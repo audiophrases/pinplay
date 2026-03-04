@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'pinplay.quiz.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
+const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -99,8 +100,15 @@ function init() {
   renderBuilder();
   refreshLocalPin();
 
-  backendUrlEl.value = loadBackendUrl();
-  setBackendStatus(loadBackendUrl() ? 'Backend URL loaded' : 'No backend URL yet');
+  const savedBackend = loadBackendUrl();
+  const initialBackend = normalizeBackendUrl(savedBackend) || DEFAULT_BACKEND_URL;
+  backendUrlEl.value = initialBackend;
+
+  if (!normalizeBackendUrl(savedBackend)) {
+    saveBackendUrl(initialBackend);
+  }
+
+  setBackendStatus('Backend URL ready ✅', 'ok');
 }
 
 // ---------- Tabs ----------
