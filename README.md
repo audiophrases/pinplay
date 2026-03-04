@@ -4,47 +4,78 @@ Free, no-ads classroom quiz web app.
 
 ## Why this exists
 
-- ✅ 100% free hosting (GitHub Pages)
+- ✅ 100% free hosting (GitHub Pages + optional Cloudflare Worker)
 - ✅ No ads
 - ✅ No student accounts needed
 - ✅ Teacher can create quiz in-app
 - ✅ Import/export quiz as JSON
 
-## Current MVP (v0.1)
+## Current features (v0.2)
 
-- Quiz builder with:
-  - Multiple choice
-  - True / False
-  - Type answer
+### Builder
+- Multiple choice
+- True / False
+- Type answer
 - Per-question points: `0`, `1000`, `2000`
-- Per-question time limit field (stored in quiz model)
+- Per-question time limit field
 - Local save (`localStorage`)
 - JSON import/export
-- Basic play mode + scoring
 
-## Not yet (planned)
+### Play
+- **Solo mode** (offline, same browser)
+- **Live mode** (host + students on different devices) via backend URL
+  - Teacher creates live game from current quiz
+  - 6-digit PIN join
+  - Student scoring + live leaderboard
 
-- Live multiplayer (real host + many devices)
-- Real countdown timer enforcement
+## What is still planned
+
+- Real timer enforcement (currently informational)
 - Puzzle / slider / pin-on-image question types
-- Teacher reports & exportable results
-- Cloud sync (optional)
+- Better reports / exports
+- Optional cloud quiz bank sync
 
-## Run locally
+## Deploy frontend (GitHub Pages)
 
-Just open `index.html` in your browser.
+1. Push repo to GitHub
+2. Go to **Settings → Pages**
+3. Source: **Deploy from branch**
+4. Branch: `main`, folder `/ (root)`
 
-## Deploy on GitHub Pages
-
-1. Push this repo to GitHub.
-2. Go to **Settings → Pages**.
-3. Source: **Deploy from branch**.
-4. Branch: `main` / folder `/ (root)`.
-5. Save.
-
-Your app will be available at:
+Frontend URL:
 
 `https://audiophrases.github.io/pinplay/`
+
+## Deploy free backend (Cloudflare Worker + Durable Objects)
+
+The live mode needs a backend. A ready Worker is included in `cloudflare/`.
+
+### 1) Install Wrangler
+
+```bash
+npm i -g wrangler
+```
+
+### 2) Login to Cloudflare
+
+```bash
+wrangler login
+```
+
+### 3) Deploy
+
+```bash
+cd cloudflare
+wrangler deploy
+```
+
+This prints a URL like:
+
+`https://pinplay-api.<your-subdomain>.workers.dev`
+
+### 4) Connect app to backend
+
+Open PinPlay in browser and paste that URL into **Backend API URL**, then click **Save backend URL**.
 
 ## Quiz JSON format (example)
 

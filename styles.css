@@ -87,6 +87,8 @@ textarea { min-height: 72px; resize: vertical; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
 .question-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; }
 .small { font-size: .85rem; color: var(--muted); }
+.small.ok { color: var(--ok); }
+.small.bad { color: var(--bad); }
 
 .answers-grid { display: grid; gap: .45rem; margin-top: .5rem; }
 .answer-row { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem; align-items: center; }
@@ -97,6 +99,12 @@ textarea { min-height: 72px; resize: vertical; }
 .feedback.ok { color: var(--ok); }
 .feedback.bad { color: var(--bad); }
 .hidden { display: none !important; }
+
+.list {
+  margin: .45rem 0 0;
+  padding-left: 1.1rem;
+}
+.list li { margin: .2rem 0; }
 
 @media (max-width: 640px) {
   .container { padding: .75rem; }

@@ -1,0 +1,11 @@
+name = "pinplay-api"
+main = "worker.js"
+compatibility_date = "2026-03-04"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "QuizRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuizRoom"]

@@ -42,13 +42,75 @@
       </section>
 
       <section id="play" class="panel">
+        <div class="card">
+          <h2>Live mode (host + students, multi-device)</h2>
+          <p class="muted">Free path: GitHub Pages frontend + Cloudflare Worker backend.</p>
+          <label>Backend API URL</label>
+          <input id="backendUrl" type="url" placeholder="https://pinplay-api.YOURNAME.workers.dev" />
+          <div class="row gap top-space">
+            <button id="saveBackendBtn" class="btn">Save backend URL</button>
+            <span id="backendStatus" class="small"></span>
+          </div>
+        </div>
+
+        <div class="card" id="hostCard">
+          <h3>Teacher host</h3>
+          <p class="muted">Creates a live game from the current quiz.</p>
+          <div class="row gap">
+            <button id="createLiveBtn" class="btn primary">Create live game</button>
+            <button id="hostRefreshBtn" class="btn">Refresh</button>
+            <button id="hostStartBtn" class="btn">Start game</button>
+            <button id="hostNextBtn" class="btn">Next question</button>
+          </div>
+          <div class="top-space">
+            <div class="pin">Live PIN: <span id="livePin">—</span></div>
+            <div id="livePhase" class="small">Phase: —</div>
+            <div id="liveProgress" class="small">Progress: —</div>
+            <div id="liveResponses" class="small">Answers this round: —</div>
+            <p id="hostStatus" class="feedback"></p>
+          </div>
+          <div class="top-space">
+            <strong>Players</strong>
+            <ul id="hostPlayers" class="list"></ul>
+          </div>
+        </div>
+
+        <div class="card" id="joinCard">
+          <h3>Student join</h3>
+          <div class="row gap">
+            <div style="flex:1; min-width: 180px;">
+              <label>PIN</label>
+              <input id="joinPin" type="text" maxlength="6" placeholder="123456" />
+            </div>
+            <div style="flex:1; min-width: 180px;">
+              <label>Name</label>
+              <input id="joinName" type="text" maxlength="40" placeholder="Student name" />
+            </div>
+          </div>
+          <button id="joinBtn" class="btn primary top-space">Join live game</button>
+          <p id="joinStatus" class="feedback"></p>
+
+          <div id="joinQuestionWrap" class="hidden top-space">
+            <div class="row spread">
+              <div id="joinProgress">Question 1 / 1</div>
+              <div id="joinScore">Score: 0</div>
+            </div>
+            <h3 id="joinPrompt"></h3>
+            <div id="joinAnswers"></div>
+            <div class="row gap top-space">
+              <button id="joinSubmitBtn" class="btn primary">Submit answer</button>
+            </div>
+            <p id="joinFeedback" class="feedback"></p>
+          </div>
+        </div>
+
         <div class="card" id="lobbyCard">
-          <h2>Play quiz</h2>
-          <p class="muted">Uses the quiz currently loaded in this browser.</p>
-          <div class="pin">Game PIN: <span id="pinValue">—</span></div>
+          <h3>Solo mode (same browser)</h3>
+          <p class="muted">Offline fallback if you don't want live mode.</p>
+          <div class="pin">Local PIN: <span id="pinValue">—</span></div>
           <label>Student name</label>
           <input id="studentName" type="text" maxlength="40" placeholder="Your name" />
-          <button id="startBtn" class="btn primary top-space">Start</button>
+          <button id="startBtn" class="btn primary top-space">Start solo</button>
         </div>
 
         <div class="card hidden" id="gameCard">
