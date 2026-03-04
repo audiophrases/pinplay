@@ -16,6 +16,10 @@ Free, no-ads classroom quiz web app.
 - Multiple choice
 - True / False
 - Type answer
+- Puzzle
+- Quiz + Audio (browser speech synthesis)
+- Slider
+- Pin answer (image + target zone)
 - Per-question points: `0`, `1000`, `2000`
 - Per-question time limit field
 - Local save (`localStorage`)
@@ -31,9 +35,9 @@ Free, no-ads classroom quiz web app.
 ## What is still planned
 
 - Real timer enforcement (currently informational)
-- Puzzle / slider / pin-on-image question types
 - Better reports / exports
 - Optional cloud quiz bank sync
+- Higher polish for anti-cheat / host controls
 
 ## Deploy frontend (GitHub Pages)
 

@@ -11,6 +11,10 @@ const questionListEl = document.getElementById('questionList');
 const addMcqBtn = document.getElementById('addMcqBtn');
 const addTfBtn = document.getElementById('addTfBtn');
 const addTextBtn = document.getElementById('addTextBtn');
+const addPuzzleBtn = document.getElementById('addPuzzleBtn');
+const addAudioBtn = document.getElementById('addAudioBtn');
+const addSliderBtn = document.getElementById('addSliderBtn');
+const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
 const exportBtn = document.getElementById('exportBtn');
 const importInput = document.getElementById('importInput');
@@ -79,6 +83,8 @@ const live = {
     pollTimer: null,
     renderKey: null,
     submittedForIndex: null,
+    currentQuestion: null,
+    pinSelection: null,
   },
 };
 
@@ -126,6 +132,26 @@ function bindBuilderEvents() {
     renderBuilder();
   });
 
+  addPuzzleBtn.addEventListener('click', () => {
+    quiz.questions.push(makePuzzleQuestion());
+    renderBuilder();
+  });
+
+  addAudioBtn.addEventListener('click', () => {
+    quiz.questions.push(makeAudioQuestion());
+    renderBuilder();
+  });
+
+  addSliderBtn.addEventListener('click', () => {
+    quiz.questions.push(makeSliderQuestion());
+    renderBuilder();
+  });
+
+  addPinBtn.addEventListener('click', () => {
+    quiz.questions.push(makePinQuestion());
+    renderBuilder();
+  });
+
   saveBtn.addEventListener('click', () => {
     syncQuizFromUI();
     saveQuiz(quiz);
@@ -154,13 +180,61 @@ function bindBuilderEvents() {
     importInput.value = '';
   });
 
-  questionListEl.addEventListener('click', (e) => {
+  questionListEl.addEventListener('click', async (e) => {
     const removeBtn = e.target.closest('[data-remove-question]');
-    if (!removeBtn) return;
+    if (removeBtn) {
+      const idx = Number(removeBtn.dataset.removeQuestion);
+      quiz.questions.splice(idx, 1);
+      renderBuilder();
+      return;
+    }
 
-    const idx = Number(removeBtn.dataset.removeQuestion);
-    quiz.questions.splice(idx, 1);
-    renderBuilder();
+    const preview = e.target.closest('[data-pin-preview]');
+    if (preview) {
+      const idx = Number(preview.dataset.pinPreview);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'pin') return;
+
+      const rect = preview.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      q.zone.x = round(clamp(x, 0, 100), 1);
+      q.zone.y = round(clamp(y, 0, 100), 1);
+      renderBuilder();
+      return;
+    }
+
+    const audioBtn = e.target.closest('[data-play-audio-preview]');
+    if (audioBtn) {
+      const idx = Number(audioBtn.dataset.playAudioPreview);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'audio') return;
+      speakText(q.audioText || q.prompt || '', q.language || 'en-US');
+    }
+  });
+
+  questionListEl.addEventListener('change', async (e) => {
+    const upload = e.target.closest('[data-pin-upload]');
+    if (!upload) return;
+
+    const idx = Number(upload.dataset.pinUpload);
+    const q = quiz.questions[idx];
+    if (!q || q.type !== 'pin') return;
+
+    const file = upload.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      return;
+    }
+
+    try {
+      q.imageData = await fileToDataUrl(file);
+      renderBuilder();
+    } catch (err) {
+      alert(`Image load failed: ${err.message}`);
+    }
   });
 }
 
@@ -195,18 +269,21 @@ function renderBuilder() {
         </div>
         <div style="min-width:160px;">
           <label>Time limit (sec)</label>
-          <input data-q="${idx}" data-field="timeLimit" type="number" min="5" max="240" value="${Number(q.timeLimit || 20)}" />
+          <input data-q="${idx}" data-field="timeLimit" type="number" min="${minTimeByType(q.type)}" max="240" value="${Number(q.timeLimit || 20)}" />
         </div>
       </div>
     `;
 
     let specific = '';
-    if (q.type === 'mcq' || q.type === 'tf') {
-      const correctIdx = q.answers.findIndex((a) => a.correct);
-      specific = `
+
+    if (['mcq', 'tf', 'audio'].includes(q.type)) {
+      const answers = q.answers || [];
+      const correctIdx = answers.findIndex((a) => a.correct);
+
+      specific += `
         <label class="top-space">Answers</label>
         <div class="answers-grid">
-          ${q.answers
+          ${answers
             .map(
               (a, aIdx) => `
             <div class="answer-row">
@@ -219,11 +296,21 @@ function renderBuilder() {
             .join('')}
         </div>
       `;
+
+      if (q.type === 'audio') {
+        specific += `
+          <label class="top-space">Text to read aloud (max 120 chars)</label>
+          <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="Text-to-speech prompt" />
+          <label>Language code (e.g. en-US, ca-ES)</label>
+          <input data-q="${idx}" data-field="language" maxlength="10" value="${escapeHtml(q.language || 'en-US')}" />
+          <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">🔊 Play preview</button></div>
+        `;
+      }
     }
 
     if (q.type === 'text') {
       const accepted = q.accepted || ['', '', '', ''];
-      specific = `
+      specific += `
         <label class="top-space">Accepted answers (1-4, max 20 chars each)</label>
         <div class="answers-grid">
           ${accepted
@@ -235,6 +322,89 @@ function renderBuilder() {
             .join('')}
         </div>
       `;
+    }
+
+    if (q.type === 'puzzle') {
+      const items = q.items || ['', '', '', ''];
+      specific += `
+        <label class="top-space">Correct order items (min 3, max 4)</label>
+        <div class="answers-grid">
+          ${items
+            .map(
+              (item, i) => `
+            <input data-q="${idx}" data-puzzle-index="${i}" maxlength="75" value="${escapeHtml(item || '')}" placeholder="Position ${i + 1}" />
+          `,
+            )
+            .join('')}
+        </div>
+        <p class="small">Students will need to place these in the correct order.</p>
+      `;
+    }
+
+    if (q.type === 'slider') {
+      specific += `
+        <div class="row gap top-space">
+          <div style="min-width:120px;">
+            <label>Min</label>
+            <input data-q="${idx}" data-field="sliderMin" type="number" value="${Number(q.min ?? 0)}" />
+          </div>
+          <div style="min-width:120px;">
+            <label>Max</label>
+            <input data-q="${idx}" data-field="sliderMax" type="number" value="${Number(q.max ?? 100)}" />
+          </div>
+          <div style="min-width:120px;">
+            <label>Correct value</label>
+            <input data-q="${idx}" data-field="sliderTarget" type="number" value="${Number(q.target ?? 50)}" />
+          </div>
+          <div style="min-width:150px;">
+            <label>Margin</label>
+            <select data-q="${idx}" data-field="sliderMargin">
+              ${['none', 'low', 'medium', 'high', 'maximum']
+                .map((m) => `<option value="${m}" ${q.margin === m ? 'selected' : ''}>${m}</option>`)
+                .join('')}
+            </select>
+          </div>
+        </div>
+        <label>Unit (optional)</label>
+        <input data-q="${idx}" data-field="sliderUnit" maxlength="20" value="${escapeHtml(q.unit || '')}" placeholder="e.g. kg, €, years" />
+      `;
+    }
+
+    if (q.type === 'pin') {
+      const zone = q.zone || { x: 50, y: 50, r: 15 };
+      specific += `
+        <label class="top-space">Image</label>
+        <input data-pin-upload="${idx}" type="file" accept="image/*" />
+        <div class="row gap top-space">
+          <div style="min-width:110px;">
+            <label>X %</label>
+            <input data-q="${idx}" data-field="pinX" type="number" min="0" max="100" value="${Number(zone.x ?? 50)}" />
+          </div>
+          <div style="min-width:110px;">
+            <label>Y %</label>
+            <input data-q="${idx}" data-field="pinY" type="number" min="0" max="100" value="${Number(zone.y ?? 50)}" />
+          </div>
+          <div style="min-width:110px;">
+            <label>Radius %</label>
+            <input data-q="${idx}" data-field="pinR" type="number" min="1" max="100" value="${Number(zone.r ?? 15)}" />
+          </div>
+        </div>
+        <p class="small">Tip: click image preview to set X/Y center.</p>
+      `;
+
+      if (q.imageData) {
+        const left = clamp(zone.x, 0, 100);
+        const top = clamp(zone.y, 0, 100);
+        const size = clamp(zone.r * 2, 2, 100);
+
+        specific += `
+          <div class="pin-preview" data-pin-preview="${idx}">
+            <img src="${q.imageData}" alt="Pin question image" />
+            <div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div>
+            <div class="pin-dot" style="left:${left}%; top:${top}%;"></div>
+          </div>
+        `;
+      }
     }
 
     wrap.innerHTML = common + specific;
@@ -257,11 +427,11 @@ function syncQuizFromUI() {
 
     if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 120);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
+    if (timeEl) q.timeLimit = clamp(Number(timeEl.value || 20), minTimeByType(q.type), 240);
 
-    const minTime = q.type === 'text' ? 20 : 5;
-    if (timeEl) q.timeLimit = clamp(Number(timeEl.value || 20), minTime, 240);
+    if (['mcq', 'tf', 'audio'].includes(q.type)) {
+      q.answers = q.answers || [];
 
-    if (q.type === 'mcq' || q.type === 'tf') {
       q.answers.forEach((a, aIdx) => {
         const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-answer-index="${aIdx}"]`);
         if (aEl) a.text = String(aEl.value || '').slice(0, 75);
@@ -272,6 +442,18 @@ function syncQuizFromUI() {
       q.answers.forEach((a, aIdx) => {
         a.correct = aIdx === correctIndex;
       });
+
+      if (q.type === 'tf') {
+        q.answers[0] = { text: 'True', correct: !!q.answers[0]?.correct };
+        q.answers[1] = { text: 'False', correct: !!q.answers[1]?.correct };
+      }
+
+      if (q.type === 'audio') {
+        const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
+        const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
+        q.audioText = String(audioTextEl?.value || '').slice(0, 120);
+        q.language = String(languageEl?.value || 'en-US').slice(0, 10) || 'en-US';
+      }
     }
 
     if (q.type === 'text') {
@@ -281,6 +463,48 @@ function syncQuizFromUI() {
         accepted.push(String(aEl?.value || '').slice(0, 20));
       }
       q.accepted = accepted;
+    }
+
+    if (q.type === 'puzzle') {
+      const items = [];
+      for (let i = 0; i < 4; i++) {
+        const itemEl = questionListEl.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
+        items.push(String(itemEl?.value || '').slice(0, 75));
+      }
+      q.items = items;
+    }
+
+    if (q.type === 'slider') {
+      const minEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMin"]`);
+      const maxEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMax"]`);
+      const targetEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderTarget"]`);
+      const marginEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMargin"]`);
+      const unitEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderUnit"]`);
+
+      const min = Number(minEl?.value ?? 0);
+      const max = Number(maxEl?.value ?? 100);
+      const fixedMin = Number.isFinite(min) ? min : 0;
+      const fixedMax = Number.isFinite(max) ? max : 100;
+
+      q.min = Math.min(fixedMin, fixedMax);
+      q.max = Math.max(fixedMin, fixedMax);
+      q.target = clamp(Number(targetEl?.value ?? q.min), q.min, q.max);
+      q.margin = ['none', 'low', 'medium', 'high', 'maximum'].includes(marginEl?.value)
+        ? marginEl.value
+        : 'medium';
+      q.unit = String(unitEl?.value || '').slice(0, 20);
+    }
+
+    if (q.type === 'pin') {
+      q.zone = q.zone || { x: 50, y: 50, r: 15 };
+
+      const xEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinX"]`);
+      const yEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinY"]`);
+      const rEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinR"]`);
+
+      q.zone.x = round(clamp(Number(xEl?.value ?? 50), 0, 100), 1);
+      q.zone.y = round(clamp(Number(yEl?.value ?? 50), 0, 100), 1);
+      q.zone.r = round(clamp(Number(rEl?.value ?? 15), 1, 100), 1);
     }
   });
 }
@@ -429,6 +653,8 @@ async function joinLiveGame() {
     live.player.token = data.playerToken;
     live.player.renderKey = null;
     live.player.submittedForIndex = null;
+    live.player.currentQuestion = null;
+    live.player.pinSelection = null;
 
     setStatus(joinStatusEl, `Joined as ${name} ✅`, 'ok');
     startPlayerPolling();
@@ -480,6 +706,8 @@ function renderPlayerState(state) {
   if (shouldRenderQuestion) {
     live.player.renderKey = key;
     live.player.submittedForIndex = state.answeredCurrent ? state.currentIndex : null;
+    live.player.currentQuestion = state.question;
+    live.player.pinSelection = null;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
   }
@@ -496,7 +724,7 @@ function renderJoinQuestion(question) {
   joinPromptEl.textContent = question.prompt || '(No question text)';
   joinAnswersEl.innerHTML = '';
 
-  if (question.type === 'mcq' || question.type === 'tf') {
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
     question.answers.forEach((a, idx) => {
       const row = document.createElement('label');
       row.className = 'answer-row';
@@ -512,6 +740,16 @@ function renderJoinQuestion(question) {
       row.append(radio, text);
       joinAnswersEl.appendChild(row);
     });
+
+    if (question.type === 'audio') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '🔊 Play audio';
+      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US'));
+      joinAnswersEl.appendChild(btn);
+      speakText(question.audioText || question.prompt || '', question.language || 'en-US');
+    }
     return;
   }
 
@@ -522,6 +760,91 @@ function renderJoinQuestion(question) {
     input.maxLength = 40;
     input.placeholder = 'Type your answer';
     joinAnswersEl.appendChild(input);
+    return;
+  }
+
+  if (question.type === 'puzzle') {
+    const options = question.options || [];
+
+    for (let i = 0; i < (question.length || options.length); i++) {
+      const row = document.createElement('div');
+      row.className = 'row gap';
+
+      const label = document.createElement('span');
+      label.className = 'small';
+      label.textContent = `Position ${i + 1}`;
+
+      const select = document.createElement('select');
+      select.dataset.joinPuzzleSlot = String(i);
+
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'Choose...';
+      select.appendChild(empty);
+
+      options.forEach((opt) => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+
+      row.append(label, select);
+      joinAnswersEl.appendChild(row);
+    }
+    return;
+  }
+
+  if (question.type === 'slider') {
+    const wrap = document.createElement('div');
+
+    const value = Number(question.min || 0);
+    wrap.innerHTML = `
+      <p class="small">Range: ${question.min} to ${question.max}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+      <input id="joinSlider" type="range" min="${question.min}" max="${question.max}" step="1" value="${value}" />
+      <p id="joinSliderValue" class="small">Selected: ${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+    `;
+    joinAnswersEl.appendChild(wrap);
+
+    const slider = document.getElementById('joinSlider');
+    const out = document.getElementById('joinSliderValue');
+    slider.addEventListener('input', () => {
+      out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
+    });
+    return;
+  }
+
+  if (question.type === 'pin') {
+    if (!question.imageData) {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = 'No image set for this question.';
+      joinAnswersEl.appendChild(p);
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pin-preview';
+    wrap.dataset.livePinSelect = 'join';
+
+    const img = document.createElement('img');
+    img.src = question.imageData;
+    img.alt = 'Pin question image';
+
+    const dot = document.createElement('div');
+    dot.className = 'pin-dot hidden';
+
+    wrap.append(img, dot);
+    joinAnswersEl.appendChild(wrap);
+
+    attachPinPicker(wrap, (point) => {
+      live.player.pinSelection = point;
+      dot.classList.remove('hidden');
+      dot.style.left = `${point.x}%`;
+      dot.style.top = `${point.y}%`;
+    });
+
+    return;
   }
 }
 
@@ -558,11 +881,34 @@ async function submitLiveAnswer() {
 }
 
 function readJoinAnswer() {
-  const checked = joinAnswersEl.querySelector('input[name="join-answer"]:checked');
-  if (checked) return Number(checked.value);
+  const q = live.player.currentQuestion;
+  if (!q) return null;
 
-  const text = document.getElementById('joinTextAnswer');
-  if (text) return text.value;
+  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+    const checked = joinAnswersEl.querySelector('input[name="join-answer"]:checked');
+    return checked ? Number(checked.value) : null;
+  }
+
+  if (q.type === 'text') {
+    const text = document.getElementById('joinTextAnswer');
+    return text ? text.value : '';
+  }
+
+  if (q.type === 'puzzle') {
+    const slots = [...joinAnswersEl.querySelectorAll('[data-join-puzzle-slot]')];
+    const values = slots.map((s) => s.value).filter(Boolean);
+    return values.length === slots.length ? values : null;
+  }
+
+  if (q.type === 'slider') {
+    const slider = document.getElementById('joinSlider');
+    if (!slider) return null;
+    return Number(slider.value);
+  }
+
+  if (q.type === 'pin') {
+    return live.player.pinSelection;
+  }
 
   return null;
 }
@@ -597,9 +943,7 @@ function renderLeaderboardInJoin(leaderboard) {
 }
 
 function ensureHostReady() {
-  if (!live.host.pin || !live.host.token) {
-    throw new Error('Create a live game first.');
-  }
+  if (!live.host.pin || !live.host.token) throw new Error('Create a live game first.');
 }
 
 // ---------- Solo mode ----------
@@ -614,6 +958,8 @@ function bindSoloEvents() {
       index: 0,
       score: 0,
       answered: false,
+      pinSelection: null,
+      puzzleOptions: null,
     };
 
     lobbyCard.classList.add('hidden');
@@ -669,14 +1015,17 @@ function renderSoloQuestion() {
   scoreEl.textContent = `Score: ${soloGame.score}`;
   qPromptEl.textContent = q.prompt || '(No question text)';
 
+  soloGame.pinSelection = null;
+  soloGame.puzzleOptions = null;
+
   setStatus(feedbackEl, '', '');
   submitBtn.classList.remove('hidden');
   nextBtn.classList.add('hidden');
 
   answersEl.innerHTML = '';
 
-  if (q.type === 'mcq' || q.type === 'tf') {
-    q.answers.forEach((a, idx) => {
+  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+    (q.answers || []).forEach((a, idx) => {
       const row = document.createElement('label');
       row.className = 'answer-row';
 
@@ -691,6 +1040,17 @@ function renderSoloQuestion() {
       row.append(radio, text);
       answersEl.appendChild(row);
     });
+
+    if (q.type === 'audio') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '🔊 Play audio';
+      btn.addEventListener('click', () => speakText(q.audioText || q.prompt || '', q.language || 'en-US'));
+      answersEl.appendChild(btn);
+      speakText(q.audioText || q.prompt || '', q.language || 'en-US');
+    }
+    return;
   }
 
   if (q.type === 'text') {
@@ -700,16 +1060,98 @@ function renderSoloQuestion() {
     input.maxLength = 40;
     input.placeholder = 'Type your answer';
     answersEl.appendChild(input);
+    return;
+  }
+
+  if (q.type === 'puzzle') {
+    const options = shuffle([...(q.items || []).filter(Boolean)]);
+    soloGame.puzzleOptions = options;
+
+    for (let i = 0; i < options.length; i++) {
+      const row = document.createElement('div');
+      row.className = 'row gap';
+
+      const label = document.createElement('span');
+      label.className = 'small';
+      label.textContent = `Position ${i + 1}`;
+
+      const select = document.createElement('select');
+      select.dataset.soloPuzzleSlot = String(i);
+
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'Choose...';
+      select.appendChild(empty);
+
+      options.forEach((opt) => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+
+      row.append(label, select);
+      answersEl.appendChild(row);
+    }
+    return;
+  }
+
+  if (q.type === 'slider') {
+    const wrap = document.createElement('div');
+    const value = Number(q.min || 0);
+    wrap.innerHTML = `
+      <p class="small">Range: ${q.min} to ${q.max}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
+      <input id="soloSlider" type="range" min="${q.min}" max="${q.max}" step="1" value="${value}" />
+      <p id="soloSliderValue" class="small">Selected: ${value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
+    `;
+    answersEl.appendChild(wrap);
+
+    const slider = document.getElementById('soloSlider');
+    const out = document.getElementById('soloSliderValue');
+    slider.addEventListener('input', () => {
+      out.textContent = `Selected: ${slider.value}${q.unit ? ` ${q.unit}` : ''}`;
+    });
+    return;
+  }
+
+  if (q.type === 'pin') {
+    if (!q.imageData) {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = 'No image set for this question.';
+      answersEl.appendChild(p);
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pin-preview';
+
+    const img = document.createElement('img');
+    img.src = q.imageData;
+    img.alt = 'Pin question image';
+
+    const dot = document.createElement('div');
+    dot.className = 'pin-dot hidden';
+
+    wrap.append(img, dot);
+    answersEl.appendChild(wrap);
+
+    attachPinPicker(wrap, (point) => {
+      soloGame.pinSelection = point;
+      dot.classList.remove('hidden');
+      dot.style.left = `${point.x}%`;
+      dot.style.top = `${point.y}%`;
+    });
   }
 }
 
 function evaluateSoloQuestion(q) {
-  if (q.type === 'mcq' || q.type === 'tf') {
+  if (['mcq', 'tf', 'audio'].includes(q.type)) {
     const checked = answersEl.querySelector('input[name="solo-answer"]:checked');
     if (!checked) return { correct: false, hint: 'Select an answer first.' };
 
     const selected = Number(checked.value);
-    const correctIndex = q.answers.findIndex((a) => a.correct);
+    const correctIndex = (q.answers || []).findIndex((a) => !!a.correct);
     return { correct: selected === correctIndex };
   }
 
@@ -720,6 +1162,38 @@ function evaluateSoloQuestion(q) {
 
     if (!accepted.length) return { correct: false, hint: 'No accepted answers set.' };
     return { correct: accepted.includes(guess), hint: `Accepted: ${accepted.slice(0, 2).join(' / ')}` };
+  }
+
+  if (q.type === 'puzzle') {
+    const slots = [...answersEl.querySelectorAll('[data-solo-puzzle-slot]')];
+    const selected = slots.map((s) => s.value).filter(Boolean);
+    if (selected.length !== slots.length) return { correct: false, hint: 'Fill all positions.' };
+
+    const expected = (q.items || []).map(normalizeTextAnswer);
+    const got = selected.map(normalizeTextAnswer);
+    return { correct: JSON.stringify(expected) === JSON.stringify(got) };
+  }
+
+  if (q.type === 'slider') {
+    const slider = document.getElementById('soloSlider');
+    if (!slider) return { correct: false, hint: 'Move the slider first.' };
+
+    const value = Number(slider.value);
+    const tol = sliderTolerance(q.margin, q.min, q.max);
+    const diff = Math.abs(value - Number(q.target));
+    const ok = diff <= tol;
+    return {
+      correct: ok,
+      hint: ok ? '' : `Correct around ${q.target}${q.unit ? ` ${q.unit}` : ''} (±${round(tol, 2)})`,
+    };
+  }
+
+  if (q.type === 'pin') {
+    if (!soloGame.pinSelection) return { correct: false, hint: 'Tap/click the image first.' };
+    const zone = q.zone || { x: 50, y: 50, r: 15 };
+    const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, zone.x, zone.y);
+    const ok = d <= zone.r;
+    return { correct: ok, hint: ok ? '' : 'Try closer to the target area.' };
   }
 
   return { correct: false };
@@ -764,10 +1238,7 @@ async function api(path, opts = {}) {
     }
   }
 
-  if (!res.ok) {
-    throw new Error(data.error || `${res.status} ${res.statusText}`);
-  }
-
+  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
   return data;
 }
 
@@ -821,41 +1292,160 @@ function makeTextQuestion() {
   };
 }
 
-function normalizeQuizForLive(raw) {
+function makePuzzleQuestion() {
   return {
+    id: crypto.randomUUID(),
+    type: 'puzzle',
+    prompt: '',
+    points: 1000,
+    timeLimit: 30,
+    items: ['', '', '', ''],
+  };
+}
+
+function makeAudioQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'audio',
+    prompt: '',
+    audioText: '',
+    language: 'en-US',
+    points: 1000,
+    timeLimit: 20,
+    answers: [
+      { text: '', correct: true },
+      { text: '', correct: false },
+      { text: '', correct: false },
+      { text: '', correct: false },
+    ],
+  };
+}
+
+function makeSliderQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'slider',
+    prompt: '',
+    points: 1000,
+    timeLimit: 20,
+    min: 0,
+    max: 100,
+    target: 50,
+    margin: 'medium',
+    unit: '',
+  };
+}
+
+function makePinQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'pin',
+    prompt: '',
+    points: 1000,
+    timeLimit: 30,
+    imageData: '',
+    zone: { x: 50, y: 50, r: 15 },
+  };
+}
+
+function normalizeQuizForLive(raw) {
+  const normalized = {
     version: 1,
     title: String(raw.title || '').slice(0, 120),
-    questions: (raw.questions || []).map((q) => {
-      const base = {
-        id: String(q.id || crypto.randomUUID()),
-        type: q.type,
-        prompt: String(q.prompt || '').slice(0, 120),
-        points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
-        timeLimit: clamp(Number(q.timeLimit || 20), q.type === 'text' ? 20 : 5, 240),
-      };
-
-      if (q.type === 'mcq' || q.type === 'tf') {
-        const answers = (q.answers || [])
-          .slice(0, q.type === 'tf' ? 2 : 6)
-          .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }));
-
-        if (q.type === 'tf') {
-          answers[0] = { text: 'True', correct: !!answers[0]?.correct };
-          answers[1] = { text: 'False', correct: !!answers[1]?.correct };
-        }
-
-        if (!answers.some((a) => a.correct) && answers.length) answers[0].correct = true;
-        return { ...base, answers };
-      }
-
-      if (q.type === 'text') {
-        const accepted = (q.accepted || []).slice(0, 4).map((x) => String(x || '').slice(0, 20));
-        return { ...base, accepted };
-      }
-
-      return base;
-    }),
+    questions: [],
   };
+
+  (raw.questions || []).forEach((q) => {
+    const base = {
+      id: String(q.id || crypto.randomUUID()),
+      type: q.type,
+      prompt: String(q.prompt || '').slice(0, 120),
+      points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
+      timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+    };
+
+    if (['mcq', 'audio'].includes(q.type)) {
+      const answers = (q.answers || [])
+        .slice(0, 6)
+        .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
+        .filter((a) => a.text.trim().length > 0);
+      if (!answers.length) return;
+      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+
+      normalized.questions.push({
+        ...base,
+        answers,
+        ...(q.type === 'audio'
+          ? {
+              audioText: String(q.audioText || '').slice(0, 120),
+              language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+            }
+          : {}),
+      });
+      return;
+    }
+
+    if (q.type === 'tf') {
+      const answers = [
+        { text: 'True', correct: !!q.answers?.[0]?.correct },
+        { text: 'False', correct: !!q.answers?.[1]?.correct },
+      ];
+      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+      normalized.questions.push({ ...base, answers });
+      return;
+    }
+
+    if (q.type === 'text') {
+      const accepted = (q.accepted || []).map((x) => String(x || '').slice(0, 20));
+      normalized.questions.push({ ...base, accepted });
+      return;
+    }
+
+    if (q.type === 'puzzle') {
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 4);
+      if (items.length < 3) return;
+      normalized.questions.push({ ...base, items });
+      return;
+    }
+
+    if (q.type === 'slider') {
+      const min = Number(q.min ?? 0);
+      const max = Number(q.max ?? 100);
+      const fixedMin = Math.min(min, max);
+      const fixedMax = Math.max(min, max);
+
+      normalized.questions.push({
+        ...base,
+        min: fixedMin,
+        max: fixedMax,
+        target: clamp(Number(q.target ?? fixedMin), fixedMin, fixedMax),
+        margin: ['none', 'low', 'medium', 'high', 'maximum'].includes(q.margin) ? q.margin : 'medium',
+        unit: String(q.unit || '').slice(0, 20),
+      });
+      return;
+    }
+
+    if (q.type === 'pin') {
+      if (!q.imageData) return;
+      const zone = q.zone || {};
+      normalized.questions.push({
+        ...base,
+        imageData: String(q.imageData || ''),
+        zone: {
+          x: round(clamp(Number(zone.x ?? 50), 0, 100), 1),
+          y: round(clamp(Number(zone.y ?? 50), 0, 100), 1),
+          r: round(clamp(Number(zone.r ?? 15), 1, 100), 1),
+        },
+      });
+      return;
+    }
+  });
+
+  if (!normalized.questions.length) {
+    throw new Error('No valid questions for live game.');
+  }
+
+  return normalized;
 }
 
 function loadQuiz() {
@@ -900,8 +1490,18 @@ function labelForType(type) {
       mcq: 'Multiple choice',
       tf: 'True / False',
       text: 'Type answer',
+      puzzle: 'Puzzle',
+      audio: 'Quiz + Audio',
+      slider: 'Slider',
+      pin: 'Pin answer',
     }[type] || type
   );
+}
+
+function minTimeByType(type) {
+  if (type === 'slider') return 10;
+  if (['text', 'puzzle', 'pin'].includes(type)) return 20;
+  return 5;
 }
 
 function validateImportedQuiz(data) {
@@ -917,15 +1517,6 @@ function normalizeTextAnswer(text) {
     .trim();
 }
 
-function escapeHtml(str) {
-  return String(str || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
 function normalizeBackendUrl(url) {
   if (!url) return '';
   try {
@@ -937,8 +1528,76 @@ function normalizeBackendUrl(url) {
   }
 }
 
+function escapeHtml(str) {
+  return String(str || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : min));
+}
+
+function round(n, d = 0) {
+  const p = 10 ** d;
+  return Math.round(n * p) / p;
+}
+
+function distance2D(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function sliderTolerance(margin, min, max) {
+  const range = Math.max(0, Number(max) - Number(min));
+  const map = {
+    none: 0,
+    low: range * 0.05,
+    medium: range * 0.1,
+    high: range * 0.2,
+    maximum: range,
+  };
+  return map[margin] ?? map.medium;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function speakText(text, lang = 'en-US') {
+  const value = String(text || '').trim();
+  if (!value || !('speechSynthesis' in window)) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(value);
+    utterance.lang = lang || 'en-US';
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // ignore speech errors silently
+  }
+}
+
+function attachPinPicker(container, onPick) {
+  container.addEventListener('click', (e) => {
+    const rect = container.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    onPick({
+      x: round(clamp(x, 0, 100), 1),
+      y: round(clamp(y, 0, 100), 1),
+    });
+  });
 }
 
 function toSafeFilename(s) {
@@ -958,4 +1617,13 @@ function downloadJson(data, filename) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Read error'));
+    reader.readAsDataURL(file);
+  });
 }

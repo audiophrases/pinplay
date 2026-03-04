@@ -38,7 +38,7 @@ export default {
 
         if (initRes.status === 201) {
           const data = await initRes.json();
-          return json(data);
+          return json(data, 201);
         }
       }
 
@@ -54,11 +54,12 @@ export default {
       if (!name) return json({ error: 'Name is required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/join', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      });
-      return withCors(res);
+      return withCors(
+        await stub.fetch('https://room/join', {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        }),
+      );
     }
 
     if (url.pathname === '/api/host/state' && request.method === 'GET') {
@@ -68,11 +69,12 @@ export default {
       if (!token) return json({ error: 'Host auth required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/host/state', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return withCors(res);
+      return withCors(
+        await stub.fetch('https://room/host/state', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
     }
 
     if (url.pathname === '/api/host/start' && request.method === 'POST') {
@@ -83,11 +85,12 @@ export default {
       if (!token) return json({ error: 'Host auth required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/host/start', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return withCors(res);
+      return withCors(
+        await stub.fetch('https://room/host/start', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
     }
 
     if (url.pathname === '/api/host/next' && request.method === 'POST') {
@@ -98,11 +101,12 @@ export default {
       if (!token) return json({ error: 'Host auth required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/host/next', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return withCors(res);
+      return withCors(
+        await stub.fetch('https://room/host/next', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
     }
 
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
@@ -115,11 +119,12 @@ export default {
       if (!playerToken) return json({ error: 'player token required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/player/state', {
-        method: 'POST',
-        body: JSON.stringify({ playerId, playerToken }),
-      });
-      return withCors(res);
+      return withCors(
+        await stub.fetch('https://room/player/state', {
+          method: 'POST',
+          body: JSON.stringify({ playerId, playerToken }),
+        }),
+      );
     }
 
     if (url.pathname === '/api/answer' && request.method === 'POST') {
@@ -133,15 +138,12 @@ export default {
       if (!playerToken) return json({ error: 'player token required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const res = await stub.fetch('https://room/answer', {
-        method: 'POST',
-        body: JSON.stringify({
-          playerId,
-          playerToken,
-          answer: body?.answer,
+      return withCors(
+        await stub.fetch('https://room/answer', {
+          method: 'POST',
+          body: JSON.stringify({ playerId, playerToken, answer: body?.answer }),
         }),
-      });
-      return withCors(res);
+      );
     }
 
     return json({ error: 'Not found' }, 404);
@@ -224,7 +226,6 @@ export class QuizRoom {
       if (url.pathname === '/host/state' && request.method === 'GET') {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
-
         return json(hostState(room));
       }
 
@@ -289,6 +290,7 @@ export class QuizRoom {
         if (!question) return json({ error: 'Question not found.' }, 404);
 
         room.responsesByQuestion[qIndex] = room.responsesByQuestion[qIndex] || {};
+
         if (room.responsesByQuestion[qIndex][playerId]) {
           const existing = room.responsesByQuestion[qIndex][playerId];
           return json({
@@ -389,13 +391,19 @@ function playerState(room, playerId) {
 function publicQuestion(question) {
   if (!question) return null;
 
-  if (question.type === 'mcq' || question.type === 'tf') {
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
     return {
       type: question.type,
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
       answers: (question.answers || []).map((a) => ({ text: a.text })),
+      ...(question.type === 'audio'
+        ? {
+            audioText: question.audioText || '',
+            language: question.language || 'en-US',
+          }
+        : {}),
     };
   }
 
@@ -405,6 +413,40 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+    };
+  }
+
+  if (question.type === 'puzzle') {
+    return {
+      type: question.type,
+      prompt: question.prompt,
+      points: question.points,
+      timeLimit: question.timeLimit,
+      length: (question.items || []).length,
+      options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
+    };
+  }
+
+  if (question.type === 'slider') {
+    return {
+      type: question.type,
+      prompt: question.prompt,
+      points: question.points,
+      timeLimit: question.timeLimit,
+      min: question.min,
+      max: question.max,
+      margin: question.margin,
+      unit: question.unit || '',
+    };
+  }
+
+  if (question.type === 'pin') {
+    return {
+      type: question.type,
+      prompt: question.prompt,
+      points: question.points,
+      timeLimit: question.timeLimit,
+      imageData: question.imageData || '',
     };
   }
 
@@ -419,7 +461,7 @@ function publicQuestion(question) {
 function evaluate(question, answer) {
   if (!question) return { correct: false };
 
-  if (question.type === 'mcq' || question.type === 'tf') {
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
     const selected = Number(answer);
     if (!Number.isFinite(selected)) return { correct: false };
     const correctIndex = (question.answers || []).findIndex((a) => !!a.correct);
@@ -432,45 +474,173 @@ function evaluate(question, answer) {
     return { correct: accepted.includes(guess) };
   }
 
+  if (question.type === 'puzzle') {
+    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer) : [];
+    const expected = (question.items || []).map(normalizeTextAnswer);
+    if (!guess.length || guess.length !== expected.length) return { correct: false };
+    return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
+  }
+
+  if (question.type === 'slider') {
+    const value = Number(answer);
+    if (!Number.isFinite(value)) return { correct: false };
+    const tol = sliderTolerance(question.margin, question.min, question.max);
+    const diff = Math.abs(value - Number(question.target));
+    return { correct: diff <= tol };
+  }
+
+  if (question.type === 'pin') {
+    const x = Number(answer?.x);
+    const y = Number(answer?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { correct: false };
+    const zone = question.zone || { x: 50, y: 50, r: 15 };
+    const d = distance2D(x, y, Number(zone.x), Number(zone.y));
+    return { correct: d <= Number(zone.r) };
+  }
+
   return { correct: false };
 }
 
 function normalizeQuiz(quiz) {
-  return {
+  const normalized = {
     version: 1,
     title: String(quiz.title || '').slice(0, 120),
-    questions: (quiz.questions || []).map((q) => {
-      const base = {
-        id: String(q.id || randomId('q_')),
-        type: q.type,
-        prompt: String(q.prompt || '').slice(0, 120),
-        points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
-        timeLimit: clamp(Number(q.timeLimit || 20), q.type === 'text' ? 20 : 5, 240),
-      };
-
-      if (q.type === 'mcq' || q.type === 'tf') {
-        const maxAnswers = q.type === 'tf' ? 2 : 6;
-        const answers = (q.answers || [])
-          .slice(0, maxAnswers)
-          .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }));
-
-        if (q.type === 'tf') {
-          answers[0] = { text: 'True', correct: !!answers[0]?.correct };
-          answers[1] = { text: 'False', correct: !!answers[1]?.correct };
-        }
-
-        if (!answers.some((a) => a.correct) && answers.length) answers[0].correct = true;
-        return { ...base, answers };
-      }
-
-      if (q.type === 'text') {
-        const accepted = (q.accepted || []).slice(0, 4).map((x) => String(x || '').slice(0, 20));
-        return { ...base, accepted };
-      }
-
-      return base;
-    }),
+    questions: [],
   };
+
+  (quiz.questions || []).forEach((q) => {
+    const base = {
+      id: String(q.id || randomId('q_')),
+      type: q.type,
+      prompt: String(q.prompt || '').slice(0, 120),
+      points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
+      timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+    };
+
+    if (['mcq', 'audio'].includes(q.type)) {
+      const answers = (q.answers || [])
+        .slice(0, 6)
+        .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
+        .filter((a) => a.text.trim().length > 0);
+      if (!answers.length) return;
+      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+
+      normalized.questions.push({
+        ...base,
+        answers,
+        ...(q.type === 'audio'
+          ? {
+              audioText: String(q.audioText || '').slice(0, 120),
+              language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+            }
+          : {}),
+      });
+      return;
+    }
+
+    if (q.type === 'tf') {
+      const answers = [
+        { text: 'True', correct: !!q.answers?.[0]?.correct },
+        { text: 'False', correct: !!q.answers?.[1]?.correct },
+      ];
+      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+      normalized.questions.push({ ...base, answers });
+      return;
+    }
+
+    if (q.type === 'text') {
+      normalized.questions.push({
+        ...base,
+        accepted: (q.accepted || []).slice(0, 4).map((x) => String(x || '').slice(0, 20)),
+      });
+      return;
+    }
+
+    if (q.type === 'puzzle') {
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 4);
+      if (items.length < 3) return;
+      normalized.questions.push({ ...base, items });
+      return;
+    }
+
+    if (q.type === 'slider') {
+      const min = Number(q.min ?? 0);
+      const max = Number(q.max ?? 100);
+      const fixedMin = Math.min(min, max);
+      const fixedMax = Math.max(min, max);
+
+      normalized.questions.push({
+        ...base,
+        min: fixedMin,
+        max: fixedMax,
+        target: clamp(Number(q.target ?? fixedMin), fixedMin, fixedMax),
+        margin: ['none', 'low', 'medium', 'high', 'maximum'].includes(q.margin) ? q.margin : 'medium',
+        unit: String(q.unit || '').slice(0, 20),
+      });
+      return;
+    }
+
+    if (q.type === 'pin') {
+      if (!q.imageData) return;
+      const zone = q.zone || {};
+      normalized.questions.push({
+        ...base,
+        imageData: String(q.imageData || ''),
+        zone: {
+          x: round(clamp(Number(zone.x ?? 50), 0, 100), 1),
+          y: round(clamp(Number(zone.y ?? 50), 0, 100), 1),
+          r: round(clamp(Number(zone.r ?? 15), 1, 100), 1),
+        },
+      });
+    }
+  });
+
+  if (!normalized.questions.length) {
+    throw new Error('No valid questions for room.');
+  }
+
+  return normalized;
+}
+
+function stableShuffle(arr, seedInput) {
+  const a = [...arr];
+  let seed = hash(seedInput || 'seed');
+  for (let i = a.length - 1; i > 0; i--) {
+    seed = nextSeed(seed);
+    const j = Math.floor(seed * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function hash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+  }
+  return h >>> 0;
+}
+
+function nextSeed(seed) {
+  // Mulberry32-like step mapped to [0,1)
+  seed = (seed + 0x6D2B79F5) >>> 0;
+  let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function sliderTolerance(margin, min, max) {
+  const range = Math.max(0, Number(max) - Number(min));
+  const map = {
+    none: 0,
+    low: range * 0.05,
+    medium: range * 0.1,
+    high: range * 0.2,
+    maximum: range,
+  };
+  return map[margin] ?? map.medium;
 }
 
 function normalizeTextAnswer(text) {
@@ -479,6 +649,18 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function distance2D(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function minTimeByType(type) {
+  if (type === 'slider') return 10;
+  if (['text', 'puzzle', 'pin'].includes(type)) return 20;
+  return 5;
 }
 
 function makePin() {
@@ -509,6 +691,11 @@ function randomId(prefix = '') {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : min));
+}
+
+function round(n, d = 0) {
+  const p = 10 ** d;
+  return Math.round(n * p) / p;
 }
 
 function readBearer(request) {
