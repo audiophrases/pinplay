@@ -1102,13 +1102,23 @@ function updateHostTimer(state) {
 function startHostTimerTicker() {
   stopHostTimerTicker();
   live.host.timerTicker = setInterval(() => {
-    if (!projectorTimerEl || !live.host.timerDeadlineMs) return;
+    if (!projectorTimerEl) return;
+
     const state = live.host.state;
     const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
-    const capMs = limitSec * 1000;
-    const remainingMs = Math.max(0, live.host.timerDeadlineMs - Date.now());
-    const safeRemainingMs = Math.min(capMs, remainingMs);
-    const remaining = Math.ceil(safeRemainingMs / 1000);
+    const startedAt = Number(live.host.timerStartedAtMs || state?.questionStartedAt || 0);
+
+    let remainingMs;
+    if (startedAt > 0) {
+      const expectedDeadline = startedAt + limitSec * 1000;
+      remainingMs = Math.max(0, expectedDeadline - Date.now());
+    } else if (live.host.timerDeadlineMs) {
+      remainingMs = Math.max(0, live.host.timerDeadlineMs - Date.now());
+    } else {
+      remainingMs = limitSec * 1000;
+    }
+
+    const remaining = Math.ceil(remainingMs / 1000);
     projectorTimerEl.textContent = `Time: ${remaining}s`;
   }, 250);
 }
