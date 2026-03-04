@@ -1034,14 +1034,20 @@ function updateHostTimer(state) {
   const limitSec = Math.max(1, Number(state.question.timeLimit || 20));
   const startedAt = Number(state.questionStartedAt || Date.now());
 
+  const deadlineFromState = Number(state.questionDeadlineAt || 0);
+  const computedDeadline = startedAt + limitSec * 1000;
+  const deadlineMs = Number.isFinite(deadlineFromState) && deadlineFromState > 0 ? deadlineFromState : computedDeadline;
+
   if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
-    live.host.timerDeadlineMs = startedAt + limitSec * 1000;
+    live.host.timerDeadlineMs = deadlineMs;
     live.host.timerForIndex = questionIndex;
     live.host.timerStartedAtMs = startedAt;
     startHostTimerTicker();
   }
 
-  const remainingMs = Math.max(0, Number(live.host.timerDeadlineMs || Date.now()) - Date.now());
+  const capMs = limitSec * 1000;
+  const remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs || Date.now()) - Date.now());
+  const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
 }
@@ -1050,8 +1056,12 @@ function startHostTimerTicker() {
   stopHostTimerTicker();
   live.host.timerTicker = setInterval(() => {
     if (!projectorTimerEl || !live.host.timerDeadlineMs) return;
+    const state = live.host.state;
+    const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
+    const capMs = limitSec * 1000;
     const remainingMs = Math.max(0, live.host.timerDeadlineMs - Date.now());
-    const remaining = Math.ceil(remainingMs / 1000);
+    const safeRemainingMs = Math.min(capMs, remainingMs);
+    const remaining = Math.ceil(safeRemainingMs / 1000);
     projectorTimerEl.textContent = `Time: ${remaining}s`;
   }, 250);
 }
