@@ -139,6 +139,38 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/prev' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/prev', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/host/reveal' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/reveal', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
     if (url.pathname === '/api/host/settings' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -250,6 +282,9 @@ export class QuizRoom {
           phase: 'lobby',
           currentIndex: -1,
           questionStartedAt: null,
+          questionClosed: false,
+          questionClosedAt: null,
+          questionCloseReason: null,
           quiz: normalizeQuiz(quiz),
           players: {},
           responsesByQuestion: {},
@@ -344,6 +379,10 @@ export class QuizRoom {
       if (url.pathname === '/host/state' && request.method === 'GET') {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const timeoutClosed = closeQuestionIfTimedOut(room);
+        if (timeoutClosed) await this.#setRoom(room);
+
         return json(hostState(room));
       }
 
@@ -351,11 +390,8 @@ export class QuizRoom {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
-        if (room.phase === 'lobby') {
-          room.phase = 'question';
-          room.currentIndex = 0;
-          room.questionStartedAt = Date.now();
-          room.updatedAt = Date.now();
+        if (room.phase === 'lobby' && room.quiz.questions.length > 0) {
+          startQuestion(room, 0);
           await this.#setRoom(room);
         }
 
@@ -366,22 +402,52 @@ export class QuizRoom {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
+        closeQuestionIfTimedOut(room);
+
         if (room.phase === 'lobby') {
-          room.phase = 'question';
-          room.currentIndex = 0;
-          room.questionStartedAt = Date.now();
+          if (room.quiz.questions.length > 0) startQuestion(room, 0);
         } else if (room.phase === 'question') {
           if (room.currentIndex + 1 < room.quiz.questions.length) {
-            room.currentIndex += 1;
-            room.questionStartedAt = Date.now();
+            startQuestion(room, room.currentIndex + 1);
           } else {
             room.phase = 'results';
             room.questionStartedAt = null;
+            room.questionClosed = true;
+            room.questionClosedAt = Date.now();
+            room.questionCloseReason = 'finished';
+            room.updatedAt = Date.now();
           }
         }
 
-        room.updatedAt = Date.now();
         await this.#setRoom(room);
+
+        return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/prev' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        closeQuestionIfTimedOut(room);
+
+        if (room.phase === 'results') {
+          if (room.quiz.questions.length > 0) startQuestion(room, room.quiz.questions.length - 1);
+        } else if (room.phase === 'question' && room.currentIndex > 0) {
+          startQuestion(room, room.currentIndex - 1);
+        }
+
+        await this.#setRoom(room);
+        return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/reveal' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        if (room.phase === 'question') {
+          closeCurrentQuestion(room, 'manual_reveal');
+          await this.#setRoom(room);
+        }
 
         return json(hostState(room));
       }
@@ -431,6 +497,9 @@ export class QuizRoom {
         const player = room.players[playerId];
         if (!player || player.token !== playerToken) return json({ error: 'Unauthorized player.' }, 401);
 
+        const timeoutClosed = closeQuestionIfTimedOut(room);
+        if (timeoutClosed) await this.#setRoom(room);
+
         return json(playerState(room, playerId));
       }
 
@@ -442,7 +511,11 @@ export class QuizRoom {
         const player = room.players[playerId];
         if (!player || player.token !== playerToken) return json({ error: 'Unauthorized player.' }, 401);
 
+        const timeoutClosed = closeQuestionIfTimedOut(room);
+        if (timeoutClosed) await this.#setRoom(room);
+
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        if (room.questionClosed) return json({ error: 'Question is closed.' }, 409);
 
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
@@ -473,7 +546,14 @@ export class QuizRoom {
         };
 
         room.players[playerId].score += pointsAwarded;
-        room.updatedAt = Date.now();
+
+        const totalPlayers = Object.keys(room.players || {}).length;
+        const answeredCount = Object.keys(room.responsesByQuestion[qIndex] || {}).length;
+        if (totalPlayers > 0 && answeredCount >= totalPlayers) {
+          closeCurrentQuestion(room, 'all_answered');
+        } else {
+          room.updatedAt = Date.now();
+        }
 
         await this.#setRoom(room);
 
@@ -514,7 +594,9 @@ function hostState(room) {
     }))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
-  const question = room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null;
+  const roomQuestion = room.quiz.questions[qIndex] || null;
+  const question = room.phase === 'question' ? hostQuestionPayload(roomQuestion) : null;
+  const timeLimitSec = getQuestionTimeLimitSec(roomQuestion);
 
   return {
     phase: room.phase,
@@ -526,8 +608,15 @@ function hostState(room) {
     players,
     question,
     questionStartedAt: room.questionStartedAt || null,
+    questionClosed: !!room.questionClosed,
+    questionClosedAt: room.questionClosedAt || null,
+    questionCloseReason: room.questionCloseReason || null,
+    questionDeadlineAt:
+      room.phase === 'question' && room.questionStartedAt && Number.isFinite(timeLimitSec)
+        ? Number(room.questionStartedAt) + timeLimitSec * 1000
+        : null,
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    correctAnswer: room.phase === 'question' ? hostCorrectSummary(room.quiz.questions[qIndex]) : '',
+    correctAnswer: room.phase === 'question' && room.questionClosed ? hostCorrectSummary(roomQuestion) : '',
     settings: {
       randomNames: !!room.settings?.randomNames,
     },
@@ -547,10 +636,114 @@ function playerState(room, playerId) {
     score: player.score,
     answeredCurrent: !!responses[playerId],
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
+    questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
+    questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,
+    questionCloseReason: room.phase === 'question' ? room.questionCloseReason || null : null,
     leaderboard: Object.values(room.players)
       .map((p) => ({ name: p.name, score: p.score }))
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
   };
+}
+
+function hostQuestionPayload(question) {
+  if (!question) return null;
+
+  const base = publicQuestion(question);
+  if (!base) return null;
+
+  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+    const answers = (question.answers || []).map((a) => ({ text: a.text, isCorrect: !!a.correct }));
+    const correctIndexes = answers.map((a, idx) => (a.isCorrect ? idx : null)).filter((idx) => idx !== null);
+    return {
+      ...base,
+      answers,
+      correctIndexes,
+    };
+  }
+
+  if (question.type === 'text') {
+    return {
+      ...base,
+      accepted: (question.accepted || []).filter(Boolean),
+    };
+  }
+
+  if (question.type === 'puzzle') {
+    return {
+      ...base,
+      items: [...(question.items || [])],
+    };
+  }
+
+  if (question.type === 'slider') {
+    return {
+      ...base,
+      target: question.target,
+    };
+  }
+
+  if (question.type === 'pin') {
+    return {
+      ...base,
+      zone: question.zone
+        ? {
+            x: Number(question.zone.x),
+            y: Number(question.zone.y),
+            r: Number(question.zone.r),
+          }
+        : null,
+    };
+  }
+
+  return base;
+}
+
+function getQuestionTimeLimitSec(question) {
+  if (!question) return null;
+  const min = minTimeByType(question.type);
+  return clamp(Number(question.timeLimit || 20), min, 240);
+}
+
+function closeCurrentQuestion(room, reason = 'manual_reveal') {
+  if (room.phase !== 'question') return false;
+  if (room.questionClosed) return false;
+
+  room.questionClosed = true;
+  room.questionClosedAt = Date.now();
+  room.questionCloseReason = String(reason || 'manual_reveal');
+  room.updatedAt = Date.now();
+  return true;
+}
+
+function closeQuestionIfTimedOut(room) {
+  if (room.phase !== 'question' || room.questionClosed) return false;
+
+  const question = room.quiz.questions?.[room.currentIndex];
+  if (!question) return false;
+
+  const startedAt = Number(room.questionStartedAt || 0);
+  if (!Number.isFinite(startedAt) || startedAt <= 0) return false;
+
+  const timeLimitSec = getQuestionTimeLimitSec(question);
+  const deadline = startedAt + timeLimitSec * 1000;
+
+  if (Date.now() < deadline) return false;
+  return closeCurrentQuestion(room, 'timeout');
+}
+
+function startQuestion(room, index) {
+  const qIndex = Number(index);
+  if (!Number.isFinite(qIndex)) return false;
+  if (qIndex < 0 || qIndex >= room.quiz.questions.length) return false;
+
+  room.phase = 'question';
+  room.currentIndex = qIndex;
+  room.questionStartedAt = Date.now();
+  room.questionClosed = false;
+  room.questionClosedAt = null;
+  room.questionCloseReason = null;
+  room.updatedAt = Date.now();
+  return true;
 }
 
 function publicQuestion(question) {

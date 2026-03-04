@@ -183,12 +183,20 @@ function renderPlayerState(state) {
     animatePulse(joinQuestionWrap);
   }
 
+  const questionClosed = !!state.questionClosed;
+
   if (joinSubmitBtn) {
-    joinSubmitBtn.disabled = state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
-    if (joinSubmitBtn.disabled) setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+    joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
+    if (questionClosed) {
+      setStatus(joinFeedbackEl, 'Time is up. Waiting for next question…', 'ok');
+    } else if (joinSubmitBtn.disabled) {
+      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+    }
   }
 
-  setStatus(joinStatusEl, 'Question live!', 'ok');
+  if (questionClosed) setStatus(joinStatusEl, 'Question closed.', 'ok');
+  else if (state.answeredCurrent) setStatus(joinStatusEl, 'Answer received.', 'ok');
+  else setStatus(joinStatusEl, 'Question live!', 'ok');
 }
 
 function renderJoinQuestion(question) {
@@ -353,7 +361,13 @@ async function submitLiveAnswer() {
 
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
-    setStatus(joinFeedbackEl, err.message, 'bad');
+    const msg = String(err?.message || 'Could not submit answer.');
+    if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
+      if (joinSubmitBtn) joinSubmitBtn.disabled = true;
+      setStatus(joinFeedbackEl, 'Question is closed. Waiting for next one…', 'ok');
+      return;
+    }
+    setStatus(joinFeedbackEl, msg, 'bad');
   }
 }
 
