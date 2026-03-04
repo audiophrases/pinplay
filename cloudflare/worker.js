@@ -205,6 +205,26 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/rename' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/rename', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+            name: sanitizeName(body?.name),
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -575,6 +595,28 @@ export class QuizRoom {
         await this.#setRoom(room);
 
         return json({ ok: true, playerId });
+      }
+
+      if (url.pathname === '/host/rename' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const nextName = sanitizeName(body?.name);
+
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+        if (!nextName) return json({ error: 'Name is required.' }, 400);
+        if (hasBlockedNickname(nextName)) return json({ error: 'Name is not allowed.' }, 400);
+
+        const nameTaken = Object.values(room.players || {}).some((p) => p.id !== playerId && normalizeNameKey(p.name) === normalizeNameKey(nextName));
+        if (nameTaken) return json({ error: 'Name already in use.' }, 409);
+
+        room.players[playerId].name = nextName;
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId, name: nextName });
       }
 
       if (url.pathname === '/player/state' && request.method === 'POST') {

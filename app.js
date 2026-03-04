@@ -777,6 +777,12 @@ function bindLiveEvents() {
 
   if (hostPlayersEl) {
     hostPlayersEl.addEventListener('click', (e) => {
+      const renameBtn = e.target.closest('[data-rename-player]');
+      if (renameBtn) {
+        renamePlayer(renameBtn.dataset.renamePlayer, renameBtn.dataset.currentName || '');
+        return;
+      }
+
       const btn = e.target.closest('[data-kick-player]');
       if (!btn) return;
       kickPlayer(btn.dataset.kickPlayer);
@@ -948,6 +954,34 @@ async function kickPlayer(playerId) {
   }
 }
 
+async function renamePlayer(playerId, currentName = '') {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    const next = prompt('New student name:', String(currentName || '').trim());
+    if (next == null) return;
+
+    const name = String(next || '').trim();
+    if (!name) throw new Error('Name cannot be empty.');
+
+    await api('/api/host/rename', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+        name,
+      },
+    });
+
+    setStatus(hostStatusEl, `Renamed to ${name}.`, 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -988,12 +1022,22 @@ function renderHostState(state) {
       const name = document.createElement('span');
       name.textContent = `${p.name} - ${p.score} pts${p.answeredCurrent ? ' [answered]' : ''}`;
 
+      const actions = document.createElement('div');
+      actions.className = 'row gap';
+
+      const rename = document.createElement('button');
+      rename.className = 'btn';
+      rename.dataset.renamePlayer = p.id;
+      rename.dataset.currentName = p.name || '';
+      rename.textContent = 'Rename';
+
       const kick = document.createElement('button');
       kick.className = 'btn';
       kick.dataset.kickPlayer = p.id;
       kick.textContent = 'Remove';
 
-      row.append(name, kick);
+      actions.append(rename, kick);
+      row.append(name, actions);
       li.appendChild(row);
       hostPlayersEl.appendChild(li);
     });
