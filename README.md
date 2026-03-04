@@ -27,11 +27,11 @@ Free, no-ads classroom quiz web app.
 - JSON import/export
 
 ### Classroom flow
-- **Create side (teacher)**
+- **Create side (teacher)** — `.../pinplay/create/`
   - Protected with password: `1234.`
   - Build quiz and host live game
   - Shows projected question view (question + options)
-- **Play side (students only)**
+- **Play side (students only)** — `.../pinplay/`
   - Join by 6-digit PIN and name
   - Students answer on their devices
   - Live scoring + leaderboard
@@ -50,9 +50,10 @@ Free, no-ads classroom quiz web app.
 3. Source: **Deploy from branch**
 4. Branch: `main`, folder `/ (root)`
 
-Frontend URL:
+Frontend URLs:
 
-`https://audiophrases.github.io/pinplay/`
+- Student play: `https://audiophrases.github.io/pinplay/`
+- Teacher create/host: `https://audiophrases.github.io/pinplay/create/`
 
 ## Deploy free backend (Cloudflare Worker + Durable Objects)
 
