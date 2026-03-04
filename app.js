@@ -23,6 +23,7 @@ const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
+const openDriveBtn = document.getElementById('openDriveBtn');
 const importInput = document.getElementById('importInput');
 
 // Create-side auth
@@ -245,6 +246,10 @@ function bindBuilderEvents() {
 
   if (publishDriveBtn) {
     publishDriveBtn.addEventListener('click', publishQuizToDrive);
+  }
+
+  if (openDriveBtn) {
+    openDriveBtn.addEventListener('click', openQuizFromDrive);
   }
 
   importInput.addEventListener('change', async (e) => {
@@ -642,6 +647,40 @@ async function publishQuizToDrive() {
     setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
+  }
+}
+
+async function openQuizFromDrive() {
+  try {
+    const list = await api('/api/drive/list', { method: 'GET' });
+    const files = Array.isArray(list?.files) ? list.files : [];
+    if (!files.length) throw new Error('No quiz files found in Drive folder.');
+
+    const preview = files
+      .slice(0, 12)
+      .map((f, i) => `${i + 1}. ${f.name || f.id}`)
+      .join('\n');
+
+    const pickRaw = prompt(`Open from Drive\n\nChoose file number:\n${preview}`);
+    if (pickRaw == null) return;
+
+    const pick = Number(String(pickRaw).trim());
+    if (!Number.isFinite(pick) || pick < 1 || pick > Math.min(files.length, 12)) {
+      throw new Error('Invalid file number.');
+    }
+
+    const chosen = files[pick - 1];
+    const openData = await api(`/api/drive/open?fileId=${encodeURIComponent(chosen.id)}`, { method: 'GET' });
+    const loadedQuiz = openData?.quiz;
+
+    validateImportedQuiz(loadedQuiz);
+    quiz = loadedQuiz;
+    renderBuilder();
+    saveQuiz(quiz);
+
+    setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name}`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
   }
 }
 

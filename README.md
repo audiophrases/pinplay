@@ -131,7 +131,11 @@ wrangler secret put DRIVE_PUBLISH_URL
 wrangler deploy
 ```
 
-After that, Teacher Create → **Publish to Drive** uploads quiz JSON into your Drive folder.
+After that, Teacher Create supports:
+- **Publish to Drive** (save current quiz JSON)
+- **Open from Drive** (list recent JSON files and load one into builder)
+
+> If you update `drive-bridge.gs`, redeploy the Apps Script Web App so new endpoints are active.
 
 ## Quiz JSON format (example)
 

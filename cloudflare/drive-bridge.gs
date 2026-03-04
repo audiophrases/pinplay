@@ -6,7 +6,7 @@ function doPost(e) {
     const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
     const body = JSON.parse(raw);
 
-    if (!body || body.secret !== SHARED_SECRET) {
+    if (!isAuthorized(body && body.secret)) {
       return jsonOut({ error: 'Unauthorized.' });
     }
 
@@ -26,19 +26,85 @@ function doPost(e) {
 
     return jsonOut({
       ok: true,
-      file: {
-        id: file.getId(),
-        name: file.getName(),
-        webViewLink: `https://drive.google.com/file/d/${file.getId()}/view`,
-      },
-      folder: {
-        id: folder.getId(),
-        webViewLink: `https://drive.google.com/drive/folders/${folder.getId()}`,
-      },
+      file: driveFileInfo(file),
+      folder: driveFolderInfo(folder),
     });
   } catch (err) {
     return jsonOut({ error: `Publish failed: ${err.message}` });
   }
+}
+
+function doGet(e) {
+  try {
+    const action = String((e && e.parameter && e.parameter.action) || '').trim();
+    const secret = String((e && e.parameter && e.parameter.secret) || '').trim();
+
+    if (!isAuthorized(secret)) {
+      return jsonOut({ error: 'Unauthorized.' });
+    }
+
+    if (action === 'list') {
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      const files = [];
+      const iter = folder.getFiles();
+
+      while (iter.hasNext()) {
+        const f = iter.next();
+        const name = String(f.getName() || '');
+        if (!name.toLowerCase().endsWith('.json')) continue;
+
+        files.push({
+          id: f.getId(),
+          name,
+          updatedAt: f.getLastUpdated().toISOString(),
+          webViewLink: `https://drive.google.com/file/d/${f.getId()}/view`,
+        });
+      }
+
+      files.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      return jsonOut({ ok: true, files, folder: driveFolderInfo(folder) });
+    }
+
+    if (action === 'open') {
+      const fileId = String((e && e.parameter && e.parameter.fileId) || '').trim();
+      if (!fileId) return jsonOut({ error: 'fileId required.' });
+
+      const file = DriveApp.getFileById(fileId);
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      const content = file.getBlob().getDataAsString('UTF-8');
+      const quiz = JSON.parse(content);
+
+      return jsonOut({
+        ok: true,
+        quiz,
+        file: driveFileInfo(file),
+        folder: driveFolderInfo(folder),
+      });
+    }
+
+    return jsonOut({ error: 'Unknown action.' });
+  } catch (err) {
+    return jsonOut({ error: `Drive bridge failed: ${err.message}` });
+  }
+}
+
+function isAuthorized(secret) {
+  return String(secret || '') === String(SHARED_SECRET || '');
+}
+
+function driveFileInfo(file) {
+  return {
+    id: file.getId(),
+    name: file.getName(),
+    webViewLink: `https://drive.google.com/file/d/${file.getId()}/view`,
+  };
+}
+
+function driveFolderInfo(folder) {
+  return {
+    id: folder.getId(),
+    webViewLink: `https://drive.google.com/drive/folders/${folder.getId()}`,
+  };
 }
 
 function jsonOut(obj) {
