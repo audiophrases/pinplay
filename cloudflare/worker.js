@@ -692,7 +692,14 @@ export class QuizRoom {
         }
 
         const verdict = evaluate(question, body?.answer);
-        const pointsAwarded = verdict.correct ? Number(question.points || 1000) : 0;
+        const basePoints = Number(question.points || 1000);
+
+        let pointsAwarded = 0;
+        if (verdict.correct) {
+          const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {}).filter((r) => !!r?.correct).length;
+          const multiplier = correctCountSoFar === 0 ? 1 : (correctCountSoFar === 1 ? 0.9 : 0.8);
+          pointsAwarded = Math.round(basePoints * multiplier);
+        }
 
         room.responsesByQuestion[qIndex][playerId] = {
           answer: body?.answer,
