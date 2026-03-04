@@ -1,7 +1,14 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
+const CLIENT_ID_KEY = 'pinplay.client.v1';
+
+const joinStepPinEl = document.getElementById('joinStepPin');
+const joinStepIdentityEl = document.getElementById('joinStepIdentity');
+const joinModeHintEl = document.getElementById('joinModeHint');
+const joinNameWrapEl = document.getElementById('joinNameWrap');
 
 const joinPinEl = document.getElementById('joinPin');
+const validatePinBtn = document.getElementById('validatePinBtn');
 const joinNameEl = document.getElementById('joinName');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
@@ -23,28 +30,90 @@ const live = {
     submittedForIndex: null,
     currentQuestion: null,
     pinSelection: null,
+    randomNamesMode: false,
+    clientId: getOrCreateClientId(),
   },
 };
 
 init();
 
 function init() {
+  if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
+
+  if (joinPinEl) {
+    joinPinEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') validatePin();
+    });
+  }
+
+  if (joinNameEl) {
+    joinNameEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinLiveGame();
+    });
+  }
+}
+
+async function validatePin() {
+  try {
+    const pin = String(joinPinEl?.value || '').trim();
+    if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits.');
+
+    const data = await api(
+      `/api/pin/check?pin=${encodeURIComponent(pin)}&clientId=${encodeURIComponent(live.player.clientId)}`,
+      { method: 'GET' },
+    );
+
+    live.player.pin = pin;
+    live.player.randomNamesMode = !!data?.settings?.randomNames;
+
+    if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+    if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+
+    if (live.player.randomNamesMode) {
+      if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+      if (joinModeHintEl) {
+        joinModeHintEl.textContent = data.alreadyJoined && data.joinedPlayer?.name
+          ? `Random names mode is ON. You are already in as ${data.joinedPlayer.name}.`
+          : 'Random names mode is ON. You will be assigned a fun name automatically.';
+      }
+    } else {
+      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+      if (joinModeHintEl) {
+        joinModeHintEl.textContent = 'Open names mode. Enter your name to join.';
+      }
+      if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
+        joinNameEl.value = data.joinedPlayer.name;
+      }
+    }
+
+    if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
+    setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
+  } catch (err) {
+    setStatus(joinStatusEl, err.message, 'bad');
+  }
 }
 
 async function joinLiveGame() {
   try {
-    const pin = String(joinPinEl?.value || '').trim();
-    const name = String(joinNameEl?.value || '').trim() || 'Student';
-    if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits.');
+    if (!live.player.pin) {
+      await validatePin();
+      if (!live.player.pin) return;
+    }
+
+    const name = String(joinNameEl?.value || '').trim();
+    if (!live.player.randomNamesMode && !name) throw new Error('Enter your name.');
 
     const data = await api('/api/join', {
       method: 'POST',
-      body: { pin, name },
+      body: {
+        pin: live.player.pin,
+        name,
+        clientId: live.player.clientId,
+      },
     });
 
-    live.player.pin = pin;
     live.player.id = data.playerId;
     live.player.token = data.playerToken;
     live.player.renderKey = null;
@@ -52,8 +121,12 @@ async function joinLiveGame() {
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
 
-    const shownName = data.name || name;
-    setStatus(joinStatusEl, `Joined as ${shownName} ✅`, 'ok');
+    const shownName = data.name || name || 'Student';
+    const prefix = data.alreadyJoined ? 'Rejoined' : 'Joined';
+    setStatus(joinStatusEl, `${prefix} as ${shownName} ✅`, 'ok');
+
+    if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
+
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
@@ -383,6 +456,21 @@ async function api(path, opts = {}) {
 
 function loadBackendUrl() {
   return localStorage.getItem(BACKEND_KEY) || '';
+}
+
+function getOrCreateClientId() {
+  const existing = localStorage.getItem(CLIENT_ID_KEY);
+  if (existing) return existing;
+
+  let id = '';
+  try {
+    id = `c_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
+  } catch {
+    id = `c_${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+  }
+
+  localStorage.setItem(CLIENT_ID_KEY, id);
+  return id;
 }
 
 function animatePulse(el) {

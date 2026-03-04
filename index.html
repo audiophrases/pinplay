@@ -15,20 +15,22 @@
       <section class="panel active">
         <div class="card" id="joinCard">
           <h2>Join game</h2>
-          <p class="muted">Enter the PIN your teacher gives in class.</p>
 
-          <div class="row gap">
-            <div style="flex:1; min-width: 180px;">
-              <label>PIN</label>
-              <input id="joinPin" type="text" maxlength="6" placeholder="123456" />
-            </div>
-            <div style="flex:1; min-width: 180px;">
-              <label>Name</label>
-              <input id="joinName" type="text" maxlength="40" placeholder="Student name" />
-            </div>
+          <div id="joinStepPin">
+            <label>PIN</label>
+            <input id="joinPin" type="text" maxlength="6" placeholder="123456" />
+            <button id="validatePinBtn" class="btn primary top-space">Continue</button>
           </div>
 
-          <button id="joinBtn" class="btn primary top-space">Join live game</button>
+          <div id="joinStepIdentity" class="hidden top-space">
+            <p id="joinModeHint" class="small"></p>
+            <div id="joinNameWrap">
+              <label>Name</label>
+              <input id="joinName" type="text" maxlength="40" placeholder="Your name" />
+            </div>
+            <button id="joinBtn" class="btn primary top-space">Join live game</button>
+          </div>
+
           <p id="joinStatus" class="feedback"></p>
 
           <div id="joinQuestionWrap" class="hidden top-space">

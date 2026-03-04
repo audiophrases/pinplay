@@ -7,9 +7,11 @@ const CORS_HEADERS = {
 };
 
 const RANDOM_NAMES = [
-  'Falcon', 'Panda', 'Otter', 'Comet', 'Maple', 'Nova', 'Cedar', 'River', 'Pixel', 'Tango',
-  'Iris', 'Cobalt', 'Echo', 'Mango', 'Lemon', 'Coral', 'Sparrow', 'Nimbus', 'Juniper', 'Ruby',
-  'Amber', 'Sunny', 'Misty', 'Berry', 'Rocket', 'Lyra', 'Orion', 'Jade', 'Aster', 'Breeze',
+  'Neon Ninja', 'Cosmic Panda', 'Turbo Otter', 'Pixel Falcon', 'Comet Rider', 'Laser Lynx',
+  'Captain Mango', 'Nova Turtle', 'Rainbow Fox', 'Thunder Koala', 'Moon Cheetah', 'Rocket Gecko',
+  'Shadow Penguin', 'Blaze Sparrow', 'Mystic Dolphin', 'Cobalt Tiger', 'Breeze Dragon', 'Jade Wolf',
+  'Berry Falcon', 'Sunny Shark', 'Nimbus Owl', 'Echo Raccoon', 'Orion Rabbit', 'Coral Panther',
+  'Maple Jaguar', 'Ruby Seahorse', 'Aster Viper', 'Lemon Phoenix', 'Juniper Eagle', 'Tango Lion',
 ];
 
 const BLOCKED_NICK_PATTERNS = [
@@ -60,10 +62,24 @@ export default {
       return json({ error: 'Could not allocate PIN. Try again.' }, 503);
     }
 
+    if (url.pathname === '/api/pin/check' && request.method === 'GET') {
+      const pin = sanitizePin(url.searchParams.get('pin'));
+      const clientId = sanitizeId(url.searchParams.get('clientId'));
+      if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch(`https://room/pin/check?clientId=${encodeURIComponent(clientId)}`, {
+          method: 'GET',
+        }),
+      );
+    }
+
     if (url.pathname === '/api/join' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
       const name = sanitizeName(body?.name);
+      const clientId = sanitizeId(body?.clientId);
 
       if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
 
@@ -71,7 +87,7 @@ export default {
       return withCors(
         await stub.fetch('https://room/join', {
           method: 'POST',
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, clientId }),
         }),
       );
     }
@@ -233,6 +249,7 @@ export class QuizRoom {
           updatedAt: Date.now(),
           phase: 'lobby',
           currentIndex: -1,
+          questionStartedAt: null,
           quiz: normalizeQuiz(quiz),
           players: {},
           responsesByQuestion: {},
@@ -253,9 +270,43 @@ export class QuizRoom {
         return json({ error: 'Room expired.' }, 410);
       }
 
+      if (url.pathname === '/pin/check' && request.method === 'GET') {
+        const clientId = sanitizeId(url.searchParams.get('clientId'));
+        const existing = findPlayerByClientId(room, clientId);
+        return json({
+          ok: true,
+          pin: room.pin,
+          phase: room.phase,
+          settings: {
+            randomNames: !!room.settings?.randomNames,
+          },
+          alreadyJoined: !!existing,
+          joinedPlayer: existing
+            ? {
+                id: existing.id,
+                name: existing.name,
+              }
+            : null,
+        });
+      }
+
       if (url.pathname === '/join' && request.method === 'POST') {
         const body = await safeJson(request);
         const rawName = sanitizeName(body?.name);
+        const clientId = sanitizeId(body?.clientId);
+
+        if (clientId) {
+          const existing = findPlayerByClientId(room, clientId);
+          if (existing) {
+            return json({
+              playerId: existing.id,
+              playerToken: existing.token,
+              pin: room.pin,
+              name: existing.name,
+              alreadyJoined: true,
+            });
+          }
+        }
 
         let name = rawName;
         if (room.settings?.randomNames) {
@@ -267,6 +318,11 @@ export class QuizRoom {
           return json({ error: 'Nickname not allowed. Please choose another one.' }, 400);
         }
 
+        if (!room.settings?.randomNames) {
+          const nameTaken = Object.values(room.players || {}).some((p) => normalizeNameKey(p.name) === normalizeNameKey(name));
+          if (nameTaken) return json({ error: 'Name already in use in this game.' }, 409);
+        }
+
         const playerId = randomId('p_');
         const playerToken = randomToken();
 
@@ -274,6 +330,7 @@ export class QuizRoom {
           id: playerId,
           name,
           token: playerToken,
+          clientId: clientId || '',
           score: 0,
           joinedAt: Date.now(),
         };
@@ -281,7 +338,7 @@ export class QuizRoom {
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
-        return json({ playerId, playerToken, pin: room.pin, name });
+        return json({ playerId, playerToken, pin: room.pin, name, alreadyJoined: false });
       }
 
       if (url.pathname === '/host/state' && request.method === 'GET') {
@@ -297,6 +354,7 @@ export class QuizRoom {
         if (room.phase === 'lobby') {
           room.phase = 'question';
           room.currentIndex = 0;
+          room.questionStartedAt = Date.now();
           room.updatedAt = Date.now();
           await this.#setRoom(room);
         }
@@ -311,11 +369,14 @@ export class QuizRoom {
         if (room.phase === 'lobby') {
           room.phase = 'question';
           room.currentIndex = 0;
+          room.questionStartedAt = Date.now();
         } else if (room.phase === 'question') {
           if (room.currentIndex + 1 < room.quiz.questions.length) {
             room.currentIndex += 1;
+            room.questionStartedAt = Date.now();
           } else {
             room.phase = 'results';
+            room.questionStartedAt = null;
           }
         }
 
@@ -464,6 +525,9 @@ function hostState(room) {
     responseCount: Object.keys(responses).length,
     players,
     question,
+    questionStartedAt: room.questionStartedAt || null,
+    allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
+    correctAnswer: room.phase === 'question' ? hostCorrectSummary(room.quiz.questions[qIndex]) : '',
     settings: {
       randomNames: !!room.settings?.randomNames,
     },
@@ -801,6 +865,49 @@ function sanitizePin(pin) {
 function sanitizeName(name) {
   const cleaned = String(name || '').replace(/\s+/g, ' ').trim();
   return cleaned.slice(0, 40);
+}
+
+function normalizeNameKey(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function findPlayerByClientId(room, clientId) {
+  if (!clientId) return null;
+  return Object.values(room.players || {}).find((p) => String(p.clientId || '') === clientId) || null;
+}
+
+function hostCorrectSummary(question) {
+  if (!question) return '';
+
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+    const idx = (question.answers || []).findIndex((a) => !!a.correct);
+    return idx >= 0 ? `${idx + 1}. ${(question.answers[idx]?.text || '').trim()}` : '';
+  }
+
+  if (question.type === 'multi') {
+    const values = (question.answers || [])
+      .map((a, idx) => (a.correct ? `${idx + 1}. ${a.text}` : null))
+      .filter(Boolean);
+    return values.join(' | ');
+  }
+
+  if (question.type === 'text') {
+    return (question.accepted || []).filter(Boolean).join(' | ');
+  }
+
+  if (question.type === 'puzzle') {
+    return (question.items || []).join(' > ');
+  }
+
+  if (question.type === 'slider') {
+    return `${question.target}${question.unit ? ` ${question.unit}` : ''}`;
+  }
+
+  if (question.type === 'pin') {
+    return 'Pin zone set';
+  }
+
+  return '';
 }
 
 function hasBlockedNickname(name) {

@@ -35,7 +35,9 @@ Free, no-ads classroom quiz web app.
   - Teacher can remove/kick students (e.g., inappropriate nicknames)
   - Projected question view (question + options)
 - **Play side (students only)** — `.../pinplay/`
-  - Join by 6-digit PIN and name
+  - Two-step join: validate 6-digit PIN, then join
+  - Open-name mode OR random-name mode (set by teacher before creating game)
+  - Same browser/device client rejoins the same player (no duplicate join)
   - Students answer on their devices
   - Live scoring + leaderboard
 
