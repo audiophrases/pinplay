@@ -115,6 +115,7 @@ const live = {
     lastAllAnsweredKey: null,
     lastRevealKey: null,
     state: null,
+    seenReactionKeys: new Set(),
   },
   player: {
     pin: null,
@@ -1003,7 +1004,7 @@ function renderHostState(state) {
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
-  if (liveReactionsEl) liveReactionsEl.textContent = `Reactions: ${formatReactionSummary(state.reactions || [])}`;
+  renderReactionPop(state.reactions || []);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
 
@@ -1070,6 +1071,11 @@ function renderHostState(state) {
   updateHostTimer(state);
 
   const phaseChanged = live.host.lastPhase !== state.phase || live.host.lastIndex !== state.currentIndex;
+
+  if (phaseChanged) {
+    live.host.seenReactionKeys = new Set();
+    if (liveReactionsEl) liveReactionsEl.innerHTML = '';
+  }
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
@@ -1224,16 +1230,27 @@ function renderProjectorScores(players) {
   });
 }
 
-function formatReactionSummary(reactions) {
-  if (!Array.isArray(reactions) || !reactions.length) return '—';
-  const counts = new Map();
+function renderReactionPop(reactions) {
+  if (!liveReactionsEl) return;
+  if (!Array.isArray(reactions) || !reactions.length) return;
+
   reactions.forEach((r) => {
     const emoji = String(r?.emoji || '').trim();
     if (!emoji) return;
-    counts.set(emoji, (counts.get(emoji) || 0) + 1);
+
+    const key = `${r.playerId || 'p'}:${r.at || 0}:${emoji}`;
+    if (live.host.seenReactionKeys.has(key)) return;
+    live.host.seenReactionKeys.add(key);
+
+    const pop = document.createElement('span');
+    pop.className = 'reaction-pop-item';
+    pop.textContent = emoji;
+    pop.style.left = `${Math.round(10 + Math.random() * 80)}%`;
+    pop.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
+
+    liveReactionsEl.appendChild(pop);
+    setTimeout(() => pop.remove(), 1800);
   });
-  if (!counts.size) return '—';
-  return [...counts.entries()].map(([emoji, count]) => `${emoji}${count}`).join(' ');
 }
 
 function updateHostTimer(state) {
