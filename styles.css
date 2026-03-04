@@ -63,6 +63,7 @@ textarea { min-height: 72px; resize: vertical; }
 .row { display: flex; align-items: center; }
 .row.spread { justify-content: space-between; }
 .row.gap { gap: .5rem; flex-wrap: wrap; }
+.quiz-actions { justify-content: center; }
 .top-space { margin-top: .75rem; }
 
 .btn {
