@@ -12,6 +12,7 @@ const validatePinBtn = document.getElementById('validatePinBtn');
 const joinNameEl = document.getElementById('joinName');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
+const joinTitleEl = document.getElementById('joinTitle');
 const joinQuestionWrap = document.getElementById('joinQuestionWrap');
 const joinProgressEl = document.getElementById('joinProgress');
 const joinScoreEl = document.getElementById('joinScore');
@@ -31,6 +32,7 @@ const live = {
     currentQuestion: null,
     pinSelection: null,
     randomNamesMode: false,
+    displayName: null,
     clientId: getOrCreateClientId(),
   },
 };
@@ -122,6 +124,9 @@ async function joinLiveGame() {
     live.player.pinSelection = null;
 
     const shownName = data.name || name || 'Student';
+    live.player.displayName = shownName;
+    setJoinTitle(shownName);
+
     const prefix = data.alreadyJoined ? 'Rejoined' : 'Joined';
     setStatus(joinStatusEl, `${prefix} as ${shownName} ✅`, 'ok');
 
@@ -500,6 +505,12 @@ function setStatus(el, text, mode = '') {
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
   if (mode === 'bad') el.classList.add('bad');
+}
+
+function setJoinTitle(name = '') {
+  if (!joinTitleEl) return;
+  const safe = String(name || '').trim();
+  joinTitleEl.textContent = safe ? safe : 'Join game';
 }
 
 function normalizeBackendUrl(url) {
