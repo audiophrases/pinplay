@@ -41,9 +41,9 @@ Free, no-ads classroom quiz web app.
 
 ### Optional classroom audio files
 Put these in `/music` (already git-tracked with placeholders):
-- `hall.mp3` → hall/lobby background loop (teacher page)
-- `answering.mp3` → question appears
-- `answered.mp3` → answer submitted/received
+- `hall.mp3` → hall/lobby background loop (teacher page only)
+- `answering.mp3` → question appears (teacher page only)
+- `answered.mp3` → answer submitted/received (teacher page only)
 
 ## What is still planned
 
