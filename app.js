@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'pinplay.quiz.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
+const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
+const CREATE_PASSWORD = '1234.';
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -21,12 +23,15 @@ const saveBtn = document.getElementById('saveBtn');
 const exportBtn = document.getElementById('exportBtn');
 const importInput = document.getElementById('importInput');
 
-// Live mode
-const backendUrlEl = document.getElementById('backendUrl');
-const saveBackendBtn = document.getElementById('saveBackendBtn');
+// Create-side auth
+const createAuthCard = document.getElementById('createAuthCard');
+const createWorkspace = document.getElementById('createWorkspace');
+const createPasswordEl = document.getElementById('createPassword');
+const unlockCreateBtn = document.getElementById('unlockCreateBtn');
+const createAuthStatusEl = document.getElementById('createAuthStatus');
 const backendStatusEl = document.getElementById('backendStatus');
 
-// Host controls
+// Host controls (create side)
 const createLiveBtn = document.getElementById('createLiveBtn');
 const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
@@ -37,6 +42,10 @@ const liveProgressEl = document.getElementById('liveProgress');
 const liveResponsesEl = document.getElementById('liveResponses');
 const hostPlayersEl = document.getElementById('hostPlayers');
 const hostStatusEl = document.getElementById('hostStatus');
+const hostQuestionWrap = document.getElementById('hostQuestionWrap');
+const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
+const hostQuestionAnswersEl = document.getElementById('hostQuestionAnswers');
+const hostQuestionHintEl = document.getElementById('hostQuestionHint');
 
 // Join controls
 const joinPinEl = document.getElementById('joinPin');
@@ -103,13 +112,41 @@ function init() {
 
   const savedBackend = loadBackendUrl();
   const initialBackend = normalizeBackendUrl(savedBackend) || DEFAULT_BACKEND_URL;
-  backendUrlEl.value = initialBackend;
-
   if (!normalizeBackendUrl(savedBackend)) {
     saveBackendUrl(initialBackend);
   }
 
-  setBackendStatus('Backend URL ready ✅', 'ok');
+  setupCreateAccess();
+}
+
+function setupCreateAccess() {
+  const unlock = () => {
+    const value = String(createPasswordEl?.value || '');
+    if (value === CREATE_PASSWORD) {
+      sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
+      if (createWorkspace) createWorkspace.classList.remove('hidden');
+      if (createAuthCard) createAuthCard.classList.add('hidden');
+      setStatus(createAuthStatusEl, 'Unlocked ✅', 'ok');
+      if (createPasswordEl) createPasswordEl.value = '';
+      return;
+    }
+    setStatus(createAuthStatusEl, 'Wrong password', 'bad');
+  };
+
+  if (sessionStorage.getItem(CREATE_UNLOCK_KEY) === '1') {
+    if (createWorkspace) createWorkspace.classList.remove('hidden');
+    if (createAuthCard) createAuthCard.classList.add('hidden');
+    return;
+  }
+
+  if (createWorkspace) createWorkspace.classList.add('hidden');
+  if (createAuthCard) createAuthCard.classList.remove('hidden');
+  if (unlockCreateBtn) unlockCreateBtn.addEventListener('click', unlock);
+  if (createPasswordEl) {
+    createPasswordEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') unlock();
+    });
+  }
 }
 
 // ---------- Tabs ----------
@@ -536,24 +573,13 @@ function syncQuizFromUI() {
 
 // ---------- Live mode ----------
 function bindLiveEvents() {
-  saveBackendBtn.addEventListener('click', () => {
-    const normalized = normalizeBackendUrl(backendUrlEl.value.trim());
-    if (!normalized) {
-      setBackendStatus('Invalid URL', 'bad');
-      return;
-    }
-    saveBackendUrl(normalized);
-    backendUrlEl.value = normalized;
-    setBackendStatus('Backend URL saved ✅', 'ok');
-  });
+  if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
+  if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
+  if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
+  if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
 
-  createLiveBtn.addEventListener('click', createLiveGame);
-  hostRefreshBtn.addEventListener('click', pollHostState);
-  hostStartBtn.addEventListener('click', hostStartGame);
-  hostNextBtn.addEventListener('click', hostNextQuestion);
-
-  joinBtn.addEventListener('click', joinLiveGame);
-  joinSubmitBtn.addEventListener('click', submitLiveAnswer);
+  if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
+  if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 }
 
 async function createLiveGame() {
@@ -625,21 +651,23 @@ async function pollHostState() {
 }
 
 function renderHostState(state) {
-  livePhaseEl.textContent = `Phase: ${state.phase}`;
-  liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
-  liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
+  if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
+  if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
+  if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
 
-  hostPlayersEl.innerHTML = '';
-  (state.players || []).forEach((p) => {
-    const li = document.createElement('li');
-    li.textContent = `${p.name} — ${p.score} pts${p.answeredCurrent ? ' ✅' : ''}`;
-    hostPlayersEl.appendChild(li);
-  });
+  if (hostPlayersEl) {
+    hostPlayersEl.innerHTML = '';
+    (state.players || []).forEach((p) => {
+      const li = document.createElement('li');
+      li.textContent = `${p.name} — ${p.score} pts${p.answeredCurrent ? ' ✅' : ''}`;
+      hostPlayersEl.appendChild(li);
+    });
 
-  if (!state.players?.length) {
-    const li = document.createElement('li');
-    li.textContent = 'No students joined yet.';
-    hostPlayersEl.appendChild(li);
+    if (!state.players?.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No students joined yet.';
+      hostPlayersEl.appendChild(li);
+    }
   }
 
   const actionHint =
@@ -650,6 +678,89 @@ function renderHostState(state) {
         : 'Game finished.';
 
   setStatus(hostStatusEl, actionHint, 'ok');
+  renderHostQuestion(state.phase, state.question);
+}
+
+function renderHostQuestion(phase, question) {
+  if (!hostQuestionWrap || !hostQuestionPromptEl || !hostQuestionAnswersEl || !hostQuestionHintEl) return;
+
+  if (phase !== 'question' || !question) {
+    hostQuestionWrap.classList.add('hidden');
+    hostQuestionPromptEl.textContent = '';
+    hostQuestionAnswersEl.innerHTML = '';
+    hostQuestionHintEl.textContent =
+      phase === 'results' ? 'Game finished. Final ranking shown above.' : 'Question will appear here when game starts.';
+    return;
+  }
+
+  hostQuestionWrap.classList.remove('hidden');
+  hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
+  hostQuestionAnswersEl.innerHTML = '';
+
+  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+    (question.answers || []).forEach((a, idx) => {
+      const row = document.createElement('div');
+      row.className = 'answer-row';
+      const tag = document.createElement('strong');
+      tag.textContent = `${idx + 1}.`;
+      const txt = document.createElement('span');
+      txt.textContent = a.text;
+      row.append(tag, txt);
+      hostQuestionAnswersEl.appendChild(row);
+    });
+
+    if (question.type === 'multi') {
+      const hint = document.createElement('p');
+      hint.className = 'small';
+      hint.textContent = 'Students must select all correct answers.';
+      hostQuestionAnswersEl.appendChild(hint);
+    }
+
+    if (question.type === 'audio') {
+      hostQuestionHintEl.textContent = 'Audio question — students can replay the audio on their device.';
+    } else {
+      hostQuestionHintEl.textContent = '';
+    }
+    return;
+  }
+
+  if (question.type === 'text') {
+    hostQuestionHintEl.textContent = 'Type-answer question (students type text).';
+    return;
+  }
+
+  if (question.type === 'puzzle') {
+    hostQuestionHintEl.textContent = 'Puzzle question (students choose the correct order).';
+    if (question.options?.length) {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = `Items: ${question.options.join(' · ')}`;
+      hostQuestionAnswersEl.appendChild(p);
+    }
+    return;
+  }
+
+  if (question.type === 'slider') {
+    hostQuestionHintEl.textContent = `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    return;
+  }
+
+  if (question.type === 'pin') {
+    hostQuestionHintEl.textContent = 'Pin answer question.';
+    if (question.imageData) {
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.alt = 'Pin question image';
+      img.style.maxWidth = '480px';
+      img.style.width = '100%';
+      img.style.border = '1px solid var(--line)';
+      img.style.borderRadius = '.6rem';
+      hostQuestionAnswersEl.appendChild(img);
+    }
+    return;
+  }
+
+  hostQuestionHintEl.textContent = '';
 }
 
 function startHostPolling() {
@@ -988,6 +1099,10 @@ function ensureHostReady() {
 
 // ---------- Solo mode ----------
 function bindSoloEvents() {
+  if (!startBtn || !submitBtn || !nextBtn || !playAgainBtn || !lobbyCard || !gameCard || !resultCard) {
+    return;
+  }
+
   startBtn.addEventListener('click', () => {
     syncQuizFromUI();
     if (!quiz.title?.trim()) return alert('Add a quiz title first.');
@@ -1271,13 +1386,14 @@ function finishSoloGame() {
 }
 
 function refreshLocalPin() {
+  if (!pinValueEl) return;
   pinValueEl.textContent = String(Math.floor(100000 + Math.random() * 900000));
 }
 
 // ---------- API ----------
 async function api(path, opts = {}) {
-  const base = normalizeBackendUrl(loadBackendUrl() || backendUrlEl.value.trim());
-  if (!base) throw new Error('Set backend URL first.');
+  const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+  if (!base) throw new Error('Backend URL is not configured.');
 
   const method = opts.method || 'GET';
   const headers = {
@@ -1570,6 +1686,7 @@ function setStatus(el, text, mode = '') {
 }
 
 function setBackendStatus(text, mode = '') {
+  if (!backendStatusEl) return;
   backendStatusEl.textContent = text;
   backendStatusEl.className = 'small';
   if (mode === 'ok') backendStatusEl.classList.add('ok');

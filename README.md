@@ -26,12 +26,15 @@ Free, no-ads classroom quiz web app.
 - Local save (`localStorage`)
 - JSON import/export
 
-### Play
-- **Solo mode** (offline, same browser)
-- **Live mode** (host + students on different devices) via backend URL
-  - Teacher creates live game from current quiz
-  - 6-digit PIN join
-  - Student scoring + live leaderboard
+### Classroom flow
+- **Create side (teacher)**
+  - Protected with password: `1234.`
+  - Build quiz and host live game
+  - Shows projected question view (question + options)
+- **Play side (students only)**
+  - Join by 6-digit PIN and name
+  - Students answer on their devices
+  - Live scoring + leaderboard
 
 ## What is still planned
 
@@ -80,7 +83,11 @@ This prints a URL like:
 
 ### 4) Connect app to backend
 
-Open PinPlay in browser and paste that URL into **Backend API URL**, then click **Save backend URL**.
+The frontend is preconfigured to use:
+
+`https://pinplay-api.eugenime.workers.dev`
+
+If you deploy to a different Worker URL, update `DEFAULT_BACKEND_URL` in `app.js`.
 
 ## Quiz JSON format (example)
 

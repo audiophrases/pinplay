@@ -19,67 +19,78 @@
       </nav>
 
       <section id="create" class="panel active">
-        <div class="card">
-          <h2>Quiz builder</h2>
-          <label>Quiz title</label>
-          <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+        <div class="card" id="createAuthCard">
+          <h2>Teacher access</h2>
+          <p class="muted">Enter password to create and host quizzes.</p>
+          <label>Password</label>
+          <input id="createPassword" type="password" placeholder="Enter teacher password" />
+          <div class="row gap top-space">
+            <button id="unlockCreateBtn" class="btn primary">Unlock create side</button>
+            <span id="createAuthStatus" class="small"></span>
+          </div>
+        </div>
 
-          <div class="row gap">
-            <button id="addMcqBtn" class="btn">+ Multiple choice</button>
-            <button id="addMultiBtn" class="btn">+ Multi-select</button>
-            <button id="addTfBtn" class="btn">+ True / False</button>
-            <button id="addTextBtn" class="btn">+ Type answer</button>
-            <button id="addPuzzleBtn" class="btn">+ Puzzle</button>
-            <button id="addAudioBtn" class="btn">+ Quiz + Audio</button>
-            <button id="addSliderBtn" class="btn">+ Slider</button>
-            <button id="addPinBtn" class="btn">+ Pin answer</button>
+        <div id="createWorkspace" class="hidden">
+          <div class="card">
+            <h2>Quiz builder</h2>
+            <label>Quiz title</label>
+            <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+
+            <div class="row gap">
+              <button id="addMcqBtn" class="btn">+ Multiple choice</button>
+              <button id="addMultiBtn" class="btn">+ Multi-select</button>
+              <button id="addTfBtn" class="btn">+ True / False</button>
+              <button id="addTextBtn" class="btn">+ Type answer</button>
+              <button id="addPuzzleBtn" class="btn">+ Puzzle</button>
+              <button id="addAudioBtn" class="btn">+ Quiz + Audio</button>
+              <button id="addSliderBtn" class="btn">+ Slider</button>
+              <button id="addPinBtn" class="btn">+ Pin answer</button>
+            </div>
+
+            <div id="questionList" class="question-list"></div>
+
+            <div class="row gap top-space">
+              <button id="saveBtn" class="btn primary">Save locally</button>
+              <button id="exportBtn" class="btn">Export JSON</button>
+              <label class="btn file-label" for="importInput">Import JSON</label>
+              <input id="importInput" type="file" accept="application/json" hidden />
+            </div>
           </div>
 
-          <div id="questionList" class="question-list"></div>
+          <div class="card" id="hostCard">
+            <h3>Teacher host</h3>
+            <p class="muted">Host from this Create side and project this screen in class.</p>
+            <div class="row gap">
+              <button id="createLiveBtn" class="btn primary">Create live game</button>
+              <button id="hostRefreshBtn" class="btn">Refresh</button>
+              <button id="hostStartBtn" class="btn">Start game</button>
+              <button id="hostNextBtn" class="btn">Next question</button>
+            </div>
+            <div class="top-space">
+              <div class="pin">Live PIN: <span id="livePin">—</span></div>
+              <div id="livePhase" class="small">Phase: —</div>
+              <div id="liveProgress" class="small">Progress: —</div>
+              <div id="liveResponses" class="small">Answers this round: —</div>
+              <p id="hostStatus" class="feedback"></p>
+            </div>
+            <div class="top-space">
+              <strong>Players</strong>
+              <ul id="hostPlayers" class="list"></ul>
+            </div>
+          </div>
 
-          <div class="row gap top-space">
-            <button id="saveBtn" class="btn primary">Save locally</button>
-            <button id="exportBtn" class="btn">Export JSON</button>
-            <label class="btn file-label" for="importInput">Import JSON</label>
-            <input id="importInput" type="file" accept="application/json" hidden />
+          <div class="card" id="hostQuestionCard">
+            <h3>Projected question view</h3>
+            <p class="small" id="hostQuestionHint">Question will appear here when game starts.</p>
+            <div id="hostQuestionWrap" class="hidden top-space">
+              <h3 id="hostQuestionPrompt"></h3>
+              <div id="hostQuestionAnswers"></div>
+            </div>
           </div>
         </div>
       </section>
 
       <section id="play" class="panel">
-        <div class="card">
-          <h2>Live mode (host + students, multi-device)</h2>
-          <p class="muted">Free path: GitHub Pages frontend + Cloudflare Worker backend.</p>
-          <label>Backend API URL</label>
-          <input id="backendUrl" type="url" placeholder="https://pinplay-api.eugenime.workers.dev" />
-          <div class="row gap top-space">
-            <button id="saveBackendBtn" class="btn">Save backend URL</button>
-            <span id="backendStatus" class="small"></span>
-          </div>
-        </div>
-
-        <div class="card" id="hostCard">
-          <h3>Teacher host</h3>
-          <p class="muted">Creates a live game from the current quiz.</p>
-          <div class="row gap">
-            <button id="createLiveBtn" class="btn primary">Create live game</button>
-            <button id="hostRefreshBtn" class="btn">Refresh</button>
-            <button id="hostStartBtn" class="btn">Start game</button>
-            <button id="hostNextBtn" class="btn">Next question</button>
-          </div>
-          <div class="top-space">
-            <div class="pin">Live PIN: <span id="livePin">—</span></div>
-            <div id="livePhase" class="small">Phase: —</div>
-            <div id="liveProgress" class="small">Progress: —</div>
-            <div id="liveResponses" class="small">Answers this round: —</div>
-            <p id="hostStatus" class="feedback"></p>
-          </div>
-          <div class="top-space">
-            <strong>Players</strong>
-            <ul id="hostPlayers" class="list"></ul>
-          </div>
-        </div>
-
         <div class="card" id="joinCard">
           <h3>Student join</h3>
           <div class="row gap">
@@ -107,35 +118,6 @@
             </div>
             <p id="joinFeedback" class="feedback"></p>
           </div>
-        </div>
-
-        <div class="card" id="lobbyCard">
-          <h3>Solo mode (same browser)</h3>
-          <p class="muted">Offline fallback if you don't want live mode.</p>
-          <div class="pin">Local PIN: <span id="pinValue">—</span></div>
-          <label>Student name</label>
-          <input id="studentName" type="text" maxlength="40" placeholder="Your name" />
-          <button id="startBtn" class="btn primary top-space">Start solo</button>
-        </div>
-
-        <div class="card hidden" id="gameCard">
-          <div class="row spread">
-            <div id="progress">Question 1 / 1</div>
-            <div id="score">Score: 0</div>
-          </div>
-          <h3 id="qPrompt"></h3>
-          <div id="answers"></div>
-          <div class="row gap top-space">
-            <button id="submitBtn" class="btn primary">Submit</button>
-            <button id="nextBtn" class="btn hidden">Next</button>
-          </div>
-          <p id="feedback" class="feedback"></p>
-        </div>
-
-        <div class="card hidden" id="resultCard">
-          <h2>Done ✅</h2>
-          <p id="finalScore"></p>
-          <button id="playAgainBtn" class="btn">Play again</button>
         </div>
       </section>
     </main>
