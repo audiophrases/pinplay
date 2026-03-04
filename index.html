@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinPlay</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>🎯 PinPlay</h1>
+      <p class="subtitle">Free, no-ads classroom quiz app (MVP)</p>
+    </header>
+
+    <main class="container">
+      <nav class="tabs">
+        <button class="tab active" data-tab="create">Create</button>
+        <button class="tab" data-tab="play">Play</button>
+      </nav>
+
+      <section id="create" class="panel active">
+        <div class="card">
+          <h2>Quiz builder</h2>
+          <label>Quiz title</label>
+          <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+
+          <div class="row gap">
+            <button id="addMcqBtn" class="btn">+ Multiple choice</button>
+            <button id="addTfBtn" class="btn">+ True / False</button>
+            <button id="addTextBtn" class="btn">+ Type answer</button>
+          </div>
+
+          <div id="questionList" class="question-list"></div>
+
+          <div class="row gap top-space">
+            <button id="saveBtn" class="btn primary">Save locally</button>
+            <button id="exportBtn" class="btn">Export JSON</button>
+            <label class="btn file-label" for="importInput">Import JSON</label>
+            <input id="importInput" type="file" accept="application/json" hidden />
+          </div>
+        </div>
+      </section>
+
+      <section id="play" class="panel">
+        <div class="card" id="lobbyCard">
+          <h2>Play quiz</h2>
+          <p class="muted">Uses the quiz currently loaded in this browser.</p>
+          <div class="pin">Game PIN: <span id="pinValue">—</span></div>
+          <label>Student name</label>
+          <input id="studentName" type="text" maxlength="40" placeholder="Your name" />
+          <button id="startBtn" class="btn primary top-space">Start</button>
+        </div>
+
+        <div class="card hidden" id="gameCard">
+          <div class="row spread">
+            <div id="progress">Question 1 / 1</div>
+            <div id="score">Score: 0</div>
+          </div>
+          <h3 id="qPrompt"></h3>
+          <div id="answers"></div>
+          <div class="row gap top-space">
+            <button id="submitBtn" class="btn primary">Submit</button>
+            <button id="nextBtn" class="btn hidden">Next</button>
+          </div>
+          <p id="feedback" class="feedback"></p>
+        </div>
+
+        <div class="card hidden" id="resultCard">
+          <h2>Done ✅</h2>
+          <p id="finalScore"></p>
+          <button id="playAgainBtn" class="btn">Play again</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
