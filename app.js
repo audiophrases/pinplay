@@ -13,11 +13,15 @@ const panels = document.querySelectorAll('.panel');
 const quizTitleEl = document.getElementById('quizTitle');
 const questionListEl = document.getElementById('questionList');
 const addMcqBtn = document.getElementById('addMcqBtn');
+const addMcqAudioBtn = document.getElementById('addMcqAudioBtn');
 const addMultiBtn = document.getElementById('addMultiBtn');
+const addMultiAudioBtn = document.getElementById('addMultiAudioBtn');
 const addTfBtn = document.getElementById('addTfBtn');
+const addTfAudioBtn = document.getElementById('addTfAudioBtn');
 const addTextBtn = document.getElementById('addTextBtn');
+const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
-const addAudioBtn = document.getElementById('addAudioBtn');
+const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
@@ -197,31 +201,56 @@ function bindBuilderEvents() {
     quiz.questions.push(makeMcqQuestion());
     renderBuilder();
   });
+  if (addMcqAudioBtn) {
+    addMcqAudioBtn.addEventListener('click', () => {
+      quiz.questions.push(makeMcqQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
 
   addMultiBtn.addEventListener('click', () => {
     quiz.questions.push(makeMultiQuestion());
     renderBuilder();
   });
+  if (addMultiAudioBtn) {
+    addMultiAudioBtn.addEventListener('click', () => {
+      quiz.questions.push(makeMultiQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
 
   addTfBtn.addEventListener('click', () => {
     quiz.questions.push(makeTfQuestion());
     renderBuilder();
   });
+  if (addTfAudioBtn) {
+    addTfAudioBtn.addEventListener('click', () => {
+      quiz.questions.push(makeTfQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
 
   addTextBtn.addEventListener('click', () => {
     quiz.questions.push(makeTextQuestion());
     renderBuilder();
   });
+  if (addTextAudioBtn) {
+    addTextAudioBtn.addEventListener('click', () => {
+      quiz.questions.push(makeTextQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
 
   addPuzzleBtn.addEventListener('click', () => {
     quiz.questions.push(makePuzzleQuestion());
     renderBuilder();
   });
-
-  addAudioBtn.addEventListener('click', () => {
-    quiz.questions.push(makeAudioQuestion());
-    renderBuilder();
-  });
+  if (addPuzzleAudioBtn) {
+    addPuzzleAudioBtn.addEventListener('click', () => {
+      quiz.questions.push(makePuzzleQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
 
   addSliderBtn.addEventListener('click', () => {
     quiz.questions.push(makeSliderQuestion());
@@ -297,32 +326,56 @@ function bindBuilderEvents() {
     if (audioBtn) {
       const idx = Number(audioBtn.dataset.playAudioPreview);
       const q = quiz.questions[idx];
-      if (!q || q.type !== 'audio') return;
-      speakText(q.audioText || q.prompt || '', q.language || 'en-US');
+      if (!q || !hasQuestionAudio(q)) return;
+      playQuestionAudio(q);
     }
   });
 
   questionListEl.addEventListener('change', async (e) => {
-    const upload = e.target.closest('[data-pin-upload]');
-    if (!upload) return;
+    const pinUpload = e.target.closest('[data-pin-upload]');
+    if (pinUpload) {
+      const idx = Number(pinUpload.dataset.pinUpload);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'pin') return;
 
-    const idx = Number(upload.dataset.pinUpload);
-    const q = quiz.questions[idx];
-    if (!q || q.type !== 'pin') return;
+      const file = pinUpload.files?.[0];
+      if (!file) return;
 
-    const file = upload.files?.[0];
-    if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        alert('Please choose an image file.');
+        return;
+      }
 
-    if (!file.type.startsWith('image/')) {
-      alert('Please choose an image file.');
+      try {
+        q.imageData = await fileToDataUrl(file);
+        renderBuilder();
+      } catch (err) {
+        alert(`Image load failed: ${err.message}`);
+      }
       return;
     }
 
-    try {
-      q.imageData = await fileToDataUrl(file);
-      renderBuilder();
-    } catch (err) {
-      alert(`Image load failed: ${err.message}`);
+    const audioUpload = e.target.closest('[data-audio-upload]');
+    if (audioUpload) {
+      const idx = Number(audioUpload.dataset.audioUpload);
+      const q = quiz.questions[idx];
+      if (!q) return;
+
+      const file = audioUpload.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('audio/')) {
+        alert('Please choose an audio file.');
+        return;
+      }
+
+      try {
+        q.audioData = await fileToDataUrl(file);
+        q.audioMode = 'file';
+        q.audioEnabled = true;
+        renderBuilder();
+      } catch (err) {
+        alert(`Audio load failed: ${err.message}`);
+      }
     }
   });
 }
@@ -390,14 +443,36 @@ function renderBuilder() {
         specific += `<p class="small">Students must select all correct answers.</p>`;
       }
 
-      if (q.type === 'audio') {
-        specific += `
+      if (supportsQuestionAudio(q.type)) {
+      const enabled = !!q.audioEnabled || q.type === 'audio';
+      const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
+      specific += `
+        <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+          <label style="display:flex; align-items:center; gap:.45rem; margin:0; font-weight:500;">
+            <input data-q="${idx}" data-field="audioEnabled" type="checkbox" ${enabled ? 'checked' : ''} style="width:auto;" />
+            Audio for this question
+          </label>
+          <div class="row gap top-space">
+            <div style="min-width:170px;">
+              <label>Audio source</label>
+              <select data-q="${idx}" data-field="audioMode">
+                <option value="tts" ${mode === 'tts' ? 'selected' : ''}>Text-to-speech</option>
+                <option value="file" ${mode === 'file' ? 'selected' : ''}>Audio file</option>
+              </select>
+            </div>
+            <div style="min-width:220px;">
+              <label>Audio file</label>
+              <input data-audio-upload="${idx}" type="file" accept="audio/*" />
+            </div>
+          </div>
           <label class="top-space">Text to read aloud (max 120 chars)</label>
           <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="Text-to-speech prompt" />
           <label>Language code (e.g. en-US, ca-ES)</label>
           <input data-q="${idx}" data-field="language" maxlength="10" value="${escapeHtml(q.language || 'en-US')}" />
-          <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">🔊 Play preview</button></div>
-        `;
+          <div class="small top-space">${q.audioData ? 'Audio file uploaded ?' : 'No audio file uploaded yet.'}</div>
+          <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">? Play preview</button></div>
+        </div>
+      `;
       }
     }
 
@@ -418,9 +493,10 @@ function renderBuilder() {
     }
 
     if (q.type === 'puzzle') {
-      const items = q.items || ['', '', '', ''];
+      const items = [...(q.items || [])];
+      while (items.length < 9) items.push('');
       specific += `
-        <label class="top-space">Correct order items (min 3, max 4)</label>
+        <label class="top-space">Correct order items (min 3, max 9)</label>
         <div class="answers-grid">
           ${items
             .map(
@@ -430,7 +506,7 @@ function renderBuilder() {
             )
             .join('')}
         </div>
-        <p class="small">Students will need to place these in the correct order.</p>
+        <p class="small">Students will drag pieces into order on their screen.</p>
       `;
     }
 
@@ -548,12 +624,19 @@ function syncQuizFromUI() {
         q.answers[1] = { text: 'False', correct: !!q.answers[1]?.correct };
       }
 
-      if (q.type === 'audio') {
-        const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
-        const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
-        q.audioText = String(audioTextEl?.value || '').slice(0, 120);
-        q.language = String(languageEl?.value || 'en-US').slice(0, 10) || 'en-US';
-      }
+    }
+
+    if (supportsQuestionAudio(q.type)) {
+      const audioEnabledEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioEnabled"]`);
+      const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
+      const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
+      const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
+
+      q.audioEnabled = !!audioEnabledEl?.checked || q.type === 'audio';
+      q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
+      q.audioText = String(audioTextEl?.value || '').slice(0, 120);
+      q.language = String(languageEl?.value || 'en-US').slice(0, 10) || 'en-US';
+      if (q.audioMode !== 'file') q.audioData = q.audioData || '';
     }
 
     if (q.type === 'text') {
@@ -567,7 +650,7 @@ function syncQuizFromUI() {
 
     if (q.type === 'puzzle') {
       const items = [];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 9; i++) {
         const itemEl = questionListEl.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
         items.push(String(itemEl?.value || '').slice(0, 75));
       }
@@ -1378,14 +1461,14 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(hint);
     }
 
-    if (question.type === 'audio') {
+    if (hasQuestionAudio(question)) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US'));
+      btn.textContent = '? Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
-      speakText(question.audioText || question.prompt || '', question.language || 'en-US');
+      playQuestionAudio(question);
     }
     return;
   }
@@ -1397,37 +1480,31 @@ function renderJoinQuestion(question) {
     input.maxLength = 40;
     input.placeholder = 'Type your answer';
     joinAnswersEl.appendChild(input);
+
+    if (hasQuestionAudio(question)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '▶ Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(question));
+      joinAnswersEl.appendChild(btn);
+      playQuestionAudio(question);
+    }
     return;
   }
 
   if (question.type === 'puzzle') {
-    const options = question.options || [];
+    const options = (question.options || []).slice(0, 9);
+    createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
 
-    for (let i = 0; i < (question.length || options.length); i++) {
-      const row = document.createElement('div');
-      row.className = 'row gap';
-
-      const label = document.createElement('span');
-      label.className = 'small';
-      label.textContent = `Position ${i + 1}`;
-
-      const select = document.createElement('select');
-      select.dataset.joinPuzzleSlot = String(i);
-
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = 'Choose...';
-      select.appendChild(empty);
-
-      options.forEach((opt) => {
-        const o = document.createElement('option');
-        o.value = opt;
-        o.textContent = opt;
-        select.appendChild(o);
-      });
-
-      row.append(label, select);
-      joinAnswersEl.appendChild(row);
+    if (hasQuestionAudio(question)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '▶ Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(question));
+      joinAnswersEl.appendChild(btn);
+      playQuestionAudio(question);
     }
     return;
   }
@@ -1543,9 +1620,8 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'puzzle') {
-    const slots = [...joinAnswersEl.querySelectorAll('[data-join-puzzle-slot]')];
-    const values = slots.map((s) => s.value).filter(Boolean);
-    return values.length === slots.length ? values : null;
+    const pieces = [...joinAnswersEl.querySelectorAll('[data-puzzle-piece]')].map((el) => String(el.dataset.puzzlePiece || '').trim()).filter(Boolean);
+    return pieces.length ? pieces : null;
   }
 
   if (q.type === 'slider') {
@@ -1703,14 +1779,14 @@ function renderSoloQuestion() {
       answersEl.appendChild(hint);
     }
 
-    if (q.type === 'audio') {
+    if (hasQuestionAudio(q)) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => speakText(q.audioText || q.prompt || '', q.language || 'en-US'));
+      btn.textContent = '? Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(q));
       answersEl.appendChild(btn);
-      speakText(q.audioText || q.prompt || '', q.language || 'en-US');
+      playQuestionAudio(q);
     }
     return;
   }
@@ -1722,38 +1798,32 @@ function renderSoloQuestion() {
     input.maxLength = 40;
     input.placeholder = 'Type your answer';
     answersEl.appendChild(input);
+
+    if (hasQuestionAudio(q)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '? Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(q));
+      answersEl.appendChild(btn);
+      playQuestionAudio(q);
+    }
     return;
   }
 
   if (q.type === 'puzzle') {
-    const options = shuffle([...(q.items || []).filter(Boolean)]);
+    const options = (q.options || shuffle([...(q.items || []).filter(Boolean)])).slice(0, 9);
     soloGame.puzzleOptions = options;
+    createPuzzleDnd(answersEl, options, 'soloPuzzlePieces');
 
-    for (let i = 0; i < options.length; i++) {
-      const row = document.createElement('div');
-      row.className = 'row gap';
-
-      const label = document.createElement('span');
-      label.className = 'small';
-      label.textContent = `Position ${i + 1}`;
-
-      const select = document.createElement('select');
-      select.dataset.soloPuzzleSlot = String(i);
-
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = 'Choose...';
-      select.appendChild(empty);
-
-      options.forEach((opt) => {
-        const o = document.createElement('option');
-        o.value = opt;
-        o.textContent = opt;
-        select.appendChild(o);
-      });
-
-      row.append(label, select);
-      answersEl.appendChild(row);
+    if (hasQuestionAudio(q)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '? Play audio';
+      btn.addEventListener('click', () => playQuestionAudio(q));
+      answersEl.appendChild(btn);
+      playQuestionAudio(q);
     }
     return;
   }
@@ -1806,7 +1876,6 @@ function renderSoloQuestion() {
     });
   }
 }
-
 function evaluateSoloQuestion(q) {
   if (['mcq', 'tf', 'audio'].includes(q.type)) {
     const checked = answersEl.querySelector('input[name="solo-answer"]:checked');
@@ -1840,12 +1909,11 @@ function evaluateSoloQuestion(q) {
   }
 
   if (q.type === 'puzzle') {
-    const slots = [...answersEl.querySelectorAll('[data-solo-puzzle-slot]')];
-    const selected = slots.map((s) => s.value).filter(Boolean);
-    if (selected.length !== slots.length) return { correct: false, hint: 'Fill all positions.' };
+    const pieces = [...answersEl.querySelectorAll('[data-puzzle-piece]')].map((el) => String(el.dataset.puzzlePiece || '').trim()).filter(Boolean);
+    if (!pieces.length) return { correct: false, hint: 'Arrange the pieces first.' };
 
-    const expected = (q.items || []).map(normalizeTextAnswer);
-    const got = selected.map(normalizeTextAnswer);
+    const expected = (q.items || []).map(normalizeTextAnswer).filter(Boolean);
+    const got = pieces.map(normalizeTextAnswer);
     return { correct: JSON.stringify(expected) === JSON.stringify(got) };
   }
 
@@ -1927,13 +1995,18 @@ function createEmptyQuiz() {
   };
 }
 
-function makeMcqQuestion() {
+function makeMcqQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
     type: 'mcq',
     prompt: '',
     points: 1000,
     timeLimit: 20,
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
     answers: [
       { text: '', correct: true },
       { text: '', correct: false },
@@ -1943,13 +2016,18 @@ function makeMcqQuestion() {
   };
 }
 
-function makeMultiQuestion() {
+function makeMultiQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
     type: 'multi',
     prompt: '',
     points: 1000,
     timeLimit: 20,
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
     answers: [
       { text: '', correct: true },
       { text: '', correct: true },
@@ -1959,13 +2037,18 @@ function makeMultiQuestion() {
   };
 }
 
-function makeTfQuestion() {
+function makeTfQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
     type: 'tf',
     prompt: '',
     points: 1000,
     timeLimit: 20,
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
     answers: [
       { text: 'True', correct: true },
       { text: 'False', correct: false },
@@ -1973,25 +2056,35 @@ function makeTfQuestion() {
   };
 }
 
-function makeTextQuestion() {
+function makeTextQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
     type: 'text',
     prompt: '',
     points: 1000,
     timeLimit: 30,
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
     accepted: ['', '', '', ''],
   };
 }
 
-function makePuzzleQuestion() {
+function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
     type: 'puzzle',
     prompt: '',
     points: 1000,
     timeLimit: 30,
-    items: ['', '', '', ''],
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
+    items: Array.from({ length: 9 }, () => ''),
   };
 }
 
@@ -2000,8 +2093,11 @@ function makeAudioQuestion() {
     id: crypto.randomUUID(),
     type: 'audio',
     prompt: '',
+    audioEnabled: true,
+    audioMode: 'tts',
     audioText: '',
     language: 'en-US',
+    audioData: '',
     points: 1000,
     timeLimit: 20,
     answers: [
@@ -2054,6 +2150,11 @@ function normalizeQuizForLive(raw) {
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      audioEnabled: !!q.audioEnabled || q.type === 'audio',
+      audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
+      audioText: String(q.audioText || '').slice(0, 120),
+      language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+      audioData: String(q.audioData || ''),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
@@ -2080,12 +2181,6 @@ function normalizeQuizForLive(raw) {
       normalized.questions.push({
         ...base,
         answers,
-        ...(q.type === 'audio'
-          ? {
-              audioText: String(q.audioText || '').slice(0, 120),
-              language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
-            }
-          : {}),
       });
       return;
     }
@@ -2107,7 +2202,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 4);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;
@@ -2293,6 +2388,79 @@ function shuffle(arr) {
   return a;
 }
 
+function supportsQuestionAudio(type) {
+  return ['mcq', 'multi', 'tf', 'text', 'puzzle', 'audio'].includes(String(type || ''));
+}
+
+function hasQuestionAudio(question) {
+  if (!question) return false;
+  if (question.type === 'audio') return true;
+  if (!supportsQuestionAudio(question.type)) return false;
+  return !!question.audioEnabled;
+}
+
+function playQuestionAudio(question) {
+  if (!hasQuestionAudio(question)) return;
+  if (question.audioMode === 'file' && question.audioData) {
+    try {
+      const a = new Audio(question.audioData);
+      a.play().catch(() => {});
+    } catch {}
+    return;
+  }
+  speakText(question.audioText || question.prompt || '', question.language || 'en-US');
+}
+
+function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
+  container.innerHTML = '';
+  const hint = document.createElement('p');
+  hint.className = 'small';
+  hint.textContent = 'Drag pieces to reorder.';
+  container.appendChild(hint);
+
+  const list = document.createElement('div');
+  list.className = 'answers-grid';
+  list.dataset.puzzleList = listId;
+
+  const items = [...options];
+  let dragIndex = -1;
+
+  items.forEach((text, index) => {
+    const item = document.createElement('div');
+    item.className = 'answer-row';
+    item.draggable = true;
+    item.dataset.puzzlePiece = String(text || '');
+    item.dataset.puzzleIndex = String(index);
+    item.style.cursor = 'grab';
+
+    const handle = document.createElement('strong');
+    handle.textContent = '?';
+    const label = document.createElement('span');
+    label.textContent = text;
+    item.append(handle, label);
+
+    item.addEventListener('dragstart', () => { dragIndex = index; item.style.opacity = '.5'; });
+    item.addEventListener('dragend', () => { item.style.opacity = '1'; dragIndex = -1; });
+    item.addEventListener('dragover', (e) => e.preventDefault());
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const from = Number(dragIndex);
+      const to = Number(item.dataset.puzzleIndex);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
+      const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
+      const moved = arr[from];
+      const target = arr[to];
+      if (!moved || !target) return;
+      if (from < to) list.insertBefore(moved, target.nextSibling);
+      else list.insertBefore(moved, target);
+      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => { el.dataset.puzzleIndex = String(i); });
+    });
+
+    list.appendChild(item);
+  });
+
+  container.appendChild(list);
+}
 function speakText(text, lang = 'en-US') {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;

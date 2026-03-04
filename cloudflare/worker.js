@@ -844,12 +844,7 @@ function publicQuestion(question) {
       points: question.points,
       timeLimit: question.timeLimit,
       answers: (question.answers || []).map((a) => ({ text: a.text })),
-      ...(question.type === 'audio'
-        ? {
-            audioText: question.audioText || '',
-            language: question.language || 'en-US',
-          }
-        : {}),
+      ...publicAudioPayload(question),
     };
   }
 
@@ -859,6 +854,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      ...publicAudioPayload(question),
     };
   }
 
@@ -870,6 +866,7 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       length: (question.items || []).length,
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
+      ...publicAudioPayload(question),
     };
   }
 
@@ -883,6 +880,7 @@ function publicQuestion(question) {
       max: question.max,
       margin: question.margin,
       unit: question.unit || '',
+      ...publicAudioPayload(question),
     };
   }
 
@@ -893,6 +891,7 @@ function publicQuestion(question) {
       points: question.points,
       timeLimit: question.timeLimit,
       imageData: question.imageData || '',
+      ...publicAudioPayload(question),
     };
   }
 
@@ -901,6 +900,19 @@ function publicQuestion(question) {
     prompt: question.prompt,
     points: question.points,
     timeLimit: question.timeLimit,
+    ...publicAudioPayload(question),
+  };
+}
+
+function publicAudioPayload(question) {
+  const enabled = !!question?.audioEnabled || question?.type === 'audio';
+  if (!enabled) return { audioEnabled: false };
+  return {
+    audioEnabled: true,
+    audioMode: ['tts', 'file'].includes(String(question?.audioMode || '')) ? String(question.audioMode) : (question?.audioData ? 'file' : 'tts'),
+    audioText: String(question?.audioText || ''),
+    language: String(question?.language || 'en-US'),
+    audioData: String(question?.audioData || ''),
   };
 }
 
@@ -973,6 +985,11 @@ function normalizeQuiz(quiz) {
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      audioEnabled: !!q.audioEnabled || q.type === 'audio',
+      audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
+      audioText: String(q.audioText || '').slice(0, 120),
+      language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+      audioData: String(q.audioData || ''),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
@@ -999,12 +1016,6 @@ function normalizeQuiz(quiz) {
       normalized.questions.push({
         ...base,
         answers,
-        ...(q.type === 'audio'
-          ? {
-              audioText: String(q.audioText || '').slice(0, 120),
-              language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
-            }
-          : {}),
       });
       return;
     }
@@ -1028,7 +1039,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 4);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;
