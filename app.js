@@ -10,6 +10,7 @@ const panels = document.querySelectorAll('.panel');
 const quizTitleEl = document.getElementById('quizTitle');
 const questionListEl = document.getElementById('questionList');
 const addMcqBtn = document.getElementById('addMcqBtn');
+const addMultiBtn = document.getElementById('addMultiBtn');
 const addTfBtn = document.getElementById('addTfBtn');
 const addTextBtn = document.getElementById('addTextBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
@@ -127,6 +128,11 @@ function bindTabs() {
 function bindBuilderEvents() {
   addMcqBtn.addEventListener('click', () => {
     quiz.questions.push(makeMcqQuestion());
+    renderBuilder();
+  });
+
+  addMultiBtn.addEventListener('click', () => {
+    quiz.questions.push(makeMultiQuestion());
     renderBuilder();
   });
 
@@ -284,9 +290,9 @@ function renderBuilder() {
 
     let specific = '';
 
-    if (['mcq', 'tf', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       const answers = q.answers || [];
-      const correctIdx = answers.findIndex((a) => a.correct);
+      const isMulti = q.type === 'multi';
 
       specific += `
         <label class="top-space">Answers</label>
@@ -295,7 +301,7 @@ function renderBuilder() {
             .map(
               (a, aIdx) => `
             <div class="answer-row">
-              <input type="radio" name="correct-${idx}" ${aIdx === correctIdx ? 'checked' : ''} data-q="${idx}" data-correct-index="${aIdx}" />
+              <input type="${isMulti ? 'checkbox' : 'radio'}" ${isMulti ? '' : `name="correct-${idx}"`} ${a.correct ? 'checked' : ''} data-q="${idx}" data-correct-index="${aIdx}" />
               <input data-q="${idx}" data-answer-index="${aIdx}" maxlength="75" value="${escapeHtml(a.text || '')}" ${q.type === 'tf' ? 'disabled' : ''}/>
               <span class="small">${q.type === 'tf' ? '' : 'max 75'}</span>
             </div>
@@ -304,6 +310,10 @@ function renderBuilder() {
             .join('')}
         </div>
       `;
+
+      if (q.type === 'multi') {
+        specific += `<p class="small">Students must select all correct answers.</p>`;
+      }
 
       if (q.type === 'audio') {
         specific += `
@@ -437,7 +447,7 @@ function syncQuizFromUI() {
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = clamp(Number(timeEl.value || 20), minTimeByType(q.type), 240);
 
-    if (['mcq', 'tf', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       q.answers = q.answers || [];
 
       q.answers.forEach((a, aIdx) => {
@@ -445,11 +455,18 @@ function syncQuizFromUI() {
         if (aEl) a.text = String(aEl.value || '').slice(0, 75);
       });
 
-      const selectedCorrect = questionListEl.querySelector(`[data-q="${idx}"][data-correct-index]:checked`);
-      const correctIndex = selectedCorrect ? Number(selectedCorrect.dataset.correctIndex) : 0;
-      q.answers.forEach((a, aIdx) => {
-        a.correct = aIdx === correctIndex;
-      });
+      if (q.type === 'multi') {
+        q.answers.forEach((a, aIdx) => {
+          const cEl = questionListEl.querySelector(`[data-q="${idx}"][data-correct-index="${aIdx}"]`);
+          a.correct = !!cEl?.checked;
+        });
+      } else {
+        const selectedCorrect = questionListEl.querySelector(`[data-q="${idx}"][data-correct-index]:checked`);
+        const correctIndex = selectedCorrect ? Number(selectedCorrect.dataset.correctIndex) : 0;
+        q.answers.forEach((a, aIdx) => {
+          a.correct = aIdx === correctIndex;
+        });
+      }
 
       if (q.type === 'tf') {
         q.answers[0] = { text: 'True', correct: !!q.answers[0]?.correct };
@@ -732,22 +749,32 @@ function renderJoinQuestion(question) {
   joinPromptEl.textContent = question.prompt || '(No question text)';
   joinAnswersEl.innerHTML = '';
 
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+    const isMulti = question.type === 'multi';
+
     question.answers.forEach((a, idx) => {
       const row = document.createElement('label');
       row.className = 'answer-row';
 
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'join-answer';
-      radio.value = String(idx);
+      const input = document.createElement('input');
+      input.type = isMulti ? 'checkbox' : 'radio';
+      if (!isMulti) input.name = 'join-answer';
+      input.value = String(idx);
+      input.dataset.joinAnswer = '1';
 
       const text = document.createElement('span');
       text.textContent = a.text;
 
-      row.append(radio, text);
+      row.append(input, text);
       joinAnswersEl.appendChild(row);
     });
+
+    if (question.type === 'multi') {
+      const hint = document.createElement('p');
+      hint.className = 'small';
+      hint.textContent = 'Select all correct answers.';
+      joinAnswersEl.appendChild(hint);
+    }
 
     if (question.type === 'audio') {
       const btn = document.createElement('button');
@@ -897,6 +924,11 @@ function readJoinAnswer() {
     return checked ? Number(checked.value) : null;
   }
 
+  if (q.type === 'multi') {
+    const selected = [...joinAnswersEl.querySelectorAll('input[data-join-answer]:checked')].map((el) => Number(el.value));
+    return selected.length ? selected : null;
+  }
+
   if (q.type === 'text') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
@@ -1032,22 +1064,32 @@ function renderSoloQuestion() {
 
   answersEl.innerHTML = '';
 
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+    const isMulti = q.type === 'multi';
+
     (q.answers || []).forEach((a, idx) => {
       const row = document.createElement('label');
       row.className = 'answer-row';
 
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'solo-answer';
-      radio.value = String(idx);
+      const input = document.createElement('input');
+      input.type = isMulti ? 'checkbox' : 'radio';
+      if (!isMulti) input.name = 'solo-answer';
+      input.value = String(idx);
+      input.dataset.soloAnswer = '1';
 
       const text = document.createElement('span');
       text.textContent = a.text || '(blank)';
 
-      row.append(radio, text);
+      row.append(input, text);
       answersEl.appendChild(row);
     });
+
+    if (q.type === 'multi') {
+      const hint = document.createElement('p');
+      hint.className = 'small';
+      hint.textContent = 'Select all correct answers.';
+      answersEl.appendChild(hint);
+    }
 
     if (q.type === 'audio') {
       const btn = document.createElement('button');
@@ -1163,6 +1205,19 @@ function evaluateSoloQuestion(q) {
     return { correct: selected === correctIndex };
   }
 
+  if (q.type === 'multi') {
+    const selected = [...answersEl.querySelectorAll('input[data-solo-answer]:checked')].map((el) => Number(el.value));
+    if (!selected.length) return { correct: false, hint: 'Select at least one answer.' };
+
+    const expected = (q.answers || [])
+      .map((a, idx) => (a.correct ? idx : null))
+      .filter((x) => x !== null);
+
+    const sameLength = selected.length === expected.length;
+    const sameSet = sameLength && selected.every((idx) => expected.includes(idx));
+    return { correct: sameSet, hint: sameSet ? '' : 'You must select all correct answers (and no wrong ones).' };
+  }
+
   if (q.type === 'text') {
     const val = document.getElementById('soloTextAnswer')?.value || '';
     const guess = normalizeTextAnswer(val);
@@ -1275,6 +1330,22 @@ function makeMcqQuestion() {
   };
 }
 
+function makeMultiQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'multi',
+    prompt: '',
+    points: 1000,
+    timeLimit: 20,
+    answers: [
+      { text: '', correct: true },
+      { text: '', correct: true },
+      { text: '', correct: false },
+      { text: '', correct: false },
+    ],
+  };
+}
+
 function makeTfQuestion() {
   return {
     id: crypto.randomUUID(),
@@ -1372,13 +1443,26 @@ function normalizeQuizForLive(raw) {
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
     };
 
-    if (['mcq', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'audio'].includes(q.type)) {
       const answers = (q.answers || [])
         .slice(0, 6)
         .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
         .filter((a) => a.text.trim().length > 0);
-      if (!answers.length) return;
-      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+      if (answers.length < 2) return;
+
+      if (q.type === 'multi') {
+        let correctCount = answers.filter((a) => a.correct).length;
+        if (correctCount < 2) {
+          for (let i = 0; i < answers.length && correctCount < 2; i++) {
+            if (!answers[i].correct) {
+              answers[i].correct = true;
+              correctCount++;
+            }
+          }
+        }
+      } else if (!answers.some((a) => a.correct)) {
+        answers[0].correct = true;
+      }
 
       normalized.questions.push({
         ...base,
@@ -1496,6 +1580,7 @@ function labelForType(type) {
   return (
     {
       mcq: 'Multiple choice',
+      multi: 'Multi-select',
       tf: 'True / False',
       text: 'Type answer',
       puzzle: 'Puzzle',

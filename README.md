@@ -14,6 +14,7 @@ Free, no-ads classroom quiz web app.
 
 ### Builder
 - Multiple choice
+- Multi-select (more than one correct answer; students must select all correct options)
 - True / False
 - Type answer
 - Puzzle

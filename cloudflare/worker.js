@@ -391,7 +391,7 @@ function playerState(room, playerId) {
 function publicQuestion(question) {
   if (!question) return null;
 
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -468,6 +468,18 @@ function evaluate(question, answer) {
     return { correct: selected === correctIndex };
   }
 
+  if (question.type === 'multi') {
+    const selected = Array.isArray(answer) ? answer.map((x) => Number(x)).filter((n) => Number.isFinite(n)) : [];
+    if (!selected.length) return { correct: false };
+
+    const expected = (question.answers || [])
+      .map((a, idx) => (a.correct ? idx : null))
+      .filter((x) => x !== null);
+
+    if (selected.length !== expected.length) return { correct: false };
+    return { correct: selected.every((idx) => expected.includes(idx)) };
+  }
+
   if (question.type === 'text') {
     const guess = normalizeTextAnswer(answer);
     const accepted = (question.accepted || []).map(normalizeTextAnswer).filter(Boolean);
@@ -517,13 +529,26 @@ function normalizeQuiz(quiz) {
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
     };
 
-    if (['mcq', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'audio'].includes(q.type)) {
       const answers = (q.answers || [])
         .slice(0, 6)
         .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
         .filter((a) => a.text.trim().length > 0);
-      if (!answers.length) return;
-      if (!answers.some((a) => a.correct)) answers[0].correct = true;
+      if (answers.length < 2) return;
+
+      if (q.type === 'multi') {
+        let correctCount = answers.filter((a) => a.correct).length;
+        if (correctCount < 2) {
+          for (let i = 0; i < answers.length && correctCount < 2; i++) {
+            if (!answers[i].correct) {
+              answers[i].correct = true;
+              correctCount++;
+            }
+          }
+        }
+      } else if (!answers.some((a) => a.correct)) {
+        answers[0].correct = true;
+      }
 
       normalized.questions.push({
         ...base,
