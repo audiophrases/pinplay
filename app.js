@@ -49,6 +49,7 @@ const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
 const liveResponsesEl = document.getElementById('liveResponses');
+const liveReactionsEl = document.getElementById('liveReactions');
 const hostPlayersEl = document.getElementById('hostPlayers');
 const hostStatusEl = document.getElementById('hostStatus');
 const hostQuestionWrap = document.getElementById('hostQuestionWrap');
@@ -1002,6 +1003,7 @@ function renderHostState(state) {
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
+  if (liveReactionsEl) liveReactionsEl.textContent = `Reactions: ${formatReactionSummary(state.reactions || [])}`;
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
 
@@ -1220,6 +1222,18 @@ function renderProjectorScores(players) {
     li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
     projectorScoresEl.appendChild(li);
   });
+}
+
+function formatReactionSummary(reactions) {
+  if (!Array.isArray(reactions) || !reactions.length) return '—';
+  const counts = new Map();
+  reactions.forEach((r) => {
+    const emoji = String(r?.emoji || '').trim();
+    if (!emoji) return;
+    counts.set(emoji, (counts.get(emoji) || 0) + 1);
+  });
+  if (!counts.size) return '—';
+  return [...counts.entries()].map(([emoji, count]) => `${emoji}${count}`).join(' ');
 }
 
 function updateHostTimer(state) {

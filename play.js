@@ -1,6 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
+const REACTION_EMOJIS = ['👍','🤩','😹','🙀','🤣','🔥','🤯','😘','😎','🤟','😜','😻','😽','😅','😱','😼','🥳','🫠','🫡','👾','✌️','☝️','🤙','💪','🙈','🙉','🙊','❤️','✅','🆗','🆙','🆒','🆕','🆓'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
@@ -245,6 +246,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(btn);
       speakText(question.audioText || question.prompt || '', question.language || 'en-US');
     }
+    appendReactionBar();
     return;
   }
 
@@ -255,6 +257,7 @@ function renderJoinQuestion(question) {
     input.maxLength = 40;
     input.placeholder = 'Type your answer';
     joinAnswersEl.appendChild(input);
+    appendReactionBar();
     return;
   }
 
@@ -286,6 +289,7 @@ function renderJoinQuestion(question) {
       row.append(label, select);
       joinAnswersEl.appendChild(row);
     }
+    appendReactionBar();
     return;
   }
 
@@ -304,6 +308,7 @@ function renderJoinQuestion(question) {
     slider?.addEventListener('input', () => {
       out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
     });
+    appendReactionBar();
     return;
   }
 
@@ -313,6 +318,7 @@ function renderJoinQuestion(question) {
       p.className = 'small';
       p.textContent = 'No image set for this question.';
       joinAnswersEl.appendChild(p);
+      appendReactionBar();
       return;
     }
 
@@ -335,6 +341,52 @@ function renderJoinQuestion(question) {
       dot.style.left = `${point.x}%`;
       dot.style.top = `${point.y}%`;
     });
+    appendReactionBar();
+  }
+}
+
+function appendReactionBar() {
+  if (!joinAnswersEl) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'top-space';
+
+  const label = document.createElement('p');
+  label.className = 'small';
+  label.textContent = 'Quick reaction:';
+  wrap.appendChild(label);
+
+  const row = document.createElement('div');
+  row.className = 'row gap';
+
+  REACTION_EMOJIS.slice(0, 20).forEach((emoji) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.textContent = emoji;
+    btn.style.padding = '.3rem .5rem';
+    btn.addEventListener('click', () => sendReaction(emoji));
+    row.appendChild(btn);
+  });
+
+  wrap.appendChild(row);
+  joinAnswersEl.appendChild(wrap);
+}
+
+async function sendReaction(emoji) {
+  try {
+    if (!live.player.pin || !live.player.id || !live.player.token) return;
+    await api('/api/react', {
+      method: 'POST',
+      headers: { 'X-Player-Token': live.player.token },
+      body: {
+        pin: live.player.pin,
+        playerId: live.player.id,
+        emoji,
+      },
+    });
+  } catch {
+    // ignore reaction failures silently
   }
 }
 

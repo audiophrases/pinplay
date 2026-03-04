@@ -22,6 +22,10 @@ const BLOCKED_NICK_PATTERNS = [
   /\bkill\s*yourself\b/i,
 ];
 
+const ALLOWED_REACTIONS = new Set([
+  '👍','🤩','😹','🙀','🤣','🔥','🤯','😘','😎','🤟','😜','😻','😽','😅','😱','😼','🥳','🫠','🫡','👾','✌️','☝️','🤙','💪','🙈','🙉','🙊','❤️','✅','🆗','🆙','🆒','🆕','🆓'
+]);
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -262,6 +266,27 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/react' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const playerId = sanitizeId(body?.playerId);
+      const playerToken = request.headers.get('X-Player-Token') || '';
+      const emoji = sanitizeReaction(body?.emoji);
+
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!playerId) return json({ error: 'playerId required.' }, 400);
+      if (!playerToken) return json({ error: 'player token required.' }, 401);
+      if (!emoji) return json({ error: 'Invalid reaction.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/react', {
+          method: 'POST',
+          body: JSON.stringify({ playerId, playerToken, emoji }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/drive/publish' && request.method === 'POST') {
       const body = await safeJson(request);
       const quiz = body?.quiz;
@@ -396,6 +421,7 @@ export class QuizRoom {
           quiz: normalizeQuiz(quiz),
           players: {},
           responsesByQuestion: {},
+          reactionsByQuestion: {},
           settings: {
             randomNames: !!options.randomNames,
           },
@@ -697,6 +723,43 @@ export class QuizRoom {
         });
       }
 
+      if (url.pathname === '/react' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const playerToken = String(body?.playerToken || '');
+        const emoji = sanitizeReaction(body?.emoji);
+
+        const player = room.players[playerId];
+        if (!player || player.token !== playerToken) return json({ error: 'Unauthorized player.' }, 401);
+        if (!emoji) return json({ error: 'Invalid reaction.' }, 400);
+
+        const timeoutClosed = closeQuestionIfTimedOut(room);
+        if (timeoutClosed) await this.#setRoom(room);
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+
+        const qIndex = room.currentIndex;
+        room.reactionsByQuestion = room.reactionsByQuestion || {};
+        room.reactionsByQuestion[qIndex] = room.reactionsByQuestion[qIndex] || [];
+
+        const list = room.reactionsByQuestion[qIndex];
+        const existingIdx = list.findIndex((r) => r.playerId === playerId);
+        const payload = {
+          playerId,
+          name: player.name,
+          emoji,
+          at: Date.now(),
+        };
+
+        if (existingIdx >= 0) list[existingIdx] = payload;
+        else list.push(payload);
+
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, reaction: payload });
+      }
+
       return json({ error: 'Not found' }, 404);
     } catch (err) {
       return json({ error: err?.message || 'Unexpected error' }, 500);
@@ -715,6 +778,7 @@ export class QuizRoom {
 function hostState(room) {
   const qIndex = room.currentIndex;
   const responses = room.responsesByQuestion[qIndex] || {};
+  const reactions = room.reactionsByQuestion?.[qIndex] || [];
   const players = Object.values(room.players)
     .map((p) => ({
       id: p.id,
@@ -735,6 +799,7 @@ function hostState(room) {
     totalQuestions: room.quiz.questions.length,
     playerCount: players.length,
     responseCount: Object.keys(responses).length,
+    reactions,
     players,
     question,
     questionStartedAt: room.questionStartedAt || null,
@@ -1199,6 +1264,11 @@ function sanitizePin(pin) {
 function sanitizeName(name) {
   const cleaned = String(name || '').replace(/\s+/g, ' ').trim();
   return cleaned.slice(0, 40);
+}
+
+function sanitizeReaction(emoji) {
+  const value = String(emoji || '').trim();
+  return ALLOWED_REACTIONS.has(value) ? value : '';
 }
 
 function normalizeNameKey(name) {
