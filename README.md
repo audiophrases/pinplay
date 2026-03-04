@@ -101,6 +101,38 @@ The frontend is preconfigured to use:
 
 If you deploy to a different Worker URL, update `DEFAULT_BACKEND_URL` in `app.js`.
 
+## Optional: Publish quizzes directly to Google Drive
+
+This adds a **Publish to Drive** button in Teacher Create.
+
+### A) Create Google Apps Script bridge
+
+1. Go to https://script.google.com and create a new project.
+2. Paste the script from `cloudflare/drive-bridge.gs`.
+3. Set these constants inside the script:
+   - `FOLDER_ID` = your Drive folder ID (`1NKH51CDu2rGeOB1VCyTA8NtkvLuf1STZ`)
+   - `SHARED_SECRET` = any long random string
+4. Deploy as **Web app**:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+5. Copy the Web app URL.
+
+### B) Set Worker env vars and redeploy
+
+From `cloudflare/`:
+
+```bash
+wrangler secret put DRIVE_SHARED_SECRET
+# paste same value as SHARED_SECRET
+
+wrangler secret put DRIVE_PUBLISH_URL
+# paste Apps Script Web app URL
+
+wrangler deploy
+```
+
+After that, Teacher Create → **Publish to Drive** uploads quiz JSON into your Drive folder.
+
 ## Quiz JSON format (example)
 
 ```json

@@ -242,6 +242,50 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/drive/publish' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const quiz = body?.quiz;
+
+      if (!quiz?.questions?.length) return json({ error: 'Quiz must include at least one question.' }, 400);
+
+      const scriptUrl = String(env.DRIVE_PUBLISH_URL || '').trim();
+      if (!scriptUrl) {
+        return json({ error: 'Drive publish is not configured on worker (DRIVE_PUBLISH_URL).' }, 501);
+      }
+
+      const outbound = {
+        source: 'pinplay',
+        secret: String(env.DRIVE_SHARED_SECRET || ''),
+        quiz,
+      };
+
+      try {
+        const res = await fetch(scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(outbound),
+        });
+
+        const text = await res.text();
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { raw: text };
+          }
+        }
+
+        if (!res.ok) {
+          return json({ error: data?.error || `Drive bridge failed (${res.status}).` }, 502);
+        }
+
+        return json(data, 200);
+      } catch (err) {
+        return json({ error: `Drive bridge request failed: ${err.message}` }, 502);
+      }
+    }
+
     return json({ error: 'Not found' }, 404);
   },
 };

@@ -3,6 +3,7 @@ const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const CREATE_PASSWORD = '1234.';
+const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -21,6 +22,7 @@ const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
 const exportBtn = document.getElementById('exportBtn');
+const publishDriveBtn = document.getElementById('publishDriveBtn');
 const importInput = document.getElementById('importInput');
 
 // Create-side auth
@@ -240,6 +242,10 @@ function bindBuilderEvents() {
     syncQuizFromUI();
     downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
   });
+
+  if (publishDriveBtn) {
+    publishDriveBtn.addEventListener('click', publishQuizToDrive);
+  }
 
   importInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -596,6 +602,47 @@ function syncQuizFromUI() {
       q.zone.r = round(clamp(Number(rEl?.value ?? 15), 1, 100), 1);
     }
   });
+}
+
+async function publishQuizToDrive() {
+  try {
+    syncQuizFromUI();
+
+    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
+
+    const payload = normalizeQuizForLive(quiz);
+    const data = await api(DRIVE_PUBLISH_ENDPOINT, {
+      method: 'POST',
+      body: {
+        quiz: payload,
+      },
+    });
+
+    const fileName = data?.file?.name || 'quiz.json';
+    const fileUrl = data?.file?.webViewLink || data?.file?.url || '';
+    const folderUrl = data?.folder?.webViewLink || data?.folder?.url || '';
+
+    if (fileUrl) {
+      setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
+      if (confirm(`Published to Drive: ${fileName}\n\nOpen file now?`)) {
+        window.open(fileUrl, '_blank', 'noopener');
+      }
+      return;
+    }
+
+    if (folderUrl) {
+      setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
+      if (confirm(`Published to Drive.\n\nOpen folder now?`)) {
+        window.open(folderUrl, '_blank', 'noopener');
+      }
+      return;
+    }
+
+    setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
+  }
 }
 
 // ---------- Live mode ----------
