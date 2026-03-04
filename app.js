@@ -111,7 +111,7 @@ const live = {
 const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
   answering: createAudio('../music/answering.mp3', { loop: false, volume: 0.7 }),
-  answered: createAudio('../music/answered.mp3', { loop: false, volume: 0.8 }),
+  answered: createAudio('../music/answered.mp3', { loop: false, volume: 1 }),
 };
 
 init();
