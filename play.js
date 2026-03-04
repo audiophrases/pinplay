@@ -26,6 +26,11 @@ const live = {
   },
 };
 
+const audioFx = {
+  answering: createAudio('music/answering.mp3', { loop: false, volume: 0.75 }),
+  answered: createAudio('music/answered.mp3', { loop: false, volume: 0.9 }),
+};
+
 init();
 
 function init() {
@@ -52,7 +57,8 @@ async function joinLiveGame() {
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
 
-    setStatus(joinStatusEl, `Joined as ${name} ✅`, 'ok');
+    const shownName = data.name || name;
+    setStatus(joinStatusEl, `Joined as ${shownName} ✅`, 'ok');
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
@@ -106,6 +112,8 @@ function renderPlayerState(state) {
     live.player.pinSelection = null;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
+    playFx('answering');
+    animatePulse(joinQuestionWrap);
   }
 
   if (joinSubmitBtn) {
@@ -117,6 +125,7 @@ function renderPlayerState(state) {
 }
 
 function renderJoinQuestion(question) {
+  if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
@@ -275,6 +284,7 @@ async function submitLiveAnswer() {
       setStatus(joinFeedbackEl, 'Not correct ❌', 'bad');
     }
 
+    playFx('answered');
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
     setStatus(joinFeedbackEl, err.message, 'bad');
@@ -380,6 +390,36 @@ async function api(path, opts = {}) {
 
 function loadBackendUrl() {
   return localStorage.getItem(BACKEND_KEY) || '';
+}
+
+function createAudio(src, opts = {}) {
+  try {
+    const a = new Audio(src);
+    a.loop = !!opts.loop;
+    if (typeof opts.volume === 'number') a.volume = clamp(opts.volume, 0, 1);
+    a.preload = 'auto';
+    return a;
+  } catch {
+    return null;
+  }
+}
+
+function playFx(name) {
+  const a = audioFx[name];
+  if (!a) return;
+  try {
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {
+    // ignore missing files/autoplay blocks
+  }
+}
+
+function animatePulse(el) {
+  if (!el) return;
+  el.classList.remove('fx-pop');
+  void el.offsetWidth;
+  el.classList.add('fx-pop');
 }
 
 function setStatus(el, text, mode = '') {

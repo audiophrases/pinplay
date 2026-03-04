@@ -55,12 +55,28 @@
           <div class="card" id="hostCard">
             <h3>Teacher host</h3>
             <p class="muted">Host from this screen and project it in class.</p>
-            <div class="row gap">
+
+            <div class="row gap top-space">
+              <label style="display:flex; align-items:center; gap:.4rem; margin:0; font-weight:500;">
+                <input id="randomNamesToggle" type="checkbox" style="width:auto;" />
+                Random acceptable names for students
+              </label>
+              <button id="applySettingsBtn" class="btn">Apply settings</button>
+            </div>
+
+            <div class="row gap top-space">
               <button id="createLiveBtn" class="btn primary">Create live game</button>
               <button id="hostRefreshBtn" class="btn">Refresh</button>
               <button id="hostStartBtn" class="btn">Start game</button>
               <button id="hostNextBtn" class="btn">Next question</button>
             </div>
+
+            <div class="hall top-space" id="hallCard">
+              <div class="small">GAME PIN</div>
+              <div class="pin-big" id="livePinBig">—</div>
+              <div class="small" id="hallHint">Create a live game to open the hall.</div>
+            </div>
+
             <div class="top-space">
               <div class="pin">Live PIN: <span id="livePin">—</span></div>
               <div id="livePhase" class="small">Phase: —</div>

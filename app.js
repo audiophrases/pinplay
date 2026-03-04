@@ -32,6 +32,7 @@ const createAuthStatusEl = document.getElementById('createAuthStatus');
 const backendStatusEl = document.getElementById('backendStatus');
 
 // Host controls (create side)
+const hostCardEl = document.getElementById('hostCard');
 const createLiveBtn = document.getElementById('createLiveBtn');
 const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
@@ -46,6 +47,11 @@ const hostQuestionWrap = document.getElementById('hostQuestionWrap');
 const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
 const hostQuestionAnswersEl = document.getElementById('hostQuestionAnswers');
 const hostQuestionHintEl = document.getElementById('hostQuestionHint');
+const randomNamesToggleEl = document.getElementById('randomNamesToggle');
+const applySettingsBtn = document.getElementById('applySettingsBtn');
+const hallCardEl = document.getElementById('hallCard');
+const livePinBigEl = document.getElementById('livePinBig');
+const hallHintEl = document.getElementById('hallHint');
 
 // Join controls
 const joinPinEl = document.getElementById('joinPin');
@@ -86,6 +92,9 @@ const live = {
     pin: null,
     token: null,
     pollTimer: null,
+    lastPhase: null,
+    lastIndex: null,
+    lastResponseCount: 0,
   },
   player: {
     pin: null,
@@ -97,6 +106,12 @@ const live = {
     currentQuestion: null,
     pinSelection: null,
   },
+};
+
+const audioFx = {
+  hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
+  answering: createAudio('../music/answering.mp3', { loop: false, volume: 0.7 }),
+  answered: createAudio('../music/answered.mp3', { loop: false, volume: 0.8 }),
 };
 
 init();
@@ -577,6 +592,15 @@ function bindLiveEvents() {
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
+  if (applySettingsBtn) applySettingsBtn.addEventListener('click', applyHostSettings);
+
+  if (hostPlayersEl) {
+    hostPlayersEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-kick-player]');
+      if (!btn) return;
+      kickPlayer(btn.dataset.kickPlayer);
+    });
+  }
 
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -592,13 +616,22 @@ async function createLiveGame() {
     const payload = normalizeQuizForLive(quiz);
     const data = await api('/api/create', {
       method: 'POST',
-      body: { quiz: payload },
+      body: {
+        quiz: payload,
+        options: {
+          randomNames: !!randomNamesToggleEl?.checked,
+        },
+      },
     });
 
     live.host.pin = data.pin;
     live.host.token = data.hostToken;
+    live.host.lastPhase = null;
+    live.host.lastIndex = null;
+    live.host.lastResponseCount = 0;
 
-    livePinEl.textContent = data.pin;
+    if (livePinEl) livePinEl.textContent = data.pin;
+    if (livePinBigEl) livePinBigEl.textContent = data.pin;
     setStatus(hostStatusEl, 'Live game created ✅ Share the PIN with students.', 'ok');
 
     startHostPolling();
@@ -636,6 +669,43 @@ async function hostNextQuestion() {
   }
 }
 
+async function applyHostSettings() {
+  try {
+    ensureHostReady();
+    await api('/api/host/settings', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        randomNames: !!randomNamesToggleEl?.checked,
+      },
+    });
+    setStatus(hostStatusEl, 'Settings applied ✅', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+async function kickPlayer(playerId) {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+    await api('/api/host/kick', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+      },
+    });
+    setStatus(hostStatusEl, 'Player removed.', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -654,12 +724,30 @@ function renderHostState(state) {
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
+  if (livePinEl) livePinEl.textContent = state.pin || '—';
+  if (livePinBigEl) livePinBigEl.textContent = state.pin || '—';
+
+  if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
+    randomNamesToggleEl.checked = !!state.settings.randomNames;
+  }
 
   if (hostPlayersEl) {
     hostPlayersEl.innerHTML = '';
     (state.players || []).forEach((p) => {
       const li = document.createElement('li');
-      li.textContent = `${p.name} — ${p.score} pts${p.answeredCurrent ? ' ✅' : ''}`;
+      const row = document.createElement('div');
+      row.className = 'row spread';
+
+      const name = document.createElement('span');
+      name.textContent = `${p.name} — ${p.score} pts${p.answeredCurrent ? ' ✅' : ''}`;
+
+      const kick = document.createElement('button');
+      kick.className = 'btn';
+      kick.dataset.kickPlayer = p.id;
+      kick.textContent = 'Remove';
+
+      row.append(name, kick);
+      li.appendChild(row);
       hostPlayersEl.appendChild(li);
     });
 
@@ -672,13 +760,28 @@ function renderHostState(state) {
 
   const actionHint =
     state.phase === 'lobby'
-      ? 'Ready to start.'
+      ? 'Lobby open. Students can join with PIN.'
       : state.phase === 'question'
         ? 'Collect answers, then click Next question.'
         : 'Game finished.';
 
   setStatus(hostStatusEl, actionHint, 'ok');
   renderHostQuestion(state.phase, state.question);
+  updateHallScene(state);
+
+  const phaseChanged = live.host.lastPhase !== state.phase || live.host.lastIndex !== state.currentIndex;
+  if (phaseChanged && state.phase === 'question') {
+    playFx('answering');
+    animatePulse(hostQuestionWrap || hostCardEl || hallCardEl);
+  }
+
+  if (state.responseCount > (live.host.lastResponseCount || 0) && state.phase === 'question') {
+    playFx('answered');
+  }
+
+  live.host.lastPhase = state.phase;
+  live.host.lastIndex = state.currentIndex;
+  live.host.lastResponseCount = state.responseCount;
 }
 
 function renderHostQuestion(phase, question) {
@@ -763,6 +866,58 @@ function renderHostQuestion(phase, question) {
   hostQuestionHintEl.textContent = '';
 }
 
+function updateHallScene(state) {
+  if (!hallCardEl || !hallHintEl) return;
+
+  if (state.phase === 'lobby') {
+    hallCardEl.classList.add('hall-live');
+    hallHintEl.textContent = `Players joined: ${state.playerCount}. Waiting for teacher to start.`;
+    playHallMusic();
+    return;
+  }
+
+  hallCardEl.classList.remove('hall-live');
+  stopHallMusic();
+
+  if (state.phase === 'question') {
+    hallHintEl.textContent = 'Question in progress…';
+  } else if (state.phase === 'results') {
+    hallHintEl.textContent = 'Game finished.';
+  } else {
+    hallHintEl.textContent = 'Create a live game to open the hall.';
+  }
+}
+
+function playHallMusic() {
+  if (!audioFx.hall) return;
+  if (!audioFx.hall.paused) return;
+  audioFx.hall.currentTime = 0;
+  audioFx.hall.play().catch(() => {});
+}
+
+function stopHallMusic() {
+  if (!audioFx.hall) return;
+  audioFx.hall.pause();
+}
+
+function playFx(name) {
+  const a = audioFx[name];
+  if (!a) return;
+  try {
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {
+    // ignore missing files or autoplay errors
+  }
+}
+
+function animatePulse(el) {
+  if (!el) return;
+  el.classList.remove('fx-pop');
+  void el.offsetWidth;
+  el.classList.add('fx-pop');
+}
+
 function startHostPolling() {
   stopHostPolling();
   live.host.pollTimer = setInterval(pollHostState, 2000);
@@ -792,7 +947,7 @@ async function joinLiveGame() {
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
 
-    setStatus(joinStatusEl, `Joined as ${name} ✅`, 'ok');
+    setStatus(joinStatusEl, `Joined as ${data.name || name} ✅`, 'ok');
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
@@ -1678,7 +1833,20 @@ function saveBackendUrl(url) {
 }
 
 // ---------- Helpers ----------
+function createAudio(src, opts = {}) {
+  try {
+    const a = new Audio(src);
+    a.loop = !!opts.loop;
+    if (typeof opts.volume === 'number') a.volume = clamp(opts.volume, 0, 1);
+    a.preload = 'auto';
+    return a;
+  } catch {
+    return null;
+  }
+}
+
 function setStatus(el, text, mode = '') {
+  if (!el) return;
   el.textContent = text;
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');

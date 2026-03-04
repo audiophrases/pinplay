@@ -10,7 +10,7 @@ Free, no-ads classroom quiz web app.
 - ✅ Teacher can create quiz in-app
 - ✅ Import/export quiz as JSON
 
-## Current features (v0.2)
+## Current features (v0.3)
 
 ### Builder
 - Multiple choice
@@ -30,11 +30,20 @@ Free, no-ads classroom quiz web app.
 - **Create side (teacher)** — `.../pinplay/create/`
   - Protected with password: `1234.`
   - Build quiz and host live game
-  - Shows projected question view (question + options)
+  - Live hall with big PIN + auto-updating player list
+  - Option to force random acceptable student names
+  - Teacher can remove/kick students (e.g., inappropriate nicknames)
+  - Projected question view (question + options)
 - **Play side (students only)** — `.../pinplay/`
   - Join by 6-digit PIN and name
   - Students answer on their devices
   - Live scoring + leaderboard
+
+### Optional classroom audio files
+Put these in `/music` (already git-tracked with placeholders):
+- `hall.mp3` → hall/lobby background loop (teacher page)
+- `answering.mp3` → question appears
+- `answered.mp3` → answer submitted/received
 
 ## What is still planned
 

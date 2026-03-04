@@ -6,6 +6,20 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
 };
 
+const RANDOM_NAMES = [
+  'Falcon', 'Panda', 'Otter', 'Comet', 'Maple', 'Nova', 'Cedar', 'River', 'Pixel', 'Tango',
+  'Iris', 'Cobalt', 'Echo', 'Mango', 'Lemon', 'Coral', 'Sparrow', 'Nimbus', 'Juniper', 'Ruby',
+  'Amber', 'Sunny', 'Misty', 'Berry', 'Rocket', 'Lyra', 'Orion', 'Jade', 'Aster', 'Breeze',
+];
+
+const BLOCKED_NICK_PATTERNS = [
+  /\bnazi\b/i,
+  /\bhitler\b/i,
+  /\bterrorist\b/i,
+  /\brape\b/i,
+  /\bkill\s*yourself\b/i,
+];
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -21,6 +35,7 @@ export default {
     if (url.pathname === '/api/create' && request.method === 'POST') {
       const body = await safeJson(request);
       const quiz = body?.quiz;
+      const options = body?.options || {};
 
       if (!quiz?.questions?.length) {
         return json({ error: 'Quiz must include at least one question.' }, 400);
@@ -33,7 +48,7 @@ export default {
 
         const initRes = await stub.fetch('https://room/init', {
           method: 'POST',
-          body: JSON.stringify({ pin, quiz }),
+          body: JSON.stringify({ pin, quiz, options }),
         });
 
         if (initRes.status === 201) {
@@ -51,7 +66,6 @@ export default {
       const name = sanitizeName(body?.name);
 
       if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
-      if (!name) return json({ error: 'Name is required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
       return withCors(
@@ -105,6 +119,40 @@ export default {
         await stub.fetch('https://room/host/next', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/host/settings' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/settings', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ randomNames: !!body?.randomNames }),
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/host/kick' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/kick', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ playerId: sanitizeId(body?.playerId) }),
         }),
       );
     }
@@ -167,6 +215,7 @@ export class QuizRoom {
         const body = await safeJson(request);
         const pin = sanitizePin(body?.pin);
         const quiz = body?.quiz;
+        const options = body?.options || {};
 
         if (!pin || !quiz?.questions?.length) {
           return json({ error: 'Invalid init payload.' }, 400);
@@ -187,10 +236,13 @@ export class QuizRoom {
           quiz: normalizeQuiz(quiz),
           players: {},
           responsesByQuestion: {},
+          settings: {
+            randomNames: !!options.randomNames,
+          },
         };
 
         await this.#setRoom(room);
-        return json({ pin, hostToken: room.hostToken }, 201);
+        return json({ pin, hostToken: room.hostToken, settings: room.settings }, 201);
       }
 
       const room = await this.#getRoom();
@@ -203,8 +255,17 @@ export class QuizRoom {
 
       if (url.pathname === '/join' && request.method === 'POST') {
         const body = await safeJson(request);
-        const name = sanitizeName(body?.name);
+        const rawName = sanitizeName(body?.name);
+
+        let name = rawName;
+        if (room.settings?.randomNames) {
+          name = pickRandomName(room.players);
+        }
+
         if (!name) return json({ error: 'Name is required.' }, 400);
+        if (hasBlockedNickname(name)) {
+          return json({ error: 'Nickname not allowed. Please choose another one.' }, 400);
+        }
 
         const playerId = randomId('p_');
         const playerToken = randomToken();
@@ -220,7 +281,7 @@ export class QuizRoom {
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
-        return json({ playerId, playerToken, pin: room.pin });
+        return json({ playerId, playerToken, pin: room.pin, name });
       }
 
       if (url.pathname === '/host/state' && request.method === 'GET') {
@@ -262,6 +323,43 @@ export class QuizRoom {
         await this.#setRoom(room);
 
         return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/settings' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        room.settings = {
+          ...(room.settings || {}),
+          randomNames: !!body?.randomNames,
+        };
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/kick' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+
+        delete room.players[playerId];
+
+        Object.keys(room.responsesByQuestion || {}).forEach((qIdx) => {
+          if (room.responsesByQuestion[qIdx]?.[playerId]) {
+            delete room.responsesByQuestion[qIdx][playerId];
+          }
+        });
+
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId });
       }
 
       if (url.pathname === '/player/state' && request.method === 'POST') {
@@ -366,6 +464,9 @@ function hostState(room) {
     responseCount: Object.keys(responses).length,
     players,
     question,
+    settings: {
+      randomNames: !!room.settings?.randomNames,
+    },
   };
 }
 
@@ -700,6 +801,25 @@ function sanitizePin(pin) {
 function sanitizeName(name) {
   const cleaned = String(name || '').replace(/\s+/g, ' ').trim();
   return cleaned.slice(0, 40);
+}
+
+function hasBlockedNickname(name) {
+  const value = String(name || '').trim();
+  if (!value) return true;
+  return BLOCKED_NICK_PATTERNS.some((re) => re.test(value));
+}
+
+function pickRandomName(playersMap) {
+  const used = new Set(Object.values(playersMap || {}).map((p) => String(p.name || '').toLowerCase()));
+
+  for (const base of RANDOM_NAMES) {
+    if (!used.has(base.toLowerCase())) return base;
+  }
+
+  const base = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)] || 'Player';
+  let n = 2;
+  while (used.has(`${base.toLowerCase()} ${n}`)) n += 1;
+  return `${base} ${n}`;
 }
 
 function sanitizeId(id) {
