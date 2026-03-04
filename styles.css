@@ -82,7 +82,12 @@ textarea { min-height: 72px; resize: vertical; }
   color: #fff;
 }
 .btn.primary:hover { background: var(--primary-2); }
-.file-label { display: inline-block; }
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
