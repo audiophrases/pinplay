@@ -20,6 +20,7 @@ const addTfBtn = document.getElementById('addTfBtn');
 const addTfAudioBtn = document.getElementById('addTfAudioBtn');
 const addTextBtn = document.getElementById('addTextBtn');
 const addTextAudioBtn = document.getElementById('addTextAudioBtn');
+const addOpenBtn = document.getElementById('addOpenBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
@@ -239,6 +240,13 @@ function bindBuilderEvents() {
   if (addTextAudioBtn) {
     addTextAudioBtn.addEventListener('click', () => {
       quiz.questions.push(makeTextQuestion({ withAudio: true }));
+      renderBuilder();
+    });
+  }
+
+  if (addOpenBtn) {
+    addOpenBtn.addEventListener('click', () => {
+      quiz.questions.push(makeOpenQuestion());
       renderBuilder();
     });
   }
@@ -491,6 +499,12 @@ function renderBuilder() {
             )
             .join('')}
         </div>
+      `;
+    }
+
+    if (q.type === 'open') {
+      specific += `
+        <p class="small top-space">Students submit short text answers. Teacher grades responses live.</p>
       `;
     }
 
@@ -1018,6 +1032,34 @@ async function adjustPlayerScore(playerId, currentName = '') {
   }
 }
 
+async function gradeOpenAnswer(playerId, currentPoints = 0) {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+    const max = Number(live.host.state?.question?.points || 1000);
+    const raw = prompt(`Grade this answer (0-${max}):`, String(currentPoints || max));
+    if (raw == null) return;
+
+    const points = Number(String(raw).trim());
+    if (!Number.isFinite(points)) throw new Error('Points must be a number.');
+
+    await api('/api/host/grade-open', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+        points,
+      },
+    });
+
+    setStatus(hostStatusEl, `Open answer graded: ${Math.round(points)} pts.`, 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -1199,6 +1241,38 @@ function renderHostQuestion(state) {
 
   if (question.type === 'text') {
     hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Correct answer: ${state.correctAnswer}` : 'Type-answer question.';
+    return;
+  }
+
+  if (question.type === 'open') {
+    hostQuestionHintEl.textContent = 'Open short answer: grade live answers below.';
+    const list = Array.isArray(state.openResponses) ? state.openResponses : [];
+    if (!list.length) {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = 'No student answers yet.';
+      hostQuestionAnswersEl.appendChild(p);
+      return;
+    }
+
+    list.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'row spread gap';
+      row.style.border = '1px solid var(--line)';
+      row.style.borderRadius = '.5rem';
+      row.style.padding = '.4rem .5rem';
+
+      const text = document.createElement('span');
+      text.textContent = `${r.name}: ${r.answer}`;
+
+      const gradeBtn = document.createElement('button');
+      gradeBtn.className = 'btn';
+      gradeBtn.textContent = r.graded ? `Regrade (${r.pointsAwarded})` : 'Grade';
+      gradeBtn.addEventListener('click', () => gradeOpenAnswer(r.playerId, r.pointsAwarded));
+
+      row.append(text, gradeBtn);
+      hostQuestionAnswersEl.appendChild(row);
+    });
     return;
   }
 
@@ -1588,12 +1662,12 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text') {
+  if (question.type === 'text' || question.type === 'open') {
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'joinTextAnswer';
-    input.maxLength = 40;
-    input.placeholder = 'Type your answer';
+    input.maxLength = 120;
+    input.placeholder = question.type === 'open' ? 'Type a short answer' : 'Type your answer';
     joinAnswersEl.appendChild(input);
 
     if (hasQuestionAudio(question)) {
@@ -1729,7 +1803,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text') {
+  if (q.type === 'text' || q.type === 'open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }
@@ -1906,12 +1980,12 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text') {
+  if (q.type === 'text' || q.type === 'open') {
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'soloTextAnswer';
-    input.maxLength = 40;
-    input.placeholder = 'Type your answer';
+    input.maxLength = 120;
+    input.placeholder = q.type === 'open' ? 'Type a short answer' : 'Type your answer';
     answersEl.appendChild(input);
 
     if (hasQuestionAudio(q)) {
@@ -2021,6 +2095,12 @@ function evaluateSoloQuestion(q) {
 
     if (!accepted.length) return { correct: false, hint: 'No accepted answers set.' };
     return { correct: accepted.includes(guess), hint: `Accepted: ${accepted.slice(0, 2).join(' / ')}` };
+  }
+
+  if (q.type === 'open') {
+    const val = String(document.getElementById('soloTextAnswer')?.value || '').trim();
+    if (!val) return { correct: false, hint: 'Type an answer first.' };
+    return { correct: false, hint: 'Open answer needs teacher grading in live mode.' };
   }
 
   if (q.type === 'puzzle') {
@@ -2187,6 +2267,21 @@ function makeTextQuestion(opts = {}) {
   };
 }
 
+function makeOpenQuestion(opts = {}) {
+  return {
+    id: crypto.randomUUID(),
+    type: 'open',
+    prompt: '',
+    points: 1000,
+    timeLimit: 45,
+    audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
+  };
+}
+
 function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
@@ -2316,6 +2411,11 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'open') {
+      normalized.questions.push({ ...base });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -2420,6 +2520,7 @@ function labelForType(type) {
       multi: 'Multi-select',
       tf: 'True / False',
       text: 'Type answer',
+      open: 'Open short answer',
       puzzle: 'Puzzle',
       audio: 'Quiz + Audio',
       slider: 'Slider',
@@ -2430,7 +2531,7 @@ function labelForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -2504,7 +2605,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'puzzle', 'audio'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'puzzle', 'audio'].includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {

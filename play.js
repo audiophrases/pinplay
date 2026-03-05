@@ -250,12 +250,12 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text') {
+  if (question.type === 'text' || question.type === 'open') {
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'joinTextAnswer';
-    input.maxLength = 40;
-    input.placeholder = 'Type your answer';
+    input.maxLength = 120;
+    input.placeholder = question.type === 'open' ? 'Type a short answer' : 'Type your answer';
     joinAnswersEl.appendChild(input);
     appendReactionBar();
     return;
@@ -442,7 +442,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text') {
+  if (q.type === 'text' || q.type === 'open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }

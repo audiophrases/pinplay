@@ -249,6 +249,26 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/grade-open' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/grade-open', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+            points: Number(body?.points || 0),
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -683,6 +703,39 @@ export class QuizRoom {
         return json({ ok: true, playerId, score: room.players[playerId].score, delta: Math.round(delta) });
       }
 
+      if (url.pathname === '/host/grade-open' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const pointsRaw = Number(body?.points);
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        const qIndex = room.currentIndex;
+        const question = room.quiz.questions[qIndex];
+        if (!question || question.type !== 'open') return json({ error: 'Current question is not open short answer.' }, 409);
+
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+        const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
+        if (!resp) return json({ error: 'No submitted open answer for this player.' }, 404);
+
+        const maxPoints = Number(question.points || 1000);
+        const points = Math.round(clamp(pointsRaw, 0, maxPoints));
+
+        const prev = Number(resp.pointsAwarded || 0);
+        resp.pointsAwarded = points;
+        resp.correct = points > 0;
+        resp.graded = true;
+        resp.gradedAt = Date.now();
+
+        room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) - prev + points);
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId, pointsAwarded: points, score: room.players[playerId].score });
+      }
+
       if (url.pathname === '/player/state' && request.method === 'POST') {
         const body = await safeJson(request);
         const playerId = sanitizeId(body?.playerId);
@@ -729,23 +782,35 @@ export class QuizRoom {
           });
         }
 
-        const verdict = evaluate(question, body?.answer);
-        const basePoints = Number(question.points || 1000);
-
+        let verdict = { correct: false };
         let pointsAwarded = 0;
-        if (verdict.correct) {
-          const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {}).filter((r) => !!r?.correct).length;
-          const rank = correctCountSoFar + 1;
-          const multiplier = rank <= 2 ? 1 : (rank <= 4 ? 0.9 : 0.8);
-          pointsAwarded = Math.round(basePoints * multiplier);
-        }
 
-        room.responsesByQuestion[qIndex][playerId] = {
-          answer: body?.answer,
-          correct: verdict.correct,
-          pointsAwarded,
-          submittedAt: Date.now(),
-        };
+        if (question.type === 'open') {
+          room.responsesByQuestion[qIndex][playerId] = {
+            answer: String(body?.answer || '').slice(0, 220),
+            correct: false,
+            pointsAwarded: 0,
+            graded: false,
+            submittedAt: Date.now(),
+          };
+        } else {
+          verdict = evaluate(question, body?.answer);
+          const basePoints = Number(question.points || 1000);
+
+          if (verdict.correct) {
+            const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {}).filter((r) => !!r?.correct).length;
+            const rank = correctCountSoFar + 1;
+            const multiplier = rank <= 2 ? 1 : (rank <= 4 ? 0.9 : 0.8);
+            pointsAwarded = Math.round(basePoints * multiplier);
+          }
+
+          room.responsesByQuestion[qIndex][playerId] = {
+            answer: body?.answer,
+            correct: verdict.correct,
+            pointsAwarded,
+            submittedAt: Date.now(),
+          };
+        }
 
         room.players[playerId].score += pointsAwarded;
 
@@ -857,6 +922,15 @@ function hostState(room) {
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
+    openResponses: room.phase === 'question' && roomQuestion?.type === 'open'
+      ? Object.entries(responses).map(([pid, r]) => ({
+          playerId: pid,
+          name: room.players?.[pid]?.name || 'Student',
+          answer: String(r?.answer || ''),
+          graded: !!r?.graded,
+          pointsAwarded: Number(r?.pointsAwarded || 0),
+        }))
+      : [],
     correctAnswer: room.phase === 'question' && room.questionClosed ? hostCorrectSummary(roomQuestion) : '',
     settings: {
       randomNames: !!room.settings?.randomNames,
@@ -1001,7 +1075,7 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text') {
+  if (question.type === 'text' || question.type === 'open') {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -1191,6 +1265,11 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'open') {
+      normalized.questions.push({ ...base });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -1294,7 +1373,7 @@ function distance2D(x1, y1, x2, y2) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -1343,6 +1422,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'text') {
     return (question.accepted || []).filter(Boolean).join(' | ');
+  }
+
+  if (question.type === 'open') {
+    return 'Teacher-graded open short answer';
   }
 
   if (question.type === 'puzzle') {
