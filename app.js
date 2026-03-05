@@ -1212,11 +1212,7 @@ function renderHostState(state) {
   }
 
   if (projectorCorrectEl) {
-    const isTextLike = state?.question?.type === 'text';
-    projectorCorrectEl.textContent =
-      state.phase === 'question' && state.questionClosed && state.correctAnswer && !isTextLike
-        ? `Correct answer: ${state.correctAnswer}`
-        : '';
+    projectorCorrectEl.textContent = '';
   }
 
   live.host.lastPhase = state.phase;
@@ -1267,7 +1263,7 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(hint);
     }
 
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Correct answer: ${state.correctAnswer}` : question.type === 'audio' ? 'Audio question.' : '';
+    hostQuestionHintEl.textContent = question.type === 'audio' ? 'Audio question.' : '';
     return;
   }
 
@@ -1316,7 +1312,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'puzzle') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Correct order: ${state.correctAnswer}` : 'Puzzle question.';
+    hostQuestionHintEl.textContent = 'Puzzle question.';
     if (question.options?.length) {
       const p = document.createElement('p');
       p.className = 'small';
@@ -1327,9 +1323,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'slider') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer
-      ? `Correct value: ${state.correctAnswer}`
-      : `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    hostQuestionHintEl.textContent = `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
     return;
   }
 
