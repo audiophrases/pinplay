@@ -1077,6 +1077,13 @@ async function pollHostState() {
 function renderHostState(state) {
   live.host.state = state;
 
+  const phaseChanged = live.host.lastPhase !== state.phase || live.host.lastIndex !== state.currentIndex;
+
+  if (phaseChanged) {
+    live.host.seenReactionKeys = new Set();
+    if (liveReactionsEl) liveReactionsEl.innerHTML = '';
+  }
+
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
@@ -1151,13 +1158,6 @@ function renderHostState(state) {
   renderHostQuestion(state);
   updateHallScene(state);
   updateHostTimer(state);
-
-  const phaseChanged = live.host.lastPhase !== state.phase || live.host.lastIndex !== state.currentIndex;
-
-  if (phaseChanged) {
-    live.host.seenReactionKeys = new Set();
-    if (liveReactionsEl) liveReactionsEl.innerHTML = '';
-  }
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');

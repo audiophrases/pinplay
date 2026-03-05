@@ -854,7 +854,6 @@ export class QuizRoom {
         room.reactionsByQuestion[qIndex] = room.reactionsByQuestion[qIndex] || [];
 
         const list = room.reactionsByQuestion[qIndex];
-        const existingIdx = list.findIndex((r) => r.playerId === playerId);
         const payload = {
           playerId,
           name: player.name,
@@ -862,8 +861,8 @@ export class QuizRoom {
           at: Date.now(),
         };
 
-        if (existingIdx >= 0) list[existingIdx] = payload;
-        else list.push(payload);
+        list.push(payload);
+        if (list.length > 120) list.splice(0, list.length - 120);
 
         room.updatedAt = Date.now();
         await this.#setRoom(room);
