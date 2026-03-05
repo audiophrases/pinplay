@@ -952,6 +952,7 @@ function playerState(room, playerId) {
     answeredCurrent: !!responses[playerId],
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
+    questionStartedAt: room.phase === 'question' ? room.questionStartedAt || null : null,
     questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,
     questionCloseReason: room.phase === 'question' ? room.questionCloseReason || null : null,
     leaderboard: Object.values(room.players)

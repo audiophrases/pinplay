@@ -1,7 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-const REACTION_EMOJIS = ['👍','🤩','😹','🙀','🤣','🔥','🤯','😘','😎','🤟','😜','😻','😽','😅','😱','😼','🥳','🫠','🫡','👾','✌️','☝️','🤙','💪','🙈','🙉','🙊','❤️','✅','🆗','🆙','🆒','🆕','🆓'];
+const REACTION_EMOJIS = ['👍','❤️','🔥','🤩','🤯','🤣','😎','🥳','😅','😱','😜','🙌','👏','✅','🆗','💪','🤟','✌️','🤙','🙈','🙉','🙊','🫡','🫠','👾'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
@@ -16,6 +16,7 @@ const joinStatusEl = document.getElementById('joinStatus');
 const joinTitleEl = document.getElementById('joinTitle');
 const joinQuestionWrap = document.getElementById('joinQuestionWrap');
 const joinProgressEl = document.getElementById('joinProgress');
+const joinTimerEl = document.getElementById('joinTimer');
 const joinScoreEl = document.getElementById('joinScore');
 const joinPromptEl = document.getElementById('joinPrompt');
 const joinAnswersEl = document.getElementById('joinAnswers');
@@ -35,6 +36,9 @@ const live = {
     randomNamesMode: false,
     displayName: null,
     clientId: getOrCreateClientId(),
+    timerTicker: null,
+    timerStartedAt: null,
+    timerLimitSec: null,
   },
 };
 
@@ -54,6 +58,19 @@ function init() {
   if (joinNameEl) {
     joinNameEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGame();
+    });
+  }
+
+  if (joinAnswersEl) {
+    joinAnswersEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const tag = t.tagName.toLowerCase();
+      if (tag !== 'input' && tag !== 'select') return;
+      if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
+      e.preventDefault();
+      submitLiveAnswer();
     });
   }
 }
@@ -170,6 +187,8 @@ function renderPlayerState(state) {
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   if (state.phase !== 'question' || !state.question) {
+    stopJoinTimer();
+    if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
 
     if (state.phase === 'lobby') {
@@ -196,6 +215,13 @@ function renderPlayerState(state) {
   }
 
   const questionClosed = !!state.questionClosed;
+
+  if (questionClosed) {
+    stopJoinTimer();
+    if (joinTimerEl) joinTimerEl.textContent = 'Time: 0s';
+  } else {
+    startJoinTimer(state);
+  }
 
   if (joinSubmitBtn) {
     joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
@@ -454,6 +480,36 @@ function startPlayerPolling() {
 function stopPlayerPolling() {
   if (live.player.pollTimer) clearInterval(live.player.pollTimer);
   live.player.pollTimer = null;
+  stopJoinTimer();
+}
+
+function startJoinTimer(state) {
+  if (!joinTimerEl) return;
+
+  const startedAt = Number(state?.questionStartedAt || Date.now());
+  const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
+
+  if (live.player.timerStartedAt === startedAt && live.player.timerLimitSec === limitSec && live.player.timerTicker) {
+    return;
+  }
+
+  live.player.timerStartedAt = startedAt;
+  live.player.timerLimitSec = limitSec;
+
+  stopJoinTimer();
+  const paint = () => {
+    const remainingMs = Math.max(0, startedAt + limitSec * 1000 - Date.now());
+    const sec = Math.ceil(remainingMs / 1000);
+    joinTimerEl.textContent = `Time: ${sec}s`;
+  };
+
+  paint();
+  live.player.timerTicker = setInterval(paint, 250);
+}
+
+function stopJoinTimer() {
+  if (live.player.timerTicker) clearInterval(live.player.timerTicker);
+  live.player.timerTicker = null;
 }
 
 function renderLeaderboardInJoin(leaderboard) {
@@ -481,7 +537,7 @@ function renderLeaderboardInJoin(leaderboard) {
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'Drag pieces to reorder.';
+  hint.textContent = 'Drag pieces to reorder (touch: tap one piece, then tap target).';
   container.appendChild(hint);
 
   const list = document.createElement('div');
@@ -491,6 +547,25 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   container.appendChild(list);
 
   let dragIndex = -1;
+  let touchFrom = -1;
+
+  const refreshIndexes = () => {
+    [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
+      el.dataset.puzzleIndex = String(i);
+    });
+  };
+
+  const movePiece = (from, to) => {
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
+    const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
+    const moving = arr[from];
+    const target = arr[to];
+    if (!moving || !target) return;
+
+    if (from < to) list.insertBefore(moving, target.nextSibling);
+    else list.insertBefore(moving, target);
+    refreshIndexes();
+  };
 
   options.forEach((text, index) => {
     const item = document.createElement('button');
@@ -513,21 +588,24 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     item.addEventListener('dragover', (e) => e.preventDefault());
     item.addEventListener('drop', (e) => {
       e.preventDefault();
-      const from = Number(dragIndex);
-      const to = Number(item.dataset.puzzleIndex);
-      if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
+      movePiece(Number(dragIndex), Number(item.dataset.puzzleIndex));
+    });
 
-      const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
-      const moving = arr[from];
-      const target = arr[to];
-      if (!moving || !target) return;
+    item.addEventListener('click', () => {
+      const idx = Number(item.dataset.puzzleIndex);
+      if (touchFrom < 0) {
+        touchFrom = idx;
+        item.style.outline = '2px solid #3b82f6';
+        item.style.outlineOffset = '2px';
+        return;
+      }
 
-      if (from < to) list.insertBefore(moving, target.nextSibling);
-      else list.insertBefore(moving, target);
-
-      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
-        el.dataset.puzzleIndex = String(i);
+      movePiece(touchFrom, idx);
+      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el) => {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
       });
+      touchFrom = -1;
     });
 
     list.appendChild(item);
