@@ -263,32 +263,7 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'puzzle') {
     const options = question.options || [];
-    for (let i = 0; i < (question.length || options.length); i++) {
-      const row = document.createElement('div');
-      row.className = 'row gap';
-
-      const label = document.createElement('span');
-      label.className = 'small';
-      label.textContent = `Position ${i + 1}`;
-
-      const select = document.createElement('select');
-      select.dataset.joinPuzzleSlot = String(i);
-
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = 'Choose...';
-      select.appendChild(empty);
-
-      options.forEach((opt) => {
-        const o = document.createElement('option');
-        o.value = opt;
-        o.textContent = opt;
-        select.appendChild(o);
-      });
-
-      row.append(label, select);
-      joinAnswersEl.appendChild(row);
-    }
+    createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
     appendReactionBar();
     return;
   }
@@ -448,9 +423,11 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'puzzle') {
-    const slots = [...joinAnswersEl.querySelectorAll('[data-join-puzzle-slot]')];
-    const values = slots.map((s) => s.value).filter(Boolean);
-    return values.length === slots.length ? values : null;
+    const pieces = [...joinAnswersEl.querySelectorAll('[data-puzzle-piece]')]
+      .map((el) => String(el.dataset.puzzlePiece || '').trim())
+      .filter(Boolean);
+    const expected = Number(q.length || (q.options || []).length || 0);
+    return pieces.length === expected ? pieces : null;
   }
 
   if (q.type === 'slider') {
@@ -493,6 +470,62 @@ function renderLeaderboardInJoin(leaderboard) {
   });
 
   joinAnswersEl.appendChild(ul);
+}
+
+function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
+  const hint = document.createElement('p');
+  hint.className = 'small';
+  hint.textContent = 'Drag pieces to reorder.';
+  container.appendChild(hint);
+
+  const list = document.createElement('div');
+  list.className = 'row gap';
+  list.style.flexWrap = 'wrap';
+  list.dataset.puzzleList = listId;
+  container.appendChild(list);
+
+  let dragIndex = -1;
+
+  options.forEach((text, index) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'btn';
+    item.style.cursor = 'grab';
+    item.draggable = true;
+    item.dataset.puzzlePiece = String(text || '');
+    item.dataset.puzzleIndex = String(index);
+    item.textContent = String(text || '');
+
+    item.addEventListener('dragstart', () => {
+      dragIndex = Number(item.dataset.puzzleIndex);
+      item.style.opacity = '.5';
+    });
+    item.addEventListener('dragend', () => {
+      item.style.opacity = '1';
+      dragIndex = -1;
+    });
+    item.addEventListener('dragover', (e) => e.preventDefault());
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const from = Number(dragIndex);
+      const to = Number(item.dataset.puzzleIndex);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
+
+      const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
+      const moving = arr[from];
+      const target = arr[to];
+      if (!moving || !target) return;
+
+      if (from < to) list.insertBefore(moving, target.nextSibling);
+      else list.insertBefore(moving, target);
+
+      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
+        el.dataset.puzzleIndex = String(i);
+      });
+    });
+
+    list.appendChild(item);
+  });
 }
 
 async function api(path, opts = {}) {
