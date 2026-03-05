@@ -1,7 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-const REACTION_EMOJIS = ['👍','❤️','🔥','🤩','🤯','🤣','😎','🥳','😅','😱','😜','🙌','👏','✅','🆗','💪','🤟','✌️','🤙','🙈','🙉','🙊','🫡','🫠','👾'];
+const REACTION_EMOJIS = ['👍','❤️','🔥','🤩','🤯','🤣','😎','🥳','😅','😱','😜','🙌','👏','✅','6️⃣','7️⃣','🆗','💪','🤟','✌️','🤙','🙈','🙉','🙊','🫡','🫠','👾'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
