@@ -231,7 +231,8 @@ textarea { min-height: 72px; resize: vertical; }
 
 .list {
   margin: .45rem 0 0;
-  padding-left: 1.1rem;
+  padding-left: 0;
+  list-style: none;
 }
 .list li { margin: .2rem 0; }
 
