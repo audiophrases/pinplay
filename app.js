@@ -66,6 +66,7 @@ const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
 const projectorCorrectEl = document.getElementById('projectorCorrect');
 const projectorScoresEl = document.getElementById('projectorScores');
+const projectorReactionsEl = document.getElementById('projectorReactions');
 
 // Join controls
 const joinPinEl = document.getElementById('joinPin');
@@ -1082,6 +1083,7 @@ function renderHostState(state) {
   if (phaseChanged) {
     live.host.seenReactionKeys = new Set();
     if (liveReactionsEl) liveReactionsEl.innerHTML = '';
+    if (projectorReactionsEl) projectorReactionsEl.innerHTML = '';
   }
 
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
@@ -1345,7 +1347,6 @@ function renderProjectorScores(players) {
 }
 
 function renderReactionPop(reactions) {
-  if (!liveReactionsEl) return;
   if (!Array.isArray(reactions) || !reactions.length) return;
 
   reactions.forEach((r) => {
@@ -1356,14 +1357,16 @@ function renderReactionPop(reactions) {
     if (live.host.seenReactionKeys.has(key)) return;
     live.host.seenReactionKeys.add(key);
 
-    const pop = document.createElement('span');
-    pop.className = 'reaction-pop-item';
-    pop.textContent = emoji;
-    pop.style.left = `${Math.round(10 + Math.random() * 80)}%`;
-    pop.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
-
-    liveReactionsEl.appendChild(pop);
-    setTimeout(() => pop.remove(), 1800);
+    [liveReactionsEl, projectorReactionsEl].forEach((container) => {
+      if (!container) return;
+      const pop = document.createElement('span');
+      pop.className = 'reaction-pop-item';
+      pop.textContent = emoji;
+      pop.style.left = `${Math.round(10 + Math.random() * 80)}%`;
+      pop.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
+      container.appendChild(pop);
+      setTimeout(() => pop.remove(), 1800);
+    });
   });
 }
 

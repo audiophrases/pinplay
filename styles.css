@@ -158,6 +158,34 @@ textarea { min-height: 72px; resize: vertical; }
   overflow: hidden;
 }
 
+.reactions-pop-projector {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+#hostQuestionCard {
+  position: relative;
+}
+
+#hostQuestionCard:fullscreen .reaction-pop-item,
+.reactions-pop-projector .reaction-pop-item {
+  font-size: 2rem;
+}
+
+.reactions-pop-projector .reaction-pop-item {
+  bottom: 12%;
+  animation-name: reaction-pop-float-projector;
+}
+
+@keyframes reaction-pop-float-projector {
+  0% { transform: translate(-50%, 0) scale(.9); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate(-50%, -140px) scale(1.2); opacity: 0; }
+}
+
 .reaction-pop-item {
   position: absolute;
   bottom: 0;
