@@ -160,6 +160,12 @@ async function pollPlayerState() {
 }
 
 function renderPlayerState(state) {
+  const latestName = String(state?.name || '').trim();
+  if (latestName && latestName !== live.player.displayName) {
+    live.player.displayName = latestName;
+    setJoinTitle(latestName);
+  }
+
   if (joinProgressEl) joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 

@@ -945,6 +945,7 @@ function playerState(room, playerId) {
   return {
     phase: room.phase,
     pin: room.pin,
+    name: player.name,
     currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     score: player.score,
