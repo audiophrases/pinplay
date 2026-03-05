@@ -62,6 +62,7 @@ const hallCardEl = document.getElementById('hallCard');
 const livePinBigEl = document.getElementById('livePinBig');
 const hallHintEl = document.getElementById('hallHint');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
+const allowFullscreenToggleEl = document.getElementById('allowFullscreenToggle');
 const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
 const projectorCorrectEl = document.getElementById('projectorCorrect');
@@ -818,6 +819,11 @@ function bindLiveEvents() {
     syncFullscreenButtonLabel();
   }
 
+  if (allowFullscreenToggleEl) {
+    allowFullscreenToggleEl.addEventListener('change', applyFullscreenPermission);
+    applyFullscreenPermission();
+  }
+
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 
@@ -1452,9 +1458,28 @@ function stopHostTimerTicker() {
   live.host.timerTicker = null;
 }
 
+function isFullscreenAllowed() {
+  return !allowFullscreenToggleEl || !!allowFullscreenToggleEl.checked;
+}
+
+function applyFullscreenPermission() {
+  const allowed = isFullscreenAllowed();
+  if (projectorFullscreenBtn) {
+    projectorFullscreenBtn.disabled = !allowed;
+    projectorFullscreenBtn.title = allowed ? '' : 'Fullscreen is disabled';
+  }
+
+  if (!allowed && document.fullscreenElement) {
+    document.exitFullscreen?.();
+  }
+
+  syncFullscreenButtonLabel();
+}
+
 function toggleProjectorFullscreen() {
   const target = hostQuestionWrap?.closest('.card') || document.getElementById('hostQuestionCard');
   if (!target) return;
+  if (!isFullscreenAllowed()) return;
 
   if (document.fullscreenElement) {
     document.exitFullscreen?.();
@@ -1465,6 +1490,10 @@ function toggleProjectorFullscreen() {
 
 function syncFullscreenButtonLabel() {
   if (!projectorFullscreenBtn) return;
+  if (!isFullscreenAllowed()) {
+    projectorFullscreenBtn.textContent = 'Fullscreen disabled';
+    return;
+  }
   projectorFullscreenBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
 }
 

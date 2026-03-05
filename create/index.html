@@ -61,7 +61,13 @@
           <div class="card project-screen" id="hostQuestionCard">
             <div class="row spread gap">
               <strong>Live screen</strong>
-              <button id="projectorFullscreenBtn" class="btn">Fullscreen</button>
+              <div class="row gap">
+                <label class="small" style="display:flex; align-items:center; gap:.35rem;">
+                  <input id="allowFullscreenToggle" type="checkbox" checked style="width:auto;" />
+                  Allow fullscreen
+                </label>
+                <button id="projectorFullscreenBtn" class="btn">Fullscreen</button>
+              </div>
             </div>
             <div class="row gap top-space small" id="projectorHud">
               <span id="projectorTimer">⏱ Time: —</span>
