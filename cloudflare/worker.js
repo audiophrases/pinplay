@@ -229,6 +229,26 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/adjust-score' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/adjust-score', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+            delta: Number(body?.delta || 0),
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -645,6 +665,24 @@ export class QuizRoom {
         return json({ ok: true, playerId, name: nextName });
       }
 
+      if (url.pathname === '/host/adjust-score' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const delta = Number(body?.delta || 0);
+
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+        if (!Number.isFinite(delta) || delta === 0) return json({ error: 'delta must be a non-zero number.' }, 400);
+
+        room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) + Math.round(delta));
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId, score: room.players[playerId].score, delta: Math.round(delta) });
+      }
+
       if (url.pathname === '/player/state' && request.method === 'POST') {
         const body = await safeJson(request);
         const playerId = sanitizeId(body?.playerId);
@@ -697,7 +735,8 @@ export class QuizRoom {
         let pointsAwarded = 0;
         if (verdict.correct) {
           const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {}).filter((r) => !!r?.correct).length;
-          const multiplier = correctCountSoFar === 0 ? 1 : (correctCountSoFar === 1 ? 0.9 : 0.8);
+          const rank = correctCountSoFar + 1;
+          const multiplier = rank <= 2 ? 1 : (rank <= 4 ? 0.9 : 0.8);
           pointsAwarded = Math.round(basePoints * multiplier);
         }
 

@@ -785,6 +785,12 @@ function bindLiveEvents() {
         return;
       }
 
+      const adjustBtn = e.target.closest('[data-adjust-player]');
+      if (adjustBtn) {
+        adjustPlayerScore(adjustBtn.dataset.adjustPlayer, adjustBtn.dataset.currentName || '');
+        return;
+      }
+
       const btn = e.target.closest('[data-kick-player]');
       if (!btn) return;
       kickPlayer(btn.dataset.kickPlayer);
@@ -984,6 +990,34 @@ async function renamePlayer(playerId, currentName = '') {
   }
 }
 
+async function adjustPlayerScore(playerId, currentName = '') {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    const raw = prompt(`Adjust score for ${currentName || 'student'} (use + or -, e.g. +1000, -500):`, '+1000');
+    if (raw == null) return;
+
+    const delta = Number(String(raw).trim());
+    if (!Number.isFinite(delta) || delta === 0) throw new Error('Please enter a non-zero number.');
+
+    await api('/api/host/adjust-score', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+        delta,
+      },
+    });
+
+    setStatus(hostStatusEl, `Score adjusted (${delta > 0 ? '+' : ''}${Math.round(delta)}).`, 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -1034,12 +1068,18 @@ function renderHostState(state) {
       rename.dataset.currentName = p.name || '';
       rename.textContent = 'Rename';
 
+      const points = document.createElement('button');
+      points.className = 'btn';
+      points.dataset.adjustPlayer = p.id;
+      points.dataset.currentName = p.name || '';
+      points.textContent = 'Points';
+
       const kick = document.createElement('button');
       kick.className = 'btn';
       kick.dataset.kickPlayer = p.id;
       kick.textContent = 'Remove';
 
-      actions.append(rename, kick);
+      actions.append(rename, points, kick);
       row.append(name, actions);
       li.appendChild(row);
       hostPlayersEl.appendChild(li);
