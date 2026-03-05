@@ -942,6 +942,8 @@ function playerState(room, playerId) {
   const qIndex = room.currentIndex;
   const responses = room.responsesByQuestion[qIndex] || {};
 
+  const myResponse = responses[playerId] || null;
+
   return {
     phase: room.phase,
     pin: room.pin,
@@ -949,7 +951,14 @@ function playerState(room, playerId) {
     currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     score: player.score,
-    answeredCurrent: !!responses[playerId],
+    answeredCurrent: !!myResponse,
+    revealedResult: room.phase === 'question' && room.questionClosed && myResponse
+      ? {
+          correct: !!myResponse.correct,
+          pointsAwarded: Number(myResponse.pointsAwarded || 0),
+          graded: !!myResponse.graded,
+        }
+      : null,
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
     questionStartedAt: room.phase === 'question' ? room.questionStartedAt || null : null,

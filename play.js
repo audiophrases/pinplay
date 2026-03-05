@@ -225,16 +225,28 @@ function renderPlayerState(state) {
 
   if (joinSubmitBtn) {
     joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
-    if (questionClosed) {
-      setStatus(joinFeedbackEl, 'Time is up. Waiting for next question…', 'ok');
-    } else if (joinSubmitBtn.disabled) {
-      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+    if (!questionClosed && joinSubmitBtn.disabled) {
+      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
     }
   }
 
-  if (questionClosed) setStatus(joinStatusEl, 'Question closed.', 'ok');
-  else if (state.answeredCurrent) setStatus(joinStatusEl, 'Answer received.', 'ok');
-  else setStatus(joinStatusEl, 'Question live!', 'ok');
+  if (questionClosed) {
+    const rr = state.revealedResult;
+    if (rr) {
+      if (rr.correct) {
+        setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
+      } else {
+        setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
+      }
+    } else {
+      setStatus(joinFeedbackEl, 'Question closed.', 'ok');
+    }
+    setStatus(joinStatusEl, 'Answer revealed.', 'ok');
+  } else if (state.answeredCurrent) {
+    setStatus(joinStatusEl, 'Answer received.', 'ok');
+  } else {
+    setStatus(joinStatusEl, 'Question live!', 'ok');
+  }
 }
 
 function renderJoinQuestion(question) {
