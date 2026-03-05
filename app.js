@@ -1185,8 +1185,11 @@ function renderHostState(state) {
   }
 
   if (projectorCorrectEl) {
+    const isTextLike = state?.question?.type === 'text';
     projectorCorrectEl.textContent =
-      state.phase === 'question' && state.questionClosed && state.correctAnswer ? `Correct answer: ${state.correctAnswer}` : '';
+      state.phase === 'question' && state.questionClosed && state.correctAnswer && !isTextLike
+        ? `Correct answer: ${state.correctAnswer}`
+        : '';
   }
 
   live.host.lastPhase = state.phase;
@@ -1242,7 +1245,14 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'text') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Correct answer: ${state.correctAnswer}` : 'Type-answer question.';
+    hostQuestionHintEl.textContent = showReveal ? '' : 'Type-answer question.';
+
+    if (showReveal && state.correctAnswer) {
+      const ans = document.createElement('div');
+      ans.className = 'project-text-reveal';
+      ans.textContent = state.correctAnswer;
+      hostQuestionAnswersEl.appendChild(ans);
+    }
     return;
   }
 
