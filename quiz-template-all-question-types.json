@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "title": "PinPlay Template · All Question Types",
+  "title": "PinPlay Template · All Question Types (Latest)",
   "questions": [
     {
       "id": "q-mcq-1",
@@ -8,6 +8,11 @@
       "prompt": "[MCQ] Replace with your question",
       "points": 1000,
       "timeLimit": 20,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "answers": [
         { "text": "Option A", "correct": true },
         { "text": "Option B", "correct": false },
@@ -21,6 +26,11 @@
       "prompt": "[Multi-select] Replace with your question",
       "points": 1000,
       "timeLimit": 25,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "answers": [
         { "text": "Correct option 1", "correct": true },
         { "text": "Correct option 2", "correct": true },
@@ -34,6 +44,11 @@
       "prompt": "[True/False] Replace with your statement",
       "points": 1000,
       "timeLimit": 12,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "answers": [
         { "text": "True", "correct": true },
         { "text": "False", "correct": false }
@@ -45,6 +60,11 @@
       "prompt": "[Short text auto-graded] Replace with your prompt",
       "points": 1000,
       "timeLimit": 25,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "accepted": ["sample answer", "alternative answer", "", ""]
     },
     {
@@ -52,7 +72,12 @@
       "type": "open",
       "prompt": "[Open short answer teacher-graded] Replace with your prompt",
       "points": 1000,
-      "timeLimit": 45
+      "timeLimit": 45,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": ""
     },
     {
       "id": "q-image-open-1",
@@ -60,6 +85,11 @@
       "prompt": "[Image prompt writing] Describe what you see in 1-2 sentences.",
       "points": 1000,
       "timeLimit": 60,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
     },
     {
@@ -68,6 +98,11 @@
       "prompt": "[Context gap fill] Replace with short paragraph and blanks in order.",
       "points": 1000,
       "timeLimit": 45,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "gaps": ["word1", "word2", "word3", "word4"]
     },
     {
@@ -76,6 +111,11 @@
       "prompt": "[Match pairs] Match each left item with the correct right item.",
       "points": 1000,
       "timeLimit": 45,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "pairs": [
         { "left": "make", "right": "a decision" },
         { "left": "take", "right": "a break" },
@@ -89,6 +129,11 @@
       "prompt": "[Order puzzle] Put words in the correct order.",
       "points": 1000,
       "timeLimit": 35,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "items": ["I", "have", "already", "finished", "my", "homework"]
     },
     {
@@ -97,6 +142,11 @@
       "prompt": "[Slider] Replace with your numeric estimation question",
       "points": 1000,
       "timeLimit": 15,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "min": 0,
       "max": 100,
       "target": 60,
@@ -109,6 +159,11 @@
       "prompt": "[Pin answer] Click the correct area on the image.",
       "points": 1000,
       "timeLimit": 30,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
       "zone": { "x": 50, "y": 50, "r": 15 }
     },
@@ -120,8 +175,9 @@
       "timeLimit": 20,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Replace this audio text.",
-      "language": "en-US",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": "",
       "answers": [
         { "text": "Correct choice", "correct": true },
         { "text": "Wrong choice 1", "correct": false },
