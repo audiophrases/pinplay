@@ -529,8 +529,8 @@ function renderBuilder() {
           </div>
           <label class="top-space">Text to read aloud (max 120 chars)</label>
           <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="Text-to-speech prompt" />
-          <label>Language code (e.g. en-US, ca-ES)</label>
-          <input data-q="${idx}" data-field="language" maxlength="10" value="${escapeHtml(q.language || 'en-US')}" />
+          <label>Language code (e.g. en-US, en-US-Wave-a)</label>
+          <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(q.language || 'en-US')}" />
           <div class="small top-space">${q.audioData ? 'Audio file uploaded ?' : 'No audio file uploaded yet.'}</div>
           <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">? Play preview</button></div>
         </div>
@@ -2754,7 +2754,7 @@ function normalizeQuizForLive(raw) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 120),
-      language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+      language: String(q.language || 'en-US').slice(0, 32) || 'en-US',
       audioData: String(q.audioData || ''),
     };
 

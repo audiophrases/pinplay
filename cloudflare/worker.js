@@ -1270,7 +1270,7 @@ function normalizeQuiz(quiz) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 120),
-      language: String(q.language || 'en-US').slice(0, 10) || 'en-US',
+      language: String(q.language || 'en-US').slice(0, 32) || 'en-US',
       audioData: String(q.audioData || ''),
     };
 
