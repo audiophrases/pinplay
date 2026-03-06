@@ -343,16 +343,16 @@ function renderJoinQuestion(question) {
         joinAnswersEl.appendChild(row);
       });
     } else if (question.type === 'error_hunt') {
+      const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${Math.max(1, Number(question.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
       joinAnswersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
       const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
-      const required = Math.max(1, Number(question.requiredErrors || 1));
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -621,7 +621,7 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
-    const required = Math.max(1, Number(q.requiredErrors || 1));
+    const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
     if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
@@ -879,6 +879,46 @@ function speakText(text, lang = 'en-US-Wave') {
   }
 }
 
+function tokenizeWords(text) {
+  return String(text || '').trim().split(/\s+/).filter(Boolean);
+}
+
+function normalizeTextAnswer(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function countErrorHuntRequiredTokens(prompt, corrected) {
+  const source = tokenizeWords(prompt);
+  const target = tokenizeWords(corrected);
+  const rows = source.length + 1;
+  const cols = target.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
+      if (same) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + 1,
+        );
+      }
+    }
+  }
+
+  return dp[source.length][target.length];
+}
+
 function escapeHtml(str) {
   return String(str || '')
     .replaceAll('&', '&amp;')
@@ -906,6 +946,5 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
-
 
 
