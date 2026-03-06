@@ -30,23 +30,44 @@
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
-            <div class="row gap">
-              <button id="addMcqBtn" class="btn">+ Multiple choice</button>
-              <button id="addMcqAudioBtn" class="btn">+ Multiple choice + Audio</button>
-              <button id="addMultiBtn" class="btn">+ Multi-select</button>
-              <button id="addMultiAudioBtn" class="btn">+ Multi-select + Audio</button>
-              <button id="addTfBtn" class="btn">+ True / False</button>
-              <button id="addTfAudioBtn" class="btn">+ True / False + Audio</button>
-              <button id="addTextBtn" class="btn">+ Type answer</button>
-              <button id="addTextAudioBtn" class="btn">+ Type answer + Audio</button>
-              <button id="addOpenBtn" class="btn">+ Open short answer (teacher grades)</button>
-              <button id="addImageOpenBtn" class="btn">+ Image prompt writing</button>
-              <button id="addContextGapBtn" class="btn">+ Context gap fill</button>
-              <button id="addMatchPairsBtn" class="btn">+ Match pairs</button>
-              <button id="addPuzzleBtn" class="btn">+ Puzzle</button>
-              <button id="addPuzzleAudioBtn" class="btn">+ Puzzle + Audio</button>
-              <button id="addSliderBtn" class="btn">+ Slider</button>
-              <button id="addPinBtn" class="btn">+ Pin answer</button>
+            <div class="top-space">
+              <p class="small"><strong>Quick check (objective)</strong></p>
+              <div class="row gap">
+                <button id="addMcqBtn" class="btn">+ Multiple choice</button>
+                <button id="addMultiBtn" class="btn">+ Multi-select</button>
+                <button id="addTfBtn" class="btn">+ True / False</button>
+                <button id="addTextBtn" class="btn">+ Short text (auto)</button>
+                <button id="addContextGapBtn" class="btn">+ Context gap fill</button>
+                <button id="addMatchPairsBtn" class="btn">+ Match pairs</button>
+              </div>
+            </div>
+
+            <div class="top-space">
+              <p class="small"><strong>Creative / teacher-graded</strong></p>
+              <div class="row gap">
+                <button id="addOpenBtn" class="btn">+ Open short answer (teacher-graded)</button>
+                <button id="addImageOpenBtn" class="btn">+ Image prompt writing (teacher-graded)</button>
+              </div>
+            </div>
+
+            <div class="top-space">
+              <p class="small"><strong>Interactive</strong></p>
+              <div class="row gap">
+                <button id="addPuzzleBtn" class="btn">+ Order puzzle</button>
+                <button id="addSliderBtn" class="btn">+ Number slider</button>
+                <button id="addPinBtn" class="btn">+ Pin on image</button>
+              </div>
+            </div>
+
+            <div class="top-space">
+              <p class="small"><strong>Audio variants</strong></p>
+              <div class="row gap">
+                <button id="addMcqAudioBtn" class="btn">+ Multiple choice + Audio</button>
+                <button id="addMultiAudioBtn" class="btn">+ Multi-select + Audio</button>
+                <button id="addTfAudioBtn" class="btn">+ True / False + Audio</button>
+                <button id="addTextAudioBtn" class="btn">+ Short text + Audio</button>
+                <button id="addPuzzleAudioBtn" class="btn">+ Order puzzle + Audio</button>
+              </div>
             </div>
 
             <div id="questionList" class="question-list"></div>
