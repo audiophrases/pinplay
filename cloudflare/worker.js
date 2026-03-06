@@ -111,6 +111,19 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/join' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/join', {
+          method: 'POST',
+        }),
+      );
+    }
+
     if (url.pathname === '/api/host/start' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -558,6 +571,10 @@ export class QuizRoom {
         if (timeoutClosed) await this.#setRoom(room);
 
         return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/join' && request.method === 'POST') {
+        return json({ ok: true, pin: room.pin, hostToken: room.hostToken, phase: room.phase });
       }
 
       if (url.pathname === '/host/start' && request.method === 'POST') {

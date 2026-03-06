@@ -46,6 +46,8 @@ const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
+const hostJoinPinEl = document.getElementById('hostJoinPin');
+const hostJoinBtn = document.getElementById('hostJoinBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -791,6 +793,12 @@ function bindLiveEvents() {
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
+  if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
+  if (hostJoinPinEl) {
+    hostJoinPinEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinLiveGameAsHostByPin();
+    });
+  }
 
   if (hostPlayersEl) {
     hostPlayersEl.addEventListener('click', (e) => {
@@ -878,6 +886,39 @@ async function hostStartGame() {
       headers: { Authorization: `Bearer ${live.host.token}` },
       body: { pin: live.host.pin },
     });
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+async function joinLiveGameAsHostByPin() {
+  try {
+    const pin = String(hostJoinPinEl?.value || '').trim();
+    if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits.');
+
+    const data = await api('/api/host/join', {
+      method: 'POST',
+      body: { pin },
+    });
+
+    live.host.pin = data.pin;
+    live.host.token = data.hostToken;
+    live.host.lastPhase = null;
+    live.host.lastIndex = null;
+    live.host.lastResponseCount = 0;
+    live.host.lastAllAnsweredKey = null;
+    live.host.lastRevealKey = null;
+    live.host.timerDeadlineMs = null;
+    live.host.timerForIndex = null;
+    live.host.timerStartedAtMs = null;
+    live.host.state = null;
+
+    if (livePinEl) livePinEl.textContent = data.pin;
+    if (livePinBigEl) livePinBigEl.textContent = data.pin;
+    setStatus(hostStatusEl, 'Joined as host by PIN. Controls are live.', 'ok');
+
+    startHostPolling();
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
