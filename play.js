@@ -662,7 +662,7 @@ function renderLeaderboardInJoin(leaderboard) {
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'Drag pieces to reorder (touch: tap one piece, then tap target).';
+  hint.textContent = 'Touchscreen: tap piece then tap target.';
   container.appendChild(hint);
 
   const list = document.createElement('div');
