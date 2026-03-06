@@ -1158,7 +1158,6 @@ function publicQuestion(question) {
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
-      requiredErrors: question.type === 'error_hunt' ? Math.max(1, Number(question.requiredErrors || 1)) : undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1267,7 +1266,7 @@ function evaluate(question, answer) {
     const rewrite = normalizeTextAnswer(answer?.rewrite ?? answer);
     const expected = normalizeTextAnswer(question.corrected || '');
     const selected = Array.isArray(answer?.selectedTokens) ? answer.selectedTokens.map((x) => Number(x)).filter(Number.isFinite) : [];
-    const required = Math.max(1, Number(question.requiredErrors || 1));
+    const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
     const uniqueCount = new Set(selected).size;
     if (uniqueCount !== required) return { correct: false };
     return { correct: !!rewrite && rewrite === expected };
@@ -1398,9 +1397,7 @@ function normalizeQuiz(quiz) {
     if (q.type === 'error_hunt') {
       const corrected = String(q.corrected || '').slice(0, 160).trim();
       if (!corrected) return;
-      const tokenCount = String(q.prompt || '').split(/\s+/).filter(Boolean).length;
-      const requiredErrors = clamp(Number(q.requiredErrors || 1), 1, Math.max(1, Math.min(12, tokenCount || 12)));
-      normalized.questions.push({ ...base, corrected, requiredErrors });
+      normalized.questions.push({ ...base, corrected });
       return;
     }
 
@@ -1491,12 +1488,44 @@ function sliderTolerance(margin, min, max) {
   return map[margin] ?? map.medium;
 }
 
+function tokenizeWords(text) {
+  return String(text || '').trim().split(/\s+/).filter(Boolean);
+}
+
 function normalizeTextAnswer(text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function countErrorHuntRequiredTokens(prompt, corrected) {
+  const source = tokenizeWords(prompt);
+  const target = tokenizeWords(corrected);
+  const rows = source.length + 1;
+  const cols = target.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
+      if (same) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + 1,
+        );
+      }
+    }
+  }
+
+  return dp[source.length][target.length];
 }
 
 function distance2D(x1, y1, x2, y2) {
@@ -1679,4 +1708,3 @@ function json(data, status = 200) {
     },
   });
 }
-

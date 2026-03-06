@@ -683,15 +683,9 @@ function renderBuilder() {
 
     if (q.type === 'error_hunt') {
       specific += `
-        <div class="row gap top-space">
-          <div style="min-width:180px;">
-            <label>Tokens to correct</label>
-            <input data-q="${idx}" data-field="requiredErrors" type="number" min="1" max="12" value="${Number(q.requiredErrors || 1)}" />
-          </div>
-        </div>
         <label class="top-space">Corrected sentence (target)</label>
         <textarea data-q="${idx}" data-field="corrected" maxlength="160">${escapeHtml(q.corrected || '')}</textarea>
-        <p class="small">Students must select exactly that many wrong tokens, then rewrite the full corrected sentence.</p>
+        <p class="small">Error count is auto-calculated from token differences between prompt and corrected sentence.</p>
       `;
     }
 
@@ -923,9 +917,7 @@ function syncQuizFromUI() {
 
     if (q.type === 'error_hunt') {
       const correctedEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
-      const requiredEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="requiredErrors"]`);
       q.corrected = String(correctedEl?.value || '').slice(0, 160);
-      q.requiredErrors = clamp(Number(requiredEl?.value || 1), 1, 12);
     }
 
     if (q.type === 'puzzle') {
@@ -2070,16 +2062,16 @@ function renderJoinQuestion(question) {
         joinAnswersEl.appendChild(input);
       }
     } else if (question.type === 'error_hunt') {
+      const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${Math.max(1, Number(question.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
       joinAnswersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
       const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
-      const required = Math.max(1, Number(question.requiredErrors || 1));
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -2288,7 +2280,7 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
-    const required = Math.max(1, Number(q.requiredErrors || 1));
+    const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
     if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
@@ -2493,16 +2485,16 @@ function renderSoloQuestion() {
         answersEl.appendChild(input);
       }
     } else if (q.type === 'error_hunt') {
+      const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${Math.max(1, Number(q.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
       answersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
       const tokens = String(q.prompt || '').split(/\s+/).filter(Boolean);
-      const required = Math.max(1, Number(q.requiredErrors || 1));
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -2696,7 +2688,7 @@ function evaluateSoloQuestion(q) {
     const rewrite = String(document.getElementById('soloErrorRewrite')?.value || '').trim();
     if (!rewrite) return { correct: false, hint: 'Rewrite the sentence first.' };
     const selected = [...answersEl.querySelectorAll('[data-solo-error-token].active')];
-    const required = Math.max(1, Number(q.requiredErrors || 1));
+    const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
     if (selected.length !== required) return { correct: false, hint: `Select exactly ${required} token(s).` };
     return { correct: normalizeTextAnswer(rewrite) === normalizeTextAnswer(q.corrected || ''), hint: `Corrected: ${q.corrected || ''}` };
   }
@@ -2939,7 +2931,6 @@ function makeErrorHuntQuestion() {
     type: 'error_hunt',
     prompt: 'She say that she go to school yesterday.',
     corrected: 'She said that she went to school yesterday.',
-    requiredErrors: 2,
     points: 1000,
     timeLimit: 45,
     audioEnabled: false,
@@ -3110,9 +3101,7 @@ function normalizeQuizForLive(raw) {
     if (q.type === 'error_hunt') {
       const corrected = String(q.corrected || '').slice(0, 160).trim();
       if (!corrected) return;
-      const tokenCount = String(q.prompt || '').split(/\s+/).filter(Boolean).length;
-      const requiredErrors = clamp(Number(q.requiredErrors || 1), 1, Math.max(1, Math.min(12, tokenCount || 12)));
-      normalized.questions.push({ ...base, corrected, requiredErrors });
+      normalized.questions.push({ ...base, corrected });
       return;
     }
 
@@ -3250,6 +3239,38 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function tokenizeWords(text) {
+  return String(text || '').trim().split(/\s+/).filter(Boolean);
+}
+
+function countErrorHuntRequiredTokens(prompt, corrected) {
+  const source = tokenizeWords(prompt);
+  const target = tokenizeWords(corrected);
+  const rows = source.length + 1;
+  const cols = target.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
+      if (same) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + 1,
+        );
+      }
+    }
+  }
+
+  return dp[source.length][target.length];
 }
 
 function normalizeBackendUrl(url) {
@@ -3435,7 +3456,6 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
-
 
 
 
