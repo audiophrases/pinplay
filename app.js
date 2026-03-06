@@ -21,6 +21,7 @@ const addTfAudioBtn = document.getElementById('addTfAudioBtn');
 const addTextBtn = document.getElementById('addTextBtn');
 const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
+const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
@@ -254,6 +255,13 @@ function bindBuilderEvents() {
     });
   }
 
+  if (addImageOpenBtn) {
+    addImageOpenBtn.addEventListener('click', () => {
+      quiz.questions.push(makeImageOpenQuestion());
+      renderBuilder();
+    });
+  }
+
   addPuzzleBtn.addEventListener('click', () => {
     quiz.questions.push(makePuzzleQuestion());
     renderBuilder();
@@ -367,6 +375,30 @@ function bindBuilderEvents() {
       }
       return;
     }
+
+    const imageUpload = e.target.closest('[data-image-upload]');
+    if (imageUpload) {
+      const idx = Number(imageUpload.dataset.imageUpload);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'image_open') return;
+
+      const file = imageUpload.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        alert('Please choose an image file.');
+        return;
+      }
+
+      try {
+        q.imageData = await fileToDataUrl(file);
+        renderBuilder();
+      } catch (err) {
+        alert(`Image load failed: ${err.message}`);
+      }
+      return;
+    }
+
 
     const audioUpload = e.target.closest('[data-audio-upload]');
     if (audioUpload) {
@@ -509,6 +541,21 @@ function renderBuilder() {
       specific += `
         <p class="small top-space">Students submit short text answers. Teacher grades responses live.</p>
       `;
+    }
+
+    if (q.type === 'image_open') {
+      specific += `
+        <label class="top-space">Prompt image</label>
+        <input data-image-upload="${idx}" type="file" accept="image/*" />
+        <p class="small top-space">Students write 1-2 sentences from the image. Teacher grades live.</p>
+      `;
+      if (q.imageData) {
+        specific += `
+          <div class="pin-preview">
+            <img src="${q.imageData}" alt="Image prompt" />
+          </div>
+        `;
+      }
     }
 
     if (q.type === 'puzzle') {
@@ -1320,8 +1367,19 @@ function renderHostQuestion(state) {
     return;
   }
 
-  if (question.type === 'open') {
+  if (question.type === 'open' || question.type === 'image_open') {
     hostQuestionHintEl.textContent = 'Open short answer: grade live answers below.';
+
+    if (question.type === 'image_open' && question.imageData) {
+      const preview = document.createElement('div');
+      preview.className = 'pin-preview';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.alt = 'Image prompt';
+      preview.appendChild(img);
+      hostQuestionAnswersEl.appendChild(preview);
+    }
+
     const list = Array.isArray(state.openResponses) ? state.openResponses : [];
     if (!list.length) {
       const p = document.createElement('p');
@@ -1737,12 +1795,22 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open') {
+    if (question.type === 'image_open' && question.imageData) {
+      const preview = document.createElement('div');
+      preview.className = 'pin-preview';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.alt = 'Image prompt';
+      preview.appendChild(img);
+      joinAnswersEl.appendChild(preview);
+    }
+
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'joinTextAnswer';
     input.maxLength = 120;
-    input.placeholder = question.type === 'open' ? 'Type a short answer' : 'Type your answer';
+    input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
     joinAnswersEl.appendChild(input);
 
     if (hasQuestionAudio(question)) {
@@ -1878,7 +1946,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text' || q.type === 'open') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }
@@ -2055,12 +2123,22 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
+    if (q.type === 'image_open' && q.imageData) {
+      const preview = document.createElement('div');
+      preview.className = 'pin-preview';
+      const img = document.createElement('img');
+      img.src = q.imageData;
+      img.alt = 'Image prompt';
+      preview.appendChild(img);
+      answersEl.appendChild(preview);
+    }
+
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'soloTextAnswer';
     input.maxLength = 120;
-    input.placeholder = q.type === 'open' ? 'Type a short answer' : 'Type your answer';
+    input.placeholder = (q.type === 'open' || q.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
     answersEl.appendChild(input);
 
     if (hasQuestionAudio(q)) {
@@ -2172,7 +2250,7 @@ function evaluateSoloQuestion(q) {
     return { correct: accepted.includes(guess), hint: `Accepted: ${accepted.slice(0, 2).join(' / ')}` };
   }
 
-  if (q.type === 'open') {
+  if (q.type === 'open' || q.type === 'image_open') {
     const val = String(document.getElementById('soloTextAnswer')?.value || '').trim();
     if (!val) return { correct: false, hint: 'Type an answer first.' };
     return { correct: false, hint: 'Open answer needs teacher grading in live mode.' };
@@ -2357,6 +2435,22 @@ function makeOpenQuestion(opts = {}) {
   };
 }
 
+function makeImageOpenQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'image_open',
+    prompt: '',
+    points: 1000,
+    timeLimit: 60,
+    imageData: '',
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
+  };
+}
+
 function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
@@ -2491,6 +2585,12 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'image_open') {
+      if (!q.imageData) return;
+      normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -2596,6 +2696,7 @@ function labelForType(type) {
       tf: 'True / False',
       text: 'Type answer',
       open: 'Open short answer',
+      image_open: 'Image prompt writing',
       puzzle: 'Puzzle',
       audio: 'Quiz + Audio',
       slider: 'Slider',
@@ -2606,7 +2707,7 @@ function labelForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 

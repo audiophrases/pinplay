@@ -297,12 +297,22 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open') {
+    if (question.type === 'image_open' && question.imageData) {
+      const wrap = document.createElement('div');
+      wrap.className = 'pin-preview';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.alt = 'Image prompt';
+      wrap.appendChild(img);
+      joinAnswersEl.appendChild(wrap);
+    }
+
     const input = document.createElement('input');
     input.type = 'text';
     input.id = 'joinTextAnswer';
     input.maxLength = 120;
-    input.placeholder = question.type === 'open' ? 'Type a short answer' : 'Type your answer';
+    input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
     joinAnswersEl.appendChild(input);
     appendRiskBetBar();
     appendReactionBar();
@@ -515,7 +525,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text' || q.type === 'open') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }

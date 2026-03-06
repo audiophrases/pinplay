@@ -731,7 +731,7 @@ export class QuizRoom {
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || question.type !== 'open') return json({ error: 'Current question is not open short answer.' }, 409);
+        if (!question || !['open', 'image_open'].includes(question.type)) return json({ error: 'Current question is not open short answer.' }, 409);
 
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
         const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
@@ -806,7 +806,7 @@ export class QuizRoom {
         let verdict = { correct: false };
         let pointsAwarded = 0;
 
-        if (question.type === 'open') {
+        if (question.type === 'open' || question.type === 'image_open') {
           room.responsesByQuestion[qIndex][playerId] = {
             answer: String(body?.answer || '').slice(0, 220),
             correct: false,
@@ -946,7 +946,7 @@ function hostState(room) {
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    openResponses: room.phase === 'question' && roomQuestion?.type === 'open'
+    openResponses: room.phase === 'question' && ['open', 'image_open'].includes(roomQuestion?.type)
       ? Object.entries(responses).map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
@@ -1111,12 +1111,13 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text' || question.type === 'open') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open') {
     return {
       type: question.type,
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      imageData: question.type === 'image_open' ? String(question.imageData || '') : undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1306,6 +1307,12 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'image_open') {
+      if (!q.imageData) return;
+      normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -1409,7 +1416,7 @@ function distance2D(x1, y1, x2, y2) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -1481,7 +1488,7 @@ function hostCorrectSummary(question) {
     return (question.accepted || []).filter(Boolean).join(' | ');
   }
 
-  if (question.type === 'open') {
+  if (question.type === 'open' || question.type === 'image_open') {
     return 'Teacher-graded open short answer';
   }
 
