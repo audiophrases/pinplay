@@ -534,11 +534,7 @@ async function submitLiveAnswer() {
     live.player.submittedForIndex = data.currentIndex;
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
 
-    if (data.correct) {
-      setStatus(joinFeedbackEl, `Correct ✅ (+${data.pointsAwarded})`, 'ok');
-    } else {
-      setStatus(joinFeedbackEl, 'Not correct ❌', 'bad');
-    }
+    setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
 
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
