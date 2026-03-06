@@ -1148,7 +1148,7 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -1260,6 +1260,12 @@ function evaluate(question, answer) {
     const expected = (question.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
     if (!guess.length || guess.length !== expected.length) return { correct: false };
     return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
+  }
+
+  if (question.type === 'error_hunt') {
+    const rewrite = normalizeTextAnswer(answer?.rewrite ?? answer);
+    const expected = normalizeTextAnswer(question.corrected || '');
+    return { correct: !!rewrite && rewrite === expected };
   }
 
   if (question.type === 'puzzle') {
@@ -1384,6 +1390,13 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'error_hunt') {
+      const corrected = String(q.corrected || '').slice(0, 160).trim();
+      if (!corrected) return;
+      normalized.questions.push({ ...base, corrected });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -1487,7 +1500,7 @@ function distance2D(x1, y1, x2, y2) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -1565,6 +1578,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'match_pairs') {
     return (question.pairs || []).map((p) => `${p.left}→${p.right}`).join(' | ');
+  }
+
+  if (question.type === 'error_hunt') {
+    return String(question.corrected || '');
   }
 
   if (question.type === 'open' || question.type === 'image_open') {

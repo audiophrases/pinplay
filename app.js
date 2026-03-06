@@ -24,6 +24,7 @@ const addOpenBtn = document.getElementById('addOpenBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addContextGapBtn = document.getElementById('addContextGapBtn');
 const addMatchPairsBtn = document.getElementById('addMatchPairsBtn');
+const addErrorHuntBtn = document.getElementById('addErrorHuntBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
@@ -274,6 +275,12 @@ function bindBuilderEvents() {
   if (addMatchPairsBtn) {
     addMatchPairsBtn.addEventListener('click', () => {
       addQuestionToBuilder(makeMatchPairsQuestion());
+    });
+  }
+
+  if (addErrorHuntBtn) {
+    addErrorHuntBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeErrorHuntQuestion());
     });
   }
 
@@ -661,6 +668,14 @@ function renderBuilder() {
       `;
     }
 
+    if (q.type === 'error_hunt') {
+      specific += `
+        <label class="top-space">Corrected sentence (target)</label>
+        <textarea data-q="${idx}" data-field="corrected" maxlength="160">${escapeHtml(q.corrected || '')}</textarea>
+        <p class="small">Students click wrong token(s), rewrite, and submit. Auto-graded against corrected sentence.</p>
+      `;
+    }
+
     if (q.type === 'puzzle') {
       const items = [...(q.items || [])];
       while (items.length < 9) items.push('');
@@ -886,6 +901,11 @@ function syncQuizFromUI() {
         if (left || right) pairs.push({ left, right });
       }
       q.pairs = pairs;
+    }
+
+    if (q.type === 'error_hunt') {
+      const correctedEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
+      q.corrected = String(correctedEl?.value || '').slice(0, 160);
     }
 
     if (q.type === 'puzzle') {
@@ -1616,6 +1636,11 @@ function renderHostQuestion(state) {
     return;
   }
 
+  if (question.type === 'error_hunt') {
+    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Corrected: ${state.correctAnswer}` : 'Error hunt: click wrong token(s), rewrite sentence.';
+    return;
+  }
+
   if (question.type === 'puzzle') {
     hostQuestionHintEl.textContent = 'Puzzle question.';
     if (question.options?.length) {
@@ -2003,7 +2028,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview';
@@ -2024,6 +2049,29 @@ function renderJoinQuestion(question) {
         input.dataset.joinGap = String(i);
         joinAnswersEl.appendChild(input);
       }
+    } else if (question.type === 'error_hunt') {
+      const tokenWrap = document.createElement('div');
+      tokenWrap.className = 'row gap';
+      tokenWrap.style.flexWrap = 'wrap';
+      const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
+      tokens.forEach((tok, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn';
+        b.dataset.errorToken = String(i);
+        b.textContent = tok;
+        b.addEventListener('click', () => b.classList.toggle('active'));
+        tokenWrap.appendChild(b);
+      });
+      joinAnswersEl.appendChild(tokenWrap);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'joinErrorRewrite';
+      input.maxLength = 160;
+      input.placeholder = 'Rewrite the corrected sentence';
+      input.className = 'top-space';
+      joinAnswersEl.appendChild(input);
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
@@ -2199,6 +2247,13 @@ function readJoinAnswer() {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
+  }
+
+  if (q.type === 'error_hunt') {
+    const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
+    if (!rewrite) return null;
+    const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
+    return { rewrite, selectedTokens: selected };
   }
 
   if (q.type === 'match_pairs') {
@@ -2379,7 +2434,7 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'context_gap') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'context_gap' || q.type === 'error_hunt') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview';
@@ -2400,6 +2455,29 @@ function renderSoloQuestion() {
         input.dataset.soloGap = String(i);
         answersEl.appendChild(input);
       }
+    } else if (q.type === 'error_hunt') {
+      const tokenWrap = document.createElement('div');
+      tokenWrap.className = 'row gap';
+      tokenWrap.style.flexWrap = 'wrap';
+      const tokens = String(q.prompt || '').split(/\s+/).filter(Boolean);
+      tokens.forEach((tok, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn';
+        b.dataset.soloErrorToken = String(i);
+        b.textContent = tok;
+        b.addEventListener('click', () => b.classList.toggle('active'));
+        tokenWrap.appendChild(b);
+      });
+      answersEl.appendChild(tokenWrap);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'soloErrorRewrite';
+      input.maxLength = 160;
+      input.placeholder = 'Rewrite the corrected sentence';
+      input.className = 'top-space';
+      answersEl.appendChild(input);
     } else if (q.type === 'match_pairs') {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
@@ -2560,6 +2638,12 @@ function evaluateSoloQuestion(q) {
     const expected = (q.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
     if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Match all pairs first.' };
     return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
+  }
+
+  if (q.type === 'error_hunt') {
+    const rewrite = String(document.getElementById('soloErrorRewrite')?.value || '').trim();
+    if (!rewrite) return { correct: false, hint: 'Rewrite the sentence first.' };
+    return { correct: normalizeTextAnswer(rewrite) === normalizeTextAnswer(q.corrected || ''), hint: `Corrected: ${q.corrected || ''}` };
   }
 
   if (q.type === 'puzzle') {
@@ -2794,6 +2878,22 @@ function makeMatchPairsQuestion() {
   };
 }
 
+function makeErrorHuntQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'error_hunt',
+    prompt: 'She say that she go to school yesterday.',
+    corrected: 'She said that she went to school yesterday.',
+    points: 1000,
+    timeLimit: 45,
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US-Wave',
+    audioData: '',
+  };
+}
+
 function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
@@ -2951,6 +3051,13 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'error_hunt') {
+      const corrected = String(q.corrected || '').slice(0, 160).trim();
+      if (!corrected) return;
+      normalized.questions.push({ ...base, corrected });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -3059,6 +3166,7 @@ function labelForType(type) {
       image_open: 'Image prompt writing',
       context_gap: 'Context gap fill',
       match_pairs: 'Match pairs',
+      error_hunt: 'Error hunt',
       puzzle: 'Puzzle',
       audio: 'Quiz + Audio',
       slider: 'Slider',
@@ -3069,7 +3177,7 @@ function labelForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -3143,7 +3251,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {

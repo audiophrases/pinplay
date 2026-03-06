@@ -297,7 +297,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview';
@@ -342,6 +342,29 @@ function renderJoinQuestion(question) {
         row.append(label, select);
         joinAnswersEl.appendChild(row);
       });
+    } else if (question.type === 'error_hunt') {
+      const tokenWrap = document.createElement('div');
+      tokenWrap.className = 'row gap';
+      tokenWrap.style.flexWrap = 'wrap';
+      const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
+      tokens.forEach((tok, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn';
+        b.dataset.errorToken = String(i);
+        b.textContent = tok;
+        b.addEventListener('click', () => b.classList.toggle('active'));
+        tokenWrap.appendChild(b);
+      });
+      joinAnswersEl.appendChild(tokenWrap);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'joinErrorRewrite';
+      input.maxLength = 160;
+      input.placeholder = 'Rewrite the corrected sentence';
+      input.className = 'top-space';
+      joinAnswersEl.appendChild(input);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -577,6 +600,13 @@ function readJoinAnswer() {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-pair]')];
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
+  }
+
+  if (q.type === 'error_hunt') {
+    const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
+    if (!rewrite) return null;
+    const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
+    return { rewrite, selectedTokens: selected };
   }
 
   if (q.type === 'puzzle') {
