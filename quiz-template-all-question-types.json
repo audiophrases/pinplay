@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "title": "PinPlay Template · All Question Types",
+  "questions": [
+    {
+      "id": "q-mcq-1",
+      "type": "mcq",
+      "prompt": "[MCQ] Replace with your question",
+      "points": 1000,
+      "timeLimit": 20,
+      "answers": [
+        { "text": "Option A", "correct": true },
+        { "text": "Option B", "correct": false },
+        { "text": "Option C", "correct": false },
+        { "text": "Option D", "correct": false }
+      ]
+    },
+    {
+      "id": "q-multi-1",
+      "type": "multi",
+      "prompt": "[Multi-select] Replace with your question",
+      "points": 1000,
+      "timeLimit": 25,
+      "answers": [
+        { "text": "Correct option 1", "correct": true },
+        { "text": "Correct option 2", "correct": true },
+        { "text": "Wrong option 1", "correct": false },
+        { "text": "Wrong option 2", "correct": false }
+      ]
+    },
+    {
+      "id": "q-tf-1",
+      "type": "tf",
+      "prompt": "[True/False] Replace with your statement",
+      "points": 1000,
+      "timeLimit": 12,
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "q-text-1",
+      "type": "text",
+      "prompt": "[Short text auto-graded] Replace with your prompt",
+      "points": 1000,
+      "timeLimit": 25,
+      "accepted": ["sample answer", "alternative answer", "", ""]
+    },
+    {
+      "id": "q-open-1",
+      "type": "open",
+      "prompt": "[Open short answer teacher-graded] Replace with your prompt",
+      "points": 1000,
+      "timeLimit": 45
+    },
+    {
+      "id": "q-image-open-1",
+      "type": "image_open",
+      "prompt": "[Image prompt writing] Describe what you see in 1-2 sentences.",
+      "points": 1000,
+      "timeLimit": 60,
+      "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
+    },
+    {
+      "id": "q-context-gap-1",
+      "type": "context_gap",
+      "prompt": "[Context gap fill] Replace with short paragraph and blanks in order.",
+      "points": 1000,
+      "timeLimit": 45,
+      "gaps": ["word1", "word2", "word3", "word4"]
+    },
+    {
+      "id": "q-match-pairs-1",
+      "type": "match_pairs",
+      "prompt": "[Match pairs] Match each left item with the correct right item.",
+      "points": 1000,
+      "timeLimit": 45,
+      "pairs": [
+        { "left": "make", "right": "a decision" },
+        { "left": "take", "right": "a break" },
+        { "left": "look", "right": "after" },
+        { "left": "turn", "right": "off" }
+      ]
+    },
+    {
+      "id": "q-puzzle-1",
+      "type": "puzzle",
+      "prompt": "[Order puzzle] Put words in the correct order.",
+      "points": 1000,
+      "timeLimit": 35,
+      "items": ["I", "have", "already", "finished", "my", "homework"]
+    },
+    {
+      "id": "q-slider-1",
+      "type": "slider",
+      "prompt": "[Slider] Replace with your numeric estimation question",
+      "points": 1000,
+      "timeLimit": 15,
+      "min": 0,
+      "max": 100,
+      "target": 60,
+      "margin": "medium",
+      "unit": "%"
+    },
+    {
+      "id": "q-pin-1",
+      "type": "pin",
+      "prompt": "[Pin answer] Click the correct area on the image.",
+      "points": 1000,
+      "timeLimit": 30,
+      "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
+      "zone": { "x": 50, "y": 50, "r": 15 }
+    },
+    {
+      "id": "q-audio-1",
+      "type": "audio",
+      "prompt": "[Audio MCQ] Listen and choose the correct answer.",
+      "points": 1000,
+      "timeLimit": 20,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Replace this audio text.",
+      "language": "en-US",
+      "answers": [
+        { "text": "Correct choice", "correct": true },
+        { "text": "Wrong choice 1", "correct": false },
+        { "text": "Wrong choice 2", "correct": false },
+        { "text": "Wrong choice 3", "correct": false }
+      ]
+    }
+  ]
+}
