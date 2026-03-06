@@ -1793,18 +1793,20 @@ function startHostTimerTicker() {
 
     const state = live.host.state;
     const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
+    const capMs = limitSec * 1000;
     const startedAt = Number(live.host.timerStartedAtMs || state?.questionStartedAt || 0);
 
-    let remainingMs;
-    if (startedAt > 0) {
-      const expectedDeadline = startedAt + limitSec * 1000;
-      remainingMs = Math.max(0, expectedDeadline - Date.now());
-    } else if (live.host.timerDeadlineMs) {
-      remainingMs = Math.max(0, live.host.timerDeadlineMs - Date.now());
+    let remainingMsRaw;
+    if (live.host.timerDeadlineMs) {
+      remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs) - Date.now());
+    } else if (startedAt > 0) {
+      const expectedDeadline = startedAt + capMs;
+      remainingMsRaw = Math.max(0, expectedDeadline - Date.now());
     } else {
-      remainingMs = limitSec * 1000;
+      remainingMsRaw = capMs;
     }
 
+    const remainingMs = Math.min(capMs, remainingMsRaw);
     const remaining = Math.ceil(remainingMs / 1000);
     projectorTimerEl.textContent = `Time: ${remaining}s`;
   }, 250);
