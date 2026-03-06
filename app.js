@@ -1543,6 +1543,15 @@ function renderHostQuestion(state) {
 
   if (!hostQuestionWrap || !hostQuestionPromptEl || !hostQuestionAnswersEl || !hostQuestionHintEl) return;
 
+  const appendBigReveal = (text) => {
+    const value = String(text || '').trim();
+    if (!value) return;
+    const ans = document.createElement('div');
+    ans.className = 'project-text-reveal';
+    ans.textContent = value;
+    hostQuestionAnswersEl.appendChild(ans);
+  };
+
   if (phase !== 'question' || !question) {
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
@@ -1585,13 +1594,7 @@ function renderHostQuestion(state) {
 
   if (question.type === 'text') {
     hostQuestionHintEl.textContent = showReveal ? '' : 'Type-answer question.';
-
-    if (showReveal && state.correctAnswer) {
-      const ans = document.createElement('div');
-      ans.className = 'project-text-reveal';
-      ans.textContent = state.correctAnswer;
-      hostQuestionAnswersEl.appendChild(ans);
-    }
+    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
@@ -1639,36 +1642,39 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'context_gap') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected: ${state.correctAnswer}` : 'Context gap fill.';
+    hostQuestionHintEl.textContent = showReveal ? '' : 'Context gap fill.';
+    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'match_pairs') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected pairs: ${state.correctAnswer}` : 'Match pairs question.';
+    hostQuestionHintEl.textContent = showReveal ? '' : 'Match pairs question.';
+    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'error_hunt') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Corrected: ${state.correctAnswer}` : 'Error hunt: click wrong token(s), rewrite sentence.';
+    hostQuestionHintEl.textContent = showReveal ? '' : 'Error hunt: click wrong token(s), rewrite sentence.';
+    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'puzzle') {
-    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected order: ${state.correctAnswer}` : 'Puzzle question.';
+    hostQuestionHintEl.textContent = showReveal ? '' : 'Puzzle question.';
     if (question.options?.length) {
       const p = document.createElement('p');
       p.className = 'small';
       p.textContent = `Items: ${question.options.join(' • ')}`;
       hostQuestionAnswersEl.appendChild(p);
     }
-    if (projectorCorrectEl) {
-      projectorCorrectEl.textContent = showReveal && state.correctAnswer ? `Correct order: ${state.correctAnswer}` : '';
-    }
+    if (showReveal) appendBigReveal(state.correctAnswer);
+    if (projectorCorrectEl) projectorCorrectEl.textContent = '';
     return;
   }
 
   if (question.type === 'slider') {
-    hostQuestionHintEl.textContent = `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    hostQuestionHintEl.textContent = showReveal ? '' : `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
