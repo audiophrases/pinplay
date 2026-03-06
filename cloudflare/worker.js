@@ -140,6 +140,23 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/quiz/update' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/quiz/update', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ quiz: body?.quiz }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/host/next' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -585,6 +602,25 @@ export class QuizRoom {
           startQuestion(room, 0);
           await this.#setRoom(room);
         }
+
+        return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/quiz/update' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const nextQuiz = normalizeQuiz(body?.quiz || {});
+        if (!nextQuiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+        if (room.phase === 'question' && room.currentIndex >= nextQuiz.questions.length) {
+          return json({ error: 'Updated quiz is shorter than current live index.' }, 409);
+        }
+
+        room.quiz = nextQuiz;
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
 
         return json(hostState(room));
       }

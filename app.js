@@ -46,6 +46,7 @@ const backendStatusEl = document.getElementById('backendStatus');
 // Host controls (create side)
 const hostCardEl = document.getElementById('hostCard');
 const createLiveBtn = document.getElementById('createLiveBtn');
+const hostApplyBuilderBtn = document.getElementById('hostApplyBuilderBtn');
 const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
@@ -1009,6 +1010,7 @@ async function openQuizFromDrive() {
 // ---------- Live mode ----------
 function bindLiveEvents() {
   if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
+  if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
@@ -1107,6 +1109,25 @@ async function hostStartGame() {
       headers: { Authorization: `Bearer ${live.host.token}` },
       body: { pin: live.host.pin },
     });
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+async function hostApplyBuilderToLive() {
+  try {
+    ensureHostReady();
+    syncQuizFromUI();
+    const payload = normalizeQuizForLive(quiz);
+
+    await api('/api/host/quiz/update', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: { pin: live.host.pin, quiz: payload },
+    });
+
+    setStatus(hostStatusEl, 'Live game updated from builder ✅', 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
