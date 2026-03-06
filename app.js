@@ -2109,27 +2109,7 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      leftItems.forEach((left, i) => {
-        const row = document.createElement('div');
-        row.className = 'row gap';
-        const label = document.createElement('span');
-        label.className = 'small';
-        label.textContent = left;
-        const select = document.createElement('select');
-        select.dataset.joinPair = String(i);
-        const empty = document.createElement('option');
-        empty.value = '';
-        empty.textContent = 'Choose...';
-        select.appendChild(empty);
-        rightOptions.forEach((opt) => {
-          const o = document.createElement('option');
-          o.value = opt;
-          o.textContent = opt;
-          select.appendChild(o);
-        });
-        row.append(label, select);
-        joinAnswersEl.appendChild(row);
-      });
+      renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -2528,27 +2508,7 @@ function renderSoloQuestion() {
     } else if (q.type === 'match_pairs') {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
-      leftItems.forEach((left, i) => {
-        const row = document.createElement('div');
-        row.className = 'row gap';
-        const label = document.createElement('span');
-        label.className = 'small';
-        label.textContent = left;
-        const select = document.createElement('select');
-        select.dataset.soloPair = String(i);
-        const empty = document.createElement('option');
-        empty.value = '';
-        empty.textContent = 'Choose...';
-        select.appendChild(empty);
-        rightOptions.forEach((opt) => {
-          const o = document.createElement('option');
-          o.value = opt;
-          o.textContent = opt;
-          select.appendChild(o);
-        });
-        row.append(label, select);
-        answersEl.appendChild(row);
-      });
+      renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -3463,6 +3423,85 @@ function playQuestionAudio(question) {
     return;
   }
   speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
+}
+
+function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
+  const wrap = document.createElement('div');
+  wrap.className = 'match-pairs-wrap';
+
+  const leftCol = document.createElement('div');
+  leftCol.className = 'match-pairs-col';
+  const rightCol = document.createElement('div');
+  rightCol.className = 'match-pairs-col';
+
+  let selectedLeft = -1;
+  const rows = [];
+
+  const refreshUi = () => {
+    rows.forEach((row, idx) => {
+      row.container.classList.toggle('active', idx === selectedLeft);
+      const val = String(row.hidden.value || '').trim();
+      row.slot.textContent = val || '_____';
+      row.slot.classList.toggle('filled', !!val);
+    });
+
+    const used = new Set(rows.map((r) => String(r.hidden.value || '').trim()).filter(Boolean));
+    rightCol.querySelectorAll('[data-match-right]').forEach((btn) => {
+      const value = String(btn.dataset.matchRight || '');
+      const isUsed = used.has(value);
+      btn.classList.toggle('active', isUsed);
+      btn.disabled = isUsed && (selectedLeft < 0 || String(rows[selectedLeft].hidden.value || '') !== value);
+    });
+  };
+
+  leftItems.forEach((left, i) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'match-pair-left';
+
+    const leftText = document.createElement('span');
+    leftText.className = 'match-left-text';
+    leftText.textContent = left;
+
+    const slot = document.createElement('span');
+    slot.className = 'match-right-slot';
+    slot.textContent = '_____';
+
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.dataset[datasetKey] = String(i);
+
+    row.append(leftText, slot, hidden);
+    row.addEventListener('click', () => {
+      selectedLeft = selectedLeft === i ? -1 : i;
+      refreshUi();
+    });
+
+    rows.push({ container: row, slot, hidden });
+    leftCol.appendChild(row);
+  });
+
+  rightOptions.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.dataset.matchRight = String(opt || '');
+    btn.textContent = String(opt || '');
+    btn.addEventListener('click', () => {
+      if (selectedLeft < 0) return;
+      rows.forEach((r) => {
+        if (String(r.hidden.value || '') === btn.dataset.matchRight) r.hidden.value = '';
+      });
+      rows[selectedLeft].hidden.value = btn.dataset.matchRight || '';
+      selectedLeft = -1;
+      refreshUi();
+    });
+    rightCol.appendChild(btn);
+  });
+
+  wrap.append(leftCol, rightCol);
+  container.appendChild(wrap);
+  refreshUi();
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
