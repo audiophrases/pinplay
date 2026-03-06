@@ -392,9 +392,9 @@ function appendRiskBetBar() {
   row.className = 'row gap risk-bet-row';
 
   const bets = [
-    { value: 1, emoji: '🙂', title: 'Bet 1' },
-    { value: 2, emoji: '😤', title: 'Bet 2' },
-    { value: 3, emoji: '😈', title: 'Bet 3' },
+    { value: 1, emoji: '🤔', title: 'Bet 1' },
+    { value: 2, emoji: '😬', title: 'Bet 2' },
+    { value: 3, emoji: '🔥', title: 'Bet 3' },
   ];
 
   bets.forEach((b) => {
