@@ -3327,6 +3327,7 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
       };
 
       input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
           finish(true);
