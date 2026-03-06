@@ -352,13 +352,23 @@ function renderJoinQuestion(question) {
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
       const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
+      const required = Math.max(1, Number(question.requiredErrors || 1));
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
         b.textContent = tok;
-        b.addEventListener('click', () => b.classList.toggle('active'));
+        b.addEventListener('click', () => {
+          const isActive = b.classList.contains('active');
+          if (isActive) {
+            b.classList.remove('active');
+            return;
+          }
+          const activeCount = tokenWrap.querySelectorAll('[data-error-token].active').length;
+          if (activeCount >= required) return;
+          b.classList.add('active');
+        });
         tokenWrap.appendChild(b);
       });
       joinAnswersEl.appendChild(tokenWrap);
