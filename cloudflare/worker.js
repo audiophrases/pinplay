@@ -1111,7 +1111,7 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs') {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -1119,6 +1119,8 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       imageData: question.type === 'image_open' ? String(question.imageData || '') : undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
+      leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
+      rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1212,6 +1214,13 @@ function evaluate(question, answer) {
   if (question.type === 'context_gap') {
     const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
     const expected = (question.gaps || []).map(normalizeTextAnswer).filter(Boolean);
+    if (!guess.length || guess.length !== expected.length) return { correct: false };
+    return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
+  }
+
+  if (question.type === 'match_pairs') {
+    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+    const expected = (question.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
     if (!guess.length || guess.length !== expected.length) return { correct: false };
     return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
   }
@@ -1328,6 +1337,16 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'match_pairs') {
+      const pairs = (q.pairs || [])
+        .map((p) => ({ left: String(p?.left || '').slice(0, 40).trim(), right: String(p?.right || '').slice(0, 40).trim() }))
+        .filter((p) => p.left && p.right)
+        .slice(0, 6);
+      if (pairs.length < 2) return;
+      normalized.questions.push({ ...base, pairs });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -1431,7 +1450,7 @@ function distance2D(x1, y1, x2, y2) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -1505,6 +1524,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'context_gap') {
     return (question.gaps || []).filter(Boolean).join(' | ');
+  }
+
+  if (question.type === 'match_pairs') {
+    return (question.pairs || []).map((p) => `${p.left}→${p.right}`).join(' | ');
   }
 
   if (question.type === 'open' || question.type === 'image_open') {

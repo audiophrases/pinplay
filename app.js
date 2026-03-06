@@ -23,6 +23,7 @@ const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addContextGapBtn = document.getElementById('addContextGapBtn');
+const addMatchPairsBtn = document.getElementById('addMatchPairsBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
@@ -266,6 +267,13 @@ function bindBuilderEvents() {
   if (addContextGapBtn) {
     addContextGapBtn.addEventListener('click', () => {
       quiz.questions.push(makeContextGapQuestion());
+      renderBuilder();
+    });
+  }
+
+  if (addMatchPairsBtn) {
+    addMatchPairsBtn.addEventListener('click', () => {
+      quiz.questions.push(makeMatchPairsQuestion());
       renderBuilder();
     });
   }
@@ -581,6 +589,26 @@ function renderBuilder() {
       `;
     }
 
+    if (q.type === 'match_pairs') {
+      const pairs = Array.isArray(q.pairs) ? q.pairs : [];
+      const normalizedPairs = [...pairs];
+      while (normalizedPairs.length < 4) normalizedPairs.push({ left: '', right: '' });
+      specific += `
+        <p class="small top-space">Set matching pairs (left → right). Min 2 pairs.</p>
+        <div class="answers-grid">
+          ${normalizedPairs
+            .slice(0, 6)
+            .map(
+              (p, i) => `
+              <input data-q="${idx}" data-pair-left="${i}" maxlength="40" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
+              <input data-q="${idx}" data-pair-right="${i}" maxlength="40" value="${escapeHtml(p?.right || '')}" placeholder="Right ${i + 1}" />
+            `,
+            )
+            .join('')}
+        </div>
+      `;
+    }
+
     if (q.type === 'puzzle') {
       const items = [...(q.items || [])];
       while (items.length < 9) items.push('');
@@ -744,6 +772,18 @@ function syncQuizFromUI() {
         gaps.push(String(aEl?.value || '').slice(0, 20));
       }
       q.gaps = gaps;
+    }
+
+    if (q.type === 'match_pairs') {
+      const pairs = [];
+      for (let i = 0; i < 6; i++) {
+        const leftEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-left="${i}"]`);
+        const rightEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-right="${i}"]`);
+        const left = String(leftEl?.value || '').slice(0, 40).trim();
+        const right = String(rightEl?.value || '').slice(0, 40).trim();
+        if (left || right) pairs.push({ left, right });
+      }
+      q.pairs = pairs;
     }
 
     if (q.type === 'puzzle') {
@@ -1447,6 +1487,11 @@ function renderHostQuestion(state) {
     return;
   }
 
+  if (question.type === 'match_pairs') {
+    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected pairs: ${state.correctAnswer}` : 'Match pairs question.';
+    return;
+  }
+
   if (question.type === 'puzzle') {
     hostQuestionHintEl.textContent = 'Puzzle question.';
     if (question.options?.length) {
@@ -1843,7 +1888,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(preview);
     }
 
-    if (question.type === 'context_gap') {
+      if (question.type === 'context_gap') {
       const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
       for (let i = 0; i < count; i++) {
         const input = document.createElement('input');
@@ -1853,6 +1898,30 @@ function renderJoinQuestion(question) {
         input.dataset.joinGap = String(i);
         joinAnswersEl.appendChild(input);
       }
+    } else if (question.type === 'match_pairs') {
+      const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
+      const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
+      leftItems.forEach((left, i) => {
+        const row = document.createElement('div');
+        row.className = 'row gap';
+        const label = document.createElement('span');
+        label.className = 'small';
+        label.textContent = left;
+        const select = document.createElement('select');
+        select.dataset.joinPair = String(i);
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Choose...';
+        select.appendChild(empty);
+        rightOptions.forEach((opt) => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          select.appendChild(o);
+        });
+        row.append(label, select);
+        joinAnswersEl.appendChild(row);
+      });
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -2002,6 +2071,12 @@ function readJoinAnswer() {
 
   if (q.type === 'context_gap') {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
+    const values = fields.map((el) => String(el.value || '').trim());
+    return values.every(Boolean) ? values : null;
+  }
+
+  if (q.type === 'match_pairs') {
+    const fields = [...joinAnswersEl.querySelectorAll('[data-join-pair]')];
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
   }
@@ -2199,6 +2274,30 @@ function renderSoloQuestion() {
         input.dataset.soloGap = String(i);
         answersEl.appendChild(input);
       }
+    } else if (q.type === 'match_pairs') {
+      const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
+      const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
+      leftItems.forEach((left, i) => {
+        const row = document.createElement('div');
+        row.className = 'row gap';
+        const label = document.createElement('span');
+        label.className = 'small';
+        label.textContent = left;
+        const select = document.createElement('select');
+        select.dataset.soloPair = String(i);
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Choose...';
+        select.appendChild(empty);
+        rightOptions.forEach((opt) => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          select.appendChild(o);
+        });
+        row.append(label, select);
+        answersEl.appendChild(row);
+      });
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -2327,6 +2426,13 @@ function evaluateSoloQuestion(q) {
     const guess = [...answersEl.querySelectorAll('[data-solo-gap]')].map((el) => normalizeTextAnswer(el.value)).filter(Boolean);
     const expected = (q.gaps || []).map(normalizeTextAnswer).filter(Boolean);
     if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Complete all blanks.' };
+    return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
+  }
+
+  if (q.type === 'match_pairs') {
+    const guess = [...answersEl.querySelectorAll('[data-solo-pair]')].map((el) => normalizeTextAnswer(el.value)).filter(Boolean);
+    const expected = (q.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
+    if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Match all pairs first.' };
     return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
   }
 
@@ -2541,6 +2647,27 @@ function makeContextGapQuestion() {
   };
 }
 
+function makeMatchPairsQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'match_pairs',
+    prompt: 'Match each item with the correct pair.',
+    points: 1000,
+    timeLimit: 45,
+    pairs: [
+      { left: '', right: '' },
+      { left: '', right: '' },
+      { left: '', right: '' },
+      { left: '', right: '' },
+    ],
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
+  };
+}
+
 function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
@@ -2688,6 +2815,16 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'match_pairs') {
+      const pairs = (q.pairs || [])
+        .map((p) => ({ left: String(p?.left || '').slice(0, 40).trim(), right: String(p?.right || '').slice(0, 40).trim() }))
+        .filter((p) => p.left && p.right)
+        .slice(0, 6);
+      if (pairs.length < 2) return;
+      normalized.questions.push({ ...base, pairs });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -2795,6 +2932,7 @@ function labelForType(type) {
       open: 'Open short answer',
       image_open: 'Image prompt writing',
       context_gap: 'Context gap fill',
+      match_pairs: 'Match pairs',
       puzzle: 'Puzzle',
       audio: 'Quiz + Audio',
       slider: 'Slider',
@@ -2805,7 +2943,7 @@ function labelForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 

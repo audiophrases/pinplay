@@ -297,7 +297,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview';
@@ -318,6 +318,30 @@ function renderJoinQuestion(question) {
         input.dataset.joinGap = String(i);
         joinAnswersEl.appendChild(input);
       }
+    } else if (question.type === 'match_pairs') {
+      const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
+      const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
+      leftItems.forEach((left, i) => {
+        const row = document.createElement('div');
+        row.className = 'row gap';
+        const label = document.createElement('span');
+        label.className = 'small';
+        label.textContent = left;
+        const select = document.createElement('select');
+        select.dataset.joinPair = String(i);
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Choose...';
+        select.appendChild(empty);
+        rightOptions.forEach((opt) => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          select.appendChild(o);
+        });
+        row.append(label, select);
+        joinAnswersEl.appendChild(row);
+      });
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -544,6 +568,12 @@ function readJoinAnswer() {
 
   if (q.type === 'context_gap') {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
+    const values = fields.map((el) => String(el.value || '').trim());
+    return values.every(Boolean) ? values : null;
+  }
+
+  if (q.type === 'match_pairs') {
+    const fields = [...joinAnswersEl.querySelectorAll('[data-join-pair]')];
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
   }
