@@ -2064,7 +2064,7 @@ function renderJoinQuestion(question) {
         joinAnswersEl.appendChild(input);
       }
     } else if (question.type === 'error_hunt') {
-      const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
+      const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
       const info = document.createElement('p');
       info.className = 'small';
       info.textContent = `Find ${required} wrong token(s), then rewrite.`;
@@ -2282,7 +2282,7 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
-    const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
+    const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
     if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
@@ -2487,7 +2487,7 @@ function renderSoloQuestion() {
         answersEl.appendChild(input);
       }
     } else if (q.type === 'error_hunt') {
-      const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
+      const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
       const info = document.createElement('p');
       info.className = 'small';
       info.textContent = `Find ${required} wrong token(s), then rewrite.`;
@@ -2690,7 +2690,7 @@ function evaluateSoloQuestion(q) {
     const rewrite = String(document.getElementById('soloErrorRewrite')?.value || '').trim();
     if (!rewrite) return { correct: false, hint: 'Rewrite the sentence first.' };
     const selected = [...answersEl.querySelectorAll('[data-solo-error-token].active')];
-    const required = countErrorHuntRequiredTokens(q.prompt, q.corrected);
+    const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
     if (selected.length !== required) return { correct: false, hint: `Select exactly ${required} token(s).` };
     return { correct: normalizeTextAnswer(rewrite) === normalizeTextAnswer(q.corrected || ''), hint: `Corrected: ${q.corrected || ''}` };
   }
