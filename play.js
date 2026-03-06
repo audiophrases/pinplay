@@ -716,6 +716,11 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   selected.className = 'answers-grid top-space';
   selected.dataset.puzzleList = listId;
 
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'btn top-space';
+  resetBtn.textContent = 'Reset order';
+
   const refreshSelectedIndexes = () => {
     [...selected.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
       el.dataset.puzzleIndex = String(i);
@@ -741,6 +746,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     e.preventDefault();
     resetSelection();
   });
+  resetBtn.addEventListener('click', () => resetSelection());
 
   const pickPiece = (bankBtn) => {
     const text = String(bankBtn.dataset.puzzleBankPiece || bankBtn.textContent || '').trim();
@@ -771,7 +777,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     bank.appendChild(btn);
   });
 
-  container.append(bank, selected);
+  container.append(bank, resetBtn, selected);
 }
 
 async function api(path, opts = {}) {
