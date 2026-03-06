@@ -2079,6 +2079,7 @@ function renderJoinQuestion(question) {
         b.type = 'button';
         b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
+        b.dataset.tokenText = tok;
         b.textContent = tok;
         b.addEventListener('click', () => {
           const isActive = b.classList.contains('active');
@@ -2100,7 +2101,9 @@ function renderJoinQuestion(question) {
       input.maxLength = 160;
       input.placeholder = 'Rewrite the corrected sentence';
       input.className = 'top-space';
+      input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
       joinAnswersEl.appendChild(input);
+      enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', input);
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
@@ -2502,6 +2505,7 @@ function renderSoloQuestion() {
         b.type = 'button';
         b.className = 'btn error-token-chip';
         b.dataset.soloErrorToken = String(i);
+        b.dataset.tokenText = tok;
         b.textContent = tok;
         b.addEventListener('click', () => {
           const isActive = b.classList.contains('active');
@@ -2523,7 +2527,9 @@ function renderSoloQuestion() {
       input.maxLength = 160;
       input.placeholder = 'Rewrite the corrected sentence';
       input.className = 'top-space';
+      input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
       answersEl.appendChild(input);
+      enableInlineErrorTokenEditing(tokenWrap, '[data-solo-error-token]', input);
     } else if (q.type === 'match_pairs') {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
@@ -3273,6 +3279,65 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   }
 
   return dp[source.length][target.length];
+}
+
+function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
+  if (!tokenWrap) return;
+
+  const syncRewriteFromTokens = () => {
+    if (!rewriteInput) return;
+    if (String(rewriteInput.dataset.fromTokens || '0') !== '1' && String(rewriteInput.value || '').trim()) return;
+    const sentence = [...tokenWrap.querySelectorAll(tokenSelector)]
+      .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    rewriteInput.value = sentence;
+    rewriteInput.dataset.fromTokens = '1';
+  };
+
+  tokenWrap.querySelectorAll(tokenSelector).forEach((chip) => {
+    chip.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (chip.dataset.editing === '1') return;
+
+      const original = String(chip.dataset.tokenText || chip.textContent || '').trim();
+      chip.dataset.editing = '1';
+      chip.classList.add('editing');
+      chip.innerHTML = '';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'error-token-editor';
+      input.maxLength = 30;
+      input.value = original;
+      chip.appendChild(input);
+      input.focus();
+      input.select();
+
+      const finish = (save) => {
+        const next = save ? String(input.value || '').trim() : original;
+        const text = next || original;
+        chip.dataset.tokenText = text;
+        chip.textContent = text;
+        chip.dataset.editing = '0';
+        chip.classList.remove('editing');
+        if (save) syncRewriteFromTokens();
+      };
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', () => finish(true), { once: true });
+    });
+  });
 }
 
 function normalizeBackendUrl(url) {
