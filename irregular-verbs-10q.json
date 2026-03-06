@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "title": "Common Irregular Verbs (10Q)",
+  "questions": [
+    {
+      "id": "iv-mcq-1",
+      "type": "mcq",
+      "prompt": "Choose the correct past simple: 'Yesterday I ___ to school.'",
+      "points": 1000,
+      "timeLimit": 20,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "goed", "correct": false },
+        { "text": "went", "correct": true },
+        { "text": "gone", "correct": false },
+        { "text": "goes", "correct": false }
+      ]
+    },
+    {
+      "id": "iv-multi-2",
+      "type": "multi",
+      "prompt": "Select all verbs that are irregular.",
+      "points": 1000,
+      "timeLimit": 25,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "go", "correct": true },
+        { "text": "take", "correct": true },
+        { "text": "walk", "correct": false },
+        { "text": "play", "correct": false },
+        { "text": "write", "correct": true }
+      ]
+    },
+    {
+      "id": "iv-tf-3",
+      "type": "tf",
+      "prompt": "True or False: The past simple of 'buy' is 'bought'.",
+      "points": 1000,
+      "timeLimit": 12,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "iv-text-4-cat",
+      "type": "text",
+      "prompt": "(Català → English) Escriu el passat simple de 'menjar' (eat).",
+      "points": 1000,
+      "timeLimit": 25,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "audioData": "",
+      "accepted": ["ate", "", "", ""]
+    },
+    {
+      "id": "iv-context-gap-5",
+      "type": "context_gap",
+      "prompt": "Complete with past simple forms: Last weekend I ___ (go) to Barcelona and ___ (see) my cousins.",
+      "points": 1000,
+      "timeLimit": 35,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "gaps": ["went", "saw"]
+    },
+    {
+      "id": "iv-match-6",
+      "type": "match_pairs",
+      "prompt": "Match base verbs with their past forms.",
+      "points": 1000,
+      "timeLimit": 40,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "pairs": [
+        { "left": "take", "right": "took" },
+        { "left": "write", "right": "wrote" },
+        { "left": "drink", "right": "drank" },
+        { "left": "have", "right": "had" }
+      ]
+    },
+    {
+      "id": "iv-errorhunt-7",
+      "type": "error_hunt",
+      "prompt": "She buyed a new phone and taked photos.",
+      "corrected": "She bought a new phone and took photos.",
+      "requiredErrors": 2,
+      "points": 1000,
+      "timeLimit": 45,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": ""
+    },
+    {
+      "id": "iv-puzzle-8",
+      "type": "puzzle",
+      "prompt": "Put the sentence in correct order.",
+      "points": 1000,
+      "timeLimit": 35,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "items": ["They", "went", "home", "after", "they", "ate", "dinner"]
+    },
+    {
+      "id": "iv-audio-9",
+      "type": "audio",
+      "prompt": "Listen and choose the verb you hear in past simple.",
+      "points": 1000,
+      "timeLimit": 20,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yesterday we drove to Girona.",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "drove", "correct": true },
+        { "text": "drived", "correct": false },
+        { "text": "drive", "correct": false },
+        { "text": "driven", "correct": false }
+      ]
+    },
+    {
+      "id": "iv-open-10-cat",
+      "type": "open",
+      "prompt": "(Català → English) Tradueix: 'Ahir vam veure una pel·lícula i vam beure aigua.' Use past simple irregular verbs.",
+      "points": 1000,
+      "timeLimit": 50,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "audioData": ""
+    }
+  ]
+}
