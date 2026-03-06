@@ -913,7 +913,8 @@ export class QuizRoom {
 function hostState(room) {
   const qIndex = room.currentIndex;
   const responses = room.responsesByQuestion[qIndex] || {};
-  const reactions = room.reactionsByQuestion?.[qIndex] || [];
+  const startedAt = Number(room.questionStartedAt || 0);
+  const reactions = (room.reactionsByQuestion?.[qIndex] || []).filter((r) => Number(r?.at || 0) >= startedAt);
   const players = Object.values(room.players)
     .map((p) => ({
       id: p.id,
