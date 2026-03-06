@@ -22,6 +22,7 @@ const addTextBtn = document.getElementById('addTextBtn');
 const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
+const addContextGapBtn = document.getElementById('addContextGapBtn');
 const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
@@ -258,6 +259,13 @@ function bindBuilderEvents() {
   if (addImageOpenBtn) {
     addImageOpenBtn.addEventListener('click', () => {
       quiz.questions.push(makeImageOpenQuestion());
+      renderBuilder();
+    });
+  }
+
+  if (addContextGapBtn) {
+    addContextGapBtn.addEventListener('click', () => {
+      quiz.questions.push(makeContextGapQuestion());
       renderBuilder();
     });
   }
@@ -558,6 +566,21 @@ function renderBuilder() {
       }
     }
 
+    if (q.type === 'context_gap') {
+      const gaps = q.gaps || ['', '', '', ''];
+      specific += `
+        <p class="small top-space">Write the paragraph in the question and set expected words for each blank.</p>
+        <label class="top-space">Expected words for blanks (1-4)</label>
+        <div class="answers-grid">
+          ${gaps
+            .map((ans, aIdx) => `
+            <input data-q="${idx}" data-gap-index="${aIdx}" maxlength="20" value="${escapeHtml(ans || '')}" placeholder="Blank ${aIdx + 1}" />
+          `)
+            .join('')}
+        </div>
+      `;
+    }
+
     if (q.type === 'puzzle') {
       const items = [...(q.items || [])];
       while (items.length < 9) items.push('');
@@ -712,6 +735,15 @@ function syncQuizFromUI() {
         accepted.push(String(aEl?.value || '').slice(0, 20));
       }
       q.accepted = accepted;
+    }
+
+    if (q.type === 'context_gap') {
+      const gaps = [];
+      for (let aIdx = 0; aIdx < 4; aIdx++) {
+        const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-gap-index="${aIdx}"]`);
+        gaps.push(String(aEl?.value || '').slice(0, 20));
+      }
+      q.gaps = gaps;
     }
 
     if (q.type === 'puzzle') {
@@ -1410,6 +1442,11 @@ function renderHostQuestion(state) {
     return;
   }
 
+  if (question.type === 'context_gap') {
+    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected: ${state.correctAnswer}` : 'Context gap fill.';
+    return;
+  }
+
   if (question.type === 'puzzle') {
     hostQuestionHintEl.textContent = 'Puzzle question.';
     if (question.options?.length) {
@@ -1795,7 +1832,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview';
@@ -1806,12 +1843,24 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(preview);
     }
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'joinTextAnswer';
-    input.maxLength = 120;
-    input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
-    joinAnswersEl.appendChild(input);
+    if (question.type === 'context_gap') {
+      const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 20;
+        input.placeholder = `Blank ${i + 1}`;
+        input.dataset.joinGap = String(i);
+        joinAnswersEl.appendChild(input);
+      }
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'joinTextAnswer';
+      input.maxLength = 120;
+      input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
+      joinAnswersEl.appendChild(input);
+    }
 
     if (hasQuestionAudio(question)) {
       const btn = document.createElement('button');
@@ -1949,6 +1998,12 @@ function readJoinAnswer() {
   if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
+  }
+
+  if (q.type === 'context_gap') {
+    const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
+    const values = fields.map((el) => String(el.value || '').trim());
+    return values.every(Boolean) ? values : null;
   }
 
   if (q.type === 'puzzle') {
@@ -2123,7 +2178,7 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'context_gap') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview';
@@ -2134,12 +2189,24 @@ function renderSoloQuestion() {
       answersEl.appendChild(preview);
     }
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'soloTextAnswer';
-    input.maxLength = 120;
-    input.placeholder = (q.type === 'open' || q.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
-    answersEl.appendChild(input);
+    if (q.type === 'context_gap') {
+      const count = Math.max(2, Math.min(4, Number((q.gaps || []).filter(Boolean).length || 2)));
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 20;
+        input.placeholder = `Blank ${i + 1}`;
+        input.dataset.soloGap = String(i);
+        answersEl.appendChild(input);
+      }
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'soloTextAnswer';
+      input.maxLength = 120;
+      input.placeholder = (q.type === 'open' || q.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
+      answersEl.appendChild(input);
+    }
 
     if (hasQuestionAudio(q)) {
       const btn = document.createElement('button');
@@ -2254,6 +2321,13 @@ function evaluateSoloQuestion(q) {
     const val = String(document.getElementById('soloTextAnswer')?.value || '').trim();
     if (!val) return { correct: false, hint: 'Type an answer first.' };
     return { correct: false, hint: 'Open answer needs teacher grading in live mode.' };
+  }
+
+  if (q.type === 'context_gap') {
+    const guess = [...answersEl.querySelectorAll('[data-solo-gap]')].map((el) => normalizeTextAnswer(el.value)).filter(Boolean);
+    const expected = (q.gaps || []).map(normalizeTextAnswer).filter(Boolean);
+    if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Complete all blanks.' };
+    return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
   }
 
   if (q.type === 'puzzle') {
@@ -2451,6 +2525,22 @@ function makeImageOpenQuestion() {
   };
 }
 
+function makeContextGapQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'context_gap',
+    prompt: 'Complete the paragraph: ...',
+    points: 1000,
+    timeLimit: 45,
+    gaps: ['', '', '', ''],
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US',
+    audioData: '',
+  };
+}
+
 function makePuzzleQuestion(opts = {}) {
   return {
     id: crypto.randomUUID(),
@@ -2591,6 +2681,13 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'context_gap') {
+      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 20)).filter(Boolean).slice(0, 4);
+      if (gaps.length < 2) return;
+      normalized.questions.push({ ...base, gaps });
+      return;
+    }
+
     if (q.type === 'puzzle') {
       const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
@@ -2697,6 +2794,7 @@ function labelForType(type) {
       text: 'Type answer',
       open: 'Open short answer',
       image_open: 'Image prompt writing',
+      context_gap: 'Context gap fill',
       puzzle: 'Puzzle',
       audio: 'Quiz + Audio',
       slider: 'Slider',
@@ -2707,7 +2805,7 @@ function labelForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'image_open', 'context_gap', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 

@@ -297,7 +297,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview';
@@ -308,12 +308,24 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(wrap);
     }
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'joinTextAnswer';
-    input.maxLength = 120;
-    input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
-    joinAnswersEl.appendChild(input);
+    if (question.type === 'context_gap') {
+      const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 20;
+        input.placeholder = `Blank ${i + 1}`;
+        input.dataset.joinGap = String(i);
+        joinAnswersEl.appendChild(input);
+      }
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'joinTextAnswer';
+      input.maxLength = 120;
+      input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
+      joinAnswersEl.appendChild(input);
+    }
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -528,6 +540,12 @@ function readJoinAnswer() {
   if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
+  }
+
+  if (q.type === 'context_gap') {
+    const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
+    const values = fields.map((el) => String(el.value || '').trim());
+    return values.every(Boolean) ? values : null;
   }
 
   if (q.type === 'puzzle') {
