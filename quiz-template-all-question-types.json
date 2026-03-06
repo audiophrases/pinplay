@@ -124,6 +124,20 @@
       ]
     },
     {
+      "id": "q-error-hunt-1",
+      "type": "error_hunt",
+      "prompt": "She say that she go to school yesterday.",
+      "corrected": "She said that she went to school yesterday.",
+      "requiredErrors": 2,
+      "points": 1000,
+      "timeLimit": 45,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "This is a sample text.",
+      "language": "en-US-Wave",
+      "audioData": ""
+    },
+    {
       "id": "q-puzzle-1",
       "type": "puzzle",
       "prompt": "[Order puzzle] Put words in the correct order.",
