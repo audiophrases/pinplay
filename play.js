@@ -429,10 +429,8 @@ function appendRiskBetBar() {
   bg.textContent = 'Danger';
   wrap.appendChild(bg);
 
-  const label = document.createElement('p');
-  label.className = 'small';
-  label.textContent = 'Bet';
-  wrap.appendChild(label);
+  const controls = document.createElement('div');
+  controls.className = 'row gap risk-bet-controls';
 
   const row = document.createElement('div');
   row.className = 'row gap risk-bet-row';
@@ -459,7 +457,14 @@ function appendRiskBetBar() {
     row.appendChild(btn);
   });
 
-  wrap.appendChild(row);
+  controls.appendChild(row);
+
+  if (joinSubmitBtn) {
+    joinSubmitBtn.classList.remove('top-space');
+    controls.appendChild(joinSubmitBtn);
+  }
+
+  wrap.appendChild(controls);
   joinAnswersEl.appendChild(wrap);
 }
 
