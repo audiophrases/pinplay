@@ -705,7 +705,7 @@ function renderLeaderboardInJoin(leaderboard) {
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'Click words in order to build the sentence. Right-click selected area to reset.';
+  hint.textContent = 'Click words in order, or drag to reorder. Right-click selected area to reset.';
   container.appendChild(hint);
 
   const bank = document.createElement('div');
@@ -721,25 +721,85 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   resetBtn.className = 'btn top-space';
   resetBtn.textContent = 'Reset order';
 
+  let draggedRow = null;
+
   const refreshSelectedIndexes = () => {
     [...selected.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
       el.dataset.puzzleIndex = String(i);
+      const n = el.querySelector('strong');
+      if (n) n.textContent = `${i + 1}.`;
     });
+  };
+
+  const clearDropHints = () => {
+    selected.querySelectorAll('.puzzle-drop-before, .puzzle-drop-after').forEach((el) => {
+      el.classList.remove('puzzle-drop-before', 'puzzle-drop-after');
+    });
+  };
+
+  const setupRowDnD = (row) => {
+    row.draggable = true;
+    row.style.cursor = 'grab';
+
+    row.addEventListener('dragstart', () => {
+      draggedRow = row;
+      row.classList.add('puzzle-dragging');
+    });
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('puzzle-dragging');
+      clearDropHints();
+      draggedRow = null;
+      refreshSelectedIndexes();
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!draggedRow || draggedRow === row) return;
+      clearDropHints();
+      const rect = row.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      row.classList.add(before ? 'puzzle-drop-before' : 'puzzle-drop-after');
+    });
+
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedRow || draggedRow === row) return;
+      const rect = row.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      if (before) selected.insertBefore(draggedRow, row);
+      else selected.insertBefore(draggedRow, row.nextSibling);
+      clearDropHints();
+      refreshSelectedIndexes();
+    });
+  };
+
+  const buildBankButton = (value) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.dataset.puzzleBankPiece = value;
+    btn.textContent = value;
+    btn.draggable = true;
+
+    btn.addEventListener('click', () => pickPiece(btn));
+    btn.addEventListener('dragstart', (e) => {
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/puzzle-bank-piece', value);
+        e.dataTransfer.effectAllowed = 'copy';
+      }
+    });
+    return btn;
   };
 
   const resetSelection = () => {
     const picked = [...selected.querySelectorAll('[data-puzzle-piece]')];
     picked.forEach((el) => {
       const value = String(el.dataset.puzzlePiece || '');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn';
-      btn.dataset.puzzleBankPiece = value;
-      btn.textContent = value;
-      btn.addEventListener('click', () => pickPiece(btn));
-      bank.appendChild(btn);
+      bank.appendChild(buildBankButton(value));
       el.remove();
     });
+    refreshSelectedIndexes();
   };
 
   selected.addEventListener('contextmenu', (e) => {
@@ -747,6 +807,19 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     resetSelection();
   });
   resetBtn.addEventListener('click', () => resetSelection());
+
+  selected.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+
+  selected.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const text = e.dataTransfer?.getData('text/puzzle-bank-piece');
+    if (!text) return;
+    const btn = bank.querySelector(`[data-puzzle-bank-piece="${CSS.escape(text)}"]`);
+    if (btn) pickPiece(btn);
+  });
 
   const pickPiece = (bankBtn) => {
     const text = String(bankBtn.dataset.puzzleBankPiece || bankBtn.textContent || '').trim();
@@ -757,24 +830,18 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     row.dataset.puzzlePiece = text;
 
     const pos = document.createElement('strong');
-    pos.textContent = `${selected.querySelectorAll('[data-puzzle-piece]').length + 1}.`;
     const label = document.createElement('span');
     label.textContent = text;
     row.append(pos, label);
 
+    setupRowDnD(row);
     selected.appendChild(row);
     bankBtn.remove();
     refreshSelectedIndexes();
   };
 
   options.forEach((text) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn';
-    btn.dataset.puzzleBankPiece = String(text || '');
-    btn.textContent = String(text || '');
-    btn.addEventListener('click', () => pickPiece(btn));
-    bank.appendChild(btn);
+    bank.appendChild(buildBankButton(String(text || '')));
   });
 
   container.append(bank, resetBtn, selected);
