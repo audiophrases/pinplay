@@ -506,35 +506,7 @@ function renderBuilder() {
       }
 
       if (supportsQuestionAudio(q.type)) {
-      const enabled = !!q.audioEnabled || q.type === 'audio';
-      const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
-      specific += `
-        <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
-          <label style="display:flex; align-items:center; gap:.45rem; margin:0; font-weight:500;">
-            <input data-q="${idx}" data-field="audioEnabled" type="checkbox" ${enabled ? 'checked' : ''} style="width:auto;" />
-            Audio for this question
-          </label>
-          <div class="row gap top-space">
-            <div style="min-width:170px;">
-              <label>Audio source</label>
-              <select data-q="${idx}" data-field="audioMode">
-                <option value="tts" ${mode === 'tts' ? 'selected' : ''}>Text-to-speech</option>
-                <option value="file" ${mode === 'file' ? 'selected' : ''}>Audio file</option>
-              </select>
-            </div>
-            <div style="min-width:220px;">
-              <label>Audio file</label>
-              <input data-audio-upload="${idx}" type="file" accept="audio/*" />
-            </div>
-          </div>
-          <label class="top-space">Text to read aloud (max 120 chars)</label>
-          <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="Text-to-speech prompt" />
-          <label>Language code (e.g. en-US, en-US-Wave-a)</label>
-          <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(q.language || 'en-US')}" />
-          <div class="small top-space">${q.audioData ? 'Audio file uploaded ?' : 'No audio file uploaded yet.'}</div>
-          <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">? Play preview</button></div>
-        </div>
-      `;
+        specific += buildAudioSettingsMarkup(idx, q);
       }
     }
 
@@ -694,6 +666,10 @@ function renderBuilder() {
       }
     }
 
+    if (supportsQuestionAudio(q.type) && !['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+      specific += buildAudioSettingsMarkup(idx, q);
+    }
+
     wrap.innerHTML = common + specific;
     questionListEl.appendChild(wrap);
   });
@@ -702,6 +678,39 @@ function renderBuilder() {
     el.addEventListener('input', syncQuizFromUI);
     el.addEventListener('change', syncQuizFromUI);
   });
+}
+
+function buildAudioSettingsMarkup(idx, q) {
+  const enabled = !!q.audioEnabled || q.type === 'audio';
+  const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
+  const lang = String(q.language || 'en-US-Wave');
+  return `
+    <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+      <label style="display:flex; align-items:center; gap:.45rem; margin:0; font-weight:500;">
+        <input data-q="${idx}" data-field="audioEnabled" type="checkbox" ${enabled ? 'checked' : ''} style="width:auto;" />
+        Audio for this question
+      </label>
+      <div class="row gap top-space">
+        <div style="min-width:170px;">
+          <label>Audio source</label>
+          <select data-q="${idx}" data-field="audioMode">
+            <option value="tts" ${mode === 'tts' ? 'selected' : ''}>Text-to-speech</option>
+            <option value="file" ${mode === 'file' ? 'selected' : ''}>Audio file</option>
+          </select>
+        </div>
+        <div style="min-width:220px;">
+          <label>Audio file</label>
+          <input data-audio-upload="${idx}" type="file" accept="audio/*" />
+        </div>
+      </div>
+      <label class="top-space">Text to read aloud (max 120 chars)</label>
+      <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <label>Language code (e.g. en-US, en-US-Wave)</label>
+      <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(lang)}" />
+      <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
+      <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>
+    </div>
+  `;
 }
 
 function syncQuizFromUI() {
@@ -753,7 +762,7 @@ function syncQuizFromUI() {
       q.audioEnabled = !!audioEnabledEl?.checked || q.type === 'audio';
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 120);
-      q.language = String(languageEl?.value || 'en-US').slice(0, 10) || 'en-US';
+      q.language = String(languageEl?.value || 'en-US-Wave').slice(0, 32) || 'en-US-Wave';
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
     }
 
@@ -2538,7 +2547,7 @@ function makeMcqQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -2559,7 +2568,7 @@ function makeMultiQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -2580,7 +2589,7 @@ function makeTfQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     answers: [
       { text: 'True', correct: true },
@@ -2599,7 +2608,7 @@ function makeTextQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     accepted: ['', '', '', ''],
   };
@@ -2615,7 +2624,7 @@ function makeOpenQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
   };
 }
@@ -2631,7 +2640,7 @@ function makeImageOpenQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
   };
 }
@@ -2647,7 +2656,7 @@ function makeContextGapQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
   };
 }
@@ -2668,7 +2677,7 @@ function makeMatchPairsQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
   };
 }
@@ -2683,7 +2692,7 @@ function makePuzzleQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     items: Array.from({ length: 9 }, () => ''),
   };
@@ -2697,7 +2706,7 @@ function makeAudioQuestion() {
     audioEnabled: true,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US',
+    language: 'en-US-Wave',
     audioData: '',
     points: 1000,
     timeLimit: 20,
@@ -2754,7 +2763,7 @@ function normalizeQuizForLive(raw) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 120),
-      language: String(q.language || 'en-US').slice(0, 32) || 'en-US',
+      language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
     };
 
@@ -3022,7 +3031,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'puzzle', 'audio'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {
@@ -3041,7 +3050,7 @@ function playQuestionAudio(question) {
     } catch {}
     return;
   }
-  speakText(question.audioText || question.prompt || '', question.language || 'en-US');
+  speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
@@ -3094,14 +3103,14 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   container.appendChild(list);
 }
-function speakText(text, lang = 'en-US') {
+function speakText(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = lang || 'en-US';
+    utterance.lang = lang || 'en-US-Wave';
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech errors silently
@@ -3148,6 +3157,7 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
 
 
 

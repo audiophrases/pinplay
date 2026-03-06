@@ -288,9 +288,9 @@ function renderJoinQuestion(question) {
       btn.type = 'button';
       btn.className = 'btn top-space';
       btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US'));
+      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
       joinAnswersEl.appendChild(btn);
-      speakText(question.audioText || question.prompt || '', question.language || 'en-US');
+      speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
     }
     appendRiskBetBar();
     appendReactionBar();
@@ -818,14 +818,14 @@ function normalizeBackendUrl(url) {
   }
 }
 
-function speakText(text, lang = 'en-US') {
+function speakText(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = lang || 'en-US';
+    utterance.lang = lang || 'en-US-Wave';
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech errors silently
@@ -859,5 +859,6 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
+
 
 

@@ -1179,7 +1179,7 @@ function publicAudioPayload(question) {
     audioEnabled: true,
     audioMode: ['tts', 'file'].includes(String(question?.audioMode || '')) ? String(question.audioMode) : (question?.audioData ? 'file' : 'tts'),
     audioText: String(question?.audioText || ''),
-    language: String(question?.language || 'en-US'),
+    language: String(question?.language || 'en-US-Wave'),
     audioData: String(question?.audioData || ''),
   };
 }
@@ -1270,7 +1270,7 @@ function normalizeQuiz(quiz) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 120),
-      language: String(q.language || 'en-US').slice(0, 32) || 'en-US',
+      language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
     };
 
@@ -1619,3 +1619,4 @@ function json(data, status = 200) {
     },
   });
 }
+
