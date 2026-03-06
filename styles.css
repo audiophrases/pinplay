@@ -94,9 +94,9 @@ textarea { min-height: 72px; resize: vertical; }
   flex-direction: column;
 }
 
-#hostCard { order: 1; }
-#builderCard { order: 2; }
-#hostQuestionCard { order: 3; }
+#hostQuestionCard { order: 1; }
+#hostCard { order: 2; }
+#builderCard { order: 3; }
 
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
