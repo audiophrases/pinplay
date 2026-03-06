@@ -457,12 +457,12 @@ function appendRiskBetBar() {
     row.appendChild(btn);
   });
 
-  controls.appendChild(row);
-
   if (joinSubmitBtn) {
     joinSubmitBtn.classList.remove('top-space');
     controls.appendChild(joinSubmitBtn);
   }
+
+  controls.appendChild(row);
 
   wrap.appendChild(controls);
   joinAnswersEl.appendChild(wrap);
