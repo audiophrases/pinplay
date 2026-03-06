@@ -108,6 +108,7 @@ const resultCard = document.getElementById('resultCard');
 let quiz = loadQuiz() || createEmptyQuiz();
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
+let dragQuestionIndex = null;
 
 const live = {
   host: {
@@ -398,6 +399,46 @@ function bindBuilderEvents() {
       if (!q || !hasQuestionAudio(q)) return;
       playQuestionAudio(q);
     }
+  });
+
+  questionListEl.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.question-item');
+    if (!item) return;
+    dragQuestionIndex = Number(item.dataset.questionIndex);
+    item.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(dragQuestionIndex));
+    }
+  });
+
+  questionListEl.addEventListener('dragover', (e) => {
+    const overItem = e.target.closest('.question-item');
+    if (!overItem) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  });
+
+  questionListEl.addEventListener('drop', (e) => {
+    const overItem = e.target.closest('.question-item');
+    if (!overItem) return;
+    e.preventDefault();
+
+    const to = Number(overItem.dataset.questionIndex);
+    const from = Number.isFinite(dragQuestionIndex) ? dragQuestionIndex : Number(e.dataTransfer?.getData('text/plain'));
+
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
+
+    const [moved] = quiz.questions.splice(from, 1);
+    quiz.questions.splice(to, 0, moved);
+    pendingScrollQuestionIndex = to;
+    dragQuestionIndex = null;
+    renderBuilder();
+  });
+
+  questionListEl.addEventListener('dragend', () => {
+    dragQuestionIndex = null;
+    questionListEl.querySelectorAll('.question-item.dragging').forEach((el) => el.classList.remove('dragging'));
   });
 
   questionListEl.addEventListener('change', async (e) => {
@@ -709,6 +750,7 @@ function renderBuilder() {
 
     wrap.innerHTML = common + specific + '</div>';
     wrap.dataset.questionIndex = String(idx);
+    wrap.draggable = true;
     questionListEl.appendChild(wrap);
   });
 

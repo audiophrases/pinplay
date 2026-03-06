@@ -100,6 +100,8 @@ textarea { min-height: 72px; resize: vertical; }
 
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
+.question-item[draggable="true"] { cursor: grab; }
+.question-item.dragging { opacity: .55; }
 .question-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; }
 .question-actions { display: inline-flex; gap: .35rem; flex-wrap: wrap; }
 .question-body-collapsed { display: none; }
