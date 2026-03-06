@@ -116,6 +116,7 @@ const live = {
     timerDeadlineMs: null,
     timerForIndex: null,
     timerStartedAtMs: null,
+    isPrimaryAudioHost: false,
     lastPhase: null,
     lastIndex: null,
     lastResponseCount: 0,
@@ -984,6 +985,7 @@ async function createLiveGame() {
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     live.host.state = null;
+    live.host.isPrimaryAudioHost = true;
 
     stopFx('answering');
     if (livePinEl) livePinEl.textContent = data.pin;
@@ -1032,6 +1034,7 @@ async function joinLiveGameAsHostByPin() {
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     live.host.state = null;
+    live.host.isPrimaryAudioHost = false;
 
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
@@ -1693,6 +1696,7 @@ function updateHallScene(state) {
 }
 
 function playHallMusic() {
+  if (!live.host.isPrimaryAudioHost) return;
   if (!audioFx.hall) return;
   if (!audioFx.hall.paused) return;
   audioFx.hall.currentTime = 0;
@@ -1705,6 +1709,7 @@ function stopHallMusic() {
 }
 
 function playFx(name) {
+  if (!live.host.isPrimaryAudioHost) return;
   const a = audioFx[name];
   if (!a) return;
   try {
