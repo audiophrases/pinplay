@@ -36,6 +36,7 @@ const live = {
     randomNamesMode: false,
     displayName: null,
     clientId: getOrCreateClientId(),
+    selectedBet: 0,
     timerTicker: null,
     timerStartedAt: null,
     timerLimitSec: null,
@@ -209,6 +210,7 @@ function renderPlayerState(state) {
     live.player.submittedForIndex = state.answeredCurrent ? state.currentIndex : null;
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
+    live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
     animatePulse(joinQuestionWrap);
@@ -290,6 +292,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(btn);
       speakText(question.audioText || question.prompt || '', question.language || 'en-US');
     }
+    appendRiskBetBar();
     appendReactionBar();
     return;
   }
@@ -301,6 +304,7 @@ function renderJoinQuestion(question) {
     input.maxLength = 120;
     input.placeholder = question.type === 'open' ? 'Type a short answer' : 'Type your answer';
     joinAnswersEl.appendChild(input);
+    appendRiskBetBar();
     appendReactionBar();
     return;
   }
@@ -308,6 +312,7 @@ function renderJoinQuestion(question) {
   if (question.type === 'puzzle') {
     const options = question.options || [];
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
+    appendRiskBetBar();
     appendReactionBar();
     return;
   }
@@ -327,6 +332,7 @@ function renderJoinQuestion(question) {
     slider?.addEventListener('input', () => {
       out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
     });
+    appendRiskBetBar();
     appendReactionBar();
     return;
   }
@@ -337,7 +343,8 @@ function renderJoinQuestion(question) {
       p.className = 'small';
       p.textContent = 'No image set for this question.';
       joinAnswersEl.appendChild(p);
-      appendReactionBar();
+      appendRiskBetBar();
+    appendReactionBar();
       return;
     }
 
@@ -360,8 +367,54 @@ function renderJoinQuestion(question) {
       dot.style.left = `${point.x}%`;
       dot.style.top = `${point.y}%`;
     });
+    appendRiskBetBar();
     appendReactionBar();
   }
+}
+
+function appendRiskBetBar() {
+  if (!joinAnswersEl) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'top-space risk-bet-wrap';
+
+  const bg = document.createElement('div');
+  bg.className = 'risk-danger-bg';
+  bg.textContent = 'Danger';
+  wrap.appendChild(bg);
+
+  const label = document.createElement('p');
+  label.className = 'small';
+  label.textContent = 'Bet';
+  wrap.appendChild(label);
+
+  const row = document.createElement('div');
+  row.className = 'row gap risk-bet-row';
+
+  const bets = [
+    { value: 1, emoji: '🙂', title: 'Bet 1' },
+    { value: 2, emoji: '😤', title: 'Bet 2' },
+    { value: 3, emoji: '😈', title: 'Bet 3' },
+  ];
+
+  bets.forEach((b) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn risk-bet-btn';
+    btn.dataset.bet = String(b.value);
+    btn.textContent = b.emoji;
+    btn.title = b.title;
+    if (Number(live.player.selectedBet || 0) === b.value) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      live.player.selectedBet = b.value;
+      row.querySelectorAll('.risk-bet-btn').forEach((el) => el.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    row.appendChild(btn);
+  });
+
+  wrap.appendChild(row);
+  joinAnswersEl.appendChild(wrap);
 }
 
 function appendReactionBar() {
@@ -423,6 +476,7 @@ async function submitLiveAnswer() {
         pin: live.player.pin,
         playerId: live.player.id,
         answer,
+        bet: Number(live.player.selectedBet || 0),
       },
     });
 
@@ -746,3 +800,5 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
+
+

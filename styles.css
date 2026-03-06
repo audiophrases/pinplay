@@ -245,6 +245,36 @@ textarea { min-height: 72px; resize: vertical; }
 .feedback.bad { color: var(--bad); }
 .hidden { display: none !important; }
 
+.risk-bet-wrap {
+  position: relative;
+  border-radius: .7rem;
+  border: 1px solid #f1d2a9;
+  padding: .5rem;
+  background: linear-gradient(90deg, rgba(111,207,151,.18) 0%, rgba(246,209,101,.2) 50%, rgba(235,87,87,.18) 100%);
+  overflow: hidden;
+}
+
+.risk-danger-bg {
+  position: absolute;
+  right: .55rem;
+  top: .35rem;
+  font-size: .72rem;
+  font-weight: 800;
+  color: rgba(183,28,28,.55);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.risk-bet-row .risk-bet-btn {
+  min-width: 2.2rem;
+}
+
+.risk-bet-row .risk-bet-btn.active {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239,68,68,.25) inset;
+}
+
 .list {
   margin: .45rem 0 0;
   padding-left: 0;

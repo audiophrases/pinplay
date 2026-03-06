@@ -314,7 +314,7 @@ export default {
       return withCors(
         await stub.fetch('https://room/answer', {
           method: 'POST',
-          body: JSON.stringify({ playerId, playerToken, answer: body?.answer }),
+          body: JSON.stringify({ playerId, playerToken, answer: body?.answer, bet: sanitizeBet(body?.bet) }),
         }),
       );
     }
@@ -738,19 +738,22 @@ export class QuizRoom {
         if (!resp) return json({ error: 'No submitted open answer for this player.' }, 404);
 
         const maxPoints = Number(question.points || 1000);
-        const points = Math.round(clamp(pointsRaw, 0, maxPoints));
+        const rawPoints = Math.round(clamp(pointsRaw, 0, maxPoints));
+        const isCorrect = rawPoints > 0;
+        const adjustedPoints = applyBetScore(maxPoints, rawPoints, isCorrect, sanitizeBet(resp?.bet));
 
         const prev = Number(resp.pointsAwarded || 0);
-        resp.pointsAwarded = points;
-        resp.correct = points > 0;
+        resp.rawPoints = rawPoints;
+        resp.pointsAwarded = adjustedPoints;
+        resp.correct = isCorrect;
         resp.graded = true;
         resp.gradedAt = Date.now();
 
-        room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) - prev + points);
+        room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) - prev + adjustedPoints);
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
-        return json({ ok: true, playerId, pointsAwarded: points, score: room.players[playerId].score });
+        return json({ ok: true, playerId, pointsAwarded: adjustedPoints, score: room.players[playerId].score });
       }
 
       if (url.pathname === '/player/state' && request.method === 'POST') {
@@ -771,6 +774,7 @@ export class QuizRoom {
         const body = await safeJson(request);
         const playerId = sanitizeId(body?.playerId);
         const playerToken = String(body?.playerToken || '');
+        const bet = sanitizeBet(body?.bet);
 
         const player = room.players[playerId];
         if (!player || player.token !== playerToken) return json({ error: 'Unauthorized player.' }, 401);
@@ -806,6 +810,7 @@ export class QuizRoom {
           room.responsesByQuestion[qIndex][playerId] = {
             answer: String(body?.answer || '').slice(0, 220),
             correct: false,
+            bet,
             pointsAwarded: 0,
             graded: false,
             submittedAt: Date.now(),
@@ -821,15 +826,18 @@ export class QuizRoom {
             pointsAwarded = Math.round(basePoints * multiplier);
           }
 
+          pointsAwarded = applyBetScore(basePoints, pointsAwarded, verdict.correct, bet);
+
           room.responsesByQuestion[qIndex][playerId] = {
             answer: body?.answer,
             correct: verdict.correct,
+            bet,
             pointsAwarded,
             submittedAt: Date.now(),
           };
         }
 
-        room.players[playerId].score += pointsAwarded;
+        room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) + Math.round(pointsAwarded));
 
         const totalPlayers = Object.keys(room.players || {}).length;
         const answeredCount = Object.keys(room.responsesByQuestion[qIndex] || {}).length;
@@ -974,6 +982,7 @@ function playerState(room, playerId) {
           correct: !!myResponse.correct,
           pointsAwarded: Number(myResponse.pointsAwarded || 0),
           graded: !!myResponse.graded,
+          bet: sanitizeBet(myResponse.bet),
         }
       : null,
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
@@ -1421,6 +1430,27 @@ function sanitizeName(name) {
 function sanitizeReaction(emoji) {
   const value = String(emoji || '').trim();
   return ALLOWED_REACTIONS.has(value) ? value : '';
+}
+
+function sanitizeBet(value) {
+  const n = Number(value || 0);
+  return n === 1 || n === 2 || n === 3 ? n : 0;
+}
+
+function applyBetScore(questionPoints, baseAwarded, isCorrect, bet) {
+  const b = sanitizeBet(bet);
+  const qPoints = Math.max(0, Number(questionPoints || 0));
+  const base = Number(baseAwarded || 0);
+
+  if (!b) return Math.round(base);
+
+  if (isCorrect) {
+    const bonusRate = b === 1 ? 0.15 : (b === 2 ? 0.25 : 0.4);
+    return Math.round(base * (1 + bonusRate));
+  }
+
+  const penaltyRate = b === 1 ? 0.05 : (b === 2 ? 0.15 : 0.3);
+  return -Math.round(qPoints * penaltyRate);
 }
 
 function normalizeNameKey(name) {
