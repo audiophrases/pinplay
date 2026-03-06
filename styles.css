@@ -110,6 +110,24 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
+.context-gap-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  align-items: center;
+}
+
+.context-gap-word {
+  font-size: .98rem;
+}
+
+.context-gap-inline-input {
+  width: 84px;
+  min-width: 84px;
+  text-align: center;
+  border-radius: 999px;
+  padding: .3rem .5rem;
+}
 .btn.primary {
   border-color: var(--primary);
   background: var(--primary);

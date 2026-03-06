@@ -2055,14 +2055,7 @@ function renderJoinQuestion(question) {
 
       if (question.type === 'context_gap') {
       const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
-      for (let i = 0; i < count; i++) {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.maxLength = 20;
-        input.placeholder = `Blank ${i + 1}`;
-        input.dataset.joinGap = String(i);
-        joinAnswersEl.appendChild(input);
-      }
+      renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
     } else if (question.type === 'error_hunt') {
       const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
       const info = document.createElement('p');
@@ -2481,14 +2474,7 @@ function renderSoloQuestion() {
 
     if (q.type === 'context_gap') {
       const count = Math.max(2, Math.min(4, Number((q.gaps || []).filter(Boolean).length || 2)));
-      for (let i = 0; i < count; i++) {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.maxLength = 20;
-        input.placeholder = `Blank ${i + 1}`;
-        input.dataset.soloGap = String(i);
-        answersEl.appendChild(input);
-      }
+      renderInlineContextGapInputs(answersEl, q.prompt, count, 'soloGap');
     } else if (q.type === 'error_hunt') {
       const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
       const info = document.createElement('p');
@@ -3279,6 +3265,56 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   }
 
   return dp[source.length][target.length];
+}
+
+function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
+  const text = String(prompt || '').trim();
+  const markerRe = /^(_{2,}|\[\s*\])$/;
+  const parts = text ? text.split(/(\_{2,}|\[\s*\])/g).filter((x) => x !== '') : [];
+  const hasMarkers = parts.some((part) => markerRe.test(String(part).trim()));
+
+  const wrap = document.createElement('div');
+  wrap.className = 'context-gap-inline';
+  let blankIndex = 0;
+
+  const addBlank = () => {
+    if (blankIndex >= count) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 20;
+    input.placeholder = '____';
+    input.className = 'context-gap-inline-input';
+    input.dataset[datasetKey] = String(blankIndex);
+    input.readOnly = true;
+    input.addEventListener('click', () => {
+      input.readOnly = false;
+      input.focus();
+    });
+    input.addEventListener('focus', () => {
+      input.readOnly = false;
+    });
+    input.addEventListener('blur', () => {
+      if (!String(input.value || '').trim()) input.readOnly = true;
+    });
+    wrap.appendChild(input);
+    blankIndex += 1;
+  };
+
+  if (hasMarkers) {
+    parts.forEach((part) => {
+      if (markerRe.test(String(part).trim()) && blankIndex < count) {
+        addBlank();
+      } else if (String(part).trim()) {
+        const span = document.createElement('span');
+        span.className = 'context-gap-word';
+        span.textContent = part;
+        wrap.appendChild(span);
+      }
+    });
+  }
+
+  while (blankIndex < count) addBlank();
+  container.appendChild(wrap);
 }
 
 function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
