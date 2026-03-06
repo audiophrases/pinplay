@@ -670,9 +670,15 @@ function renderBuilder() {
 
     if (q.type === 'error_hunt') {
       specific += `
+        <div class="row gap top-space">
+          <div style="min-width:180px;">
+            <label>Tokens to correct</label>
+            <input data-q="${idx}" data-field="requiredErrors" type="number" min="1" max="12" value="${Number(q.requiredErrors || 1)}" />
+          </div>
+        </div>
         <label class="top-space">Corrected sentence (target)</label>
         <textarea data-q="${idx}" data-field="corrected" maxlength="160">${escapeHtml(q.corrected || '')}</textarea>
-        <p class="small">Students click wrong token(s), rewrite, and submit. Auto-graded against corrected sentence.</p>
+        <p class="small">Students must select exactly that many wrong tokens, then rewrite the full corrected sentence.</p>
       `;
     }
 
@@ -905,7 +911,9 @@ function syncQuizFromUI() {
 
     if (q.type === 'error_hunt') {
       const correctedEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
+      const requiredEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="requiredErrors"]`);
       q.corrected = String(correctedEl?.value || '').slice(0, 160);
+      q.requiredErrors = clamp(Number(requiredEl?.value || 1), 1, 12);
     }
 
     if (q.type === 'puzzle') {
@@ -2050,6 +2058,11 @@ function renderJoinQuestion(question) {
         joinAnswersEl.appendChild(input);
       }
     } else if (question.type === 'error_hunt') {
+      const info = document.createElement('p');
+      info.className = 'small';
+      info.textContent = `Find ${Math.max(1, Number(question.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      joinAnswersEl.appendChild(info);
+
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
@@ -2057,7 +2070,7 @@ function renderJoinQuestion(question) {
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'btn';
+        b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
         b.textContent = tok;
         b.addEventListener('click', () => b.classList.toggle('active'));
@@ -2253,6 +2266,8 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
+    const required = Math.max(1, Number(q.requiredErrors || 1));
+    if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
 
@@ -2456,6 +2471,11 @@ function renderSoloQuestion() {
         answersEl.appendChild(input);
       }
     } else if (q.type === 'error_hunt') {
+      const info = document.createElement('p');
+      info.className = 'small';
+      info.textContent = `Find ${Math.max(1, Number(q.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      answersEl.appendChild(info);
+
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
@@ -2463,7 +2483,7 @@ function renderSoloQuestion() {
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'btn';
+        b.className = 'btn error-token-chip';
         b.dataset.soloErrorToken = String(i);
         b.textContent = tok;
         b.addEventListener('click', () => b.classList.toggle('active'));
@@ -2643,6 +2663,9 @@ function evaluateSoloQuestion(q) {
   if (q.type === 'error_hunt') {
     const rewrite = String(document.getElementById('soloErrorRewrite')?.value || '').trim();
     if (!rewrite) return { correct: false, hint: 'Rewrite the sentence first.' };
+    const selected = [...answersEl.querySelectorAll('[data-solo-error-token].active')];
+    const required = Math.max(1, Number(q.requiredErrors || 1));
+    if (selected.length !== required) return { correct: false, hint: `Select exactly ${required} token(s).` };
     return { correct: normalizeTextAnswer(rewrite) === normalizeTextAnswer(q.corrected || ''), hint: `Corrected: ${q.corrected || ''}` };
   }
 
@@ -2884,6 +2907,7 @@ function makeErrorHuntQuestion() {
     type: 'error_hunt',
     prompt: 'She say that she go to school yesterday.',
     corrected: 'She said that she went to school yesterday.',
+    requiredErrors: 2,
     points: 1000,
     timeLimit: 45,
     audioEnabled: false,
@@ -3054,7 +3078,9 @@ function normalizeQuizForLive(raw) {
     if (q.type === 'error_hunt') {
       const corrected = String(q.corrected || '').slice(0, 160).trim();
       if (!corrected) return;
-      normalized.questions.push({ ...base, corrected });
+      const tokenCount = String(q.prompt || '').split(/\s+/).filter(Boolean).length;
+      const requiredErrors = clamp(Number(q.requiredErrors || 1), 1, Math.max(1, Math.min(12, tokenCount || 12)));
+      normalized.questions.push({ ...base, corrected, requiredErrors });
       return;
     }
 

@@ -1158,6 +1158,7 @@ function publicQuestion(question) {
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
+      requiredErrors: question.type === 'error_hunt' ? Math.max(1, Number(question.requiredErrors || 1)) : undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1265,6 +1266,10 @@ function evaluate(question, answer) {
   if (question.type === 'error_hunt') {
     const rewrite = normalizeTextAnswer(answer?.rewrite ?? answer);
     const expected = normalizeTextAnswer(question.corrected || '');
+    const selected = Array.isArray(answer?.selectedTokens) ? answer.selectedTokens.map((x) => Number(x)).filter(Number.isFinite) : [];
+    const required = Math.max(1, Number(question.requiredErrors || 1));
+    const uniqueCount = new Set(selected).size;
+    if (uniqueCount !== required) return { correct: false };
     return { correct: !!rewrite && rewrite === expected };
   }
 
@@ -1393,7 +1398,9 @@ function normalizeQuiz(quiz) {
     if (q.type === 'error_hunt') {
       const corrected = String(q.corrected || '').slice(0, 160).trim();
       if (!corrected) return;
-      normalized.questions.push({ ...base, corrected });
+      const tokenCount = String(q.prompt || '').split(/\s+/).filter(Boolean).length;
+      const requiredErrors = clamp(Number(q.requiredErrors || 1), 1, Math.max(1, Math.min(12, tokenCount || 12)));
+      normalized.questions.push({ ...base, corrected, requiredErrors });
       return;
     }
 

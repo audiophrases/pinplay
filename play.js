@@ -343,6 +343,11 @@ function renderJoinQuestion(question) {
         joinAnswersEl.appendChild(row);
       });
     } else if (question.type === 'error_hunt') {
+      const info = document.createElement('p');
+      info.className = 'small';
+      info.textContent = `Find ${Math.max(1, Number(question.requiredErrors || 1))} wrong token(s), then rewrite.`;
+      joinAnswersEl.appendChild(info);
+
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
@@ -350,7 +355,7 @@ function renderJoinQuestion(question) {
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'btn';
+        b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
         b.textContent = tok;
         b.addEventListener('click', () => b.classList.toggle('active'));
@@ -606,6 +611,8 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
+    const required = Math.max(1, Number(q.requiredErrors || 1));
+    if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
 
