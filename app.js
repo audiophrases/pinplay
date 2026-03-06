@@ -1654,12 +1654,15 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'puzzle') {
-    hostQuestionHintEl.textContent = 'Puzzle question.';
+    hostQuestionHintEl.textContent = showReveal && state.correctAnswer ? `Expected order: ${state.correctAnswer}` : 'Puzzle question.';
     if (question.options?.length) {
       const p = document.createElement('p');
       p.className = 'small';
       p.textContent = `Items: ${question.options.join(' • ')}`;
       hostQuestionAnswersEl.appendChild(p);
+    }
+    if (projectorCorrectEl) {
+      projectorCorrectEl.textContent = showReveal && state.correctAnswer ? `Correct order: ${state.correctAnswer}` : '';
     }
     return;
   }
@@ -3458,53 +3461,76 @@ function playQuestionAudio(question) {
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   container.innerHTML = '';
+
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'Drag pieces to reorder.';
+  hint.textContent = 'Click words in order to build the sentence. Right-click selected area to reset.';
   container.appendChild(hint);
 
-  const list = document.createElement('div');
-  list.className = 'answers-grid';
-  list.dataset.puzzleList = listId;
+  const bank = document.createElement('div');
+  bank.className = 'row gap';
+  bank.style.flexWrap = 'wrap';
 
-  const items = [...options];
-  let dragIndex = -1;
+  const selected = document.createElement('div');
+  selected.className = 'answers-grid top-space';
+  selected.dataset.puzzleList = listId;
 
-  items.forEach((text, index) => {
-    const item = document.createElement('div');
-    item.className = 'answer-row';
-    item.draggable = true;
-    item.dataset.puzzlePiece = String(text || '');
-    item.dataset.puzzleIndex = String(index);
-    item.style.cursor = 'grab';
-
-    const handle = document.createElement('strong');
-    handle.textContent = '?';
-    const label = document.createElement('span');
-    label.textContent = text;
-    item.append(handle, label);
-
-    item.addEventListener('dragstart', () => { dragIndex = index; item.style.opacity = '.5'; });
-    item.addEventListener('dragend', () => { item.style.opacity = '1'; dragIndex = -1; });
-    item.addEventListener('dragover', (e) => e.preventDefault());
-    item.addEventListener('drop', (e) => {
-      e.preventDefault();
-      const from = Number(dragIndex);
-      const to = Number(item.dataset.puzzleIndex);
-      if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
-      const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
-      const moved = arr[from];
-      const target = arr[to];
-      if (!moved || !target) return;
-      if (from < to) list.insertBefore(moved, target.nextSibling);
-      else list.insertBefore(moved, target);
-      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => { el.dataset.puzzleIndex = String(i); });
+  const refreshSelectedIndexes = () => {
+    [...selected.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
+      el.dataset.puzzleIndex = String(i);
     });
+  };
 
-    list.appendChild(item);
+  const resetSelection = () => {
+    const picked = [...selected.querySelectorAll('[data-puzzle-piece]')];
+    picked.forEach((el) => {
+      const value = String(el.dataset.puzzlePiece || '');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.dataset.puzzleBankPiece = value;
+      btn.textContent = value;
+      btn.addEventListener('click', () => pickPiece(btn));
+      bank.appendChild(btn);
+      el.remove();
+    });
+  };
+
+  selected.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    resetSelection();
   });
 
-  container.appendChild(list);
+  const pickPiece = (bankBtn) => {
+    const text = String(bankBtn.dataset.puzzleBankPiece || bankBtn.textContent || '').trim();
+    if (!text) return;
+
+    const row = document.createElement('div');
+    row.className = 'answer-row';
+    row.dataset.puzzlePiece = text;
+
+    const pos = document.createElement('strong');
+    pos.textContent = `${selected.querySelectorAll('[data-puzzle-piece]').length + 1}.`;
+    const label = document.createElement('span');
+    label.textContent = text;
+    row.append(pos, label);
+
+    selected.appendChild(row);
+    bankBtn.remove();
+    refreshSelectedIndexes();
+  };
+
+  [...options].forEach((text) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.dataset.puzzleBankPiece = String(text || '');
+    btn.textContent = String(text || '');
+    btn.addEventListener('click', () => pickPiece(btn));
+    bank.appendChild(btn);
+  });
+
+  container.append(bank, selected);
 }
 function speakText(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();

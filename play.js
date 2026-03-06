@@ -705,79 +705,73 @@ function renderLeaderboardInJoin(leaderboard) {
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'Touchscreen: tap piece then tap target.';
+  hint.textContent = 'Click words in order to build the sentence. Right-click selected area to reset.';
   container.appendChild(hint);
 
-  const list = document.createElement('div');
-  list.className = 'row gap';
-  list.style.flexWrap = 'wrap';
-  list.dataset.puzzleList = listId;
-  container.appendChild(list);
+  const bank = document.createElement('div');
+  bank.className = 'row gap';
+  bank.style.flexWrap = 'wrap';
 
-  let dragIndex = -1;
-  let touchFrom = -1;
+  const selected = document.createElement('div');
+  selected.className = 'answers-grid top-space';
+  selected.dataset.puzzleList = listId;
 
-  const refreshIndexes = () => {
-    [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
+  const refreshSelectedIndexes = () => {
+    [...selected.querySelectorAll('[data-puzzle-piece]')].forEach((el, i) => {
       el.dataset.puzzleIndex = String(i);
     });
   };
 
-  const movePiece = (from, to) => {
-    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
-    const arr = [...list.querySelectorAll('[data-puzzle-piece]')];
-    const moving = arr[from];
-    const target = arr[to];
-    if (!moving || !target) return;
-
-    if (from < to) list.insertBefore(moving, target.nextSibling);
-    else list.insertBefore(moving, target);
-    refreshIndexes();
+  const resetSelection = () => {
+    const picked = [...selected.querySelectorAll('[data-puzzle-piece]')];
+    picked.forEach((el) => {
+      const value = String(el.dataset.puzzlePiece || '');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.dataset.puzzleBankPiece = value;
+      btn.textContent = value;
+      btn.addEventListener('click', () => pickPiece(btn));
+      bank.appendChild(btn);
+      el.remove();
+    });
   };
 
-  options.forEach((text, index) => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'btn';
-    item.style.cursor = 'grab';
-    item.draggable = true;
-    item.dataset.puzzlePiece = String(text || '');
-    item.dataset.puzzleIndex = String(index);
-    item.textContent = String(text || '');
-
-    item.addEventListener('dragstart', () => {
-      dragIndex = Number(item.dataset.puzzleIndex);
-      item.style.opacity = '.5';
-    });
-    item.addEventListener('dragend', () => {
-      item.style.opacity = '1';
-      dragIndex = -1;
-    });
-    item.addEventListener('dragover', (e) => e.preventDefault());
-    item.addEventListener('drop', (e) => {
-      e.preventDefault();
-      movePiece(Number(dragIndex), Number(item.dataset.puzzleIndex));
-    });
-
-    item.addEventListener('click', () => {
-      const idx = Number(item.dataset.puzzleIndex);
-      if (touchFrom < 0) {
-        touchFrom = idx;
-        item.style.outline = '2px solid #3b82f6';
-        item.style.outlineOffset = '2px';
-        return;
-      }
-
-      movePiece(touchFrom, idx);
-      [...list.querySelectorAll('[data-puzzle-piece]')].forEach((el) => {
-        el.style.outline = '';
-        el.style.outlineOffset = '';
-      });
-      touchFrom = -1;
-    });
-
-    list.appendChild(item);
+  selected.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    resetSelection();
   });
+
+  const pickPiece = (bankBtn) => {
+    const text = String(bankBtn.dataset.puzzleBankPiece || bankBtn.textContent || '').trim();
+    if (!text) return;
+
+    const row = document.createElement('div');
+    row.className = 'answer-row';
+    row.dataset.puzzlePiece = text;
+
+    const pos = document.createElement('strong');
+    pos.textContent = `${selected.querySelectorAll('[data-puzzle-piece]').length + 1}.`;
+    const label = document.createElement('span');
+    label.textContent = text;
+    row.append(pos, label);
+
+    selected.appendChild(row);
+    bankBtn.remove();
+    refreshSelectedIndexes();
+  };
+
+  options.forEach((text) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.dataset.puzzleBankPiece = String(text || '');
+    btn.textContent = String(text || '');
+    btn.addEventListener('click', () => pickPiece(btn));
+    bank.appendChild(btn);
+  });
+
+  container.append(bank, selected);
 }
 
 async function api(path, opts = {}) {
