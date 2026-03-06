@@ -107,7 +107,8 @@ const lobbyCard = document.getElementById('lobbyCard');
 const gameCard = document.getElementById('gameCard');
 const resultCard = document.getElementById('resultCard');
 
-let quiz = loadQuiz() || createEmptyQuiz();
+const shouldAutoloadQuiz = !window.location.pathname.includes('/create/');
+let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQuiz();
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
@@ -377,6 +378,16 @@ function bindBuilderEvents() {
       return;
     }
 
+    const toggleHeader = e.target.closest('[data-toggle-question-header]');
+    if (toggleHeader) {
+      const idx = Number(toggleHeader.dataset.toggleQuestionHeader);
+      if (quiz.questions[idx]) {
+        quiz.questions[idx].collapsed = !quiz.questions[idx].collapsed;
+        renderBuilder();
+      }
+      return;
+    }
+
     const removeBtn = e.target.closest('[data-remove-question]');
     if (removeBtn) {
       const idx = Number(removeBtn.dataset.removeQuestion);
@@ -410,7 +421,9 @@ function bindBuilderEvents() {
   });
 
   questionListEl.addEventListener('dragstart', (e) => {
-    const item = e.target.closest('.question-item');
+    const handle = e.target.closest('[data-drag-question]');
+    if (!handle) return;
+    const item = handle.closest('.question-item');
     if (!item) return;
     dragQuestionIndex = Number(item.dataset.questionIndex);
     item.classList.add('dragging');
@@ -536,7 +549,7 @@ function renderBuilder() {
     wrap.className = 'question-item';
 
     const common = `
-      <div class="question-header">
+      <div class="question-header" data-toggle-question-header="${idx}" data-drag-question="${idx}" draggable="true" title="Click to collapse/expand · Drag header to reorder">
         <strong>Q${idx + 1} · ${labelForType(q.type)}</strong>
         <div class="question-actions">
           <button class="btn" data-move-up-question="${idx}" title="Move up">↑</button>
@@ -772,7 +785,6 @@ function renderBuilder() {
 
     wrap.innerHTML = common + specific + '</div>';
     wrap.dataset.questionIndex = String(idx);
-    wrap.draggable = true;
     questionListEl.appendChild(wrap);
   });
 
@@ -816,8 +828,8 @@ function buildAudioSettingsMarkup(idx, q) {
           <input data-audio-upload="${idx}" type="file" accept="audio/*" />
         </div>
       </div>
-      <label class="top-space">Text to read aloud (max 120 chars)</label>
-      <input data-q="${idx}" data-field="audioText" maxlength="120" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <label class="top-space">Text to read aloud (max 1000 chars)</label>
+      <input data-q="${idx}" data-field="audioText" maxlength="1000" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
       <label>Language code (e.g. en-US, en-US-Wave)</label>
       <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(lang)}" />
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
@@ -874,7 +886,7 @@ function syncQuizFromUI() {
 
       q.audioEnabled = !!audioEnabledEl?.checked || q.type === 'audio';
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
-      q.audioText = String(audioTextEl?.value || '').slice(0, 120);
+      q.audioText = String(audioTextEl?.value || '').slice(0, 1000);
       q.language = String(languageEl?.value || 'en-US-Wave').slice(0, 32) || 'en-US-Wave';
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
     }
@@ -3018,7 +3030,7 @@ function normalizeQuizForLive(raw) {
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      audioText: String(q.audioText || '').slice(0, 120),
+      audioText: String(q.audioText || '').slice(0, 1000),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
     };
@@ -3423,7 +3435,6 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
-
 
 
 
