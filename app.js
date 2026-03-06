@@ -33,6 +33,7 @@ const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
 const importInput = document.getElementById('importInput');
+const collapseAllBtn = document.getElementById('collapseAllBtn');
 
 // Create-side auth
 const createAuthCard = document.getElementById('createAuthCard');
@@ -106,6 +107,7 @@ const resultCard = document.getElementById('resultCard');
 
 let quiz = loadQuiz() || createEmptyQuiz();
 let soloGame = null;
+let pendingScrollQuestionIndex = null;
 
 const live = {
   host: {
@@ -206,98 +208,88 @@ function bindTabs() {
 }
 
 // ---------- Builder ----------
+function addQuestionToBuilder(question) {
+  quiz.questions.push(question);
+  pendingScrollQuestionIndex = quiz.questions.length - 1;
+  renderBuilder();
+}
+
 function bindBuilderEvents() {
   addMcqBtn.addEventListener('click', () => {
-    quiz.questions.push(makeMcqQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makeMcqQuestion());
   });
   if (addMcqAudioBtn) {
     addMcqAudioBtn.addEventListener('click', () => {
-      quiz.questions.push(makeMcqQuestion({ withAudio: true }));
-      renderBuilder();
+      addQuestionToBuilder(makeMcqQuestion({ withAudio: true }));
     });
   }
 
   addMultiBtn.addEventListener('click', () => {
-    quiz.questions.push(makeMultiQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makeMultiQuestion());
   });
   if (addMultiAudioBtn) {
     addMultiAudioBtn.addEventListener('click', () => {
-      quiz.questions.push(makeMultiQuestion({ withAudio: true }));
-      renderBuilder();
+      addQuestionToBuilder(makeMultiQuestion({ withAudio: true }));
     });
   }
 
   addTfBtn.addEventListener('click', () => {
-    quiz.questions.push(makeTfQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makeTfQuestion());
   });
   if (addTfAudioBtn) {
     addTfAudioBtn.addEventListener('click', () => {
-      quiz.questions.push(makeTfQuestion({ withAudio: true }));
-      renderBuilder();
+      addQuestionToBuilder(makeTfQuestion({ withAudio: true }));
     });
   }
 
   addTextBtn.addEventListener('click', () => {
-    quiz.questions.push(makeTextQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makeTextQuestion());
   });
   if (addTextAudioBtn) {
     addTextAudioBtn.addEventListener('click', () => {
-      quiz.questions.push(makeTextQuestion({ withAudio: true }));
-      renderBuilder();
+      addQuestionToBuilder(makeTextQuestion({ withAudio: true }));
     });
   }
 
   if (addOpenBtn) {
     addOpenBtn.addEventListener('click', () => {
-      quiz.questions.push(makeOpenQuestion());
-      renderBuilder();
+      addQuestionToBuilder(makeOpenQuestion());
     });
   }
 
   if (addImageOpenBtn) {
     addImageOpenBtn.addEventListener('click', () => {
-      quiz.questions.push(makeImageOpenQuestion());
-      renderBuilder();
+      addQuestionToBuilder(makeImageOpenQuestion());
     });
   }
 
   if (addContextGapBtn) {
     addContextGapBtn.addEventListener('click', () => {
-      quiz.questions.push(makeContextGapQuestion());
-      renderBuilder();
+      addQuestionToBuilder(makeContextGapQuestion());
     });
   }
 
   if (addMatchPairsBtn) {
     addMatchPairsBtn.addEventListener('click', () => {
-      quiz.questions.push(makeMatchPairsQuestion());
-      renderBuilder();
+      addQuestionToBuilder(makeMatchPairsQuestion());
     });
   }
 
   addPuzzleBtn.addEventListener('click', () => {
-    quiz.questions.push(makePuzzleQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makePuzzleQuestion());
   });
   if (addPuzzleAudioBtn) {
     addPuzzleAudioBtn.addEventListener('click', () => {
-      quiz.questions.push(makePuzzleQuestion({ withAudio: true }));
-      renderBuilder();
+      addQuestionToBuilder(makePuzzleQuestion({ withAudio: true }));
     });
   }
 
   addSliderBtn.addEventListener('click', () => {
-    quiz.questions.push(makeSliderQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makeSliderQuestion());
   });
 
   addPinBtn.addEventListener('click', () => {
-    quiz.questions.push(makePinQuestion());
-    renderBuilder();
+    addQuestionToBuilder(makePinQuestion());
   });
 
   saveBtn.addEventListener('click', () => {
@@ -336,7 +328,46 @@ function bindBuilderEvents() {
     importInput.value = '';
   });
 
+  if (collapseAllBtn) {
+    collapseAllBtn.addEventListener('click', () => {
+      const shouldCollapse = quiz.questions.some((q) => !q.collapsed);
+      quiz.questions.forEach((q) => { q.collapsed = shouldCollapse; });
+      collapseAllBtn.textContent = shouldCollapse ? 'Expand all' : 'Collapse all';
+      renderBuilder();
+    });
+  }
+
   questionListEl.addEventListener('click', async (e) => {
+    const moveUpBtn = e.target.closest('[data-move-up-question]');
+    if (moveUpBtn) {
+      const idx = Number(moveUpBtn.dataset.moveUpQuestion);
+      if (idx > 0) {
+        [quiz.questions[idx - 1], quiz.questions[idx]] = [quiz.questions[idx], quiz.questions[idx - 1]];
+        renderBuilder();
+      }
+      return;
+    }
+
+    const moveDownBtn = e.target.closest('[data-move-down-question]');
+    if (moveDownBtn) {
+      const idx = Number(moveDownBtn.dataset.moveDownQuestion);
+      if (idx >= 0 && idx < quiz.questions.length - 1) {
+        [quiz.questions[idx], quiz.questions[idx + 1]] = [quiz.questions[idx + 1], quiz.questions[idx]];
+        renderBuilder();
+      }
+      return;
+    }
+
+    const toggleBtn = e.target.closest('[data-toggle-question]');
+    if (toggleBtn) {
+      const idx = Number(toggleBtn.dataset.toggleQuestion);
+      if (quiz.questions[idx]) {
+        quiz.questions[idx].collapsed = !quiz.questions[idx].collapsed;
+        renderBuilder();
+      }
+      return;
+    }
+
     const removeBtn = e.target.closest('[data-remove-question]');
     if (removeBtn) {
       const idx = Number(removeBtn.dataset.removeQuestion);
@@ -458,8 +489,14 @@ function renderBuilder() {
     const common = `
       <div class="question-header">
         <strong>Q${idx + 1} · ${labelForType(q.type)}</strong>
-        <button class="btn" data-remove-question="${idx}">Remove</button>
+        <div class="question-actions">
+          <button class="btn" data-move-up-question="${idx}" title="Move up">↑</button>
+          <button class="btn" data-move-down-question="${idx}" title="Move down">↓</button>
+          <button class="btn" data-toggle-question="${idx}">${q.collapsed ? 'Expand' : 'Collapse'}</button>
+          <button class="btn" data-remove-question="${idx}">Remove</button>
+        </div>
       </div>
+      <div class="${q.collapsed ? 'question-body-collapsed' : ''}">
       <label>Question (max 120 chars)</label>
       <textarea data-q="${idx}" data-field="prompt" maxlength="120">${escapeHtml(q.prompt || '')}</textarea>
       <div class="row gap top-space">
@@ -670,7 +707,8 @@ function renderBuilder() {
       specific += buildAudioSettingsMarkup(idx, q);
     }
 
-    wrap.innerHTML = common + specific;
+    wrap.innerHTML = common + specific + '</div>';
+    wrap.dataset.questionIndex = String(idx);
     questionListEl.appendChild(wrap);
   });
 
@@ -678,6 +716,17 @@ function renderBuilder() {
     el.addEventListener('input', syncQuizFromUI);
     el.addEventListener('change', syncQuizFromUI);
   });
+
+  if (collapseAllBtn) {
+    const allCollapsed = quiz.questions.length > 0 && quiz.questions.every((q) => !!q.collapsed);
+    collapseAllBtn.textContent = allCollapsed ? 'Expand all' : 'Collapse all';
+  }
+
+  if (pendingScrollQuestionIndex != null) {
+    const target = questionListEl.querySelector(`[data-question-index="${pendingScrollQuestionIndex}"]`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    pendingScrollQuestionIndex = null;
+  }
 }
 
 function buildAudioSettingsMarkup(idx, q) {
@@ -3157,6 +3206,7 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
 
 
 

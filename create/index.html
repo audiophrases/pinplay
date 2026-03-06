@@ -25,7 +25,7 @@
         </div>
 
         <div id="createWorkspace" class="hidden">
-          <div class="card">
+          <div class="card" id="builderCard">
             <h2>Quiz builder</h2>
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
@@ -60,6 +60,10 @@
             </div>
 
             <!-- Audio options are now inside each question type card -->
+
+            <div class="row gap top-space">
+              <button id="collapseAllBtn" class="btn">Collapse all</button>
+            </div>
 
             <div id="questionList" class="question-list"></div>
 

@@ -89,9 +89,20 @@ textarea { min-height: 72px; resize: vertical; }
   line-height: 1;
 }
 
+#createWorkspace {
+  display: flex;
+  flex-direction: column;
+}
+
+#hostCard { order: 1; }
+#builderCard { order: 2; }
+#hostQuestionCard { order: 3; }
+
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
 .question-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; }
+.question-actions { display: inline-flex; gap: .35rem; flex-wrap: wrap; }
+.question-body-collapsed { display: none; }
 .small { font-size: .85rem; color: var(--muted); }
 .small.ok { color: var(--ok); }
 .small.bad { color: var(--bad); }
