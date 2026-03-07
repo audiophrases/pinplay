@@ -157,6 +157,7 @@ const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
   answering: createAudio('../music/answering.mp3', { loop: true, volume: 0.7 }),
   answered: createAudio('../music/answered.mp3', { loop: false, volume: 1 }),
+  final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
 
 init();
@@ -1623,7 +1624,7 @@ function renderHostState(state) {
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
 
-  if (projectorAnswersEl) projectorAnswersEl.textContent = `Answers: ${state.responseCount} / ${state.playerCount}`;
+  if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
   if (projectorScoresEl) renderProjectorScores(state.players || []);
 
   if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
@@ -1725,6 +1726,12 @@ function renderHostState(state) {
 
   if (state.phase !== 'question' || state.questionClosed) {
     stopFx('answering');
+  }
+
+  if (state.phase === 'results' && live.host.lastPhase !== 'results') {
+    stopFx('answering');
+    stopFx('answered');
+    playFx('final');
   }
 
   if (revealKey && live.host.lastRevealKey !== revealKey) {
@@ -1898,7 +1905,7 @@ function renderHostQuestion(state) {
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
     hostQuestionHintEl.textContent =
-      phase === 'results' ? 'Game finished. Final ranking shown above.' : 'Question will appear here when game starts.';
+      phase === 'results' ? '🏁 Game finished! Final ranking shown below.' : 'Question will appear here when game starts.';
     return;
   }
 
@@ -2123,7 +2130,10 @@ function renderProjectorScores(players) {
 
   players.slice(0, 10).forEach((p, i) => {
     const li = document.createElement('li');
-    li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
+    const medals = ['🥇','🥈','🥉'];
+    const prefix = medals[i] || '🏅';
+    li.textContent = `${prefix} ${i + 1}. ${p.name} - ${p.score} pts`;
+    li.classList.add('projector-score-item', `rank-${Math.min(i + 1, 4)}`);
     projectorScoresEl.appendChild(li);
   });
 }
@@ -2171,7 +2181,7 @@ function updateHostTimer(state) {
     live.host.timerAnchorAtMs = null;
     live.host.timerInitialRemainingMs = null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = 'Time: -';
+    projectorTimerEl.textContent = '⏱️ Time: -';
     setHostTimerBar(0, 1, false);
     return;
   }
@@ -2185,7 +2195,7 @@ function updateHostTimer(state) {
     live.host.timerForIndex = Number(state.currentIndex || 0);
     live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = hasTimeLimit ? 'Time: 0s' : 'Time: No limit';
+    projectorTimerEl.textContent = hasTimeLimit ? '⏱️ Time: 0s' : '⏱️ Time: No limit';
     setHostTimerBar(0, limitSec || 1, false);
     return;
   }
@@ -2195,7 +2205,7 @@ function updateHostTimer(state) {
     live.host.timerForIndex = Number(state.currentIndex || 0);
     live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = 'Time: No limit';
+    projectorTimerEl.textContent = '⏱️ Time: No limit';
     setHostTimerBar(0, 1, false);
     return;
   }
@@ -2220,7 +2230,7 @@ function updateHostTimer(state) {
 
   const deadlineMs = Number(live.host.timerDeadlineMs || 0);
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
-    projectorTimerEl.textContent = `Time: ${limitSec}s`;
+    projectorTimerEl.textContent = `⏱️ Time: ${limitSec}s`;
     setHostTimerBar(limitSec, limitSec, true);
     return;
   }
@@ -2229,7 +2239,7 @@ function updateHostTimer(state) {
   const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
-  projectorTimerEl.textContent = `Time: ${remaining}s`;
+  projectorTimerEl.textContent = `⏱️ Time: ${remaining}s`;
   setHostTimerBar(remainingMs / 1000, limitSec, true);
   startHostTimerTicker();
 }
@@ -2246,7 +2256,7 @@ function startHostTimerTicker() {
     const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const remaining = Math.ceil(remainingMs / 1000);
-    projectorTimerEl.textContent = `Time: ${remaining}s`;
+    projectorTimerEl.textContent = `⏱️ Time: ${remaining}s`;
 
     if (hostTimerBarFill) {
       const pct = Math.max(0, Math.min(100, (remainingMs / capMs) * 100));
@@ -2277,7 +2287,7 @@ function toggleProjectorFullscreen() {
 
 function syncFullscreenButtonLabel() {
   if (!projectorFullscreenBtn) return;
-  projectorFullscreenBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+  projectorFullscreenBtn.textContent = document.fullscreenElement ? '🗗 Exit fullscreen' : '🖥️ Fullscreen';
 }
 
 function updateHallScene(state) {
