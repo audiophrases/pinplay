@@ -318,18 +318,14 @@ function bindBuilderEvents() {
     saveQuiz(quiz);
 
     const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
-    const suggested = `${fallback} (${new Date().toLocaleString()})`;
-    const name = prompt('Local save name:', suggested);
-    if (name !== null) {
-      saveQuizToLibrary(name, quiz);
-      alert('Saved locally ✅');
-    } else {
-      alert('Saved latest snapshot locally ✅');
-    }
+    const autoName = `${fallback} (${new Date().toLocaleString()})`;
+    const saved = saveQuizToLibrary(autoName, quiz);
+    setStatus(hostStatusEl, `Saved locally: ${saved.name}`, 'ok');
+    openLocalLibraryDialog({ highlightId: saved.id });
   });
 
   if (openLocalBtn) {
-    openLocalBtn.addEventListener('click', openLocalLibraryDialog);
+    openLocalBtn.addEventListener('click', () => openLocalLibraryDialog());
   }
 
   exportBtn.addEventListener('click', () => {
@@ -342,7 +338,7 @@ function bindBuilderEvents() {
   }
 
   if (openDriveBtn) {
-    openDriveBtn.addEventListener('click', openQuizFromDrive);
+    openDriveBtn.addEventListener('click', () => openQuizFromDrive());
   }
 
   // delete actions are integrated into open dialogs
@@ -1025,32 +1021,16 @@ async function publishQuizToDrive() {
     });
 
     const fileName = data?.file?.name || 'quiz.json';
-    const fileUrl = data?.file?.webViewLink || data?.file?.url || '';
-    const folderUrl = data?.folder?.webViewLink || data?.folder?.url || '';
-
-    if (fileUrl) {
-      setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
-      if (confirm(`Published to Drive: ${fileName}\n\nOpen file now?`)) {
-        window.open(fileUrl, '_blank', 'noopener');
-      }
-      return;
-    }
-
-    if (folderUrl) {
-      setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
-      if (confirm(`Published to Drive.\n\nOpen folder now?`)) {
-        window.open(folderUrl, '_blank', 'noopener');
-      }
-      return;
-    }
+    const fileId = data?.file?.id || null;
 
     setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
+    await openQuizFromDrive({ highlightId: fileId });
   } catch (err) {
     setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
   }
 }
 
-function showQuizManagerDialog({ title, items, onOpen, onDelete }) {
+function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
 
@@ -1079,6 +1059,9 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete }) {
     items.forEach((item) => {
       const row = document.createElement('div');
       row.className = 'dialog-row';
+      if (highlightId && String(item.id || '') === String(highlightId)) {
+        row.classList.add('recent');
+      }
 
       const openBtn = document.createElement('button');
       openBtn.className = 'btn dialog-open';
@@ -1112,7 +1095,7 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete }) {
   document.body.appendChild(overlay);
 }
 
-function openLocalLibraryDialog() {
+function openLocalLibraryDialog(opts = {}) {
   const items = loadQuizLibrary().slice().reverse();
   showQuizManagerDialog({
     title: 'Local quizzes',
@@ -1134,10 +1117,11 @@ function openLocalLibraryDialog() {
       saveQuizLibrary(next);
       setStatus(hostStatusEl, `Deleted local save: ${item.raw.name}`, 'ok');
     },
+    highlightId: opts.highlightId || null,
   });
 }
 
-async function openQuizFromDrive() {
+async function openQuizFromDrive(opts = {}) {
   try {
     const list = await api('/api/drive/list', { method: 'GET' });
     const files = Array.isArray(list?.files) ? list.files : [];
@@ -1162,6 +1146,7 @@ async function openQuizFromDrive() {
         });
         setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
       },
+      highlightId: opts.highlightId || null,
     });
   } catch (err) {
     setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
