@@ -134,6 +134,7 @@ wrangler deploy
 After that, Teacher Create supports:
 - **Publish to Drive** (save current quiz JSON)
 - **Open from Drive** (list recent JSON files and load one into builder)
+- **Delete from Drive** (trash unwanted quiz files from the picker dialog)
 
 > If you update `drive-bridge.gs`, redeploy the Apps Script Web App so new endpoints are active.
 

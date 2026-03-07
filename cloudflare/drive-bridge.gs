@@ -82,6 +82,22 @@ function doGet(e) {
       });
     }
 
+    if (action === 'delete') {
+      const fileId = String((e && e.parameter && e.parameter.fileId) || '').trim();
+      if (!fileId) return jsonOut({ error: 'fileId required.' });
+
+      const file = DriveApp.getFileById(fileId);
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      if (!isFileInFolder(file, folder)) {
+        return jsonOut({ error: 'File is not in configured folder.' });
+      }
+
+      const info = driveFileInfo(file);
+      file.setTrashed(true);
+
+      return jsonOut({ ok: true, deleted: true, file: info, folder: driveFolderInfo(folder) });
+    }
+
     return jsonOut({ error: 'Unknown action.' });
   } catch (err) {
     return jsonOut({ error: `Drive bridge failed: ${err.message}` });
@@ -90,6 +106,16 @@ function doGet(e) {
 
 function isAuthorized(secret) {
   return String(secret || '') === String(SHARED_SECRET || '');
+}
+
+function isFileInFolder(file, folder) {
+  const parents = file.getParents();
+  const folderId = folder.getId();
+  while (parents.hasNext()) {
+    const p = parents.next();
+    if (p.getId() === folderId) return true;
+  }
+  return false;
 }
 
 function driveFileInfo(file) {
