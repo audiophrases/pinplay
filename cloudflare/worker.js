@@ -1389,7 +1389,7 @@ function evaluate(question, answer) {
 function normalizeQuiz(quiz) {
   const normalized = {
     version: 1,
-    title: String(quiz.title || '').slice(0, 120),
+    title: String(quiz.title || '').slice(0, 1000),
     questions: [],
   };
 
@@ -1397,13 +1397,13 @@ function normalizeQuiz(quiz) {
     const base = {
       id: String(q.id || randomId('q_')),
       type: q.type,
-      prompt: String(q.prompt || '').slice(0, 120),
+      prompt: String(q.prompt || '').slice(0, 1000),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      audioText: String(q.audioText || '').slice(0, 120),
+      audioText: String(q.audioText || '').slice(0, 1000),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
@@ -1450,7 +1450,7 @@ function normalizeQuiz(quiz) {
     if (q.type === 'text') {
       normalized.questions.push({
         ...base,
-        accepted: (q.accepted || []).slice(0, 4).map((x) => String(x || '').slice(0, 20)),
+        accepted: (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120)),
       });
       return;
     }
@@ -1467,7 +1467,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 20)).filter(Boolean).slice(0, 4);
+      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 4);
       if (gaps.length < 2) return;
       normalized.questions.push({ ...base, gaps });
       return;

@@ -564,8 +564,8 @@ function renderBuilder() {
         </div>
       </div>
       <div class="${q.collapsed ? 'question-body-collapsed' : ''}">
-      <label>Question (max 120 chars)</label>
-      <textarea data-q="${idx}" data-field="prompt" maxlength="120">${escapeHtml(q.prompt || '')}</textarea>
+      <label>Question (max 1000 chars)</label>
+      <textarea data-q="${idx}" data-field="prompt" maxlength="1000">${escapeHtml(q.prompt || '')}</textarea>
       <div class="row gap top-space">
         <div style="min-width:120px;">
           <label>Points</label>
@@ -618,14 +618,16 @@ function renderBuilder() {
     }
 
     if (q.type === 'text') {
-      const accepted = q.accepted || ['', '', '', ''];
+      const accepted = Array.isArray(q.accepted) ? [...q.accepted] : [];
+      while (accepted.length < 20) accepted.push('');
       specific += `
-        <label class="top-space">Accepted answers (1-4, max 20 chars each)</label>
+        <label class="top-space">Accepted answers (1-20, max 120 chars each)</label>
         <div class="answers-grid">
           ${accepted
+            .slice(0, 20)
             .map(
               (ans, aIdx) => `
-            <input data-q="${idx}" data-accepted-index="${aIdx}" maxlength="20" value="${escapeHtml(ans || '')}" placeholder="Accepted answer ${aIdx + 1}" />
+            <input data-q="${idx}" data-accepted-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Accepted answer ${aIdx + 1}" />
           `,
             )
             .join('')}
@@ -854,7 +856,7 @@ function syncQuizFromUI() {
     const timeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
     const pollEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
 
-    if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 120);
+    if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 1000);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
@@ -902,9 +904,9 @@ function syncQuizFromUI() {
 
     if (q.type === 'text') {
       const accepted = [];
-      for (let aIdx = 0; aIdx < 4; aIdx++) {
+      for (let aIdx = 0; aIdx < 20; aIdx++) {
         const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-accepted-index="${aIdx}"]`);
-        accepted.push(String(aEl?.value || '').slice(0, 20));
+        accepted.push(String(aEl?.value || '').slice(0, 120));
       }
       q.accepted = accepted;
     }
@@ -3253,7 +3255,7 @@ function makePinQuestion() {
 function normalizeQuizForLive(raw) {
   const normalized = {
     version: 1,
-    title: String(raw.title || '').slice(0, 120),
+    title: String(raw.title || '').slice(0, 1000),
     questions: [],
   };
 
@@ -3261,7 +3263,7 @@ function normalizeQuizForLive(raw) {
     const base = {
       id: String(q.id || crypto.randomUUID()),
       type: q.type,
-      prompt: String(q.prompt || '').slice(0, 120),
+      prompt: String(q.prompt || '').slice(0, 1000),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
@@ -3312,7 +3314,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'text') {
-      const accepted = (q.accepted || []).map((x) => String(x || '').slice(0, 20));
+      const accepted = (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120));
       normalized.questions.push({ ...base, accepted });
       return;
     }
