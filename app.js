@@ -67,6 +67,7 @@ const hostQuestionAnswersEl = document.getElementById('hostQuestionAnswers');
 const hostQuestionHintEl = document.getElementById('hostQuestionHint');
 const randomNamesToggleEl = document.getElementById('randomNamesToggle');
 const hallCardEl = document.getElementById('hallCard');
+const hostQuestionCardEl = document.getElementById('hostQuestionCard');
 const livePinBigEl = document.getElementById('livePinBig');
 const hallHintEl = document.getElementById('hallHint');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
@@ -112,6 +113,8 @@ let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQ
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
+
+const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
 const live = {
   host: {
@@ -1755,14 +1758,26 @@ function renderReactionPop(reactions) {
 function updateHostTimer(state) {
   if (!projectorTimerEl) return;
 
+  const setHostTimerBar = (remainingSec, limitSec, active = true) => {
+    if (!hostTimerBarFill) return;
+    const limit = Math.max(1, Number(limitSec || 1));
+    const remaining = Math.max(0, Number(remainingSec || 0));
+    const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+    hostTimerBarFill.style.width = `${pct}%`;
+    hostTimerBarFill.parentElement?.classList.toggle('active', !!active && pct > 0);
+  };
+
   if (state.phase !== 'question' || !state.question) {
     live.host.timerDeadlineMs = null;
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     stopHostTimerTicker();
     projectorTimerEl.textContent = 'Time: -';
+    setHostTimerBar(0, 1, false);
     return;
   }
+
+  const limitSec = Math.max(1, Number(state.question.timeLimit || 20));
 
   if (state.questionClosed) {
     live.host.timerDeadlineMs = null;
@@ -1770,11 +1785,11 @@ function updateHostTimer(state) {
     live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
     stopHostTimerTicker();
     projectorTimerEl.textContent = 'Time: 0s';
+    setHostTimerBar(0, limitSec, true);
     return;
   }
 
   const questionIndex = Number(state.currentIndex || 0);
-  const limitSec = Math.max(1, Number(state.question.timeLimit || 20));
   const startedAt = Number(state.questionStartedAt || Date.now());
 
   const deadlineFromState = Number(state.questionDeadlineAt || 0);
@@ -1793,6 +1808,7 @@ function updateHostTimer(state) {
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
+  setHostTimerBar(remainingMs / 1000, limitSec, true);
 }
 
 function startHostTimerTicker() {
@@ -1818,6 +1834,11 @@ function startHostTimerTicker() {
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const remaining = Math.ceil(remainingMs / 1000);
     projectorTimerEl.textContent = `Time: ${remaining}s`;
+    if (hostTimerBarFill) {
+      const pct = Math.max(0, Math.min(100, (remainingMs / capMs) * 100));
+      hostTimerBarFill.style.width = `${pct}%`;
+      hostTimerBarFill.parentElement?.classList.toggle('active', pct > 0);
+    }
   }, 250);
 }
 
@@ -3344,6 +3365,21 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
       input.addEventListener('blur', () => finish(true), { once: true });
     });
   });
+}
+
+function ensureTimerProgressBar(cardEl, id) {
+  if (!cardEl) return null;
+  let bar = cardEl.querySelector(`[data-timer-bar="${id}"]`);
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'timer-progress-bar';
+    bar.dataset.timerBar = id;
+    const fill = document.createElement('div');
+    fill.className = 'timer-progress-fill';
+    bar.appendChild(fill);
+    cardEl.prepend(bar);
+  }
+  return bar.querySelector('.timer-progress-fill');
 }
 
 function normalizeBackendUrl(url) {

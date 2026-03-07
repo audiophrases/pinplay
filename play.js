@@ -22,6 +22,8 @@ const joinPromptEl = document.getElementById('joinPrompt');
 const joinAnswersEl = document.getElementById('joinAnswers');
 const joinSubmitBtn = document.getElementById('joinSubmitBtn');
 const joinFeedbackEl = document.getElementById('joinFeedback');
+const joinCardEl = document.getElementById('joinCard');
+const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
 const live = {
   player: {
@@ -634,6 +636,15 @@ function stopPlayerPolling() {
 function startJoinTimer(state) {
   if (!joinTimerEl) return;
 
+  const setJoinTimerBar = (remainingSec, limitSec, active = true) => {
+    if (!joinTimerBarFill) return;
+    const limit = Math.max(1, Number(limitSec || 1));
+    const remaining = Math.max(0, Number(remainingSec || 0));
+    const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+    joinTimerBarFill.style.width = `${pct}%`;
+    joinTimerBarFill.parentElement?.classList.toggle('active', !!active && pct > 0);
+  };
+
   const startedAt = Number(state?.questionStartedAt || Date.now());
   const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
 
@@ -649,6 +660,7 @@ function startJoinTimer(state) {
     const remainingMs = Math.max(0, startedAt + limitSec * 1000 - Date.now());
     const sec = Math.ceil(remainingMs / 1000);
     joinTimerEl.textContent = `Time: ${sec}s`;
+    setJoinTimerBar(remainingMs / 1000, limitSec, true);
   };
 
   paint();
@@ -658,6 +670,10 @@ function startJoinTimer(state) {
 function stopJoinTimer() {
   if (live.player.timerTicker) clearInterval(live.player.timerTicker);
   live.player.timerTicker = null;
+  if (joinTimerBarFill) {
+    joinTimerBarFill.style.width = '0%';
+    joinTimerBarFill.parentElement?.classList.remove('active');
+  }
 }
 
 function renderLeaderboardInJoin(leaderboard) {
@@ -974,6 +990,21 @@ function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
   joinTitleEl.textContent = safe ? safe : 'Join game';
+}
+
+function ensureTimerProgressBar(cardEl, id) {
+  if (!cardEl) return null;
+  let bar = cardEl.querySelector(`[data-timer-bar="${id}"]`);
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'timer-progress-bar';
+    bar.dataset.timerBar = id;
+    const fill = document.createElement('div');
+    fill.className = 'timer-progress-fill';
+    bar.appendChild(fill);
+    cardEl.prepend(bar);
+  }
+  return bar.querySelector('.timer-progress-fill');
 }
 
 function normalizeBackendUrl(url) {
