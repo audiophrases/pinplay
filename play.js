@@ -219,6 +219,7 @@ function renderPlayerState(state) {
   }
 
   const questionClosed = !!state.questionClosed;
+  const isPoll = !!state.question?.isPoll;
 
   if (questionClosed) {
     stopJoinTimer();
@@ -235,17 +236,22 @@ function renderPlayerState(state) {
   }
 
   if (questionClosed) {
-    const rr = state.revealedResult;
-    if (rr) {
-      if (rr.correct) {
-        setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
-      } else {
-        setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
-      }
+    if (isPoll) {
+      setStatus(joinFeedbackEl, '🗳️ Poll closed. Results on projector.', 'ok');
+      setStatus(joinStatusEl, 'Poll closed.', 'ok');
     } else {
-      setStatus(joinFeedbackEl, 'Question closed.', 'ok');
+      const rr = state.revealedResult;
+      if (rr) {
+        if (rr.correct) {
+          setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
+        } else {
+          setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
+        }
+      } else {
+        setStatus(joinFeedbackEl, 'Question closed.', 'ok');
+      }
+      setStatus(joinStatusEl, 'Answer revealed.', 'ok');
     }
-    setStatus(joinStatusEl, 'Answer revealed.', 'ok');
   } else if (state.answeredCurrent) {
     setStatus(joinStatusEl, 'Answer received.', 'ok');
   } else {
@@ -258,6 +264,13 @@ function renderJoinQuestion(question) {
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
+
+  if (question.isPoll) {
+    const note = document.createElement('p');
+    note.className = 'small';
+    note.textContent = 'Poll mode: anonymous results, no points.';
+    joinAnswersEl.appendChild(note);
+  }
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';

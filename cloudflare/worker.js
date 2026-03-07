@@ -842,7 +842,16 @@ export class QuizRoom {
         let verdict = { correct: false };
         let pointsAwarded = 0;
 
-        if (question.type === 'open' || question.type === 'image_open') {
+        if (question.isPoll) {
+          room.responsesByQuestion[qIndex][playerId] = {
+            answer: body?.answer,
+            correct: false,
+            bet: 0,
+            pointsAwarded: 0,
+            graded: true,
+            submittedAt: Date.now(),
+          };
+        } else if (question.type === 'open' || question.type === 'image_open') {
           room.responsesByQuestion[qIndex][playerId] = {
             answer: String(body?.answer || '').slice(0, 220),
             correct: false,
@@ -964,6 +973,15 @@ function hostState(room) {
   const question = room.phase === 'question' ? hostQuestionPayload(roomQuestion) : null;
   const timeLimitSec = getQuestionTimeLimitSec(roomQuestion);
 
+  const pollVisible = room.phase === 'question' && !!room.questionClosed && !!roomQuestion?.isPoll;
+  const pollResponses = pollVisible
+    ? Object.entries(responses).map(([pid, r]) => ({
+        playerId: pid,
+        name: room.players?.[pid]?.name || 'Student',
+        answer: r?.answer,
+      }))
+    : [];
+
   return {
     phase: room.phase,
     pin: room.pin,
@@ -983,7 +1001,7 @@ function hostState(room) {
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    openResponses: room.phase === 'question' && ['open', 'image_open'].includes(roomQuestion?.type)
+    openResponses: room.phase === 'question' && ['open', 'image_open'].includes(roomQuestion?.type) && !roomQuestion?.isPoll
       ? Object.entries(responses).map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
@@ -992,7 +1010,9 @@ function hostState(room) {
           pointsAwarded: Number(r?.pointsAwarded || 0),
         }))
       : [],
-    correctAnswer: room.phase === 'question' && room.questionClosed ? hostCorrectSummary(roomQuestion) : '',
+    pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses.map((x) => x.answer)) : null,
+    pollResponses,
+    correctAnswer: room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll ? hostCorrectSummary(roomQuestion) : '',
     settings: {
       randomNames: !!room.settings?.randomNames,
     },
@@ -1014,7 +1034,7 @@ function playerState(room, playerId) {
     totalQuestions: room.quiz.questions.length,
     score: player.score,
     answeredCurrent: !!myResponse,
-    revealedResult: room.phase === 'question' && room.questionClosed && myResponse
+    revealedResult: room.phase === 'question' && room.questionClosed && myResponse && !room.quiz.questions[qIndex]?.isPoll
       ? {
           correct: !!myResponse.correct,
           pointsAwarded: Number(myResponse.pointsAwarded || 0),
@@ -1143,6 +1163,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
       answers: (question.answers || []).map((a) => ({ text: a.text })),
       ...publicAudioPayload(question),
     };
@@ -1154,6 +1175,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
       imageData: question.type === 'image_open' ? String(question.imageData || '') : undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
@@ -1169,6 +1191,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
       length: (question.items || []).length,
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
       ...publicAudioPayload(question),
@@ -1181,6 +1204,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
       min: question.min,
       max: question.max,
       margin: question.margin,
@@ -1195,6 +1219,7 @@ function publicQuestion(question) {
       prompt: question.prompt,
       points: question.points,
       timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
       imageData: question.imageData || '',
       ...publicAudioPayload(question),
     };
@@ -1314,6 +1339,7 @@ function normalizeQuiz(quiz) {
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 120),
@@ -1589,6 +1615,55 @@ function normalizeNameKey(name) {
 function findPlayerByClientId(room, clientId) {
   if (!clientId) return null;
   return Object.values(room.players || {}).find((p) => String(p.clientId || '') === clientId) || null;
+}
+
+function summarizePoll(question, answers) {
+  const list = Array.isArray(answers) ? answers : [];
+  const counts = new Map();
+
+  const pushCount = (label) => {
+    const key = String(label || '').trim() || '(blank)';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  };
+
+  if (['mcq', 'tf', 'audio'].includes(question?.type)) {
+    list.forEach((a) => {
+      const idx = Number(a);
+      const txt = Number.isFinite(idx) ? String(question.answers?.[idx]?.text || `Option ${idx + 1}`) : '(blank)';
+      pushCount(txt);
+    });
+  } else if (question?.type === 'multi') {
+    list.forEach((a) => {
+      const arr = Array.isArray(a) ? a : [];
+      const key = arr.map((idx) => String(question.answers?.[Number(idx)]?.text || '')).filter(Boolean).join(' + ');
+      pushCount(key || '(none)');
+    });
+  } else if (question?.type === 'slider') {
+    list.forEach((a) => pushCount(String(Math.round(Number(a || 0)))));
+  } else if (question?.type === 'pin') {
+    list.forEach((a) => {
+      const x = Math.round(Number(a?.x || 0));
+      const y = Math.round(Number(a?.y || 0));
+      pushCount(`(${x}%, ${y}%)`);
+    });
+  } else if (question?.type === 'error_hunt') {
+    list.forEach((a) => pushCount(String(a?.rewrite || '')));
+  } else if (question?.type === 'context_gap' || question?.type === 'match_pairs' || question?.type === 'puzzle') {
+    list.forEach((a) => pushCount(Array.isArray(a) ? a.join(' | ') : String(a || '')));
+  } else {
+    list.forEach((a) => pushCount(String(a || '')));
+  }
+
+  const items = [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 20);
+
+  return {
+    type: question?.type || 'unknown',
+    total: list.length,
+    items,
+  };
 }
 
 function hostCorrectSummary(question) {

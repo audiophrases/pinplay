@@ -577,6 +577,9 @@ function renderBuilder() {
           <label>Time limit (sec)</label>
           <input data-q="${idx}" data-field="timeLimit" type="number" min="${minTimeByType(q.type)}" max="240" value="${Number(q.timeLimit || 20)}" />
         </div>
+        <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600;">
+          <input data-q="${idx}" data-field="isPoll" type="checkbox" ${q.isPoll ? 'checked' : ''} /> Poll mode
+        </label>
       </div>
     `;
 
@@ -842,10 +845,12 @@ function syncQuizFromUI() {
     const promptEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
     const pointsEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="points"]`);
     const timeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
+    const pollEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
 
     if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 120);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = clamp(Number(timeEl.value || 20), minTimeByType(q.type), 240);
+    q.isPoll = !!pollEl?.checked;
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       q.answers = q.answers || [];
@@ -1544,6 +1549,44 @@ function renderHostQuestion(state) {
   const question = state.question;
   const showReveal = phase === 'question' && !!state.questionClosed;
 
+  const renderPollSummary = () => {
+    const summary = state.pollSummary;
+    if (!summary || !Array.isArray(summary.items) || !summary.items.length) {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = 'No poll answers submitted.';
+      hostQuestionAnswersEl.appendChild(p);
+      return;
+    }
+
+    const max = Math.max(1, ...summary.items.map((x) => Number(x.count || 0)));
+    const list = document.createElement('div');
+    list.className = 'answers-grid';
+
+    summary.items.slice(0, 15).forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'answer-row';
+      const label = document.createElement('span');
+      label.textContent = String(item.label || '(blank)');
+      const barWrap = document.createElement('div');
+      barWrap.style.height = '10px';
+      barWrap.style.borderRadius = '999px';
+      barWrap.style.background = 'rgba(96,93,255,.14)';
+      const bar = document.createElement('div');
+      bar.style.height = '100%';
+      bar.style.borderRadius = '999px';
+      bar.style.background = 'linear-gradient(90deg,#605dff,#8b5cf6)';
+      bar.style.width = `${Math.max(6, (Number(item.count || 0) / max) * 100)}%`;
+      barWrap.appendChild(bar);
+      const count = document.createElement('strong');
+      count.textContent = String(item.count || 0);
+      row.append(label, barWrap, count);
+      list.appendChild(row);
+    });
+
+    hostQuestionAnswersEl.appendChild(list);
+  };
+
   if (!hostQuestionWrap || !hostQuestionPromptEl || !hostQuestionAnswersEl || !hostQuestionHintEl) return;
 
   const appendBigReveal = (text) => {
@@ -1567,6 +1610,12 @@ function renderHostQuestion(state) {
   hostQuestionWrap.classList.remove('hidden');
   hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
   hostQuestionAnswersEl.innerHTML = '';
+
+  if (question.isPoll) {
+    hostQuestionHintEl.textContent = showReveal ? 'Poll results (anonymous)' : 'Poll mode: no points, no correct answer.';
+    if (showReveal) renderPollSummary();
+    return;
+  }
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const correctSet = new Set(Array.isArray(question.correctIndexes) ? question.correctIndexes : []);
@@ -2016,11 +2065,12 @@ function renderPlayerState(state) {
   }
 
   const questionClosed = !!state.questionClosed;
+  const isPoll = !!state.question?.isPoll;
   joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
 
   if (questionClosed) {
-    setStatus(joinFeedbackEl, 'Time is up. Waiting for next question…', 'ok');
-    setStatus(joinStatusEl, 'Question closed.', 'ok');
+    setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : 'Time is up. Waiting for next question…', 'ok');
+    setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
     setStatus(joinStatusEl, 'Answer received.', 'ok');
@@ -2032,6 +2082,13 @@ function renderPlayerState(state) {
 function renderJoinQuestion(question) {
   joinPromptEl.textContent = question.prompt || '(No question text)';
   joinAnswersEl.innerHTML = '';
+
+  if (question.isPoll) {
+    const note = document.createElement('p');
+    note.className = 'small';
+    note.textContent = 'Poll mode: anonymous results, no points.';
+    joinAnswersEl.appendChild(note);
+  }
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
@@ -3003,6 +3060,7 @@ function normalizeQuizForLive(raw) {
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1000),
