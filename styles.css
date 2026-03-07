@@ -254,6 +254,29 @@ textarea { min-height: 72px; resize: vertical; }
   border-bottom: 2px solid var(--primary);
 }
 
+.puzzle-reveal-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  justify-content: center;
+  margin-top: .35rem;
+}
+
+.puzzle-reveal-token {
+  display: inline-block;
+  padding: .42rem .6rem;
+  border-radius: .6rem;
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.puzzle-reveal-token:nth-child(6n+1) { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+.puzzle-reveal-token:nth-child(6n+2) { background: #ecfeff; border-color: #a5f3fc; color: #155e75; }
+.puzzle-reveal-token:nth-child(6n+3) { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.puzzle-reveal-token:nth-child(6n+4) { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+.puzzle-reveal-token:nth-child(6n+5) { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.puzzle-reveal-token:nth-child(6n+6) { background: #faf5ff; border-color: #d8b4fe; color: #6b21a8; }
+
 .btn.puzzle-picked {
   opacity: .75;
   filter: saturate(.65);

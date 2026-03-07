@@ -2015,7 +2015,16 @@ function renderHostQuestion(state) {
       p.textContent = `Items: ${question.options.join(' • ')}`;
       hostQuestionAnswersEl.appendChild(p);
     }
-    if (showReveal) appendBigReveal(state.correctAnswer);
+    if (showReveal) {
+      const items = Array.isArray(question.items)
+        ? question.items.map((x) => String(x || '').trim()).filter(Boolean)
+        : [];
+      if (items.length) {
+        renderPuzzleRevealTokens(hostQuestionAnswersEl, items);
+      } else {
+        appendBigReveal(state.correctAnswer);
+      }
+    }
     if (projectorCorrectEl) projectorCorrectEl.textContent = '';
     return;
   }
@@ -4208,6 +4217,20 @@ function renderMatchPairsReveal(container, pairs) {
   wrap.append(leftCol, rightCol, lineLayer);
   container.appendChild(wrap);
   requestAnimationFrame(draw);
+}
+
+function renderPuzzleRevealTokens(container, items) {
+  const wrap = document.createElement('div');
+  wrap.className = 'puzzle-reveal-wrap';
+
+  items.forEach((token) => {
+    const chip = document.createElement('span');
+    chip.className = 'puzzle-reveal-token';
+    chip.textContent = String(token || '').trim();
+    wrap.appendChild(chip);
+  });
+
+  container.appendChild(wrap);
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
