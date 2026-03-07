@@ -1477,8 +1477,8 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 4);
-      if (gaps.length < 2) return;
+      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 10);
+      if (gaps.length < 1) return;
       normalized.questions.push({ ...base, gaps });
       return;
     }

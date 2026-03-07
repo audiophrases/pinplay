@@ -368,7 +368,7 @@ function renderJoinQuestion(question) {
     }
 
     if (question.type === 'context_gap') {
-      const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
+      const count = Math.max(1, Math.min(10, Number(question.gapCount || 1)));
       renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];

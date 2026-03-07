@@ -698,14 +698,17 @@ function renderBuilder() {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = q.gaps || ['', '', '', ''];
+      const gaps = Array.isArray(q.gaps) ? [...q.gaps] : [];
+      while (gaps.length < 10) gaps.push('');
       specific += `
-        <p class="small top-space">Write the paragraph in the question and set expected words for each blank.</p>
-        <label class="top-space">Expected words for blanks (1-4)</label>
+        <p class="small top-space">How to create blanks: write your text and add <strong>____</strong> or <strong>[]</strong> where gaps should appear.</p>
+        <p class="small">Then set expected answers below (up to 10). Keep order aligned with blanks.</p>
+        <label class="top-space">Expected words for blanks (1-10)</label>
         <div class="answers-grid">
           ${gaps
+            .slice(0, 10)
             .map((ans, aIdx) => `
-            <input data-q="${idx}" data-gap-index="${aIdx}" maxlength="20" value="${escapeHtml(ans || '')}" placeholder="Blank ${aIdx + 1}" />
+            <input data-q="${idx}" data-gap-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Blank ${aIdx + 1}" />
           `)
             .join('')}
         </div>
@@ -965,9 +968,9 @@ function syncQuizFromUI() {
 
     if (q.type === 'context_gap') {
       const gaps = [];
-      for (let aIdx = 0; aIdx < 4; aIdx++) {
+      for (let aIdx = 0; aIdx < 10; aIdx++) {
         const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-gap-index="${aIdx}"]`);
-        gaps.push(String(aEl?.value || '').slice(0, 20));
+        gaps.push(String(aEl?.value || '').slice(0, 120));
       }
       q.gaps = gaps;
     }
@@ -2402,7 +2405,7 @@ function renderJoinQuestion(question) {
     }
 
       if (question.type === 'context_gap') {
-      const count = Math.max(2, Math.min(4, Number(question.gapCount || 2)));
+      const count = Math.max(1, Math.min(10, Number(question.gapCount || 1)));
       renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
     } else if (question.type === 'error_hunt') {
       const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
@@ -2802,7 +2805,7 @@ function renderSoloQuestion() {
     }
 
     if (q.type === 'context_gap') {
-      const count = Math.max(2, Math.min(4, Number((q.gaps || []).filter(Boolean).length || 2)));
+      const count = Math.max(1, Math.min(10, Number((q.gaps || []).filter(Boolean).length || 1)));
       renderInlineContextGapInputs(answersEl, q.prompt, count, 'soloGap');
     } else if (q.type === 'error_hunt') {
       const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
@@ -3387,8 +3390,8 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 20)).filter(Boolean).slice(0, 4);
-      if (gaps.length < 2) return;
+      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 10);
+      if (gaps.length < 1) return;
       normalized.questions.push({ ...base, gaps });
       return;
     }
