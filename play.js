@@ -451,10 +451,14 @@ function appendRiskBetBar() {
   const row = document.createElement('div');
   row.className = 'row gap risk-bet-row';
 
+  const legend = document.createElement('p');
+  legend.className = 'small risk-bet-legend';
+  legend.innerHTML = '<span>🤔</span><span>😬</span><span>🔥</span>';
+
   const bets = [
-    { value: 1, emoji: '🤔', title: 'Bet 1' },
-    { value: 2, emoji: '😬', title: 'Bet 2' },
-    { value: 3, emoji: '🔥', title: 'Bet 3' },
+    { value: 1, emoji: '🤔', bonus: '+15%', penalty: '-5%' },
+    { value: 2, emoji: '😬', bonus: '+25%', penalty: '-15%' },
+    { value: 3, emoji: '🔥', bonus: '+40%', penalty: '-30%' },
   ];
 
   bets.forEach((b) => {
@@ -462,8 +466,8 @@ function appendRiskBetBar() {
     btn.type = 'button';
     btn.className = 'btn risk-bet-btn';
     btn.dataset.bet = String(b.value);
-    btn.textContent = b.emoji;
-    btn.title = b.title;
+    btn.textContent = b.bonus;
+    btn.title = `${b.emoji} Win ${b.bonus} / Miss ${b.penalty}`;
     if (Number(live.player.selectedBet || 0) === b.value) btn.classList.add('active');
     btn.addEventListener('click', () => {
       live.player.selectedBet = b.value;
@@ -480,6 +484,7 @@ function appendRiskBetBar() {
 
   controls.appendChild(row);
 
+  wrap.appendChild(legend);
   wrap.appendChild(controls);
   joinAnswersEl.appendChild(wrap);
 }
