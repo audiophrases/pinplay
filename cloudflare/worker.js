@@ -1088,6 +1088,10 @@ function playerState(room, playerId) {
         }
       : null,
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
+    correctAnswer:
+      room.phase === 'question' && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
+        ? hostCorrectSummary(room.quiz.questions[qIndex])
+        : '',
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
     questionStartedAt: room.phase === 'question' ? room.questionStartedAt || null : null,
     questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,

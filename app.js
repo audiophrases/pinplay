@@ -2179,6 +2179,22 @@ function renderPlayerState(state) {
   joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   joinScoreEl.textContent = `Score: ${state.score}`;
 
+  const renderJoinReveal = () => {
+    if (!joinAnswersEl) return;
+    joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+
+    const isPoll = !!state.question?.isPoll;
+    const show = !!state.questionClosed && !isPoll;
+    const text = String(state.correctAnswer || '').trim();
+    if (!show || !text) return;
+
+    const reveal = document.createElement('div');
+    reveal.className = 'project-text-reveal';
+    reveal.dataset.joinCorrectReveal = '1';
+    reveal.textContent = text;
+    joinAnswersEl.appendChild(reveal);
+  };
+
   if (state.phase !== 'question' || !state.question) {
     joinQuestionWrap.classList.add('hidden');
 
@@ -2188,6 +2204,7 @@ function renderPlayerState(state) {
       setStatus(joinStatusEl, 'Game finished 🎉', 'ok');
       renderLeaderboardInJoin(state.leaderboard || []);
     }
+    renderJoinReveal();
     return;
   }
 
@@ -2217,6 +2234,8 @@ function renderPlayerState(state) {
   } else {
     setStatus(joinStatusEl, 'Question live!', 'ok');
   }
+
+  renderJoinReveal();
 }
 
 function renderJoinQuestion(question) {
