@@ -324,6 +324,32 @@ textarea { min-height: 72px; resize: vertical; }
 .qt-emoji { font-size: 1.05rem; }
 .qt-text { font-weight: 600; }
 
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.35);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.dialog-card {
+  width: min(760px, 96vw);
+  max-height: 80vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: .8rem;
+  padding: .8rem;
+}
+
+.dialog-list { display: grid; gap: .45rem; }
+.dialog-row { display: grid; grid-template-columns: 1fr auto; gap: .45rem; }
+.dialog-open { text-align: left; justify-content: flex-start; white-space: normal; height: auto; }
+.dialog-delete { min-width: 38px; color: #b91c1c; font-weight: 700; }
+
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
 .question-header[draggable="true"] { cursor: grab; }

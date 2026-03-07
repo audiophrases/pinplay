@@ -32,11 +32,9 @@ const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
-const deleteLocalBtn = document.getElementById('deleteLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
-const deleteDriveBtn = document.getElementById('deleteDriveBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 
@@ -331,38 +329,7 @@ function bindBuilderEvents() {
   });
 
   if (openLocalBtn) {
-    openLocalBtn.addEventListener('click', () => {
-      const items = loadQuizLibrary();
-      if (!items.length) {
-        alert('No local saved quizzes yet.');
-        return;
-      }
-
-      const list = items
-        .slice()
-        .reverse()
-        .map((item, i) => `${i + 1}) ${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`)
-        .join('\n');
-
-      const raw = prompt(`Choose a local save number:\n\n${list}`);
-      if (raw === null) return;
-      const pick = Number(raw);
-      if (!Number.isFinite(pick) || pick < 1 || pick > items.length) {
-        alert('Invalid selection.');
-        return;
-      }
-
-      const chosen = items.slice().reverse()[pick - 1];
-      try {
-        validateImportedQuiz(chosen.quiz);
-        quiz = chosen.quiz;
-        renderBuilder();
-        saveQuiz(quiz);
-        alert(`Loaded local save ✅\n${chosen.name}`);
-      } catch (err) {
-        alert(`Could not load save: ${err.message}`);
-      }
-    });
+    openLocalBtn.addEventListener('click', openLocalLibraryDialog);
   }
 
   exportBtn.addEventListener('click', () => {
@@ -378,13 +345,7 @@ function bindBuilderEvents() {
     openDriveBtn.addEventListener('click', openQuizFromDrive);
   }
 
-  if (deleteLocalBtn) {
-    deleteLocalBtn.addEventListener('click', deleteQuizFromLocalLibrary);
-  }
-
-  if (deleteDriveBtn) {
-    deleteDriveBtn.addEventListener('click', deleteQuizFromDrive);
-  }
+  // delete actions are integrated into open dialogs
 
   importInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -1089,96 +1050,121 @@ async function publishQuizToDrive() {
   }
 }
 
+function showQuizManagerDialog({ title, items, onOpen, onDelete }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const h = document.createElement('strong');
+  h.textContent = title;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(h, closeBtn);
+
+  const list = document.createElement('div');
+  list.className = 'dialog-list top-space';
+
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = 'No saved quizzes found.';
+    list.appendChild(p);
+  } else {
+    items.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'dialog-row';
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn dialog-open';
+      openBtn.textContent = item.label;
+      openBtn.title = item.label;
+      openBtn.addEventListener('click', async () => {
+        await onOpen(item);
+        overlay.remove();
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn dialog-delete';
+      delBtn.textContent = '✕';
+      delBtn.title = `Delete ${item.label}`;
+      delBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete "${item.label}"?`)) return;
+        await onDelete(item);
+        row.remove();
+      });
+
+      row.append(openBtn, delBtn);
+      list.appendChild(row);
+    });
+  }
+
+  dialog.append(head, list);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  document.body.appendChild(overlay);
+}
+
+function openLocalLibraryDialog() {
+  const items = loadQuizLibrary().slice().reverse();
+  showQuizManagerDialog({
+    title: 'Local quizzes',
+    items: items.map((item) => ({
+      id: item.id,
+      raw: item,
+      label: `${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`,
+    })),
+    onOpen: async (item) => {
+      const chosen = item.raw;
+      validateImportedQuiz(chosen.quiz);
+      quiz = chosen.quiz;
+      renderBuilder();
+      saveQuiz(quiz);
+      setStatus(hostStatusEl, `Loaded local save: ${chosen.name}`, 'ok');
+    },
+    onDelete: async (item) => {
+      const next = loadQuizLibrary().filter((x) => x.id !== item.id);
+      saveQuizLibrary(next);
+      setStatus(hostStatusEl, `Deleted local save: ${item.raw.name}`, 'ok');
+    },
+  });
+}
+
 async function openQuizFromDrive() {
   try {
     const list = await api('/api/drive/list', { method: 'GET' });
     const files = Array.isArray(list?.files) ? list.files : [];
-    if (!files.length) throw new Error('No quiz files found in Drive folder.');
-
-    const preview = files
-      .slice(0, 12)
-      .map((f, i) => `${i + 1}. ${f.name || f.id}`)
-      .join('\n');
-
-    const pickRaw = prompt(`Open from Drive\n\nChoose file number:\n${preview}`);
-    if (pickRaw == null) return;
-
-    const pick = Number(String(pickRaw).trim());
-    if (!Number.isFinite(pick) || pick < 1 || pick > Math.min(files.length, 12)) {
-      throw new Error('Invalid file number.');
-    }
-
-    const chosen = files[pick - 1];
-    const openData = await api(`/api/drive/open?fileId=${encodeURIComponent(chosen.id)}`, { method: 'GET' });
-    const loadedQuiz = openData?.quiz;
-
-    validateImportedQuiz(loadedQuiz);
-    quiz = loadedQuiz;
-    renderBuilder();
-    saveQuiz(quiz);
-
-    setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name}`, 'ok');
+    showQuizManagerDialog({
+      title: 'Drive quizzes',
+      items: files.map((f) => ({ id: f.id, raw: f, label: String(f.name || f.id) })),
+      onOpen: async (item) => {
+        const chosen = item.raw;
+        const openData = await api(`/api/drive/open?fileId=${encodeURIComponent(chosen.id)}`, { method: 'GET' });
+        const loadedQuiz = openData?.quiz;
+        validateImportedQuiz(loadedQuiz);
+        quiz = loadedQuiz;
+        renderBuilder();
+        saveQuiz(quiz);
+        setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name || chosen.id}`, 'ok');
+      },
+      onDelete: async (item) => {
+        const chosen = item.raw;
+        await api('/api/drive/delete', {
+          method: 'POST',
+          body: { fileId: chosen.id },
+        });
+        setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
+      },
+    });
   } catch (err) {
     setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
-  }
-}
-
-function deleteQuizFromLocalLibrary() {
-  const items = loadQuizLibrary();
-  if (!items.length) {
-    alert('No local saved quizzes yet.');
-    return;
-  }
-
-  const ordered = items.slice().reverse();
-  const list = ordered
-    .map((item, i) => `${i + 1}) ${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`)
-    .join('\n');
-
-  const raw = prompt(`Delete local save\n\nChoose number:\n${list}`);
-  if (raw === null) return;
-
-  const pick = Number(String(raw).trim());
-  if (!Number.isFinite(pick) || pick < 1 || pick > ordered.length) {
-    alert('Invalid selection.');
-    return;
-  }
-
-  const chosen = ordered[pick - 1];
-  if (!confirm(`Delete local save permanently?\n\n${chosen.name}`)) return;
-
-  const next = items.filter((item) => item.id !== chosen.id);
-  saveQuizLibrary(next);
-  setStatus(hostStatusEl, `Deleted local save: ${chosen.name}`, 'ok');
-}
-
-async function deleteQuizFromDrive() {
-  try {
-    const list = await api('/api/drive/list', { method: 'GET' });
-    const files = Array.isArray(list?.files) ? list.files : [];
-    if (!files.length) throw new Error('No quiz files found in Drive folder.');
-
-    const shown = files.slice(0, 20);
-    const preview = shown.map((f, i) => `${i + 1}. ${f.name || f.id}`).join('\n');
-    const pickRaw = prompt(`Delete from Drive\n\nChoose file number:\n${preview}`);
-    if (pickRaw == null) return;
-
-    const pick = Number(String(pickRaw).trim());
-    if (!Number.isFinite(pick) || pick < 1 || pick > shown.length) {
-      throw new Error('Invalid file number.');
-    }
-
-    const chosen = shown[pick - 1];
-    if (!confirm(`Delete from Drive?\n\n${chosen.name || chosen.id}`)) return;
-
-    await api('/api/drive/delete', {
-      method: 'POST',
-      body: { fileId: chosen.id },
-    });
-
-    setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
-  } catch (err) {
-    setStatus(hostStatusEl, `Delete from Drive failed: ${err.message}`, 'bad');
   }
 }
 
@@ -2778,7 +2764,7 @@ function renderLeaderboardInJoin(leaderboard) {
 
   leaderboard.forEach((p, i) => {
     const li = document.createElement('li');
-    li.textContent = `${i + 1}. ${p.name} — ${p.score} pts`;
+    li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
     ul.appendChild(li);
   });
 
