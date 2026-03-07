@@ -433,6 +433,14 @@ function bindBuilderEvents() {
       return;
     }
 
+    const removeBtn = e.target.closest('[data-remove-question]');
+    if (removeBtn) {
+      const idx = Number(removeBtn.dataset.removeQuestion);
+      quiz.questions.splice(idx, 1);
+      renderBuilder();
+      return;
+    }
+
     const toggleHeader = e.target.closest('[data-toggle-question-header]');
     if (toggleHeader) {
       const idx = Number(toggleHeader.dataset.toggleQuestionHeader);
@@ -440,14 +448,6 @@ function bindBuilderEvents() {
         quiz.questions[idx].collapsed = !quiz.questions[idx].collapsed;
         renderBuilder();
       }
-      return;
-    }
-
-    const removeBtn = e.target.closest('[data-remove-question]');
-    if (removeBtn) {
-      const idx = Number(removeBtn.dataset.removeQuestion);
-      quiz.questions.splice(idx, 1);
-      renderBuilder();
       return;
     }
 
