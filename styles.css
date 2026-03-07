@@ -429,18 +429,6 @@ textarea { min-height: 72px; resize: vertical; }
   font-weight: 700;
 }
 
-.risk-bet-legend {
-  display: flex;
-  gap: .4rem;
-  align-items: center;
-  margin: 0;
-}
-
-.risk-bet-legend span {
-  font-size: 1.08rem;
-  line-height: 1;
-}
-
 .risk-bet-row .risk-bet-btn.active {
   border-color: #ef4444;
   box-shadow: 0 0 0 2px rgba(239,68,68,.25) inset;

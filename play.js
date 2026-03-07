@@ -484,7 +484,6 @@ function appendRiskBetBar() {
 
   controls.appendChild(row);
 
-  wrap.appendChild(legend);
   wrap.appendChild(controls);
   joinAnswersEl.appendChild(wrap);
 }
