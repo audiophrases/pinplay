@@ -1241,6 +1241,16 @@ function hostQuestionPayload(question) {
     };
   }
 
+  if (question.type === 'match_pairs') {
+    return {
+      ...base,
+      pairs: (question.pairs || []).map((p) => ({
+        left: String(p?.left || ''),
+        right: String(p?.right || ''),
+      })),
+    };
+  }
+
   if (question.type === 'pin') {
     return {
       ...base,

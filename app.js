@@ -1995,8 +1995,9 @@ function renderHostQuestion(state) {
     hostQuestionHintEl.textContent = showReveal ? '' : 'Match pairs question.';
     if (!showReveal) {
       renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+    } else {
+      renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
     }
-    if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
@@ -4136,6 +4137,77 @@ function renderMatchPairsPreview(container, leftItems, rightOptions) {
 
   wrap.append(leftCol, rightCol);
   container.appendChild(wrap);
+}
+
+function renderMatchPairsReveal(container, pairs) {
+  const rows = Array.isArray(pairs)
+    ? pairs
+      .map((p) => ({ left: String(p?.left || '').trim(), right: String(p?.right || '').trim() }))
+      .filter((p) => p.left && p.right)
+    : [];
+
+  if (!rows.length) {
+    appendBigReveal('No pairs to reveal.');
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'match-pairs-wrap match-pairs-wrap-interactive';
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const lineLayer = document.createElementNS(svgNs, 'svg');
+  lineLayer.classList.add('match-pairs-lines');
+
+  const leftCol = document.createElement('div');
+  leftCol.className = 'match-pairs-col match-pairs-col-left';
+  const rightCol = document.createElement('div');
+  rightCol.className = 'match-pairs-col match-pairs-col-right';
+
+  const leftEls = [];
+  const rightEls = [];
+
+  rows.forEach((pair) => {
+    const left = document.createElement('div');
+    left.className = 'match-pair-left filled';
+    left.textContent = pair.left;
+    leftCol.appendChild(left);
+    leftEls.push(left);
+
+    const right = document.createElement('div');
+    right.className = 'btn';
+    right.textContent = pair.right;
+    rightCol.appendChild(right);
+    rightEls.push(right);
+  });
+
+  const draw = () => {
+    lineLayer.innerHTML = '';
+    const wrapRect = wrap.getBoundingClientRect();
+    if (!wrapRect.width || !wrapRect.height) return;
+
+    lineLayer.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+    lineLayer.setAttribute('width', String(wrapRect.width));
+    lineLayer.setAttribute('height', String(wrapRect.height));
+
+    leftEls.forEach((leftEl, i) => {
+      const rightEl = rightEls[i];
+      if (!rightEl) return;
+      const l = leftEl.getBoundingClientRect();
+      const r = rightEl.getBoundingClientRect();
+
+      const line = document.createElementNS(svgNs, 'line');
+      line.setAttribute('x1', String(Math.max(0, l.right - wrapRect.left)));
+      line.setAttribute('y1', String(Math.max(0, l.top + (l.height / 2) - wrapRect.top)));
+      line.setAttribute('x2', String(Math.max(0, r.left - wrapRect.left)));
+      line.setAttribute('y2', String(Math.max(0, r.top + (r.height / 2) - wrapRect.top)));
+      line.classList.add('match-connection-line');
+      lineLayer.appendChild(line);
+    });
+  };
+
+  wrap.append(leftCol, rightCol, lineLayer);
+  container.appendChild(wrap);
+  requestAnimationFrame(draw);
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
