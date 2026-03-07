@@ -719,12 +719,12 @@ function renderBuilder() {
     if (q.type === 'match_pairs') {
       const pairs = Array.isArray(q.pairs) ? q.pairs : [];
       const normalizedPairs = [...pairs];
-      while (normalizedPairs.length < 4) normalizedPairs.push({ left: '', right: '' });
+      while (normalizedPairs.length < 10) normalizedPairs.push({ left: '', right: '' });
       specific += `
-        <p class="small top-space">Set matching pairs (left → right). Min 2 pairs.</p>
+        <p class="small top-space">Set matching pairs (left → right). Min 2 pairs, max 10.</p>
         <div class="answers-grid">
           ${normalizedPairs
-            .slice(0, 6)
+            .slice(0, 10)
             .map(
               (p, i) => `
               <input data-q="${idx}" data-pair-left="${i}" maxlength="40" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
@@ -978,7 +978,7 @@ function syncQuizFromUI() {
 
     if (q.type === 'match_pairs') {
       const pairs = [];
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 10; i++) {
         const leftEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-left="${i}"]`);
         const rightEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-right="${i}"]`);
         const left = String(leftEl?.value || '').slice(0, 40).trim();
