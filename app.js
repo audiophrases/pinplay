@@ -1412,6 +1412,27 @@ async function gradeOpenAnswer(playerId, currentPoints = 0) {
   }
 }
 
+async function hostHidePollResponse(playerId) {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    await api('/api/host/poll/hide', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+      },
+    });
+
+    setStatus(hostStatusEl, 'Poll response hidden (moved to Other).', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -1584,7 +1605,56 @@ function renderHostQuestion(state) {
       list.appendChild(row);
     });
 
+    if (Number(summary.otherCount || 0) > 0) {
+      const row = document.createElement('div');
+      row.className = 'answer-row';
+      const label = document.createElement('span');
+      label.textContent = 'Other';
+      const barWrap = document.createElement('div');
+      barWrap.style.height = '10px';
+      barWrap.style.borderRadius = '999px';
+      barWrap.style.background = 'rgba(156,163,175,.2)';
+      const bar = document.createElement('div');
+      bar.style.height = '100%';
+      bar.style.borderRadius = '999px';
+      bar.style.background = 'linear-gradient(90deg,#6b7280,#4b5563)';
+      bar.style.width = `${Math.max(6, (Number(summary.otherCount || 0) / max) * 100)}%`;
+      barWrap.appendChild(bar);
+      const count = document.createElement('strong');
+      count.textContent = String(summary.otherCount || 0);
+      row.append(label, barWrap, count);
+      list.appendChild(row);
+    }
+
     hostQuestionAnswersEl.appendChild(list);
+
+    const raw = Array.isArray(state.pollResponses) ? state.pollResponses : [];
+    if (raw.length) {
+      const modTitle = document.createElement('p');
+      modTitle.className = 'small top-space';
+      modTitle.textContent = 'Moderation (host only):';
+      hostQuestionAnswersEl.appendChild(modTitle);
+
+      raw.forEach((r) => {
+        const row = document.createElement('div');
+        row.className = 'row spread gap';
+        row.style.border = '1px solid var(--line)';
+        row.style.borderRadius = '.5rem';
+        row.style.padding = '.35rem .45rem';
+
+        const txt = document.createElement('span');
+        txt.textContent = `${r.name}: ${formatPollAnswerForHost(r.answer)}`;
+
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = r.hidden ? 'Hidden' : 'Hide';
+        btn.disabled = !!r.hidden;
+        btn.addEventListener('click', () => hostHidePollResponse(r.playerId));
+
+        row.append(txt, btn);
+        hostQuestionAnswersEl.appendChild(row);
+      });
+    }
   };
 
   if (!hostQuestionWrap || !hostQuestionPromptEl || !hostQuestionAnswersEl || !hostQuestionHintEl) return;
@@ -3438,6 +3508,19 @@ function ensureTimerProgressBar(cardEl, id) {
     cardEl.prepend(bar);
   }
   return bar.querySelector('.timer-progress-fill');
+}
+
+function formatPollAnswerForHost(answer) {
+  if (Array.isArray(answer)) return answer.join(' | ') || '(blank)';
+  if (answer && typeof answer === 'object') {
+    if (typeof answer.rewrite === 'string') return answer.rewrite || '(blank)';
+    if (Number.isFinite(answer.x) || Number.isFinite(answer.y)) {
+      return `(${Math.round(Number(answer.x || 0))}%, ${Math.round(Number(answer.y || 0))}%)`;
+    }
+    return JSON.stringify(answer);
+  }
+  const s = String(answer || '').trim();
+  return s || '(blank)';
 }
 
 function normalizeBackendUrl(url) {

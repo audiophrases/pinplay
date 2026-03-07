@@ -299,6 +299,25 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/poll/hide' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/poll/hide', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -792,6 +811,30 @@ export class QuizRoom {
         return json({ ok: true, playerId, pointsAwarded: adjustedPoints, score: room.players[playerId].score });
       }
 
+      if (url.pathname === '/host/poll/hide' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        const qIndex = room.currentIndex;
+        const question = room.quiz.questions[qIndex];
+        if (!question || !question.isPoll) return json({ error: 'Current question is not a poll.' }, 409);
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+
+        const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
+        if (!resp) return json({ error: 'No submitted answer for this player.' }, 404);
+
+        resp.hidden = true;
+        resp.hiddenAt = Date.now();
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId, hidden: true });
+      }
+
       if (url.pathname === '/player/state' && request.method === 'POST') {
         const body = await safeJson(request);
         const playerId = sanitizeId(body?.playerId);
@@ -849,6 +892,7 @@ export class QuizRoom {
             bet: 0,
             pointsAwarded: 0,
             graded: true,
+            hidden: false,
             submittedAt: Date.now(),
           };
         } else if (question.type === 'open' || question.type === 'image_open') {
@@ -979,6 +1023,7 @@ function hostState(room) {
         playerId: pid,
         name: room.players?.[pid]?.name || 'Student',
         answer: r?.answer,
+        hidden: !!r?.hidden,
       }))
     : [];
 
@@ -1010,7 +1055,7 @@ function hostState(room) {
           pointsAwarded: Number(r?.pointsAwarded || 0),
         }))
       : [],
-    pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses.map((x) => x.answer)) : null,
+    pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses) : null,
     pollResponses,
     correctAnswer: room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll ? hostCorrectSummary(roomQuestion) : '',
     settings: {
@@ -1617,8 +1662,10 @@ function findPlayerByClientId(room, clientId) {
   return Object.values(room.players || {}).find((p) => String(p.clientId || '') === clientId) || null;
 }
 
-function summarizePoll(question, answers) {
-  const list = Array.isArray(answers) ? answers : [];
+function summarizePoll(question, responses) {
+  const list = Array.isArray(responses) ? responses : [];
+  const visible = list.filter((r) => !r?.hidden);
+  const hiddenCount = list.length - visible.length;
   const counts = new Map();
 
   const pushCount = (label) => {
@@ -1626,42 +1673,48 @@ function summarizePoll(question, answers) {
     counts.set(key, (counts.get(key) || 0) + 1);
   };
 
+  const answers = visible.map((r) => r?.answer);
+
   if (['mcq', 'tf', 'audio'].includes(question?.type)) {
-    list.forEach((a) => {
+    answers.forEach((a) => {
       const idx = Number(a);
       const txt = Number.isFinite(idx) ? String(question.answers?.[idx]?.text || `Option ${idx + 1}`) : '(blank)';
       pushCount(txt);
     });
   } else if (question?.type === 'multi') {
-    list.forEach((a) => {
+    answers.forEach((a) => {
       const arr = Array.isArray(a) ? a : [];
       const key = arr.map((idx) => String(question.answers?.[Number(idx)]?.text || '')).filter(Boolean).join(' + ');
       pushCount(key || '(none)');
     });
   } else if (question?.type === 'slider') {
-    list.forEach((a) => pushCount(String(Math.round(Number(a || 0)))));
+    answers.forEach((a) => pushCount(String(Math.round(Number(a || 0)))));
   } else if (question?.type === 'pin') {
-    list.forEach((a) => {
+    answers.forEach((a) => {
       const x = Math.round(Number(a?.x || 0));
       const y = Math.round(Number(a?.y || 0));
       pushCount(`(${x}%, ${y}%)`);
     });
   } else if (question?.type === 'error_hunt') {
-    list.forEach((a) => pushCount(String(a?.rewrite || '')));
+    answers.forEach((a) => pushCount(String(a?.rewrite || '')));
   } else if (question?.type === 'context_gap' || question?.type === 'match_pairs' || question?.type === 'puzzle') {
-    list.forEach((a) => pushCount(Array.isArray(a) ? a.join(' | ') : String(a || '')));
+    answers.forEach((a) => pushCount(Array.isArray(a) ? a.join(' | ') : String(a || '')));
   } else {
-    list.forEach((a) => pushCount(String(a || '')));
+    answers.forEach((a) => pushCount(String(a || '')));
   }
 
-  const items = [...counts.entries()]
+  const allItems = [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 20);
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  const items = allItems.slice(0, 15);
+  const overflowCount = allItems.slice(15).reduce((sum, x) => sum + Number(x.count || 0), 0);
 
   return {
     type: question?.type || 'unknown',
     total: list.length,
+    hiddenCount,
+    otherCount: hiddenCount + overflowCount,
     items,
   };
 }
