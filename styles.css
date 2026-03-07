@@ -478,6 +478,27 @@ textarea { min-height: 72px; resize: vertical; }
   width: 100%;
   height: auto;
 }
+
+.question-image-preview img {
+  cursor: zoom-in;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, .86);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.image-lightbox img {
+  max-width: min(96vw, 1200px);
+  max-height: 92vh;
+  border-radius: .75rem;
+  box-shadow: 0 24px 80px rgba(0,0,0,.45);
+}
 .pin-dot {
   position: absolute;
   width: 12px;

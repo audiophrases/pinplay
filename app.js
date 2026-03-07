@@ -156,6 +156,7 @@ const audioFx = {
 init();
 
 function init() {
+  setupImageLightbox();
   bindTabs();
   bindBuilderEvents();
   bindLiveEvents();
@@ -778,8 +779,8 @@ function renderBuilder() {
       `;
       if (q.imageData) {
         specific += `
-          <div class="pin-preview">
-            <img src="${q.imageData}" alt="Question image" />
+          <div class="pin-preview question-image-preview">
+            <img src="${q.imageData}" alt="Question image" data-zoomable="1" />
           </div>
         `;
       }
@@ -1737,10 +1738,11 @@ function renderHostQuestion(state) {
 
   if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
-    preview.className = 'pin-preview';
+    preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
     img.src = question.imageData;
     img.alt = 'Question image';
+    img.dataset.zoomable = '1';
     preview.appendChild(img);
     hostQuestionAnswersEl.appendChild(preview);
   }
@@ -1793,10 +1795,11 @@ function renderHostQuestion(state) {
 
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
-      preview.className = 'pin-preview';
+      preview.className = 'pin-preview question-image-preview';
       const img = document.createElement('img');
       img.src = question.imageData;
       img.alt = 'Image prompt';
+      img.dataset.zoomable = '1';
       preview.appendChild(img);
       hostQuestionAnswersEl.appendChild(preview);
     }
@@ -2274,10 +2277,11 @@ function renderJoinQuestion(question) {
 
   if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
-    preview.className = 'pin-preview';
+    preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
     img.src = question.imageData;
     img.alt = 'Question image';
+    img.dataset.zoomable = '1';
     preview.appendChild(img);
     joinAnswersEl.appendChild(preview);
   }
@@ -2324,10 +2328,11 @@ function renderJoinQuestion(question) {
   if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
-      preview.className = 'pin-preview';
+      preview.className = 'pin-preview question-image-preview';
       const img = document.createElement('img');
       img.src = question.imageData;
       img.alt = 'Image prompt';
+      img.dataset.zoomable = '1';
       preview.appendChild(img);
       joinAnswersEl.appendChild(preview);
     }
@@ -2723,10 +2728,11 @@ function renderSoloQuestion() {
   if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'context_gap' || q.type === 'error_hunt') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
-      preview.className = 'pin-preview';
+      preview.className = 'pin-preview question-image-preview';
       const img = document.createElement('img');
       img.src = q.imageData;
       img.alt = 'Image prompt';
+      img.dataset.zoomable = '1';
       preview.appendChild(img);
       answersEl.appendChild(preview);
     }
@@ -4035,8 +4041,33 @@ function fileToDataUrl(file) {
   });
 }
 
+function setupImageLightbox() {
+  if (document.getElementById('imageLightbox')) return;
 
+  const modal = document.createElement('div');
+  modal.id = 'imageLightbox';
+  modal.className = 'image-lightbox hidden';
+  modal.innerHTML = '<img alt="Zoomed question image" />';
+  document.body.appendChild(modal);
 
+  const modalImg = modal.querySelector('img');
 
+  const close = () => {
+    modal.classList.add('hidden');
+    if (modalImg) modalImg.src = '';
+  };
 
+  modal.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+  });
+
+  document.addEventListener('click', (e) => {
+    const img = e.target?.closest?.('img[data-zoomable="1"]');
+    if (!img) return;
+    if (!(img instanceof HTMLImageElement)) return;
+    modalImg.src = img.src;
+    modal.classList.remove('hidden');
+  });
+}
 
