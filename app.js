@@ -1734,6 +1734,10 @@ function renderHostState(state) {
     playFx('final');
   }
 
+  if (state.phase !== 'results') {
+    stopFx('final');
+  }
+
   if (revealKey && live.host.lastRevealKey !== revealKey) {
     stopFx('answering');
     playFx('answered');

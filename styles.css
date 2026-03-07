@@ -663,10 +663,10 @@ textarea { min-height: 72px; resize: vertical; }
 .pin-arrow {
   position: absolute;
   transform: translate(-50%, -100%);
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #312e81;
-  text-shadow: 0 1px 0 #fff;
+  font-size: 2rem;
+  font-weight: 900;
+  color: #1e1b4b;
+  text-shadow: 0 2px 0 #fff, 0 0 8px rgba(255,255,255,.65);
   pointer-events: none;
 }
 
