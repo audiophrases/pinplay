@@ -1763,14 +1763,18 @@ function renderHostQuestion(state) {
     return;
   }
 
-  if (question.type === 'text') {
+  const isTeacherGradedText = question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length;
+
+  if (question.type === 'text' && !isTeacherGradedText) {
     hostQuestionHintEl.textContent = showReveal ? '' : 'Type-answer question.';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
-  if (question.type === 'open' || question.type === 'image_open') {
-    hostQuestionHintEl.textContent = 'Open short answer: grade live answers below.';
+  if (question.type === 'open' || question.type === 'image_open' || isTeacherGradedText) {
+    hostQuestionHintEl.textContent = isTeacherGradedText
+      ? 'Typed answer (teacher-graded): grade live answers below.'
+      : 'Open short answer: grade live answers below.';
 
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');

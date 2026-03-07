@@ -259,7 +259,9 @@ function renderPlayerState(state) {
     } else {
       const rr = state.revealedResult;
       if (rr) {
-        if (rr.correct) {
+        if (rr.graded === false) {
+          setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
+        } else if (rr.correct) {
           setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
         } else {
           setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');

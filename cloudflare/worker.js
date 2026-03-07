@@ -786,7 +786,7 @@ export class QuizRoom {
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || !['open', 'image_open'].includes(question.type)) return json({ error: 'Current question is not open short answer.' }, 409);
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) return json({ error: 'Current question is not teacher-graded.' }, 409);
 
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
         const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
@@ -895,7 +895,7 @@ export class QuizRoom {
             hidden: false,
             submittedAt: Date.now(),
           };
-        } else if (question.type === 'open' || question.type === 'image_open') {
+        } else if (question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question)) {
           room.responsesByQuestion[qIndex][playerId] = {
             answer: String(body?.answer || '').slice(0, 220),
             correct: false,
@@ -1046,7 +1046,7 @@ function hostState(room) {
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    openResponses: room.phase === 'question' && ['open', 'image_open'].includes(roomQuestion?.type) && !roomQuestion?.isPoll
+    openResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses).map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
@@ -1057,7 +1057,12 @@ function hostState(room) {
       : [],
     pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses) : null,
     pollResponses,
-    correctAnswer: room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll ? hostCorrectSummary(roomQuestion) : '',
+    correctAnswer:
+      room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll
+      && !['open', 'image_open'].includes(roomQuestion?.type)
+      && !isTeacherGradedTextQuestion(roomQuestion)
+        ? hostCorrectSummary(roomQuestion)
+        : '',
     settings: {
       randomNames: !!room.settings?.randomNames,
     },
@@ -1090,6 +1095,8 @@ function playerState(room, playerId) {
     question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
     correctAnswer:
       room.phase === 'question' && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
+      && !['open', 'image_open'].includes(room.quiz.questions[qIndex]?.type)
+      && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
         ? hostCorrectSummary(room.quiz.questions[qIndex])
         : '',
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
@@ -1750,6 +1757,7 @@ function hostCorrectSummary(question) {
   }
 
   if (question.type === 'text') {
+    if (isTeacherGradedTextQuestion(question)) return 'Teacher-graded typed answer';
     return (question.accepted || []).filter(Boolean).join(' | ');
   }
 
@@ -1782,6 +1790,12 @@ function hostCorrectSummary(question) {
   }
 
   return '';
+}
+
+function isTeacherGradedTextQuestion(question) {
+  if (!question || question.type !== 'text') return false;
+  const accepted = (question.accepted || []).map((x) => String(x || '').trim()).filter(Boolean);
+  return accepted.length === 0;
 }
 
 function hasBlockedNickname(name) {
