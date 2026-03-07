@@ -110,6 +110,25 @@
             </div>
           </div>
 
+          <div class="card hidden" id="studentPreviewCard">
+            <div class="row spread gap">
+              <strong>Student preview</strong>
+              <span class="small">← / → navigate questions</span>
+            </div>
+            <div class="row gap top-space small" id="joinHud">
+              <span id="joinProgress">Question 1 / 1</span>
+              <span id="joinTimer">⏱️ Time: —</span>
+              <span id="joinScore">Score: 0</span>
+            </div>
+            <p class="small" id="joinStatus">Preview mode.</p>
+            <div id="joinQuestionWrap" class="top-space">
+              <h3 id="joinPrompt"></h3>
+              <div id="joinAnswers"></div>
+            </div>
+            <p class="small" id="joinFeedback"></p>
+            <button id="joinSubmitBtn" class="btn top-space">Submit answer</button>
+          </div>
+
           <div class="card" id="hostCard">
             <div class="row gap top-space">
               <label style="display:flex; align-items:center; gap:.4rem; margin:0; font-weight:500;">
@@ -125,6 +144,9 @@
               <button id="hostStartBtn" class="btn">Start game</button>
               <button id="hostPrevBtn" class="btn">← Previous</button>
               <button id="hostNextBtn" class="btn">Next →</button>
+              <button id="previewLiveBtn" class="btn">🖥️ Preview live</button>
+              <button id="previewStudentBtn" class="btn">🎒 Preview student</button>
+              <button id="previewExitBtn" class="btn hidden">✖ Exit preview</button>
             </div>
 
             <div class="row gap top-space" id="hostJoinRow">

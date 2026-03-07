@@ -54,6 +54,10 @@ const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
+const previewLiveBtn = document.getElementById('previewLiveBtn');
+const previewStudentBtn = document.getElementById('previewStudentBtn');
+const previewExitBtn = document.getElementById('previewExitBtn');
+const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
 const livePinEl = document.getElementById('livePin');
@@ -115,6 +119,15 @@ let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQ
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
+let previewMode = {
+  active: false,
+  mode: null,
+  index: 0,
+  showReveal: false,
+  score: 0,
+  answeredCurrent: false,
+  revealedResult: null,
+};
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -1229,6 +1242,10 @@ function bindLiveEvents() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 
+  if (previewLiveBtn) previewLiveBtn.addEventListener('click', () => startPreviewMode('live'));
+  if (previewStudentBtn) previewStudentBtn.addEventListener('click', () => startPreviewMode('student'));
+  if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
+
   if (randomNamesToggleEl) {
     randomNamesToggleEl.addEventListener('change', hostUpdateRandomNames);
   }
@@ -1347,6 +1364,15 @@ async function joinLiveGameAsHostByPin() {
 }
 
 async function hostNextQuestion() {
+  if (previewMode.active) {
+    previewMode.index = Math.min(quiz.questions.length - 1, previewMode.index + 1);
+    previewMode.showReveal = false;
+    previewMode.answeredCurrent = false;
+    previewMode.revealedResult = null;
+    renderPreviewFrame();
+    return;
+  }
+
   try {
     ensureHostReady();
     await api('/api/host/next', {
@@ -1361,6 +1387,15 @@ async function hostNextQuestion() {
 }
 
 async function hostPrevQuestion() {
+  if (previewMode.active) {
+    previewMode.index = Math.max(0, previewMode.index - 1);
+    previewMode.showReveal = false;
+    previewMode.answeredCurrent = false;
+    previewMode.revealedResult = null;
+    renderPreviewFrame();
+    return;
+  }
+
   try {
     ensureHostReady();
     await api('/api/host/prev', {
@@ -1375,6 +1410,12 @@ async function hostPrevQuestion() {
 }
 
 async function hostRevealQuestion() {
+  if (previewMode.active) {
+    previewMode.showReveal = !previewMode.showReveal;
+    renderPreviewFrame();
+    return;
+  }
+
   try {
     ensureHostReady();
     await api('/api/host/reveal', {
@@ -1407,17 +1448,30 @@ async function hostUpdateRandomNames() {
 
 function shouldIgnoreHostHotkey(e) {
   if (!createWorkspace || createWorkspace.classList.contains('hidden')) return true;
-  if (!live.host.pin || !live.host.token) return true;
+  if (!previewMode.active && (!live.host.pin || !live.host.token)) return true;
 
   const el = e.target;
   if (!el) return false;
   const tag = String(el.tagName || '').toLowerCase();
   if (el.isContentEditable) return true;
-  return ['input', 'textarea', 'select', 'button'].includes(tag);
+  return ['input', 'textarea', 'select'].includes(tag);
 }
 
 function handleHostHotkeys(e) {
   if (shouldIgnoreHostHotkey(e)) return;
+
+  if (previewMode.active && previewMode.mode === 'student') {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      hostNextQuestion();
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      hostPrevQuestion();
+      return;
+    }
+  }
 
   if (e.key === 'f' || e.key === 'F') {
     e.preventDefault();
@@ -2700,6 +2754,22 @@ function renderJoinQuestion(question) {
 
 async function submitLiveAnswer() {
   try {
+    if (previewMode.active && previewMode.mode === 'student') {
+      const q = quiz.questions[previewMode.index];
+      if (!q) return;
+      const answer = readJoinAnswer();
+      if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
+
+      const verdict = evaluatePreviewAnswer(q, answer);
+      previewMode.answeredCurrent = true;
+      previewMode.revealedResult = verdict;
+      if (verdict.correct) {
+        previewMode.score += Number(q.points || 1000);
+      }
+      renderPreviewFrame();
+      return;
+    }
+
     if (!live.player.pin || !live.player.id || !live.player.token) throw new Error('Join first.');
 
     const answer = readJoinAnswer();
@@ -2821,6 +2891,185 @@ function renderLeaderboardInJoin(leaderboard) {
   });
 
   joinAnswersEl.appendChild(ul);
+}
+
+function startPreviewMode(mode) {
+  syncQuizFromUI();
+  if (!quiz.questions?.length) {
+    setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
+    return;
+  }
+
+  previewMode.active = true;
+  previewMode.mode = mode;
+  previewMode.index = Math.max(0, Math.min(previewMode.index, quiz.questions.length - 1));
+  previewMode.showReveal = false;
+  previewMode.answeredCurrent = false;
+  previewMode.revealedResult = null;
+  live.player.renderKey = null;
+  live.player.currentQuestion = null;
+  live.player.pinSelection = null;
+
+  if (previewExitBtn) previewExitBtn.classList.remove('hidden');
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.toggle('hidden', mode !== 'student');
+
+  renderPreviewFrame();
+}
+
+function stopPreviewMode() {
+  previewMode.active = false;
+  previewMode.mode = null;
+  previewMode.showReveal = false;
+  previewMode.answeredCurrent = false;
+  previewMode.revealedResult = null;
+  if (previewExitBtn) previewExitBtn.classList.add('hidden');
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+  setStatus(joinFeedbackEl, '', '');
+  setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
+}
+
+function buildPreviewHostQuestion(q) {
+  if (!q) return null;
+  const base = {
+    type: q.type,
+    prompt: q.prompt,
+    points: q.points,
+    timeLimit: q.timeLimit,
+    isPoll: !!q.isPoll,
+    imageData: String(q.imageData || '') || undefined,
+    zones: q.type === 'pin' ? normalizePinZones(q) : undefined,
+    zone: q.type === 'pin' ? normalizePinZones(q)[0] : undefined,
+  };
+
+  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+    const answers = (q.answers || []).map((a) => ({ text: String(a.text || ''), isCorrect: !!a.correct }));
+    return { ...base, answers, correctIndexes: answers.map((a, i) => (a.isCorrect ? i : null)).filter((x) => x !== null) };
+  }
+
+  if (q.type === 'text') return { ...base, accepted: q.accepted || [] };
+  if (q.type === 'puzzle') return { ...base, options: q.items || [], items: q.items || [] };
+  if (q.type === 'slider') return { ...base, min: q.min, max: q.max, target: q.target, margin: q.margin, unit: q.unit };
+  if (q.type === 'context_gap') return { ...base, gapCount: Number((q.gaps || []).filter(Boolean).length || 0) };
+  if (q.type === 'match_pairs') {
+    return {
+      ...base,
+      leftItems: (q.pairs || []).map((p) => String(p.left || '')).filter(Boolean),
+      rightOptions: (q.pairs || []).map((p) => String(p.right || '')).filter(Boolean),
+      pairs: q.pairs || [],
+    };
+  }
+  if (q.type === 'error_hunt') return { ...base, corrected: q.corrected, requiredErrors: q.requiredErrors };
+  return base;
+}
+
+function evaluatePreviewAnswer(q, answer) {
+  if (!q) return { correct: false };
+  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+    const selected = Number(answer);
+    const correctIndex = (q.answers || []).findIndex((a) => !!a.correct);
+    return { correct: Number.isFinite(selected) && selected === correctIndex };
+  }
+  if (q.type === 'multi') {
+    const selected = Array.isArray(answer) ? answer.map(Number).filter(Number.isFinite) : [];
+    const expected = (q.answers || []).map((a, i) => (a.correct ? i : null)).filter((x) => x !== null);
+    return { correct: selected.length === expected.length && selected.every((i) => expected.includes(i)) };
+  }
+  if (q.type === 'text') {
+    const guess = normalizeTextAnswer(answer);
+    const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
+    return { correct: accepted.length ? accepted.includes(guess) : false };
+  }
+  if (q.type === 'open' || q.type === 'image_open') return { correct: false, graded: false };
+  if (q.type === 'context_gap') {
+    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+    const expected = (q.gaps || []).map(normalizeTextAnswer).filter(Boolean);
+    return { correct: guess.length === expected.length && JSON.stringify(guess) === JSON.stringify(expected) };
+  }
+  if (q.type === 'match_pairs') {
+    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+    const expected = (q.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
+    return { correct: guess.length === expected.length && JSON.stringify(guess) === JSON.stringify(expected) };
+  }
+  if (q.type === 'error_hunt') {
+    const rewrite = normalizeTextAnswer(answer?.rewrite || '');
+    const corrected = normalizeTextAnswer(q.corrected || '');
+    return { correct: rewrite && rewrite === corrected };
+  }
+  if (q.type === 'puzzle') {
+    const expected = (q.items || []).map(normalizeTextAnswer).filter(Boolean);
+    const got = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+    return { correct: got.length === expected.length && JSON.stringify(got) === JSON.stringify(expected) };
+  }
+  if (q.type === 'slider') {
+    const value = Number(answer);
+    const tol = sliderTolerance(q.margin, q.min, q.max);
+    return { correct: Number.isFinite(value) && Math.abs(value - Number(q.target)) <= tol };
+  }
+  if (q.type === 'pin') {
+    const x = Number(answer?.x);
+    const y = Number(answer?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { correct: false };
+    const zones = normalizePinZones(q);
+    return { correct: zones.some((z) => distance2D(x, y, Number(z.x), Number(z.y)) <= Number(z.r)) };
+  }
+  return { correct: false };
+}
+
+function renderPreviewFrame() {
+  if (!previewMode.active) return;
+  const q = quiz.questions[previewMode.index];
+  if (!q) return;
+
+  if (previewMode.mode === 'live') {
+    if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+    const state = {
+      phase: 'question',
+      currentIndex: previewMode.index,
+      totalQuestions: quiz.questions.length,
+      responseCount: previewMode.answeredCurrent ? 1 : 0,
+      playerCount: 1,
+      question: buildPreviewHostQuestion(q),
+      questionClosed: !!previewMode.showReveal,
+      questionClosedAt: previewMode.showReveal ? Date.now() : null,
+      questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
+      correctAnswer: '',
+      pollSummary: null,
+      openResponses: [],
+      players: [{ name: 'Preview Student', score: previewMode.score, answeredCurrent: previewMode.answeredCurrent }],
+      reactions: [],
+    };
+    if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
+    if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
+    if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
+    renderProjectorScores(state.players || []);
+    renderHostQuestion(state);
+    return;
+  }
+
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
+  const state = {
+    phase: 'question',
+    name: 'Preview Student',
+    currentIndex: previewMode.index,
+    totalQuestions: quiz.questions.length,
+    score: previewMode.score,
+    answeredCurrent: previewMode.answeredCurrent,
+    question: buildPreviewHostQuestion(q),
+    questionClosed: false,
+    questionStartedAt: null,
+    questionDeadlineAt: null,
+    questionClosedAt: null,
+    questionCloseReason: null,
+    correctAnswer: '',
+    revealedResult: previewMode.revealedResult,
+    leaderboard: [{ name: 'Preview Student', score: previewMode.score }],
+  };
+  renderPlayerState(state);
+  if (previewMode.revealedResult) {
+    if (previewMode.revealedResult.correct) setStatus(joinFeedbackEl, `✅ Correct (+${Number(q.points || 1000)} pts)`, 'ok');
+    else if (previewMode.revealedResult.graded === false) setStatus(joinFeedbackEl, '⏳ Waiting for teacher grading.', 'ok');
+    else setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
+  }
 }
 
 function ensureHostReady() {
