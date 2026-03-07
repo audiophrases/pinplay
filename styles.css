@@ -201,15 +201,24 @@ textarea { min-height: 72px; resize: vertical; }
   border: 1px solid var(--line);
   border-radius: .6rem;
   background: #fff;
-  padding: .45rem .55rem;
+  padding: .5rem .75rem;
   display: block;
   text-align: left;
   cursor: pointer;
+  font-size: 1rem;
+  line-height: 1.25;
 }
 
 .match-pair-left.filled {
   border-color: #605dff;
 }
+
+.match-pairs-lines .match-connection-line:nth-child(6n+1) { stroke: #605dff; }
+.match-pairs-lines .match-connection-line:nth-child(6n+2) { stroke: #0ea5e9; }
+.match-pairs-lines .match-connection-line:nth-child(6n+3) { stroke: #22c55e; }
+.match-pairs-lines .match-connection-line:nth-child(6n+4) { stroke: #f59e0b; }
+.match-pairs-lines .match-connection-line:nth-child(6n+5) { stroke: #ef4444; }
+.match-pairs-lines .match-connection-line:nth-child(6n+6) { stroke: #a855f7; }
 
 .match-pair-left.active {
   border-color: var(--primary);
