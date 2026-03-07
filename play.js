@@ -291,6 +291,9 @@ function renderJoinQuestion(question) {
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
 
+  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
+  joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
+
   if (question.isPoll) {
     const note = document.createElement('p');
     note.className = 'small';

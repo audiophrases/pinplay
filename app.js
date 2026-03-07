@@ -1736,6 +1736,9 @@ function renderHostQuestion(state) {
   hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
   hostQuestionAnswersEl.innerHTML = '';
 
+  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
+  hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
+
   if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
@@ -2267,6 +2270,9 @@ function renderPlayerState(state) {
 function renderJoinQuestion(question) {
   joinPromptEl.textContent = question.prompt || '(No question text)';
   joinAnswersEl.innerHTML = '';
+
+  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
+  joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
   if (question.isPoll) {
     const note = document.createElement('p');

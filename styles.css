@@ -483,6 +483,27 @@ textarea { min-height: 72px; resize: vertical; }
   cursor: zoom-in;
 }
 
+@media (min-width: 980px) {
+  .project-answers.has-question-image {
+    display: grid;
+    grid-template-columns: minmax(260px, 42%) minmax(0, 1fr);
+    gap: .8rem 1rem;
+    align-items: start;
+  }
+
+  .project-answers.has-question-image > .question-image-preview {
+    grid-column: 1;
+    grid-row: 1 / span 20;
+    margin-top: 0;
+    position: sticky;
+    top: .5rem;
+  }
+
+  .project-answers.has-question-image > :not(.question-image-preview) {
+    grid-column: 2;
+  }
+}
+
 .image-lightbox {
   position: fixed;
   inset: 0;
