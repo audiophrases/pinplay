@@ -226,7 +226,7 @@ function renderPlayerState(state) {
 
   if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
 
-  const key = `${state.phase}:${state.currentIndex}`;
+  const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
   const shouldRenderQuestion = live.player.renderKey !== key;
   if (shouldRenderQuestion) {
     live.player.renderKey = key;
@@ -798,12 +798,18 @@ function renderLeaderboardInJoin(leaderboard) {
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
   const wrap = document.createElement('div');
-  wrap.className = 'match-pairs-wrap';
+  wrap.className = 'match-pairs-wrap match-pairs-wrap-interactive';
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const lineLayer = document.createElementNS(svgNs, 'svg');
+  lineLayer.classList.add('match-pairs-lines');
 
   const leftCol = document.createElement('div');
   leftCol.className = 'match-pairs-col';
   const rightCol = document.createElement('div');
   rightCol.className = 'match-pairs-col';
+
+  const rightButtonsByValue = new Map();
 
   let selectedLeft = -1;
   let selectedRight = '';
@@ -825,6 +831,39 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     refreshUi();
   };
 
+  const drawConnections = () => {
+    lineLayer.innerHTML = '';
+    const wrapRect = wrap.getBoundingClientRect();
+    if (!wrapRect.width || !wrapRect.height) return;
+
+    lineLayer.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+    lineLayer.setAttribute('width', String(wrapRect.width));
+    lineLayer.setAttribute('height', String(wrapRect.height));
+
+    rows.forEach((row) => {
+      const value = String(row.hidden.value || '').trim();
+      if (!value) return;
+      const target = rightButtonsByValue.get(value);
+      if (!target) return;
+
+      const leftRect = row.container.getBoundingClientRect();
+      const rightRect = target.getBoundingClientRect();
+
+      const x1 = leftRect.right - wrapRect.left;
+      const y1 = leftRect.top + (leftRect.height / 2) - wrapRect.top;
+      const x2 = rightRect.left - wrapRect.left;
+      const y2 = rightRect.top + (rightRect.height / 2) - wrapRect.top;
+
+      const line = document.createElementNS(svgNs, 'line');
+      line.setAttribute('x1', String(Math.max(0, x1)));
+      line.setAttribute('y1', String(Math.max(0, y1)));
+      line.setAttribute('x2', String(Math.max(0, x2)));
+      line.setAttribute('y2', String(Math.max(0, y2)));
+      line.classList.add('match-connection-line');
+      lineLayer.appendChild(line);
+    });
+  };
+
   const refreshUi = () => {
     rows.forEach((row, idx) => {
       row.container.classList.toggle('active', idx === selectedLeft);
@@ -841,6 +880,8 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       btn.classList.toggle('active', isUsed || value === selectedRight);
       btn.disabled = false;
     });
+
+    requestAnimationFrame(drawConnections);
   };
 
   leftItems.forEach((left, i) => {
@@ -927,11 +968,13 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       e.dataTransfer.effectAllowed = 'move';
     });
 
+    rightButtonsByValue.set(String(opt || ''), btn);
     rightCol.appendChild(btn);
   });
 
-  wrap.append(leftCol, rightCol);
+  wrap.append(leftCol, rightCol, lineLayer);
   container.appendChild(wrap);
+  window.addEventListener('resize', drawConnections);
   refreshUi();
 }
 

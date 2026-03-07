@@ -130,6 +130,7 @@ const live = {
     timerLimitSec: null,
     timerAnchorAtMs: null,
     timerInitialRemainingMs: null,
+    timerLastSyncAt: null,
     isPrimaryAudioHost: false,
     lastPhase: null,
     lastIndex: null,
@@ -1953,6 +1954,9 @@ function renderHostQuestion(state) {
 
   if (question.type === 'match_pairs') {
     hostQuestionHintEl.textContent = showReveal ? '' : 'Match pairs question.';
+    if (!showReveal) {
+      renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+    }
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
@@ -2106,12 +2110,22 @@ function updateHostTimer(state) {
 
   const questionIndex = Number(state.currentIndex || 0);
   const startedAt = Number(state.questionStartedAt || 0);
+  const deadlineFromState = Number(state.questionDeadlineAt || 0);
+  const now = Date.now();
 
   if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
-    const fallbackStart = startedAt > 0 ? startedAt : Date.now();
-    live.host.timerDeadlineMs = fallbackStart + limitSec * 1000;
     live.host.timerForIndex = questionIndex;
     live.host.timerStartedAtMs = startedAt || null;
+    live.host.timerDeadlineMs = deadlineFromState > 0
+      ? deadlineFromState
+      : ((startedAt > 0 ? startedAt : now) + limitSec * 1000);
+    live.host.timerLastSyncAt = now;
+  } else if (deadlineFromState > 0) {
+    const lastSyncAt = Number(live.host.timerLastSyncAt || 0);
+    if (!lastSyncAt || (now - lastSyncAt) >= 6000) {
+      live.host.timerDeadlineMs = deadlineFromState;
+      live.host.timerLastSyncAt = now;
+    }
   }
 
   live.host.timerLimitSec = limitSec;
@@ -2160,6 +2174,7 @@ function stopHostTimerTicker() {
   live.host.timerLimitSec = null;
   live.host.timerAnchorAtMs = null;
   live.host.timerInitialRemainingMs = null;
+  live.host.timerLastSyncAt = null;
 }
 
 function toggleProjectorFullscreen() {
@@ -2336,7 +2351,7 @@ function renderPlayerState(state) {
 
   joinQuestionWrap.classList.remove('hidden');
 
-  const key = `${state.phase}:${state.currentIndex}`;
+  const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
   const shouldRenderQuestion = live.player.renderKey !== key;
   if (shouldRenderQuestion) {
     live.player.renderKey = key;
@@ -3886,12 +3901,18 @@ function playQuestionAudio(question) {
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
   const wrap = document.createElement('div');
-  wrap.className = 'match-pairs-wrap';
+  wrap.className = 'match-pairs-wrap match-pairs-wrap-interactive';
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const lineLayer = document.createElementNS(svgNs, 'svg');
+  lineLayer.classList.add('match-pairs-lines');
 
   const leftCol = document.createElement('div');
   leftCol.className = 'match-pairs-col';
   const rightCol = document.createElement('div');
   rightCol.className = 'match-pairs-col';
+
+  const rightButtonsByValue = new Map();
 
   let selectedLeft = -1;
   let selectedRight = '';
@@ -3913,6 +3934,39 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     refreshUi();
   };
 
+  const drawConnections = () => {
+    lineLayer.innerHTML = '';
+    const wrapRect = wrap.getBoundingClientRect();
+    if (!wrapRect.width || !wrapRect.height) return;
+
+    lineLayer.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+    lineLayer.setAttribute('width', String(wrapRect.width));
+    lineLayer.setAttribute('height', String(wrapRect.height));
+
+    rows.forEach((row) => {
+      const value = String(row.hidden.value || '').trim();
+      if (!value) return;
+      const target = rightButtonsByValue.get(value);
+      if (!target) return;
+
+      const leftRect = row.container.getBoundingClientRect();
+      const rightRect = target.getBoundingClientRect();
+
+      const x1 = leftRect.right - wrapRect.left;
+      const y1 = leftRect.top + (leftRect.height / 2) - wrapRect.top;
+      const x2 = rightRect.left - wrapRect.left;
+      const y2 = rightRect.top + (rightRect.height / 2) - wrapRect.top;
+
+      const line = document.createElementNS(svgNs, 'line');
+      line.setAttribute('x1', String(Math.max(0, x1)));
+      line.setAttribute('y1', String(Math.max(0, y1)));
+      line.setAttribute('x2', String(Math.max(0, x2)));
+      line.setAttribute('y2', String(Math.max(0, y2)));
+      line.classList.add('match-connection-line');
+      lineLayer.appendChild(line);
+    });
+  };
+
   const refreshUi = () => {
     rows.forEach((row, idx) => {
       row.container.classList.toggle('active', idx === selectedLeft);
@@ -3929,6 +3983,8 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       btn.classList.toggle('active', isUsed || value === selectedRight);
       btn.disabled = false;
     });
+
+    requestAnimationFrame(drawConnections);
   };
 
   leftItems.forEach((left, i) => {
@@ -4015,12 +4071,53 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       e.dataTransfer.effectAllowed = 'move';
     });
 
+    rightButtonsByValue.set(String(opt || ''), btn);
     rightCol.appendChild(btn);
+  });
+
+  wrap.append(leftCol, rightCol, lineLayer);
+  container.appendChild(wrap);
+  window.addEventListener('resize', drawConnections);
+  refreshUi();
+}
+
+function renderMatchPairsPreview(container, leftItems, rightOptions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'match-pairs-wrap';
+
+  const leftCol = document.createElement('div');
+  leftCol.className = 'match-pairs-col';
+  const rightCol = document.createElement('div');
+  rightCol.className = 'match-pairs-col';
+
+  leftItems.forEach((left) => {
+    const row = document.createElement('div');
+    row.className = 'match-pair-left';
+
+    const leftText = document.createElement('span');
+    leftText.className = 'match-left-text';
+    leftText.textContent = left;
+
+    const link = document.createElement('span');
+    link.className = 'match-link-line';
+
+    const slot = document.createElement('span');
+    slot.className = 'match-right-slot';
+    slot.textContent = '_____';
+
+    row.append(leftText, link, slot);
+    leftCol.appendChild(row);
+  });
+
+  rightOptions.forEach((opt) => {
+    const item = document.createElement('div');
+    item.className = 'btn';
+    item.textContent = String(opt || '');
+    rightCol.appendChild(item);
   });
 
   wrap.append(leftCol, rightCol);
   container.appendChild(wrap);
-  refreshUi();
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
