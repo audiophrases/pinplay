@@ -868,7 +868,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     rows.forEach((row, idx) => {
       row.container.classList.toggle('active', idx === selectedLeft);
       const val = String(row.hidden.value || '').trim();
-      row.slot.textContent = val || '_____';
+      row.slot.textContent = val ? '●' : '○';
       row.slot.classList.toggle('filled', !!val);
       row.link.classList.toggle('filled', !!val);
     });

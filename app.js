@@ -130,7 +130,6 @@ const live = {
     timerLimitSec: null,
     timerAnchorAtMs: null,
     timerInitialRemainingMs: null,
-    timerLastSyncAt: null,
     isPrimaryAudioHost: false,
     lastPhase: null,
     lastIndex: null,
@@ -2111,21 +2110,17 @@ function updateHostTimer(state) {
   const questionIndex = Number(state.currentIndex || 0);
   const startedAt = Number(state.questionStartedAt || 0);
   const deadlineFromState = Number(state.questionDeadlineAt || 0);
+  const serverNow = Number(state.serverNow || 0);
   const now = Date.now();
 
-  if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
-    live.host.timerForIndex = questionIndex;
-    live.host.timerStartedAtMs = startedAt || null;
-    live.host.timerDeadlineMs = deadlineFromState > 0
-      ? deadlineFromState
-      : ((startedAt > 0 ? startedAt : now) + limitSec * 1000);
-    live.host.timerLastSyncAt = now;
-  } else if (deadlineFromState > 0) {
-    const lastSyncAt = Number(live.host.timerLastSyncAt || 0);
-    if (!lastSyncAt || (now - lastSyncAt) >= 6000) {
-      live.host.timerDeadlineMs = deadlineFromState;
-      live.host.timerLastSyncAt = now;
-    }
+  live.host.timerForIndex = questionIndex;
+  live.host.timerStartedAtMs = startedAt || null;
+
+  if (deadlineFromState > 0) {
+    const driftMs = serverNow > 0 ? (now - serverNow) : 0;
+    live.host.timerDeadlineMs = deadlineFromState + driftMs;
+  } else {
+    live.host.timerDeadlineMs = (startedAt > 0 ? startedAt : now) + limitSec * 1000;
   }
 
   live.host.timerLimitSec = limitSec;
@@ -2174,7 +2169,6 @@ function stopHostTimerTicker() {
   live.host.timerLimitSec = null;
   live.host.timerAnchorAtMs = null;
   live.host.timerInitialRemainingMs = null;
-  live.host.timerLastSyncAt = null;
 }
 
 function toggleProjectorFullscreen() {
@@ -3971,7 +3965,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     rows.forEach((row, idx) => {
       row.container.classList.toggle('active', idx === selectedLeft);
       const val = String(row.hidden.value || '').trim();
-      row.slot.textContent = val || '_____';
+      row.slot.textContent = val ? '●' : '○';
       row.slot.classList.toggle('filled', !!val);
       row.link.classList.toggle('filled', !!val);
     });
