@@ -2074,29 +2074,38 @@ function updateHostTimer(state) {
   }
 
   const questionIndex = Number(state.currentIndex || 0);
-  const startedAt = Number(state.questionStartedAt || live.host.timerStartedAtMs || Date.now());
+  const startedAtFromState = Number(state.questionStartedAt || 0);
+  const startedAt = startedAtFromState > 0
+    ? startedAtFromState
+    : Number(live.host.timerStartedAtMs || 0);
 
   const deadlineFromState = Number(state.questionDeadlineAt || 0);
-  const computedDeadline = startedAt + limitSec * 1000;
-  const deadlineMs = Number.isFinite(deadlineFromState) && deadlineFromState > 0 ? deadlineFromState : computedDeadline;
+  const computedDeadline = startedAt > 0 ? (startedAt + limitSec * 1000) : 0;
+  const previousDeadline = Number(live.host.timerDeadlineMs || 0);
+  const deadlineMs = Number.isFinite(deadlineFromState) && deadlineFromState > 0
+    ? deadlineFromState
+    : (computedDeadline > 0 ? computedDeadline : previousDeadline);
 
-  if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
-    const serverNow = Number(state.serverNow || 0);
-    const initialRemainingMs = Number.isFinite(serverNow) && serverNow > 0
-      ? Math.max(0, deadlineMs - serverNow)
-      : Math.max(0, deadlineMs - Date.now());
-
+  if (
+    live.host.timerForIndex !== questionIndex
+    || live.host.timerStartedAtMs !== startedAt
+    || live.host.timerDeadlineMs !== deadlineMs
+  ) {
     live.host.timerDeadlineMs = deadlineMs;
     live.host.timerForIndex = questionIndex;
-    live.host.timerStartedAtMs = startedAt;
-    live.host.timerAnchorAtMs = Date.now();
-    live.host.timerInitialRemainingMs = initialRemainingMs;
+    live.host.timerStartedAtMs = startedAt || null;
+  }
+
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
+    projectorTimerEl.textContent = `Time: ${limitSec}s`;
+    setHostTimerBar(limitSec, limitSec, true);
+    return;
   }
 
   const capMs = limitSec * 1000;
   const serverNow = Number(state.serverNow || 0);
   const nowMs = Number.isFinite(serverNow) && serverNow > 0 ? serverNow : Date.now();
-  const remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs || deadlineMs) - nowMs);
+  const remainingMsRaw = Math.max(0, deadlineMs - nowMs);
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
