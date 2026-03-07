@@ -805,9 +805,9 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
   lineLayer.classList.add('match-pairs-lines');
 
   const leftCol = document.createElement('div');
-  leftCol.className = 'match-pairs-col';
+  leftCol.className = 'match-pairs-col match-pairs-col-left';
   const rightCol = document.createElement('div');
-  rightCol.className = 'match-pairs-col';
+  rightCol.className = 'match-pairs-col match-pairs-col-right';
 
   const rightButtonsByValue = new Map();
 
@@ -868,9 +868,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     rows.forEach((row, idx) => {
       row.container.classList.toggle('active', idx === selectedLeft);
       const val = String(row.hidden.value || '').trim();
-      row.slot.textContent = val ? '●' : '○';
-      row.slot.classList.toggle('filled', !!val);
-      row.link.classList.toggle('filled', !!val);
+      row.container.classList.toggle('filled', !!val);
     });
 
     const used = new Set(rows.map((r) => String(r.hidden.value || '').trim()).filter(Boolean));
@@ -893,18 +891,11 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     leftText.className = 'match-left-text';
     leftText.textContent = left;
 
-    const slot = document.createElement('span');
-    slot.className = 'match-right-slot';
-    slot.textContent = '_____';
-
-    const link = document.createElement('span');
-    link.className = 'match-link-line';
-
     const hidden = document.createElement('input');
     hidden.type = 'hidden';
     hidden.dataset[datasetKey] = String(i);
 
-    row.append(leftText, link, slot, hidden);
+    row.append(leftText, hidden);
     row.addEventListener('click', () => {
       if (selectedRight) {
         assignPair(i, selectedRight);
@@ -940,7 +931,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       assignPair(i, value);
     });
 
-    rows.push({ container: row, link, slot, hidden });
+    rows.push({ container: row, hidden });
     leftCol.appendChild(row);
   });
 
