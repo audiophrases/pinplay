@@ -495,7 +495,7 @@ function bindBuilderEvents() {
     if (imageUpload) {
       const idx = Number(imageUpload.dataset.imageUpload);
       const q = quiz.questions[idx];
-      if (!q || q.type !== 'image_open') return;
+      if (!q || q.type === 'pin') return;
 
       const file = imageUpload.files?.[0];
       if (!file) return;
