@@ -258,6 +258,10 @@ function renderPlayerState(state) {
       setStatus(joinStatusEl, 'Poll closed.', 'ok');
     } else {
       const rr = state.revealedResult;
+      const closeReason = String(state.questionCloseReason || '').trim();
+      const closedMsg = closeReason === 'all_answered'
+        ? 'Everyone answered. Waiting for next question…'
+        : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Question closed.');
       if (rr) {
         if (rr.graded === false) {
           setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
@@ -267,7 +271,7 @@ function renderPlayerState(state) {
           setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
         }
       } else {
-        setStatus(joinFeedbackEl, 'Question closed.', 'ok');
+        setStatus(joinFeedbackEl, closedMsg, 'ok');
       }
       setStatus(joinStatusEl, 'Answer revealed.', 'ok');
     }

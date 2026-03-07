@@ -2230,7 +2230,11 @@ function renderPlayerState(state) {
   joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
 
   if (questionClosed) {
-    setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : 'Time is up. Waiting for next question…', 'ok');
+    const closeReason = String(state.questionCloseReason || '').trim();
+    const closedMsg = closeReason === 'all_answered'
+      ? 'Everyone answered. Waiting for next question…'
+      : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Time is up. Waiting for next question…');
+    setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : closedMsg, 'ok');
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
