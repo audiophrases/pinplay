@@ -2075,30 +2075,18 @@ function updateHostTimer(state) {
   }
 
   const questionIndex = Number(state.currentIndex || 0);
-  const startedAtFromState = Number(state.questionStartedAt || 0);
-  const startedAt = startedAtFromState > 0
-    ? startedAtFromState
-    : Number(live.host.timerStartedAtMs || 0);
+  const startedAt = Number(state.questionStartedAt || 0);
 
-  const deadlineFromState = Number(state.questionDeadlineAt || 0);
-  const computedDeadline = startedAt > 0 ? (startedAt + limitSec * 1000) : 0;
-  const previousDeadline = Number(live.host.timerDeadlineMs || 0);
-  const deadlineMs = Number.isFinite(deadlineFromState) && deadlineFromState > 0
-    ? deadlineFromState
-    : (computedDeadline > 0 ? computedDeadline : previousDeadline);
-
-  if (
-    live.host.timerForIndex !== questionIndex
-    || live.host.timerStartedAtMs !== startedAt
-    || live.host.timerDeadlineMs !== deadlineMs
-  ) {
-    live.host.timerDeadlineMs = deadlineMs;
+  if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
+    const fallbackStart = startedAt > 0 ? startedAt : Date.now();
+    live.host.timerDeadlineMs = fallbackStart + limitSec * 1000;
     live.host.timerForIndex = questionIndex;
     live.host.timerStartedAtMs = startedAt || null;
   }
 
   live.host.timerLimitSec = limitSec;
 
+  const deadlineMs = Number(live.host.timerDeadlineMs || 0);
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
     projectorTimerEl.textContent = `Time: ${limitSec}s`;
     setHostTimerBar(limitSec, limitSec, true);
@@ -3114,7 +3102,7 @@ function makeMcqQuestion(opts = {}) {
     type: 'mcq',
     prompt: '',
     points: 1000,
-    timeLimit: 20,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3135,7 +3123,7 @@ function makeMultiQuestion(opts = {}) {
     type: 'multi',
     prompt: '',
     points: 1000,
-    timeLimit: 20,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3156,7 +3144,7 @@ function makeTfQuestion(opts = {}) {
     type: 'tf',
     prompt: '',
     points: 1000,
-    timeLimit: 20,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3175,7 +3163,7 @@ function makeTextQuestion(opts = {}) {
     type: 'text',
     prompt: '',
     points: 1000,
-    timeLimit: 30,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3191,7 +3179,7 @@ function makeOpenQuestion(opts = {}) {
     type: 'open',
     prompt: '',
     points: 1000,
-    timeLimit: 45,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3206,7 +3194,7 @@ function makeImageOpenQuestion() {
     type: 'image_open',
     prompt: '',
     points: 1000,
-    timeLimit: 60,
+    timeLimit: 0,
     imageData: '',
     audioEnabled: false,
     audioMode: 'tts',
@@ -3222,7 +3210,7 @@ function makeContextGapQuestion() {
     type: 'context_gap',
     prompt: 'Complete the paragraph: ...',
     points: 1000,
-    timeLimit: 45,
+    timeLimit: 0,
     gaps: ['', '', '', ''],
     audioEnabled: false,
     audioMode: 'tts',
@@ -3238,7 +3226,7 @@ function makeMatchPairsQuestion() {
     type: 'match_pairs',
     prompt: 'Match each item with the correct pair.',
     points: 1000,
-    timeLimit: 45,
+    timeLimit: 0,
     pairs: [
       { left: '', right: '' },
       { left: '', right: '' },
@@ -3260,7 +3248,7 @@ function makeErrorHuntQuestion() {
     prompt: 'She say that she go to school yesterday.',
     corrected: 'She said that she went to school yesterday.',
     points: 1000,
-    timeLimit: 45,
+    timeLimit: 0,
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
@@ -3275,7 +3263,7 @@ function makePuzzleQuestion(opts = {}) {
     type: 'puzzle',
     prompt: '',
     points: 1000,
-    timeLimit: 30,
+    timeLimit: 0,
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
@@ -3296,7 +3284,7 @@ function makeAudioQuestion() {
     language: 'en-US-Wave',
     audioData: '',
     points: 1000,
-    timeLimit: 20,
+    timeLimit: 0,
     answers: [
       { text: '', correct: true },
       { text: '', correct: false },
@@ -3312,7 +3300,7 @@ function makeSliderQuestion() {
     type: 'slider',
     prompt: '',
     points: 1000,
-    timeLimit: 20,
+    timeLimit: 0,
     min: 0,
     max: 100,
     target: 50,
@@ -3327,7 +3315,7 @@ function makePinQuestion() {
     type: 'pin',
     prompt: '',
     points: 1000,
-    timeLimit: 30,
+    timeLimit: 0,
     imageData: '',
     zone: { x: 50, y: 50, r: 15 },
   };

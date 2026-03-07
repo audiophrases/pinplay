@@ -262,6 +262,23 @@ textarea { min-height: 72px; resize: vertical; }
 #hostCard { order: 2; }
 #builderCard { order: 3; }
 
+.question-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: .45rem;
+}
+
+.question-type-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .5rem;
+  min-height: 44px;
+}
+
+.qt-emoji { font-size: 1.05rem; }
+.qt-text { font-weight: 600; }
+
 .question-list { margin-top: .8rem; display: grid; gap: .65rem; }
 .question-item { border: 1px dashed var(--line); border-radius: .65rem; padding: .8rem; }
 .question-header[draggable="true"] { cursor: grab; }

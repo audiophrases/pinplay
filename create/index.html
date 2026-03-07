@@ -31,37 +31,41 @@
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
             <div class="top-space">
-              <p class="small"><strong>1) Fast checks (auto-graded)</strong></p>
-              <div class="row gap">
-                <button id="addMcqBtn" class="btn">+ Multiple choice</button>
-                <button id="addMultiBtn" class="btn">+ Multi-select</button>
-                <button id="addTfBtn" class="btn">+ True / False</button>
-                <button id="addTextBtn" class="btn">+ Type answer</button>
-              </div>
-            </div>
-
-            <div class="top-space">
-              <p class="small"><strong>2) Language tasks</strong></p>
-              <div class="row gap">
-                <button id="addContextGapBtn" class="btn">+ Context gap fill</button>
-                <button id="addMatchPairsBtn" class="btn">+ Match pairs</button>
-                <button id="addErrorHuntBtn" class="btn">+ Error hunt</button>
-              </div>
-            </div>
-
-            <div class="top-space">
-              <p class="small"><strong>3) Teacher-graded</strong></p>
-              <div class="row gap">
-                <button id="addOpenBtn" class="btn">+ Open short answer</button>
-              </div>
-            </div>
-
-            <div class="top-space">
-              <p class="small"><strong>4) Interactive</strong></p>
-              <div class="row gap">
-                <button id="addPuzzleBtn" class="btn">+ Order puzzle</button>
-                <button id="addSliderBtn" class="btn">+ Number slider</button>
-                <button id="addPinBtn" class="btn">+ Pin on image</button>
+              <p class="small"><strong>Question types</strong></p>
+              <div class="question-type-grid" id="questionTypeGrid">
+                <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">✅</span><span class="qt-text">Multiple choice</span>
+                </button>
+                <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
+                </button>
+                <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">🔀</span><span class="qt-text">True / False</span>
+                </button>
+                <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
+                  <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
+                </button>
+                <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
+                </button>
+                <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
+                </button>
+                <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
+                </button>
+                <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
+                  <span class="qt-emoji">💬</span><span class="qt-text">Open short answer</span>
+                </button>
+                <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
+                </button>
+                <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">📏</span><span class="qt-text">Number slider</span>
+                </button>
+                <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
+                </button>
               </div>
             </div>
 
