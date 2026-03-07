@@ -1581,6 +1581,24 @@ function renderHostQuestion(state) {
     }
 
     const max = Math.max(1, ...summary.items.map((x) => Number(x.count || 0)));
+
+    const textLikeTypes = new Set(['text', 'open', 'image_open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
+    if (textLikeTypes.has(String(summary.type || ''))) {
+      const cloud = document.createElement('div');
+      cloud.className = 'poll-word-cloud';
+      summary.items.slice(0, 20).forEach((item) => {
+        const chip = document.createElement('span');
+        chip.className = 'poll-word-chip';
+        chip.textContent = String(item.label || '(blank)');
+        const weight = Number(item.count || 0) / max;
+        const size = Math.round(14 + weight * 20);
+        chip.style.fontSize = `${size}px`;
+        chip.title = `${item.count} vote(s)`;
+        cloud.appendChild(chip);
+      });
+      hostQuestionAnswersEl.appendChild(cloud);
+    }
+
     const list = document.createElement('div');
     list.className = 'answers-grid';
 

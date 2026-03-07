@@ -212,6 +212,24 @@ textarea { min-height: 72px; resize: vertical; }
   transform: translateY(6px);
   border-bottom: 2px solid var(--primary);
 }
+
+.poll-word-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .6rem;
+  align-items: center;
+  margin: .25rem 0 .75rem;
+}
+
+.poll-word-chip {
+  display: inline-block;
+  padding: .2rem .45rem;
+  border-radius: .5rem;
+  background: rgba(96,93,255,.08);
+  border: 1px solid rgba(96,93,255,.2);
+  line-height: 1.2;
+}
+
 .btn.primary {
   border-color: var(--primary);
   background: var(--primary);
