@@ -42,6 +42,7 @@ const live = {
     timerTicker: null,
     timerStartedAt: null,
     timerLimitSec: null,
+    timerDeadlineAt: null,
   },
 };
 
@@ -712,21 +713,35 @@ function startJoinTimer(state) {
     stopJoinTimer();
     live.player.timerStartedAt = startedAt;
     live.player.timerLimitSec = 0;
+    live.player.timerDeadlineAt = null;
     joinTimerEl.textContent = 'Time: No limit';
     setJoinTimerBar(0, 1, false);
     return;
   }
 
-  if (live.player.timerStartedAt === startedAt && live.player.timerLimitSec === limitSec && live.player.timerTicker) {
+  const capMs = limitSec * 1000;
+  const deadlineFromState = Number(state?.questionDeadlineAt || 0);
+  const deadlineAt = Number.isFinite(deadlineFromState) && deadlineFromState > 0
+    ? deadlineFromState
+    : (startedAt + capMs);
+
+  if (
+    live.player.timerStartedAt === startedAt
+    && live.player.timerLimitSec === limitSec
+    && live.player.timerDeadlineAt === deadlineAt
+    && live.player.timerTicker
+  ) {
     return;
   }
 
   live.player.timerStartedAt = startedAt;
   live.player.timerLimitSec = limitSec;
+  live.player.timerDeadlineAt = deadlineAt;
 
   stopJoinTimer();
   const paint = () => {
-    const remainingMs = Math.max(0, startedAt + limitSec * 1000 - Date.now());
+    const remainingMsRaw = Math.max(0, deadlineAt - Date.now());
+    const remainingMs = Math.min(capMs, remainingMsRaw);
     const sec = Math.ceil(remainingMs / 1000);
     joinTimerEl.textContent = `Time: ${sec}s`;
     setJoinTimerBar(remainingMs / 1000, limitSec, true);
@@ -739,6 +754,7 @@ function startJoinTimer(state) {
 function stopJoinTimer() {
   if (live.player.timerTicker) clearInterval(live.player.timerTicker);
   live.player.timerTicker = null;
+  live.player.timerDeadlineAt = null;
   if (joinTimerBarFill) {
     joinTimerBarFill.style.width = '0%';
     joinTimerBarFill.parentElement?.classList.remove('active');
