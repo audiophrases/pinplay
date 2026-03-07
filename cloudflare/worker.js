@@ -1574,7 +1574,7 @@ function normalizeQuiz(quiz) {
 
     if (q.type === 'match_pairs') {
       const pairs = (q.pairs || [])
-        .map((p) => ({ left: String(p?.left || '').slice(0, 48).trim(), right: String(p?.right || '').slice(0, 48).trim() }))
+        .map((p) => ({ left: String(p?.left || '').slice(0, 72).trim(), right: String(p?.right || '').slice(0, 72).trim() }))
         .filter((p) => p.left && p.right)
         .slice(0, 10);
       if (pairs.length < 2) return;

@@ -699,8 +699,8 @@ function renderBuilder() {
             .slice(0, 10)
             .map(
               (p, i) => `
-              <input data-q="${idx}" data-pair-left="${i}" maxlength="40" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
-              <input data-q="${idx}" data-pair-right="${i}" maxlength="40" value="${escapeHtml(p?.right || '')}" placeholder="Right ${i + 1}" />
+              <input data-q="${idx}" data-pair-left="${i}" maxlength="60" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
+              <input data-q="${idx}" data-pair-right="${i}" maxlength="60" value="${escapeHtml(p?.right || '')}" placeholder="Right ${i + 1}" />
             `,
             )
             .join('')}
@@ -953,8 +953,8 @@ function syncQuizFromUI() {
       for (let i = 0; i < 10; i++) {
         const leftEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-left="${i}"]`);
         const rightEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-right="${i}"]`);
-        const left = String(leftEl?.value || '').slice(0, 40).trim();
-        const right = String(rightEl?.value || '').slice(0, 40).trim();
+        const left = String(leftEl?.value || '').slice(0, 60).trim();
+        const right = String(rightEl?.value || '').slice(0, 60).trim();
         if (left || right) pairs.push({ left, right });
       }
       q.pairs = pairs;
@@ -3502,7 +3502,7 @@ function normalizeQuizForLive(raw) {
 
     if (q.type === 'match_pairs') {
       const pairs = (q.pairs || [])
-        .map((p) => ({ left: String(p?.left || '').slice(0, 48).trim(), right: String(p?.right || '').slice(0, 48).trim() }))
+        .map((p) => ({ left: String(p?.left || '').slice(0, 72).trim(), right: String(p?.right || '').slice(0, 72).trim() }))
         .filter((p) => p.left && p.right)
         .slice(0, 10);
       if (pairs.length < 2) return;
