@@ -127,6 +127,7 @@ const live = {
     timerDeadlineMs: null,
     timerForIndex: null,
     timerStartedAtMs: null,
+    timerLimitSec: null,
     timerAnchorAtMs: null,
     timerInitialRemainingMs: null,
     isPrimaryAudioHost: false,
@@ -2096,6 +2097,8 @@ function updateHostTimer(state) {
     live.host.timerStartedAtMs = startedAt || null;
   }
 
+  live.host.timerLimitSec = limitSec;
+
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
     projectorTimerEl.textContent = `Time: ${limitSec}s`;
     setHostTimerBar(limitSec, limitSec, true);
@@ -2103,23 +2106,40 @@ function updateHostTimer(state) {
   }
 
   const capMs = limitSec * 1000;
-  const serverNow = Number(state.serverNow || 0);
-  const nowMs = Number.isFinite(serverNow) && serverNow > 0 ? serverNow : Date.now();
-  const remainingMsRaw = Math.max(0, deadlineMs - nowMs);
+  const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
   setHostTimerBar(remainingMs / 1000, limitSec, true);
+  startHostTimerTicker();
 }
 
 function startHostTimerTicker() {
-  // Intentionally no-op: host timer is updated from polled host state
-  // to avoid jitter/blinking from competing timer loops.
+  if (live.host.timerTicker) return;
+  live.host.timerTicker = setInterval(() => {
+    if (!projectorTimerEl) return;
+    const deadlineMs = Number(live.host.timerDeadlineMs || 0);
+    const limitSec = Math.max(1, Number(live.host.timerLimitSec || 20));
+    if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) return;
+
+    const capMs = limitSec * 1000;
+    const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
+    const remainingMs = Math.min(capMs, remainingMsRaw);
+    const remaining = Math.ceil(remainingMs / 1000);
+    projectorTimerEl.textContent = `Time: ${remaining}s`;
+
+    if (hostTimerBarFill) {
+      const pct = Math.max(0, Math.min(100, (remainingMs / capMs) * 100));
+      hostTimerBarFill.style.width = `${pct}%`;
+      hostTimerBarFill.parentElement?.classList.toggle('active', pct > 0);
+    }
+  }, 200);
 }
 
 function stopHostTimerTicker() {
   if (live.host.timerTicker) clearInterval(live.host.timerTicker);
   live.host.timerTicker = null;
+  live.host.timerLimitSec = null;
   live.host.timerAnchorAtMs = null;
   live.host.timerInitialRemainingMs = null;
 }
