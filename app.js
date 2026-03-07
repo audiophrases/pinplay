@@ -127,6 +127,8 @@ const live = {
     timerDeadlineMs: null,
     timerForIndex: null,
     timerStartedAtMs: null,
+    timerAnchorAtMs: null,
+    timerInitialRemainingMs: null,
     isPrimaryAudioHost: false,
     lastPhase: null,
     lastIndex: null,
@@ -2016,6 +2018,8 @@ function updateHostTimer(state) {
     live.host.timerDeadlineMs = null;
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
+    live.host.timerAnchorAtMs = null;
+    live.host.timerInitialRemainingMs = null;
     stopHostTimerTicker();
     projectorTimerEl.textContent = 'Time: -';
     setHostTimerBar(0, 1, false);
@@ -2047,21 +2051,29 @@ function updateHostTimer(state) {
   }
 
   const questionIndex = Number(state.currentIndex || 0);
-  const startedAt = Number(state.questionStartedAt || Date.now());
+  const startedAt = Number(state.questionStartedAt || live.host.timerStartedAtMs || Date.now());
 
   const deadlineFromState = Number(state.questionDeadlineAt || 0);
   const computedDeadline = startedAt + limitSec * 1000;
   const deadlineMs = Number.isFinite(deadlineFromState) && deadlineFromState > 0 ? deadlineFromState : computedDeadline;
 
   if (live.host.timerForIndex !== questionIndex || live.host.timerStartedAtMs !== startedAt) {
+    const serverNow = Number(state.serverNow || 0);
+    const initialRemainingMs = Number.isFinite(serverNow) && serverNow > 0
+      ? Math.max(0, deadlineMs - serverNow)
+      : Math.max(0, deadlineMs - Date.now());
+
     live.host.timerDeadlineMs = deadlineMs;
     live.host.timerForIndex = questionIndex;
     live.host.timerStartedAtMs = startedAt;
+    live.host.timerAnchorAtMs = Date.now();
+    live.host.timerInitialRemainingMs = initialRemainingMs;
     startHostTimerTicker();
   }
 
   const capMs = limitSec * 1000;
-  const remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs || Date.now()) - Date.now());
+  const elapsedMs = Math.max(0, Date.now() - Number(live.host.timerAnchorAtMs || Date.now()));
+  const remainingMsRaw = Math.max(0, Number(live.host.timerInitialRemainingMs || 0) - elapsedMs);
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
@@ -2085,17 +2097,9 @@ function startHostTimerTicker() {
     }
     const limitSec = Math.max(1, rawLimitSec || 20);
     const capMs = limitSec * 1000;
-    const startedAt = Number(live.host.timerStartedAtMs || state?.questionStartedAt || 0);
 
-    let remainingMsRaw;
-    if (live.host.timerDeadlineMs) {
-      remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs) - Date.now());
-    } else if (startedAt > 0) {
-      const expectedDeadline = startedAt + capMs;
-      remainingMsRaw = Math.max(0, expectedDeadline - Date.now());
-    } else {
-      remainingMsRaw = capMs;
-    }
+    const elapsedMs = Math.max(0, Date.now() - Number(live.host.timerAnchorAtMs || Date.now()));
+    const remainingMsRaw = Math.max(0, Number(live.host.timerInitialRemainingMs || capMs) - elapsedMs);
 
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const remaining = Math.ceil(remainingMs / 1000);
@@ -2111,6 +2115,8 @@ function startHostTimerTicker() {
 function stopHostTimerTicker() {
   if (live.host.timerTicker) clearInterval(live.host.timerTicker);
   live.host.timerTicker = null;
+  live.host.timerAnchorAtMs = null;
+  live.host.timerInitialRemainingMs = null;
 }
 
 function toggleProjectorFullscreen() {

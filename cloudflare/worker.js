@@ -1046,6 +1046,7 @@ function hostState(room) {
       room.phase === 'question' && room.questionStartedAt && Number.isFinite(timeLimitSec)
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
+    serverNow: Date.now(),
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
     openResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses).map(([pid, r]) => ({
