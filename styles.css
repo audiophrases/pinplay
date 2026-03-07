@@ -213,6 +213,11 @@ textarea { min-height: 72px; resize: vertical; }
   border-bottom: 2px solid var(--primary);
 }
 
+.btn.puzzle-picked {
+  opacity: .75;
+  filter: saturate(.65);
+}
+
 .poll-word-cloud {
   display: flex;
   flex-wrap: wrap;

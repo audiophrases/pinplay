@@ -3834,18 +3834,38 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     });
   };
 
-  const buildBankButton = (value) => {
+  const refreshBankButtons = () => {
+    const pickedIds = new Set(
+      [...selected.querySelectorAll('[data-puzzle-piece-id]')].map((el) => String(el.dataset.puzzlePieceId || '')),
+    );
+
+    [...bank.querySelectorAll('[data-puzzle-bank-id]')].forEach((btn) => {
+      const id = String(btn.dataset.puzzleBankId || '');
+      const picked = pickedIds.has(id);
+      btn.disabled = picked;
+      btn.classList.toggle('puzzle-picked', picked);
+      if (picked) btn.setAttribute('aria-label', `${btn.dataset.puzzleBankPiece || btn.textContent} (selected)`);
+      else btn.removeAttribute('aria-label');
+    });
+  };
+
+  const buildBankButton = (value, pieceId) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn';
     btn.dataset.puzzleBankPiece = value;
+    btn.dataset.puzzleBankId = String(pieceId);
     btn.textContent = value;
     btn.draggable = true;
 
     btn.addEventListener('click', () => pickPiece(btn));
     btn.addEventListener('dragstart', (e) => {
+      if (btn.disabled) {
+        e.preventDefault();
+        return;
+      }
       if (e.dataTransfer) {
-        e.dataTransfer.setData('text/puzzle-bank-piece', value);
+        e.dataTransfer.setData('text/puzzle-bank-id', String(pieceId));
         e.dataTransfer.effectAllowed = 'copy';
       }
     });
@@ -3853,13 +3873,9 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   };
 
   const resetSelection = () => {
-    const picked = [...selected.querySelectorAll('[data-puzzle-piece]')];
-    picked.forEach((el) => {
-      const value = String(el.dataset.puzzlePiece || '');
-      bank.appendChild(buildBankButton(value));
-      el.remove();
-    });
+    selected.querySelectorAll('[data-puzzle-piece]').forEach((el) => el.remove());
     refreshSelectedIndexes();
+    refreshBankButtons();
   };
 
   selected.addEventListener('contextmenu', (e) => {
@@ -3875,19 +3891,23 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   selected.addEventListener('drop', (e) => {
     e.preventDefault();
-    const text = e.dataTransfer?.getData('text/puzzle-bank-piece');
-    if (!text) return;
-    const btn = bank.querySelector(`[data-puzzle-bank-piece="${CSS.escape(text)}"]`);
+    const pieceId = e.dataTransfer?.getData('text/puzzle-bank-id');
+    if (!pieceId) return;
+    const btn = bank.querySelector(`[data-puzzle-bank-id="${CSS.escape(pieceId)}"]`);
     if (btn) pickPiece(btn);
   });
 
   const pickPiece = (bankBtn) => {
+    if (!bankBtn || bankBtn.disabled) return;
     const text = String(bankBtn.dataset.puzzleBankPiece || bankBtn.textContent || '').trim();
-    if (!text) return;
+    const pieceId = String(bankBtn.dataset.puzzleBankId || '').trim();
+    if (!text || !pieceId) return;
+    if (selected.querySelector(`[data-puzzle-piece-id="${CSS.escape(pieceId)}"]`)) return;
 
     const row = document.createElement('div');
     row.className = 'answer-row';
     row.dataset.puzzlePiece = text;
+    row.dataset.puzzlePieceId = pieceId;
 
     const pos = document.createElement('strong');
     const label = document.createElement('span');
@@ -3896,13 +3916,14 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
     setupRowDnD(row);
     selected.appendChild(row);
-    bankBtn.remove();
     refreshSelectedIndexes();
+    refreshBankButtons();
   };
 
-  [...options].forEach((text) => {
-    bank.appendChild(buildBankButton(String(text || '')));
+  [...options].forEach((text, i) => {
+    bank.appendChild(buildBankButton(String(text || ''), i));
   });
+  refreshBankButtons();
 
   container.append(bank, resetBtn, selected);
 }
