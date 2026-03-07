@@ -1499,6 +1499,27 @@ async function hostHidePollResponse(playerId) {
   }
 }
 
+async function hostHideOpenResponse(playerId) {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    await api('/api/host/open/hide', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+      },
+    });
+
+    setStatus(hostStatusEl, 'Open response hidden.', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -1904,12 +1925,21 @@ function renderHostQuestion(state) {
       const text = document.createElement('span');
       text.textContent = `${r.name}: ${r.answer}`;
 
+      const actions = document.createElement('div');
+      actions.className = 'row gap';
+
       const gradeBtn = document.createElement('button');
       gradeBtn.className = 'btn';
       gradeBtn.textContent = r.graded ? `Regrade (${r.pointsAwarded})` : 'Grade';
       gradeBtn.addEventListener('click', () => gradeOpenAnswer(r.playerId, r.pointsAwarded));
 
-      row.append(text, gradeBtn);
+      const hideBtn = document.createElement('button');
+      hideBtn.className = 'btn';
+      hideBtn.textContent = 'Hide';
+      hideBtn.addEventListener('click', () => hostHideOpenResponse(r.playerId));
+
+      actions.append(gradeBtn, hideBtn);
+      row.append(text, actions);
       hostQuestionAnswersEl.appendChild(row);
     });
     return;
@@ -3889,6 +3919,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       const val = String(row.hidden.value || '').trim();
       row.slot.textContent = val || '_____';
       row.slot.classList.toggle('filled', !!val);
+      row.link.classList.toggle('filled', !!val);
     });
 
     const used = new Set(rows.map((r) => String(r.hidden.value || '').trim()).filter(Boolean));
@@ -3913,11 +3944,14 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     slot.className = 'match-right-slot';
     slot.textContent = '_____';
 
+    const link = document.createElement('span');
+    link.className = 'match-link-line';
+
     const hidden = document.createElement('input');
     hidden.type = 'hidden';
     hidden.dataset[datasetKey] = String(i);
 
-    row.append(leftText, slot, hidden);
+    row.append(leftText, link, slot, hidden);
     row.addEventListener('click', () => {
       if (selectedRight) {
         assignPair(i, selectedRight);
@@ -3953,7 +3987,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       assignPair(i, value);
     });
 
-    rows.push({ container: row, slot, hidden });
+    rows.push({ container: row, link, slot, hidden });
     leftCol.appendChild(row);
   });
 

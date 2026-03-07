@@ -318,6 +318,25 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/open/hide' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/open/hide', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -836,6 +855,32 @@ export class QuizRoom {
         return json({ ok: true, playerId, hidden: true });
       }
 
+      if (url.pathname === '/host/open/hide' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        const qIndex = room.currentIndex;
+        const question = room.quiz.questions[qIndex];
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+          return json({ error: 'Current question is not teacher-graded.' }, 409);
+        }
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+
+        const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
+        if (!resp) return json({ error: 'No submitted answer for this player.' }, 404);
+
+        resp.hidden = true;
+        resp.hiddenAt = Date.now();
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, playerId, hidden: true });
+      }
+
       if (url.pathname === '/player/state' && request.method === 'POST') {
         const body = await safeJson(request);
         const playerId = sanitizeId(body?.playerId);
@@ -1062,7 +1107,9 @@ function hostState(room) {
     serverNow: Date.now(),
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
     openResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
-      ? Object.entries(responses).map(([pid, r]) => ({
+      ? Object.entries(responses)
+        .filter(([, r]) => !r?.hidden)
+        .map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
           answer: String(r?.answer || ''),

@@ -173,11 +173,22 @@ textarea { min-height: 72px; resize: vertical; }
   background: #fff;
   padding: .45rem .55rem;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr minmax(32px, 1fr) auto;
   gap: .5rem;
   align-items: center;
   text-align: left;
   cursor: pointer;
+}
+
+.match-link-line {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148,163,184,.38);
+  transition: background-color .15s ease;
+}
+
+.match-link-line.filled {
+  background: linear-gradient(90deg,#605dff,#8b5cf6);
 }
 
 .match-pair-left.active {
