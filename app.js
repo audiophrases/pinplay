@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'pinplay.quiz.v1';
+const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
@@ -30,6 +31,7 @@ const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
+const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
@@ -310,8 +312,52 @@ function bindBuilderEvents() {
   saveBtn.addEventListener('click', () => {
     syncQuizFromUI();
     saveQuiz(quiz);
-    alert('Saved locally ✅');
+
+    const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
+    const suggested = `${fallback} (${new Date().toLocaleString()})`;
+    const name = prompt('Local save name:', suggested);
+    if (name !== null) {
+      saveQuizToLibrary(name, quiz);
+      alert('Saved locally ✅');
+    } else {
+      alert('Saved latest snapshot locally ✅');
+    }
   });
+
+  if (openLocalBtn) {
+    openLocalBtn.addEventListener('click', () => {
+      const items = loadQuizLibrary();
+      if (!items.length) {
+        alert('No local saved quizzes yet.');
+        return;
+      }
+
+      const list = items
+        .slice()
+        .reverse()
+        .map((item, i) => `${i + 1}) ${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`)
+        .join('\n');
+
+      const raw = prompt(`Choose a local save number:\n\n${list}`);
+      if (raw === null) return;
+      const pick = Number(raw);
+      if (!Number.isFinite(pick) || pick < 1 || pick > items.length) {
+        alert('Invalid selection.');
+        return;
+      }
+
+      const chosen = items.slice().reverse()[pick - 1];
+      try {
+        validateImportedQuiz(chosen.quiz);
+        quiz = chosen.quiz;
+        renderBuilder();
+        saveQuiz(quiz);
+        alert(`Loaded local save ✅\n${chosen.name}`);
+      } catch (err) {
+        alert(`Could not load save: ${err.message}`);
+      }
+    });
+  }
 
   exportBtn.addEventListener('click', () => {
     syncQuizFromUI();
@@ -3416,6 +3462,37 @@ function loadQuiz() {
 
 function saveQuiz(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function loadQuizLibrary() {
+  try {
+    const raw = localStorage.getItem(STORAGE_LIBRARY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveQuizLibrary(items) {
+  localStorage.setItem(STORAGE_LIBRARY_KEY, JSON.stringify(items));
+}
+
+function saveQuizToLibrary(name, data) {
+  const label = String(name || '').trim().slice(0, 140) || 'Untitled quiz';
+  const items = loadQuizLibrary();
+  const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const next = {
+    id,
+    name: label,
+    updatedAt: Date.now(),
+    quiz: JSON.parse(JSON.stringify(data || createEmptyQuiz())),
+  };
+
+  items.push(next);
+  const trimmed = items.slice(-50);
+  saveQuizLibrary(trimmed);
+  return next;
 }
 
 function loadBackendUrl() {
