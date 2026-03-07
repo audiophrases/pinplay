@@ -135,6 +135,7 @@ const live = {
     lastResponseCount: 0,
     lastAllAnsweredKey: null,
     lastRevealKey: null,
+    lastQuestionRenderKey: null,
     state: null,
     pollViewMode: 'bar',
     seenReactionKeys: new Set(),
@@ -1593,7 +1594,26 @@ function renderHostState(state) {
   }
 
   setStatus(hostStatusEl, actionHint, 'ok');
-  renderHostQuestion(state);
+
+  const questionRenderKey = [
+    state.phase,
+    state.currentIndex,
+    state.questionClosed ? 1 : 0,
+    state.questionClosedAt || 0,
+    state.responseCount || 0,
+    state.playerCount || 0,
+    state.question?.type || '',
+    state.question?.prompt || '',
+    state.question?.isPoll ? 1 : 0,
+    Array.isArray(state.openResponses) ? state.openResponses.length : 0,
+    Array.isArray(state.pollResponses) ? state.pollResponses.length : 0,
+  ].join(':');
+
+  if (live.host.lastQuestionRenderKey !== questionRenderKey) {
+    renderHostQuestion(state);
+    live.host.lastQuestionRenderKey = questionRenderKey;
+  }
+
   updateHallScene(state);
   updateHostTimer(state);
 
