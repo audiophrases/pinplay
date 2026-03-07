@@ -1074,6 +1074,9 @@ function playerState(room, playerId) {
   const qIndex = room.currentIndex;
   const responses = room.responsesByQuestion[qIndex] || {};
 
+  const roomQuestion = room.quiz.questions[qIndex];
+  const timeLimitSec = getQuestionTimeLimitSec(roomQuestion);
+
   const myResponse = responses[playerId] || null;
 
   return {
@@ -1101,6 +1104,10 @@ function playerState(room, playerId) {
         : '',
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
     questionStartedAt: room.phase === 'question' ? room.questionStartedAt || null : null,
+    questionDeadlineAt:
+      room.phase === 'question' && room.questionStartedAt && Number.isFinite(timeLimitSec)
+        ? Number(room.questionStartedAt) + timeLimitSec * 1000
+        : null,
     questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,
     questionCloseReason: room.phase === 'question' ? room.questionCloseReason || null : null,
     leaderboard: Object.values(room.players)

@@ -704,7 +704,7 @@ function startJoinTimer(state) {
     joinTimerBarFill.parentElement?.classList.toggle('active', !!active && pct > 0);
   };
 
-  const startedAt = Number(state?.questionStartedAt || Date.now());
+  const startedAt = Number(state?.questionStartedAt || live.player.timerStartedAt || Date.now());
   const rawLimitSec = Number(state?.question?.timeLimit);
   const hasTimeLimit = Number.isFinite(rawLimitSec) ? rawLimitSec > 0 : true;
   const limitSec = hasTimeLimit ? Math.max(1, rawLimitSec || 20) : null;
