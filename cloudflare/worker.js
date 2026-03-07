@@ -1153,8 +1153,9 @@ function hostQuestionPayload(question) {
 
 function getQuestionTimeLimitSec(question) {
   if (!question) return null;
-  const min = minTimeByType(question.type);
-  return clamp(Number(question.timeLimit || 20), min, 240);
+  const value = normalizeTimeLimitValue(question.timeLimit, question.type);
+  if (value === 0) return null;
+  return value;
 }
 
 function closeCurrentQuestion(room, reason = 'manual_reveal') {
@@ -1178,6 +1179,7 @@ function closeQuestionIfTimedOut(room) {
   if (!Number.isFinite(startedAt) || startedAt <= 0) return false;
 
   const timeLimitSec = getQuestionTimeLimitSec(question);
+  if (!Number.isFinite(timeLimitSec) || timeLimitSec <= 0) return false;
   const deadline = startedAt + timeLimitSec * 1000;
 
   if (Date.now() < deadline) return false;
@@ -1383,7 +1385,7 @@ function normalizeQuiz(quiz) {
       type: q.type,
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
-      timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
@@ -1611,6 +1613,15 @@ function minTimeByType(type) {
   if (type === 'slider') return 10;
   if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
+}
+
+function normalizeTimeLimitValue(value, type) {
+  const raw = String(value ?? '').trim();
+  if (raw === '') return 20;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 20;
+  if (n <= 0) return 0;
+  return clamp(n, minTimeByType(type), 240);
 }
 
 function makePin() {

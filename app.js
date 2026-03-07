@@ -576,7 +576,7 @@ function renderBuilder() {
         </div>
         <div style="min-width:160px;">
           <label>Time limit (sec)</label>
-          <input data-q="${idx}" data-field="timeLimit" type="number" min="${minTimeByType(q.type)}" max="240" value="${Number(q.timeLimit || 20)}" />
+          <input data-q="${idx}" data-field="timeLimit" type="number" min="0" max="240" value="${Number.isFinite(Number(q.timeLimit)) ? Number(q.timeLimit) : 20}" />
         </div>
         <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600;">
           <input data-q="${idx}" data-field="isPoll" type="checkbox" ${q.isPoll ? 'checked' : ''} /> Poll mode
@@ -850,7 +850,7 @@ function syncQuizFromUI() {
 
     if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 120);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
-    if (timeEl) q.timeLimit = clamp(Number(timeEl.value || 20), minTimeByType(q.type), 240);
+    if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
@@ -1945,15 +1945,27 @@ function updateHostTimer(state) {
     return;
   }
 
-  const limitSec = Math.max(1, Number(state.question.timeLimit || 20));
+  const rawLimitSec = Number(state.question.timeLimit);
+  const hasTimeLimit = Number.isFinite(rawLimitSec) ? rawLimitSec > 0 : true;
+  const limitSec = hasTimeLimit ? Math.max(1, rawLimitSec || 20) : null;
 
   if (state.questionClosed) {
     live.host.timerDeadlineMs = null;
     live.host.timerForIndex = Number(state.currentIndex || 0);
     live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = 'Time: 0s';
-    setHostTimerBar(0, limitSec, true);
+    projectorTimerEl.textContent = hasTimeLimit ? 'Time: 0s' : 'Time: No limit';
+    setHostTimerBar(0, limitSec || 1, false);
+    return;
+  }
+
+  if (!hasTimeLimit) {
+    live.host.timerDeadlineMs = null;
+    live.host.timerForIndex = Number(state.currentIndex || 0);
+    live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
+    stopHostTimerTicker();
+    projectorTimerEl.textContent = 'Time: No limit';
+    setHostTimerBar(0, 1, false);
     return;
   }
 
@@ -1985,7 +1997,16 @@ function startHostTimerTicker() {
     if (!projectorTimerEl) return;
 
     const state = live.host.state;
-    const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
+    const rawLimitSec = Number(state?.question?.timeLimit);
+    if (Number.isFinite(rawLimitSec) && rawLimitSec <= 0) {
+      projectorTimerEl.textContent = 'Time: No limit';
+      if (hostTimerBarFill) {
+        hostTimerBarFill.style.width = '0%';
+        hostTimerBarFill.parentElement?.classList.remove('active');
+      }
+      return;
+    }
+    const limitSec = Math.max(1, rawLimitSec || 20);
     const capMs = limitSec * 1000;
     const startedAt = Number(live.host.timerStartedAtMs || state?.questionStartedAt || 0);
 
@@ -3178,7 +3199,7 @@ function normalizeQuizForLive(raw) {
       type: q.type,
       prompt: String(q.prompt || '').slice(0, 120),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
-      timeLimit: clamp(Number(q.timeLimit || 20), minTimeByType(q.type), 240),
+      timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
@@ -3387,6 +3408,15 @@ function minTimeByType(type) {
   if (type === 'slider') return 10;
   if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
+}
+
+function normalizeTimeLimitValue(value, type) {
+  const raw = String(value ?? '').trim();
+  if (raw === '') return 20;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 20;
+  if (n <= 0) return 0;
+  return clamp(n, minTimeByType(type), 240);
 }
 
 function validateImportedQuiz(data) {

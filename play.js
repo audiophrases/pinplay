@@ -663,7 +663,18 @@ function startJoinTimer(state) {
   };
 
   const startedAt = Number(state?.questionStartedAt || Date.now());
-  const limitSec = Math.max(1, Number(state?.question?.timeLimit || 20));
+  const rawLimitSec = Number(state?.question?.timeLimit);
+  const hasTimeLimit = Number.isFinite(rawLimitSec) ? rawLimitSec > 0 : true;
+  const limitSec = hasTimeLimit ? Math.max(1, rawLimitSec || 20) : null;
+
+  if (!hasTimeLimit) {
+    stopJoinTimer();
+    live.player.timerStartedAt = startedAt;
+    live.player.timerLimitSec = 0;
+    joinTimerEl.textContent = 'Time: No limit';
+    setJoinTimerBar(0, 1, false);
+    return;
+  }
 
   if (live.player.timerStartedAt === startedAt && live.player.timerLimitSec === limitSec && live.player.timerTicker) {
     return;
