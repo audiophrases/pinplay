@@ -2296,7 +2296,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview';
