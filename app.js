@@ -32,9 +32,11 @@ const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
+const deleteLocalBtn = document.getElementById('deleteLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
+const deleteDriveBtn = document.getElementById('deleteDriveBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 
@@ -374,6 +376,14 @@ function bindBuilderEvents() {
 
   if (openDriveBtn) {
     openDriveBtn.addEventListener('click', openQuizFromDrive);
+  }
+
+  if (deleteLocalBtn) {
+    deleteLocalBtn.addEventListener('click', deleteQuizFromLocalLibrary);
+  }
+
+  if (deleteDriveBtn) {
+    deleteDriveBtn.addEventListener('click', deleteQuizFromDrive);
   }
 
   importInput.addEventListener('change', async (e) => {
@@ -1110,6 +1120,65 @@ async function openQuizFromDrive() {
     setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name}`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
+  }
+}
+
+function deleteQuizFromLocalLibrary() {
+  const items = loadQuizLibrary();
+  if (!items.length) {
+    alert('No local saved quizzes yet.');
+    return;
+  }
+
+  const ordered = items.slice().reverse();
+  const list = ordered
+    .map((item, i) => `${i + 1}) ${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`)
+    .join('\n');
+
+  const raw = prompt(`Delete local save\n\nChoose number:\n${list}`);
+  if (raw === null) return;
+
+  const pick = Number(String(raw).trim());
+  if (!Number.isFinite(pick) || pick < 1 || pick > ordered.length) {
+    alert('Invalid selection.');
+    return;
+  }
+
+  const chosen = ordered[pick - 1];
+  if (!confirm(`Delete local save permanently?\n\n${chosen.name}`)) return;
+
+  const next = items.filter((item) => item.id !== chosen.id);
+  saveQuizLibrary(next);
+  setStatus(hostStatusEl, `Deleted local save: ${chosen.name}`, 'ok');
+}
+
+async function deleteQuizFromDrive() {
+  try {
+    const list = await api('/api/drive/list', { method: 'GET' });
+    const files = Array.isArray(list?.files) ? list.files : [];
+    if (!files.length) throw new Error('No quiz files found in Drive folder.');
+
+    const shown = files.slice(0, 20);
+    const preview = shown.map((f, i) => `${i + 1}. ${f.name || f.id}`).join('\n');
+    const pickRaw = prompt(`Delete from Drive\n\nChoose file number:\n${preview}`);
+    if (pickRaw == null) return;
+
+    const pick = Number(String(pickRaw).trim());
+    if (!Number.isFinite(pick) || pick < 1 || pick > shown.length) {
+      throw new Error('Invalid file number.');
+    }
+
+    const chosen = shown[pick - 1];
+    if (!confirm(`Delete from Drive?\n\n${chosen.name || chosen.id}`)) return;
+
+    await api('/api/drive/delete', {
+      method: 'POST',
+      body: { fileId: chosen.id },
+    });
+
+    setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Delete from Drive failed: ${err.message}`, 'bad');
   }
 }
 

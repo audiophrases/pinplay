@@ -483,6 +483,31 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/drive/delete' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const fileId = sanitizeId(body?.fileId);
+      if (!fileId) return json({ error: 'fileId required.' }, 400);
+
+      const scriptUrl = String(env.DRIVE_PUBLISH_URL || '').trim();
+      const secret = String(env.DRIVE_SHARED_SECRET || '');
+      if (!scriptUrl) return json({ error: 'Drive publish is not configured on worker (DRIVE_PUBLISH_URL).' }, 501);
+
+      try {
+        const bridgeUrl = new URL(scriptUrl);
+        bridgeUrl.searchParams.set('action', 'delete');
+        bridgeUrl.searchParams.set('secret', secret);
+        bridgeUrl.searchParams.set('fileId', fileId);
+
+        const res = await fetch(bridgeUrl.toString(), { method: 'GET' });
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : {};
+        if (!res.ok || data?.error) return json({ error: data?.error || 'Drive delete failed.' }, 502);
+        return json(data, 200);
+      } catch (err) {
+        return json({ error: `Drive delete request failed: ${err.message}` }, 502);
+      }
+    }
+
     return json({ error: 'Not found' }, 404);
   },
 };
