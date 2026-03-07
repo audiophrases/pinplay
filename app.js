@@ -163,6 +163,7 @@ const live = {
     submittedForIndex: null,
     currentQuestion: null,
     pinSelection: null,
+    pinSelections: [],
   },
 };
 
@@ -2443,6 +2444,7 @@ async function joinLiveGame() {
     live.player.submittedForIndex = null;
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
+    live.player.pinSelections = [];
 
     setStatus(joinStatusEl, `Joined as ${data.name || name} ✅`, 'ok');
     startPlayerPolling();
@@ -2513,6 +2515,7 @@ function renderPlayerState(state) {
     live.player.submittedForIndex = state.answeredCurrent ? state.currentIndex : null;
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
+    live.player.pinSelections = [];
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
   }
@@ -2735,19 +2738,44 @@ function renderJoinQuestion(question) {
     img.src = question.imageData;
     img.alt = 'Pin question image';
 
-    const dot = document.createElement('div');
-    dot.className = 'pin-dot hidden';
+    const picksLayer = document.createElement('div');
+    picksLayer.className = 'pin-picks-layer';
 
-    wrap.append(img, dot);
+    const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
+    const required = Math.max(1, Math.min(12, zones.length));
+
+    const countLabel = document.createElement('p');
+    countLabel.className = 'small';
+    countLabel.textContent = `Pin all correct spots: 0 / ${required}`;
+
+    wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
+    joinAnswersEl.appendChild(countLabel);
+
+    const renderPicks = () => {
+      picksLayer.innerHTML = '';
+      const picks = live.player.pinSelections || [];
+      countLabel.textContent = `Pin all correct spots: ${picks.length} / ${required}`;
+      picks.forEach((p) => {
+        const dot = document.createElement('div');
+        dot.className = 'pin-dot';
+        dot.style.left = `${p.x}%`;
+        dot.style.top = `${p.y}%`;
+        picksLayer.appendChild(dot);
+      });
+    };
 
     attachPinPicker(wrap, (point) => {
-      live.player.pinSelection = point;
-      dot.classList.remove('hidden');
-      dot.style.left = `${point.x}%`;
-      dot.style.top = `${point.y}%`;
+      const picks = live.player.pinSelections || [];
+      const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
+      if (nearIdx >= 0) picks.splice(nearIdx, 1);
+      else if (picks.length < required) picks.push(point);
+      live.player.pinSelections = picks;
+      live.player.pinSelection = picks[0] || null;
+      renderPicks();
     });
 
+    renderPicks();
     return;
   }
 }
@@ -2858,7 +2886,8 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'pin') {
-    return live.player.pinSelection;
+    const picks = Array.isArray(live.player.pinSelections) ? live.player.pinSelections : [];
+    return picks.length ? picks : null;
   }
 
   return null;
@@ -2909,6 +2938,7 @@ function startPreviewMode(mode) {
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
+  live.player.pinSelections = [];
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
   if (studentPreviewCardEl) studentPreviewCardEl.classList.toggle('hidden', mode !== 'student');
@@ -3006,11 +3036,14 @@ function evaluatePreviewAnswer(q, answer) {
     return { correct: Number.isFinite(value) && Math.abs(value - Number(q.target)) <= tol };
   }
   if (q.type === 'pin') {
-    const x = Number(answer?.x);
-    const y = Number(answer?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return { correct: false };
     const zones = normalizePinZones(q);
-    return { correct: zones.some((z) => distance2D(x, y, Number(z.x), Number(z.y)) <= Number(z.r)) };
+    const picksRaw = Array.isArray(answer) ? answer : (answer && Number.isFinite(Number(answer.x)) && Number.isFinite(Number(answer.y)) ? [answer] : []);
+    const picks = picksRaw
+      .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (!picks.length) return { correct: false };
+    const allCovered = zones.every((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r)));
+    return { correct: allCovered };
   }
   return { correct: false };
 }

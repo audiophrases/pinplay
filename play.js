@@ -35,6 +35,7 @@ const live = {
     submittedForIndex: null,
     currentQuestion: null,
     pinSelection: null,
+    pinSelections: [],
     randomNamesMode: false,
     displayName: null,
     clientId: getOrCreateClientId(),
@@ -147,6 +148,7 @@ async function joinLiveGame() {
     live.player.submittedForIndex = null;
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
+    live.player.pinSelections = [];
 
     const shownName = data.name || name || 'Student';
     live.player.displayName = shownName;
@@ -233,6 +235,7 @@ function renderPlayerState(state) {
     live.player.submittedForIndex = state.answeredCurrent ? state.currentIndex : null;
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
+    live.player.pinSelections = [];
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
@@ -474,18 +477,47 @@ function renderJoinQuestion(question) {
     img.src = question.imageData;
     img.alt = 'Pin question image';
 
-    const dot = document.createElement('div');
-    dot.className = 'pin-dot hidden';
+    const picksLayer = document.createElement('div');
+    picksLayer.className = 'pin-picks-layer';
 
-    wrap.append(img, dot);
+    const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
+    const required = Math.max(1, Math.min(12, zones.length));
+
+    const countLabel = document.createElement('p');
+    countLabel.className = 'small';
+    countLabel.textContent = `Pin all correct spots: 0 / ${required}`;
+
+    wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
+    joinAnswersEl.appendChild(countLabel);
+
+    const renderPicks = () => {
+      picksLayer.innerHTML = '';
+      const picks = live.player.pinSelections || [];
+      countLabel.textContent = `Pin all correct spots: ${picks.length} / ${required}`;
+      picks.forEach((p) => {
+        const dot = document.createElement('div');
+        dot.className = 'pin-dot';
+        dot.style.left = `${p.x}%`;
+        dot.style.top = `${p.y}%`;
+        picksLayer.appendChild(dot);
+      });
+    };
 
     attachPinPicker(wrap, (point) => {
-      live.player.pinSelection = point;
-      dot.classList.remove('hidden');
-      dot.style.left = `${point.x}%`;
-      dot.style.top = `${point.y}%`;
+      const picks = live.player.pinSelections || [];
+      const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
+      if (nearIdx >= 0) {
+        picks.splice(nearIdx, 1);
+      } else if (picks.length < required) {
+        picks.push(point);
+      }
+      live.player.pinSelections = picks;
+      live.player.pinSelection = picks[0] || null;
+      renderPicks();
     });
+
+    renderPicks();
     appendRiskBetBar();
     appendReactionBar();
   }
@@ -678,7 +710,10 @@ function readJoinAnswer() {
     return slider ? Number(slider.value) : null;
   }
 
-  if (q.type === 'pin') return live.player.pinSelection;
+  if (q.type === 'pin') {
+    const picks = Array.isArray(live.player.pinSelections) ? live.player.pinSelections : [];
+    return picks.length ? picks : null;
+  }
 
   return null;
 }

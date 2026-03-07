@@ -1482,15 +1482,15 @@ function evaluate(question, answer) {
   }
 
   if (question.type === 'pin') {
-    const x = Number(answer?.x);
-    const y = Number(answer?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return { correct: false };
     const zones = (Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }]).slice(0, 12);
-    const ok = zones.some((z) => {
-      const d = distance2D(x, y, Number(z?.x ?? 50), Number(z?.y ?? 50));
-      return d <= Number(z?.r ?? 15);
-    });
-    return { correct: ok };
+    const picksRaw = Array.isArray(answer) ? answer : (answer && Number.isFinite(Number(answer.x)) && Number.isFinite(Number(answer.y)) ? [answer] : []);
+    const picks = picksRaw
+      .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (!picks.length) return { correct: false };
+
+    const allCovered = zones.every((z) => picks.some((p) => distance2D(p.x, p.y, Number(z?.x ?? 50), Number(z?.y ?? 50)) <= Number(z?.r ?? 15)));
+    return { correct: allCovered };
   }
 
   return { correct: false };
