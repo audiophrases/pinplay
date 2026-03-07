@@ -3678,9 +3678,9 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
   };
 
   tokenWrap.querySelectorAll(tokenSelector).forEach((chip) => {
-    chip.addEventListener('dblclick', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
+    const startEdit = (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
       if (chip.dataset.editing === '1') return;
 
       const original = String(chip.dataset.tokenText || chip.textContent || '').trim();
@@ -3718,6 +3718,12 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
         }
       });
       input.addEventListener('blur', () => finish(true), { once: true });
+    };
+
+    chip.addEventListener('dblclick', startEdit);
+    chip.addEventListener('click', (event) => {
+      if (!chip.classList.contains('active')) return;
+      startEdit(event);
     });
   });
 }

@@ -922,6 +922,7 @@ export class QuizRoom {
             correct: verdict.correct,
             bet,
             pointsAwarded,
+            graded: true,
             submittedAt: Date.now(),
           };
         }
@@ -1110,6 +1111,7 @@ function playerState(room, playerId) {
         : null,
     questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,
     questionCloseReason: room.phase === 'question' ? room.questionCloseReason || null : null,
+    serverNow: Date.now(),
     leaderboard: Object.values(room.players)
       .map((p) => ({ name: p.name, score: p.score }))
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),

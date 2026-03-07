@@ -43,6 +43,8 @@ const live = {
     timerStartedAt: null,
     timerLimitSec: null,
     timerDeadlineAt: null,
+    timerAnchorAt: null,
+    timerInitialRemainingMs: null,
   },
 };
 
@@ -734,13 +736,22 @@ function startJoinTimer(state) {
     return;
   }
 
+  const serverNow = Number(state?.serverNow || 0);
+  const initialRemainingMs = Number.isFinite(serverNow) && serverNow > 0
+    ? Math.max(0, deadlineAt - serverNow)
+    : Math.max(0, deadlineAt - Date.now());
+
+  stopJoinTimer();
+
   live.player.timerStartedAt = startedAt;
   live.player.timerLimitSec = limitSec;
   live.player.timerDeadlineAt = deadlineAt;
+  live.player.timerAnchorAt = Date.now();
+  live.player.timerInitialRemainingMs = initialRemainingMs;
 
-  stopJoinTimer();
   const paint = () => {
-    const remainingMsRaw = Math.max(0, deadlineAt - Date.now());
+    const elapsedMs = Math.max(0, Date.now() - Number(live.player.timerAnchorAt || Date.now()));
+    const remainingMsRaw = Math.max(0, Number(live.player.timerInitialRemainingMs || 0) - elapsedMs);
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const sec = Math.ceil(remainingMs / 1000);
     joinTimerEl.textContent = `Time: ${sec}s`;
@@ -755,6 +766,8 @@ function stopJoinTimer() {
   if (live.player.timerTicker) clearInterval(live.player.timerTicker);
   live.player.timerTicker = null;
   live.player.timerDeadlineAt = null;
+  live.player.timerAnchorAt = null;
+  live.player.timerInitialRemainingMs = null;
   if (joinTimerBarFill) {
     joinTimerBarFill.style.width = '0%';
     joinTimerBarFill.parentElement?.classList.remove('active');
@@ -1244,9 +1257,9 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
   };
 
   tokenWrap.querySelectorAll(tokenSelector).forEach((chip) => {
-    chip.addEventListener('dblclick', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
+    const startEdit = (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
       if (chip.dataset.editing === '1') return;
 
       const original = String(chip.dataset.tokenText || chip.textContent || '').trim();
@@ -1284,6 +1297,12 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
         }
       });
       input.addEventListener('blur', () => finish(true), { once: true });
+    };
+
+    chip.addEventListener('dblclick', startEdit);
+    chip.addEventListener('click', (event) => {
+      if (!chip.classList.contains('active')) return;
+      startEdit(event);
     });
   });
 }
