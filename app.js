@@ -564,8 +564,8 @@ function renderBuilder() {
         </div>
       </div>
       <div class="${q.collapsed ? 'question-body-collapsed' : ''}">
-      <label>Question (max 1000 chars)</label>
-      <textarea data-q="${idx}" data-field="prompt" maxlength="1000">${escapeHtml(q.prompt || '')}</textarea>
+      <label>Question (max 1200 chars)</label>
+      <textarea data-q="${idx}" data-field="prompt" maxlength="1200">${escapeHtml(q.prompt || '')}</textarea>
       <div class="row gap top-space">
         <div style="min-width:120px;">
           <label>Points</label>
@@ -588,8 +588,10 @@ function renderBuilder() {
     let specific = '';
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
-      const answers = q.answers || [];
+      const answers = Array.isArray(q.answers) ? [...q.answers] : [];
       const isMulti = q.type === 'multi';
+      const answerSlots = q.type === 'tf' ? 2 : 10;
+      while (answers.length < answerSlots) answers.push({ text: '', correct: false });
 
       specific += `
         <label class="top-space">Answers</label>
@@ -599,8 +601,8 @@ function renderBuilder() {
               (a, aIdx) => `
             <div class="answer-row">
               <input type="${isMulti ? 'checkbox' : 'radio'}" ${isMulti ? '' : `name="correct-${idx}"`} ${a.correct ? 'checked' : ''} data-q="${idx}" data-correct-index="${aIdx}" />
-              <input data-q="${idx}" data-answer-index="${aIdx}" maxlength="75" value="${escapeHtml(a.text || '')}" ${q.type === 'tf' ? 'disabled' : ''}/>
-              <span class="small">${q.type === 'tf' ? '' : 'max 75'}</span>
+              <input data-q="${idx}" data-answer-index="${aIdx}" maxlength="90" value="${escapeHtml(a.text || '')}" ${q.type === 'tf' ? 'disabled' : ''}/>
+              <span class="small">${q.type === 'tf' ? '' : 'max 90'}</span>
             </div>
           `,
             )
@@ -838,7 +840,7 @@ function buildAudioSettingsMarkup(idx, q) {
         </div>
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
-      <input data-q="${idx}" data-field="audioText" maxlength="1000" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
       <label>Language code (e.g. en-US, en-US-Wave)</label>
       <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(lang)}" />
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
@@ -856,17 +858,19 @@ function syncQuizFromUI() {
     const timeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
     const pollEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
 
-    if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 1000);
+    if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 1200);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       q.answers = q.answers || [];
+      const answerSlots = q.type === 'tf' ? 2 : 10;
+      while (q.answers.length < answerSlots) q.answers.push({ text: '', correct: false });
 
-      q.answers.forEach((a, aIdx) => {
+      q.answers.slice(0, answerSlots).forEach((a, aIdx) => {
         const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-answer-index="${aIdx}"]`);
-        if (aEl) a.text = String(aEl.value || '').slice(0, 75);
+        if (aEl) a.text = String(aEl.value || '').slice(0, 90);
       });
 
       if (q.type === 'multi') {
@@ -897,7 +901,7 @@ function syncQuizFromUI() {
 
       q.audioEnabled = !!audioEnabledEl?.checked || q.type === 'audio';
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
-      q.audioText = String(audioTextEl?.value || '').slice(0, 1000);
+      q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
       q.language = String(languageEl?.value || 'en-US-Wave').slice(0, 32) || 'en-US-Wave';
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
     }
@@ -941,7 +945,7 @@ function syncQuizFromUI() {
       const items = [];
       for (let i = 0; i < 9; i++) {
         const itemEl = questionListEl.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
-        items.push(String(itemEl?.value || '').slice(0, 75));
+        items.push(String(itemEl?.value || '').slice(0, 90));
       }
       q.items = items;
     }
@@ -3255,7 +3259,7 @@ function makePinQuestion() {
 function normalizeQuizForLive(raw) {
   const normalized = {
     version: 1,
-    title: String(raw.title || '').slice(0, 1000),
+    title: String(raw.title || '').slice(0, 1200),
     questions: [],
   };
 
@@ -3263,13 +3267,13 @@ function normalizeQuizForLive(raw) {
     const base = {
       id: String(q.id || crypto.randomUUID()),
       type: q.type,
-      prompt: String(q.prompt || '').slice(0, 1000),
+      prompt: String(q.prompt || '').slice(0, 1200),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      audioText: String(q.audioText || '').slice(0, 1000),
+      audioText: String(q.audioText || '').slice(0, 1200),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
@@ -3277,8 +3281,8 @@ function normalizeQuizForLive(raw) {
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
       const answers = (q.answers || [])
-        .slice(0, 6)
-        .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
+        .slice(0, 10)
+        .map((a) => ({ text: String(a.text || '').slice(0, 90), correct: !!a.correct }))
         .filter((a) => a.text.trim().length > 0);
       if (answers.length < 2) return;
 
@@ -3339,9 +3343,9 @@ function normalizeQuizForLive(raw) {
 
     if (q.type === 'match_pairs') {
       const pairs = (q.pairs || [])
-        .map((p) => ({ left: String(p?.left || '').slice(0, 40).trim(), right: String(p?.right || '').slice(0, 40).trim() }))
+        .map((p) => ({ left: String(p?.left || '').slice(0, 48).trim(), right: String(p?.right || '').slice(0, 48).trim() }))
         .filter((p) => p.left && p.right)
-        .slice(0, 6);
+        .slice(0, 10);
       if (pairs.length < 2) return;
       normalized.questions.push({ ...base, pairs });
       return;
@@ -3355,7 +3359,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;

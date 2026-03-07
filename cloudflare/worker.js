@@ -1389,7 +1389,7 @@ function evaluate(question, answer) {
 function normalizeQuiz(quiz) {
   const normalized = {
     version: 1,
-    title: String(quiz.title || '').slice(0, 1000),
+    title: String(quiz.title || '').slice(0, 1200),
     questions: [],
   };
 
@@ -1397,13 +1397,13 @@ function normalizeQuiz(quiz) {
     const base = {
       id: String(q.id || randomId('q_')),
       type: q.type,
-      prompt: String(q.prompt || '').slice(0, 1000),
+      prompt: String(q.prompt || '').slice(0, 1200),
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      audioText: String(q.audioText || '').slice(0, 1000),
+      audioText: String(q.audioText || '').slice(0, 1200),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
@@ -1411,8 +1411,8 @@ function normalizeQuiz(quiz) {
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
       const answers = (q.answers || [])
-        .slice(0, 6)
-        .map((a) => ({ text: String(a.text || '').slice(0, 75), correct: !!a.correct }))
+        .slice(0, 10)
+        .map((a) => ({ text: String(a.text || '').slice(0, 90), correct: !!a.correct }))
         .filter((a) => a.text.trim().length > 0);
       if (answers.length < 2) return;
 
@@ -1475,9 +1475,9 @@ function normalizeQuiz(quiz) {
 
     if (q.type === 'match_pairs') {
       const pairs = (q.pairs || [])
-        .map((p) => ({ left: String(p?.left || '').slice(0, 40).trim(), right: String(p?.right || '').slice(0, 40).trim() }))
+        .map((p) => ({ left: String(p?.left || '').slice(0, 48).trim(), right: String(p?.right || '').slice(0, 48).trim() }))
         .filter((p) => p.left && p.right)
-        .slice(0, 6);
+        .slice(0, 10);
       if (pairs.length < 2) return;
       normalized.questions.push({ ...base, pairs });
       return;
@@ -1492,7 +1492,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 75)).filter(Boolean).slice(0, 9);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 9);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;
