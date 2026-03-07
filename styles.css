@@ -218,7 +218,7 @@ textarea { min-height: 72px; resize: vertical; }
   flex-wrap: wrap;
   gap: .45rem .6rem;
   align-items: center;
-  margin: .25rem 0 .75rem;
+  margin: .45rem 0 .75rem;
 }
 
 .poll-word-chip {

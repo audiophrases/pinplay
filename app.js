@@ -132,6 +132,7 @@ const live = {
     lastAllAnsweredKey: null,
     lastRevealKey: null,
     state: null,
+    pollViewMode: 'bar',
     seenReactionKeys: new Set(),
   },
   player: {
@@ -1583,7 +1584,35 @@ function renderHostQuestion(state) {
     const max = Math.max(1, ...summary.items.map((x) => Number(x.count || 0)));
 
     const textLikeTypes = new Set(['text', 'open', 'image_open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
-    if (textLikeTypes.has(String(summary.type || ''))) {
+    const isTextLike = textLikeTypes.has(String(summary.type || ''));
+    const mode = isTextLike ? String(live.host.pollViewMode || 'bar') : 'bar';
+
+    if (isTextLike) {
+      const toggle = document.createElement('div');
+      toggle.className = 'row gap top-space';
+      const barBtn = document.createElement('button');
+      barBtn.type = 'button';
+      barBtn.className = `btn ${mode === 'bar' ? 'active' : ''}`;
+      barBtn.textContent = 'Bar view';
+      barBtn.addEventListener('click', () => {
+        live.host.pollViewMode = 'bar';
+        renderHostQuestion(state);
+      });
+
+      const cloudBtn = document.createElement('button');
+      cloudBtn.type = 'button';
+      cloudBtn.className = `btn ${mode === 'cloud' ? 'active' : ''}`;
+      cloudBtn.textContent = 'Cloud view';
+      cloudBtn.addEventListener('click', () => {
+        live.host.pollViewMode = 'cloud';
+        renderHostQuestion(state);
+      });
+
+      toggle.append(barBtn, cloudBtn);
+      hostQuestionAnswersEl.appendChild(toggle);
+    }
+
+    if (isTextLike && mode === 'cloud') {
       const cloud = document.createElement('div');
       cloud.className = 'poll-word-cloud';
       summary.items.slice(0, 20).forEach((item) => {
@@ -1599,52 +1628,54 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(cloud);
     }
 
-    const list = document.createElement('div');
-    list.className = 'answers-grid';
+    if (mode === 'bar') {
+      const list = document.createElement('div');
+      list.className = 'answers-grid';
 
-    summary.items.slice(0, 15).forEach((item) => {
-      const row = document.createElement('div');
-      row.className = 'answer-row';
-      const label = document.createElement('span');
-      label.textContent = String(item.label || '(blank)');
-      const barWrap = document.createElement('div');
-      barWrap.style.height = '10px';
-      barWrap.style.borderRadius = '999px';
-      barWrap.style.background = 'rgba(96,93,255,.14)';
-      const bar = document.createElement('div');
-      bar.style.height = '100%';
-      bar.style.borderRadius = '999px';
-      bar.style.background = 'linear-gradient(90deg,#605dff,#8b5cf6)';
-      bar.style.width = `${Math.max(6, (Number(item.count || 0) / max) * 100)}%`;
-      barWrap.appendChild(bar);
-      const count = document.createElement('strong');
-      count.textContent = String(item.count || 0);
-      row.append(label, barWrap, count);
-      list.appendChild(row);
-    });
+      summary.items.slice(0, 15).forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'answer-row';
+        const label = document.createElement('span');
+        label.textContent = String(item.label || '(blank)');
+        const barWrap = document.createElement('div');
+        barWrap.style.height = '10px';
+        barWrap.style.borderRadius = '999px';
+        barWrap.style.background = 'rgba(96,93,255,.14)';
+        const bar = document.createElement('div');
+        bar.style.height = '100%';
+        bar.style.borderRadius = '999px';
+        bar.style.background = 'linear-gradient(90deg,#605dff,#8b5cf6)';
+        bar.style.width = `${Math.max(6, (Number(item.count || 0) / max) * 100)}%`;
+        barWrap.appendChild(bar);
+        const count = document.createElement('strong');
+        count.textContent = String(item.count || 0);
+        row.append(label, barWrap, count);
+        list.appendChild(row);
+      });
 
-    if (Number(summary.otherCount || 0) > 0) {
-      const row = document.createElement('div');
-      row.className = 'answer-row';
-      const label = document.createElement('span');
-      label.textContent = 'Other';
-      const barWrap = document.createElement('div');
-      barWrap.style.height = '10px';
-      barWrap.style.borderRadius = '999px';
-      barWrap.style.background = 'rgba(156,163,175,.2)';
-      const bar = document.createElement('div');
-      bar.style.height = '100%';
-      bar.style.borderRadius = '999px';
-      bar.style.background = 'linear-gradient(90deg,#6b7280,#4b5563)';
-      bar.style.width = `${Math.max(6, (Number(summary.otherCount || 0) / max) * 100)}%`;
-      barWrap.appendChild(bar);
-      const count = document.createElement('strong');
-      count.textContent = String(summary.otherCount || 0);
-      row.append(label, barWrap, count);
-      list.appendChild(row);
+      if (Number(summary.otherCount || 0) > 0) {
+        const row = document.createElement('div');
+        row.className = 'answer-row';
+        const label = document.createElement('span');
+        label.textContent = 'Other';
+        const barWrap = document.createElement('div');
+        barWrap.style.height = '10px';
+        barWrap.style.borderRadius = '999px';
+        barWrap.style.background = 'rgba(156,163,175,.2)';
+        const bar = document.createElement('div');
+        bar.style.height = '100%';
+        bar.style.borderRadius = '999px';
+        bar.style.background = 'linear-gradient(90deg,#6b7280,#4b5563)';
+        bar.style.width = `${Math.max(6, (Number(summary.otherCount || 0) / max) * 100)}%`;
+        barWrap.appendChild(bar);
+        const count = document.createElement('strong');
+        count.textContent = String(summary.otherCount || 0);
+        row.append(label, barWrap, count);
+        list.appendChild(row);
+      }
+
+      hostQuestionAnswersEl.appendChild(list);
     }
-
-    hostQuestionAnswersEl.appendChild(list);
 
     const raw = Array.isArray(state.pollResponses) ? state.pollResponses : [];
     if (raw.length) {
