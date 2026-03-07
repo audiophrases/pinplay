@@ -2091,12 +2091,12 @@ function updateHostTimer(state) {
     live.host.timerStartedAtMs = startedAt;
     live.host.timerAnchorAtMs = Date.now();
     live.host.timerInitialRemainingMs = initialRemainingMs;
-    startHostTimerTicker();
   }
 
   const capMs = limitSec * 1000;
-  const elapsedMs = Math.max(0, Date.now() - Number(live.host.timerAnchorAtMs || Date.now()));
-  const remainingMsRaw = Math.max(0, Number(live.host.timerInitialRemainingMs || 0) - elapsedMs);
+  const serverNow = Number(state.serverNow || 0);
+  const nowMs = Number.isFinite(serverNow) && serverNow > 0 ? serverNow : Date.now();
+  const remainingMsRaw = Math.max(0, Number(live.host.timerDeadlineMs || deadlineMs) - nowMs);
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
   projectorTimerEl.textContent = `Time: ${remaining}s`;
@@ -2104,35 +2104,8 @@ function updateHostTimer(state) {
 }
 
 function startHostTimerTicker() {
-  stopHostTimerTicker();
-  live.host.timerTicker = setInterval(() => {
-    if (!projectorTimerEl) return;
-
-    const state = live.host.state;
-    const rawLimitSec = Number(state?.question?.timeLimit);
-    if (Number.isFinite(rawLimitSec) && rawLimitSec <= 0) {
-      projectorTimerEl.textContent = 'Time: No limit';
-      if (hostTimerBarFill) {
-        hostTimerBarFill.style.width = '0%';
-        hostTimerBarFill.parentElement?.classList.remove('active');
-      }
-      return;
-    }
-    const limitSec = Math.max(1, rawLimitSec || 20);
-    const capMs = limitSec * 1000;
-
-    const elapsedMs = Math.max(0, Date.now() - Number(live.host.timerAnchorAtMs || Date.now()));
-    const remainingMsRaw = Math.max(0, Number(live.host.timerInitialRemainingMs || capMs) - elapsedMs);
-
-    const remainingMs = Math.min(capMs, remainingMsRaw);
-    const remaining = Math.ceil(remainingMs / 1000);
-    projectorTimerEl.textContent = `Time: ${remaining}s`;
-    if (hostTimerBarFill) {
-      const pct = Math.max(0, Math.min(100, (remainingMs / capMs) * 100));
-      hostTimerBarFill.style.width = `${pct}%`;
-      hostTimerBarFill.parentElement?.classList.toggle('active', pct > 0);
-    }
-  }, 250);
+  // Intentionally no-op: host timer is updated from polled host state
+  // to avoid jitter/blinking from competing timer loops.
 }
 
 function stopHostTimerTicker() {
