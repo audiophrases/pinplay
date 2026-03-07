@@ -510,6 +510,7 @@ export class QuizRoom {
           quiz: normalizeQuiz(quiz),
           players: {},
           responsesByQuestion: {},
+          scoreLocksByQuestion: {},
           reactionsByQuestion: {},
           settings: {
             randomNames: !!options.randomNames,
@@ -905,17 +906,29 @@ export class QuizRoom {
             submittedAt: Date.now(),
           };
         } else {
+          room.scoreLocksByQuestion = room.scoreLocksByQuestion || {};
+          room.scoreLocksByQuestion[qIndex] = room.scoreLocksByQuestion[qIndex] || {};
+          const lock = room.scoreLocksByQuestion[qIndex][playerId] || { lockedCorrect: false };
+
           verdict = evaluate(question, body?.answer);
           const basePoints = Number(question.points || 1000);
 
-          if (verdict.correct) {
-            const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {}).filter((r) => !!r?.correct).length;
+          if (!lock.lockedCorrect && verdict.correct) {
+            const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {})
+              .filter((r) => !!r?.correct)
+              .length;
             const rank = correctCountSoFar + 1;
             const multiplier = rank <= 2 ? 1 : (rank <= 4 ? 0.9 : 0.8);
             pointsAwarded = Math.round(basePoints * multiplier);
-          }
+            pointsAwarded = applyBetScore(basePoints, pointsAwarded, true, bet);
 
-          pointsAwarded = applyBetScore(basePoints, pointsAwarded, verdict.correct, bet);
+            lock.lockedCorrect = true;
+            lock.awardedPoints = pointsAwarded;
+            lock.awardedAt = Date.now();
+            room.scoreLocksByQuestion[qIndex][playerId] = lock;
+          } else {
+            pointsAwarded = 0;
+          }
 
           room.responsesByQuestion[qIndex][playerId] = {
             answer: body?.answer,
@@ -1218,6 +1231,10 @@ function startQuestion(room, index) {
   room.questionClosed = false;
   room.questionClosedAt = null;
   room.questionCloseReason = null;
+  room.responsesByQuestion = room.responsesByQuestion || {};
+  room.responsesByQuestion[qIndex] = {};
+  room.scoreLocksByQuestion = room.scoreLocksByQuestion || {};
+  room.scoreLocksByQuestion[qIndex] = room.scoreLocksByQuestion[qIndex] || {};
   room.updatedAt = Date.now();
   return true;
 }
