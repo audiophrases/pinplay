@@ -1252,15 +1252,13 @@ function hostQuestionPayload(question) {
   }
 
   if (question.type === 'pin') {
+    const zones = (Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }])
+      .slice(0, 12)
+      .map((z) => ({ x: Number(z?.x), y: Number(z?.y), r: Number(z?.r) }));
     return {
       ...base,
-      zone: question.zone
-        ? {
-            x: Number(question.zone.x),
-            y: Number(question.zone.y),
-            r: Number(question.zone.r),
-          }
-        : null,
+      zones,
+      zone: zones[0] || null,
     };
   }
 
@@ -1487,9 +1485,12 @@ function evaluate(question, answer) {
     const x = Number(answer?.x);
     const y = Number(answer?.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { correct: false };
-    const zone = question.zone || { x: 50, y: 50, r: 15 };
-    const d = distance2D(x, y, Number(zone.x), Number(zone.y));
-    return { correct: d <= Number(zone.r) };
+    const zones = (Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }]).slice(0, 12);
+    const ok = zones.some((z) => {
+      const d = distance2D(x, y, Number(z?.x ?? 50), Number(z?.y ?? 50));
+      return d <= Number(z?.r ?? 15);
+    });
+    return { correct: ok };
   }
 
   return { correct: false };
@@ -1626,15 +1627,19 @@ function normalizeQuiz(quiz) {
 
     if (q.type === 'pin') {
       if (!q.imageData) return;
-      const zone = q.zone || {};
+      const zonesSource = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || {}];
+      const zones = zonesSource
+        .slice(0, 12)
+        .map((z) => ({
+          x: round(clamp(Number(z?.x ?? 50), 0, 100), 1),
+          y: round(clamp(Number(z?.y ?? 50), 0, 100), 1),
+          r: round(clamp(Number(z?.r ?? 15), 1, 100), 1),
+        }));
       normalized.questions.push({
         ...base,
         imageData: String(q.imageData || ''),
-        zone: {
-          x: round(clamp(Number(zone.x ?? 50), 0, 100), 1),
-          y: round(clamp(Number(zone.y ?? 50), 0, 100), 1),
-          r: round(clamp(Number(zone.r ?? 15), 1, 100), 1),
-        },
+        zones,
+        zone: zones[0],
       });
     }
   });

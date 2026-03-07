@@ -418,6 +418,31 @@ function bindBuilderEvents() {
       return;
     }
 
+    const addPinZoneBtn = e.target.closest('[data-add-pin-zone]');
+    if (addPinZoneBtn) {
+      const idx = Number(addPinZoneBtn.dataset.addPinZone);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'pin') return;
+      const zones = normalizePinZones(q);
+      if (zones.length >= 12) return;
+      zones.push({ x: 50, y: 50, r: zones[0]?.r || 15 });
+      q.zones = zones;
+      renderBuilder();
+      return;
+    }
+
+    const removePinZoneBtn = e.target.closest('[data-remove-pin-zone]');
+    if (removePinZoneBtn) {
+      const idx = Number(removePinZoneBtn.dataset.removePinZone);
+      const zi = Number(removePinZoneBtn.dataset.zoneIndex);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'pin') return;
+      const zones = normalizePinZones(q).filter((_, i) => i !== zi);
+      q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
+      renderBuilder();
+      return;
+    }
+
     const preview = e.target.closest('[data-pin-preview]');
     if (preview) {
       const idx = Number(preview.dataset.pinPreview);
@@ -427,8 +452,13 @@ function bindBuilderEvents() {
       const rect = preview.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
-      q.zone.x = round(clamp(x, 0, 100), 1);
-      q.zone.y = round(clamp(y, 0, 100), 1);
+      const zones = normalizePinZones(q);
+      if (zones.length < 12) {
+        zones.push({ x: round(clamp(x, 0, 100), 1), y: round(clamp(y, 0, 100), 1), r: zones[0]?.r || 15 });
+      } else {
+        zones[zones.length - 1] = { ...zones[zones.length - 1], x: round(clamp(x, 0, 100), 1), y: round(clamp(y, 0, 100), 1) };
+      }
+      q.zones = zones;
       renderBuilder();
       return;
     }
@@ -760,37 +790,34 @@ function renderBuilder() {
     }
 
     if (q.type === 'pin') {
-      const zone = q.zone || { x: 50, y: 50, r: 15 };
+      const zones = normalizePinZones(q);
       specific += `
         <label class="top-space">Image</label>
         <input data-pin-upload="${idx}" type="file" accept="image/*" />
         <div class="row gap top-space">
-          <div style="min-width:110px;">
-            <label>X %</label>
-            <input data-q="${idx}" data-field="pinX" type="number" min="0" max="100" value="${Number(zone.x ?? 50)}" />
-          </div>
-          <div style="min-width:110px;">
-            <label>Y %</label>
-            <input data-q="${idx}" data-field="pinY" type="number" min="0" max="100" value="${Number(zone.y ?? 50)}" />
-          </div>
-          <div style="min-width:110px;">
-            <label>Radius %</label>
-            <input data-q="${idx}" data-field="pinR" type="number" min="1" max="100" value="${Number(zone.r ?? 15)}" />
-          </div>
+          <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
         </div>
-        <p class="small">Tip: click image preview to set X/Y center.</p>
+        <p class="small">Up to 12 correct points. Click preview to add a point at clicked location.</p>
+        <div class="answers-grid">
+          ${zones.map((z, zi) => `
+            <input data-q="${idx}" data-pin-zone-x="${zi}" type="number" min="0" max="100" value="${Number(z.x)}" placeholder="X ${zi + 1}" />
+            <input data-q="${idx}" data-pin-zone-y="${zi}" type="number" min="0" max="100" value="${Number(z.y)}" placeholder="Y ${zi + 1}" />
+            <input data-q="${idx}" data-pin-zone-r="${zi}" type="number" min="1" max="100" value="${Number(z.r)}" placeholder="R ${zi + 1}" />
+            <button type="button" class="btn" data-remove-pin-zone="${idx}" data-zone-index="${zi}">Remove</button>
+          `).join('')}
+        </div>
       `;
 
       if (q.imageData) {
-        const left = clamp(zone.x, 0, 100);
-        const top = clamp(zone.y, 0, 100);
-        const size = clamp(zone.r * 2, 2, 100);
-
         specific += `
           <div class="pin-preview" data-pin-preview="${idx}">
             <img src="${q.imageData}" alt="Pin question image" />
-            <div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div>
-            <div class="pin-dot" style="left:${left}%; top:${top}%;"></div>
+            ${zones.map((z) => {
+              const left = clamp(z.x, 0, 100);
+              const top = clamp(z.y, 0, 100);
+              const size = clamp(z.r * 2, 2, 100);
+              return `<div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div><div class="pin-dot" style="left:${left}%; top:${top}%;"></div>`;
+            }).join('')}
           </div>
         `;
       }
@@ -992,15 +1019,19 @@ function syncQuizFromUI() {
     }
 
     if (q.type === 'pin') {
-      q.zone = q.zone || { x: 50, y: 50, r: 15 };
-
-      const xEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinX"]`);
-      const yEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinY"]`);
-      const rEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinR"]`);
-
-      q.zone.x = round(clamp(Number(xEl?.value ?? 50), 0, 100), 1);
-      q.zone.y = round(clamp(Number(yEl?.value ?? 50), 0, 100), 1);
-      q.zone.r = round(clamp(Number(rEl?.value ?? 15), 1, 100), 1);
+      const xEls = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-pin-zone-x]`)];
+      const zones = xEls.map((xEl) => {
+        const zi = Number(xEl.dataset.pinZoneX);
+        const yEl = questionListEl.querySelector(`[data-q="${idx}"][data-pin-zone-y="${zi}"]`);
+        const rEl = questionListEl.querySelector(`[data-q="${idx}"][data-pin-zone-r="${zi}"]`);
+        return {
+          x: round(clamp(Number(xEl?.value ?? 50), 0, 100), 1),
+          y: round(clamp(Number(yEl?.value ?? 50), 0, 100), 1),
+          r: round(clamp(Number(rEl?.value ?? 15), 1, 100), 1),
+        };
+      }).slice(0, 12);
+      q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
+      q.zone = q.zones[0];
     }
   });
 }
@@ -2049,14 +2080,26 @@ function renderHostQuestion(state) {
 
       wrap.appendChild(img);
 
-      if (showReveal && question.zone) {
-        const zone = document.createElement('div');
-        zone.className = 'pin-zone';
-        zone.style.left = `${Number(question.zone.x || 50)}%`;
-        zone.style.top = `${Number(question.zone.y || 50)}%`;
-        zone.style.width = `${Math.max(2, Number(question.zone.r || 15) * 2)}%`;
-        zone.style.height = `${Math.max(2, Number(question.zone.r || 15) * 2)}%`;
-        wrap.appendChild(zone);
+      if (showReveal) {
+        const zones = Array.isArray(question.zones) && question.zones.length
+          ? question.zones
+          : (question.zone ? [question.zone] : []);
+        zones.slice(0, 12).forEach((z) => {
+          const zone = document.createElement('div');
+          zone.className = 'pin-zone';
+          zone.style.left = `${Number(z.x || 50)}%`;
+          zone.style.top = `${Number(z.y || 50)}%`;
+          zone.style.width = `${Math.max(2, Number(z.r || 15) * 2)}%`;
+          zone.style.height = `${Math.max(2, Number(z.r || 15) * 2)}%`;
+          wrap.appendChild(zone);
+
+          const arrow = document.createElement('div');
+          arrow.className = 'pin-arrow';
+          arrow.style.left = `${Number(z.x || 50)}%`;
+          arrow.style.top = `${Math.max(0, Number(z.y || 50) - Number(z.r || 15) - 6)}%`;
+          arrow.textContent = '↓';
+          wrap.appendChild(arrow);
+        });
       }
 
       hostQuestionAnswersEl.appendChild(wrap);
@@ -3123,10 +3166,12 @@ function evaluateSoloQuestion(q) {
 
   if (q.type === 'pin') {
     if (!soloGame.pinSelection) return { correct: false, hint: 'Tap/click the image first.' };
-    const zone = q.zone || { x: 50, y: 50, r: 15 };
-    const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, zone.x, zone.y);
-    const ok = d <= zone.r;
-    return { correct: ok, hint: ok ? '' : 'Try closer to the target area.' };
+    const zones = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || { x: 50, y: 50, r: 15 }];
+    const ok = zones.some((z) => {
+      const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, Number(z.x || 50), Number(z.y || 50));
+      return d <= Number(z.r || 15);
+    });
+    return { correct: ok, hint: ok ? '' : 'Try closer to one of the target areas.' };
   }
 
   return { correct: false };
@@ -3406,8 +3451,22 @@ function makePinQuestion() {
     points: 1000,
     timeLimit: 0,
     imageData: '',
-    zone: { x: 50, y: 50, r: 15 },
+    zones: [{ x: 50, y: 50, r: 15 }],
   };
+}
+
+function normalizePinZones(question) {
+  const source = Array.isArray(question?.zones) && question.zones.length
+    ? question.zones
+    : (question?.zone ? [question.zone] : [{ x: 50, y: 50, r: 15 }]);
+
+  return source
+    .slice(0, 12)
+    .map((z) => ({
+      x: round(clamp(Number(z?.x ?? 50), 0, 100), 1),
+      y: round(clamp(Number(z?.y ?? 50), 0, 100), 1),
+      r: round(clamp(Number(z?.r ?? 15), 1, 100), 1),
+    }));
 }
 
 function normalizeQuizForLive(raw) {
@@ -3538,15 +3597,12 @@ function normalizeQuizForLive(raw) {
 
     if (q.type === 'pin') {
       if (!q.imageData) return;
-      const zone = q.zone || {};
+      const zones = normalizePinZones(q);
       normalized.questions.push({
         ...base,
         imageData: String(q.imageData || ''),
-        zone: {
-          x: round(clamp(Number(zone.x ?? 50), 0, 100), 1),
-          y: round(clamp(Number(zone.y ?? 50), 0, 100), 1),
-          r: round(clamp(Number(zone.r ?? 15), 1, 100), 1),
-        },
+        zones,
+        zone: zones[0],
       });
       return;
     }

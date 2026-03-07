@@ -650,6 +650,16 @@ textarea { min-height: 72px; resize: vertical; }
   pointer-events: none;
 }
 
+.pin-arrow {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #312e81;
+  text-shadow: 0 1px 0 #fff;
+  pointer-events: none;
+}
+
 .fx-pop {
   animation: fx-pop .28s ease-out;
 }
