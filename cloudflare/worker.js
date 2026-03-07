@@ -1223,6 +1223,7 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       answers: (question.answers || []).map((a) => ({ text: a.text })),
+      imageData: String(question.imageData || '') || undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1234,7 +1235,7 @@ function publicQuestion(question) {
       points: question.points,
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
-      imageData: question.type === 'image_open' ? String(question.imageData || '') : undefined,
+      imageData: String(question.imageData || '') || undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
@@ -1252,6 +1253,7 @@ function publicQuestion(question) {
       isPoll: !!question.isPoll,
       length: (question.items || []).length,
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
+      imageData: String(question.imageData || '') || undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1267,6 +1269,7 @@ function publicQuestion(question) {
       max: question.max,
       margin: question.margin,
       unit: question.unit || '',
+      imageData: String(question.imageData || '') || undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -1403,6 +1406,7 @@ function normalizeQuiz(quiz) {
       audioText: String(q.audioText || '').slice(0, 120),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
+      imageData: String(q.imageData || ''),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {

@@ -297,6 +297,16 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+    const preview = document.createElement('div');
+    preview.className = 'pin-preview';
+    const img = document.createElement('img');
+    img.src = question.imageData;
+    img.alt = 'Question image';
+    preview.appendChild(img);
+    joinAnswersEl.appendChild(preview);
+  }
+
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
     question.answers.forEach((a, idx) => {

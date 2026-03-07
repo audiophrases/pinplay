@@ -640,17 +640,8 @@ function renderBuilder() {
 
     if (q.type === 'image_open') {
       specific += `
-        <label class="top-space">Prompt image</label>
-        <input data-image-upload="${idx}" type="file" accept="image/*" />
         <p class="small top-space">Students write 1-2 sentences from the image. Teacher grades live.</p>
       `;
-      if (q.imageData) {
-        specific += `
-          <div class="pin-preview">
-            <img src="${q.imageData}" alt="Image prompt" />
-          </div>
-        `;
-      }
     }
 
     if (q.type === 'context_gap') {
@@ -775,6 +766,20 @@ function renderBuilder() {
             <img src="${q.imageData}" alt="Pin question image" />
             <div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div>
             <div class="pin-dot" style="left:${left}%; top:${top}%;"></div>
+          </div>
+        `;
+      }
+    }
+
+    if (q.type !== 'pin') {
+      specific += `
+        <label class="top-space">Question image (optional)</label>
+        <input data-image-upload="${idx}" type="file" accept="image/*" />
+      `;
+      if (q.imageData) {
+        specific += `
+          <div class="pin-preview">
+            <img src="${q.imageData}" alt="Question image" />
           </div>
         `;
       }
@@ -1730,6 +1735,16 @@ function renderHostQuestion(state) {
   hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
   hostQuestionAnswersEl.innerHTML = '';
 
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+    const preview = document.createElement('div');
+    preview.className = 'pin-preview';
+    const img = document.createElement('img');
+    img.src = question.imageData;
+    img.alt = 'Question image';
+    preview.appendChild(img);
+    hostQuestionAnswersEl.appendChild(preview);
+  }
+
   if (question.isPoll) {
     hostQuestionHintEl.textContent = showReveal ? 'Poll results (anonymous)' : 'Poll mode: no points, no correct answer.';
     if (showReveal) renderPollSummary();
@@ -2255,6 +2270,16 @@ function renderJoinQuestion(question) {
     note.className = 'small';
     note.textContent = 'Poll mode: anonymous results, no points.';
     joinAnswersEl.appendChild(note);
+  }
+
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+    const preview = document.createElement('div');
+    preview.className = 'pin-preview';
+    const img = document.createElement('img');
+    img.src = question.imageData;
+    img.alt = 'Question image';
+    preview.appendChild(img);
+    joinAnswersEl.appendChild(preview);
   }
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
@@ -3233,6 +3258,7 @@ function normalizeQuizForLive(raw) {
       audioText: String(q.audioText || '').slice(0, 1000),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
+      imageData: String(q.imageData || ''),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
