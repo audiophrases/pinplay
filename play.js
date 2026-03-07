@@ -806,7 +806,24 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
   rightCol.className = 'match-pairs-col';
 
   let selectedLeft = -1;
+  let selectedRight = '';
   const rows = [];
+
+  const clearDropTargets = () => {
+    leftCol.querySelectorAll('.match-drop-target').forEach((el) => el.classList.remove('match-drop-target'));
+  };
+
+  const assignPair = (leftIdx, rightValue) => {
+    const value = String(rightValue || '').trim();
+    if (leftIdx < 0 || !value) return;
+    rows.forEach((r) => {
+      if (String(r.hidden.value || '') === value) r.hidden.value = '';
+    });
+    rows[leftIdx].hidden.value = value;
+    selectedLeft = -1;
+    selectedRight = '';
+    refreshUi();
+  };
 
   const refreshUi = () => {
     rows.forEach((row, idx) => {
@@ -820,8 +837,8 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     rightCol.querySelectorAll('[data-match-right]').forEach((btn) => {
       const value = String(btn.dataset.matchRight || '');
       const isUsed = used.has(value);
-      btn.classList.toggle('active', isUsed);
-      btn.disabled = isUsed && (selectedLeft < 0 || String(rows[selectedLeft].hidden.value || '') !== value);
+      btn.classList.toggle('active', isUsed || value === selectedRight);
+      btn.disabled = false;
     });
   };
 
@@ -844,8 +861,38 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
 
     row.append(leftText, slot, hidden);
     row.addEventListener('click', () => {
+      if (selectedRight) {
+        assignPair(i, selectedRight);
+        return;
+      }
       selectedLeft = selectedLeft === i ? -1 : i;
       refreshUi();
+    });
+
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      hidden.value = '';
+      refreshUi();
+    });
+
+    row.addEventListener('dragover', (e) => {
+      const value = e.dataTransfer?.getData('text/match-right');
+      if (!value) return;
+      e.preventDefault();
+      clearDropTargets();
+      row.classList.add('match-drop-target');
+    });
+
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('match-drop-target');
+    });
+
+    row.addEventListener('drop', (e) => {
+      const value = e.dataTransfer?.getData('text/match-right');
+      if (!value) return;
+      e.preventDefault();
+      clearDropTargets();
+      assignPair(i, value);
     });
 
     rows.push({ container: row, slot, hidden });
@@ -858,15 +905,24 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     btn.className = 'btn';
     btn.dataset.matchRight = String(opt || '');
     btn.textContent = String(opt || '');
+    btn.draggable = true;
+
     btn.addEventListener('click', () => {
-      if (selectedLeft < 0) return;
-      rows.forEach((r) => {
-        if (String(r.hidden.value || '') === btn.dataset.matchRight) r.hidden.value = '';
-      });
-      rows[selectedLeft].hidden.value = btn.dataset.matchRight || '';
-      selectedLeft = -1;
+      const value = btn.dataset.matchRight || '';
+      if (selectedLeft >= 0) {
+        assignPair(selectedLeft, value);
+        return;
+      }
+      selectedRight = selectedRight === value ? '' : value;
       refreshUi();
     });
+
+    btn.addEventListener('dragstart', (e) => {
+      if (!e.dataTransfer) return;
+      e.dataTransfer.setData('text/match-right', btn.dataset.matchRight || '');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
     rightCol.appendChild(btn);
   });
 
