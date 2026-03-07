@@ -2364,7 +2364,7 @@ function renderPlayerState(state) {
 
   const questionClosed = !!state.questionClosed;
   const isPoll = !!state.question?.isPoll;
-  joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
+  joinSubmitBtn.disabled = questionClosed || state.answeredCurrent;
 
   if (questionClosed) {
     const closeReason = String(state.questionCloseReason || '').trim();

@@ -250,7 +250,7 @@ function renderPlayerState(state) {
   }
 
   if (joinSubmitBtn) {
-    joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || live.player.submittedForIndex === state.currentIndex;
+    joinSubmitBtn.disabled = questionClosed || state.answeredCurrent;
     if (!questionClosed && joinSubmitBtn.disabled) {
       setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
     }
