@@ -158,7 +158,17 @@
 
             <div class="hall top-space" id="hallCard">
               <div class="small">GAME PIN</div>
-              <div class="pin-big" id="livePinBig">—</div>
+              <div class="hall-pin-row">
+                <div class="pin-big" id="livePinBig">—</div>
+                <div class="hall-qr-wrap" aria-label="Join QR">
+                  <img
+                    class="hall-qr"
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Faudiophrases.github.io%2Fpinplay%2F"
+                    alt="QR code to open PinPlay join page"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
               <div class="small" id="hallHint">Create a live game to open the hall.</div>
             </div>
 

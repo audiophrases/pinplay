@@ -401,6 +401,27 @@ textarea { min-height: 72px; resize: vertical; }
   box-shadow: 0 0 0 3px rgba(96,93,255,.12);
 }
 
+.hall-pin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.hall-qr-wrap {
+  flex: 0 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .3rem;
+}
+
+.hall-qr {
+  display: block;
+  width: 96px;
+  height: 96px;
+}
+
 .project-screen {
   text-align: center;
 }
