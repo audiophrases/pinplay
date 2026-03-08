@@ -518,7 +518,6 @@ export default {
         apiUrl.searchParams.set('q', query);
         apiUrl.searchParams.set('page_size', String(count));
         apiUrl.searchParams.set('mature', 'false');
-        apiUrl.searchParams.set('aspect_ratio', 'all');
 
         const res = await fetch(apiUrl.toString(), {
           method: 'GET',
