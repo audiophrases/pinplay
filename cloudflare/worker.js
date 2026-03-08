@@ -23,7 +23,7 @@ const BLOCKED_NICK_PATTERNS = [
 ];
 
 const ALLOWED_REACTIONS = new Set([
-  ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+  '👍','👏','🔥','😍','😂','🤯','🙌','✅','💯','🎉','⚡','😮','🤔','👀','🧠','❤️','😅','😎','🥳','🫶'
 ]);
 
 export default {
