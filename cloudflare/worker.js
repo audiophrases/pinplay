@@ -1389,6 +1389,7 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: question.imageData || '',
+      pinMode: String(question.pinMode || 'all') === 'any' ? 'any' : 'all',
       ...publicAudioPayload(question),
     };
   }
@@ -1489,8 +1490,10 @@ function evaluate(question, answer) {
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
 
-    const allCovered = zones.every((z) => picks.some((p) => distance2D(p.x, p.y, Number(z?.x ?? 50), Number(z?.y ?? 50)) <= Number(z?.r ?? 15)));
-    return { correct: allCovered };
+    const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z?.x ?? 50), Number(z?.y ?? 50)) <= Number(z?.r ?? 15))).length;
+    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const ok = pinMode === 'any' ? coveredCount >= 1 : coveredCount >= zones.length;
+    return { correct: ok };
   }
 
   return { correct: false };
@@ -1640,6 +1643,7 @@ function normalizeQuiz(quiz) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
+        pinMode: String(q.pinMode || 'all') === 'any' ? 'any' : 'all',
       });
     }
   });

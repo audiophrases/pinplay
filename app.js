@@ -811,6 +811,13 @@ function renderBuilder() {
         <input data-pin-upload="${idx}" type="file" accept="image/*" />
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
+          <div style="min-width:220px;">
+            <label>Correct rule</label>
+            <select data-q="${idx}" data-field="pinMode">
+              <option value="all" ${String(q.pinMode || 'all') === 'all' ? 'selected' : ''}>All spots must be pinned</option>
+              <option value="any" ${String(q.pinMode || 'all') === 'any' ? 'selected' : ''}>Any one spot is enough</option>
+            </select>
+          </div>
         </div>
         <p class="small">Up to 12 correct points. Click preview to add a point at clicked location.</p>
         <div class="answers-grid">
@@ -1047,6 +1054,7 @@ function syncQuizFromUI() {
       }).slice(0, 12);
       q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
       q.zone = q.zones[0];
+      q.pinMode = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all') === 'any' ? 'any' : 'all';
     }
   });
 }
@@ -2742,7 +2750,8 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const required = Math.max(1, Math.min(12, zones.length));
+    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
 
     const countLabel = document.createElement('p');
     countLabel.className = 'small';
@@ -2755,7 +2764,9 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = `Pin all correct spots: ${picks.length} / ${required}`;
+      countLabel.textContent = pinMode === 'all'
+        ? `Pin all correct spots: ${picks.length} / ${required}`
+        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -2969,6 +2980,7 @@ function buildPreviewHostQuestion(q) {
     imageData: String(q.imageData || '') || undefined,
     zones: q.type === 'pin' ? normalizePinZones(q) : undefined,
     zone: q.type === 'pin' ? normalizePinZones(q)[0] : undefined,
+    pinMode: q.type === 'pin' ? (String(q.pinMode || 'all') === 'any' ? 'any' : 'all') : undefined,
   };
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
@@ -3042,8 +3054,10 @@ function evaluatePreviewAnswer(q, answer) {
       .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
-    const allCovered = zones.every((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r)));
-    return { correct: allCovered };
+    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
+    const ok = pinMode === 'any' ? coveredCount >= 1 : coveredCount >= zones.length;
+    return { correct: ok };
   }
   return { correct: false };
 }
@@ -3463,11 +3477,13 @@ function evaluateSoloQuestion(q) {
   if (q.type === 'pin') {
     if (!soloGame.pinSelection) return { correct: false, hint: 'Tap/click the image first.' };
     const zones = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || { x: 50, y: 50, r: 15 }];
-    const ok = zones.some((z) => {
+    const hits = zones.filter((z) => {
       const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, Number(z.x || 50), Number(z.y || 50));
       return d <= Number(z.r || 15);
-    });
-    return { correct: ok, hint: ok ? '' : 'Try closer to one of the target areas.' };
+    }).length;
+    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const ok = pinMode === 'any' ? hits >= 1 : hits >= zones.length;
+    return { correct: ok, hint: ok ? '' : (pinMode === 'all' ? 'Try closer to all target areas.' : 'Try closer to a target area.') };
   }
 
   return { correct: false };
@@ -3748,6 +3764,7 @@ function makePinQuestion() {
     timeLimit: 0,
     imageData: '',
     zones: [{ x: 50, y: 50, r: 15 }],
+    pinMode: 'all',
   };
 }
 
@@ -3899,6 +3916,7 @@ function normalizeQuizForLive(raw) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
+        pinMode: String(q.pinMode || 'all') === 'any' ? 'any' : 'all',
       });
       return;
     }

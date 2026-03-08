@@ -481,7 +481,8 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const required = Math.max(1, Math.min(12, zones.length));
+    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
 
     const countLabel = document.createElement('p');
     countLabel.className = 'small';
@@ -494,7 +495,9 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = `Pin all correct spots: ${picks.length} / ${required}`;
+      countLabel.textContent = pinMode === 'all'
+        ? `Pin all correct spots: ${picks.length} / ${required}`
+        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
