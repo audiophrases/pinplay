@@ -1083,6 +1083,27 @@ export class QuizRoom {
   }
 }
 
+function summarizeHistoryAnswer(question, answer) {
+  if (!question) return '(no answer)';
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+    const idx = Number(answer);
+    return Number.isFinite(idx) ? String(question.answers?.[idx]?.text || `Option ${idx + 1}`) : '(blank)';
+  }
+  if (question.type === 'multi') {
+    const arr = Array.isArray(answer) ? answer : [];
+    return arr.map((idx) => String(question.answers?.[Number(idx)]?.text || '')).filter(Boolean).join(' + ') || '(none)';
+  }
+  if (question.type === 'pin') {
+    const picks = Array.isArray(answer) ? answer : (answer ? [answer] : []);
+    return picks.map((p) => `(${Math.round(Number(p?.x || 0))}%, ${Math.round(Number(p?.y || 0))}%)`).join(' | ') || '(none)';
+  }
+  if (question.type === 'error_hunt') return String(answer?.rewrite || '');
+  if (question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'puzzle') {
+    return Array.isArray(answer) ? answer.join(' | ') : String(answer || '');
+  }
+  return String(answer || '');
+}
+
 function hostState(room) {
   const qIndex = room.currentIndex;
   const responses = room.responsesByQuestion[qIndex] || {};
@@ -1110,6 +1131,31 @@ function hostState(room) {
         hidden: !!r?.hidden,
       }))
     : [];
+
+  const totalQs = Number(room.quiz?.questions?.length || 0);
+  const answerHistory = [];
+  for (let i = Math.max(0, totalQs - 8); i < totalQs; i++) {
+    const questionRef = room.quiz?.questions?.[i];
+    if (!questionRef) continue;
+    const perQ = room.responsesByQuestion?.[i] || {};
+    const entries = Object.entries(perQ).map(([pid, r]) => ({
+      playerId: pid,
+      name: room.players?.[pid]?.name || 'Student',
+      answerText: summarizeHistoryAnswer(questionRef, r?.answer),
+      correct: !!r?.correct,
+      graded: !!r?.graded,
+      submittedAt: Number(r?.submittedAt || 0) || null,
+    })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    if (entries.length || i === qIndex) {
+      answerHistory.push({
+        qIndex: i,
+        prompt: String(questionRef.prompt || ''),
+        type: String(questionRef.type || ''),
+        entries,
+      });
+    }
+  }
 
   return {
     phase: room.phase,
@@ -1144,6 +1190,7 @@ function hostState(room) {
       : [],
     pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses) : null,
     pollResponses,
+    answerHistory,
     correctAnswer:
       room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll
       && !['open', 'image_open'].includes(roomQuestion?.type)

@@ -66,6 +66,7 @@ const liveProgressEl = document.getElementById('liveProgress');
 const liveResponsesEl = document.getElementById('liveResponses');
 const liveReactionsEl = document.getElementById('liveReactions');
 const hostPlayersEl = document.getElementById('hostPlayers');
+const hostAnswerHistoryEl = document.getElementById('hostAnswerHistory');
 const hostStatusEl = document.getElementById('hostStatus');
 const hostQuestionWrap = document.getElementById('hostQuestionWrap');
 const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
@@ -1669,6 +1670,53 @@ async function pollHostState() {
   }
 }
 
+function formatHistoryAnswer(entry) {
+  if (!entry) return '(no answer)';
+  if (Array.isArray(entry.answerText)) return entry.answerText.join(' | ');
+  return String(entry.answerText || '(no answer)');
+}
+
+function renderHostAnswerHistory(state) {
+  if (!hostAnswerHistoryEl) return;
+  hostAnswerHistoryEl.innerHTML = '';
+
+  const blocks = Array.isArray(state?.answerHistory) ? state.answerHistory : [];
+  if (!blocks.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No answers yet.';
+    hostAnswerHistoryEl.appendChild(li);
+    return;
+  }
+
+  blocks.forEach((block) => {
+    const li = document.createElement('li');
+    const title = document.createElement('div');
+    title.className = 'small';
+    title.innerHTML = `<strong>Q${Number(block.qIndex) + 1}</strong> - ${escapeHtml(String(block.prompt || '').slice(0, 90) || '(no prompt)' )}`;
+    li.appendChild(title);
+
+    const entries = Array.isArray(block.entries) ? block.entries : [];
+    if (!entries.length) {
+      const muted = document.createElement('div');
+      muted.className = 'small muted';
+      muted.textContent = 'No submissions on this question.';
+      li.appendChild(muted);
+    } else {
+      const sub = document.createElement('ul');
+      sub.className = 'list';
+      entries.forEach((entry) => {
+        const row = document.createElement('li');
+        const verdict = entry.graded ? (entry.correct ? '✅' : '❌') : '⏳';
+        row.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}`;
+        sub.appendChild(row);
+      });
+      li.appendChild(sub);
+    }
+
+    hostAnswerHistoryEl.appendChild(li);
+  });
+}
+
 function renderHostState(state) {
   live.host.state = state;
 
@@ -1736,6 +1784,8 @@ function renderHostState(state) {
       hostPlayersEl.appendChild(li);
     }
   }
+
+  renderHostAnswerHistory(state);
 
   let actionHint = 'Game finished.';
   if (state.phase === 'lobby') {
