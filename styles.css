@@ -627,6 +627,29 @@ textarea { min-height: 72px; resize: vertical; }
   margin-top: -.2rem;
 }
 
+#joinPrompt.with-image {
+  position: relative;
+  z-index: 3;
+}
+
+@media (max-width: 860px) {
+  #joinPrompt.with-image {
+    display: inline-block;
+    margin: 0 0 -.55rem;
+    padding: .38rem .6rem;
+    border-radius: .62rem;
+    background: linear-gradient(180deg, rgba(15,23,42,.78), rgba(15,23,42,.56));
+    color: #fff;
+    text-shadow: 0 2px 5px rgba(0,0,0,.55), 0 0 1px rgba(0,0,0,.8);
+    -webkit-text-stroke: .25px rgba(0,0,0,.35);
+    box-shadow: 0 6px 18px rgba(15,23,42,.28);
+  }
+
+  #joinAnswers.has-question-image .question-image-preview {
+    margin-top: 0;
+  }
+}
+
 @media (min-width: 980px) {
   .project-answers.has-question-image {
     display: grid;
