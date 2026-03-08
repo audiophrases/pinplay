@@ -1,7 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-const REACTION_EMOJIS = ['👍','👏','🔥','😍','😂','🤯','🙌','✅','💯','🎉','⚡','😮','🤔','👀','🧠','❤️','😅','😎','🥳','🫶'];
+const REACTION_EMOJIS = ['👍','👏','🔥','😍','😂','🤯','🙌','✅','💯','🎉','⚡','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
@@ -582,9 +582,14 @@ function appendRiskBetBar() {
 }
 
 function appendReactionBar() {
-  if (!joinAnswersEl) return;
+  const host = joinFeedbackEl?.parentElement || joinQuestionWrap || joinAnswersEl;
+  if (!host) return;
+
+  const old = host.querySelector('#joinReactionBar');
+  if (old) old.remove();
 
   const wrap = document.createElement('div');
+  wrap.id = 'joinReactionBar';
   wrap.className = 'top-space';
 
   const label = document.createElement('p');
@@ -595,7 +600,7 @@ function appendReactionBar() {
   const row = document.createElement('div');
   row.className = 'row gap';
 
-  REACTION_EMOJIS.slice(0, 20).forEach((emoji) => {
+  REACTION_EMOJIS.forEach((emoji) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn';
@@ -606,7 +611,12 @@ function appendReactionBar() {
   });
 
   wrap.appendChild(row);
-  joinAnswersEl.appendChild(wrap);
+
+  if (joinFeedbackEl && joinFeedbackEl.parentElement === host) {
+    joinFeedbackEl.insertAdjacentElement('afterend', wrap);
+  } else {
+    host.appendChild(wrap);
+  }
 }
 
 async function sendReaction(emoji) {
