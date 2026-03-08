@@ -1882,6 +1882,53 @@ async function hostHideOpenResponse(playerId) {
   }
 }
 
+async function hostSetOpenCorrection(playerId, currentText = '') {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    const text = prompt('Correction/feedback for student:', String(currentText || ''));
+    if (text == null) return;
+
+    await api('/api/host/open/feedback', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+        correction: String(text || '').slice(0, 280),
+      },
+    });
+
+    setStatus(hostStatusEl, 'Correction saved.', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+async function hostToggleModelAnswer(playerId, nextValue) {
+  try {
+    if (!playerId) return;
+    ensureHostReady();
+
+    await api('/api/host/open/model', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: {
+        pin: live.host.pin,
+        playerId,
+        modelAnswer: !!nextValue,
+      },
+    });
+
+    setStatus(hostStatusEl, nextValue ? 'Marked as model answer.' : 'Removed from model answers.', 'ok');
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
 async function pollHostState() {
   if (!live.host.pin || !live.host.token) return;
   try {
@@ -1933,7 +1980,42 @@ function renderHostAnswerHistory(state) {
       entries.forEach((entry) => {
         const row = document.createElement('li');
         const verdict = entry.graded ? (entry.correct ? '✅' : '❌') : '⏳';
-        row.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}`;
+        const line = document.createElement('div');
+        line.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}${entry.graded ? ` (${Number(entry.pointsAwarded || 0)} pts)` : ''}`;
+        row.appendChild(line);
+
+        const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
+        const currentQ = state?.question || null;
+        const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
+
+        if (teacherGradedCurrent) {
+          const actions = document.createElement('div');
+          actions.className = 'row gap top-space';
+
+          const gradeBtn = document.createElement('button');
+          gradeBtn.className = 'btn';
+          gradeBtn.textContent = entry.graded ? `Regrade (${Number(entry.pointsAwarded || 0)})` : 'Grade';
+          gradeBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, entry.pointsAwarded));
+
+          const corrBtn = document.createElement('button');
+          corrBtn.className = 'btn';
+          corrBtn.textContent = entry.correction ? 'Edit correction' : 'Add correction';
+          corrBtn.addEventListener('click', () => hostSetOpenCorrection(entry.playerId, entry.correction || ''));
+
+          const modelBtn = document.createElement('button');
+          modelBtn.className = 'btn';
+          modelBtn.textContent = entry.modelAnswer ? 'Unshow model' : 'Show as model';
+          modelBtn.addEventListener('click', () => hostToggleModelAnswer(entry.playerId, !entry.modelAnswer));
+
+          const hideBtn = document.createElement('button');
+          hideBtn.className = 'btn';
+          hideBtn.textContent = 'Hide';
+          hideBtn.addEventListener('click', () => hostHideOpenResponse(entry.playerId));
+
+          actions.append(gradeBtn, corrBtn, modelBtn, hideBtn);
+          row.appendChild(actions);
+        }
+
         sub.appendChild(row);
       });
       li.appendChild(sub);
@@ -2348,40 +2430,35 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(preview);
     }
 
-    const list = Array.isArray(state.openResponses) ? state.openResponses : [];
-    if (!list.length) {
+    const teacherNote = document.createElement('p');
+    teacherNote.className = 'small';
+    teacherNote.textContent = 'Teacher grading/corrections are in the private Answer history panel below.';
+    hostQuestionAnswersEl.appendChild(teacherNote);
+
+    const models = Array.isArray(state.modelResponses) ? state.modelResponses : [];
+    if (!models.length) {
       const p = document.createElement('p');
-      p.className = 'small';
-      p.textContent = 'No student answers yet.';
+      p.className = 'small muted';
+      p.textContent = 'No model answers selected yet.';
       hostQuestionAnswersEl.appendChild(p);
       return;
     }
 
-    list.forEach((r) => {
+    const title = document.createElement('p');
+    title.className = 'small';
+    title.textContent = 'Model answers shown on live screen:';
+    hostQuestionAnswersEl.appendChild(title);
+
+    models.forEach((r) => {
       const row = document.createElement('div');
-      row.className = 'row spread gap';
+      row.className = 'row gap';
       row.style.border = '1px solid var(--line)';
       row.style.borderRadius = '.5rem';
       row.style.padding = '.4rem .5rem';
 
       const text = document.createElement('span');
       text.textContent = `${r.name}: ${r.answer}`;
-
-      const actions = document.createElement('div');
-      actions.className = 'row gap';
-
-      const gradeBtn = document.createElement('button');
-      gradeBtn.className = 'btn';
-      gradeBtn.textContent = r.graded ? `Regrade (${r.pointsAwarded})` : 'Grade';
-      gradeBtn.addEventListener('click', () => gradeOpenAnswer(r.playerId, r.pointsAwarded));
-
-      const hideBtn = document.createElement('button');
-      hideBtn.className = 'btn';
-      hideBtn.textContent = 'Hide';
-      hideBtn.addEventListener('click', () => hostHideOpenResponse(r.playerId));
-
-      actions.append(gradeBtn, hideBtn);
-      row.append(text, actions);
+      row.append(text);
       hostQuestionAnswersEl.appendChild(row);
     });
     return;
@@ -2834,7 +2911,15 @@ function renderPlayerState(state) {
     const closedMsg = closeReason === 'all_answered'
       ? 'Everyone answered. Waiting for next question…'
       : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Time is up. Waiting for next question…');
-    setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : closedMsg, 'ok');
+
+    const rr = state.revealedResult || null;
+    if (!isPoll && rr && rr.graded === true && String(rr.correction || '').trim()) {
+      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
+    } else if (!isPoll && rr && rr.graded === true) {
+      setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
+    } else {
+      setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : closedMsg, 'ok');
+    }
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');

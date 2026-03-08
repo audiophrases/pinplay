@@ -337,6 +337,46 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/open/feedback' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/open/feedback', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+            correction: String(body?.correction || '').slice(0, 280),
+          }),
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/host/open/model' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/open/model', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            playerId: sanitizeId(body?.playerId),
+            modelAnswer: !!body?.modelAnswer,
+          }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/player/state' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const playerId = sanitizeId(url.searchParams.get('playerId'));
@@ -939,6 +979,8 @@ export class QuizRoom {
         resp.correct = isCorrect;
         resp.graded = true;
         resp.gradedAt = Date.now();
+        if (typeof resp.modelAnswer !== 'boolean') resp.modelAnswer = false;
+        if (typeof resp.correction !== 'string') resp.correction = '';
 
         room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) - prev + adjustedPoints);
         room.updatedAt = Date.now();
@@ -995,6 +1037,58 @@ export class QuizRoom {
         await this.#setRoom(room);
 
         return json({ ok: true, playerId, hidden: true });
+      }
+
+      if (url.pathname === '/host/open/feedback' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const correction = String(body?.correction || '').slice(0, 280);
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        const qIndex = room.currentIndex;
+        const question = room.quiz.questions[qIndex];
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+          return json({ error: 'Current question is not teacher-graded.' }, 409);
+        }
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+
+        const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
+        if (!resp) return json({ error: 'No submitted answer for this player.' }, 404);
+
+        resp.correction = correction;
+        resp.feedbackAt = Date.now();
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+        return json({ ok: true, playerId, correction });
+      }
+
+      if (url.pathname === '/host/open/model' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const modelAnswer = !!body?.modelAnswer;
+
+        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        const qIndex = room.currentIndex;
+        const question = room.quiz.questions[qIndex];
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+          return json({ error: 'Current question is not teacher-graded.' }, 409);
+        }
+        if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
+
+        const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
+        if (!resp) return json({ error: 'No submitted answer for this player.' }, 404);
+
+        resp.modelAnswer = modelAnswer;
+        resp.modelAt = Date.now();
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+        return json({ ok: true, playerId, modelAnswer });
       }
 
       if (url.pathname === '/player/state' && request.method === 'POST') {
@@ -1064,6 +1158,8 @@ export class QuizRoom {
             bet,
             pointsAwarded: 0,
             graded: false,
+            correction: '',
+            modelAnswer: false,
             submittedAt: Date.now(),
           };
         } else {
@@ -1235,6 +1331,10 @@ function hostState(room) {
       answerText: summarizeHistoryAnswer(questionRef, r?.answer),
       correct: !!r?.correct,
       graded: !!r?.graded,
+      pointsAwarded: Number(r?.pointsAwarded || 0),
+      hidden: !!r?.hidden,
+      correction: String(r?.correction || ''),
+      modelAnswer: !!r?.modelAnswer,
       submittedAt: Number(r?.submittedAt || 0) || null,
     })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
@@ -1277,6 +1377,17 @@ function hostState(room) {
           answer: String(r?.answer || ''),
           graded: !!r?.graded,
           pointsAwarded: Number(r?.pointsAwarded || 0),
+          correction: String(r?.correction || ''),
+          modelAnswer: !!r?.modelAnswer,
+        }))
+      : [],
+    modelResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
+      ? Object.entries(responses)
+        .filter(([, r]) => !r?.hidden && !!r?.modelAnswer)
+        .map(([pid, r]) => ({
+          playerId: pid,
+          name: room.players?.[pid]?.name || 'Student',
+          answer: String(r?.answer || ''),
         }))
       : [],
     pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses) : null,
@@ -1317,6 +1428,7 @@ function playerState(room, playerId) {
           correct: !!myResponse.correct,
           pointsAwarded: Number(myResponse.pointsAwarded || 0),
           graded: !!myResponse.graded,
+          correction: String(myResponse.correction || ''),
           bet: sanitizeBet(myResponse.bet),
         }
       : null,
