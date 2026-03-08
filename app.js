@@ -1133,6 +1133,8 @@ async function openImageSearchDialog(questionIdx) {
 
   const results = document.createElement('div');
   results.className = 'answers-grid top-space';
+  results.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
+  results.style.gap = '.45rem';
 
   const runSearch = async () => {
     const query = String(input.value || '').trim();
@@ -1144,7 +1146,7 @@ async function openImageSearchDialog(questionIdx) {
     results.innerHTML = '';
 
     try {
-      const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=10`, { method: 'GET' });
+      const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=100`, { method: 'GET' });
       const items = Array.isArray(data.items) ? data.items : [];
       if (!items.length) {
         status.textContent = 'No images found.';
@@ -1155,14 +1157,14 @@ async function openImageSearchDialog(questionIdx) {
       items.forEach((item) => {
         const card = document.createElement('div');
         card.className = 'card';
-        card.style.padding = '.45rem';
+        card.style.padding = '.3rem';
 
         const img = document.createElement('img');
         img.src = item.thumb || item.url;
         img.alt = String(item.title || 'Image result');
         img.style.width = '100%';
         img.style.borderRadius = '.45rem';
-        img.style.maxHeight = '140px';
+        img.style.maxHeight = '78px';
         img.style.objectFit = 'cover';
 
         const label = document.createElement('p');
@@ -1171,7 +1173,9 @@ async function openImageSearchDialog(questionIdx) {
 
         const pick = document.createElement('button');
         pick.className = 'btn';
-        pick.textContent = 'Use this image';
+        pick.style.padding = '.25rem .4rem';
+        pick.style.fontSize = '.76rem';
+        pick.textContent = 'Use';
         pick.addEventListener('click', async () => {
           try {
             pick.disabled = true;

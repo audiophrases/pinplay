@@ -510,7 +510,7 @@ export default {
 
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
-      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
+      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 100);
       if (!query) return json({ error: 'q required.' }, 400);
 
       try {
