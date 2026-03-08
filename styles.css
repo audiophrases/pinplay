@@ -536,6 +536,14 @@ textarea { min-height: 72px; resize: vertical; }
 .feedback { font-weight: 600; min-height: 1.5rem; }
 .feedback.ok { color: var(--ok); }
 .feedback.bad { color: var(--bad); }
+
+#joinSliderValue,
+#soloSliderValue {
+  font-size: clamp(1.1rem, 2.2vw, 1.45rem);
+  font-weight: 800;
+  letter-spacing: .01em;
+  margin-top: .45rem;
+}
 .hidden { display: none !important; }
 
 .risk-bet-wrap {
