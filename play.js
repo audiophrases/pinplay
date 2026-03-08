@@ -1010,11 +1010,6 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
-  const hint = document.createElement('p');
-  hint.className = 'small';
-  hint.textContent = 'Click words in order, or drag to reorder. Right-click selected area to reset.';
-  container.appendChild(hint);
-
   const bank = document.createElement('div');
   bank.className = 'row gap';
   bank.style.flexWrap = 'wrap';
