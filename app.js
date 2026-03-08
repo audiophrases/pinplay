@@ -1148,8 +1148,8 @@ async function openImageSearchDialog(questionIdx) {
     try {
       const allItems = [];
       const seen = new Set();
-      const targetTotal = 10;
-      const openverseFirstLimit = Math.min(5, targetTotal);
+      const targetTotal = 60;
+      const openverseFirstLimit = Math.min(20, targetTotal);
 
       // 1) Openverse direct from browser first (small curated slice)
       try {
@@ -1201,34 +1201,26 @@ async function openImageSearchDialog(questionIdx) {
         status.textContent = 'No images found.';
         return;
       }
-      status.textContent = `Found ${items.length} images. Pick one.`;
+      status.textContent = `Found ${items.length} images. Click an image to import.`;
 
       items.forEach((item) => {
         const card = document.createElement('div');
         card.className = 'card';
-        card.style.padding = '.3rem';
+        card.style.padding = '.2rem';
+        card.style.cursor = 'pointer';
 
         const img = document.createElement('img');
         img.src = item.thumb || item.url;
         img.alt = String(item.title || 'Image result');
         img.style.width = '100%';
-        img.style.borderRadius = '.45rem';
+        img.style.borderRadius = '.4rem';
         img.style.maxHeight = '78px';
         img.style.objectFit = 'cover';
 
-        const label = document.createElement('p');
-        label.className = 'small';
-        label.textContent = String(item.source || item.title || item.url || '').slice(0, 90);
-
-        const pick = document.createElement('button');
-        pick.className = 'btn';
-        pick.style.padding = '.25rem .4rem';
-        pick.style.fontSize = '.76rem';
-        pick.textContent = 'Use';
-        pick.addEventListener('click', async () => {
+        const importImage = async () => {
           try {
-            pick.disabled = true;
-            pick.textContent = 'Importing...';
+            card.style.opacity = '.55';
+            card.style.pointerEvents = 'none';
             const imported = await api('/api/images/fetch', { method: 'POST', body: { url: item.url } });
             if (!imported?.dataUrl) throw new Error('Image import failed.');
             q.imageData = imported.dataUrl;
@@ -1237,12 +1229,13 @@ async function openImageSearchDialog(questionIdx) {
             overlay.remove();
           } catch (err) {
             setStatus(hostStatusEl, err.message || 'Could not import image.', 'bad');
-            pick.disabled = false;
-            pick.textContent = 'Use this image';
+            card.style.opacity = '1';
+            card.style.pointerEvents = 'auto';
           }
-        });
+        };
 
-        card.append(img, label, pick);
+        card.addEventListener('click', importImage);
+        card.append(img);
         results.appendChild(card);
       });
     } catch (err) {
