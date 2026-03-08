@@ -140,6 +140,19 @@ After that, Teacher Create supports:
 - **Open from Drive** (list recent JSON files and load one into builder)
 - **Delete from Drive** (trash unwanted quiz files from the picker dialog)
 
+### Optional: Google Images search in builder (quota-based)
+
+By default, builder image search uses free Wikimedia Commons.
+If you want Google Images results in the same search UI, set these worker secrets:
+
+```bash
+wrangler secret put GOOGLE_CSE_KEY
+wrangler secret put GOOGLE_CSE_CX
+wrangler deploy
+```
+
+Once set, `/api/images/search` auto-prefers Google and falls back to Wikimedia when needed.
+
 > If you update `drive-bridge.gs`, redeploy the Apps Script Web App so new endpoints are active.
 
 ## Quiz JSON format (example)

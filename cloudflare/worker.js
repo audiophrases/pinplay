@@ -511,7 +511,43 @@ export default {
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
       const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
+      const mode = String(url.searchParams.get('mode') || 'auto').toLowerCase(); // auto|google|wikimedia
       if (!query) return json({ error: 'q required.' }, 400);
+
+      const googleKey = String(env.GOOGLE_CSE_KEY || '').trim();
+      const googleCx = String(env.GOOGLE_CSE_CX || '').trim();
+      const canGoogle = !!googleKey && !!googleCx;
+      const preferGoogle = mode === 'google' || (mode === 'auto' && canGoogle);
+
+      if (preferGoogle) {
+        try {
+          const apiUrl = new URL('https://www.googleapis.com/customsearch/v1');
+          apiUrl.searchParams.set('key', googleKey);
+          apiUrl.searchParams.set('cx', googleCx);
+          apiUrl.searchParams.set('searchType', 'image');
+          apiUrl.searchParams.set('safe', 'active');
+          apiUrl.searchParams.set('q', query);
+          apiUrl.searchParams.set('num', String(Math.min(10, count)));
+
+          const res = await fetch(apiUrl.toString(), { method: 'GET' });
+          const raw = await res.text();
+          let data = {};
+          try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+          if (!res.ok) throw new Error(data?.error?.message || 'Google image search failed.');
+
+          const items = (Array.isArray(data?.items) ? data.items : []).map((it) => ({
+            url: String(it?.link || ''),
+            thumb: String(it?.image?.thumbnailLink || ''),
+            title: String(it?.title || ''),
+            source: String(it?.displayLink || 'Google Images'),
+          })).filter((it) => isHttpUrl(it.url));
+
+          if (items.length) return json({ provider: 'google', items }, 200);
+        } catch (err) {
+          if (mode === 'google') return json({ error: `Google image search failed: ${err.message}` }, 502);
+          // auto mode: silently fall back to Wikimedia
+        }
+      }
 
       try {
         const apiUrl = new URL('https://commons.wikimedia.org/w/api.php');
@@ -551,7 +587,7 @@ export default {
           };
         }).filter((it) => isHttpUrl(it.url));
 
-        return json({ items }, 200);
+        return json({ provider: 'wikimedia', items }, 200);
       } catch (err) {
         return json({ error: `Image search request failed: ${err.message}` }, 502);
       }
