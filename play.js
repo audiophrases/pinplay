@@ -1086,9 +1086,17 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
       const picked = pickedIds.has(id);
       btn.disabled = picked;
       btn.classList.toggle('puzzle-picked', picked);
+      btn.classList.toggle('hidden', picked);
       if (picked) btn.setAttribute('aria-label', `${btn.dataset.puzzleBankPiece || btn.textContent} (selected)`);
       else btn.removeAttribute('aria-label');
     });
+  };
+
+  const unpickRow = (rowEl) => {
+    if (!rowEl) return;
+    rowEl.remove();
+    refreshSelectedIndexes();
+    refreshBankButtons();
   };
 
   const buildBankButton = (value, pieceId) => {
@@ -1155,6 +1163,8 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     const label = document.createElement('span');
     label.textContent = text;
     row.append(pos, label);
+
+    row.addEventListener('click', () => unpickRow(row));
 
     setupRowDnD(row);
     selected.appendChild(row);
