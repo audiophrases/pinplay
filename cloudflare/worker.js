@@ -510,55 +510,42 @@ export default {
 
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
-      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 100);
+      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
       if (!query) return json({ error: 'q required.' }, 400);
 
       try {
-        const perPage = 20;
-        const pages = Math.max(1, Math.ceil(count / perPage));
-        const seen = new Set();
-        const items = [];
+        const apiUrl = new URL('https://api.openverse.org/v1/images/');
+        apiUrl.searchParams.set('q', query);
+        apiUrl.searchParams.set('page_size', String(count));
+        apiUrl.searchParams.set('page', '1');
+        apiUrl.searchParams.set('mature', 'false');
 
-        for (let page = 1; page <= pages; page += 1) {
-          const apiUrl = new URL('https://unsplash.com/napi/search/photos');
-          apiUrl.searchParams.set('query', query);
-          apiUrl.searchParams.set('per_page', String(perPage));
-          apiUrl.searchParams.set('page', String(page));
-
-          const res = await fetch(apiUrl.toString(), {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
-              'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-            },
-          });
-          const raw = await res.text();
-          let data = {};
-          try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-          if (!res.ok) {
-            throw new Error(`Unsplash failed (HTTP ${res.status}).`);
-          }
-
-          const batch = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
-            url: String(it?.urls?.regular || it?.urls?.full || it?.urls?.small || ''),
-            thumb: String(it?.urls?.thumb || it?.urls?.small || it?.urls?.regular || ''),
-            title: String(it?.alt_description || it?.description || 'Unsplash image'),
-            source: 'Unsplash',
-          })).filter((it) => isHttpUrl(it.url));
-
-          for (const it of batch) {
-            if (!seen.has(it.url)) {
-              seen.add(it.url);
-              items.push(it);
-              if (items.length >= count) break;
-            }
-          }
-          if (items.length >= count || !batch.length) break;
+        const res = await fetch(apiUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+            'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
+          },
+        });
+        const raw = await res.text();
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+        if (!res.ok) {
+          const detail = data?.detail;
+          const detailText = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : '');
+          throw new Error(detailText || `Openverse failed (HTTP ${res.status}).`);
         }
 
-        return json({ provider: 'unsplash', items }, 200);
+        const items = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
+          url: String(it?.url || ''),
+          thumb: String(it?.thumbnail || it?.url || ''),
+          title: String(it?.title || it?.foreign_landing_url || 'Openverse image'),
+          source: 'Openverse',
+        })).filter((it) => isHttpUrl(it.url));
+
+        return json({ provider: 'openverse', items }, 200);
       } catch (err) {
-        return json({ error: `Unsplash image search failed: ${err.message}` }, 502);
+        return json({ error: `Openverse image search failed: ${err.message}` }, 502);
       }
     }
 
