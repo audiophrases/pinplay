@@ -538,6 +538,29 @@ function bindBuilderEvents() {
     questionListEl.querySelectorAll('.question-item.dragging').forEach((el) => el.classList.remove('dragging'));
   });
 
+  questionListEl.addEventListener('paste', async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find((it) => String(it.type || '').startsWith('image/'));
+    if (!imageItem) return;
+
+    const file = imageItem.getAsFile?.();
+    if (!file) return;
+
+    const idx = findQuestionIndexFromBuilderEventTarget(e.target);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= quiz.questions.length) return;
+
+    e.preventDefault();
+    const q = quiz.questions[idx];
+
+    try {
+      q.imageData = await fileToDataUrl(file);
+      renderBuilder();
+      setStatus(hostStatusEl, `Image pasted into Q${idx + 1}.`, 'ok');
+    } catch (err) {
+      setStatus(hostStatusEl, err.message || 'Could not paste image.', 'bad');
+    }
+  });
+
   questionListEl.addEventListener('change', async (e) => {
     const pinUpload = e.target.closest('[data-pin-upload]');
     if (pinUpload) {
@@ -609,6 +632,23 @@ function bindBuilderEvents() {
       }
     }
   });
+}
+
+function findQuestionIndexFromBuilderEventTarget(target) {
+  if (!target) return null;
+  const el = target.nodeType === 1 ? target : target.parentElement;
+  if (!el || !questionListEl?.contains(el)) return null;
+
+  const withQ = el.closest('[data-q]');
+  if (withQ && Number.isInteger(Number(withQ.dataset.q))) return Number(withQ.dataset.q);
+
+  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview]');
+  if (!withBody) return null;
+
+  const ds = withBody.dataset || {};
+  const raw = ds.q ?? ds.imageUpload ?? ds.pinUpload ?? ds.audioUpload ?? ds.imageSearch ?? ds.removeQuestion ?? ds.toggleQuestion ?? ds.toggleQuestionHeader ?? ds.moveUpQuestion ?? ds.moveDownQuestion ?? ds.addPinZone ?? ds.removePinZone ?? ds.pinPreview;
+  const idx = Number(raw);
+  return Number.isInteger(idx) ? idx : null;
 }
 
 function renderBuilder() {
