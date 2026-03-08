@@ -154,6 +154,7 @@ const live = {
     state: null,
     pollViewMode: 'bar',
     seenReactionKeys: new Set(),
+    lastHostAudioKey: null,
   },
   player: {
     pin: null,
@@ -1988,6 +1989,18 @@ function renderHostState(state) {
     projectorCorrectEl.textContent = '';
   }
 
+  if (state.phase === 'question' && !state.questionClosed && hasQuestionAudio(state.question)) {
+    const hostAudioKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
+    if (live.host.lastHostAudioKey !== hostAudioKey) {
+      playQuestionAudio(state.question);
+      live.host.lastHostAudioKey = hostAudioKey;
+    }
+  }
+
+  if (state.phase !== 'question') {
+    live.host.lastHostAudioKey = null;
+  }
+
   live.host.lastPhase = state.phase;
   live.host.lastIndex = state.currentIndex;
   live.host.lastResponseCount = state.responseCount;
@@ -2156,6 +2169,15 @@ function renderHostQuestion(state) {
   hostQuestionWrap.classList.remove('hidden');
   hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
   hostQuestionAnswersEl.innerHTML = '';
+
+  if (hasQuestionAudio(question)) {
+    const audioBtn = document.createElement('button');
+    audioBtn.type = 'button';
+    audioBtn.className = 'btn top-space';
+    audioBtn.textContent = '🔊 Play audio';
+    audioBtn.addEventListener('click', () => playQuestionAudio(question));
+    hostQuestionAnswersEl.appendChild(audioBtn);
+  }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
@@ -2784,10 +2806,9 @@ function renderJoinQuestion(question) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '? Play audio';
+      btn.textContent = '▶ Play audio';
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
-      playQuestionAudio(question);
     }
     return;
   }
@@ -2868,7 +2889,6 @@ function renderJoinQuestion(question) {
       btn.textContent = '▶ Play audio';
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
-      playQuestionAudio(question);
     }
     return;
   }
@@ -2884,7 +2904,6 @@ function renderJoinQuestion(question) {
       btn.textContent = '▶ Play audio';
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
-      playQuestionAudio(question);
     }
     return;
   }

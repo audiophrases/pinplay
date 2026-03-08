@@ -353,7 +353,6 @@ function renderJoinQuestion(question) {
       btn.textContent = '🔊 Play audio';
       btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
       joinAnswersEl.appendChild(btn);
-      speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
     }
     appendRiskBetBar();
     appendReactionBar();
