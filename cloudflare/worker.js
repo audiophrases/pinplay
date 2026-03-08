@@ -513,37 +513,34 @@ export default {
       const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
       if (!query) return json({ error: 'q required.' }, 400);
 
-      const googleKey = String(env.GOOGLE_CSE_KEY || '').trim();
-      const googleCx = String(env.GOOGLE_CSE_CX || '').trim();
-      if (!googleKey || !googleCx) {
-        return json({ error: 'Google image search is not configured (missing GOOGLE_CSE_KEY/GOOGLE_CSE_CX).' }, 503);
-      }
-
       try {
-        const apiUrl = new URL('https://www.googleapis.com/customsearch/v1');
-        apiUrl.searchParams.set('key', googleKey);
-        apiUrl.searchParams.set('cx', googleCx);
-        apiUrl.searchParams.set('searchType', 'image');
-        apiUrl.searchParams.set('safe', 'active');
+        const apiUrl = new URL('https://api.openverse.org/v1/images/');
         apiUrl.searchParams.set('q', query);
-        apiUrl.searchParams.set('num', String(Math.min(10, count)));
+        apiUrl.searchParams.set('page_size', String(count));
+        apiUrl.searchParams.set('mature', 'false');
+        apiUrl.searchParams.set('aspect_ratio', 'all');
 
-        const res = await fetch(apiUrl.toString(), { method: 'GET' });
+        const res = await fetch(apiUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+          },
+        });
         const raw = await res.text();
         let data = {};
         try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-        if (!res.ok) throw new Error(data?.error?.message || 'Google image search failed.');
+        if (!res.ok) throw new Error(data?.detail || `Openverse failed (HTTP ${res.status}).`);
 
-        const items = (Array.isArray(data?.items) ? data.items : []).map((it) => ({
-          url: String(it?.link || ''),
-          thumb: String(it?.image?.thumbnailLink || ''),
-          title: String(it?.title || ''),
-          source: String(it?.displayLink || 'Google Images'),
+        const items = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
+          url: String(it?.url || ''),
+          thumb: String(it?.thumbnail || it?.url || ''),
+          title: String(it?.title || it?.foreign_landing_url || 'Openverse image'),
+          source: 'Openverse',
         })).filter((it) => isHttpUrl(it.url));
 
-        return json({ provider: 'google', items }, 200);
+        return json({ provider: 'openverse', items }, 200);
       } catch (err) {
-        return json({ error: `Google image search failed: ${err.message}` }, 502);
+        return json({ error: `Openverse image search failed: ${err.message}` }, 502);
       }
     }
 
