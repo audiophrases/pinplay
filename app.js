@@ -442,6 +442,17 @@ function bindBuilderEvents() {
       return;
     }
 
+    const clearImageBtn = e.target.closest('[data-clear-image]');
+    if (clearImageBtn) {
+      const idx = Number(clearImageBtn.dataset.clearImage);
+      const q = quiz.questions[idx];
+      if (!q) return;
+      q.imageData = '';
+      renderBuilder();
+      setStatus(hostStatusEl, `Image cleared from Q${idx + 1}.`, 'ok');
+      return;
+    }
+
     const addPinZoneBtn = e.target.closest('[data-add-pin-zone]');
     if (addPinZoneBtn) {
       const idx = Number(addPinZoneBtn.dataset.addPinZone);
@@ -860,6 +871,7 @@ function renderBuilder() {
         <input data-pin-upload="${idx}" type="file" accept="image/*" />
         <div class="row gap top-space">
           <button type="button" class="btn" data-image-search="${idx}">Search web image</button>
+          <button type="button" class="btn" data-clear-image="${idx}">Clear image</button>
         </div>
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
@@ -901,7 +913,7 @@ function renderBuilder() {
       specific += `
         <label class="top-space">Question image (optional)</label>
         <input data-image-upload="${idx}" type="file" accept="image/*" />
-        <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button></div>
+        <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
       `;
       if (q.imageData) {
         specific += `
