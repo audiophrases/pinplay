@@ -34,7 +34,6 @@ Free, no-ads classroom quiz web app.
 
 ### Classroom flow
 - **Create side (teacher)** — `.../pinplay/create/`
-  - Protected with password: `1234.`
   - Build quiz and host live game
   - Live hall with big PIN + auto-updating player list
   - Option to force random acceptable student names
