@@ -526,9 +526,19 @@ export default {
         apiUrl.searchParams.set('iiprop', 'url');
         apiUrl.searchParams.set('iiurlwidth', '480');
 
-        const res = await fetch(apiUrl.toString(), { method: 'GET' });
-        const data = await res.json();
-        if (!res.ok) return json({ error: 'Image search failed.' }, 502);
+        const res = await fetch(apiUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+          },
+        });
+        const raw = await res.text();
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+        if (!res.ok) {
+          const msg = raw && raw.length < 220 ? raw : 'Image search failed.';
+          return json({ error: msg }, 502);
+        }
 
         const pages = Object.values(data?.query?.pages || {});
         const items = pages.map((p) => {
@@ -553,7 +563,12 @@ export default {
       if (!isHttpUrl(imageUrl)) return json({ error: 'Valid image url required.' }, 400);
 
       try {
-        const res = await fetch(imageUrl, { method: 'GET' });
+        const res = await fetch(imageUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+          },
+        });
         if (!res.ok) return json({ error: 'Could not download image.' }, 502);
         const contentType = String(res.headers.get('content-type') || '').toLowerCase();
         if (!contentType.startsWith('image/')) return json({ error: 'URL is not an image.' }, 400);
