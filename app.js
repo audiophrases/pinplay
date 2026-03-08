@@ -554,6 +554,13 @@ function bindBuilderEvents() {
       return;
     }
 
+    const imageSearchBtn = e.target.closest('[data-image-search]');
+    if (imageSearchBtn) {
+      const idx = Number(imageSearchBtn.dataset.imageSearch);
+      openImageSearchDialog(idx);
+      return;
+    }
+
     const imageUpload = e.target.closest('[data-image-upload]');
     if (imageUpload) {
       const idx = Number(imageUpload.dataset.imageUpload);
@@ -811,6 +818,9 @@ function renderBuilder() {
         <label class="top-space">Image</label>
         <input data-pin-upload="${idx}" type="file" accept="image/*" />
         <div class="row gap top-space">
+          <button type="button" class="btn" data-image-search="${idx}">Search web image</button>
+        </div>
+        <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
           <div style="min-width:220px;">
             <label>Correct rule</label>
@@ -850,6 +860,7 @@ function renderBuilder() {
       specific += `
         <label class="top-space">Question image (optional)</label>
         <input data-image-upload="${idx}" type="file" accept="image/*" />
+        <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button></div>
       `;
       if (q.imageData) {
         specific += `
@@ -1083,6 +1094,122 @@ async function publishQuizToDrive() {
   } catch (err) {
     setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
   }
+}
+
+async function openImageSearchDialog(questionIdx) {
+  const q = quiz.questions?.[Number(questionIdx)];
+  if (!q) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const h = document.createElement('h3');
+  h.textContent = 'Search web images';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(h, closeBtn);
+
+  const row = document.createElement('div');
+  row.className = 'row gap top-space';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Search query';
+  input.value = String(q.prompt || q.type || '').slice(0, 140);
+  const searchBtn = document.createElement('button');
+  searchBtn.className = 'btn primary';
+  searchBtn.textContent = 'Search';
+  row.append(input, searchBtn);
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+
+  const results = document.createElement('div');
+  results.className = 'answers-grid top-space';
+
+  const runSearch = async () => {
+    const query = String(input.value || '').trim();
+    if (!query) {
+      status.textContent = 'Enter a search query.';
+      return;
+    }
+    status.textContent = 'Searching images...';
+    results.innerHTML = '';
+
+    try {
+      const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=10`, { method: 'GET' });
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (!items.length) {
+        status.textContent = 'No images found.';
+        return;
+      }
+      status.textContent = `Found ${items.length} images. Pick one.`;
+
+      items.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '.45rem';
+
+        const img = document.createElement('img');
+        img.src = item.thumb || item.url;
+        img.alt = String(item.title || 'Image result');
+        img.style.width = '100%';
+        img.style.borderRadius = '.45rem';
+        img.style.maxHeight = '140px';
+        img.style.objectFit = 'cover';
+
+        const label = document.createElement('p');
+        label.className = 'small';
+        label.textContent = String(item.source || item.title || item.url || '').slice(0, 90);
+
+        const pick = document.createElement('button');
+        pick.className = 'btn';
+        pick.textContent = 'Use this image';
+        pick.addEventListener('click', async () => {
+          try {
+            pick.disabled = true;
+            pick.textContent = 'Importing...';
+            const imported = await api('/api/images/fetch', { method: 'POST', body: { url: item.url } });
+            if (!imported?.dataUrl) throw new Error('Image import failed.');
+            q.imageData = imported.dataUrl;
+            renderBuilder();
+            setStatus(hostStatusEl, 'Image added from web search.', 'ok');
+            overlay.remove();
+          } catch (err) {
+            setStatus(hostStatusEl, err.message || 'Could not import image.', 'bad');
+            pick.disabled = false;
+            pick.textContent = 'Use this image';
+          }
+        });
+
+        card.append(img, label, pick);
+        results.appendChild(card);
+      });
+    } catch (err) {
+      status.textContent = String(err?.message || 'Image search failed.');
+    }
+  };
+
+  searchBtn.addEventListener('click', runSearch);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runSearch();
+    }
+  });
+
+  dialog.append(head, row, status, results);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  document.body.appendChild(overlay);
 }
 
 function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {

@@ -508,6 +508,62 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/images/search' && request.method === 'GET') {
+      const query = String(url.searchParams.get('q') || '').trim();
+      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 10);
+      if (!query) return json({ error: 'q required.' }, 400);
+
+      const key = String(env.GOOGLE_CSE_KEY || '').trim();
+      const cx = String(env.GOOGLE_CSE_CX || '').trim();
+      if (!key || !cx) return json({ error: 'Image search not configured (GOOGLE_CSE_KEY + GOOGLE_CSE_CX).' }, 501);
+
+      try {
+        const apiUrl = new URL('https://www.googleapis.com/customsearch/v1');
+        apiUrl.searchParams.set('key', key);
+        apiUrl.searchParams.set('cx', cx);
+        apiUrl.searchParams.set('searchType', 'image');
+        apiUrl.searchParams.set('safe', 'active');
+        apiUrl.searchParams.set('q', query);
+        apiUrl.searchParams.set('num', String(count));
+
+        const res = await fetch(apiUrl.toString(), { method: 'GET' });
+        const data = await res.json();
+        if (!res.ok) return json({ error: data?.error?.message || 'Image search failed.' }, 502);
+
+        const items = (Array.isArray(data?.items) ? data.items : []).map((it) => ({
+          url: String(it?.link || ''),
+          thumb: String(it?.image?.thumbnailLink || ''),
+          title: String(it?.title || ''),
+          source: String(it?.displayLink || ''),
+        })).filter((it) => isHttpUrl(it.url));
+
+        return json({ items }, 200);
+      } catch (err) {
+        return json({ error: `Image search request failed: ${err.message}` }, 502);
+      }
+    }
+
+    if (url.pathname === '/api/images/fetch' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const imageUrl = String(body?.url || '').trim();
+      if (!isHttpUrl(imageUrl)) return json({ error: 'Valid image url required.' }, 400);
+
+      try {
+        const res = await fetch(imageUrl, { method: 'GET' });
+        if (!res.ok) return json({ error: 'Could not download image.' }, 502);
+        const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.startsWith('image/')) return json({ error: 'URL is not an image.' }, 400);
+
+        const bytes = await res.arrayBuffer();
+        if (bytes.byteLength > 6 * 1024 * 1024) return json({ error: 'Image too large (max 6MB).' }, 400);
+
+        const b64 = arrayBufferToBase64(bytes);
+        return json({ dataUrl: `data:${contentType};base64,${b64}` }, 200);
+      } catch (err) {
+        return json({ error: `Image import failed: ${err.message}` }, 502);
+      }
+    }
+
     return json({ error: 'Not found' }, 404);
   },
 };
@@ -1984,6 +2040,21 @@ function pickRandomName(playersMap) {
   let n = 2;
   while (used.has(`${base.toLowerCase()} ${n}`)) n += 1;
   return `${base} ${n}`;
+}
+
+function isHttpUrl(value) {
+  const s = String(value || '').trim();
+  return /^https?:\/\//i.test(s);
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer || new ArrayBuffer(0));
+  const chunk = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 function sanitizeId(id) {
