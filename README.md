@@ -10,21 +10,27 @@ Free, no-ads classroom quiz web app.
 - ✅ Teacher can create quiz in-app
 - ✅ Import/export quiz as JSON
 
-## Current features (v0.3)
+## Current features (v0.4)
 
 ### Builder
 - Multiple choice
 - Multi-select (more than one correct answer; students must select all correct options)
 - True / False
-- Type answer
+- Type answer (auto-check list)
+- Open answer (teacher-graded)
+- Image open answer (teacher-graded)
+- Context gap (fill blanks)
+- Match pairs
+- Error hunt (fix sentence)
 - Puzzle
-- Quiz + Audio (browser speech synthesis)
+- Audio question + per-question audio support (TTS or uploaded file)
 - Slider
-- Pin answer (image + target zone)
+- Pin answer with image + **multiple correct zones** (up to 12) and rule: **any one** or **all zones**
+- Poll mode per question (`isPoll`)
 - Per-question points: `0`, `1000`, `2000`
-- Per-question time limit field
-- Local save (`localStorage`)
-- JSON import/export
+- Per-question time-limit field (set `0` for no limit)
+- Local save (`localStorage`) + JSON import/export + Drive publish/open/delete (when configured)
+- Student/Live preview in teacher create page (including keyboard left/right navigation)
 
 ### Classroom flow
 - **Create side (teacher)** — `.../pinplay/create/`
@@ -49,7 +55,6 @@ Put these in `/music` (already git-tracked with placeholders):
 
 ## What is still planned
 
-- Real timer enforcement (currently informational)
 - Better reports / exports
 - Optional cloud quiz bank sync
 - Higher polish for anti-cheat / host controls
