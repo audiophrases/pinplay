@@ -1148,12 +1148,14 @@ async function openImageSearchDialog(questionIdx) {
     try {
       const allItems = [];
       const seen = new Set();
+      const targetTotal = 10;
+      const openverseFirstLimit = Math.min(5, targetTotal);
 
-      // 1) Openverse direct from browser first (up to 20)
+      // 1) Openverse direct from browser first (small curated slice)
       try {
         const ovUrl = new URL('https://api.openverse.org/v1/images/');
         ovUrl.searchParams.set('q', query);
-        ovUrl.searchParams.set('page_size', '20');
+        ovUrl.searchParams.set('page_size', String(openverseFirstLimit));
         ovUrl.searchParams.set('page', '1');
         ovUrl.searchParams.set('mature', 'false');
 
@@ -1181,7 +1183,7 @@ async function openImageSearchDialog(questionIdx) {
       }
 
       // 2) Fill rest from backend Pexels search
-      const need = Math.max(0, 10 - allItems.length);
+      const need = Math.max(0, targetTotal - allItems.length);
       if (need > 0) {
         const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=${need}`, { method: 'GET' });
         const pxItems = Array.isArray(data.items) ? data.items : [];
