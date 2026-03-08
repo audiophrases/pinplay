@@ -434,6 +434,13 @@ function bindBuilderEvents() {
       return;
     }
 
+    const imageSearchBtn = e.target.closest('[data-image-search]');
+    if (imageSearchBtn) {
+      const idx = Number(imageSearchBtn.dataset.imageSearch);
+      openImageSearchDialog(idx);
+      return;
+    }
+
     const addPinZoneBtn = e.target.closest('[data-add-pin-zone]');
     if (addPinZoneBtn) {
       const idx = Number(addPinZoneBtn.dataset.addPinZone);
@@ -551,13 +558,6 @@ function bindBuilderEvents() {
       } catch (err) {
         alert(`Image load failed: ${err.message}`);
       }
-      return;
-    }
-
-    const imageSearchBtn = e.target.closest('[data-image-search]');
-    if (imageSearchBtn) {
-      const idx = Number(imageSearchBtn.dataset.imageSearch);
-      openImageSearchDialog(idx);
       return;
     }
 
