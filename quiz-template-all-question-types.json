@@ -1,6 +1,6 @@
 {
     "version":  3,
-    "title":  "PinPlay Template · All Question Types · Explained Features · No-Time Default",
+    "title":  "PinPlay Template · Core Question Types (image_open removed) · Explained Features · No-Time Default",
     "questions":  [
                       {
                           "id":  "mcq-vocab-1",
@@ -229,32 +229,6 @@
                           "audioText":  "",
                           "language":  "en-US-Wave",
                           "audioData":  ""
-                      },
-                      {
-                          "id":  "image-open-1",
-                          "type":  "image_open",
-                          "prompt":  "Describe this image in 2 sentences using at least one past tense verb.",
-                          "points":  1000,
-                          "timeLimit":  0,
-                          "audioEnabled":  false,
-                          "audioMode":  "tts",
-                          "audioText":  "",
-                          "language":  "en-US-Wave",
-                          "audioData":  "",
-                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
-                      },
-                      {
-                          "id":  "image-open-2",
-                          "type":  "image_open",
-                          "prompt":  "Write a mini story (2-3 lines) based on the picture.",
-                          "points":  1000,
-                          "timeLimit":  0,
-                          "audioEnabled":  false,
-                          "audioMode":  "tts",
-                          "audioText":  "",
-                          "language":  "en-US-Wave",
-                          "audioData":  "",
-                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
                       },
                       {
                           "id":  "context-gap-1",
@@ -573,7 +547,6 @@
                                                 "tf":  "True/False variant of MCQ.",
                                                 "text":  "Auto-check short typed answers against accepted list.",
                                                 "open":  "Teacher-graded free response.",
-                                                "image_open":  "Teacher-graded response based on an image prompt.",
                                                 "context_gap":  "Fill ordered blanks from context.",
                                                 "match_pairs":  "Match left and right items.",
                                                 "error_hunt":  "Find/fix sentence error; compare with corrected target.",
