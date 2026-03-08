@@ -521,52 +521,9 @@ export default {
       const seen = new Set();
       const items = [];
 
-      // 1) Openverse first (up to 20 anonymous results)
-      try {
-        const ovCount = Math.min(20, count);
-        const apiUrl = new URL('https://api.openverse.org/v1/images/');
-        apiUrl.searchParams.set('q', query);
-        apiUrl.searchParams.set('page_size', String(ovCount));
-        apiUrl.searchParams.set('page', '1');
-        apiUrl.searchParams.set('mature', 'false');
-
-        const res = await fetch(apiUrl.toString(), {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
-            'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-          },
-        });
-
-        if (res.ok) {
-          const raw = await res.text();
-          let data = {};
-          try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-
-          const ovItems = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
-            url: String(it?.url || ''),
-            thumb: String(it?.thumbnail || it?.url || ''),
-            title: String(it?.title || it?.foreign_landing_url || 'Openverse image'),
-            source: 'Openverse',
-          })).filter((it) => isHttpUrl(it.url));
-
-          for (const it of ovItems) {
-            if (!seen.has(it.url)) {
-              seen.add(it.url);
-              items.push(it);
-              if (items.length >= count) break;
-            }
-          }
-        }
-      } catch {
-        // ignore Openverse errors and continue with Pexels
-      }
-
-      // 2) Fill the rest with Pexels
       try {
         const perPage = 80;
-        const need = Math.max(0, count - items.length);
-        const pages = Math.max(1, Math.ceil(need / perPage));
+        const pages = Math.max(1, Math.ceil(count / perPage));
 
         for (let page = 1; page <= pages; page += 1) {
           const remaining = count - items.length;
@@ -610,9 +567,8 @@ export default {
           if (items.length >= count || !batch.length) break;
         }
 
-        return json({ provider: 'openverse+pexels', items }, 200);
+        return json({ provider: 'pexels', items }, 200);
       } catch (err) {
-        if (items.length) return json({ provider: 'openverse+pexels', items }, 200);
         return json({ error: `Pexels image search failed: ${err.message}` }, 502);
       }
     }

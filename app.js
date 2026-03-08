@@ -1146,8 +1146,55 @@ async function openImageSearchDialog(questionIdx) {
     results.innerHTML = '';
 
     try {
-      const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=100`, { method: 'GET' });
-      const items = Array.isArray(data.items) ? data.items : [];
+      const allItems = [];
+      const seen = new Set();
+
+      // 1) Openverse direct from browser first (up to 20)
+      try {
+        const ovUrl = new URL('https://api.openverse.org/v1/images/');
+        ovUrl.searchParams.set('q', query);
+        ovUrl.searchParams.set('page_size', '20');
+        ovUrl.searchParams.set('page', '1');
+        ovUrl.searchParams.set('mature', 'false');
+
+        const ovRes = await fetch(ovUrl.toString(), {
+          method: 'GET',
+          headers: { Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8' },
+        });
+        if (ovRes.ok) {
+          const ovData = await ovRes.json();
+          const ovItems = (Array.isArray(ovData?.results) ? ovData.results : []).map((it) => ({
+            url: String(it?.url || ''),
+            thumb: String(it?.thumbnail || it?.url || ''),
+            title: String(it?.title || it?.foreign_landing_url || 'Openverse image'),
+            source: 'Openverse',
+          }));
+          ovItems.forEach((it) => {
+            if (it.url && !seen.has(it.url)) {
+              seen.add(it.url);
+              allItems.push(it);
+            }
+          });
+        }
+      } catch {
+        // Openverse optional; continue with Pexels
+      }
+
+      // 2) Fill rest from backend Pexels search
+      const need = Math.max(0, 100 - allItems.length);
+      if (need > 0) {
+        const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=${need}`, { method: 'GET' });
+        const pxItems = Array.isArray(data.items) ? data.items : [];
+        pxItems.forEach((it) => {
+          const url = String(it?.url || '');
+          if (url && !seen.has(url)) {
+            seen.add(url);
+            allItems.push(it);
+          }
+        });
+      }
+
+      const items = allItems;
       if (!items.length) {
         status.textContent = 'No images found.';
         return;
