@@ -1,0 +1,604 @@
+{
+    "version":  3,
+    "title":  "PinPlay Template · All Question Types · Explained Features · No-Time Default",
+    "questions":  [
+                      {
+                          "id":  "mcq-vocab-1",
+                          "type":  "mcq",
+                          "prompt":  "Choose the correct past simple: \u0027Yesterday she ___ late.\u0027",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "came",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "come",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "comed",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "comes",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "mcq-grammar-2",
+                          "type":  "mcq",
+                          "prompt":  "Choose the best sentence.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "They went to the museum last Saturday.",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "They goed to the museum last Saturday.",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "They gone to the museum last Saturday.",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "They go to the museum last Saturday.",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "multi-irregular-1",
+                          "type":  "multi",
+                          "prompt":  "Select all irregular verbs.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "go",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "buy",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "watch",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "speak",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "play",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "multi-reading-2",
+                          "type":  "multi",
+                          "prompt":  "Which statements are true about a strong paragraph?",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "It has one clear main idea.",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "Every sentence is unrelated.",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "Details support the topic sentence.",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "It must always be exactly 3 sentences.",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "tf-fact-1",
+                          "type":  "tf",
+                          "prompt":  "True/False: The past participle of \u0027write\u0027 is \u0027written\u0027.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "True",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "False",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "tf-classroom-2",
+                          "type":  "tf",
+                          "prompt":  "True/False: In English, every regular past form ends in -ed.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "True",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "False",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "text-spelling-1",
+                          "type":  "text",
+                          "prompt":  "Type the past simple of \u0027teach\u0027.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "accepted":  [
+                                           "taught",
+                                           "",
+                                           "",
+                                           ""
+                                       ]
+                      },
+                      {
+                          "id":  "text-translation-2",
+                          "type":  "text",
+                          "prompt":  "(Catal? ? English) Escriu en passat: \u0027Ella va veure la pel?l?cula\u0027.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "accepted":  [
+                                           "she saw the film",
+                                           "she saw the movie",
+                                           "",
+                                           ""
+                                       ]
+                      },
+                      {
+                          "id":  "open-opinion-1",
+                          "type":  "open",
+                          "prompt":  "In 2 short sentences: Which school subject is most useful and why?",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  ""
+                      },
+                      {
+                          "id":  "open-reflection-2",
+                          "type":  "open",
+                          "prompt":  "Write a short answer: What was the most difficult part of this unit?",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  ""
+                      },
+                      {
+                          "id":  "image-open-1",
+                          "type":  "image_open",
+                          "prompt":  "Describe this image in 2 sentences using at least one past tense verb.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
+                      },
+                      {
+                          "id":  "image-open-2",
+                          "type":  "image_open",
+                          "prompt":  "Write a mini story (2-3 lines) based on the picture.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII="
+                      },
+                      {
+                          "id":  "context-gap-1",
+                          "type":  "context_gap",
+                          "prompt":  "Yesterday we ____ to the beach and ____ volleyball.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "gaps":  [
+                                       "went",
+                                       "played"
+                                   ]
+                      },
+                      {
+                          "id":  "context-gap-2",
+                          "type":  "context_gap",
+                          "prompt":  "If I ____ more time, I would ____ guitar every day.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "gaps":  [
+                                       "had",
+                                       "practice"
+                                   ]
+                      },
+                      {
+                          "id":  "match-pairs-1",
+                          "type":  "match_pairs",
+                          "prompt":  "Match base forms with past forms.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "pairs":  [
+                                        {
+                                            "left":  "go",
+                                            "right":  "went"
+                                        },
+                                        {
+                                            "left":  "buy",
+                                            "right":  "bought"
+                                        },
+                                        {
+                                            "left":  "take",
+                                            "right":  "took"
+                                        },
+                                        {
+                                            "left":  "see",
+                                            "right":  "saw"
+                                        }
+                                    ]
+                      },
+                      {
+                          "id":  "match-pairs-2",
+                          "type":  "match_pairs",
+                          "prompt":  "Match collocations.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "pairs":  [
+                                        {
+                                            "left":  "make",
+                                            "right":  "a decision"
+                                        },
+                                        {
+                                            "left":  "do",
+                                            "right":  "homework"
+                                        },
+                                        {
+                                            "left":  "take",
+                                            "right":  "a break"
+                                        },
+                                        {
+                                            "left":  "pay",
+                                            "right":  "attention"
+                                        }
+                                    ]
+                      },
+                      {
+                          "id":  "error-hunt-1",
+                          "type":  "error_hunt",
+                          "prompt":  "She buyed a new phone and taked photos.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "corrected":  "She bought a new phone and took photos.",
+                          "requiredErrors":  2
+                      },
+                      {
+                          "id":  "error-hunt-2",
+                          "type":  "error_hunt",
+                          "prompt":  "I has seen him yesterday at the station.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "corrected":  "I saw him yesterday at the station.",
+                          "requiredErrors":  2
+                      },
+                      {
+                          "id":  "puzzle-1",
+                          "type":  "puzzle",
+                          "prompt":  "Put the words in correct order.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "items":  [
+                                        "They",
+                                        "have",
+                                        "already",
+                                        "finished",
+                                        "their",
+                                        "project"
+                                    ]
+                      },
+                      {
+                          "id":  "puzzle-2",
+                          "type":  "puzzle",
+                          "prompt":  "Reorder to make a correct question.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "items":  [
+                                        "Where",
+                                        "did",
+                                        "you",
+                                        "go",
+                                        "last",
+                                        "weekend",
+                                        "?"
+                                    ]
+                      },
+                      {
+                          "id":  "slider-1",
+                          "type":  "slider",
+                          "prompt":  "Estimate: What percentage of Earth is covered by water?",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "min":  0,
+                          "max":  100,
+                          "target":  71,
+                          "margin":  "medium",
+                          "unit":  "%"
+                      },
+                      {
+                          "id":  "slider-2",
+                          "type":  "slider",
+                          "prompt":  "Temperature guess: Classroom ideal temperature (?C)",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "min":  10,
+                          "max":  35,
+                          "target":  22,
+                          "margin":  "tight",
+                          "unit":  "?C"
+                      },
+                      {
+                          "id":  "pin-1",
+                          "type":  "pin",
+                          "prompt":  "Pin the capital city on the map image.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
+                          "zone":  {
+                                       "x":  50,
+                                       "y":  50,
+                                       "r":  15
+                                   },
+                          "zones":  [
+                                        {
+                                            "x":  50,
+                                            "y":  50,
+                                            "r":  15
+                                        }
+                                    ],
+                          "pinMode":  "all"
+                      },
+                      {
+                          "id":  "pin-2",
+                          "type":  "pin",
+                          "prompt":  "Pin the main character in the scene image.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  false,
+                          "audioMode":  "tts",
+                          "audioText":  "",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "imageData":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
+                          "zone":  {
+                                       "x":  35,
+                                       "y":  60,
+                                       "r":  12
+                                   },
+                          "zones":  [
+                                        {
+                                            "x":  35,
+                                            "y":  60,
+                                            "r":  12
+                                        }
+                                    ],
+                          "pinMode":  "all"
+                      },
+                      {
+                          "id":  "audio-1",
+                          "type":  "audio",
+                          "prompt":  "Listen and choose the verb you hear.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  true,
+                          "audioMode":  "tts",
+                          "audioText":  "Yesterday we drove to Girona.",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "drove",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "drived",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "drive",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "driven",
+                                              "correct":  false
+                                          }
+                                      ]
+                      },
+                      {
+                          "id":  "audio-2",
+                          "type":  "audio",
+                          "prompt":  "Listen and choose the correct sentence.",
+                          "points":  1000,
+                          "timeLimit":  0,
+                          "audioEnabled":  true,
+                          "audioMode":  "tts",
+                          "audioText":  "She bought two books after class.",
+                          "language":  "en-US-Wave",
+                          "audioData":  "",
+                          "answers":  [
+                                          {
+                                              "text":  "She bought two books after class.",
+                                              "correct":  true
+                                          },
+                                          {
+                                              "text":  "She buyed two books after class.",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "She has buy two books after class.",
+                                              "correct":  false
+                                          },
+                                          {
+                                              "text":  "She buys two books after class.",
+                                              "correct":  false
+                                          }
+                                      ]
+                      }
+                  ],
+    "templateGuide":  {
+                          "purpose":  "Reference template covering all PinPlay question types with practical examples and feature usage notes.",
+                          "defaultStyle":  "No time limit by default. Confidence-building flow: teach/scaffold first, then varied practice.",
+                          "questionTypes":  {
+                                                "mcq":  "Single correct option.",
+                                                "multi":  "Select all correct options.",
+                                                "tf":  "True/False variant of MCQ.",
+                                                "text":  "Auto-check short typed answers against accepted list.",
+                                                "open":  "Teacher-graded free response.",
+                                                "image_open":  "Teacher-graded response based on an image prompt.",
+                                                "context_gap":  "Fill ordered blanks from context.",
+                                                "match_pairs":  "Match left and right items.",
+                                                "error_hunt":  "Find/fix sentence error; compare with corrected target.",
+                                                "puzzle":  "Reorder items into correct sequence.",
+                                                "slider":  "Numeric estimate with margin tolerance.",
+                                                "pin":  "Pinpoint location(s) on image; supports one or multiple zones with pinMode any/all.",
+                                                "audio":  "Audio-first question (TTS or uploaded file) with answers."
+                                            },
+                          "featureGuides":  {
+                                                "poll":  {
+                                                             "how":  "Set isPoll=true on a question to collect responses anonymously with no points.",
+                                                             "behavior":  "Works with most question types; useful for warm-up checks or opinion prompts."
+                                                         },
+                                                "audio":  {
+                                                              "fields":  "audioEnabled, audioMode(tts|file), audioText, language, audioData",
+                                                              "note":  "Only mention/use audio when enabled or provided."
+                                                          },
+                                                "image":  {
+                                                              "fields":  "imageData used by shared-image questions and required by pin/image_open.",
+                                                              "note":  "Use clear pedagogical visuals; keep prompt readable near image."
+                                                          },
+                                                "pin":  {
+                                                            "fields":  "zones[], zone (legacy), pinMode(any|all)",
+                                                            "note":  "pinMode=all requires covering all correct zones; pinMode=any accepts one correct zone."
+                                                        }
+                                            }
+                      }
+}
