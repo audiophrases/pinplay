@@ -1181,7 +1181,7 @@ async function openImageSearchDialog(questionIdx) {
       }
 
       // 2) Fill rest from backend Pexels search
-      const need = Math.max(0, 100 - allItems.length);
+      const need = Math.max(0, 10 - allItems.length);
       if (need > 0) {
         const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=${need}`, { method: 'GET' });
         const pxItems = Array.isArray(data.items) ? data.items : [];
