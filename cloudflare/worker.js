@@ -510,42 +510,62 @@ export default {
 
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
-      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
+      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 100);
       if (!query) return json({ error: 'q required.' }, 400);
 
-      try {
-        const apiUrl = new URL('https://api.openverse.org/v1/images/');
-        apiUrl.searchParams.set('q', query);
-        apiUrl.searchParams.set('page_size', String(count));
-        apiUrl.searchParams.set('page', '1');
-        apiUrl.searchParams.set('mature', 'false');
+      const pexelsKey = String(env.PEXELS_API_KEY || '').trim();
+      if (!pexelsKey) {
+        return json({ error: 'Pexels image search is not configured (missing PEXELS_API_KEY).' }, 503);
+      }
 
-        const res = await fetch(apiUrl.toString(), {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
-            'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-          },
-        });
-        const raw = await res.text();
-        let data = {};
-        try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-        if (!res.ok) {
-          const detail = data?.detail;
-          const detailText = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : '');
-          throw new Error(detailText || `Openverse failed (HTTP ${res.status}).`);
+      try {
+        const perPage = 80;
+        const pages = Math.max(1, Math.ceil(count / perPage));
+        const seen = new Set();
+        const items = [];
+
+        for (let page = 1; page <= pages; page += 1) {
+          const apiUrl = new URL('https://api.pexels.com/v1/search');
+          apiUrl.searchParams.set('query', query);
+          apiUrl.searchParams.set('per_page', String(Math.min(perPage, count - items.length)));
+          apiUrl.searchParams.set('page', String(page));
+
+          const res = await fetch(apiUrl.toString(), {
+            method: 'GET',
+            headers: {
+              'Authorization': pexelsKey,
+              'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+              'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
+            },
+          });
+          const raw = await res.text();
+          let data = {};
+          try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+          if (!res.ok) {
+            const msg = data?.error || data?.message || `Pexels failed (HTTP ${res.status}).`;
+            throw new Error(msg);
+          }
+
+          const batch = (Array.isArray(data?.photos) ? data.photos : []).map((it) => ({
+            url: String(it?.src?.large2x || it?.src?.large || it?.src?.medium || ''),
+            thumb: String(it?.src?.tiny || it?.src?.small || it?.src?.medium || ''),
+            title: String(it?.alt || `Photo by ${it?.photographer || 'Pexels'}`),
+            source: 'Pexels',
+          })).filter((it) => isHttpUrl(it.url));
+
+          for (const it of batch) {
+            if (!seen.has(it.url)) {
+              seen.add(it.url);
+              items.push(it);
+              if (items.length >= count) break;
+            }
+          }
+          if (items.length >= count || !batch.length) break;
         }
 
-        const items = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
-          url: String(it?.url || ''),
-          thumb: String(it?.thumbnail || it?.url || ''),
-          title: String(it?.title || it?.foreign_landing_url || 'Openverse image'),
-          source: 'Openverse',
-        })).filter((it) => isHttpUrl(it.url));
-
-        return json({ provider: 'openverse', items }, 200);
+        return json({ provider: 'pexels', items }, 200);
       } catch (err) {
-        return json({ error: `Openverse image search failed: ${err.message}` }, 502);
+        return json({ error: `Pexels image search failed: ${err.message}` }, 502);
       }
     }
 
