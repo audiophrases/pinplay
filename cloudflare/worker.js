@@ -510,32 +510,36 @@ export default {
 
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
-      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 10);
+      const count = clamp(Number(url.searchParams.get('count') || 10), 1, 20);
       if (!query) return json({ error: 'q required.' }, 400);
 
-      const key = String(env.GOOGLE_CSE_KEY || '').trim();
-      const cx = String(env.GOOGLE_CSE_CX || '').trim();
-      if (!key || !cx) return json({ error: 'Image search not configured (GOOGLE_CSE_KEY + GOOGLE_CSE_CX).' }, 501);
-
       try {
-        const apiUrl = new URL('https://www.googleapis.com/customsearch/v1');
-        apiUrl.searchParams.set('key', key);
-        apiUrl.searchParams.set('cx', cx);
-        apiUrl.searchParams.set('searchType', 'image');
-        apiUrl.searchParams.set('safe', 'active');
-        apiUrl.searchParams.set('q', query);
-        apiUrl.searchParams.set('num', String(count));
+        const apiUrl = new URL('https://commons.wikimedia.org/w/api.php');
+        apiUrl.searchParams.set('origin', '*');
+        apiUrl.searchParams.set('action', 'query');
+        apiUrl.searchParams.set('format', 'json');
+        apiUrl.searchParams.set('generator', 'search');
+        apiUrl.searchParams.set('gsrsearch', query);
+        apiUrl.searchParams.set('gsrnamespace', '6');
+        apiUrl.searchParams.set('gsrlimit', String(count));
+        apiUrl.searchParams.set('prop', 'imageinfo');
+        apiUrl.searchParams.set('iiprop', 'url');
+        apiUrl.searchParams.set('iiurlwidth', '480');
 
         const res = await fetch(apiUrl.toString(), { method: 'GET' });
         const data = await res.json();
-        if (!res.ok) return json({ error: data?.error?.message || 'Image search failed.' }, 502);
+        if (!res.ok) return json({ error: 'Image search failed.' }, 502);
 
-        const items = (Array.isArray(data?.items) ? data.items : []).map((it) => ({
-          url: String(it?.link || ''),
-          thumb: String(it?.image?.thumbnailLink || ''),
-          title: String(it?.title || ''),
-          source: String(it?.displayLink || ''),
-        })).filter((it) => isHttpUrl(it.url));
+        const pages = Object.values(data?.query?.pages || {});
+        const items = pages.map((p) => {
+          const ii = Array.isArray(p?.imageinfo) ? p.imageinfo[0] : null;
+          return {
+            url: String(ii?.url || ''),
+            thumb: String(ii?.thumburl || ii?.url || ''),
+            title: String(p?.title || ''),
+            source: 'Wikimedia Commons',
+          };
+        }).filter((it) => isHttpUrl(it.url));
 
         return json({ items }, 200);
       } catch (err) {
