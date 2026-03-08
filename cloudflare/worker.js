@@ -529,7 +529,13 @@ export default {
         const raw = await res.text();
         let data = {};
         try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-        if (!res.ok) throw new Error(data?.detail || `Openverse failed (HTTP ${res.status}).`);
+        if (!res.ok) {
+          const detail = data?.detail;
+          const detailText = typeof detail === 'string'
+            ? detail
+            : (detail ? JSON.stringify(detail) : '');
+          throw new Error(detailText || `Openverse failed (HTTP ${res.status}).`);
+        }
 
         const items = (Array.isArray(data?.results) ? data.results : []).map((it) => ({
           url: String(it?.url || ''),
