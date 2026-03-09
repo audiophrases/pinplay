@@ -1794,14 +1794,17 @@ function isRandomNamesEnabled() {
 function setRandomNamesToggleState(enabled) {
   if (!randomNamesToggleEl) return;
   randomNamesToggleEl.classList.toggle('active', !!enabled);
-  randomNamesToggleEl.textContent = enabled ? 'Random names ✓' : 'Random names';
+  randomNamesToggleEl.textContent = 'Random names';
 }
 
 async function hostUpdateRandomNames() {
+  if (!randomNamesToggleEl) return;
+  const prev = isRandomNamesEnabled();
+  const next = !prev;
+  setRandomNamesToggleState(next);
+
   try {
-    if (!live.host.pin || !live.host.token || !randomNamesToggleEl) return;
-    const next = !isRandomNamesEnabled();
-    setRandomNamesToggleState(next);
+    if (!live.host.pin || !live.host.token) return;
     await api('/api/host/settings', {
       method: 'POST',
       headers: { Authorization: `Bearer ${live.host.token}` },
@@ -1812,7 +1815,7 @@ async function hostUpdateRandomNames() {
     });
     await pollHostState();
   } catch (err) {
-    setRandomNamesToggleState(!isRandomNamesEnabled());
+    setRandomNamesToggleState(prev);
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
