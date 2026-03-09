@@ -588,6 +588,78 @@ function bindBuilderEvents() {
     }
   });
 
+  questionListEl.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el || !el.dataset) return;
+
+    const idxRaw = el.dataset.q;
+    if (idxRaw == null) return;
+    const idx = Number(idxRaw);
+    if (!Number.isInteger(idx) || !quiz.questions[idx]) return;
+
+    const q = quiz.questions[idx];
+    const value = String(el.value || '').trim();
+    if (!value) return;
+
+    let shouldExpand = false;
+    let nextSelector = '';
+
+    if ((el.dataset.acceptedIndex != null) && q.type === 'text') {
+      const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-accepted-index]`)];
+      const last = fields[fields.length - 1];
+      if (el === last && fields.length < 20) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-accepted-index="${fields.length}"]`;
+      }
+    }
+
+    if ((el.dataset.gapIndex != null) && q.type === 'context_gap') {
+      const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-gap-index]`)];
+      const last = fields[fields.length - 1];
+      if (el === last && fields.length < 10) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-gap-index="${fields.length}"]`;
+      }
+    }
+
+    if ((el.dataset.puzzleIndex != null) && q.type === 'puzzle') {
+      const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-puzzle-index]`)];
+      const last = fields[fields.length - 1];
+      if (el === last && fields.length < 12) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-puzzle-index="${fields.length}"]`;
+      }
+    }
+
+    if ((el.dataset.answerIndex != null) && ['mcq', 'multi', 'audio'].includes(q.type)) {
+      const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-answer-index]`)];
+      const last = fields[fields.length - 1];
+      if (el === last && fields.length < 10) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-answer-index="${fields.length}"]`;
+      }
+    }
+
+    if ((el.dataset.pairLeft != null || el.dataset.pairRight != null) && q.type === 'match_pairs') {
+      const leftFields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-pair-left]`)];
+      const rightFields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-pair-right]`)];
+      const pairCount = Math.min(leftFields.length, rightFields.length);
+      const lastLeft = leftFields[pairCount - 1];
+      const lastRight = rightFields[pairCount - 1];
+      if ((el === lastLeft || el === lastRight) && pairCount < 10) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-pair-left="${pairCount}"]`;
+      }
+    }
+
+    if (!shouldExpand) return;
+
+    syncQuizFromUI();
+    renderBuilder();
+    const nextEl = questionListEl.querySelector(nextSelector);
+    if (nextEl) nextEl.focus();
+  });
+
   questionListEl.addEventListener('change', async (e) => {
     const pinUpload = e.target.closest('[data-pin-upload]');
     if (pinUpload) {
@@ -859,7 +931,7 @@ function renderBuilder() {
     }
 
     if (q.type === 'puzzle') {
-      const maxItems = 9;
+      const maxItems = 12;
       const itemsRaw = (Array.isArray(q.items) ? q.items : []).slice(0, maxItems).map((x) => String(x || '').slice(0, 75));
       const itemsNonEmpty = itemsRaw.filter((x) => x.trim().length > 0);
       const items = itemsNonEmpty.length ? [...itemsNonEmpty] : [''];
@@ -867,7 +939,7 @@ function renderBuilder() {
       const itemsLastFilled = String(items[items.length - 1] || '').trim().length > 0;
       if (itemsLastFilled && items.length < maxItems) items.push('');
       specific += `
-        <label class="top-space">Correct order items (dynamic, max 9)</label>
+        <label class="top-space">Correct order items (dynamic, max 12)</label>
         <div class="answers-grid">
           ${items
             .slice(0, maxItems)
@@ -1127,7 +1199,7 @@ function syncQuizFromUI() {
 
     if (q.type === 'puzzle') {
       const items = [];
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 12; i++) {
         const itemEl = questionListEl.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
         items.push(String(itemEl?.value || '').slice(0, 90));
       }
@@ -3126,7 +3198,7 @@ function renderJoinQuestion(question) {
   }
 
   if (question.type === 'puzzle') {
-    const options = (question.options || []).slice(0, 9);
+    const options = (question.options || []).slice(0, 12);
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
 
     if (hasQuestionAudio(question)) {
@@ -3756,7 +3828,7 @@ function renderSoloQuestion() {
   }
 
   if (q.type === 'puzzle') {
-    const options = (q.options || shuffle([...(q.items || []).filter(Boolean)])).slice(0, 9);
+    const options = (q.options || shuffle([...(q.items || []).filter(Boolean)])).slice(0, 12);
     soloGame.puzzleOptions = options;
     createPuzzleDnd(answersEl, options, 'soloPuzzlePieces');
 
@@ -4325,7 +4397,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 9);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 12);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;
@@ -4473,18 +4545,18 @@ function labelForType(type) {
 function iconForType(type) {
   return (
     {
-      mcq: '🧩',
-      multi: '✅',
-      tf: '⚖️',
+      mcq: '🔘',
+      multi: '☑️',
+      tf: '✅❌',
       text: '⌨️',
       open: '💬',
       image_open: '🖼️',
       context_gap: '🕳️',
       match_pairs: '🔗',
       error_hunt: '🕵️',
-      puzzle: '🧱',
+      puzzle: '🧩',
       audio: '🔊',
-      slider: '🎚️',
+      slider: '📐',
       pin: '📍',
     }[type] || ''
   );

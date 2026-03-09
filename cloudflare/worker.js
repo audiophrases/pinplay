@@ -1872,7 +1872,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'puzzle') {
-      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 9);
+      const items = (q.items || []).map((x) => String(x || '').slice(0, 90)).filter(Boolean).slice(0, 12);
       if (items.length < 3) return;
       normalized.questions.push({ ...base, items });
       return;
