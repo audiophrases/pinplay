@@ -318,6 +318,13 @@ textarea { min-height: 72px; resize: vertical; }
   color: #fff;
 }
 .btn.primary:hover { background: var(--primary-2); }
+
+.btn.success {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+.btn.success:hover { background: #15803d; }
 .file-label {
   display: inline-flex;
   align-items: center;

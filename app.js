@@ -1605,7 +1605,7 @@ function bindLiveEvents() {
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
 
   if (randomNamesToggleEl) {
-    randomNamesToggleEl.addEventListener('change', hostUpdateRandomNames);
+    randomNamesToggleEl.addEventListener('click', hostUpdateRandomNames);
   }
 
   document.addEventListener('keydown', handleHostHotkeys);
@@ -1624,7 +1624,7 @@ async function createLiveGame() {
       body: {
         quiz: payload,
         options: {
-          randomNames: !!randomNamesToggleEl?.checked,
+          randomNames: isRandomNamesEnabled(),
         },
       },
     });
@@ -1787,19 +1787,32 @@ async function hostRevealQuestion() {
   }
 }
 
+function isRandomNamesEnabled() {
+  return !!randomNamesToggleEl?.classList.contains('active');
+}
+
+function setRandomNamesToggleState(enabled) {
+  if (!randomNamesToggleEl) return;
+  randomNamesToggleEl.classList.toggle('active', !!enabled);
+  randomNamesToggleEl.textContent = enabled ? 'Random names ✓' : 'Random names';
+}
+
 async function hostUpdateRandomNames() {
   try {
-    if (!live.host.pin || !live.host.token) return;
+    if (!live.host.pin || !live.host.token || !randomNamesToggleEl) return;
+    const next = !isRandomNamesEnabled();
+    setRandomNamesToggleState(next);
     await api('/api/host/settings', {
       method: 'POST',
       headers: { Authorization: `Bearer ${live.host.token}` },
       body: {
         pin: live.host.pin,
-        randomNames: !!randomNamesToggleEl?.checked,
+        randomNames: next,
       },
     });
     await pollHostState();
   } catch (err) {
+    setRandomNamesToggleState(!isRandomNamesEnabled());
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
@@ -2170,7 +2183,7 @@ function renderHostState(state) {
   if (projectorScoresEl) renderProjectorScores(state.players || []);
 
   if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
-    randomNamesToggleEl.checked = !!state.settings.randomNames;
+    setRandomNamesToggleState(!!state.settings.randomNames);
   }
 
   if (hostPlayersEl) {
