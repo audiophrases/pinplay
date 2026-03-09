@@ -2369,7 +2369,9 @@ function renderHostQuestion(state) {
   }
 
   hostQuestionWrap.classList.remove('hidden');
-  hostQuestionPromptEl.textContent = question.prompt || '(No question text)';
+  const qIcon = iconForType(question.type);
+  const qPrompt = question.prompt || '(No question text)';
+  hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
   hostQuestionAnswersEl.innerHTML = '';
 
   if (hasQuestionAudio(question)) {
@@ -2487,7 +2489,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'context_gap') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Context gap fill.';
+    hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
@@ -4440,6 +4442,26 @@ function labelForType(type) {
       slider: 'Slider',
       pin: 'Pin answer',
     }[type] || type
+  );
+}
+
+function iconForType(type) {
+  return (
+    {
+      mcq: '🧩',
+      multi: '✅',
+      tf: '⚖️',
+      text: '⌨️',
+      open: '💬',
+      image_open: '🖼️',
+      context_gap: '🕳️',
+      match_pairs: '🔗',
+      error_hunt: '🕵️',
+      puzzle: '🧱',
+      audio: '🔊',
+      slider: '🎚️',
+      pin: '📍',
+    }[type] || ''
   );
 }
 
