@@ -145,6 +145,8 @@ textarea { min-height: 72px; resize: vertical; }
   height: 2.25rem;
   padding: 0 .74rem;
   line-height: 1;
+  margin: 0 !important;
+  font: inherit;
 }
 
 #builderActionRow .btn:hover,
