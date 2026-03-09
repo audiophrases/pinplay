@@ -669,6 +669,14 @@ textarea { min-height: 72px; resize: vertical; }
   color: var(--ok);
 }
 
+.join-points-inline {
+  display: inline-block;
+  margin-left: .45rem;
+  font-size: .92rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+
 .pin-preview {
   position: relative;
   margin-top: .5rem;

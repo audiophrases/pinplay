@@ -211,6 +211,25 @@ function renderPlayerState(state) {
   if (joinProgressEl) joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
+  const renderInlinePoints = (points) => {
+    if (!joinAnswersEl) return;
+    joinAnswersEl.querySelectorAll('[data-join-points-inline="1"]').forEach((el) => el.remove());
+    const n = Number(points || 0);
+    if (!Number.isFinite(n)) return;
+
+    const badge = document.createElement('span');
+    badge.dataset.joinPointsInline = '1';
+    badge.className = 'join-points-inline';
+    badge.textContent = `+${Math.round(n)} pts`;
+
+    const input = joinAnswersEl.querySelector('input[type="text"], textarea');
+    if (input && input.parentElement) {
+      input.insertAdjacentElement('afterend', badge);
+    } else {
+      joinAnswersEl.appendChild(badge);
+    }
+  };
+
   const renderInlineCorrection = (text = '') => {
     const host = joinQuestionWrap || joinAnswersEl;
     if (!host) return;
@@ -281,6 +300,7 @@ function renderPlayerState(state) {
 
   const rrNow = state.revealedResult;
   renderInlineCorrection(String(rrNow?.correction || ''));
+  if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
   if (questionClosed) {
     if (isPoll) {
