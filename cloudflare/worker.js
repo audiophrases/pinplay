@@ -1095,6 +1095,7 @@ export class QuizRoom {
         if (!resp) return json({ error: 'No submitted answer for this player.' }, 404);
 
         resp.modelAnswer = modelAnswer;
+        if (modelAnswer) resp.hidden = false;
         resp.modelAt = Date.now();
         room.updatedAt = Date.now();
         await this.#setRoom(room);
