@@ -588,7 +588,7 @@ function bindBuilderEvents() {
     }
   });
 
-  questionListEl.addEventListener('input', (e) => {
+  questionListEl.addEventListener('focusout', (e) => {
     const el = e.target;
     if (!el || !el.dataset) return;
 
@@ -656,8 +656,6 @@ function bindBuilderEvents() {
 
     syncQuizFromUI();
     renderBuilder();
-    const nextEl = questionListEl.querySelector(nextSelector);
-    if (nextEl) nextEl.focus();
   });
 
   questionListEl.addEventListener('change', async (e) => {
