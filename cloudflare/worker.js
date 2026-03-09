@@ -1428,7 +1428,9 @@ function playerState(room, playerId) {
 
   const currentQ = room.quiz.questions[qIndex];
   const isTeacherGraded = currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || isTeacherGradedTextQuestion(currentQ));
-  const canRevealNow = room.phase === 'question' && myResponse && !currentQ?.isPoll && (room.questionClosed || (isTeacherGraded && !!myResponse.graded));
+  const hasTeacherCorrection = !!String(myResponse?.correction || '').trim();
+  const canRevealNow = room.phase === 'question' && myResponse && !currentQ?.isPoll
+    && (room.questionClosed || (isTeacherGraded && (!!myResponse.graded || hasTeacherCorrection)));
 
   return {
     phase: room.phase,
