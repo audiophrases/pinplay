@@ -2484,24 +2484,10 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(preview);
     }
 
-    const teacherNote = document.createElement('p');
-    teacherNote.className = 'small';
-    teacherNote.textContent = 'Teacher grading/corrections are in the private Answer history panel below.';
-    hostQuestionAnswersEl.appendChild(teacherNote);
-
     const models = Array.isArray(state.modelResponses) ? state.modelResponses : [];
     if (!models.length) {
-      const p = document.createElement('p');
-      p.className = 'small muted';
-      p.textContent = 'No model answers selected yet.';
-      hostQuestionAnswersEl.appendChild(p);
       return;
     }
-
-    const title = document.createElement('p');
-    title.className = 'small';
-    title.textContent = 'Model answers shown on live screen:';
-    hostQuestionAnswersEl.appendChild(title);
 
     models.forEach((r) => {
       const row = document.createElement('div');
@@ -2513,6 +2499,15 @@ function renderHostQuestion(state) {
       const text = document.createElement('span');
       text.textContent = `${r.name}: ${r.answer}`;
       row.append(text);
+
+      if (String(r.correction || '').trim()) {
+        const corr = document.createElement('div');
+        corr.className = 'small';
+        corr.style.marginTop = '.25rem';
+        corr.textContent = `Correction: ${String(r.correction).trim()}`;
+        row.append(corr);
+      }
+
       hostQuestionAnswersEl.appendChild(row);
     });
     return;

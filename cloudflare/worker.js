@@ -1398,6 +1398,7 @@ function hostState(room) {
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
           answer: String(r?.answer || ''),
+          correction: String(r?.correction || ''),
         }))
       : [],
     pollSummary: pollVisible ? summarizePoll(roomQuestion, pollResponses) : null,
@@ -1425,6 +1426,10 @@ function playerState(room, playerId) {
 
   const myResponse = responses[playerId] || null;
 
+  const currentQ = room.quiz.questions[qIndex];
+  const isTeacherGraded = currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || isTeacherGradedTextQuestion(currentQ));
+  const canRevealNow = room.phase === 'question' && myResponse && !currentQ?.isPoll && (room.questionClosed || (isTeacherGraded && !!myResponse.graded));
+
   return {
     phase: room.phase,
     pin: room.pin,
@@ -1433,7 +1438,7 @@ function playerState(room, playerId) {
     totalQuestions: room.quiz.questions.length,
     score: player.score,
     answeredCurrent: !!myResponse,
-    revealedResult: room.phase === 'question' && room.questionClosed && myResponse && !room.quiz.questions[qIndex]?.isPoll
+    revealedResult: canRevealNow
       ? {
           correct: !!myResponse.correct,
           pointsAwarded: Number(myResponse.pointsAwarded || 0),
