@@ -2588,9 +2588,9 @@ function renderHostQuestion(state) {
       } else {
         projectorCorrectEl.textContent = models
           .map((r) => {
-            const ans = `${r.name}: ${r.answer}`;
+            const ans = `${r.answer}`;
             const corr = String(r.correction || '').trim();
-            return corr ? `${ans} — Correction: ${corr}` : ans;
+            return corr ? `${ans} — ${corr}` : ans;
           })
           .join(' | ');
       }
@@ -2608,7 +2608,7 @@ function renderHostQuestion(state) {
       row.style.padding = '.4rem .5rem';
 
       const text = document.createElement('span');
-      text.textContent = `${r.name}: ${r.answer}`;
+      text.textContent = `${r.answer}`;
       row.append(text);
 
       if (String(r.correction || '').trim()) {

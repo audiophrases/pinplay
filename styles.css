@@ -678,7 +678,7 @@ textarea { min-height: 72px; resize: vertical; }
 .list li { margin: .2rem 0; }
 
 .join-correction-inline {
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   color: var(--ok);
 }
 
@@ -687,12 +687,28 @@ textarea { min-height: 72px; resize: vertical; }
   color: var(--ok);
 }
 
+.join-answer-inline-row {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.join-answer-inline-row input,
+.join-answer-inline-row textarea {
+  flex: 1 1 auto;
+}
+
 .join-points-inline {
   display: inline-block;
-  margin-left: .45rem;
+  margin-left: .2rem;
   font-size: .92rem;
   font-weight: 700;
   color: var(--ok);
+  white-space: nowrap;
+}
+
+.join-reaction-row {
+  margin-top: 0;
 }
 
 .pin-preview {

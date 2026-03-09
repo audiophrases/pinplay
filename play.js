@@ -224,7 +224,15 @@ function renderPlayerState(state) {
 
     const input = joinAnswersEl.querySelector('input[type="text"], textarea');
     if (input && input.parentElement) {
-      input.insertAdjacentElement('afterend', badge);
+      let row = joinAnswersEl.querySelector('.join-answer-inline-row');
+      if (!row) {
+        row = document.createElement('div');
+        row.className = 'join-answer-inline-row';
+        input.insertAdjacentElement('beforebegin', row);
+        row.appendChild(input);
+      }
+      row.querySelectorAll('[data-join-points-inline="1"]').forEach((el) => el.remove());
+      row.appendChild(badge);
     } else {
       joinAnswersEl.appendChild(badge);
     }
@@ -241,9 +249,12 @@ function renderPlayerState(state) {
     const p = document.createElement('p');
     p.dataset.joinCorrectionInline = '1';
     p.className = 'join-correction-inline top-space';
-    p.innerHTML = `Correction: ${buildCorrectionDiffHtml(corr, studentText)}`;
+    p.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
 
-    if (joinSubmitBtn && joinSubmitBtn.parentElement === host) {
+    const ansRow = host.querySelector('.join-answer-inline-row');
+    if (ansRow) {
+      ansRow.insertAdjacentElement('afterend', p);
+    } else if (joinSubmitBtn && joinSubmitBtn.parentElement === host) {
       joinSubmitBtn.insertAdjacentElement('beforebegin', p);
     } else {
       host.appendChild(p);
@@ -664,15 +675,16 @@ function buildCorrectionDiffHtml(correction, original) {
   const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
   const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
   return tokens.map((tok) => {
-    const word = tok.toLowerCase().match(/^[\p{L}\p{N}']+$/u) ? tok.toLowerCase() : null;
     const safe = escapeHtmlText(tok);
+    const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
+    const word = core ? String(core).toLowerCase() : null;
     if (!word || origWords.has(word)) return safe;
     return `<span class="join-correction-diff">${safe}</span>`;
   }).join('');
 }
 
 function appendReactionBar() {
-  const host = joinFeedbackEl?.parentElement || joinQuestionWrap || joinAnswersEl;
+  const host = joinAnswersEl;
   if (!host) return;
 
   const old = host.querySelector('#joinReactionBar');
@@ -680,7 +692,7 @@ function appendReactionBar() {
 
   const wrap = document.createElement('div');
   wrap.id = 'joinReactionBar';
-  wrap.className = '';
+  wrap.className = 'join-reaction-row';
 
   const row = document.createElement('div');
   row.className = 'row gap';
@@ -697,11 +709,7 @@ function appendReactionBar() {
 
   wrap.appendChild(row);
 
-  if (joinFeedbackEl && joinFeedbackEl.parentElement === host) {
-    joinFeedbackEl.insertAdjacentElement('afterend', wrap);
-  } else {
-    host.appendChild(wrap);
-  }
+  host.appendChild(wrap);
 }
 
 async function sendReaction(emoji) {
