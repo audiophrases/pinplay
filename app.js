@@ -2600,7 +2600,9 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(preview);
     }
 
-    const models = Array.isArray(state.modelResponses) ? state.modelResponses : [];
+    const models = Array.isArray(state.modelResponses) && state.modelResponses.length
+      ? state.modelResponses
+      : (Array.isArray(state.openResponses) ? state.openResponses.filter((r) => !!r.modelAnswer) : []);
 
     if (projectorCorrectEl) {
       if (!models.length) {
@@ -2616,6 +2618,18 @@ function renderHostQuestion(state) {
       }
     }
 
+    if (!models.length) return;
+
+    // Fallback visible list (same behavior as the prior working state)
+    models.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'answer-row';
+      const text = document.createElement('span');
+      const corr = String(r.correction || '').trim();
+      text.textContent = corr || `${r.answer}`;
+      row.append(text);
+      hostQuestionAnswersEl.appendChild(row);
+    });
     return;
   }
 
