@@ -1212,7 +1212,9 @@ export class QuizRoom {
 
         const totalPlayers = Object.keys(room.players || {}).length;
         const answeredCount = Object.keys(room.responsesByQuestion[qIndex] || {}).length;
-        if (totalPlayers > 0 && answeredCount >= totalPlayers) {
+        const qRef = room.quiz.questions[qIndex];
+        const teacherGradedFlow = !!(qRef && (qRef.type === 'open' || qRef.type === 'image_open' || isTeacherGradedTextQuestion(qRef)));
+        if (totalPlayers > 0 && answeredCount >= totalPlayers && !teacherGradedFlow) {
           closeCurrentQuestion(room, 'all_answered');
         } else {
           room.updatedAt = Date.now();
