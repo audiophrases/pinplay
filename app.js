@@ -2612,28 +2612,10 @@ function renderHostQuestion(state) {
             const corr = String(r.correction || '').trim();
             return corr || ans;
           })
-          .join(' | ');
+          .join('\n');
       }
     }
 
-    if (!models.length) {
-      return;
-    }
-
-    models.forEach((r) => {
-      const row = document.createElement('div');
-      row.className = 'row gap';
-      row.style.border = '1px solid var(--line)';
-      row.style.borderRadius = '.5rem';
-      row.style.padding = '.4rem .5rem';
-
-      const corrText = String(r.correction || '').trim();
-      const text = document.createElement('span');
-      text.textContent = corrText || `${r.answer}`;
-      row.append(text);
-
-      hostQuestionAnswersEl.appendChild(row);
-    });
     return;
   }
 
