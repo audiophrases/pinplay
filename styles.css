@@ -132,6 +132,14 @@ textarea { min-height: 72px; resize: vertical; }
   border-radius: .62rem;
   font-weight: 600;
   letter-spacing: .01em;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+#builderActionRow .file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #builderActionRow .btn:hover,
