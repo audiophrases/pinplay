@@ -593,10 +593,14 @@ textarea { min-height: 72px; resize: vertical; }
 
 #projectorCorrect {
   min-height: 1.25rem;
+  margin-top: .45rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ok);
-  font-size: clamp(2.2rem, 5.6vw, 4.3rem);
+  font-size: clamp(2.6rem, 6.6vw, 5rem);
   font-weight: 900;
-  line-height: 1.12;
+  line-height: 1.08;
   white-space: pre-line;
 }
 
