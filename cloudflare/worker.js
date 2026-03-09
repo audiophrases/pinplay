@@ -1057,7 +1057,7 @@ export class QuizRoom {
         const playerId = sanitizeId(body?.playerId);
         const correction = String(body?.correction || '').slice(0, 280);
 
-        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        if (!(room.phase === 'question' || room.phase === 'results')) return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
         if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
@@ -1083,7 +1083,7 @@ export class QuizRoom {
         const playerId = sanitizeId(body?.playerId);
         const modelAnswer = !!body?.modelAnswer;
 
-        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        if (!(room.phase === 'question' || room.phase === 'results')) return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
         if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
