@@ -569,9 +569,9 @@ textarea { min-height: 72px; resize: vertical; }
 #projectorCorrect {
   min-height: 1.25rem;
   color: var(--ok);
-  font-size: clamp(1.55rem, 3.2vw, 2.5rem);
-  font-weight: 800;
-  line-height: 1.2;
+  font-size: clamp(2.2rem, 5.6vw, 4.3rem);
+  font-weight: 900;
+  line-height: 1.12;
 }
 
 .projector-score-item {
@@ -610,7 +610,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #hostQuestionCard:fullscreen #projectorCorrect {
-  font-size: clamp(2rem, 4.2vw, 3.3rem);
+  font-size: clamp(2.8rem, 6.8vw, 5.4rem);
 }
 
 #hostQuestionCard:fullscreen .project-answers .answer-row {
