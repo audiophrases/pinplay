@@ -28,6 +28,15 @@
         <div id="createWorkspace" class="hidden">
           <div class="card" id="builderCard">
             <h2>Quiz builder</h2>
+            <div class="row gap top-space quiz-actions">
+              <button id="saveBtn" class="btn primary">Save locally</button>
+              <button id="openLocalBtn" class="btn">Open local save</button>
+              <button id="exportBtn" class="btn">Export JSON</button>
+              <button id="publishDriveBtn" class="btn">Publish to Drive</button>
+              <button id="openDriveBtn" class="btn">Open from Drive</button>
+              <label class="btn file-label" for="importInput">Import JSON</label>
+              <input id="importInput" type="file" accept="application/json" hidden />
+            </div>
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
@@ -77,16 +86,6 @@
             </div>
 
             <div id="questionList" class="question-list"></div>
-
-            <div class="row gap top-space quiz-actions">
-              <button id="saveBtn" class="btn primary">Save locally</button>
-              <button id="openLocalBtn" class="btn">Open local save</button>
-              <button id="exportBtn" class="btn">Export JSON</button>
-              <button id="publishDriveBtn" class="btn">Publish to Drive</button>
-              <button id="openDriveBtn" class="btn">Open from Drive</button>
-              <label class="btn file-label" for="importInput">Import JSON</label>
-              <input id="importInput" type="file" accept="application/json" hidden />
-            </div>
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
