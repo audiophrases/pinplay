@@ -483,9 +483,14 @@ function renderJoinQuestion(question) {
       const input = document.createElement('input');
       input.type = 'text';
       input.id = 'joinTextAnswer';
+      input.className = 'join-answer-input';
       input.maxLength = 120;
       input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
-      joinAnswersEl.appendChild(input);
+
+      const row = document.createElement('div');
+      row.className = 'join-answer-inline-row';
+      row.appendChild(input);
+      joinAnswersEl.appendChild(row);
     }
     appendRiskBetBar();
     appendReactionBar();
