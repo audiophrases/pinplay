@@ -437,6 +437,11 @@ textarea { min-height: 72px; resize: vertical; }
   vertical-align: middle;
 }
 
+.hall-short-url-slash {
+  font-size: calc(1.9rem + 5pt);
+  vertical-align: middle;
+}
+
 .project-screen {
   text-align: center;
 }
