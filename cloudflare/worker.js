@@ -1302,8 +1302,16 @@ function summarizeHistoryAnswer(question, answer) {
   return String(answer || '');
 }
 
+function effectiveQuestionIndex(room) {
+  const total = Number(room?.quiz?.questions?.length || 0);
+  if (total <= 0) return -1;
+  const idx = Number(room?.currentIndex);
+  if (Number.isInteger(idx) && idx >= 0 && idx < total) return idx;
+  return total - 1;
+}
+
 function hostState(room) {
-  const qIndex = room.currentIndex;
+  const qIndex = effectiveQuestionIndex(room);
   const responses = room.responsesByQuestion[qIndex] || {};
   const startedAt = Number(room.questionStartedAt || 0);
   const reactions = (room.reactionsByQuestion?.[qIndex] || []).filter((r) => Number(r?.at || 0) >= startedAt);
@@ -1362,7 +1370,7 @@ function hostState(room) {
   return {
     phase: room.phase,
     pin: room.pin,
-    currentIndex: room.currentIndex,
+    currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     playerCount: players.length,
     responseCount: Object.keys(responses).length,
@@ -1419,7 +1427,7 @@ function hostState(room) {
 
 function playerState(room, playerId) {
   const player = room.players[playerId];
-  const qIndex = room.currentIndex;
+  const qIndex = effectiveQuestionIndex(room);
   const responses = room.responsesByQuestion[qIndex] || {};
 
   const roomQuestion = room.quiz.questions[qIndex];
