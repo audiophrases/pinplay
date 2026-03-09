@@ -270,7 +270,10 @@ function renderPlayerState(state) {
         ? 'Everyone answered. Waiting for next question…'
         : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Question closed.');
       if (rr) {
-        if (rr.graded === false) {
+        const corr = String(rr.correction || '').trim();
+        if (corr) {
+          setStatus(joinFeedbackEl, `Teacher correction: ${corr}`, rr.correct ? 'ok' : 'bad');
+        } else if (rr.graded === false) {
           setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
         } else if (rr.correct) {
           setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
@@ -283,6 +286,11 @@ function renderPlayerState(state) {
       setStatus(joinStatusEl, 'Answer revealed.', 'ok');
     }
   } else if (state.answeredCurrent) {
+    const rr = state.revealedResult;
+    const corr = String(rr?.correction || '').trim();
+    if (corr) {
+      setStatus(joinFeedbackEl, `Teacher correction: ${corr}`, rr?.correct ? 'ok' : 'bad');
+    }
     setStatus(joinStatusEl, 'Answer received.', 'ok');
   } else {
     setStatus(joinStatusEl, 'Question live!', 'ok');
