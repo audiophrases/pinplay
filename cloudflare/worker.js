@@ -1379,7 +1379,7 @@ function hostState(room) {
         : null,
     serverNow: Date.now(),
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    openResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
+    openResponses: !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses)
         .filter(([, r]) => !r?.hidden)
         .map(([pid, r]) => ({
@@ -1392,7 +1392,7 @@ function hostState(room) {
           modelAnswer: !!r?.modelAnswer,
         }))
       : [],
-    modelResponses: room.phase === 'question' && !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
+    modelResponses: !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses)
         .filter(([, r]) => !r?.hidden && !!r?.modelAnswer)
         .map(([pid, r]) => ({
@@ -1430,8 +1430,8 @@ function playerState(room, playerId) {
   const currentQ = room.quiz.questions[qIndex];
   const isTeacherGraded = currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || isTeacherGradedTextQuestion(currentQ));
   const hasTeacherCorrection = !!String(myResponse?.correction || '').trim();
-  const canRevealNow = room.phase === 'question' && myResponse && !currentQ?.isPoll
-    && (room.questionClosed || (isTeacherGraded && (!!myResponse.graded || hasTeacherCorrection)));
+  const canRevealNow = (room.phase === 'question' || room.phase === 'results') && myResponse && !currentQ?.isPoll
+    && (room.questionClosed || room.phase === 'results' || (isTeacherGraded && (!!myResponse.graded || hasTeacherCorrection)));
 
   return {
     phase: room.phase,
