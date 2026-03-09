@@ -36,6 +36,10 @@
               <button id="openDriveBtn" class="btn">Open from Drive</button>
               <label class="btn file-label" for="importInput">Import JSON</label>
               <input id="importInput" type="file" accept="application/json" hidden />
+              <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
+              <button id="previewLiveBtn" class="btn">🖥️ Preview live</button>
+              <button id="previewStudentBtn" class="btn">🎒 Preview student</button>
+              <button id="previewExitBtn" class="btn hidden">✖ Exit preview</button>
             </div>
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
@@ -139,14 +143,10 @@
 
             <div class="row gap top-space" id="hostActionRow">
               <button id="createLiveBtn" class="btn primary">Create live game</button>
-              <button id="hostApplyBuilderBtn" class="btn">Apply builder to live</button>
               <button id="hostRefreshBtn" class="btn">Refresh</button>
               <button id="hostStartBtn" class="btn">Start game</button>
               <button id="hostPrevBtn" class="btn">← Previous</button>
               <button id="hostNextBtn" class="btn">Next →</button>
-              <button id="previewLiveBtn" class="btn">🖥️ Preview live</button>
-              <button id="previewStudentBtn" class="btn">🎒 Preview student</button>
-              <button id="previewExitBtn" class="btn hidden">✖ Exit preview</button>
             </div>
 
             <div class="row gap top-space" id="hostJoinRow">
