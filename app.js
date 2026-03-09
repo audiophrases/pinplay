@@ -1037,8 +1037,12 @@ function syncQuizFromUI() {
       }
 
       if (q.type === 'tf') {
-        q.answers[0] = { text: 'True', correct: !!q.answers[0]?.correct };
-        q.answers[1] = { text: 'False', correct: !!q.answers[1]?.correct };
+        const tfTrue = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'true');
+        const tfFalse = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'false');
+        const trueCorrect = tfTrue ? !!tfTrue.correct : !!q.answers?.[0]?.correct;
+        const falseCorrect = tfFalse ? !!tfFalse.correct : !!q.answers?.[1]?.correct;
+        q.answers[0] = { text: 'True', correct: trueCorrect };
+        q.answers[1] = { text: 'False', correct: falseCorrect };
       }
 
     }
@@ -4241,9 +4245,11 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'tf') {
+      const tfTrue = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'true');
+      const tfFalse = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'false');
       const answers = [
-        { text: 'True', correct: !!q.answers?.[0]?.correct },
-        { text: 'False', correct: !!q.answers?.[1]?.correct },
+        { text: 'True', correct: tfTrue ? !!tfTrue.correct : !!q.answers?.[0]?.correct },
+        { text: 'False', correct: tfFalse ? !!tfFalse.correct : !!q.answers?.[1]?.correct },
       ];
       if (!answers.some((a) => a.correct)) answers[0].correct = true;
       normalized.questions.push({ ...base, answers });

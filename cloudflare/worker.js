@@ -1811,9 +1811,11 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'tf') {
+      const tfTrue = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'true');
+      const tfFalse = (q.answers || []).find((a) => String(a?.text || '').trim().toLowerCase() === 'false');
       const answers = [
-        { text: 'True', correct: !!q.answers?.[0]?.correct },
-        { text: 'False', correct: !!q.answers?.[1]?.correct },
+        { text: 'True', correct: tfTrue ? !!tfTrue.correct : !!q.answers?.[0]?.correct },
+        { text: 'False', correct: tfFalse ? !!tfFalse.correct : !!q.answers?.[1]?.correct },
       ];
       if (!answers.some((a) => a.correct)) answers[0].correct = true;
       normalized.questions.push({ ...base, answers });
