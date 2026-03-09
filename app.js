@@ -2539,9 +2539,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'open' || question.type === 'image_open' || isTeacherGradedText) {
-    hostQuestionHintEl.textContent = isTeacherGradedText
-      ? 'Typed answer (teacher-graded): grade live answers below.'
-      : 'Open short answer: grade live answers below.';
+    hostQuestionHintEl.textContent = '';
 
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
