@@ -2023,15 +2023,10 @@ function makePin() {
 
 async function verifyCreatePassword(env, password) {
   const raw = String(password || '');
-  const plain = String(env.CREATE_PASSWORD || '').trim();
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
-
-  if (hash) {
-    const digest = await sha256Hex(raw);
-    return digest === hash;
-  }
-  if (!plain) return false;
-  return raw === plain;
+  if (!hash) return false;
+  const digest = await sha256Hex(raw);
+  return digest === hash;
 }
 
 async function sha256Hex(input) {
