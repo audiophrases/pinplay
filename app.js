@@ -3041,7 +3041,14 @@ function renderPlayerState(state) {
     }
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
-    setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+    const rr = state.revealedResult || null;
+    if (!isPoll && rr && rr.graded === true && String(rr.correction || '').trim()) {
+      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
+    } else if (!isPoll && rr && rr.graded === true) {
+      setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
+    } else {
+      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+    }
     setStatus(joinStatusEl, 'Answer received.', 'ok');
   } else {
     setStatus(joinStatusEl, 'Question live!', 'ok');
