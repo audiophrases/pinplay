@@ -122,6 +122,7 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .38rem;
   padding-bottom: .15rem;
   scrollbar-width: thin;
+  align-items: center;
 }
 
 #builderActionRow .btn,
@@ -140,6 +141,9 @@ textarea { min-height: 72px; resize: vertical; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  vertical-align: middle;
+  position: relative;
+  top: 0;
 }
 
 #builderActionRow .btn:hover,
