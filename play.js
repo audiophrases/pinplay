@@ -102,9 +102,7 @@ async function validatePin() {
     if (live.player.randomNamesMode) {
       if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
       if (joinModeHintEl) {
-        joinModeHintEl.textContent = data.alreadyJoined && data.joinedPlayer?.name
-          ? `Random names mode is ON. You are already in as ${data.joinedPlayer.name}.`
-          : 'Random names mode is ON. You will be assigned a fun name automatically.';
+        joinModeHintEl.textContent = '';
       }
     } else {
       if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
@@ -1349,7 +1347,7 @@ function setStatus(el, text, mode = '') {
 function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
-  joinTitleEl.textContent = safe ? safe : 'Join game';
+  joinTitleEl.textContent = safe ? safe : '';
 }
 
 function ensureTimerProgressBar(cardEl, id) {
