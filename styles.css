@@ -107,17 +107,42 @@ textarea { min-height: 72px; resize: vertical; }
   color: #14532d;
   box-shadow: 0 0 0 2px rgba(34,197,94,.22) inset;
 }
+
+#previewLiveBtn,
+#previewStudentBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+}
 .quiz-actions { justify-content: center; }
 
 #builderActionRow {
   flex-wrap: nowrap;
   overflow-x: auto;
-  gap: .35rem;
+  gap: .38rem;
+  padding-bottom: .15rem;
+  scrollbar-width: thin;
 }
 
 #builderActionRow .btn,
 #builderActionRow .file-label {
   white-space: nowrap;
+  min-height: 2.25rem;
+  padding: .46rem .74rem;
+  border-radius: .62rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+#builderActionRow .btn:hover,
+#builderActionRow .file-label:hover {
+  transform: translateY(-1px);
+}
+
+#builderActionRow .btn:focus-visible,
+#builderActionRow .file-label:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 55%, white);
+  outline-offset: 1px;
 }
 .top-space { margin-top: .75rem; }
 
