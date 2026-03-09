@@ -101,6 +101,17 @@ textarea { min-height: 72px; resize: vertical; }
   white-space: nowrap;
 }
 .quiz-actions { justify-content: center; }
+
+#builderActionRow {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: .35rem;
+}
+
+#builderActionRow .btn,
+#builderActionRow .file-label {
+  white-space: nowrap;
+}
 .top-space { margin-top: .75rem; }
 
 .btn {
