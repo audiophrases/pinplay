@@ -116,6 +116,7 @@ const resultCard = document.getElementById('resultCard');
 
 const shouldAutoloadQuiz = !window.location.pathname.includes('/create/');
 let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQuiz();
+collapseAllQuestions(quiz);
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
@@ -382,6 +383,7 @@ function bindBuilderEvents() {
       const parsed = JSON.parse(text);
       validateImportedQuiz(parsed);
       quiz = parsed;
+      collapseAllQuestions(quiz);
       renderBuilder();
       saveQuiz(quiz);
       alert('Quiz imported ✅');
@@ -1403,6 +1405,7 @@ function openLocalLibraryDialog(opts = {}) {
       const chosen = item.raw;
       validateImportedQuiz(chosen.quiz);
       quiz = chosen.quiz;
+      collapseAllQuestions(quiz);
       renderBuilder();
       saveQuiz(quiz);
       setStatus(hostStatusEl, `Loaded local save: ${chosen.name}`, 'ok');
@@ -1429,6 +1432,7 @@ async function openQuizFromDrive(opts = {}) {
         const loadedQuiz = openData?.quiz;
         validateImportedQuiz(loadedQuiz);
         quiz = loadedQuiz;
+        collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
         setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name || chosen.id}`, 'ok');
@@ -3935,6 +3939,14 @@ function createEmptyQuiz() {
     title: '',
     questions: [],
   };
+}
+
+function collapseAllQuestions(targetQuiz) {
+  if (!targetQuiz || !Array.isArray(targetQuiz.questions)) return;
+  targetQuiz.questions.forEach((q) => {
+    if (!q) return;
+    q.collapsed = true;
+  });
 }
 
 function makeMcqQuestion(opts = {}) {
