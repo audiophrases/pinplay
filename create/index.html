@@ -134,24 +134,18 @@
           </div>
 
           <div class="card" id="hostCard">
-            <div class="row gap top-space">
-              <label style="display:flex; align-items:center; gap:.4rem; margin:0; font-weight:500;">
+            <div class="row gap top-space" id="hostActionRow">
+              <label style="display:flex; align-items:center; gap:.35rem; margin:0; font-weight:500; white-space:nowrap;">
                 <input id="randomNamesToggle" type="checkbox" style="width:auto;" />
                 Random names
               </label>
-            </div>
-
-            <div class="row gap top-space" id="hostActionRow">
-              <button id="createLiveBtn" class="btn primary">Create live game</button>
+              <button id="createLiveBtn" class="btn primary">Live Pin</button>
               <button id="hostRefreshBtn" class="btn">Refresh</button>
-              <button id="hostStartBtn" class="btn">Start game</button>
-              <button id="hostPrevBtn" class="btn">← Previous</button>
-              <button id="hostNextBtn" class="btn">Next →</button>
-            </div>
-
-            <div class="row gap top-space" id="hostJoinRow">
-              <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="max-width:120px;" />
-              <button id="hostJoinBtn" class="btn">Join as host (PIN)</button>
+              <button id="hostStartBtn" class="btn">Start</button>
+              <button id="hostPrevBtn" class="btn">←</button>
+              <button id="hostNextBtn" class="btn">→</button>
+              <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" />
+              <button id="hostJoinBtn" class="btn">Join as host</button>
             </div>
             <p class="small">Keyboard: ← previous, → next, Space = end timer + reveal answer.</p>
 

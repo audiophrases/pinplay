@@ -88,6 +88,18 @@ textarea { min-height: 72px; resize: vertical; }
 .row { display: flex; align-items: center; }
 .row.spread { justify-content: space-between; }
 .row.gap { gap: .5rem; flex-wrap: wrap; }
+
+#hostActionRow {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: .35rem;
+  overflow-x: auto;
+}
+
+#hostActionRow .btn {
+  padding: .4rem .55rem;
+  white-space: nowrap;
+}
 .quiz-actions { justify-content: center; }
 .top-space { margin-top: .75rem; }
 
