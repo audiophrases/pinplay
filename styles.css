@@ -618,13 +618,22 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .risk-bet-row .risk-bet-btn {
-  min-width: 3.7rem;
+  min-width: auto;
   font-weight: 700;
+  font-size: 133%;
+  padding: 0 .2rem;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
+.risk-bet-row .risk-bet-btn:hover,
+.risk-bet-row .risk-bet-btn:focus-visible,
 .risk-bet-row .risk-bet-btn.active {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239,68,68,.25) inset;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  transform: scale(1.06);
 }
 
 .list {

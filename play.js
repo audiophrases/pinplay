@@ -567,8 +567,8 @@ function appendRiskBetBar() {
     btn.type = 'button';
     btn.className = 'btn risk-bet-btn';
     btn.dataset.bet = String(b.value);
-    btn.textContent = b.bonus;
-    btn.title = b.emoji;
+    btn.textContent = b.emoji;
+    btn.title = `${b.bonus} / ${b.penalty}`;
     if (Number(live.player.selectedBet || 0) === b.value) btn.classList.add('active');
     btn.addEventListener('click', () => {
       live.player.selectedBet = b.value;
