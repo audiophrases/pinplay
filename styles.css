@@ -619,7 +619,14 @@ textarea { min-height: 72px; resize: vertical; }
 
 .risk-bet-row .risk-bet-btn {
   min-width: 3.7rem;
+  width: 3.7rem;
+  text-align: center;
   font-weight: 700;
+}
+
+.risk-bet-row .risk-bet-btn.is-emoji {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .risk-bet-row .risk-bet-btn.active {
