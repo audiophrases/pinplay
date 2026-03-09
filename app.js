@@ -3,7 +3,6 @@ const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
-const CREATE_PASSWORD = '1234.';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
 // Tabs
@@ -198,17 +197,32 @@ function init() {
 }
 
 function setupCreateAccess() {
-  const unlock = () => {
-    const value = String(createPasswordEl?.value || '');
-    if (value === CREATE_PASSWORD) {
+  const unlock = async () => {
+    try {
+      const value = String(createPasswordEl?.value || '');
+      if (!value) {
+        setStatus(createAuthStatusEl, 'Enter password', 'bad');
+        return;
+      }
+
+      if (unlockCreateBtn) unlockCreateBtn.disabled = true;
+      setStatus(createAuthStatusEl, 'Checking password…', 'ok');
+
+      await api('/api/create/auth', {
+        method: 'POST',
+        body: { password: value },
+      });
+
       sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
       if (createWorkspace) createWorkspace.classList.remove('hidden');
       if (createAuthCard) createAuthCard.classList.add('hidden');
       setStatus(createAuthStatusEl, 'Unlocked ✅', 'ok');
       if (createPasswordEl) createPasswordEl.value = '';
-      return;
+    } catch (err) {
+      setStatus(createAuthStatusEl, err?.message || 'Wrong password', 'bad');
+    } finally {
+      if (unlockCreateBtn) unlockCreateBtn.disabled = false;
     }
-    setStatus(createAuthStatusEl, 'Wrong password', 'bad');
   };
 
   if (sessionStorage.getItem(CREATE_UNLOCK_KEY) === '1') {

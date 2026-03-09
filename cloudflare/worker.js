@@ -239,6 +239,16 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/create/auth' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      if (!password) return json({ error: 'Password required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+      return json({ ok: true }, 200);
+    }
+
     if (url.pathname === '/api/host/rename' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -2009,6 +2019,25 @@ function normalizeTimeLimitValue(value, type) {
 
 function makePin() {
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function verifyCreatePassword(env, password) {
+  const raw = String(password || '');
+  const plain = String(env.CREATE_PASSWORD || '').trim();
+  const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
+
+  if (hash) {
+    const digest = await sha256Hex(raw);
+    return digest === hash;
+  }
+  if (!plain) return false;
+  return raw === plain;
+}
+
+async function sha256Hex(input) {
+  const data = new TextEncoder().encode(String(input || ''));
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function sanitizePin(pin) {
