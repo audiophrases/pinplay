@@ -1822,7 +1822,6 @@ async function hostUpdateRandomNames() {
 
 function shouldIgnoreHostHotkey(e) {
   if (!createWorkspace || createWorkspace.classList.contains('hidden')) return true;
-  if (!previewMode.active && (!live.host.pin || !live.host.token)) return true;
 
   const el = e.target;
   if (!el) return false;
@@ -1833,6 +1832,24 @@ function shouldIgnoreHostHotkey(e) {
 
 function handleHostHotkeys(e) {
   if (shouldIgnoreHostHotkey(e)) return;
+
+  if (e.key === 'l' || e.key === 'L') {
+    e.preventDefault();
+    createLiveGame();
+    return;
+  }
+
+  if (e.key === 'o' || e.key === 'O') {
+    e.preventDefault();
+    openLocalLibraryDialog();
+    return;
+  }
+
+  if (e.key === 's' || e.key === 'S') {
+    e.preventDefault();
+    hostStartGame();
+    return;
+  }
 
   if (previewMode.active && previewMode.mode === 'student') {
     if (e.key === 'ArrowRight') {
