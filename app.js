@@ -2553,6 +2553,21 @@ function renderHostQuestion(state) {
     }
 
     const models = Array.isArray(state.modelResponses) ? state.modelResponses : [];
+
+    if (projectorCorrectEl) {
+      if (!models.length) {
+        projectorCorrectEl.textContent = '';
+      } else {
+        projectorCorrectEl.textContent = models
+          .map((r) => {
+            const ans = `${r.name}: ${r.answer}`;
+            const corr = String(r.correction || '').trim();
+            return corr ? `${ans} — Correction: ${corr}` : ans;
+          })
+          .join(' | ');
+      }
+    }
+
     if (!models.length) {
       return;
     }
@@ -3030,7 +3045,7 @@ function renderPlayerState(state) {
       : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Time is up. Waiting for next question…');
 
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && rr.graded === true && String(rr.correction || '').trim()) {
+    if (!isPoll && rr && String(rr.correction || '').trim()) {
       setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
     } else if (!isPoll && rr && rr.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
@@ -3040,7 +3055,7 @@ function renderPlayerState(state) {
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && rr.graded === true && String(rr.correction || '').trim()) {
+    if (!isPoll && rr && String(rr.correction || '').trim()) {
       setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
     } else if (!isPoll && rr && rr.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
