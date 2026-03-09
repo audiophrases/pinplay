@@ -217,10 +217,13 @@ function renderPlayerState(state) {
     host.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
     const corr = String(text || '').trim();
     if (!corr) return;
+
+    const studentText = getStudentAnswerTextFromUI();
     const p = document.createElement('p');
     p.dataset.joinCorrectionInline = '1';
-    p.className = 'small ok top-space';
-    p.textContent = `Correction: ${corr}`;
+    p.className = 'join-correction-inline top-space';
+    p.innerHTML = `Correction: ${buildCorrectionDiffHtml(corr, studentText)}`;
+
     if (joinSubmitBtn && joinSubmitBtn.parentElement === host) {
       joinSubmitBtn.insertAdjacentElement('beforebegin', p);
     } else {
@@ -620,6 +623,34 @@ function appendRiskBetBar() {
   joinAnswersEl.appendChild(wrap);
 }
 
+function getStudentAnswerTextFromUI() {
+  const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
+  if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
+  const selected = [...(joinAnswersEl?.querySelectorAll('[data-puzzle-piece], input:checked + span') || [])]
+    .map((el) => String(el.textContent || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  return selected;
+}
+
+function escapeHtmlText(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildCorrectionDiffHtml(correction, original) {
+  const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
+  const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
+  return tokens.map((tok) => {
+    const word = tok.toLowerCase().match(/^[\p{L}\p{N}']+$/u) ? tok.toLowerCase() : null;
+    const safe = escapeHtmlText(tok);
+    if (!word || origWords.has(word)) return safe;
+    return `<span class="join-correction-diff">${safe}</span>`;
+  }).join('');
+}
+
 function appendReactionBar() {
   const host = joinFeedbackEl?.parentElement || joinQuestionWrap || joinAnswersEl;
   if (!host) return;
@@ -629,7 +660,7 @@ function appendReactionBar() {
 
   const wrap = document.createElement('div');
   wrap.id = 'joinReactionBar';
-  wrap.className = 'top-space';
+  wrap.className = '';
 
   const row = document.createElement('div');
   row.className = 'row gap';

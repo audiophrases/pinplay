@@ -659,6 +659,16 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .list li { margin: .2rem 0; }
 
+.join-correction-inline {
+  font-size: 1.05rem;
+  color: var(--ok);
+}
+
+.join-correction-diff {
+  font-weight: 800;
+  color: var(--ok);
+}
+
 .pin-preview {
   position: relative;
   margin-top: .5rem;
