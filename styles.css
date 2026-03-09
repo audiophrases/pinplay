@@ -627,6 +627,13 @@ textarea { min-height: 72px; resize: vertical; }
   box-shadow: none;
 }
 
+.risk-bet-row .risk-bet-btn::after {
+  content: attr(data-emoji);
+  opacity: 0;
+  margin-left: .22rem;
+  transition: opacity .12s ease;
+}
+
 .risk-bet-row .risk-bet-btn:hover,
 .risk-bet-row .risk-bet-btn:focus-visible,
 .risk-bet-row .risk-bet-btn.active {
@@ -634,6 +641,12 @@ textarea { min-height: 72px; resize: vertical; }
   background: transparent;
   box-shadow: none;
   transform: scale(1.06);
+}
+
+.risk-bet-row .risk-bet-btn:hover::after,
+.risk-bet-row .risk-bet-btn:focus-visible::after,
+.risk-bet-row .risk-bet-btn.active::after {
+  opacity: 1;
 }
 
 .list {
