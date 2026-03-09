@@ -1450,9 +1450,9 @@ function playerState(room, playerId) {
           bet: sanitizeBet(myResponse.bet),
         }
       : null,
-    question: room.phase === 'question' ? publicQuestion(room.quiz.questions[qIndex]) : null,
+    question: (room.phase === 'question' || room.phase === 'results') ? publicQuestion(room.quiz.questions[qIndex]) : null,
     correctAnswer:
-      room.phase === 'question' && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
+      (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
       && !['open', 'image_open'].includes(room.quiz.questions[qIndex]?.type)
       && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
         ? hostCorrectSummary(room.quiz.questions[qIndex])

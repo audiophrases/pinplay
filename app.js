@@ -2326,7 +2326,7 @@ function renderHostState(state) {
 function renderHostQuestion(state) {
   const phase = state.phase;
   const question = state.question;
-  const showReveal = phase === 'question' && !!state.questionClosed;
+  const showReveal = !!state.questionClosed && (phase === 'question' || phase === 'results');
 
   const renderPollSummary = () => {
     const summary = state.pollSummary;
@@ -2474,7 +2474,7 @@ function renderHostQuestion(state) {
     hostQuestionAnswersEl.appendChild(ans);
   };
 
-  if (phase !== 'question' || !question) {
+  if (!question) {
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
