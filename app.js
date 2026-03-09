@@ -726,10 +726,17 @@ function renderBuilder() {
     let specific = '';
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
-      const answers = Array.isArray(q.answers) ? [...q.answers] : [];
       const isMulti = q.type === 'multi';
-      const answerSlots = q.type === 'tf' ? 2 : 10;
-      while (answers.length < answerSlots) answers.push({ text: '', correct: false });
+      const maxAnswers = q.type === 'tf' ? 2 : 10;
+      const baseMin = q.type === 'tf' ? 2 : 4;
+      const source = (Array.isArray(q.answers) ? q.answers : []).slice(0, maxAnswers).map((a) => ({
+        text: String(a?.text || ''),
+        correct: !!a?.correct,
+      }));
+      const answers = source.length ? source : [{ text: '', correct: true }, { text: '', correct: false }];
+      while (answers.length < baseMin) answers.push({ text: '', correct: false });
+      const lastFilled = String(answers[answers.length - 1]?.text || '').trim().length > 0;
+      if (q.type !== 'tf' && lastFilled && answers.length < maxAnswers) answers.push({ text: '', correct: false });
 
       specific += `
         <label class="top-space">Answers</label>
@@ -758,13 +765,18 @@ function renderBuilder() {
     }
 
     if (q.type === 'text') {
-      const accepted = Array.isArray(q.accepted) ? [...q.accepted] : [];
-      while (accepted.length < 20) accepted.push('');
+      const maxAccepted = 20;
+      const acceptedRaw = (Array.isArray(q.accepted) ? q.accepted : []).slice(0, maxAccepted).map((x) => String(x || '').slice(0, 120));
+      const acceptedNonEmpty = acceptedRaw.filter((x) => x.trim().length > 0);
+      const accepted = acceptedNonEmpty.length ? [...acceptedNonEmpty] : [];
+      while (accepted.length < Math.min(4, maxAccepted)) accepted.push('');
+      const acceptedLastFilled = String(accepted[accepted.length - 1] || '').trim().length > 0;
+      if (acceptedLastFilled && accepted.length < maxAccepted) accepted.push('');
       specific += `
-        <label class="top-space">Accepted answers (1-20, max 120 chars each)</label>
+        <label class="top-space">Accepted answers (dynamic, max 20)</label>
         <div class="answers-grid">
           ${accepted
-            .slice(0, 20)
+            .slice(0, maxAccepted)
             .map(
               (ans, aIdx) => `
             <input data-q="${idx}" data-accepted-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Accepted answer ${aIdx + 1}" />
@@ -788,15 +800,20 @@ function renderBuilder() {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = Array.isArray(q.gaps) ? [...q.gaps] : [];
-      while (gaps.length < 10) gaps.push('');
+      const maxGaps = 10;
+      const gapRaw = (Array.isArray(q.gaps) ? q.gaps : []).slice(0, maxGaps).map((x) => String(x || '').slice(0, 120));
+      const gapNonEmpty = gapRaw.filter((x) => x.trim().length > 0);
+      const gaps = gapNonEmpty.length ? [...gapNonEmpty] : [''];
+      while (gaps.length < Math.min(2, maxGaps)) gaps.push('');
+      const gapLastFilled = String(gaps[gaps.length - 1] || '').trim().length > 0;
+      if (gapLastFilled && gaps.length < maxGaps) gaps.push('');
       specific += `
         <p class="small top-space">How to create blanks: write your text and add <strong>____</strong> or <strong>[]</strong> where gaps should appear.</p>
-        <p class="small">Then set expected answers below (up to 10). Keep order aligned with blanks.</p>
-        <label class="top-space">Expected words for blanks (1-10)</label>
+        <p class="small">Then set expected answers below (dynamic, max 10). Keep order aligned with blanks.</p>
+        <label class="top-space">Expected words for blanks</label>
         <div class="answers-grid">
           ${gaps
-            .slice(0, 10)
+            .slice(0, maxGaps)
             .map((ans, aIdx) => `
             <input data-q="${idx}" data-gap-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Blank ${aIdx + 1}" />
           `)
@@ -806,14 +823,22 @@ function renderBuilder() {
     }
 
     if (q.type === 'match_pairs') {
-      const pairs = Array.isArray(q.pairs) ? q.pairs : [];
-      const normalizedPairs = [...pairs];
-      while (normalizedPairs.length < 10) normalizedPairs.push({ left: '', right: '' });
+      const maxPairs = 10;
+      const pairsRaw = (Array.isArray(q.pairs) ? q.pairs : []).slice(0, maxPairs).map((p) => ({
+        left: String(p?.left || '').slice(0, 60),
+        right: String(p?.right || '').slice(0, 60),
+      }));
+      const pairsNonEmpty = pairsRaw.filter((p) => p.left.trim() || p.right.trim());
+      const normalizedPairs = pairsNonEmpty.length ? [...pairsNonEmpty] : [{ left: '', right: '' }];
+      while (normalizedPairs.length < Math.min(2, maxPairs)) normalizedPairs.push({ left: '', right: '' });
+      const lastPair = normalizedPairs[normalizedPairs.length - 1] || { left: '', right: '' };
+      const lastPairFilled = String(lastPair.left || '').trim() || String(lastPair.right || '').trim();
+      if (lastPairFilled && normalizedPairs.length < maxPairs) normalizedPairs.push({ left: '', right: '' });
       specific += `
-        <p class="small top-space">Set matching pairs (left → right). Min 2 pairs, max 10.</p>
+        <p class="small top-space">Set matching pairs (left → right). Dynamic rows, max 10.</p>
         <div class="answers-grid">
           ${normalizedPairs
-            .slice(0, 10)
+            .slice(0, maxPairs)
             .map(
               (p, i) => `
               <input data-q="${idx}" data-pair-left="${i}" maxlength="60" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
@@ -834,12 +859,18 @@ function renderBuilder() {
     }
 
     if (q.type === 'puzzle') {
-      const items = [...(q.items || [])];
-      while (items.length < 9) items.push('');
+      const maxItems = 9;
+      const itemsRaw = (Array.isArray(q.items) ? q.items : []).slice(0, maxItems).map((x) => String(x || '').slice(0, 75));
+      const itemsNonEmpty = itemsRaw.filter((x) => x.trim().length > 0);
+      const items = itemsNonEmpty.length ? [...itemsNonEmpty] : [''];
+      while (items.length < Math.min(4, maxItems)) items.push('');
+      const itemsLastFilled = String(items[items.length - 1] || '').trim().length > 0;
+      if (itemsLastFilled && items.length < maxItems) items.push('');
       specific += `
-        <label class="top-space">Correct order items (min 3, max 9)</label>
+        <label class="top-space">Correct order items (dynamic, max 9)</label>
         <div class="answers-grid">
           ${items
+            .slice(0, maxItems)
             .map(
               (item, i) => `
             <input data-q="${idx}" data-puzzle-index="${i}" maxlength="75" value="${escapeHtml(item || '')}" placeholder="Position ${i + 1}" />
