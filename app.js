@@ -998,15 +998,10 @@ function renderBuilder() {
 }
 
 function buildAudioSettingsMarkup(idx, q) {
-  const enabled = !!q.audioEnabled || q.type === 'audio';
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
   const lang = String(q.language || 'en-US-Wave');
   return `
     <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
-      <label style="display:flex; align-items:center; gap:.45rem; margin:0; font-weight:500;">
-        <input data-q="${idx}" data-field="audioEnabled" type="checkbox" ${enabled ? 'checked' : ''} style="width:auto;" />
-        Audio for this question
-      </label>
       <div class="row gap top-space">
         <div style="min-width:170px;">
           <label>Audio source</label>
@@ -1079,16 +1074,20 @@ function syncQuizFromUI() {
     }
 
     if (supportsQuestionAudio(q.type)) {
-      const audioEnabledEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioEnabled"]`);
       const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
       const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
 
-      q.audioEnabled = !!audioEnabledEl?.checked || q.type === 'audio';
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
       q.language = String(languageEl?.value || 'en-US-Wave').slice(0, 32) || 'en-US-Wave';
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
+
+      // New rule: no checkbox.
+      // TTS is enabled when text exists; file mode enabled when audioData exists.
+      q.audioEnabled = q.type === 'audio'
+        ? true
+        : (q.audioMode === 'file' ? !!q.audioData : !!String(q.audioText || '').trim());
     }
 
     if (q.type === 'text') {
