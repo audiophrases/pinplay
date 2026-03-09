@@ -2593,7 +2593,7 @@ function renderHostQuestion(state) {
           .map((r) => {
             const ans = `${r.answer}`;
             const corr = String(r.correction || '').trim();
-            return corr ? `${ans} — ${corr}` : ans;
+            return corr || ans;
           })
           .join(' | ');
       }
@@ -2610,17 +2610,10 @@ function renderHostQuestion(state) {
       row.style.borderRadius = '.5rem';
       row.style.padding = '.4rem .5rem';
 
+      const corrText = String(r.correction || '').trim();
       const text = document.createElement('span');
-      text.textContent = `${r.answer}`;
+      text.textContent = corrText || `${r.answer}`;
       row.append(text);
-
-      if (String(r.correction || '').trim()) {
-        const corr = document.createElement('div');
-        corr.className = 'small';
-        corr.style.marginTop = '.25rem';
-        corr.textContent = `Correction: ${String(r.correction).trim()}`;
-        row.append(corr);
-      }
 
       hostQuestionAnswersEl.appendChild(row);
     });
