@@ -212,15 +212,20 @@ function renderPlayerState(state) {
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   const renderInlineCorrection = (text = '') => {
-    if (!joinAnswersEl) return;
-    joinAnswersEl.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    const host = joinQuestionWrap || joinAnswersEl;
+    if (!host) return;
+    host.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
     const corr = String(text || '').trim();
     if (!corr) return;
     const p = document.createElement('p');
     p.dataset.joinCorrectionInline = '1';
     p.className = 'small ok top-space';
     p.textContent = `Correction: ${corr}`;
-    joinAnswersEl.appendChild(p);
+    if (joinSubmitBtn && joinSubmitBtn.parentElement === host) {
+      joinSubmitBtn.insertAdjacentElement('beforebegin', p);
+    } else {
+      host.appendChild(p);
+    }
   };
 
   if (state.phase !== 'question' || !state.question) {
@@ -287,7 +292,7 @@ function renderPlayerState(state) {
       if (rr) {
         const corr = String(rr.correction || '').trim();
         if (corr) {
-          setStatus(joinFeedbackEl, `Correction: ${corr}`, 'ok');
+          setStatus(joinFeedbackEl, '', '');
         } else if (rr.graded === false) {
           setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
         } else if (rr.correct) {
@@ -304,7 +309,7 @@ function renderPlayerState(state) {
     const rr = state.revealedResult;
     const corr = String(rr?.correction || '').trim();
     if (corr) {
-      setStatus(joinFeedbackEl, `Correction: ${corr}`, 'ok');
+      setStatus(joinFeedbackEl, '', '');
     }
     setStatus(joinStatusEl, 'Answer received.', 'ok');
   } else {
