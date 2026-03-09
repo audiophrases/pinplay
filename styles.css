@@ -127,8 +127,8 @@ textarea { min-height: 72px; resize: vertical; }
 #builderActionRow .btn,
 #builderActionRow .file-label {
   white-space: nowrap;
-  min-height: 2.25rem;
-  padding: .46rem .74rem;
+  height: 2.25rem;
+  padding: 0 .74rem;
   border-radius: .62rem;
   font-weight: 600;
   letter-spacing: .01em;
