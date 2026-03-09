@@ -2004,12 +2004,13 @@ async function hostHideOpenResponse(playerId) {
   }
 }
 
-async function hostSetOpenCorrection(playerId, currentText = '') {
+async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer = '') {
   try {
     if (!playerId) return;
     ensureHostReady();
 
-    const text = prompt('Correction/feedback for student:', String(currentText || ''));
+    const seed = String(currentText || '').trim() || String(studentAnswer || '').trim();
+    const text = prompt('Correction/feedback for student:', seed);
     if (text == null) return;
 
     await api('/api/host/open/feedback', {
@@ -2122,7 +2123,7 @@ function renderHostAnswerHistory(state) {
           const corrBtn = document.createElement('button');
           corrBtn.className = 'btn';
           corrBtn.textContent = entry.correction ? 'Edit correction' : 'Add correction';
-          corrBtn.addEventListener('click', () => hostSetOpenCorrection(entry.playerId, entry.correction || ''));
+          corrBtn.addEventListener('click', () => hostSetOpenCorrection(entry.playerId, entry.correction || '', formatHistoryAnswer(entry)));
 
           const modelBtn = document.createElement('button');
           modelBtn.className = 'btn';
