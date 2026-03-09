@@ -433,13 +433,13 @@ textarea { min-height: 72px; resize: vertical; }
 
 .hall-short-url-dot {
   font-size: calc(1.9rem + 10pt);
-  line-height: 0;
-  vertical-align: middle;
+  line-height: inherit;
+  vertical-align: baseline;
 }
 
 .hall-short-url-slash {
   font-size: calc(1.9rem + 5pt);
-  vertical-align: middle;
+  vertical-align: baseline;
 }
 
 .project-screen {
