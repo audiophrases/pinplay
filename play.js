@@ -587,11 +587,18 @@ function appendRiskBetBar() {
     btn.type = 'button';
     btn.className = 'btn risk-bet-btn';
     btn.dataset.bet = String(b.value);
-    btn.textContent = b.emoji;
+    btn.textContent = b.bonus;
     btn.removeAttribute('title');
-    btn.dataset.tooltip = b.bonus;
     btn.setAttribute('aria-label', `${b.bonus} / ${b.penalty}`);
     if (Number(live.player.selectedBet || 0) === b.value) btn.classList.add('active');
+
+    const showEmoji = () => { btn.textContent = b.emoji; };
+    const showBonus = () => { btn.textContent = b.bonus; };
+    btn.addEventListener('mouseenter', showEmoji);
+    btn.addEventListener('mouseleave', showBonus);
+    btn.addEventListener('focus', showEmoji);
+    btn.addEventListener('blur', showBonus);
+
     btn.addEventListener('click', () => {
       live.player.selectedBet = b.value;
       row.querySelectorAll('.risk-bet-btn').forEach((el) => el.classList.remove('active'));
