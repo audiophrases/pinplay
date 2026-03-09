@@ -2868,7 +2868,7 @@ function updateHallScene(state) {
 
   if (state.phase === 'lobby') {
     hallCardEl.classList.add('hall-live');
-    hallHintEl.textContent = `Players joined: ${state.playerCount}. Waiting for teacher to start.`;
+    hallHintEl.textContent = '';
     playHallMusic();
     return;
   }
@@ -2881,7 +2881,7 @@ function updateHallScene(state) {
   } else if (state.phase === 'results') {
     hallHintEl.textContent = 'Game finished.';
   } else {
-    hallHintEl.textContent = 'Create a live game to open the hall.';
+    hallHintEl.textContent = '';
   }
 }
 
