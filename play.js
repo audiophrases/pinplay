@@ -600,11 +600,6 @@ function appendReactionBar() {
   wrap.id = 'joinReactionBar';
   wrap.className = 'top-space';
 
-  const label = document.createElement('p');
-  label.className = 'small';
-  label.textContent = 'Quick reaction:';
-  wrap.appendChild(label);
-
   const row = document.createElement('div');
   row.className = 'row gap';
 
