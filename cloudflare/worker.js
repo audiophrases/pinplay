@@ -1327,7 +1327,7 @@ function hostState(room) {
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
   const roomQuestion = room.quiz.questions[qIndex] || null;
-  const question = room.phase === 'question' ? hostQuestionPayload(roomQuestion) : null;
+  const question = (room.phase === 'question' || room.phase === 'results') ? hostQuestionPayload(roomQuestion) : null;
   const timeLimitSec = getQuestionTimeLimitSec(roomQuestion);
 
   const pollVisible = room.phase === 'question' && !!room.questionClosed && !!roomQuestion?.isPoll;
@@ -1416,7 +1416,7 @@ function hostState(room) {
     pollResponses,
     answerHistory,
     correctAnswer:
-      room.phase === 'question' && room.questionClosed && !roomQuestion?.isPoll
+      (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !roomQuestion?.isPoll
       && !['open', 'image_open'].includes(roomQuestion?.type)
       && !isTeacherGradedTextQuestion(roomQuestion)
         ? hostCorrectSummary(roomQuestion)
