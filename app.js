@@ -2233,6 +2233,17 @@ function renderHostState(state) {
 
   setStatus(hostStatusEl, actionHint, 'ok');
 
+  const openSig = Array.isArray(state.openResponses)
+    ? state.openResponses
+      .map((r) => `${r.playerId}:${r.modelAnswer ? 1 : 0}:${String(r.correction || '').trim()}`)
+      .join('|')
+    : '';
+  const modelSig = Array.isArray(state.modelResponses)
+    ? state.modelResponses
+      .map((r) => `${r.playerId}:${String(r.correction || '').trim()}`)
+      .join('|')
+    : '';
+
   const questionRenderKey = [
     state.phase,
     state.currentIndex,
@@ -2245,6 +2256,9 @@ function renderHostState(state) {
     state.question?.isPoll ? 1 : 0,
     Array.isArray(state.openResponses) ? state.openResponses.length : 0,
     Array.isArray(state.pollResponses) ? state.pollResponses.length : 0,
+    Array.isArray(state.modelResponses) ? state.modelResponses.length : 0,
+    openSig,
+    modelSig,
   ].join(':');
 
   if (live.host.lastQuestionRenderKey !== questionRenderKey) {
