@@ -1758,7 +1758,13 @@ function startRankingAnimationMode() {
   state.players.forEach((p) => {
     const prev = Number(live.host.lastScoresByPlayer?.[p.id]);
     const end = Number(toMap[p.id] || 0);
-    fromMap[p.id] = Number.isFinite(prev) ? prev : end;
+    // If we don't have a reliable previous score (or it equals current),
+    // fall back to 0 so R always produces a visible count-up effect.
+    if (!Number.isFinite(prev) || prev === end) {
+      fromMap[p.id] = 0;
+    } else {
+      fromMap[p.id] = prev;
+    }
   });
 
   live.host.rankingAnimFrom = fromMap;
