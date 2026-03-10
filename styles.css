@@ -117,11 +117,10 @@ textarea { min-height: 72px; resize: vertical; }
 .quiz-actions { justify-content: center; }
 
 #builderActionRow {
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow-x: visible;
   gap: .38rem;
   padding-bottom: .15rem;
-  scrollbar-width: thin;
   align-items: center;
 }
 
