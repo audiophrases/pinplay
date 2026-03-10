@@ -60,6 +60,16 @@ How to read this section:
 - **How to run it:** Mix today’s topic with 20–30% old-topic MCQs from previous weeks.
 - **Creative twist:** Tag questions as “Today” vs “Throwback” to normalize revision.
 
+### 11) Debate Trigger MCQ
+- **Learning goal:** Build argumentation skills from content prompts.
+- **How to run it:** Use MCQs where two options are close, then ask pairs to justify why one is better.
+- **Creative twist:** Give 60 seconds to switch sides and defend the opposite option.
+
+### 12) Adaptive Retry Ladder
+- **Learning goal:** Support mixed-ability classrooms.
+- **How to run it:** For each core concept, prepare easy/medium/challenge MCQs and move groups up by performance.
+- **Creative twist:** Let students choose their “challenge lane” for bonus recognition.
+
 ---
 
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
