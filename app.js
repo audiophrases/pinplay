@@ -2722,18 +2722,10 @@ function renderHostQuestion(state) {
       ? state.modelResponses
       : (Array.isArray(state.openResponses) ? state.openResponses.filter((r) => !!r.modelAnswer) : []);
 
+    // Do not mirror model answers into projectorCorrectEl here.
+    // Keep only the standard visible model list below (prevents duplicate model rendering).
     if (projectorCorrectEl) {
-      if (!models.length) {
-        projectorCorrectEl.textContent = '';
-      } else {
-        projectorCorrectEl.textContent = models
-          .map((r) => {
-            const ans = `${r.answer}`;
-            const corr = String(r.correction || '').trim();
-            return corr || ans;
-          })
-          .join('\n');
-      }
+      projectorCorrectEl.textContent = '';
     }
 
     if (!models.length) return;
