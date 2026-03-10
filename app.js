@@ -156,7 +156,7 @@ const live = {
     pollViewMode: 'bar',
     rankingMode: false,
     rankingAnimStartAt: 0,
-    rankingAnimDurationMs: 2600,
+    rankingAnimDurationMs: 3800,
     rankingAnimFrom: {},
     rankingAnimTo: {},
     lastScoresByPlayer: {},
@@ -2319,7 +2319,9 @@ function renderHostState(state) {
       const t = Date.now();
       const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
       const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
-      const eased = 1 - Math.pow(1 - p, 3);
+      const eased = p < 0.5
+        ? 4 * p * p * p
+        : 1 - Math.pow(-2 * p + 2, 3) / 2;
 
       hostPlayersView = hostPlayersView.map((pl) => {
         const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
@@ -2932,7 +2934,9 @@ function renderProjectorScores(players, opts = {}) {
     const t = Date.now();
     const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
     const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
-    const eased = 1 - Math.pow(1 - p, 3);
+    const eased = p < 0.5
+      ? 4 * p * p * p
+      : 1 - Math.pow(-2 * p + 2, 3) / 2;
 
     viewPlayers = viewPlayers.map((pl) => {
       const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
