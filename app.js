@@ -2318,17 +2318,22 @@ function renderHostState(state) {
     if (live.host.rankingMode) {
       const t = Date.now();
       const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
-      const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
-      const eased = p < 0.5
-        ? 4 * p * p * p
-        : 1 - Math.pow(-2 * p + 2, 3) / 2;
+      const elapsedMs = t - Number(live.host.rankingAnimStartAt || t);
+      const p = Math.max(0, Math.min(1, elapsedMs / d));
 
       hostPlayersView = hostPlayersView.map((pl) => {
         const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
         const to = Number(live.host.rankingAnimTo?.[pl.id] ?? pl.score ?? 0);
-        const score = Math.round(from + (to - from) * eased);
-        return { ...pl, score };
-      }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+        const score = computeCrazyCountScore(to, p, elapsedMs);
+        return { ...pl, score, _from: from, _to: to };
+      });
+
+      const climbWindowMs = 1000;
+      if (elapsedMs >= d - climbWindowMs) {
+        hostPlayersView.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+      } else {
+        hostPlayersView.sort((a, b) => Number(b._from || 0) - Number(a._from || 0));
+      }
 
       const counterLeadOutMs = 500;
       const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
@@ -2853,6 +2858,26 @@ function renderHostQuestion(state) {
   hostQuestionHintEl.textContent = '';
 }
 
+function computeCrazyCountScore(toScore, p, elapsedMs) {
+  const target = Math.max(0, Math.round(Number(toScore || 0)));
+  if (p >= 1) return target;
+
+  const targetStr = String(target);
+  const len = targetStr.length;
+  const chars = targetStr.split('');
+
+  for (let posFromRight = 0; posFromRight < len; posFromRight++) {
+    const idx = len - 1 - posFromRight;
+    const stopAt = 0.5 + (posFromRight * (0.45 / Math.max(1, len - 1))); // right -> left stop
+    if (p < stopAt) {
+      chars[idx] = String(Math.floor((elapsedMs / 22 + (idx + 1) * 3) % 10));
+    }
+  }
+
+  const n = Number(chars.join(''));
+  return Number.isFinite(n) ? n : target;
+}
+
 function renderProjectorScores(players, opts = {}) {
   if (!projectorScoresEl) return;
   projectorScoresEl.innerHTML = '';
@@ -2938,17 +2963,22 @@ function renderProjectorScores(players, opts = {}) {
   if (opts.animate && live.host.rankingMode) {
     const t = Date.now();
     const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
-    const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
-    const eased = p < 0.5
-      ? 4 * p * p * p
-      : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    const elapsedMs = t - Number(live.host.rankingAnimStartAt || t);
+    const p = Math.max(0, Math.min(1, elapsedMs / d));
 
     viewPlayers = viewPlayers.map((pl) => {
       const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
       const to = Number(live.host.rankingAnimTo?.[pl.id] ?? pl.score ?? 0);
-      const score = Math.round(from + (to - from) * eased);
-      return { ...pl, score };
-    }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+      const score = computeCrazyCountScore(to, p, elapsedMs);
+      return { ...pl, score, _from: from, _to: to };
+    });
+
+    const climbWindowMs = 1000;
+    if (elapsedMs >= d - climbWindowMs) {
+      viewPlayers.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    } else {
+      viewPlayers.sort((a, b) => Number(b._from || 0) - Number(a._from || 0));
+    }
 
     const counterLeadOutMs = 500;
     const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
