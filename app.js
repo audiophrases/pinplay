@@ -2265,7 +2265,9 @@ function renderHostAnswerHistory(state) {
 
 function renderHostState(state) {
   const prevState = live.host.state;
-  if (prevState && Array.isArray(prevState.players)) {
+  // Keep a stable "previous question" score snapshot for R count-up.
+  // Important: do not keep overwriting while already in results, otherwise from==to and animation looks static.
+  if (prevState && Array.isArray(prevState.players) && state?.phase !== 'results') {
     const snap = {};
     prevState.players.forEach((p) => { snap[p.id] = Number(p.score || 0); });
     live.host.lastScoresByPlayer = snap;
