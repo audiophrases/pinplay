@@ -2299,7 +2299,27 @@ function renderHostState(state) {
 
   if (hostPlayersEl) {
     hostPlayersEl.innerHTML = '';
-    (state.players || []).forEach((p) => {
+
+    let hostPlayersView = [...(state.players || [])];
+    if (live.host.rankingMode) {
+      const t = Date.now();
+      const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
+      const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
+      const eased = 1 - Math.pow(1 - p, 3);
+
+      hostPlayersView = hostPlayersView.map((pl) => {
+        const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
+        const to = Number(live.host.rankingAnimTo?.[pl.id] ?? pl.score ?? 0);
+        const score = Math.round(from + (to - from) * eased);
+        return { ...pl, score };
+      }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+
+      if (p < 1) {
+        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+      }
+    }
+
+    hostPlayersView.forEach((p) => {
       const li = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'row spread';
