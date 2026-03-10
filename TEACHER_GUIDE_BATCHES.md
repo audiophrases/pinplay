@@ -72,6 +72,70 @@ How to read this section:
 
 ---
 
+## Batch 2 — Multi-select
+
+### 1) Partial-Knowledge Detector
+- **Learning goal:** Identify if students know only part of a concept.
+- **How to run it:** Create items with 2–3 correct options where one option is often forgotten.
+- **Creative twist:** Debrief with “Which correct option did most people miss?”
+
+### 2) Myth vs Fact Bundle
+- **Learning goal:** Correct persistent misconceptions.
+- **How to run it:** Ask students to select all true statements about one topic.
+- **Creative twist:** Include one “half-true” statement to train careful reading.
+
+### 3) Grammar Pattern Sweep
+- **Learning goal:** Practice rule recognition in context.
+- **How to run it:** Present a sentence set; select all sentences that follow the target grammar rule.
+- **Creative twist:** Pair with a follow-up: rewrite one wrong sentence correctly.
+
+### 4) Source Credibility Filter
+- **Learning goal:** Build media literacy and critical thinking.
+- **How to run it:** Show short claims/sources; select all that are reliable/evidence-based.
+- **Creative twist:** Students justify one rejected source in one line.
+
+### 5) “All that Apply” Vocabulary Networks
+- **Learning goal:** Strengthen semantic links and nuance.
+- **How to run it:** Prompt with a base word; select all synonyms/collocations that fit context.
+- **Creative twist:** Add one context-sensitive trap (word fits generally, not in this sentence).
+
+### 6) Lab-Safety / Procedure Checklist
+- **Learning goal:** Reinforce process compliance.
+- **How to run it:** Select all required steps before starting an experiment/activity.
+- **Creative twist:** Turn into a timed “Safety unlock” before practical work begins.
+
+### 7) Historical Causation Cluster
+- **Learning goal:** Distinguish main causes from background noise.
+- **How to run it:** Select all factors that directly caused an event.
+- **Creative twist:** Rank selected causes afterward by impact in pair discussion.
+
+### 8) Reading-Comprehension Evidence Hunt
+- **Learning goal:** Support answer-with-evidence habits.
+- **How to run it:** After a short text, select all statements supported by explicit evidence.
+- **Creative twist:** Students must point to line numbers after reveal.
+
+### 9) Math Strategy Selection
+- **Learning goal:** Choose valid solving strategies, not only final answers.
+- **How to run it:** Present a problem; select all strategies that could solve it correctly.
+- **Creative twist:** Bonus if students explain when each strategy is fastest.
+
+### 10) Peer-Feedback Rubric Training
+- **Learning goal:** Improve quality of peer assessment.
+- **How to run it:** Show a sample student response; select all rubric criteria it meets.
+- **Creative twist:** Compare class selections with teacher moderation to calibrate standards.
+
+### 11) “Fix the Prompt” Teacher Mode
+- **Learning goal:** Model high-quality task design.
+- **How to run it:** Give a weak assignment prompt; select all improvements that make it clearer.
+- **Creative twist:** Students vote, then co-author the final improved prompt.
+
+### 12) Interleaved Skills Challenge
+- **Learning goal:** Improve transfer across mixed skills.
+- **How to run it:** Mix grammar, vocabulary, reading, and reasoning in one multi-select set.
+- **Creative twist:** Label each question by skill after answering, not before.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -90,7 +154,7 @@ How to read this section:
 ## Batch Tracker
 
 - [x] Batch 1: MCQ
-- [ ] Batch 2: Multi-select
+- [x] Batch 2: Multi-select
 - [ ] Batch 3: True/False
 - [ ] Batch 4: Text answer
 - [ ] Batch 5: Context gap
@@ -103,4 +167,4 @@ How to read this section:
 - [ ] Batch 12: Audio question
 - [ ] Batch 13: Image open
 
-Next pass will continue with Batch 2 (Multi-select) and add another 10 creative classroom use-cases.
+Next pass will continue with Batch 3 (True/False) and add 10+ creative classroom use-cases.
