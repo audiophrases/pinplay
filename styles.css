@@ -607,6 +607,25 @@ textarea { min-height: 72px; resize: vertical; }
   border-radius: .55rem;
   padding: .28rem .5rem;
   margin-bottom: .2rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.projector-score-left,
+.projector-score-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.projector-score-left {
+  min-width: 0;
+}
+
+.projector-score-value {
+  min-width: 7ch;
+  text-align: right;
+  white-space: nowrap;
 }
 .projector-score-item.rank-1 { background: #fff7cc; border: 1px solid #facc15; }
 .projector-score-item.rank-2 { background: #f3f4f6; border: 1px solid #d1d5db; }

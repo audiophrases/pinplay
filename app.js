@@ -2355,11 +2355,10 @@ function renderHostState(state) {
         hostPlayersView.sort((a, b) => Number(b._from || 0) - Number(a._from || 0));
       }
 
-      const counterLeadOutMs = 500;
-      const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
       if (p < 1) {
-        if (p >= stopCounterAt) stopFx('counter');
         scheduleRankingAnimationFrame();
+      } else {
+        stopFx('counter');
       }
     }
 
@@ -2898,6 +2897,22 @@ function computeCrazyCountScore(toScore, p, elapsedMs) {
   return Number.isFinite(n) ? n : target;
 }
 
+function buildProjectorScoreItem(rank, name, score, medal = '🏅') {
+  const li = document.createElement('li');
+  li.classList.add('projector-score-item', `rank-${Math.min(rank, 4)}`);
+
+  const left = document.createElement('span');
+  left.className = 'projector-score-left';
+  left.textContent = `${medal} ${rank}. ${name}`;
+
+  const right = document.createElement('span');
+  right.className = 'projector-score-value';
+  right.textContent = `${score} pts`;
+
+  li.append(left, right);
+  return li;
+}
+
 function renderProjectorScores(players, opts = {}) {
   if (!projectorScoresEl) return;
   projectorScoresEl.innerHTML = '';
@@ -2960,10 +2975,7 @@ function renderProjectorScores(players, opts = {}) {
       if (elapsed < revealAt) continue;
       const p = revealSlice[rank - 1];
       if (!p) continue;
-      const li = document.createElement('li');
-      li.classList.add('projector-score-item', `rank-${Math.min(rank, 4)}`);
-      li.textContent = `${medalForRank(rank)} ${rank}. ${p.name} - ${p.score} pts`;
-      projectorScoresEl.appendChild(li);
+      projectorScoresEl.appendChild(buildProjectorScoreItem(rank, p.name, p.score, medalForRank(rank)));
     }
 
     const finalStartMs = revealTiming.drumrollTotalMs;
@@ -3000,10 +3012,7 @@ function renderProjectorScores(players, opts = {}) {
       viewPlayers.sort((a, b) => Number(b._from || 0) - Number(a._from || 0));
     }
 
-    const counterLeadOutMs = 500;
-    const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
     if (p < 1) {
-      if (p >= stopCounterAt) stopFx('counter');
       scheduleRankingAnimationFrame();
     } else {
       stopFx('counter');
@@ -3011,12 +3020,9 @@ function renderProjectorScores(players, opts = {}) {
   }
 
   viewPlayers.slice(0, 10).forEach((p, i) => {
-    const li = document.createElement('li');
     const medals = ['🥇','🥈','🥉'];
     const prefix = medals[i] || '🏅';
-    li.textContent = `${prefix} ${i + 1}. ${p.name} - ${p.score} pts`;
-    li.classList.add('projector-score-item', `rank-${Math.min(i + 1, 4)}`);
-    projectorScoresEl.appendChild(li);
+    projectorScoresEl.appendChild(buildProjectorScoreItem(i + 1, p.name, p.score, prefix));
   });
 }
 
