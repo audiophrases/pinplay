@@ -159,6 +159,7 @@ const live = {
     rankingAnimDurationMs: 2600,
     rankingAnimFrom: {},
     rankingAnimTo: {},
+    lastScoresByPlayer: {},
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
   },
@@ -1739,16 +1740,16 @@ function startRankingAnimationMode() {
 
   const fromMap = {};
   state.players.forEach((p) => {
+    const prev = Number(live.host.lastScoresByPlayer?.[p.id]);
     const end = Number(toMap[p.id] || 0);
-    // approximate round delta when not explicitly tracked
-    const delta = Number(p.answeredCurrent ? 1000 : 0);
-    fromMap[p.id] = end - delta;
+    fromMap[p.id] = Number.isFinite(prev) ? prev : end;
   });
 
   live.host.rankingAnimFrom = fromMap;
   live.host.rankingAnimTo = toMap;
   live.host.rankingAnimStartAt = Date.now();
   live.host.rankingMode = true;
+  playFx('answered');
   renderHostState(state);
 }
 
@@ -2234,6 +2235,12 @@ function renderHostAnswerHistory(state) {
 }
 
 function renderHostState(state) {
+  const prevState = live.host.state;
+  if (prevState && Array.isArray(prevState.players)) {
+    const snap = {};
+    prevState.players.forEach((p) => { snap[p.id] = Number(p.score || 0); });
+    live.host.lastScoresByPlayer = snap;
+  }
   live.host.state = state;
 
   const phaseChanged = live.host.lastPhase !== state.phase || live.host.lastIndex !== state.currentIndex;
