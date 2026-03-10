@@ -125,8 +125,7 @@ textarea { min-height: 72px; resize: vertical; }
   align-items: center;
 }
 
-#builderActionRow .btn,
-#builderActionRow .file-label {
+#builderActionRow .btn {
   white-space: nowrap;
   height: 2.25rem;
   padding: 0 .74rem;
@@ -137,25 +136,11 @@ textarea { min-height: 72px; resize: vertical; }
   line-height: 1;
 }
 
-#builderActionRow .file-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  height: 2.25rem;
-  padding: 0 .74rem;
-  line-height: 1;
-  margin: 0 !important;
-  font: inherit;
-}
-
-#builderActionRow .btn:hover,
-#builderActionRow .file-label:hover {
+#builderActionRow .btn:hover {
   transform: translateY(-1px);
 }
 
-#builderActionRow .btn:focus-visible,
-#builderActionRow .file-label:focus-visible {
+#builderActionRow .btn:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--primary) 55%, white);
   outline-offset: 1px;
 }

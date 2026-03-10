@@ -34,6 +34,7 @@ const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
+const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 
@@ -358,6 +359,9 @@ function bindBuilderEvents() {
 
   if (openLocalBtn) {
     openLocalBtn.addEventListener('click', () => openLocalLibraryDialog());
+  }
+  if (importBtn && importInput) {
+    importBtn.addEventListener('click', () => importInput.click());
   }
 
   exportBtn.addEventListener('click', () => {
