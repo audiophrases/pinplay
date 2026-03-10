@@ -2882,13 +2882,15 @@ function renderProjectorScores(players, opts = {}) {
     }
 
     const revealTiming = {
-      firstRevealMs: 300,
-      stepMs: 1000,
-      finalAfterWinnerMs: 1600,
+      winnerHornMs: 7000,
+      drumrollTotalMs: 10000,
     };
 
     const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
-    const winnerRevealMs = revealTiming.firstRevealMs + (revealCount - 1) * revealTiming.stepMs;
+    const firstRevealMs = revealCount > 1 ? 1000 : revealTiming.winnerHornMs;
+    const stepMs = revealCount > 1
+      ? (revealTiming.winnerHornMs - firstRevealMs) / (revealCount - 1)
+      : 0;
 
     if (!live.host.finalRevealStagePlayed.drumroll) {
       playFx('drumrollwinner');
@@ -2909,7 +2911,7 @@ function renderProjectorScores(players, opts = {}) {
 
     // Reveal from 7 -> 1 in time, but render as 1..N so new better ranks appear above previous ones.
     for (let rank = 1; rank <= revealCount; rank++) {
-      const revealAt = revealTiming.firstRevealMs + (revealCount - rank) * revealTiming.stepMs;
+      const revealAt = firstRevealMs + (revealCount - rank) * stepMs;
       if (elapsed < revealAt) continue;
       const p = revealSlice[rank - 1];
       if (!p) continue;
@@ -2919,7 +2921,7 @@ function renderProjectorScores(players, opts = {}) {
       projectorScoresEl.appendChild(li);
     }
 
-    const finalStartMs = winnerRevealMs + revealTiming.finalAfterWinnerMs;
+    const finalStartMs = revealTiming.drumrollTotalMs;
     if (elapsed >= finalStartMs && !live.host.finalRevealStagePlayed.final) {
       stopFx('drumrollwinner');
       playFx('final');
