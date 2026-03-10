@@ -3227,6 +3227,18 @@ function playFxWithVolume(name, volume = 1) {
   }
 }
 
+function stopAudioFxGroup(exceptName = null) {
+  Object.entries(audioFx).forEach(([key, a]) => {
+    if (!a || key === exceptName || key === 'hall') return;
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  });
+}
+
 function playFx(name) {
   if (!live.host.isPrimaryAudioHost) return;
 
@@ -3250,6 +3262,11 @@ function playFx(name) {
 
   const a = audioFx[name];
   if (!a) return;
+
+  // Keep stage FX mutually exclusive to prevent accidental double-audio overlaps.
+  stopFx('answering');
+  stopAudioFxGroup(name);
+
   try {
     a.currentTime = 0;
     a.play().catch(() => {});
