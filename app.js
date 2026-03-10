@@ -2283,7 +2283,7 @@ function renderHostState(state) {
     if (state.phase !== 'results') {
       live.host.finalRevealKey = null;
       live.host.finalRevealStartedAt = 0;
-      live.host.finalRevealStagePlayed = { third: false, second: false, drumroll: false, winner: false };
+      live.host.finalRevealStagePlayed = { drumroll: false, final: false };
       stopFx('drumrollwinner');
     }
   }
@@ -2441,7 +2441,8 @@ function renderHostState(state) {
   if (state.phase === 'results' && live.host.lastPhase !== 'results') {
     stopFx('answering');
     stopFx('answered');
-    playFx('final');
+    // final.mp3 is now triggered by the staged final reveal sequence (after drumroll + winner reveal)
+    stopFx('final');
   }
 
   if (state.phase !== 'results') {
@@ -2855,44 +2856,32 @@ function renderProjectorScores(players, opts = {}) {
   const inFinalResults = live.host.state?.phase === 'results' && !live.host.rankingMode;
   if (inFinalResults) {
     const sorted = [...players].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
-    const top3 = sorted.slice(0, 3);
-    const revealKey = top3.map((p) => `${p.id}:${Number(p.score || 0)}`).join('|');
+    const revealCount = Math.min(7, sorted.length);
+    const revealSlice = sorted.slice(0, revealCount);
+    const revealKey = revealSlice.map((p) => `${p.id}:${Number(p.score || 0)}`).join('|');
 
     if (live.host.finalRevealKey !== revealKey) {
       live.host.finalRevealKey = revealKey;
       live.host.finalRevealStartedAt = Date.now();
-      live.host.finalRevealStagePlayed = { third: false, second: false, drumroll: false, winner: false };
+      live.host.finalRevealStagePlayed = { drumroll: false, final: false };
       stopFx('counter');
       stopFx('answered');
+      stopFx('final');
       stopFx('drumrollwinner');
     }
 
     const revealTiming = {
-      thirdMs: 500,
-      secondMs: 1800,
-      drumrollMs: 3000,
-      winnerMs: 8600,
+      firstRevealMs: 300,
+      stepMs: 1000,
+      finalAfterWinnerMs: 1600,
     };
-    const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
-    const showThird = elapsed >= revealTiming.thirdMs;
-    const showSecond = elapsed >= revealTiming.secondMs;
-    const startDrumroll = elapsed >= revealTiming.drumrollMs;
-    const showWinner = elapsed >= revealTiming.winnerMs;
 
-    if (showThird && !live.host.finalRevealStagePlayed.third) {
-      playFxWithVolume('answered', 0.75);
-      live.host.finalRevealStagePlayed.third = true;
-    }
-    if (showSecond && !live.host.finalRevealStagePlayed.second) {
-      playFxWithVolume('answered', 1);
-      live.host.finalRevealStagePlayed.second = true;
-    }
-    if (startDrumroll && !live.host.finalRevealStagePlayed.drumroll) {
+    const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
+    const winnerRevealMs = revealTiming.firstRevealMs + (revealCount - 1) * revealTiming.stepMs;
+
+    if (!live.host.finalRevealStagePlayed.drumroll) {
       playFx('drumrollwinner');
       live.host.finalRevealStagePlayed.drumroll = true;
-    }
-    if (showWinner && !live.host.finalRevealStagePlayed.winner) {
-      live.host.finalRevealStagePlayed.winner = true;
     }
 
     const title = document.createElement('li');
@@ -2900,28 +2889,35 @@ function renderProjectorScores(players, opts = {}) {
     title.classList.add('projector-score-item', 'rank-1');
     projectorScoresEl.appendChild(title);
 
-    if (top3[0] && (showWinner || showSecond)) {
+    const medalForRank = (rank) => {
+      if (rank === 1) return '🥇';
+      if (rank === 2) return '🥈';
+      if (rank === 3) return '🥉';
+      return '🏅';
+    };
+
+    // Reveal from 7 -> 1 in time, but render as 1..N so new better ranks appear above previous ones.
+    for (let rank = 1; rank <= revealCount; rank++) {
+      const revealAt = revealTiming.firstRevealMs + (revealCount - rank) * revealTiming.stepMs;
+      if (elapsed < revealAt) continue;
+      const p = revealSlice[rank - 1];
+      if (!p) continue;
       const li = document.createElement('li');
-      li.classList.add('projector-score-item', 'rank-1');
-      li.textContent = showWinner ? `🥇 1. ${top3[0].name} - ${top3[0].score} pts` : '🥁 Winner reveal...';
+      li.classList.add('projector-score-item', `rank-${Math.min(rank, 4)}`);
+      li.textContent = `${medalForRank(rank)} ${rank}. ${p.name} - ${p.score} pts`;
       projectorScoresEl.appendChild(li);
     }
 
-    if (top3[1] && showSecond) {
-      const li = document.createElement('li');
-      li.classList.add('projector-score-item', 'rank-2');
-      li.textContent = `🥈 2. ${top3[1].name} - ${top3[1].score} pts`;
-      projectorScoresEl.appendChild(li);
+    const finalStartMs = winnerRevealMs + revealTiming.finalAfterWinnerMs;
+    if (elapsed >= finalStartMs && !live.host.finalRevealStagePlayed.final) {
+      stopFx('drumrollwinner');
+      playFx('final');
+      live.host.finalRevealStagePlayed.final = true;
     }
 
-    if (top3[2] && showThird) {
-      const li = document.createElement('li');
-      li.classList.add('projector-score-item', 'rank-3');
-      li.textContent = `🥉 3. ${top3[2].name} - ${top3[2].score} pts`;
-      projectorScoresEl.appendChild(li);
+    if (elapsed < finalStartMs) {
+      requestAnimationFrame(() => renderHostState(live.host.state || {}));
     }
-
-    if (!showWinner) requestAnimationFrame(() => renderHostState(live.host.state || {}));
     return;
   }
 
