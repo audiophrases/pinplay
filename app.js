@@ -194,7 +194,7 @@ const answeringFxPool = [
 const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
   answered: createAudio('../music/answered.mp3', { loop: false, volume: 1 }),
-  counter: createAudio('../music/counter.mp3', { loop: false, volume: 1 }),
+  counter: createAudio('../music/counter.mp3', { loop: true, volume: 1 }),
   drumrollwinner: createAudio('../music/drumrollwinner.mp3', { loop: false, volume: 1 }),
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
