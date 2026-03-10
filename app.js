@@ -154,6 +154,11 @@ const live = {
     lastQuestionRenderKey: null,
     state: null,
     pollViewMode: 'bar',
+    rankingMode: false,
+    rankingAnimStartAt: 0,
+    rankingAnimDurationMs: 2600,
+    rankingAnimFrom: {},
+    rankingAnimTo: {},
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
   },
@@ -1725,7 +1730,39 @@ async function joinLiveGameAsHostByPin() {
   }
 }
 
+function startRankingAnimationMode() {
+  const state = live.host.state;
+  if (!state || !Array.isArray(state.players) || !state.players.length) return;
+
+  const toMap = {};
+  state.players.forEach((p) => { toMap[p.id] = Number(p.score || 0); });
+
+  const fromMap = {};
+  state.players.forEach((p) => {
+    const end = Number(toMap[p.id] || 0);
+    // approximate round delta when not explicitly tracked
+    const delta = Number(p.answeredCurrent ? 1000 : 0);
+    fromMap[p.id] = end - delta;
+  });
+
+  live.host.rankingAnimFrom = fromMap;
+  live.host.rankingAnimTo = toMap;
+  live.host.rankingAnimStartAt = Date.now();
+  live.host.rankingMode = true;
+  renderHostState(state);
+}
+
+function stopRankingAnimationMode() {
+  if (!live.host.rankingMode) return;
+  live.host.rankingMode = false;
+  if (live.host.state) renderHostState(live.host.state);
+}
+
 async function hostNextQuestion() {
+  if (live.host.rankingMode) {
+    stopRankingAnimationMode();
+  }
+
   if (previewMode.active) {
     previewMode.index = Math.min(quiz.questions.length - 1, previewMode.index + 1);
     previewMode.showReveal = false;
@@ -1749,6 +1786,11 @@ async function hostNextQuestion() {
 }
 
 async function hostPrevQuestion() {
+  if (live.host.rankingMode) {
+    stopRankingAnimationMode();
+    return;
+  }
+
   if (previewMode.active) {
     previewMode.index = Math.max(0, previewMode.index - 1);
     previewMode.showReveal = false;
@@ -1852,6 +1894,12 @@ function handleHostHotkeys(e) {
   if (e.key === 's' || e.key === 'S') {
     e.preventDefault();
     hostStartGame();
+    return;
+  }
+
+  if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    startRankingAnimationMode();
     return;
   }
 
@@ -2204,7 +2252,10 @@ function renderHostState(state) {
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
-  if (projectorScoresEl) renderProjectorScores(state.players || []);
+  if (projectorScoresEl) {
+    const showScores = state.phase === 'results' || live.host.rankingMode;
+    renderProjectorScores(showScores ? (state.players || []) : [], { animate: live.host.rankingMode });
+  }
 
   if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
     setRandomNamesToggleState(!!state.settings.randomNames);
@@ -2727,7 +2778,7 @@ function renderHostQuestion(state) {
   hostQuestionHintEl.textContent = '';
 }
 
-function renderProjectorScores(players) {
+function renderProjectorScores(players, opts = {}) {
   if (!projectorScoresEl) return;
   projectorScoresEl.innerHTML = '';
 
@@ -2738,7 +2789,24 @@ function renderProjectorScores(players) {
     return;
   }
 
-  players.slice(0, 10).forEach((p, i) => {
+  let viewPlayers = [...players];
+  if (opts.animate && live.host.rankingMode) {
+    const t = Date.now();
+    const d = Math.max(200, Number(live.host.rankingAnimDurationMs || 2600));
+    const p = Math.max(0, Math.min(1, (t - Number(live.host.rankingAnimStartAt || t)) / d));
+    const eased = 1 - Math.pow(1 - p, 3);
+
+    viewPlayers = viewPlayers.map((pl) => {
+      const from = Number(live.host.rankingAnimFrom?.[pl.id] ?? pl.score ?? 0);
+      const to = Number(live.host.rankingAnimTo?.[pl.id] ?? pl.score ?? 0);
+      const score = Math.round(from + (to - from) * eased);
+      return { ...pl, score };
+    }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+
+    if (p < 1) requestAnimationFrame(() => renderHostState(live.host.state || {}));
+  }
+
+  viewPlayers.slice(0, 10).forEach((p, i) => {
     const li = document.createElement('li');
     const medals = ['🥇','🥈','🥉'];
     const prefix = medals[i] || '🏅';
