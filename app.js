@@ -164,6 +164,14 @@ const live = {
     lastAnsweringFxIndex: -1,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
+    finalRevealKey: null,
+    finalRevealStartedAt: 0,
+    finalRevealStagePlayed: {
+      third: false,
+      second: false,
+      drumroll: false,
+      winner: false,
+    },
   },
   player: {
     pin: null,
@@ -180,12 +188,14 @@ const live = {
 
 const answeringFxPool = [
   '../music/answering.mp3',
-  ...Array.from({ length: 9 }, (_, i) => `../music/answering${i + 2}.mp3`),
+  ...Array.from({ length: 10 }, (_, i) => `../music/answering${i + 2}.mp3`),
 ].map((src) => createAudio(src, { loop: true, volume: 0.7 }));
 
 const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
   answered: createAudio('../music/answered.mp3', { loop: false, volume: 1 }),
+  counter: createAudio('../music/counter.mp3', { loop: false, volume: 1 }),
+  drumrollwinner: createAudio('../music/drumrollwinner.mp3', { loop: false, volume: 1 }),
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
 
@@ -1755,13 +1765,14 @@ function startRankingAnimationMode() {
   live.host.rankingAnimTo = toMap;
   live.host.rankingAnimStartAt = Date.now();
   live.host.rankingMode = true;
-  playFx('answered');
+  playFx('counter');
   renderHostState(state);
 }
 
 function stopRankingAnimationMode() {
   if (!live.host.rankingMode) return;
   live.host.rankingMode = false;
+  stopFx('counter');
   if (live.host.state) renderHostState(live.host.state);
 }
 
@@ -1895,6 +1906,12 @@ function handleHostHotkeys(e) {
   if (e.key === 'o' || e.key === 'O') {
     e.preventDefault();
     openLocalLibraryDialog();
+    return;
+  }
+
+  if (e.key === 'd' || e.key === 'D') {
+    e.preventDefault();
+    openQuizFromDrive();
     return;
   }
 
@@ -2255,6 +2272,12 @@ function renderHostState(state) {
     live.host.seenReactionKeys = new Set();
     if (liveReactionsEl) liveReactionsEl.innerHTML = '';
     if (projectorReactionsEl) projectorReactionsEl.innerHTML = '';
+    if (state.phase !== 'results') {
+      live.host.finalRevealKey = null;
+      live.host.finalRevealStartedAt = 0;
+      live.host.finalRevealStagePlayed = { third: false, second: false, drumroll: false, winner: false };
+      stopFx('drumrollwinner');
+    }
   }
 
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
@@ -2571,12 +2594,23 @@ function renderHostQuestion(state) {
     hostQuestionAnswersEl.appendChild(ans);
   };
 
+  if (phase === 'results') {
+    hostQuestionWrap.classList.remove('hidden');
+    hostQuestionPromptEl.textContent = '🏁 Final ranking reveal';
+    hostQuestionAnswersEl.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = 'Dedicated final card active. Podium reveal is running on projector scores.';
+    hostQuestionAnswersEl.appendChild(p);
+    hostQuestionHintEl.textContent = 'Final reveal mode.';
+    return;
+  }
+
   if (!question) {
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
-    hostQuestionHintEl.textContent =
-      phase === 'results' ? '🏁 Game finished! Final ranking shown below.' : 'Question will appear here when game starts.';
+    hostQuestionHintEl.textContent = 'Question will appear here when game starts.';
     return;
   }
 
@@ -2802,6 +2836,73 @@ function renderProjectorScores(players, opts = {}) {
     return;
   }
 
+  const inFinalResults = live.host.state?.phase === 'results' && !live.host.rankingMode;
+  if (inFinalResults) {
+    const sorted = [...players].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    const top3 = sorted.slice(0, 3);
+    const revealKey = top3.map((p) => `${p.id}:${Number(p.score || 0)}`).join('|');
+
+    if (live.host.finalRevealKey !== revealKey) {
+      live.host.finalRevealKey = revealKey;
+      live.host.finalRevealStartedAt = Date.now();
+      live.host.finalRevealStagePlayed = { third: false, second: false, drumroll: false, winner: false };
+      stopFx('counter');
+      stopFx('answered');
+      stopFx('drumrollwinner');
+    }
+
+    const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
+    const showThird = elapsed >= 500;
+    const showSecond = elapsed >= 1800;
+    const startDrumroll = elapsed >= 3000;
+    const showWinner = elapsed >= 4600;
+
+    if (showThird && !live.host.finalRevealStagePlayed.third) {
+      playFxWithVolume('answered', 0.75);
+      live.host.finalRevealStagePlayed.third = true;
+    }
+    if (showSecond && !live.host.finalRevealStagePlayed.second) {
+      playFxWithVolume('answered', 1);
+      live.host.finalRevealStagePlayed.second = true;
+    }
+    if (startDrumroll && !live.host.finalRevealStagePlayed.drumroll) {
+      playFx('drumrollwinner');
+      live.host.finalRevealStagePlayed.drumroll = true;
+    }
+    if (showWinner && !live.host.finalRevealStagePlayed.winner) {
+      live.host.finalRevealStagePlayed.winner = true;
+    }
+
+    const title = document.createElement('li');
+    title.textContent = '🏁 FINAL RANKING REVEAL';
+    title.classList.add('projector-score-item', 'rank-1');
+    projectorScoresEl.appendChild(title);
+
+    if (top3[2]) {
+      const li = document.createElement('li');
+      li.classList.add('projector-score-item', 'rank-3');
+      li.textContent = showThird ? `🥉 3. ${top3[2].name} - ${top3[2].score} pts` : '🥉 3. ...';
+      projectorScoresEl.appendChild(li);
+    }
+
+    if (top3[1]) {
+      const li = document.createElement('li');
+      li.classList.add('projector-score-item', 'rank-2');
+      li.textContent = showSecond ? `🥈 2. ${top3[1].name} - ${top3[1].score} pts` : '🥈 2. ...';
+      projectorScoresEl.appendChild(li);
+    }
+
+    if (top3[0]) {
+      const li = document.createElement('li');
+      li.classList.add('projector-score-item', 'rank-1');
+      li.textContent = showWinner ? `🥇 1. ${top3[0].name} - ${top3[0].score} pts` : '🥁 Winner reveal...';
+      projectorScoresEl.appendChild(li);
+    }
+
+    if (!showWinner) requestAnimationFrame(() => renderHostState(live.host.state || {}));
+    return;
+  }
+
   let viewPlayers = [...players];
   if (opts.animate && live.host.rankingMode) {
     const t = Date.now();
@@ -2816,7 +2917,11 @@ function renderProjectorScores(players, opts = {}) {
       return { ...pl, score };
     }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
 
-    if (p < 1) requestAnimationFrame(() => renderHostState(live.host.state || {}));
+    if (p < 1) {
+      requestAnimationFrame(() => renderHostState(live.host.state || {}));
+    } else {
+      stopFx('counter');
+    }
   }
 
   viewPlayers.slice(0, 10).forEach((p, i) => {
@@ -3014,6 +3119,20 @@ function playHallMusic() {
 function stopHallMusic() {
   if (!audioFx.hall) return;
   audioFx.hall.pause();
+}
+
+function playFxWithVolume(name, volume = 1) {
+  if (!live.host.isPrimaryAudioHost) return;
+  const a = audioFx[name];
+  if (!a) return;
+  try {
+    a.pause();
+    a.currentTime = 0;
+    a.volume = Math.max(0, Math.min(1, Number(volume || 0)));
+    a.play().catch(() => {});
+  } catch {
+    // ignore missing files/autoplay errors
+  }
 }
 
 function playFx(name) {
