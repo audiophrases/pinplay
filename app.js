@@ -2851,11 +2851,17 @@ function renderProjectorScores(players, opts = {}) {
       stopFx('drumrollwinner');
     }
 
+    const revealTiming = {
+      thirdMs: 500,
+      secondMs: 1800,
+      drumrollMs: 3000,
+      winnerMs: 4600,
+    };
     const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
-    const showThird = elapsed >= 500;
-    const showSecond = elapsed >= 1800;
-    const startDrumroll = elapsed >= 3000;
-    const showWinner = elapsed >= 4600;
+    const showThird = elapsed >= revealTiming.thirdMs;
+    const showSecond = elapsed >= revealTiming.secondMs;
+    const startDrumroll = elapsed >= revealTiming.drumrollMs;
+    const showWinner = elapsed >= revealTiming.winnerMs;
 
     if (showThird && !live.host.finalRevealStagePlayed.third) {
       playFxWithVolume('answered', 0.75);
