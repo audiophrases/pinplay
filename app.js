@@ -3484,6 +3484,12 @@ function renderJoinQuestion(question) {
       input.id = 'joinTextAnswer';
       input.maxLength = 120;
       input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (joinSubmitBtn?.disabled) return;
+        submitLiveAnswer();
+      });
       joinAnswersEl.appendChild(input);
     }
 
