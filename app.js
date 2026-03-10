@@ -2867,7 +2867,7 @@ function renderProjectorScores(players, opts = {}) {
       thirdMs: 500,
       secondMs: 1800,
       drumrollMs: 3000,
-      winnerMs: 4600,
+      winnerMs: 8600,
     };
     const elapsed = Date.now() - Number(live.host.finalRevealStartedAt || Date.now());
     const showThird = elapsed >= revealTiming.thirdMs;
@@ -2896,24 +2896,24 @@ function renderProjectorScores(players, opts = {}) {
     title.classList.add('projector-score-item', 'rank-1');
     projectorScoresEl.appendChild(title);
 
-    if (top3[2]) {
-      const li = document.createElement('li');
-      li.classList.add('projector-score-item', 'rank-3');
-      li.textContent = showThird ? `🥉 3. ${top3[2].name} - ${top3[2].score} pts` : '🥉 3. ...';
-      projectorScoresEl.appendChild(li);
-    }
-
-    if (top3[1]) {
-      const li = document.createElement('li');
-      li.classList.add('projector-score-item', 'rank-2');
-      li.textContent = showSecond ? `🥈 2. ${top3[1].name} - ${top3[1].score} pts` : '🥈 2. ...';
-      projectorScoresEl.appendChild(li);
-    }
-
-    if (top3[0]) {
+    if (top3[0] && (showWinner || showSecond)) {
       const li = document.createElement('li');
       li.classList.add('projector-score-item', 'rank-1');
       li.textContent = showWinner ? `🥇 1. ${top3[0].name} - ${top3[0].score} pts` : '🥁 Winner reveal...';
+      projectorScoresEl.appendChild(li);
+    }
+
+    if (top3[1] && showSecond) {
+      const li = document.createElement('li');
+      li.classList.add('projector-score-item', 'rank-2');
+      li.textContent = `🥈 2. ${top3[1].name} - ${top3[1].score} pts`;
+      projectorScoresEl.appendChild(li);
+    }
+
+    if (top3[2] && showThird) {
+      const li = document.createElement('li');
+      li.classList.add('projector-score-item', 'rank-3');
+      li.textContent = `🥉 3. ${top3[2].name} - ${top3[2].score} pts`;
       projectorScoresEl.appendChild(li);
     }
 
