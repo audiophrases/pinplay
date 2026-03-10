@@ -2339,10 +2339,6 @@ function renderHostState(state) {
     live.host.lastRevealKey = revealKey;
   }
 
-  if (projectorCorrectEl) {
-    projectorCorrectEl.textContent = '';
-  }
-
   if (state.phase === 'question' && !state.questionClosed && hasQuestionAudio(state.question)) {
     const hostAudioKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
     if (live.host.lastHostAudioKey !== hostAudioKey) {
