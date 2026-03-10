@@ -159,6 +159,7 @@ const live = {
     rankingAnimDurationMs: 3800,
     rankingAnimFrom: {},
     rankingAnimTo: {},
+    rankingAnimRafId: null,
     lastScoresByPlayer: {},
     currentAnsweringFx: null,
     lastAnsweringFxIndex: -1,
@@ -1747,7 +1748,25 @@ async function joinLiveGameAsHostByPin() {
   }
 }
 
+function cancelRankingAnimationFrame() {
+  if (live.host.rankingAnimRafId != null) {
+    cancelAnimationFrame(live.host.rankingAnimRafId);
+    live.host.rankingAnimRafId = null;
+  }
+}
+
+function scheduleRankingAnimationFrame() {
+  if (live.host.rankingAnimRafId != null) return;
+  live.host.rankingAnimRafId = requestAnimationFrame(() => {
+    live.host.rankingAnimRafId = null;
+    if (!live.host.rankingMode) return;
+    renderHostState(live.host.state || {});
+  });
+}
+
 function startRankingAnimationMode() {
+  cancelRankingAnimationFrame();
+
   const state = live.host.state;
   if (!state || !Array.isArray(state.players) || !state.players.length) return;
 
@@ -1778,6 +1797,7 @@ function startRankingAnimationMode() {
 function stopRankingAnimationMode() {
   if (!live.host.rankingMode) return;
   live.host.rankingMode = false;
+  cancelRankingAnimationFrame();
   stopFx('counter');
   if (live.host.state) renderHostState(live.host.state);
 }
@@ -2339,7 +2359,7 @@ function renderHostState(state) {
       const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
       if (p < 1) {
         if (p >= stopCounterAt) stopFx('counter');
-        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+        scheduleRankingAnimationFrame();
       }
     }
 
@@ -2954,7 +2974,7 @@ function renderProjectorScores(players, opts = {}) {
     }
 
     if (elapsed < finalStartMs) {
-      requestAnimationFrame(() => renderHostState(live.host.state || {}));
+      scheduleRankingAnimationFrame();
     }
     return;
   }
@@ -2984,7 +3004,7 @@ function renderProjectorScores(players, opts = {}) {
     const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
     if (p < 1) {
       if (p >= stopCounterAt) stopFx('counter');
-      requestAnimationFrame(() => renderHostState(live.host.state || {}));
+      scheduleRankingAnimationFrame();
     } else {
       stopFx('counter');
     }
