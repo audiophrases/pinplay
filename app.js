@@ -2330,7 +2330,10 @@ function renderHostState(state) {
         return { ...pl, score };
       }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
 
+      const counterLeadOutMs = 500;
+      const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
       if (p < 1) {
+        if (p >= stopCounterAt) stopFx('counter');
         requestAnimationFrame(() => renderHostState(live.host.state || {}));
       }
     }
@@ -2945,7 +2948,10 @@ function renderProjectorScores(players, opts = {}) {
       return { ...pl, score };
     }).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
 
+    const counterLeadOutMs = 500;
+    const stopCounterAt = Math.max(0, 1 - (counterLeadOutMs / d));
     if (p < 1) {
+      if (p >= stopCounterAt) stopFx('counter');
       requestAnimationFrame(() => renderHostState(live.host.state || {}));
     } else {
       stopFx('counter');
