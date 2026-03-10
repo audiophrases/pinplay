@@ -2618,10 +2618,6 @@ function renderHostQuestion(state) {
     hostQuestionWrap.classList.remove('hidden');
     hostQuestionPromptEl.textContent = '🏁 Final ranking reveal';
     hostQuestionAnswersEl.innerHTML = '';
-    const p = document.createElement('p');
-    p.className = 'small';
-    p.textContent = 'Dedicated final card active. Podium reveal is running on projector scores.';
-    hostQuestionAnswersEl.appendChild(p);
     hostQuestionHintEl.textContent = 'Final reveal mode.';
     return;
   }
