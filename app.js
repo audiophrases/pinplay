@@ -1921,6 +1921,12 @@ function handleHostHotkeys(e) {
     return;
   }
 
+  if (e.key === 'a' || e.key === 'A') {
+    e.preventDefault();
+    hostApplyBuilderToLive();
+    return;
+  }
+
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     startRankingAnimationMode();
