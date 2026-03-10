@@ -1722,10 +1722,7 @@ function evaluate(question, answer) {
   }
 
   if (question.type === 'context_gap') {
-    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
-    const expected = (question.gaps || []).map(normalizeTextAnswer).filter(Boolean);
-    if (!guess.length || guess.length !== expected.length) return { correct: false };
-    return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
+    return { correct: isContextGapCorrect(answer, question.gaps || []) };
   }
 
   if (question.type === 'match_pairs') {
@@ -1986,6 +1983,29 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function parseAcceptedGapOptions(value) {
+  return String(value || '')
+    .split(',')
+    .map((x) => normalizeTextAnswer(x))
+    .filter(Boolean);
+}
+
+function contextGapExpectedOptions(gaps) {
+  return (Array.isArray(gaps) ? gaps : [])
+    .map((g) => {
+      const opts = parseAcceptedGapOptions(g);
+      return opts.length ? opts : [normalizeTextAnswer(g)];
+    })
+    .filter((opts) => opts.some(Boolean));
+}
+
+function isContextGapCorrect(answer, gaps) {
+  const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+  const expected = contextGapExpectedOptions(gaps);
+  if (!guess.length || guess.length !== expected.length) return false;
+  return guess.every((g, i) => expected[i].includes(g));
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {

@@ -906,7 +906,7 @@ function renderBuilder() {
       if (gapLastFilled && gaps.length < maxGaps) gaps.push('');
       specific += `
         <p class="small top-space">How to create blanks: write your text and add <strong>____</strong> or <strong>[]</strong> where gaps should appear.</p>
-        <p class="small">Then set expected answers below (dynamic, max 10). Keep order aligned with blanks.</p>
+        <p class="small">Then set expected answers below (dynamic, max 10). Keep order aligned with blanks. For alternatives, separate with commas (example: <em>big, large, huge</em>).</p>
         <label class="top-space">Expected words for blanks</label>
         <div class="answers-grid">
           ${gaps
@@ -3910,9 +3910,7 @@ function evaluatePreviewAnswer(q, answer) {
   }
   if (q.type === 'open' || q.type === 'image_open') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
-    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
-    const expected = (q.gaps || []).map(normalizeTextAnswer).filter(Boolean);
-    return { correct: guess.length === expected.length && JSON.stringify(guess) === JSON.stringify(expected) };
+    return { correct: isContextGapCorrect(answer, q.gaps || []) };
   }
   if (q.type === 'match_pairs') {
     const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
@@ -4316,10 +4314,13 @@ function evaluateSoloQuestion(q) {
   }
 
   if (q.type === 'context_gap') {
-    const guess = [...answersEl.querySelectorAll('[data-solo-gap]')].map((el) => normalizeTextAnswer(el.value)).filter(Boolean);
-    const expected = (q.gaps || []).map(normalizeTextAnswer).filter(Boolean);
-    if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Complete all blanks.' };
-    return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
+    const guess = [...answersEl.querySelectorAll('[data-solo-gap]')].map((el) => String(el.value || ''));
+    const expectedOptions = contextGapExpectedOptions(q.gaps || []);
+    if (!guess.length || guess.filter((x) => normalizeTextAnswer(x)).length !== expectedOptions.length) {
+      return { correct: false, hint: 'Complete all blanks.' };
+    }
+    const expectedHint = expectedOptions.map((opts) => opts.join(' / ')).join(' | ');
+    return { correct: isContextGapCorrect(guess, q.gaps || []), hint: `Expected: ${expectedHint}` };
   }
 
   if (q.type === 'match_pairs') {
@@ -4973,6 +4974,29 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function parseAcceptedGapOptions(value) {
+  return String(value || '')
+    .split(',')
+    .map((x) => normalizeTextAnswer(x))
+    .filter(Boolean);
+}
+
+function contextGapExpectedOptions(gaps) {
+  return (Array.isArray(gaps) ? gaps : [])
+    .map((g) => {
+      const opts = parseAcceptedGapOptions(g);
+      return opts.length ? opts : [normalizeTextAnswer(g)];
+    })
+    .filter((opts) => opts.some(Boolean));
+}
+
+function isContextGapCorrect(guessRaw, gaps) {
+  const guess = Array.isArray(guessRaw) ? guessRaw.map(normalizeTextAnswer).filter(Boolean) : [];
+  const expected = contextGapExpectedOptions(gaps);
+  if (!guess.length || guess.length !== expected.length) return false;
+  return guess.every((g, i) => expected[i].includes(g));
 }
 
 function tokenizeWords(text) {
