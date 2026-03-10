@@ -927,18 +927,24 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.innerHTML = '';
   if (joinSubmitBtn) joinSubmitBtn.classList.add('hidden');
 
-  if (!leaderboard?.length) return;
+  if (leaderboard?.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'list';
 
-  const ul = document.createElement('ul');
-  ul.className = 'list';
+    leaderboard.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.textContent = `${i + 1}. ${p.name} — ${p.score} pts`;
+      ul.appendChild(li);
+    });
 
-  leaderboard.forEach((p, i) => {
-    const li = document.createElement('li');
-    li.textContent = `${i + 1}. ${p.name} — ${p.score} pts`;
-    ul.appendChild(li);
-  });
+    joinAnswersEl.appendChild(ul);
+  }
 
-  joinAnswersEl.appendChild(ul);
+  const hint = document.createElement('p');
+  hint.className = 'small';
+  hint.textContent = 'React to the final result 👇';
+  joinAnswersEl.appendChild(hint);
+  appendReactionBar();
 }
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
