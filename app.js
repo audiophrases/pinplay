@@ -160,6 +160,8 @@ const live = {
     rankingAnimFrom: {},
     rankingAnimTo: {},
     lastScoresByPlayer: {},
+    currentAnsweringFx: null,
+    lastAnsweringFxIndex: -1,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
   },
@@ -176,9 +178,13 @@ const live = {
   },
 };
 
+const answeringFxPool = [
+  '../music/answering.mp3',
+  ...Array.from({ length: 9 }, (_, i) => `../music/answering${i + 2}.mp3`),
+].map((src) => createAudio(src, { loop: true, volume: 0.7 }));
+
 const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
-  answering: createAudio('../music/answering.mp3', { loop: true, volume: 0.7 }),
   answered: createAudio('../music/answered.mp3', { loop: false, volume: 1 }),
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
@@ -3012,6 +3018,25 @@ function stopHallMusic() {
 
 function playFx(name) {
   if (!live.host.isPrimaryAudioHost) return;
+
+  if (name === 'answering') {
+    if (!answeringFxPool.length) return;
+    let idx = Math.floor(Math.random() * answeringFxPool.length);
+    if (answeringFxPool.length > 1 && idx === live.host.lastAnsweringFxIndex) {
+      idx = (idx + 1) % answeringFxPool.length;
+    }
+    live.host.lastAnsweringFxIndex = idx;
+    const a = answeringFxPool[idx];
+    live.host.currentAnsweringFx = a;
+    try {
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch {
+      // ignore missing files or autoplay errors
+    }
+    return;
+  }
+
   const a = audioFx[name];
   if (!a) return;
   try {
@@ -3023,6 +3048,19 @@ function playFx(name) {
 }
 
 function stopFx(name) {
+  if (name === 'answering') {
+    const a = live.host.currentAnsweringFx;
+    if (!a) return;
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {
+      // ignore
+    }
+    live.host.currentAnsweringFx = null;
+    return;
+  }
+
   const a = audioFx[name];
   if (!a) return;
   try {
