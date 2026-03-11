@@ -182,6 +182,7 @@ const live = {
     lastAnsweringFxIndex: -1,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
+    pendingAutoAudioTimer: null,
     finalRevealKey: null,
     finalRevealStartedAt: 0,
     finalRevealStagePlayed: {
@@ -2661,8 +2662,23 @@ function renderHostState(state) {
   if (state.phase === 'question' && !state.questionClosed && hasQuestionAudio(state.question)) {
     const hostAudioKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
     if (live.host.lastHostAudioKey !== hostAudioKey) {
-      playQuestionAudio(state.question);
+      if (live.host.pendingAutoAudioTimer) {
+        clearTimeout(live.host.pendingAutoAudioTimer);
+        live.host.pendingAutoAudioTimer = null;
+      }
+      live.host.pendingAutoAudioTimer = setTimeout(() => {
+        const s = live.host.state;
+        if (!s || s.phase !== 'question' || s.questionClosed) return;
+        playQuestionAudio(s.question);
+      }, 3000);
       live.host.lastHostAudioKey = hostAudioKey;
+    }
+  }
+
+  if (state.phase !== 'question' || state.questionClosed) {
+    if (live.host.pendingAutoAudioTimer) {
+      clearTimeout(live.host.pendingAutoAudioTimer);
+      live.host.pendingAutoAudioTimer = null;
     }
   }
 
