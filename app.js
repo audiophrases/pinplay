@@ -4172,8 +4172,14 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
     });
 }
 
-function summarizePreviewStudentAnswer(question, player) {
+function summarizePreviewStudentAnswer(question, player, openResponseMap = null) {
   if (!question || !player?.answeredCurrent) return '(no submission)';
+
+  if (openResponseMap && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'text')) {
+    const txt = String(openResponseMap.get(player.id) || '').trim();
+    if (txt) return txt;
+  }
+
   const ok = player.previewResult === 'correct';
   if (['mcq', 'tf', 'audio'].includes(question.type)) return ok ? 'selected correct option' : 'selected wrong option';
   if (question.type === 'multi') return ok ? 'selected full correct set' : 'partial/wrong multi-select';
@@ -4192,6 +4198,7 @@ function renderPreviewStudentStack(sim) {
   if (!studentPreviewStackEl) return;
   studentPreviewStackEl.innerHTML = '';
   const list = sim?.hostState?.players || [];
+  const openResponseMap = new Map((sim?.hostState?.openResponses || []).map((r) => [String(r.playerId || ''), String(r.answer || '')]));
 
   if (studentPreviewSummaryEl) {
     const correct = list.filter((p) => p.previewResult === 'correct').length;
@@ -4208,7 +4215,7 @@ function renderPreviewStudentStack(sim) {
       ? 'submitted ✅'
       : (p.previewResult === 'wrong' ? 'submitted ❌' : 'no submission');
     const betTxt = Number(p.previewBet || 0) > 0 ? ` · bet x${Number(p.previewBet)}` : '';
-    const answerText = summarizePreviewStudentAnswer(sim?.hostState?.question, p);
+    const answerText = summarizePreviewStudentAnswer(sim?.hostState?.question, p, openResponseMap);
     card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div><div class="small muted">Answer: ${escapeHtml(answerText)}</div>`;
     studentPreviewStackEl.appendChild(card);
   });
