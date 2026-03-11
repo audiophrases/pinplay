@@ -867,6 +867,62 @@ How to read this section:
 
 ---
 
+## Assessment & Impact Toolkit
+
+### 1) Quiz Quality Self-Check (before class)
+- Is each question tied to a clear objective?
+- Are distractors plausible (not silly)?
+- Is there a balance of recall and reasoning?
+- Did I include at least one transfer-to-real-life item?
+- Do I know what I’ll say in the reveal for top misconceptions?
+
+### 2) Student Engagement Signals (during class)
+Track quickly:
+- response speed trend (faster ≠ better; watch thoughtful pace)
+- distribution spread (if all same wrong option, concept issue)
+- confidence mismatch (high confidence + wrong = key reteach target)
+- reaction energy (especially in final phases)
+
+### 3) Post-Quiz Intervention Matrix
+- **If >40% missed same item:** reteach concept with new example
+- **If errors are language-only:** targeted micro-drill (5 min)
+- **If timing issue:** same concept with longer timer and fewer distractors
+- **If mixed errors:** split class into support/challenge station tasks
+
+### 4) Evidence for Families / Reports
+Use quiz outputs to communicate:
+- what skills improved
+- where support is needed
+- what strategy students should use at home
+
+### 5) Monthly Improvement Dashboard (simple)
+Track 4 metrics:
+1. Accuracy by question type
+2. Most common error category
+3. Confidence calibration (if used)
+4. Participation consistency
+
+---
+
+## Plug-and-Play Prompt Bank (Teacher Copy/Paste)
+
+### Warm-up prompts
+- “One thing you remember from last lesson is…?”
+- “Which option feels correct, and why?”
+- “Predict the most common mistake today.”
+
+### Reveal prompts
+- “What clue made option C wrong?”
+- “What rule decides this answer?”
+- “How would you explain this to a classmate?”
+
+### Reflection prompts
+- “What fooled you and how will you avoid it next time?”
+- “Which question type helps you learn best?”
+- “What should I change next quiz to help you more?”
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
