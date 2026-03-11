@@ -59,6 +59,7 @@ const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
+const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary');
 const studentPreviewStackEl = document.getElementById('studentPreviewStack');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
@@ -4194,6 +4195,15 @@ function renderPreviewStudentStack(sim) {
   if (!studentPreviewStackEl) return;
   studentPreviewStackEl.innerHTML = '';
   const list = sim?.hostState?.players || [];
+
+  if (studentPreviewSummaryEl) {
+    const correct = list.filter((p) => p.previewResult === 'correct').length;
+    const wrong = list.filter((p) => p.previewResult === 'wrong').length;
+    const none = list.filter((p) => p.previewResult === 'none').length;
+    const bets = list.filter((p) => Number(p.previewBet || 0) > 0).length;
+    studentPreviewSummaryEl.textContent = `Summary: ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet`;
+  }
+
   list.forEach((p, i) => {
     const card = document.createElement('div');
     card.className = 'card top-space';
