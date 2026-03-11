@@ -57,6 +57,7 @@ const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
 const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewRerollBtn = document.getElementById('previewRerollBtn');
+const previewResimBtn = document.getElementById('previewResimBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
 const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary');
@@ -1682,6 +1683,16 @@ function bindLiveEvents() {
       previewMode.simTeacherByQ = {};
       renderPreviewFrame();
       setStatus(hostStatusEl, 'Unified preview class re-rolled (local grading reset).', 'ok');
+    });
+  }
+  if (previewResimBtn) {
+    previewResimBtn.addEventListener('click', () => {
+      if (!previewMode.active) return;
+      previewMode.simClassSeed = Date.now();
+      const qKey = String(Number(previewMode.index || 0));
+      delete previewMode.simTeacherByQ[qKey];
+      renderPreviewFrame();
+      setStatus(hostStatusEl, 'Unified preview current question re-simulated.', 'ok');
     });
   }
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
@@ -3980,6 +3991,7 @@ function startPreviewMode() {
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
   if (previewRerollBtn) previewRerollBtn.classList.remove('hidden');
+  if (previewResimBtn) previewResimBtn.classList.remove('hidden');
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
@@ -3994,6 +4006,7 @@ function stopPreviewMode() {
   previewMode.revealedResult = null;
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
   if (previewRerollBtn) previewRerollBtn.classList.add('hidden');
+  if (previewResimBtn) previewResimBtn.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
