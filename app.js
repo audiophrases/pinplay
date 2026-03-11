@@ -794,10 +794,6 @@ function bindBuilderEvents() {
         alert('Please choose an audio file.');
         return;
       }
-      if (file.size > AUDIO_MAX_BYTES) {
-        alert('Audio file is too large for embedded quiz JSON. Max size is 2 MB. Please compress/trim the clip and retry.');
-        return;
-      }
 
       try {
         q.audioData = await fileToDataUrl(file);
@@ -6416,7 +6412,6 @@ function fileToDataUrl(file) {
 
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_TARGET_BYTES = 450 * 1024;
-const AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 function estimateDataUrlBytes(dataUrl) {
   const payload = String(dataUrl || '').split(',')[1] || '';
