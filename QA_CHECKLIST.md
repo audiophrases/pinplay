@@ -37,8 +37,17 @@
 - [ ] Secondary host controls usable on mobile
 - [ ] Touch targets, responsive controls
 - [ ] Student join flow on mobile
-- [ ] Unified preview opens and auto-scrolls to live preview card
-- [ ] Unified preview shows 14 stacked simulated students with mixed outcomes and bets
+
+## 6b) Unified Preview (final)
+- [ ] Unified Preview button opens teacher live preview and auto-scrolls to preview area
+- [ ] 14 simulated students render in stacked cards with random names
+- [ ] Mixed outcomes visible (correct / wrong / no submission) + bet indicators/chips
+- [ ] Summary line shows submitted count, distribution, phase, and seed
+- [ ] Re-roll class regenerates names + behavior and resets local preview grading
+- [ ] Re-sim current question changes only current-question simulation and clears local patches for that question
+- [ ] Jump control moves directly to target question number
+- [ ] Teacher answer history panel mirrors simulated entries for current question
+- [ ] Teacher grading actions work locally in preview (grade/correction/model/hide) with immediate UI refresh
 
 ## 7) Reliability
 - [ ] Question close reasons (timeout/all_answered/manual) are consistent

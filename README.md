@@ -32,6 +32,8 @@ Free, no-ads classroom quiz web app.
 - Per-question time-limit field (set `0` for no limit)
 - Local save (`localStorage`) + JSON import/export + Drive publish/open/delete (when configured)
 - Unified preview in teacher create page: one-click simulation with fixed baseline (14 random students, mixed correct/wrong/no-submission, some bets) rendered as teacher live preview + stacked student previews
+  - Includes quick test controls: Re-roll class, Re-sim current question, Jump to question
+  - Includes local preview grading interactions in teacher answer-history area (no live API calls)
 
 ### Classroom flow
 - **Create side (teacher)** — `.../pinplay/create/`
