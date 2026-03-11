@@ -1727,10 +1727,7 @@ function evaluate(question, answer) {
   }
 
   if (question.type === 'match_pairs') {
-    const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
-    const expected = (question.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
-    if (!guess.length || guess.length !== expected.length) return { correct: false };
-    return { correct: JSON.stringify(guess) === JSON.stringify(expected) };
+    return { correct: isMatchPairsCorrect(answer, question.pairs || []) };
   }
 
   if (question.type === 'error_hunt') {
@@ -2012,6 +2009,27 @@ function isContextGapCorrect(answer, gaps) {
   const expected = contextGapExpectedOptions(gaps);
   if (!guess.length || guess.length !== expected.length) return false;
   return guess.every((g, i) => expected[i].includes(g));
+}
+
+function isMatchPairsCorrect(answer, pairsRaw) {
+  const pairs = (Array.isArray(pairsRaw) ? pairsRaw : [])
+    .map((p) => ({ left: normalizeTextAnswer(p?.left), right: normalizeTextAnswer(p?.right) }))
+    .filter((p) => p.left && p.right);
+  const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
+  if (!pairs.length || guess.length !== pairs.length) return false;
+
+  const groups = new Map();
+  pairs.forEach((p, idx) => {
+    if (!groups.has(p.left)) groups.set(p.left, []);
+    groups.get(p.left).push({ idx, right: p.right });
+  });
+
+  for (const entries of groups.values()) {
+    const expected = entries.map((x) => x.right).sort();
+    const got = entries.map((x) => guess[x.idx] || '').sort();
+    if (JSON.stringify(expected) !== JSON.stringify(got)) return false;
+  }
+  return true;
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {

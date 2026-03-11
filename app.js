@@ -4130,8 +4130,7 @@ function evaluatePreviewAnswer(q, answer) {
   }
   if (q.type === 'match_pairs') {
     const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
-    const expected = (q.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
-    return { correct: guess.length === expected.length && JSON.stringify(guess) === JSON.stringify(expected) };
+    return { correct: isMatchPairsCorrect(guess, q.pairs || []) };
   }
   if (q.type === 'error_hunt') {
     const rewrite = normalizeTextAnswer(answer?.rewrite || '');
@@ -4835,7 +4834,7 @@ function evaluateSoloQuestion(q) {
     const guess = [...answersEl.querySelectorAll('[data-solo-pair]')].map((el) => normalizeTextAnswer(el.value)).filter(Boolean);
     const expected = (q.pairs || []).map((p) => normalizeTextAnswer(p.right)).filter(Boolean);
     if (!guess.length || guess.length !== expected.length) return { correct: false, hint: 'Match all pairs first.' };
-    return { correct: JSON.stringify(guess) === JSON.stringify(expected), hint: `Expected: ${expected.join(' | ')}` };
+    return { correct: isMatchPairsCorrect(guess, q.pairs || []), hint: `Expected: ${expected.join(' | ')}` };
   }
 
   if (q.type === 'error_hunt') {
@@ -5540,6 +5539,27 @@ function isContextGapCorrect(guessRaw, gaps) {
   const expected = contextGapExpectedOptions(gaps);
   if (!guess.length || guess.length !== expected.length) return false;
   return guess.every((g, i) => expected[i].includes(g));
+}
+
+function isMatchPairsCorrect(guessRaw, pairsRaw) {
+  const pairs = (Array.isArray(pairsRaw) ? pairsRaw : [])
+    .map((p) => ({ left: normalizeTextAnswer(p?.left), right: normalizeTextAnswer(p?.right) }))
+    .filter((p) => p.left && p.right);
+  const guess = Array.isArray(guessRaw) ? guessRaw.map(normalizeTextAnswer).filter(Boolean) : [];
+  if (!pairs.length || guess.length !== pairs.length) return false;
+
+  const groups = new Map();
+  pairs.forEach((p, idx) => {
+    if (!groups.has(p.left)) groups.set(p.left, []);
+    groups.get(p.left).push({ idx, right: p.right });
+  });
+
+  for (const entries of groups.values()) {
+    const expected = entries.map((x) => x.right).sort();
+    const got = entries.map((x) => guess[x.idx] || '').sort();
+    if (JSON.stringify(expected) !== JSON.stringify(got)) return false;
+  }
+  return true;
 }
 
 function tokenizeWords(text) {
