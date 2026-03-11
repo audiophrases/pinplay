@@ -4287,7 +4287,8 @@ function renderPreviewStudentStack(sim) {
     const bets = list.filter((p) => Number(p.previewBet || 0) > 0).length;
     const submitted = list.length - none;
     const phase = previewMode.showReveal ? 'reveal' : 'question';
-    studentPreviewSummaryEl.textContent = `Summary: ${submitted}/${list.length} submitted · ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet · phase: ${phase}`;
+    const qSeed = String(previewMode.simQuestionSeed || 0).slice(-6);
+    studentPreviewSummaryEl.textContent = `Summary: ${submitted}/${list.length} submitted · ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet · phase: ${phase} · seed:${qSeed}`;
   }
 
   list.forEach((p, i) => {
