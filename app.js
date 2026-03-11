@@ -2120,6 +2120,10 @@ async function adjustPlayerScore(playerId, currentName = '') {
 async function gradeOpenAnswer(playerId, points) {
   try {
     if (!playerId) return;
+    if (previewMode.active) {
+      setStatus(hostStatusEl, 'Preview mode: grading actions are display-only in this batch.', 'ok');
+      return;
+    }
     ensureHostReady();
 
     const max = Number(live.host.state?.question?.points || 1000);
@@ -2168,6 +2172,10 @@ async function hostHidePollResponse(playerId) {
 async function hostHideOpenResponse(playerId) {
   try {
     if (!playerId) return;
+    if (previewMode.active) {
+      setStatus(hostStatusEl, 'Preview mode: hide action is display-only in this batch.', 'ok');
+      return;
+    }
     ensureHostReady();
 
     await api('/api/host/open/hide', {
@@ -2189,6 +2197,10 @@ async function hostHideOpenResponse(playerId) {
 async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer = '') {
   try {
     if (!playerId) return;
+    if (previewMode.active) {
+      setStatus(hostStatusEl, 'Preview mode: correction action is display-only in this batch.', 'ok');
+      return;
+    }
     ensureHostReady();
 
     const seed = String(currentText || '').trim() || String(studentAnswer || '').trim();
@@ -2215,6 +2227,10 @@ async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer =
 async function hostToggleModelAnswer(playerId, nextValue) {
   try {
     if (!playerId) return;
+    if (previewMode.active) {
+      setStatus(hostStatusEl, 'Preview mode: model-answer toggle is display-only in this batch.', 'ok');
+      return;
+    }
     ensureHostReady();
 
     await api('/api/host/open/model', {
