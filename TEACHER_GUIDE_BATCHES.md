@@ -136,6 +136,70 @@ How to read this section:
 
 ---
 
+## Batch 3 — True/False
+
+### 1) Fast Misconception Scan
+- **Learning goal:** Quickly surface class-wide misunderstandings.
+- **How to run it:** 12 rapid T/F items on one unit before starting deeper practice.
+- **Creative twist:** Ask students to rate each item “easy trap” or “hard trap” after reveal.
+
+### 2) Justify the False
+- **Learning goal:** Improve reasoning, not guessing.
+- **How to run it:** Students answer T/F, then rewrite false statements to make them true.
+- **Creative twist:** Give bonus points for the clearest correction, not speed.
+
+### 3) Timeline Truth Check
+- **Learning goal:** Strengthen chronology in history/science processes.
+- **How to run it:** T/F statements about sequence/order of events.
+- **Creative twist:** End with one challenge item where students must place the corrected order.
+
+### 4) Grammar Rule Reality Test
+- **Learning goal:** Consolidate explicit grammar rules.
+- **How to run it:** T/F statements like “Present perfect can be used with finished past time markers.”
+- **Creative twist:** Students create one extra counterexample for every false rule.
+
+### 5) Lab Safety Snap Decisions
+- **Learning goal:** Automate safe decision-making.
+- **How to run it:** T/F scenarios before practical work.
+- **Creative twist:** Run as a “license to start experiment” gate.
+
+### 6) Media Literacy Mini-Factcheck
+- **Learning goal:** Build verification habits.
+- **How to run it:** T/F claims from social-media style headlines.
+- **Creative twist:** After each item, students tag why it’s false: missing context / wrong source / misleading framing.
+
+### 7) Vocabulary Precision Drill
+- **Learning goal:** Differentiate close meanings.
+- **How to run it:** T/F sentence-usage checks with near-synonyms.
+- **Creative twist:** Include one deliberately awkward but technically correct sentence for discussion.
+
+### 8) Reading Inference Filter
+- **Learning goal:** Separate explicit facts from inferences.
+- **How to run it:** After a text, mix literal and inferential T/F claims.
+- **Creative twist:** Label claims “text says” vs “I infer” after voting.
+
+### 9) Formula/Concept Boundary Test
+- **Learning goal:** Understand when rules apply (and when not).
+- **How to run it:** T/F items that test edge conditions/exceptions.
+- **Creative twist:** One “always/sometimes/never” reflection at the end.
+
+### 10) Debate Warm-Up
+- **Learning goal:** Prime oral argumentation.
+- **How to run it:** Use controversial but curriculum-relevant T/F prompts.
+- **Creative twist:** Students defend the minority answer first.
+
+### 11) Exam-Style Distractor Immunity
+- **Learning goal:** Reduce trick-question anxiety.
+- **How to run it:** T/F set using common exam wording traps (double negatives, absolute words).
+- **Creative twist:** Students rewrite trap wording into clear language.
+
+### 12) Retrieval Roulette
+- **Learning goal:** Keep older content alive through spaced review.
+- **How to run it:** Mix current unit T/F with 30% throwback items from prior units.
+- **Creative twist:** Track “throwback streaks” to gamify retention.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -155,7 +219,7 @@ How to read this section:
 
 - [x] Batch 1: MCQ
 - [x] Batch 2: Multi-select
-- [ ] Batch 3: True/False
+- [x] Batch 3: True/False
 - [ ] Batch 4: Text answer
 - [ ] Batch 5: Context gap
 - [ ] Batch 6: Match pairs
@@ -167,4 +231,4 @@ How to read this section:
 - [ ] Batch 12: Audio question
 - [ ] Batch 13: Image open
 
-Next pass will continue with Batch 3 (True/False) and add 10+ creative classroom use-cases.
+Next pass will continue with Batch 4 (Text answer) and add 10+ creative classroom use-cases.
