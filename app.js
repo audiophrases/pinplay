@@ -2922,11 +2922,14 @@ function renderHostQuestion(state) {
     const speedSel = document.createElement('select');
     speedSel.className = 'btn';
     speedSel.title = 'TTS speed';
-    ['1.0','0.9','0.8','0.7','1.1'].forEach((v) => {
+    speedSel.style.width = 'auto';
+    speedSel.style.minWidth = '0';
+    speedSel.style.padding = '0 .45rem';
+    [['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v,label]) => {
       const opt = document.createElement('option');
       opt.value = v;
-      opt.textContent = `×${v}`;
-      if (v === '1.0') opt.selected = true;
+      opt.textContent = label;
+      if (v === '0.95') opt.selected = true;
       speedSel.appendChild(opt);
     });
 
