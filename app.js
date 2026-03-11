@@ -2911,12 +2911,31 @@ function renderHostQuestion(state) {
   hostQuestionAnswersEl.innerHTML = '';
 
   if (hasQuestionAudio(question)) {
+    const audioRow = document.createElement('div');
+    audioRow.className = 'row gap top-space';
+
     const audioBtn = document.createElement('button');
     audioBtn.type = 'button';
-    audioBtn.className = 'btn top-space';
+    audioBtn.className = 'btn';
     audioBtn.textContent = '🔊 Play audio';
-    audioBtn.addEventListener('click', () => playQuestionAudio(question));
-    hostQuestionAnswersEl.appendChild(audioBtn);
+
+    const speedSel = document.createElement('select');
+    speedSel.className = 'btn';
+    speedSel.title = 'TTS speed';
+    ['1.0','0.9','0.8','0.7','1.1'].forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = `×${v}`;
+      if (v === '1.0') opt.selected = true;
+      speedSel.appendChild(opt);
+    });
+
+    audioBtn.addEventListener('click', () => {
+      playQuestionAudio(question, { speed: Number(speedSel.value || 1) });
+    });
+
+    audioRow.append(audioBtn, speedSel);
+    hostQuestionAnswersEl.appendChild(audioRow);
   }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
@@ -5888,7 +5907,7 @@ function stopQuestionAudioPlayback() {
   } catch {}
 }
 
-async function playQuestionAudio(question) {
+async function playQuestionAudio(question, opts = {}) {
   if (!hasQuestionAudio(question)) return;
   // Prevent overlap with question background music/SFX.
   stopFx('answering');
@@ -5901,8 +5920,12 @@ async function playQuestionAudio(question) {
     playFx('answering');
   };
 
+  const speed = Number(opts?.speed || 1);
+  const safeSpeed = Number.isFinite(speed) ? Math.max(0.6, Math.min(1.4, speed)) : 1;
+
   const playAudioEl = (a) => {
     activeQuestionAudioEl = a;
+    try { a.playbackRate = safeSpeed; } catch {}
     a.addEventListener('ended', () => {
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
       maybeResumeQuestionMusic();
@@ -5930,12 +5953,14 @@ async function playQuestionAudio(question) {
       : (rawVoice.toLowerCase().startsWith('en-gb') ? 'en-GB-SoniaNeural' : 'en-US-AriaNeural');
     const key = `${voice}::${text}`;
 
-    let audioUrl = edgeTtsBlobUrlCache.get(key);
+    const ratePct = `${safeSpeed >= 1 ? '+' : ''}${Math.round((safeSpeed - 1) * 100)}%`;
+    const cacheKey = `${key}::${ratePct}`;
+    let audioUrl = edgeTtsBlobUrlCache.get(cacheKey);
     if (!audioUrl) {
       const res = await fetch(`${base}/api/tts/edge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice }),
+        body: JSON.stringify({ text, voice, rate: ratePct }),
       });
       if (!res.ok) {
         const msg = await res.text();
@@ -5943,7 +5968,7 @@ async function playQuestionAudio(question) {
       }
       const blob = await res.blob();
       audioUrl = URL.createObjectURL(blob);
-      edgeTtsBlobUrlCache.set(key, audioUrl);
+      edgeTtsBlobUrlCache.set(cacheKey, audioUrl);
     }
 
     const a = new Audio(audioUrl);
