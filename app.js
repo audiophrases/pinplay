@@ -56,6 +56,7 @@ const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
 const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
+const previewRerollBtn = document.getElementById('previewRerollBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
 const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary');
@@ -1672,6 +1673,14 @@ function bindLiveEvents() {
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 
   if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode());
+  if (previewRerollBtn) {
+    previewRerollBtn.addEventListener('click', () => {
+      if (!previewMode.active) return;
+      previewMode.simNames = randomPreviewNames(14);
+      renderPreviewFrame();
+      setStatus(hostStatusEl, 'Unified preview class re-rolled.', 'ok');
+    });
+  }
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
 
   if (randomNamesToggleEl) {
@@ -3966,6 +3975,7 @@ function startPreviewMode() {
   live.player.pinSelections = [];
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
+  if (previewRerollBtn) previewRerollBtn.classList.remove('hidden');
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
@@ -3979,6 +3989,7 @@ function stopPreviewMode() {
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
+  if (previewRerollBtn) previewRerollBtn.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
