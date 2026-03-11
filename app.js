@@ -2590,6 +2590,21 @@ function renderHostState(state) {
   updateHallScene(state);
   updateHostTimer(state);
 
+  // Preview mode should be silent: no auto music/SFX/question audio.
+  if (previewMode.active) {
+    stopHallMusic();
+    stopFx('answering');
+    stopFx('answered');
+    stopFx('counter');
+    stopFx('drumrollwinner');
+    stopFx('final');
+    live.host.lastHostAudioKey = null;
+    live.host.lastPhase = state.phase;
+    live.host.lastIndex = state.currentIndex;
+    live.host.lastResponseCount = state.responseCount;
+    return;
+  }
+
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
     playFx('answering');
