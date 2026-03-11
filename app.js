@@ -5862,7 +5862,7 @@ function stopQuestionAudioPlayback() {
   } catch {}
 }
 
-function playQuestionAudio(question) {
+async function playQuestionAudio(question) {
   if (!hasQuestionAudio(question)) return;
   // Prevent overlap with question background music/SFX.
   stopFx('answering');
@@ -5875,19 +5875,47 @@ function playQuestionAudio(question) {
     playFx('answering');
   };
 
+  const playAudioEl = (a) => {
+    activeQuestionAudioEl = a;
+    a.addEventListener('ended', () => {
+      if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
+      maybeResumeQuestionMusic();
+    }, { once: true });
+    a.play().catch(() => {});
+  };
+
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
-      activeQuestionAudioEl = a;
-      a.addEventListener('ended', () => {
-        if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
-        maybeResumeQuestionMusic();
-      }, { once: true });
-      a.play().catch(() => {});
+      playAudioEl(a);
     } catch {}
     return;
   }
-  speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave', maybeResumeQuestionMusic);
+
+  // TTS mode: Edge TTS only (no fallback).
+  const text = String(question.audioText || question.prompt || '').trim();
+  if (!text) return;
+  try {
+    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    if (!base) throw new Error('Backend URL is not configured.');
+    const voice = String(question.language || 'en-US-AriaNeural').trim() || 'en-US-AriaNeural';
+    const res = await fetch(`${base}/api/tts/edge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `Edge TTS failed (${res.status}).`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = new Audio(url);
+    a.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+    playAudioEl(a);
+  } catch (err) {
+    setStatus(hostStatusEl, `Edge TTS error: ${err?.message || 'failed'}`, 'bad');
+  }
 }
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {

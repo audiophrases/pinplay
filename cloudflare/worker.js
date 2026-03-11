@@ -445,6 +445,48 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/tts/edge' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const text = String(body?.text || '').trim();
+      const voice = String(body?.voice || 'en-US-AriaNeural').trim();
+      const rate = String(body?.rate || '0%').trim();
+
+      if (!text) return json({ error: 'Missing text.' }, 400);
+
+      const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
+      if (!edgeUrl) return json({ error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' }, 501);
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        const secret = String(env.EDGE_TTS_SECRET || '').trim();
+        if (secret) headers['Authorization'] = `Bearer ${secret}`;
+
+        const ttsRes = await fetch(edgeUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ text, voice, rate }),
+        });
+
+        if (!ttsRes.ok) {
+          const txt = await ttsRes.text();
+          let err = txt;
+          try { err = JSON.parse(txt)?.error || txt; } catch {}
+          return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
+        }
+
+        const audio = await ttsRes.arrayBuffer();
+        return withCors(new Response(audio, {
+          status: 200,
+          headers: {
+            'Content-Type': ttsRes.headers.get('content-type') || 'audio/mpeg',
+            'Cache-Control': 'public, max-age=3600',
+          },
+        }));
+      } catch (err) {
+        return json({ error: `Edge TTS request failed: ${err.message}` }, 502);
+      }
+    }
+
     if (url.pathname === '/api/drive/publish' && request.method === 'POST') {
       const body = await safeJson(request);
       const quiz = body?.quiz;
