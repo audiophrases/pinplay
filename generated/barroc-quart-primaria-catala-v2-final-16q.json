@@ -292,7 +292,8 @@
       "type": "speaking",
       "prompt": "Explica en 20-30 segons dues diferències entre Renaixement i Barroc, i cita un artista o compositor del Barroc.",
       "points": 2000,
-      "timeLimit": 0
+      "timeLimit": 0,
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Gian_Lorenzo_Bernini%2C_David%2C_1623-24%2C_Galleria_Borghese.jpg/800px-Gian_Lorenzo_Bernini%2C_David%2C_1623-24%2C_Galleria_Borghese.jpg"
     },
     {
       "id": "q15",
