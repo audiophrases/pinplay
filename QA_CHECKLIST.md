@@ -16,7 +16,7 @@
 - [ ] text (auto-correct when accepted answers exist)
 - [ ] text (teacher-graded when accepted answers empty)
 - [ ] open / speaking / image_open grading
-- [ ] context_gap
+- [ ] context_gap (including comma-separated multiple accepted answers per blank)
 - [ ] match_pairs
 - [ ] error_hunt
 - [ ] puzzle (click + drag; tokens stay visible)

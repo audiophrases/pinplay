@@ -20,7 +20,7 @@ Free, no-ads classroom quiz web app.
 - Open answer (teacher-graded)
 - Speaking answer (teacher-graded oral mode)
 - Image open answer (teacher-graded)
-- Context gap (fill blanks)
+- Context gap (fill blanks; each blank supports multiple accepted answers separated by commas)
 - Match pairs
 - Error hunt (fix sentence)
 - Puzzle
