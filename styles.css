@@ -114,7 +114,7 @@ textarea { min-height: 72px; resize: vertical; }
   align-items: center;
   gap: .3rem;
 }
-.quiz-actions { justify-content: center; }
+.quiz-actions { justify-content: flex-start; }
 
 #builderActionRow {
   flex-wrap: wrap;
