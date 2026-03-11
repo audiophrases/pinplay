@@ -37,12 +37,6 @@
               <button id="importBtn" class="btn" type="button">Import</button>
               <input id="importInput" type="file" accept="application/json" hidden />
               <button id="exportBtn" class="btn">Export</button>
-              <button id="previewUnifiedBtn" class="btn">Preview</button>
-              <button id="previewRerollBtn" class="btn hidden">🔁 Re-roll class</button>
-              <button id="previewResimBtn" class="btn hidden">🎲 Re-sim current question</button>
-              <input id="previewJumpInput" class="hidden" type="number" min="1" step="1" style="width:82px" placeholder="Q#" />
-              <button id="previewJumpBtn" class="btn hidden">↪ Jump</button>
-              <button id="previewExitBtn" class="btn hidden">✖ Exit preview</button>
             </div>
 
             <label>Quiz title</label>
@@ -121,14 +115,6 @@
             </div>
           </div>
 
-          <div class="card hidden" id="studentPreviewStackCard">
-            <div class="row spread gap">
-              <strong>Student previews (simulated class)</strong>
-              <span class="small">14 students</span>
-            </div>
-            <div id="studentPreviewSummary" class="small top-space"></div>
-            <div id="studentPreviewStack" class="top-space"></div>
-          </div>
 
           <div class="card" id="hostCard">
             <div class="row gap top-space" id="hostActionRow">

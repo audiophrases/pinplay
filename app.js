@@ -2051,13 +2051,6 @@ function handleHostHotkeys(e) {
     return;
   }
 
-  if (e.key === 'p' || e.key === 'P') {
-    e.preventDefault();
-    if (previewMode.active) stopPreviewMode();
-    else startPreviewMode();
-    return;
-  }
-
   if (previewMode.active) {
     if (e.key === 'ArrowRight') {
       e.preventDefault();
