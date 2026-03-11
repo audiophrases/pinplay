@@ -4261,16 +4261,29 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   }
 
   const ok = player.previewResult === 'correct';
-  if (['mcq', 'tf', 'audio'].includes(question.type)) return ok ? 'selected correct option' : 'selected wrong option';
-  if (question.type === 'multi') return ok ? 'selected full correct set' : 'partial/wrong multi-select';
-  if (question.type === 'context_gap') return ok ? 'all gaps correct' : 'one or more gaps incorrect';
-  if (question.type === 'match_pairs') return ok ? 'all pairs matched' : 'some pairs mismatched';
-  if (question.type === 'error_hunt') return ok ? 'clean corrected sentence' : 'rewrite needs fixes';
-  if (question.type === 'open' || question.type === 'image_open') return ok ? 'strong open response' : 'basic/weak open response';
-  if (question.type === 'speaking') return ok ? 'spoke clearly (graded)' : 'spoke but needs improvement';
-  if (question.type === 'slider') return ok ? 'value within target range' : 'value outside target range';
-  if (question.type === 'pin') return ok ? 'pin in valid zone' : 'pin outside valid zone';
-  if (question.type === 'puzzle') return ok ? 'order correct' : 'order not correct';
+  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+    const answers = Array.isArray(question.answers) ? question.answers : [];
+    const correctIdx = Math.max(0, answers.findIndex((a) => !!a.isCorrect));
+    const wrongIdx = Math.max(0, answers.findIndex((a, i) => !a.isCorrect && i !== correctIdx));
+    const idx = ok ? correctIdx : wrongIdx;
+    return `option ${idx + 1}: ${String(answers[idx]?.text || '').trim() || '(blank option)'}`;
+  }
+  if (question.type === 'multi') return ok ? 'multi: full correct set' : 'multi: partial/wrong set';
+  if (question.type === 'context_gap') return ok ? 'gaps: all correct' : 'gaps: one or more wrong';
+  if (question.type === 'match_pairs') return ok ? 'pairs: all matched' : 'pairs: mismatched pairs';
+  if (question.type === 'error_hunt') return ok ? 'rewrite: corrected sentence' : 'rewrite: needs fixes';
+  if (question.type === 'open' || question.type === 'image_open') return ok ? 'open: strong response' : 'open: basic response';
+  if (question.type === 'speaking') return ok ? 'speaking: clear oral response' : 'speaking: oral response needs improvement';
+  if (question.type === 'slider') {
+    const min = Number(question.min || 0);
+    const max = Number(question.max || 100);
+    const target = Number(question.target || ((min + max) / 2));
+    const spread = Math.max(1, Math.round((max - min) * 0.12));
+    const value = ok ? target : Math.min(max, target + spread);
+    return `slider value: ${value}${question.unit ? ` ${question.unit}` : ''}`;
+  }
+  if (question.type === 'pin') return ok ? 'pin: inside valid zone' : 'pin: outside valid zone';
+  if (question.type === 'puzzle') return ok ? 'puzzle: correct order' : 'puzzle: wrong order';
   return ok ? 'correct submission' : 'incorrect submission';
 }
 
