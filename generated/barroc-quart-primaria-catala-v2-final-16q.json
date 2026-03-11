@@ -117,7 +117,8 @@
           "text": "Salvador Dalí",
           "correct": false
         }
-      ]
+      ],
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Caravaggio_%E2%80%94_The_Calling_of_Saint_Matthew.jpg/1280px-Caravaggio_%E2%80%94_The_Calling_of_Saint_Matthew.jpg"
     },
     {
       "id": "q6",
