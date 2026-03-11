@@ -60,6 +60,7 @@ const previewStudentBtn = document.getElementById('previewStudentBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const previewStudentCountEl = document.getElementById('previewStudentCount');
 const previewResponseProfileEl = document.getElementById('previewResponseProfile');
+const previewTimingProfileEl = document.getElementById('previewTimingProfile');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
@@ -134,6 +135,7 @@ let previewMode = {
   revealedResult: null,
   simStudentCount: 10,
   simProfile: 'balanced',
+  simTimingProfile: 'staggered',
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -1660,6 +1662,12 @@ function bindLiveEvents() {
   if (previewResponseProfileEl) {
     previewResponseProfileEl.addEventListener('change', () => {
       previewMode.simProfile = String(previewResponseProfileEl.value || 'balanced');
+      renderPreviewFrame();
+    });
+  }
+  if (previewTimingProfileEl) {
+    previewTimingProfileEl.addEventListener('change', () => {
+      previewMode.simTimingProfile = String(previewTimingProfileEl.value || 'staggered');
       renderPreviewFrame();
     });
   }
@@ -3923,6 +3931,7 @@ function startPreviewMode(mode) {
   previewMode.revealedResult = null;
   previewMode.simStudentCount = Math.max(1, Math.min(60, Number(previewStudentCountEl?.value || previewMode.simStudentCount || 10)));
   previewMode.simProfile = String(previewResponseProfileEl?.value || previewMode.simProfile || 'balanced');
+  previewMode.simTimingProfile = String(previewTimingProfileEl?.value || previewMode.simTimingProfile || 'staggered');
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -4043,18 +4052,28 @@ function previewCorrectRatio(profile) {
   return 0.5;
 }
 
-function buildPreviewPlayersSim(count, profile, points = 1000) {
+function previewAnsweredRatio(timingProfile) {
+  if (timingProfile === 'instant') return 1;
+  if (timingProfile === 'last_second') return 0.4;
+  if (timingProfile === 'mixed_late') return 0.55;
+  return 0.7;
+}
+
+function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
   const total = Math.max(1, Math.min(60, Number(count || 10)));
   const ratio = previewCorrectRatio(profile);
+  const answeredRatio = previewAnsweredRatio(timingProfile);
+  const answeredCut = Math.max(1, Math.round(total * answeredRatio));
   const players = [];
   for (let i = 0; i < total; i++) {
     const rank = i + 1;
-    const correct = rank <= Math.round(total * ratio);
+    const answeredCurrent = rank <= answeredCut;
+    const correct = answeredCurrent && rank <= Math.round(answeredCut * ratio);
     players.push({
       id: `p${rank}`,
       name: `Student ${rank}`,
       score: correct ? Math.max(0, points - (rank * 20)) : Math.max(0, Math.round(points * 0.1)),
-      answeredCurrent: true,
+      answeredCurrent,
     });
   }
   return players;
@@ -4067,12 +4086,13 @@ function renderPreviewFrame() {
 
   if (previewMode.mode === 'live') {
     if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
-    const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, Number(q.points || 1000));
+    const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, previewMode.simTimingProfile, Number(q.points || 1000));
+    const answeredCount = simPlayers.filter((p) => p.answeredCurrent).length;
     const state = {
       phase: 'question',
       currentIndex: previewMode.index,
       totalQuestions: quiz.questions.length,
-      responseCount: simPlayers.length,
+      responseCount: answeredCount,
       playerCount: simPlayers.length,
       question: buildPreviewHostQuestion(q),
       questionClosed: !!previewMode.showReveal,
@@ -4093,7 +4113,7 @@ function renderPreviewFrame() {
   }
 
   if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
-  const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, Number(q.points || 1000));
+  const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, previewMode.simTimingProfile, Number(q.points || 1000));
   const me = simPlayers[0] || { name: 'Preview Student', score: 0 };
   const state = {
     phase: 'question',
