@@ -37,6 +37,8 @@
 - [ ] Secondary host controls usable on mobile
 - [ ] Touch targets, responsive controls
 - [ ] Student join flow on mobile
+- [ ] Unified preview opens and auto-scrolls to live preview card
+- [ ] Unified preview shows 14 stacked simulated students with mixed outcomes and bets
 
 ## 7) Reliability
 - [ ] Question close reasons (timeout/all_answered/manual) are consistent
