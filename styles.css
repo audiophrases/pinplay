@@ -702,6 +702,10 @@ textarea { min-height: 72px; resize: vertical; }
 .feedback.ok { color: var(--ok); }
 .feedback.bad { color: var(--bad); }
 
+#joinFeedback {
+  font-size: 0.8em;
+}
+
 #joinSliderValue,
 #soloSliderValue {
   font-size: clamp(1.1rem, 2.2vw, 1.45rem);
