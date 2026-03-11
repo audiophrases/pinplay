@@ -2017,8 +2017,35 @@ function isMatchPairsCorrect(answer, pairsRaw) {
   const pairs = (Array.isArray(pairsRaw) ? pairsRaw : [])
     .map((p) => ({ left: normalizeTextAnswer(p?.left), right: normalizeTextAnswer(p?.right) }))
     .filter((p) => p.left && p.right);
+  if (!pairs.length) return false;
+
+  // New robust payload: [{left,right}, ...] (order-independent exact multiset compare)
+  if (Array.isArray(answer) && answer.some((x) => x && typeof x === 'object')) {
+    const expectedCounts = new Map();
+    pairs.forEach((p) => {
+      const key = `${p.left}=>${p.right}`;
+      expectedCounts.set(key, (expectedCounts.get(key) || 0) + 1);
+    });
+
+    const gotCounts = new Map();
+    answer.forEach((g) => {
+      const left = normalizeTextAnswer(g?.left);
+      const right = normalizeTextAnswer(g?.right);
+      if (!left || !right) return;
+      const key = `${left}=>${right}`;
+      gotCounts.set(key, (gotCounts.get(key) || 0) + 1);
+    });
+
+    if (gotCounts.size !== expectedCounts.size) return false;
+    for (const [k, v] of expectedCounts.entries()) {
+      if ((gotCounts.get(k) || 0) !== v) return false;
+    }
+    return true;
+  }
+
+  // Backward compatibility: legacy payload = array of right-side values by left row order.
   const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
-  if (!pairs.length || guess.length !== pairs.length) return false;
+  if (guess.length !== pairs.length) return false;
 
   const groups = new Map();
   pairs.forEach((p, idx) => {
