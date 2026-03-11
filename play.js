@@ -209,31 +209,10 @@ function renderPlayerState(state) {
   if (joinProgressEl) joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
-  const renderInlinePoints = (points) => {
+  const renderInlinePoints = (_points) => {
+    // Removed by request: do not show separate inline "+X pts" row.
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-points-inline="1"]').forEach((el) => el.remove());
-    const n = Number(points || 0);
-    if (!Number.isFinite(n)) return;
-
-    const badge = document.createElement('span');
-    badge.dataset.joinPointsInline = '1';
-    badge.className = 'join-points-inline';
-    badge.textContent = `+${Math.round(n)} pts`;
-
-    const input = joinAnswersEl.querySelector('input[type="text"], textarea');
-    if (input && input.parentElement) {
-      let row = joinAnswersEl.querySelector('.join-answer-inline-row');
-      if (!row) {
-        row = document.createElement('div');
-        row.className = 'join-answer-inline-row';
-        input.insertAdjacentElement('beforebegin', row);
-        row.appendChild(input);
-      }
-      row.querySelectorAll('[data-join-points-inline="1"]').forEach((el) => el.remove());
-      row.appendChild(badge);
-    } else {
-      joinAnswersEl.appendChild(badge);
-    }
   };
 
   const renderInlineCorrection = (text = '') => {
@@ -249,11 +228,8 @@ function renderPlayerState(state) {
     p.className = 'join-correction-inline top-space';
     p.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
 
-    const ansRow = host.querySelector('.join-answer-inline-row');
-    if (ansRow) {
-      ansRow.insertAdjacentElement('afterend', p);
-    } else if (joinSubmitBtn && joinSubmitBtn.parentElement === host) {
-      joinSubmitBtn.insertAdjacentElement('beforebegin', p);
+    if (joinFeedbackEl && joinFeedbackEl.parentElement) {
+      joinFeedbackEl.insertAdjacentElement('afterend', p);
     } else {
       host.appendChild(p);
     }

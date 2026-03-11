@@ -703,7 +703,7 @@ textarea { min-height: 72px; resize: vertical; }
 .feedback.bad { color: var(--bad); }
 
 #joinFeedback {
-  font-size: 0.8em;
+  font-size: 0.88em;
 }
 
 #joinSliderValue,
