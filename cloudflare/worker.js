@@ -471,11 +471,23 @@ export default {
         const secret = String(env.EDGE_TTS_SECRET || '').trim();
         if (secret) headers['Authorization'] = `Bearer ${secret}`;
 
-        const ttsRes = await fetch(edgeUrl, {
+        let ttsRes = await fetch(edgeUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify({ text, voice, rate }),
         });
+
+        // Convenience retry: if bridge base URL was provided without /tts.
+        if (ttsRes.status === 404) {
+          const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
+          if (retryUrl !== edgeUrl) {
+            ttsRes = await fetch(retryUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ text, voice, rate }),
+            });
+          }
+        }
 
         if (!ttsRes.ok) {
           const txt = await ttsRes.text();
