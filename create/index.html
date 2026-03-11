@@ -45,6 +45,7 @@
                 <select id="previewStudentCount">
                   <option value="5">5</option>
                   <option value="10" selected>10</option>
+                  <option value="14">14</option>
                   <option value="15">15</option>
                   <option value="25">25</option>
                   <option value="35">35</option>
@@ -175,6 +176,14 @@
             </div>
             <p class="small" id="joinFeedback"></p>
             <button id="joinSubmitBtn" class="btn top-space">Submit answer</button>
+          </div>
+
+          <div class="card hidden" id="studentPreviewStackCard">
+            <div class="row spread gap">
+              <strong>Student previews (simulated class)</strong>
+              <span class="small">14 students</span>
+            </div>
+            <div id="studentPreviewStack" class="top-space"></div>
           </div>
 
           <div class="card" id="hostCard">
