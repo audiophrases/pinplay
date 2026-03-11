@@ -62,6 +62,7 @@ const previewStudentCountEl = document.getElementById('previewStudentCount');
 const previewResponseProfileEl = document.getElementById('previewResponseProfile');
 const previewTimingProfileEl = document.getElementById('previewTimingProfile');
 const previewTextQualityProfileEl = document.getElementById('previewTextQualityProfile');
+const previewEdgeCaseProfileEl = document.getElementById('previewEdgeCaseProfile');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
@@ -138,6 +139,7 @@ let previewMode = {
   simProfile: 'balanced',
   simTimingProfile: 'staggered',
   simTextQualityProfile: 'acceptable',
+  simEdgeCaseProfile: 'none',
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -1676,6 +1678,12 @@ function bindLiveEvents() {
   if (previewTextQualityProfileEl) {
     previewTextQualityProfileEl.addEventListener('change', () => {
       previewMode.simTextQualityProfile = String(previewTextQualityProfileEl.value || 'acceptable');
+      renderPreviewFrame();
+    });
+  }
+  if (previewEdgeCaseProfileEl) {
+    previewEdgeCaseProfileEl.addEventListener('change', () => {
+      previewMode.simEdgeCaseProfile = String(previewEdgeCaseProfileEl.value || 'none');
       renderPreviewFrame();
     });
   }
@@ -3941,6 +3949,7 @@ function startPreviewMode(mode) {
   previewMode.simProfile = String(previewResponseProfileEl?.value || previewMode.simProfile || 'balanced');
   previewMode.simTimingProfile = String(previewTimingProfileEl?.value || previewMode.simTimingProfile || 'staggered');
   previewMode.simTextQualityProfile = String(previewTextQualityProfileEl?.value || previewMode.simTextQualityProfile || 'acceptable');
+  previewMode.simEdgeCaseProfile = String(previewEdgeCaseProfileEl?.value || previewMode.simEdgeCaseProfile || 'none');
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -4068,6 +4077,29 @@ function previewAnsweredRatio(timingProfile) {
   return 0.7;
 }
 
+function applyPreviewEdgeCase(players, edgeCase = 'none') {
+  const next = (players || []).map((p) => ({ ...p }));
+  if (edgeCase === 'no_submissions') {
+    next.forEach((p) => { p.answeredCurrent = false; });
+    return next;
+  }
+  if (edgeCase === 'all_correct') {
+    next.forEach((p, i) => {
+      p.answeredCurrent = true;
+      p.score = Math.max(0, 1000 - (i * 20));
+    });
+    return next;
+  }
+  if (edgeCase === 'all_wrong') {
+    next.forEach((p) => {
+      p.answeredCurrent = true;
+      p.score = 0;
+    });
+    return next;
+  }
+  return next;
+}
+
 function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
   const total = Math.max(1, Math.min(60, Number(count || 10)));
   const ratio = previewCorrectRatio(profile);
@@ -4122,12 +4154,13 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
 
 function buildPreviewSimulationState(question) {
   const safeQuestion = buildPreviewHostQuestion(question);
-  const simPlayers = buildPreviewPlayersSim(
+  const simPlayersBase = buildPreviewPlayersSim(
     previewMode.simStudentCount,
     previewMode.simProfile,
     previewMode.simTimingProfile,
     Number(question?.points || 1000),
   );
+  const simPlayers = applyPreviewEdgeCase(simPlayersBase, previewMode.simEdgeCaseProfile);
   const answeredCount = simPlayers.filter((p) => p.answeredCurrent).length;
   const me = simPlayers[0] || { name: 'Preview Student', score: 0, answeredCurrent: false };
 
