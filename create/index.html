@@ -40,49 +40,7 @@
               <button id="previewUnifiedBtn" class="btn">🖥️▶👥 Unified Preview</button>
               <button id="previewExitBtn" class="btn hidden">✖ Exit preview</button>
             </div>
-            <div class="row gap top-space small" id="previewSimControls">
-              <label>Students
-                <select id="previewStudentCount">
-                  <option value="5">5</option>
-                  <option value="10" selected>10</option>
-                  <option value="14">14</option>
-                  <option value="15">15</option>
-                  <option value="25">25</option>
-                  <option value="35">35</option>
-                </select>
-              </label>
-              <label>Profile
-                <select id="previewResponseProfile">
-                  <option value="mostly_correct">Mostly correct</option>
-                  <option value="balanced" selected>Balanced</option>
-                  <option value="mostly_wrong">Mostly wrong</option>
-                </select>
-              </label>
-              <label>Timing
-                <select id="previewTimingProfile">
-                  <option value="instant">Instant wave</option>
-                  <option value="staggered" selected>Staggered</option>
-                  <option value="last_second">Last-second rush</option>
-                  <option value="mixed_late">Mixed late</option>
-                </select>
-              </label>
-              <label>Text quality
-                <select id="previewTextQualityProfile">
-                  <option value="excellent">Excellent</option>
-                  <option value="acceptable" selected>Acceptable</option>
-                  <option value="weak">Weak</option>
-                  <option value="empty">Empty / off-topic</option>
-                </select>
-              </label>
-              <label>Edge case
-                <select id="previewEdgeCaseProfile">
-                  <option value="none" selected>None</option>
-                  <option value="no_submissions">No submissions</option>
-                  <option value="all_correct">All correct</option>
-                  <option value="all_wrong">All wrong</option>
-                </select>
-              </label>
-            </div>
+            <p class="small top-space" id="previewSimControls">Unified preview uses a fixed baseline simulation: 14 students with mixed outcomes (correct / wrong / no submission) and some bets.</p>
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
