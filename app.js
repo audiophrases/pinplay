@@ -129,7 +129,6 @@ let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let previewMode = {
   active: false,
-  mode: null,
   index: 0,
   showReveal: false,
   score: 0,
@@ -3991,7 +3990,6 @@ function startPreviewMode() {
   }
 
   previewMode.active = true;
-  previewMode.mode = 'unified';
   previewMode.simStudentCount = 14;
   previewMode.simNames = randomPreviewNames(14);
   previewMode.simClassSeed = Date.now();
@@ -4025,7 +4023,6 @@ function startPreviewMode() {
 
 function stopPreviewMode() {
   previewMode.active = false;
-  previewMode.mode = null;
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
