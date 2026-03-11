@@ -2090,16 +2090,15 @@ async function adjustPlayerScore(playerId, currentName = '') {
   }
 }
 
-async function gradeOpenAnswer(playerId, currentPoints = 0) {
+async function gradeOpenAnswer(playerId, points) {
   try {
     if (!playerId) return;
     ensureHostReady();
-    const max = Number(live.host.state?.question?.points || 1000);
-    const raw = prompt(`Grade this answer (0-${max}):`, String(currentPoints || max));
-    if (raw == null) return;
 
-    const points = Number(String(raw).trim());
-    if (!Number.isFinite(points)) throw new Error('Points must be a number.');
+    const max = Number(live.host.state?.question?.points || 1000);
+    const value = Number(points);
+    if (!Number.isFinite(value)) throw new Error('Points must be a number.');
+    const safePoints = Math.max(0, Math.min(max, Math.round(value)));
 
     await api('/api/host/grade-open', {
       method: 'POST',
@@ -2107,11 +2106,11 @@ async function gradeOpenAnswer(playerId, currentPoints = 0) {
       body: {
         pin: live.host.pin,
         playerId,
-        points,
+        points: safePoints,
       },
     });
 
-    setStatus(hostStatusEl, `Open answer graded: ${Math.round(points)} pts.`, 'ok');
+    setStatus(hostStatusEl, `Open answer graded: ${safePoints} pts.`, 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -2271,10 +2270,19 @@ function renderHostAnswerHistory(state) {
           const actions = document.createElement('div');
           actions.className = 'row gap top-space';
 
+          const maxPoints = Number(currentQ?.points || 1000);
+
           const gradeBtn = document.createElement('button');
           gradeBtn.className = 'btn';
-          gradeBtn.textContent = entry.graded ? `Regrade (${Number(entry.pointsAwarded || 0)})` : 'Grade';
-          gradeBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, entry.pointsAwarded));
+          gradeBtn.textContent = `+${maxPoints}`;
+          gradeBtn.title = `Award full points (${maxPoints})`;
+          gradeBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, maxPoints));
+
+          const zeroBtn = document.createElement('button');
+          zeroBtn.className = 'btn';
+          zeroBtn.textContent = '0';
+          zeroBtn.title = 'Set 0 points';
+          zeroBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, 0));
 
           const corrBtn = document.createElement('button');
           corrBtn.className = 'btn';
@@ -2291,7 +2299,7 @@ function renderHostAnswerHistory(state) {
           hideBtn.textContent = 'Hide';
           hideBtn.addEventListener('click', () => hostHideOpenResponse(entry.playerId));
 
-          actions.append(gradeBtn, corrBtn, modelBtn, hideBtn);
+          actions.append(gradeBtn, zeroBtn, corrBtn, modelBtn, hideBtn);
           row.appendChild(actions);
         }
 
