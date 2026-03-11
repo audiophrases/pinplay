@@ -1150,9 +1150,33 @@ function renderBuilder() {
   }
 }
 
+const EDGE_TTS_VOICE_OPTIONS = [
+  'en-US-AnaNeural',
+  'en-US-AndrewMultilingualNeural',
+  'en-US-AndrewNeural',
+  'en-US-AriaNeural',
+  'en-US-AvaMultilingualNeural',
+  'en-US-AvaNeural',
+  'en-US-BrianMultilingualNeural',
+  'en-US-BrianNeural',
+  'en-US-ChristopherNeural',
+  'en-US-EmmaMultilingualNeural',
+  'en-US-EmmaNeural',
+  'en-US-EricNeural',
+  'en-US-GuyNeural',
+  'en-US-JennyNeural',
+  'en-US-MichelleNeural',
+  'en-US-RogerNeural',
+  'en-US-SteffanNeural',
+];
+const DEFAULT_EDGE_TTS_VOICE = 'en-US-AndrewMultilingualNeural';
+
 function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
-  const lang = String(q.language || 'en-US-Wave');
+  const voice = String(q.language || DEFAULT_EDGE_TTS_VOICE);
+  const voiceOptions = EDGE_TTS_VOICE_OPTIONS
+    .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
+    .join('');
   return `
     <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
       <div class="row gap top-space">
@@ -1170,8 +1194,8 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
-      <label>Language code (e.g. en-US, en-US-Wave)</label>
-      <input data-q="${idx}" data-field="language" maxlength="32" value="${escapeHtml(lang)}" />
+      <label>TTS Voice</label>
+      <select data-q="${idx}" data-field="language">${voiceOptions}</select>
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
       <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>
     </div>
@@ -1233,7 +1257,8 @@ function syncQuizFromUI() {
 
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
-      q.language = String(languageEl?.value || 'en-US-Wave').slice(0, 32) || 'en-US-Wave';
+      const pickedVoice = String(languageEl?.value || DEFAULT_EDGE_TTS_VOICE).slice(0, 64);
+      q.language = EDGE_TTS_VOICE_OPTIONS.includes(pickedVoice) ? pickedVoice : DEFAULT_EDGE_TTS_VOICE;
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
 
       // New rule: no checkbox.
@@ -4970,7 +4995,7 @@ function makeMcqQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -4991,7 +5016,7 @@ function makeMultiQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -5012,7 +5037,7 @@ function makeTfQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: 'True', correct: true },
@@ -5031,7 +5056,7 @@ function makeTextQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     accepted: ['', '', '', ''],
   };
@@ -5047,7 +5072,7 @@ function makeOpenQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5062,7 +5087,7 @@ function makeSpeakingQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5078,7 +5103,7 @@ function makeImageOpenQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5094,7 +5119,7 @@ function makeContextGapQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5115,7 +5140,7 @@ function makeMatchPairsQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5131,7 +5156,7 @@ function makeErrorHuntQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -5146,7 +5171,7 @@ function makePuzzleQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     items: Array.from({ length: 9 }, () => ''),
   };
@@ -5160,7 +5185,7 @@ function makeAudioQuestion() {
     audioEnabled: true,
     audioMode: 'tts',
     audioText: '',
-    language: 'en-US-Wave',
+    language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     points: 1000,
     timeLimit: 0,
@@ -5233,7 +5258,7 @@ function normalizeQuizForLive(raw) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1200),
-      language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
+      language: String(q.language || DEFAULT_EDGE_TTS_VOICE).slice(0, 32) || DEFAULT_EDGE_TTS_VOICE,
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
     };
@@ -6390,14 +6415,14 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   container.append(bank, resetBtn, selected);
 }
-function speakText(text, lang = 'en-US-Wave', onEnd = null) {
+function speakText(text, lang = 'en-US', onEnd = null) {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = lang || 'en-US-Wave';
+    utterance.lang = String(lang || 'en-US').slice(0, 5);
     if (typeof onEnd === 'function') {
       utterance.addEventListener('end', () => onEnd(), { once: true });
     }
@@ -6521,4 +6546,5 @@ function setupImageLightbox() {
     modal.classList.remove('hidden');
   });
 }
+
 
