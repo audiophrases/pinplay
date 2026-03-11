@@ -2925,7 +2925,7 @@ function renderHostQuestion(state) {
     speedSel.style.width = 'auto';
     speedSel.style.minWidth = '0';
     speedSel.style.padding = '0 .45rem';
-    [['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v,label]) => {
+    [['1.0','100%'],['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v,label]) => {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = label;
