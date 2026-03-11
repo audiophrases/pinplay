@@ -972,7 +972,7 @@ export class QuizRoom {
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) return json({ error: 'Current question is not teacher-graded.' }, 409);
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedTextQuestion(question))) return json({ error: 'Current question is not teacher-graded.' }, 409);
 
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
         const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
@@ -1033,7 +1033,7 @@ export class QuizRoom {
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedTextQuestion(question))) {
           return json({ error: 'Current question is not teacher-graded.' }, 409);
         }
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
@@ -1060,7 +1060,7 @@ export class QuizRoom {
         if (!(room.phase === 'question' || room.phase === 'results')) return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedTextQuestion(question))) {
           return json({ error: 'Current question is not teacher-graded.' }, 409);
         }
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
@@ -1086,7 +1086,7 @@ export class QuizRoom {
         if (!(room.phase === 'question' || room.phase === 'results')) return json({ error: 'Question is not active.' }, 409);
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
-        if (!question || !(question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question))) {
+        if (!question || !(question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedTextQuestion(question))) {
           return json({ error: 'Current question is not teacher-graded.' }, 409);
         }
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
@@ -1162,7 +1162,7 @@ export class QuizRoom {
             hidden: false,
             submittedAt: Date.now(),
           };
-        } else if (question.type === 'open' || question.type === 'image_open' || isTeacherGradedTextQuestion(question)) {
+        } else if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedTextQuestion(question)) {
           room.responsesByQuestion[qIndex][playerId] = {
             answer: String(body?.answer || '').slice(0, 220),
             correct: false,
@@ -1213,7 +1213,7 @@ export class QuizRoom {
         const totalPlayers = Object.keys(room.players || {}).length;
         const answeredCount = Object.keys(room.responsesByQuestion[qIndex] || {}).length;
         const qRef = room.quiz.questions[qIndex];
-        const teacherGradedFlow = !!(qRef && (qRef.type === 'open' || qRef.type === 'image_open' || isTeacherGradedTextQuestion(qRef)));
+        const teacherGradedFlow = !!(qRef && (qRef.type === 'open' || qRef.type === 'image_open' || qRef.type === 'speaking' || isTeacherGradedTextQuestion(qRef)));
         if (totalPlayers > 0 && answeredCount >= totalPlayers && !teacherGradedFlow) {
           closeCurrentQuestion(room, 'all_answered');
         } else {
@@ -1297,6 +1297,7 @@ function summarizeHistoryAnswer(question, answer) {
     const picks = Array.isArray(answer) ? answer : (answer ? [answer] : []);
     return picks.map((p) => `(${Math.round(Number(p?.x || 0))}%, ${Math.round(Number(p?.y || 0))}%)`).join(' | ') || '(none)';
   }
+  if (question.type === 'speaking') return '__spoken__' === String(answer || '') ? '🗣️ Spoke (teacher grades)' : String(answer || '');
   if (question.type === 'error_hunt') return String(answer?.rewrite || '');
   if (question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'puzzle') {
     return Array.isArray(answer) ? answer.join(' | ') : String(answer || '');
@@ -1389,7 +1390,7 @@ function hostState(room) {
         : null,
     serverNow: Date.now(),
     allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
-    openResponses: !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
+    openResponses: !roomQuestion?.isPoll && (['open', 'image_open', 'speaking'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses)
         .filter(([, r]) => !r?.hidden)
         .map(([pid, r]) => ({
@@ -1402,7 +1403,7 @@ function hostState(room) {
           modelAnswer: !!r?.modelAnswer,
         }))
       : [],
-    modelResponses: !roomQuestion?.isPoll && (['open', 'image_open'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
+    modelResponses: !roomQuestion?.isPoll && (['open', 'image_open', 'speaking'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses)
         .filter(([, r]) => !r?.hidden && !!r?.modelAnswer)
         .map(([pid, r]) => ({
@@ -1417,7 +1418,7 @@ function hostState(room) {
     answerHistory,
     correctAnswer:
       (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !roomQuestion?.isPoll
-      && !['open', 'image_open'].includes(roomQuestion?.type)
+      && !['open', 'image_open', 'speaking'].includes(roomQuestion?.type)
       && !isTeacherGradedTextQuestion(roomQuestion)
         ? hostCorrectSummary(roomQuestion)
         : '',
@@ -1438,7 +1439,7 @@ function playerState(room, playerId) {
   const myResponse = responses[playerId] || null;
 
   const currentQ = room.quiz.questions[qIndex];
-  const isTeacherGraded = currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || isTeacherGradedTextQuestion(currentQ));
+  const isTeacherGraded = currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || currentQ.type === 'speaking' || isTeacherGradedTextQuestion(currentQ));
   const hasTeacherCorrection = !!String(myResponse?.correction || '').trim();
   const canRevealNow = (room.phase === 'question' || room.phase === 'results') && myResponse && !currentQ?.isPoll
     && (room.questionClosed || room.phase === 'results' || (isTeacherGraded && (!!myResponse.graded || hasTeacherCorrection)));
@@ -1463,7 +1464,7 @@ function playerState(room, playerId) {
     question: (room.phase === 'question' || room.phase === 'results') ? publicQuestion(room.quiz.questions[qIndex]) : null,
     correctAnswer:
       (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
-      && !['open', 'image_open'].includes(room.quiz.questions[qIndex]?.type)
+      && !['open', 'image_open', 'speaking'].includes(room.quiz.questions[qIndex]?.type)
       && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
         ? hostCorrectSummary(room.quiz.questions[qIndex])
         : '',
@@ -1613,7 +1614,7 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -1850,6 +1851,11 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'speaking') {
+      normalized.questions.push({ ...base });
+      return;
+    }
+
     if (q.type === 'image_open') {
       if (!q.imageData) return;
       normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
@@ -2044,7 +2050,7 @@ function distance2D(x1, y1, x2, y2) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -2209,8 +2215,8 @@ function hostCorrectSummary(question) {
     return String(question.corrected || '');
   }
 
-  if (question.type === 'open' || question.type === 'image_open') {
-    return 'Teacher-graded open short answer';
+  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking') {
+    return question.type === 'speaking' ? 'Teacher-graded speaking answer' : 'Teacher-graded open short answer';
   }
 
   if (question.type === 'puzzle') {
@@ -2318,3 +2324,4 @@ function json(data, status = 200) {
     },
   });
 }
+

@@ -421,7 +421,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
@@ -481,6 +481,11 @@ function renderJoinQuestion(question) {
       input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
       joinAnswersEl.appendChild(input);
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', input);
+    } else if (question.type === 'speaking') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
+      joinAnswersEl.appendChild(note);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -786,6 +791,10 @@ function readJoinAnswer() {
   if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
+  }
+
+  if (q.type === 'speaking') {
+    return '__spoken__';
   }
 
   if (q.type === 'context_gap') {

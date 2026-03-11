@@ -21,6 +21,7 @@ const addTfAudioBtn = document.getElementById('addTfAudioBtn');
 const addTextBtn = document.getElementById('addTextBtn');
 const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
+const addSpeakingBtn = document.getElementById('addSpeakingBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addContextGapBtn = document.getElementById('addContextGapBtn');
 const addMatchPairsBtn = document.getElementById('addMatchPairsBtn');
@@ -327,6 +328,12 @@ function bindBuilderEvents() {
   if (addOpenBtn) {
     addOpenBtn.addEventListener('click', () => {
       addQuestionToBuilder(makeOpenQuestion());
+    });
+  }
+
+  if (addSpeakingBtn) {
+    addSpeakingBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeSpeakingQuestion());
     });
   }
 
@@ -895,6 +902,12 @@ function renderBuilder() {
     if (q.type === 'image_open') {
       specific += `
         <p class="small top-space">Students write 1-2 sentences from the image. Teacher grades live.</p>
+      `;
+    }
+
+    if (q.type === 'speaking') {
+      specific += `
+        <p class="small top-space">In-class speaking round: students tap submit when they have answered orally. Teacher grades participation/performance live.</p>
       `;
     }
 
@@ -2252,7 +2265,7 @@ function renderHostAnswerHistory(state) {
 
         const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
         const currentQ = state?.question || null;
-        const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
+        const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || currentQ.type === 'speaking' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
 
         if (teacherGradedCurrent) {
           const actions = document.createElement('div');
@@ -2784,7 +2797,7 @@ function renderHostQuestion(state) {
     return;
   }
 
-  if (question.type === 'open' || question.type === 'image_open' || isTeacherGradedText) {
+  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedText) {
     hostQuestionHintEl.textContent = '';
 
     if (question.type === 'image_open' && question.imageData) {
@@ -3536,7 +3549,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -3596,6 +3609,11 @@ function renderJoinQuestion(question) {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
       renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+    } else if (question.type === 'speaking') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
+      joinAnswersEl.appendChild(note);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -3791,6 +3809,10 @@ function readJoinAnswer() {
     return text ? text.value : '';
   }
 
+  if (q.type === 'speaking') {
+    return '__spoken__';
+  }
+
   if (q.type === 'context_gap') {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
     const values = fields.map((el) => String(el.value || '').trim());
@@ -3948,7 +3970,7 @@ function evaluatePreviewAnswer(q, answer) {
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     return { correct: accepted.length ? accepted.includes(guess) : false };
   }
-  if (q.type === 'open' || q.type === 'image_open') return { correct: false, graded: false };
+  if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
     return { correct: isContextGapCorrect(answer, q.gaps || []) };
   }
@@ -4169,7 +4191,7 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'context_gap' || q.type === 'error_hunt') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'context_gap' || q.type === 'error_hunt') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -4229,6 +4251,11 @@ function renderSoloQuestion() {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
       renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
+    } else if (q.type === 'speaking') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Speaking question: answer orally and get graded by teacher in live mode.';
+      answersEl.appendChild(note);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -4351,6 +4378,10 @@ function evaluateSoloQuestion(q) {
     const val = String(document.getElementById('soloTextAnswer')?.value || '').trim();
     if (!val) return { correct: false, hint: 'Type an answer first.' };
     return { correct: false, hint: 'Open answer needs teacher grading in live mode.' };
+  }
+
+  if (q.type === 'speaking') {
+    return { correct: false, hint: 'Speaking answer is teacher-graded in live mode.' };
   }
 
   if (q.type === 'context_gap') {
@@ -4563,6 +4594,21 @@ function makeOpenQuestion(opts = {}) {
     points: 1000,
     timeLimit: 0,
     audioEnabled: !!opts.withAudio,
+    audioMode: 'tts',
+    audioText: '',
+    language: 'en-US-Wave',
+    audioData: '',
+  };
+}
+
+function makeSpeakingQuestion() {
+  return {
+    id: crypto.randomUUID(),
+    type: 'speaking',
+    prompt: 'Speak your answer when called by the teacher.',
+    points: 1000,
+    timeLimit: 0,
+    audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
     language: 'en-US-Wave',
@@ -4792,6 +4838,11 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
+    if (q.type === 'speaking') {
+      normalized.questions.push({ ...base });
+      return;
+    }
+
     if (q.type === 'image_open') {
       if (!q.imageData) return;
       normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
@@ -4956,6 +5007,7 @@ function labelForType(type) {
       tf: 'True / False',
       text: 'Type answer',
       open: 'Open short answer',
+      speaking: 'Speaking answer (teacher-graded)',
       image_open: 'Image prompt writing',
       context_gap: 'Context gap fill',
       match_pairs: 'Match pairs',
@@ -4976,6 +5028,7 @@ function iconForType(type) {
       tf: '✅❌',
       text: '⌨️',
       open: '💬',
+      speaking: '🗣️',
       image_open: '🖼️',
       context_gap: '🕳️',
       match_pairs: '🔗',
@@ -4990,7 +5043,7 @@ function iconForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
