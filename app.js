@@ -3942,7 +3942,7 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
-function startPreviewMode(mode) {
+function startPreviewMode(mode = 'unified') {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
     setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
@@ -3950,12 +3950,10 @@ function startPreviewMode(mode) {
   }
 
   previewMode.active = true;
-  previewMode.mode = mode;
-  if (mode === 'unified') {
-    previewMode.simStudentCount = 14;
-    previewMode.simNames = randomPreviewNames(14);
-    if (previewStudentCountEl) previewStudentCountEl.value = '14';
-  }
+  previewMode.mode = 'unified';
+  previewMode.simStudentCount = 14;
+  previewMode.simNames = randomPreviewNames(14);
+  if (previewStudentCountEl) previewStudentCountEl.value = '14';
   previewMode.index = Math.max(0, Math.min(previewMode.index, quiz.questions.length - 1));
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
@@ -3974,6 +3972,7 @@ function startPreviewMode(mode) {
   if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
 
   renderPreviewFrame();
+  hostQuestionCardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function stopPreviewMode() {
