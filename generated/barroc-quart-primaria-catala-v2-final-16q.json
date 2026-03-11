@@ -318,7 +318,8 @@
           "text": "Bach, Monet, Bernini, Caravaggio",
           "correct": false
         }
-      ]
+      ],
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Las_Meninas_01.jpg/640px-Las_Meninas_01.jpg"
     },
     {
       "id": "q16",
