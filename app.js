@@ -138,6 +138,7 @@ let previewMode = {
   simTextQualityProfile: 'acceptable',
   simEdgeCaseProfile: 'none',
   simNames: [],
+  simClassSeed: 0,
   simQuestionSeed: 0,
   simTeacherByQ: {},
 };
@@ -1677,6 +1678,7 @@ function bindLiveEvents() {
     previewRerollBtn.addEventListener('click', () => {
       if (!previewMode.active) return;
       previewMode.simNames = randomPreviewNames(14);
+      previewMode.simClassSeed = Date.now();
       previewMode.simTeacherByQ = {};
       renderPreviewFrame();
       setStatus(hostStatusEl, 'Unified preview class re-rolled (local grading reset).', 'ok');
@@ -3961,6 +3963,7 @@ function startPreviewMode() {
   previewMode.mode = 'unified';
   previewMode.simStudentCount = 14;
   previewMode.simNames = randomPreviewNames(14);
+  previewMode.simClassSeed = Date.now();
   previewMode.index = Math.max(0, Math.min(previewMode.index, quiz.questions.length - 1));
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
@@ -4318,7 +4321,7 @@ function buildPreviewAnswerHistory(question, simPlayers, openResponses) {
 
 function buildPreviewSimulationState(question) {
   const safeQuestion = buildPreviewHostQuestion(question);
-  previewMode.simQuestionSeed = hashStringInt(`${previewMode.index}:${question?.id || question?.prompt || ''}`);
+  previewMode.simQuestionSeed = hashStringInt(`${previewMode.simClassSeed}:${previewMode.index}:${question?.id || question?.prompt || ''}`);
   const simPlayersBase = buildPreviewPlayersSim(
     previewMode.simStudentCount,
     previewMode.simProfile,
