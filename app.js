@@ -4211,6 +4211,22 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
     });
 }
 
+function summarizePreviewStudentAnswer(question, player) {
+  if (!question || !player?.answeredCurrent) return '(no submission)';
+  const ok = player.previewResult === 'correct';
+  if (['mcq', 'tf', 'audio'].includes(question.type)) return ok ? 'selected correct option' : 'selected wrong option';
+  if (question.type === 'multi') return ok ? 'selected full correct set' : 'partial/wrong multi-select';
+  if (question.type === 'context_gap') return ok ? 'all gaps correct' : 'one or more gaps incorrect';
+  if (question.type === 'match_pairs') return ok ? 'all pairs matched' : 'some pairs mismatched';
+  if (question.type === 'error_hunt') return ok ? 'clean corrected sentence' : 'rewrite needs fixes';
+  if (question.type === 'open' || question.type === 'image_open') return ok ? 'strong open response' : 'basic/weak open response';
+  if (question.type === 'speaking') return ok ? 'spoke clearly (graded)' : 'spoke but needs improvement';
+  if (question.type === 'slider') return ok ? 'value within target range' : 'value outside target range';
+  if (question.type === 'pin') return ok ? 'pin in valid zone' : 'pin outside valid zone';
+  if (question.type === 'puzzle') return ok ? 'order correct' : 'order not correct';
+  return ok ? 'correct submission' : 'incorrect submission';
+}
+
 function renderPreviewStudentStack(sim) {
   if (!studentPreviewStackEl) return;
   studentPreviewStackEl.innerHTML = '';
@@ -4222,7 +4238,8 @@ function renderPreviewStudentStack(sim) {
       ? 'submitted ✅'
       : (p.previewResult === 'wrong' ? 'submitted ❌' : 'no submission');
     const betTxt = Number(p.previewBet || 0) > 0 ? ` · bet x${Number(p.previewBet)}` : '';
-    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div>`;
+    const answerText = summarizePreviewStudentAnswer(sim?.hostState?.question, p);
+    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div><div class="small muted">Answer: ${escapeHtml(answerText)}</div>`;
     studentPreviewStackEl.appendChild(card);
   });
 }
