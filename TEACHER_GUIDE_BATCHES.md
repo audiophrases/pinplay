@@ -770,6 +770,59 @@ How to read this section:
 
 ---
 
+## Classroom Deployment Playbooks (Use Any Question Type)
+
+### A) 20-Minute High-Energy Lesson Block
+1. 2 min warm-up check-in question
+2. 8 min mixed quiz burst (5–7 items)
+3. 5 min reveal + error discussion
+4. 3 min pair correction/rewrite
+5. 2 min exit ticket
+
+### B) 45-Minute Standard Lesson Flow
+1. Hook question (contextual, fun)
+2. Core concept sequence (8–12 items, mixed types)
+3. Mid-lesson pause: explain top 2 mistakes
+4. Application round (open/context/pin/audio)
+5. Reflection question + next-step homework cue
+
+### C) Weekly Spiral Revision Routine
+- Monday: current unit focus
+- Wednesday: mixed review (30% old content)
+- Friday: challenge round + student-created question slot
+
+### D) Differentiation Blueprint (A2/B1 Mixed Group)
+- **Tier 1 support:** word banks, longer timers, model examples
+- **Tier 2 standard:** regular prompts and timing
+- **Tier 3 challenge:** reduced scaffolds, justify answers, extension follow-up
+
+### E) Fast Feedback Protocol
+- After each reveal, choose one of these:
+  - “Why this is correct” (concept explanation)
+  - “Why this distractor is tempting” (misconception correction)
+  - “How to avoid this next time” (strategy cue)
+
+---
+
+## Teacher Grading & Coaching Micro-Rubrics
+
+### Short text / open answer (quick 0–2 rubric)
+- **2:** accurate, clear, uses target language correctly
+- **1:** partially correct or understandable with errors
+- **0:** incorrect, unclear, off-task, or blank
+
+### Error-hunt coaching prompts
+- “Which word gave you the biggest clue?”
+- “What rule would prevent this mistake next time?”
+- “Can you create a correct sentence with the same structure?”
+
+### Reflection prompts that improve retention
+- “What fooled you today?”
+- “What pattern did you notice?”
+- “What will you check first in the next quiz?”
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
