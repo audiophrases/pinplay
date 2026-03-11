@@ -18,6 +18,7 @@ Free, no-ads classroom quiz web app.
 - True / False
 - Type answer (auto-check list)
 - Open answer (teacher-graded)
+- Speaking answer (teacher-graded oral mode)
 - Image open answer (teacher-graded)
 - Context gap (fill blanks)
 - Match pairs

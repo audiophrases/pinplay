@@ -536,6 +536,30 @@
           "correct": false
         }
       ]
+    },
+    {
+      "id": "speaking-1",
+      "type": "speaking",
+      "prompt": "Speaking round: explain in one clear sentence why daily reading helps language learning.",
+      "points": 1000,
+      "timeLimit": 20,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": ""
+    },
+    {
+      "id": "speaking-2",
+      "type": "speaking",
+      "prompt": "Speaking challenge: give one example from real life using today's target structure.",
+      "points": 2000,
+      "timeLimit": 30,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": ""
     }
   ],
   "templateGuide": {

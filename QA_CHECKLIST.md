@@ -15,7 +15,7 @@
 - [ ] mcq / multi / tf
 - [ ] text (auto-correct when accepted answers exist)
 - [ ] text (teacher-graded when accepted answers empty)
-- [ ] open / image_open grading
+- [ ] open / speaking / image_open grading
 - [ ] context_gap
 - [ ] match_pairs
 - [ ] error_hunt
