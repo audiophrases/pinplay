@@ -142,6 +142,7 @@ let previewMode = {
   simTextQualityProfile: 'acceptable',
   simEdgeCaseProfile: 'none',
   simNames: [],
+  simQuestionSeed: 0,
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -4079,6 +4080,20 @@ function evaluatePreviewAnswer(q, answer) {
   return { correct: false };
 }
 
+function hashStringInt(text = '') {
+  let h = 2166136261;
+  const s = String(text || '');
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+  }
+  return (h >>> 0);
+}
+
+function seededUnit(key = '') {
+  return (hashStringInt(key) % 10000) / 10000;
+}
+
 function previewCorrectRatio(profile) {
   if (profile === 'mostly_correct') return 0.75;
   if (profile === 'mostly_wrong') return 0.25;
@@ -4147,9 +4162,11 @@ function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
   for (let i = 0; i < total; i++) {
     const rank = i + 1;
     const answeredCurrent = rank <= answeredCut;
-    const correct = answeredCurrent && rank <= Math.round(answeredCut * ratio);
-    const hasBet = answeredCurrent && Math.random() < 0.4;
-    const bet = hasBet ? [1, 2, 3][Math.floor(Math.random() * 3)] : 0;
+    const roll = seededUnit(`${previewMode.simQuestionSeed}:${rank}:roll`);
+    const correct = answeredCurrent && (roll < ratio);
+    const hasBet = answeredCurrent && seededUnit(`${previewMode.simQuestionSeed}:${rank}:bet`) < 0.4;
+    const betPool = [1, 2, 3];
+    const bet = hasBet ? betPool[Math.floor(seededUnit(`${previewMode.simQuestionSeed}:${rank}:betv`) * betPool.length)] : 0;
     players.push({
       id: `p${rank}`,
       name: previewMode.simNames?.[i] || `Student ${rank}`,
@@ -4212,6 +4229,7 @@ function renderPreviewStudentStack(sim) {
 
 function buildPreviewSimulationState(question) {
   const safeQuestion = buildPreviewHostQuestion(question);
+  previewMode.simQuestionSeed = hashStringInt(`${previewMode.index}:${question?.id || question?.prompt || ''}`);
   const simPlayersBase = buildPreviewPlayersSim(
     previewMode.simStudentCount,
     previewMode.simProfile,
