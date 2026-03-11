@@ -4120,60 +4120,74 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
     });
 }
 
-function renderPreviewFrame() {
-  if (!previewMode.active) return;
-  const q = quiz.questions[previewMode.index];
-  if (!q) return;
+function buildPreviewSimulationState(question) {
+  const safeQuestion = buildPreviewHostQuestion(question);
+  const simPlayers = buildPreviewPlayersSim(
+    previewMode.simStudentCount,
+    previewMode.simProfile,
+    previewMode.simTimingProfile,
+    Number(question?.points || 1000),
+  );
+  const answeredCount = simPlayers.filter((p) => p.answeredCurrent).length;
+  const me = simPlayers[0] || { name: 'Preview Student', score: 0, answeredCurrent: false };
 
-  if (previewMode.mode === 'live') {
-    if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
-    const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, previewMode.simTimingProfile, Number(q.points || 1000));
-    const answeredCount = simPlayers.filter((p) => p.answeredCurrent).length;
-    const state = {
-      phase: 'question',
-      currentIndex: previewMode.index,
-      totalQuestions: quiz.questions.length,
-      responseCount: answeredCount,
-      playerCount: simPlayers.length,
-      question: buildPreviewHostQuestion(q),
-      questionClosed: !!previewMode.showReveal,
-      questionClosedAt: previewMode.showReveal ? Date.now() : null,
-      questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
-      correctAnswer: '',
-      pollSummary: null,
-      openResponses: buildPreviewOpenResponses(q, simPlayers, previewMode.simTextQualityProfile),
-      players: simPlayers,
-      reactions: [],
-    };
-    if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
-    if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
-    if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
-    renderProjectorScores(state.players || []);
-    renderHostQuestion(state);
-    return;
-  }
+  const hostState = {
+    phase: 'question',
+    currentIndex: previewMode.index,
+    totalQuestions: quiz.questions.length,
+    responseCount: answeredCount,
+    playerCount: simPlayers.length,
+    question: safeQuestion,
+    questionClosed: !!previewMode.showReveal,
+    questionClosedAt: previewMode.showReveal ? Date.now() : null,
+    questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
+    correctAnswer: '',
+    pollSummary: null,
+    openResponses: buildPreviewOpenResponses(question, simPlayers, previewMode.simTextQualityProfile),
+    players: simPlayers,
+    reactions: [],
+  };
 
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
-  const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, previewMode.simTimingProfile, Number(q.points || 1000));
-  const me = simPlayers[0] || { name: 'Preview Student', score: 0 };
-  const state = {
+  const studentState = {
     phase: 'question',
     name: me.name,
     currentIndex: previewMode.index,
     totalQuestions: quiz.questions.length,
     score: Number(me.score || 0),
-    answeredCurrent: previewMode.answeredCurrent,
-    question: buildPreviewHostQuestion(q),
-    questionClosed: false,
+    answeredCurrent: previewMode.answeredCurrent || !!me.answeredCurrent,
+    question: safeQuestion,
+    questionClosed: !!previewMode.showReveal,
     questionStartedAt: null,
     questionDeadlineAt: null,
-    questionClosedAt: null,
-    questionCloseReason: null,
+    questionClosedAt: previewMode.showReveal ? Date.now() : null,
+    questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
     correctAnswer: '',
     revealedResult: previewMode.revealedResult,
     leaderboard: simPlayers.slice(0, 10).map((p) => ({ name: p.name, score: p.score })),
   };
-  renderPlayerState(state);
+
+  return { hostState, studentState };
+}
+
+function renderPreviewFrame() {
+  if (!previewMode.active) return;
+  const q = quiz.questions[previewMode.index];
+  if (!q) return;
+
+  const sim = buildPreviewSimulationState(q);
+
+  if (previewMode.mode === 'live') {
+    if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+    if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
+    if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
+    if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
+    renderProjectorScores(sim.hostState.players || []);
+    renderHostQuestion(sim.hostState);
+    return;
+  }
+
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
+  renderPlayerState(sim.studentState);
   if (previewMode.revealedResult) {
     if (previewMode.revealedResult.correct) setStatus(joinFeedbackEl, `✅ Correct (+${Number(q.points || 1000)} pts)`, 'ok');
     else if (previewMode.revealedResult.graded === false) setStatus(joinFeedbackEl, '⏳ Waiting for teacher grading.', 'ok');
