@@ -508,7 +508,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .project-prompt {
-  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-size: clamp(1.62rem, 3.6vw, 2.7rem);
   line-height: 1.2;
   margin: .35rem auto .45rem;
   max-width: 960px;
@@ -686,7 +686,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #hostQuestionCard:fullscreen .project-prompt {
-  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-size: clamp(2.16rem, 4.5vw, 3.6rem);
 }
 
 #hostQuestionCard:fullscreen #projectorCorrect {
