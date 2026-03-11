@@ -326,7 +326,8 @@
       "type": "open",
       "prompt": "Escriu dues frases: una diferència entre Renaixement i Barroc, i una obra o autor del Barroc que recordes.",
       "points": 2000,
-      "timeLimit": 0
+      "timeLimit": 0,
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Caravaggio_%E2%80%94_The_Calling_of_Saint_Matthew.jpg/960px-Caravaggio_%E2%80%94_The_Calling_of_Saint_Matthew.jpg"
     }
   ]
 }
