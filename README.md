@@ -143,6 +143,49 @@ After that, Teacher Create supports:
 - **Open from Drive** (list recent JSON files and load one into builder)
 - **Delete from Drive** (trash unwanted quiz files from the picker dialog)
 
+## Edge TTS (PinPlay, Edge-only/no fallback)
+
+PinPlay can now use an Edge TTS backend for question TTS.
+
+### 1) Run a bridge service
+
+A minimal bridge is included at:
+- `cloudflare/edge_tts_bridge.py`
+
+Start it:
+
+```bash
+pip install edge-tts fastapi uvicorn
+export EDGE_TTS_SECRET="your_shared_secret"   # Windows PowerShell: $env:EDGE_TTS_SECRET="..."
+uvicorn cloudflare.edge_tts_bridge:app --host 0.0.0.0 --port 8788
+```
+
+It exposes `POST /tts` with body:
+
+```json
+{ "text": "Hello class", "voice": "en-US-AriaNeural", "rate": "0%" }
+```
+
+### 2) Configure Worker secrets
+
+From `cloudflare/`:
+
+```bash
+wrangler secret put EDGE_TTS_URL
+# e.g. https://your-edge-tts-host/tts
+
+wrangler secret put EDGE_TTS_SECRET
+# same value used by the bridge (optional if bridge is open)
+
+wrangler deploy
+```
+
+### 3) Behavior
+
+- `audioMode: "tts"` now calls Edge TTS endpoint.
+- No browser TTS fallback.
+- Caching enabled on Worker + client for repeated text/voice lines.
+
 ### Optional: Google Images search in builder (quota-based)
 
 By default, builder image search uses free Wikimedia Commons.
