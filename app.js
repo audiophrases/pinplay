@@ -2814,12 +2814,14 @@ function renderHostQuestion(state) {
 
   const inQuestionIntro = phase === 'question' && !showReveal;
   if (!inQuestionIntro) {
+    hostQuestionCardEl?.classList.remove('intro-active');
     live.host.questionIntroKey = null;
     live.host.questionIntroStartedAt = 0;
     live.host.questionIntroDone = false;
   }
 
   if (!question) {
+    hostQuestionCardEl?.classList.remove('intro-active');
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
@@ -2844,6 +2846,7 @@ function renderHostQuestion(state) {
     if (!live.host.questionIntroDone) {
       const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
       if (elapsed < 1000) {
+        hostQuestionCardEl?.classList.add('intro-active');
         hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = '';
         hostQuestionHintEl.textContent = '';
@@ -2863,6 +2866,7 @@ function renderHostQuestion(state) {
       }
 
       if (elapsed < 2000) {
+        hostQuestionCardEl?.classList.add('intro-active');
         hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
         hostQuestionHintEl.textContent = '';
@@ -2879,6 +2883,7 @@ function renderHostQuestion(state) {
     }
   }
 
+  hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('center-stage');
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
   hostQuestionAnswersEl.innerHTML = '';

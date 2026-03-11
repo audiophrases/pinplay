@@ -665,6 +665,13 @@ textarea { min-height: 72px; resize: vertical; }
   justify-content: center;
 }
 
+#hostQuestionCard.intro-active .projector-scoreboard {
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  margin: 0;
+}
+
 #hostQuestionWrap.center-stage .project-prompt {
   margin: 0 auto;
 }
