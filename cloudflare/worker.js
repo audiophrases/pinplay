@@ -449,7 +449,7 @@ export default {
       const body = await safeJson(request);
       const text = String(body?.text || '').trim();
       const voice = String(body?.voice || 'en-US-AriaNeural').trim();
-      const rate = String(body?.rate || '0%').trim();
+      const rate = String(body?.rate || '+0%').trim();
 
       if (!text) return json({ error: 'Missing text.' }, 400);
 
@@ -2426,12 +2426,6 @@ function withCors(response) {
   const headers = new Headers(response.headers);
   Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
   return new Response(response.body, { status: response.status, headers });
-}
-
-async function sha256Hex(text) {
-  const bytes = new TextEncoder().encode(String(text || ''));
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function json(data, status = 200) {

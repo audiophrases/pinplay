@@ -24,7 +24,7 @@ import edge_tts
 class TTSRequest(BaseModel):
     text: str
     voice: str = "en-US-AriaNeural"
-    rate: str = "0%"
+    rate: str = "+0%"
 
 
 app = FastAPI()
