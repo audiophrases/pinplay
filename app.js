@@ -1677,8 +1677,9 @@ function bindLiveEvents() {
     previewRerollBtn.addEventListener('click', () => {
       if (!previewMode.active) return;
       previewMode.simNames = randomPreviewNames(14);
+      previewMode.simTeacherByQ = {};
       renderPreviewFrame();
-      setStatus(hostStatusEl, 'Unified preview class re-rolled.', 'ok');
+      setStatus(hostStatusEl, 'Unified preview class re-rolled (local grading reset).', 'ok');
     });
   }
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
