@@ -55,8 +55,7 @@ const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
-const previewLiveBtn = document.getElementById('previewLiveBtn');
-const previewStudentBtn = document.getElementById('previewStudentBtn');
+const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const previewStudentCountEl = document.getElementById('previewStudentCount');
 const previewResponseProfileEl = document.getElementById('previewResponseProfile');
@@ -1672,8 +1671,7 @@ function bindLiveEvents() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 
-  if (previewLiveBtn) previewLiveBtn.addEventListener('click', () => startPreviewMode('live'));
-  if (previewStudentBtn) previewStudentBtn.addEventListener('click', () => startPreviewMode('student'));
+  if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode('unified'));
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
 
   if (previewStudentCountEl) {
