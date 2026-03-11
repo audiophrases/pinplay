@@ -4096,13 +4096,19 @@ function previewAnsweredRatio(timingProfile) {
 function applyPreviewEdgeCase(players, edgeCase = 'none') {
   const next = (players || []).map((p) => ({ ...p }));
   if (edgeCase === 'no_submissions') {
-    next.forEach((p) => { p.answeredCurrent = false; });
+    next.forEach((p) => {
+      p.answeredCurrent = false;
+      p.previewResult = 'none';
+      p.previewBet = 0;
+    });
     return next;
   }
   if (edgeCase === 'all_correct') {
     next.forEach((p, i) => {
       p.answeredCurrent = true;
       p.score = Math.max(0, 1000 - (i * 20));
+      p.previewResult = 'correct';
+      p.previewBet = p.previewBet || 1;
     });
     return next;
   }
@@ -4110,6 +4116,8 @@ function applyPreviewEdgeCase(players, edgeCase = 'none') {
     next.forEach((p) => {
       p.answeredCurrent = true;
       p.score = 0;
+      p.previewResult = 'wrong';
+      p.previewBet = p.previewBet || 1;
     });
     return next;
   }
@@ -4141,11 +4149,15 @@ function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
     const rank = i + 1;
     const answeredCurrent = rank <= answeredCut;
     const correct = answeredCurrent && rank <= Math.round(answeredCut * ratio);
+    const hasBet = answeredCurrent && Math.random() < 0.4;
+    const bet = hasBet ? [1, 2, 3][Math.floor(Math.random() * 3)] : 0;
     players.push({
       id: `p${rank}`,
       name: previewMode.simNames?.[i] || `Student ${rank}`,
       score: correct ? Math.max(0, points - (rank * 20)) : Math.max(0, Math.round(points * 0.1)),
       answeredCurrent,
+      previewResult: answeredCurrent ? (correct ? 'correct' : 'wrong') : 'none',
+      previewBet: bet,
     });
   }
   return players;
@@ -4190,8 +4202,11 @@ function renderPreviewStudentStack(sim) {
   list.forEach((p, i) => {
     const card = document.createElement('div');
     card.className = 'card top-space';
-    const status = p.answeredCurrent ? 'submitted' : 'no submission';
-    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}</div>`;
+    const status = p.previewResult === 'correct'
+      ? 'submitted ✅'
+      : (p.previewResult === 'wrong' ? 'submitted ❌' : 'no submission');
+    const betTxt = Number(p.previewBet || 0) > 0 ? ` · bet x${Number(p.previewBet)}` : '';
+    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div>`;
     studentPreviewStackEl.appendChild(card);
   });
 }
