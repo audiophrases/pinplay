@@ -1675,7 +1675,7 @@ function bindLiveEvents() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
 
-  if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode('unified'));
+  if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode());
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
 
   if (previewStudentCountEl) {
@@ -3951,7 +3951,7 @@ function setUnifiedPreviewControlsEnabled(enabled) {
     });
 }
 
-function startPreviewMode(mode = 'unified') {
+function startPreviewMode() {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
     setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
@@ -3986,6 +3986,7 @@ function startPreviewMode(mode = 'unified') {
   setUnifiedPreviewControlsEnabled(false);
 
   renderPreviewFrame();
+  setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
   hostQuestionCardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
