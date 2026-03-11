@@ -58,6 +58,8 @@ const hostNextBtn = document.getElementById('hostNextBtn');
 const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewRerollBtn = document.getElementById('previewRerollBtn');
 const previewResimBtn = document.getElementById('previewResimBtn');
+const previewJumpInputEl = document.getElementById('previewJumpInput');
+const previewJumpBtn = document.getElementById('previewJumpBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
 const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary');
@@ -1693,6 +1695,24 @@ function bindLiveEvents() {
       delete previewMode.simTeacherByQ[qKey];
       renderPreviewFrame();
       setStatus(hostStatusEl, 'Unified preview current question re-simulated.', 'ok');
+    });
+  }
+  const jumpPreviewQuestion = () => {
+    if (!previewMode.active) return;
+    const total = Number(quiz?.questions?.length || 0);
+    if (!total) return;
+    const wanted = Number(previewJumpInputEl?.value || 1);
+    const idx = Math.max(0, Math.min(total - 1, (Number.isFinite(wanted) ? wanted : 1) - 1));
+    previewMode.index = idx;
+    renderPreviewFrame();
+    setStatus(hostStatusEl, `Unified preview jumped to Q${idx + 1}.`, 'ok');
+  };
+  if (previewJumpBtn) previewJumpBtn.addEventListener('click', jumpPreviewQuestion);
+  if (previewJumpInputEl) {
+    previewJumpInputEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      jumpPreviewQuestion();
     });
   }
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
@@ -3992,6 +4012,11 @@ function startPreviewMode() {
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
   if (previewRerollBtn) previewRerollBtn.classList.remove('hidden');
   if (previewResimBtn) previewResimBtn.classList.remove('hidden');
+  if (previewJumpInputEl) {
+    previewJumpInputEl.classList.remove('hidden');
+    previewJumpInputEl.value = String(Number(previewMode.index || 0) + 1);
+  }
+  if (previewJumpBtn) previewJumpBtn.classList.remove('hidden');
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
@@ -4007,6 +4032,8 @@ function stopPreviewMode() {
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
   if (previewRerollBtn) previewRerollBtn.classList.add('hidden');
   if (previewResimBtn) previewResimBtn.classList.add('hidden');
+  if (previewJumpInputEl) previewJumpInputEl.classList.add('hidden');
+  if (previewJumpBtn) previewJumpBtn.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
