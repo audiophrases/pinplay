@@ -264,6 +264,70 @@ How to read this section:
 
 ---
 
+## Batch 5 — Context Gap
+
+### 1) Grammar-in-Context Repair
+- **Learning goal:** Apply grammar rules inside meaningful text.
+- **How to run it:** Short paragraph with 4–6 blanks focused on one structure.
+- **Creative twist:** Use a mini-story students can continue after quiz.
+
+### 2) Collocation Builder
+- **Learning goal:** Improve natural word combinations.
+- **How to run it:** Blanks target collocations (make a decision, take a risk, etc.).
+- **Creative twist:** After reveal, students produce one original sentence with each collocation.
+
+### 3) Academic Register Upgrade
+- **Learning goal:** Move from informal to academic phrasing.
+- **How to run it:** Gap text in semi-formal tone; students fill with precise connectors/vocabulary.
+- **Creative twist:** Include alternative accepted answers to model stylistic flexibility.
+
+### 4) Listening-to-Gap Dictation Lite
+- **Learning goal:** Connect listening comprehension with spelling and syntax.
+- **How to run it:** Read paragraph aloud once/twice; students fill the blanks.
+- **Creative twist:** Use rhythm clues (pause before blank) for weaker groups.
+
+### 5) Reading Flow Reconstruction
+- **Learning goal:** Understand cohesion and discourse markers.
+- **How to run it:** Remove connectors/pronouns; students restore coherence.
+- **Creative twist:** Debate why two different connectors can both be valid in some blanks.
+
+### 6) Subject-Specific Vocabulary Embed
+- **Learning goal:** Reinforce science/history/math terminology in context.
+- **How to run it:** Curriculum paragraph with key term blanks.
+- **Creative twist:** Add one “challenge blank” requiring paraphrase, not exact keyword.
+
+### 7) Differentiated Dual-Path Gaps
+- **Learning goal:** Support mixed levels in one classroom.
+- **How to run it:** Same paragraph, but A-level set has word bank; B-level set has no bank.
+- **Creative twist:** Students choose path and reflect on difficulty after.
+
+### 8) Error-Aware Gap Challenge
+- **Learning goal:** Prevent common mistakes proactively.
+- **How to run it:** Blanks target known class errors (prepositions, tense endings, false friends).
+- **Creative twist:** Show anonymized “most common wrong fill” and discuss why.
+
+### 9) Creative Gap Endings
+- **Learning goal:** Blend accuracy with creativity.
+- **How to run it:** First half of blanks are fixed answers; last 1–2 blanks accept multiple valid options.
+- **Creative twist:** Class votes on most expressive but correct ending.
+
+### 10) Exam Readiness Mode
+- **Learning goal:** Build speed + precision for test conditions.
+- **How to run it:** 8–10 gap items with timer and instant reveal.
+- **Creative twist:** Second pass allows slower “accuracy mode” for correction.
+
+### 11) CLIL Bridge Activity
+- **Learning goal:** Use English/Catalan for subject content language.
+- **How to run it:** Content paragraph (e.g., ecosystems, industrial revolution) with language-focused blanks.
+- **Creative twist:** Ask one follow-up oral explanation using at least 3 filled words.
+
+### 12) Multi-Answer Flexible Gaps
+- **Learning goal:** Encourage language variation without penalizing valid alternatives.
+- **How to run it:** Teacher enters multiple accepted answers per blank separated by commas.
+- **Creative twist:** Share examples of different correct fills and discuss tone/nuance differences.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -285,7 +349,7 @@ How to read this section:
 - [x] Batch 2: Multi-select
 - [x] Batch 3: True/False
 - [x] Batch 4: Text answer
-- [ ] Batch 5: Context gap
+- [x] Batch 5: Context gap
 - [ ] Batch 6: Match pairs
 - [ ] Batch 7: Error hunt
 - [ ] Batch 8: Open answer
@@ -295,4 +359,4 @@ How to read this section:
 - [ ] Batch 12: Audio question
 - [ ] Batch 13: Image open
 
-Next pass will continue with Batch 5 (Context gap) and add 10+ creative classroom use-cases.
+Next pass will continue with Batch 6 (Match pairs) and add 10+ creative classroom use-cases.
