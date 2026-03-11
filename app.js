@@ -57,11 +57,6 @@ const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
 const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
-const previewStudentCountEl = document.getElementById('previewStudentCount');
-const previewResponseProfileEl = document.getElementById('previewResponseProfile');
-const previewTimingProfileEl = document.getElementById('previewTimingProfile');
-const previewTextQualityProfileEl = document.getElementById('previewTextQualityProfile');
-const previewEdgeCaseProfileEl = document.getElementById('previewEdgeCaseProfile');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
 const studentPreviewStackEl = document.getElementById('studentPreviewStack');
@@ -1677,38 +1672,6 @@ function bindLiveEvents() {
 
   if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode());
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
-
-  if (previewStudentCountEl) {
-    previewStudentCountEl.addEventListener('change', () => {
-      const n = Number(previewStudentCountEl.value || 10);
-      previewMode.simStudentCount = Math.max(1, Math.min(60, Number.isFinite(n) ? n : 10));
-      renderPreviewFrame();
-    });
-  }
-  if (previewResponseProfileEl) {
-    previewResponseProfileEl.addEventListener('change', () => {
-      previewMode.simProfile = String(previewResponseProfileEl.value || 'balanced');
-      renderPreviewFrame();
-    });
-  }
-  if (previewTimingProfileEl) {
-    previewTimingProfileEl.addEventListener('change', () => {
-      previewMode.simTimingProfile = String(previewTimingProfileEl.value || 'staggered');
-      renderPreviewFrame();
-    });
-  }
-  if (previewTextQualityProfileEl) {
-    previewTextQualityProfileEl.addEventListener('change', () => {
-      previewMode.simTextQualityProfile = String(previewTextQualityProfileEl.value || 'acceptable');
-      renderPreviewFrame();
-    });
-  }
-  if (previewEdgeCaseProfileEl) {
-    previewEdgeCaseProfileEl.addEventListener('change', () => {
-      previewMode.simEdgeCaseProfile = String(previewEdgeCaseProfileEl.value || 'none');
-      renderPreviewFrame();
-    });
-  }
 
   if (randomNamesToggleEl) {
     randomNamesToggleEl.addEventListener('click', hostUpdateRandomNames);
@@ -3943,14 +3906,6 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
-function setUnifiedPreviewControlsEnabled(enabled) {
-  [previewStudentCountEl, previewResponseProfileEl, previewTimingProfileEl, previewTextQualityProfileEl, previewEdgeCaseProfileEl]
-    .forEach((el) => {
-      if (!el) return;
-      el.disabled = !enabled;
-    });
-}
-
 function startPreviewMode() {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
@@ -3962,7 +3917,6 @@ function startPreviewMode() {
   previewMode.mode = 'unified';
   previewMode.simStudentCount = 14;
   previewMode.simNames = randomPreviewNames(14);
-  if (previewStudentCountEl) previewStudentCountEl.value = '14';
   previewMode.index = Math.max(0, Math.min(previewMode.index, quiz.questions.length - 1));
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
@@ -3972,10 +3926,6 @@ function startPreviewMode() {
   previewMode.simTimingProfile = 'staggered';
   previewMode.simTextQualityProfile = 'acceptable';
   previewMode.simEdgeCaseProfile = 'none';
-  if (previewResponseProfileEl) previewResponseProfileEl.value = 'balanced';
-  if (previewTimingProfileEl) previewTimingProfileEl.value = 'staggered';
-  if (previewTextQualityProfileEl) previewTextQualityProfileEl.value = 'acceptable';
-  if (previewEdgeCaseProfileEl) previewEdgeCaseProfileEl.value = 'none';
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -3983,7 +3933,6 @@ function startPreviewMode() {
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
   if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
-  setUnifiedPreviewControlsEnabled(false);
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
@@ -3999,7 +3948,6 @@ function stopPreviewMode() {
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
   if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
-  setUnifiedPreviewControlsEnabled(true);
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
 }
