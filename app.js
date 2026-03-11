@@ -456,8 +456,12 @@ function bindBuilderEvents() {
       quiz = parsed;
       collapseAllQuestions(quiz);
       renderBuilder();
-      saveQuiz(quiz);
-      alert('Quiz imported ✅');
+      const savedOk = saveQuiz(quiz);
+      if (savedOk) {
+        alert('Quiz imported ✅');
+      } else {
+        alert('Quiz imported ✅ (local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
+      }
     } catch (err) {
       alert(`Import failed: ${err.message}`);
     }
@@ -5360,8 +5364,21 @@ function loadQuiz() {
   }
 }
 
+function isStorageQuotaError(err) {
+  if (!err) return false;
+  const name = String(err.name || '').toLowerCase();
+  const msg = String(err.message || '').toLowerCase();
+  return name.includes('quota') || msg.includes('exceeded the quota') || msg.includes('quota exceeded');
+}
+
 function saveQuiz(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch (err) {
+    if (isStorageQuotaError(err)) return false;
+    throw err;
+  }
 }
 
 function loadQuizLibrary() {
