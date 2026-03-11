@@ -328,6 +328,70 @@ How to read this section:
 
 ---
 
+## Batch 6 — Match Pairs
+
+### 1) Term ↔ Definition Speed Link
+- **Learning goal:** Build fast concept recall.
+- **How to run it:** Match key terms to concise definitions.
+- **Creative twist:** Second round: students write one new definition each.
+
+### 2) Verb ↔ Preposition Collocations
+- **Learning goal:** Improve natural grammar chunks.
+- **How to run it:** Match verbs with their common prepositions (depend on, believe in, etc.).
+- **Creative twist:** After matching, students produce mini-dialogues using 3 pairs.
+
+### 3) Cause ↔ Effect Mapper
+- **Learning goal:** Strengthen causal reasoning.
+- **How to run it:** Match events to direct consequences.
+- **Creative twist:** Ask for one indirect consequence after reveal.
+
+### 4) Timeline Event ↔ Year/Era
+- **Learning goal:** Anchor chronology.
+- **How to run it:** Match events with dates or periods.
+- **Creative twist:** Include two close dates to train precision.
+
+### 5) Formula ↔ Real-World Use
+- **Learning goal:** Connect abstract math/science to application.
+- **How to run it:** Match formulas/concepts to practical scenarios.
+- **Creative twist:** Students propose one extra scenario not listed.
+
+### 6) Quote ↔ Speaker/Character
+- **Learning goal:** Improve close reading/literary analysis.
+- **How to run it:** Match lines to character/author/source.
+- **Creative twist:** Add one “style clue” question after matching.
+
+### 7) Image ↔ Label (Content Vocabulary)
+- **Learning goal:** Build visual vocabulary retention.
+- **How to run it:** Match image labels (organs, map regions, tools, symbols).
+- **Creative twist:** Turn top matched pairs into a quick oral recap.
+
+### 8) Error Type ↔ Correction Strategy
+- **Learning goal:** Improve self-editing.
+- **How to run it:** Match common error categories with correction actions.
+- **Creative twist:** Students diagnose one sample sentence using the matched strategy.
+
+### 9) Function ↔ Language Chunk
+- **Learning goal:** Improve communicative fluency.
+- **How to run it:** Match communicative functions (agree/disagree/suggest) to useful phrases.
+- **Creative twist:** Pair role-play using at least 4 matched chunks.
+
+### 10) Data Point ↔ Interpretation
+- **Learning goal:** Build data literacy.
+- **How to run it:** Match chart facts/statistics to correct interpretation statements.
+- **Creative twist:** Include one misleading interpretation to discuss bias.
+
+### 11) Synonym Leveling (Easy ↔ Academic)
+- **Learning goal:** Expand register range.
+- **How to run it:** Match basic words to more academic alternatives.
+- **Creative twist:** Students rewrite one paragraph using 3 upgraded words.
+
+### 12) Cross-Topic Bridge Pairs
+- **Learning goal:** Encourage transfer across units.
+- **How to run it:** Match ideas from current unit to related ideas from previous units.
+- **Creative twist:** Students explain one surprising connection in one sentence.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -350,7 +414,7 @@ How to read this section:
 - [x] Batch 3: True/False
 - [x] Batch 4: Text answer
 - [x] Batch 5: Context gap
-- [ ] Batch 6: Match pairs
+- [x] Batch 6: Match pairs
 - [ ] Batch 7: Error hunt
 - [ ] Batch 8: Open answer
 - [ ] Batch 9: Puzzle/order
@@ -359,4 +423,4 @@ How to read this section:
 - [ ] Batch 12: Audio question
 - [ ] Batch 13: Image open
 
-Next pass will continue with Batch 6 (Match pairs) and add 10+ creative classroom use-cases.
+Next pass will continue with Batch 7 (Error hunt) and add 10+ creative classroom use-cases.
