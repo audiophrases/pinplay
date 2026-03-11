@@ -5899,7 +5899,10 @@ async function playQuestionAudio(question) {
   try {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     if (!base) throw new Error('Backend URL is not configured.');
-    const voice = String(question.language || 'en-US-AriaNeural').trim() || 'en-US-AriaNeural';
+    const rawVoice = String(question.language || 'en-US-AriaNeural').trim();
+    const voice = /neural/i.test(rawVoice)
+      ? rawVoice
+      : (rawVoice.toLowerCase().startsWith('en-gb') ? 'en-GB-SoniaNeural' : 'en-US-AriaNeural');
     const key = `${voice}::${text}`;
 
     let audioUrl = edgeTtsBlobUrlCache.get(key);
