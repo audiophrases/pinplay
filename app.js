@@ -61,6 +61,7 @@ const previewExitBtn = document.getElementById('previewExitBtn');
 const previewStudentCountEl = document.getElementById('previewStudentCount');
 const previewResponseProfileEl = document.getElementById('previewResponseProfile');
 const previewTimingProfileEl = document.getElementById('previewTimingProfile');
+const previewTextQualityProfileEl = document.getElementById('previewTextQualityProfile');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
@@ -136,6 +137,7 @@ let previewMode = {
   simStudentCount: 10,
   simProfile: 'balanced',
   simTimingProfile: 'staggered',
+  simTextQualityProfile: 'acceptable',
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -1668,6 +1670,12 @@ function bindLiveEvents() {
   if (previewTimingProfileEl) {
     previewTimingProfileEl.addEventListener('change', () => {
       previewMode.simTimingProfile = String(previewTimingProfileEl.value || 'staggered');
+      renderPreviewFrame();
+    });
+  }
+  if (previewTextQualityProfileEl) {
+    previewTextQualityProfileEl.addEventListener('change', () => {
+      previewMode.simTextQualityProfile = String(previewTextQualityProfileEl.value || 'acceptable');
       renderPreviewFrame();
     });
   }
@@ -3932,6 +3940,7 @@ function startPreviewMode(mode) {
   previewMode.simStudentCount = Math.max(1, Math.min(60, Number(previewStudentCountEl?.value || previewMode.simStudentCount || 10)));
   previewMode.simProfile = String(previewResponseProfileEl?.value || previewMode.simProfile || 'balanced');
   previewMode.simTimingProfile = String(previewTimingProfileEl?.value || previewMode.simTimingProfile || 'staggered');
+  previewMode.simTextQualityProfile = String(previewTextQualityProfileEl?.value || previewMode.simTextQualityProfile || 'acceptable');
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -4079,6 +4088,38 @@ function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
   return players;
 }
 
+function buildPreviewTextAnswer(name, quality, prompt = '') {
+  const topic = String(prompt || 'the topic').split(/[.?!]/)[0].trim() || 'the topic';
+  if (quality === 'excellent') return `${name}: Clear, accurate answer with strong example about ${topic}.`;
+  if (quality === 'weak') return `${name}: maybe about ${topic}, not sure...`;
+  if (quality === 'empty') return '';
+  return `${name}: Correct idea with simple explanation about ${topic}.`;
+}
+
+function buildPreviewOpenResponses(question, simPlayers, quality) {
+  const teacherGraded = question && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || (question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length));
+  if (!teacherGraded) return [];
+
+  return simPlayers
+    .filter((p) => p.answeredCurrent)
+    .map((p, idx) => {
+      const q = quality === 'acceptable' && idx % 4 === 0 ? 'excellent' : quality;
+      const answer = question.type === 'speaking'
+        ? '__spoken__'
+        : buildPreviewTextAnswer(p.name, q, question.prompt || '');
+      return {
+        playerId: p.id,
+        name: p.name,
+        answer,
+        graded: false,
+        pointsAwarded: 0,
+        hidden: false,
+        correction: '',
+        modelAnswer: false,
+      };
+    });
+}
+
 function renderPreviewFrame() {
   if (!previewMode.active) return;
   const q = quiz.questions[previewMode.index];
@@ -4100,7 +4141,7 @@ function renderPreviewFrame() {
       questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
       correctAnswer: '',
       pollSummary: null,
-      openResponses: [],
+      openResponses: buildPreviewOpenResponses(q, simPlayers, previewMode.simTextQualityProfile),
       players: simPlayers,
       reactions: [],
     };
