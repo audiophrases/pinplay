@@ -2839,6 +2839,7 @@ function renderHostQuestion(state) {
     if (!live.host.questionIntroDone) {
       const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
       if (elapsed < 1000) {
+        hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = '';
         hostQuestionHintEl.textContent = '';
         hostQuestionAnswersEl.innerHTML = '';
@@ -2857,6 +2858,7 @@ function renderHostQuestion(state) {
       }
 
       if (elapsed < 2000) {
+        hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
         hostQuestionHintEl.textContent = '';
         hostQuestionAnswersEl.innerHTML = '';
@@ -2872,6 +2874,7 @@ function renderHostQuestion(state) {
     }
   }
 
+  hostQuestionWrap.classList.remove('center-stage');
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
   hostQuestionAnswersEl.innerHTML = '';
 
