@@ -4257,7 +4257,9 @@ function renderPreviewStudentStack(sim) {
     const wrong = list.filter((p) => p.previewResult === 'wrong').length;
     const none = list.filter((p) => p.previewResult === 'none').length;
     const bets = list.filter((p) => Number(p.previewBet || 0) > 0).length;
-    studentPreviewSummaryEl.textContent = `Summary: ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet`;
+    const submitted = list.length - none;
+    const phase = previewMode.showReveal ? 'reveal' : 'question';
+    studentPreviewSummaryEl.textContent = `Summary: ${submitted}/${list.length} submitted · ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet · phase: ${phase}`;
   }
 
   list.forEach((p, i) => {
