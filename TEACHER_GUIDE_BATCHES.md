@@ -392,6 +392,384 @@ How to read this section:
 
 ---
 
+## Batch 7 — Error Hunt
+
+### 1) Tense Detective
+- **Learning goal:** Spot tense agreement issues quickly.
+- **How to run it:** 1 sentence with 2–4 hidden tense errors.
+- **Creative twist:** Students classify each error (time marker mismatch, form error, sequence issue).
+
+### 2) False Friend Trap Hunt
+- **Learning goal:** Reduce L1 interference mistakes.
+- **How to run it:** Include common Catalan/Spanish→English false friends in context.
+- **Creative twist:** Build a class “false friend blacklist” from misses.
+
+### 3) Punctuation Rescue
+- **Learning goal:** Improve readability and sentence control.
+- **How to run it:** Error hunt focused only on punctuation and capitalization.
+- **Creative twist:** Before fixing, students predict how meaning changes if punctuation stays wrong.
+
+### 4) Agreement Clinic
+- **Learning goal:** Consolidate subject-verb and noun-adjective agreement.
+- **How to run it:** Short paragraph with mixed agreement errors.
+- **Creative twist:** Teams compete for “cleanest corrected version.”
+
+### 5) Register Filter
+- **Learning goal:** Distinguish formal/informal language.
+- **How to run it:** Academic email with slang intrusions; students hunt inappropriate register.
+- **Creative twist:** Rewrite in two versions: teacher email vs friend chat.
+
+### 6) Scientific Writing Debug
+- **Learning goal:** Improve precision in STEM language.
+- **How to run it:** Lab-report sentences with vague/incorrect terminology.
+- **Creative twist:** Students replace weak words with measurable language.
+
+### 7) Source-Citation Error Hunt
+- **Learning goal:** Build academic integrity habits.
+- **How to run it:** Paragraph with citation/quoting mistakes.
+- **Creative twist:** Add one “looks right but still wrong” citation format case.
+
+### 8) Logic Leak Hunt
+- **Learning goal:** Strengthen argument coherence.
+- **How to run it:** Claims with contradiction or missing connector logic.
+- **Creative twist:** Students label each error as contradiction, unsupported jump, or ambiguity.
+
+### 9) Pronoun Reference Repair
+- **Learning goal:** Improve clarity in long sentences.
+- **How to run it:** Hunt ambiguous pronoun references in a paragraph.
+- **Creative twist:** Students rewrite with explicit noun references.
+
+### 10) Exam-Proof Editing Sprint
+- **Learning goal:** Build exam editing speed.
+- **How to run it:** 90-second error hunt rounds with immediate reveal.
+- **Creative twist:** Second attempt allows “accuracy over speed” scoring.
+
+---
+
+## Batch 8 — Open Answer
+
+### 1) Claim-Evidence-Reasoning Mini Response
+- **Learning goal:** Structure analytical writing.
+- **How to run it:** Students answer in 3 lines: claim, evidence, reasoning.
+- **Creative twist:** Teacher spotlights strong reasoning sentence after grading.
+
+### 2) Opinion with Counterpoint
+- **Learning goal:** Develop balanced argumentation.
+- **How to run it:** Prompt asks for opinion + one possible objection.
+- **Creative twist:** Peer replies with one respectful rebuttal.
+
+### 3) Real-Life Problem Solver
+- **Learning goal:** Apply content to practical contexts.
+- **How to run it:** Open prompt based on local/community scenario.
+- **Creative twist:** Students vote most feasible solution.
+
+### 4) Historical Perspective Shift
+- **Learning goal:** Build empathy and contextual analysis.
+- **How to run it:** Answer as if writing from perspective of historical actor.
+- **Creative twist:** Include a constraint: must mention 2 factual references.
+
+### 5) Science Explanation for Non-Experts
+- **Learning goal:** Simplify complex content accurately.
+- **How to run it:** Explain concept to a younger student audience.
+- **Creative twist:** Bonus for clear analogy.
+
+### 6) Reflective Learning Journal Prompt
+- **Learning goal:** Strengthen metacognition.
+- **How to run it:** “What did you change in your thinking today?”
+- **Creative twist:** Compare first-week vs current responses monthly.
+
+### 7) Ethical Dilemma Response
+- **Learning goal:** Practice reasoned decision-making.
+- **How to run it:** Open scenario with no perfect answer.
+- **Creative twist:** Require one value principle and one practical consequence.
+
+### 8) Micro-Essay in 80 Words
+- **Learning goal:** Improve concise writing.
+- **How to run it:** Limit response length to force prioritization.
+- **Creative twist:** Students self-edit once before submit.
+
+### 9) Explain Your Error
+- **Learning goal:** Turn mistakes into learning artifacts.
+- **How to run it:** Students describe one mistake and correction plan.
+- **Creative twist:** Make a class anonymous “mistakes that taught us” wall.
+
+### 10) Two-Audience Rewrite
+- **Learning goal:** Build audience awareness.
+- **How to run it:** Same idea written once for peers, once for teachers.
+- **Creative twist:** Class identifies which linguistic choices changed tone.
+
+---
+
+## Batch 9 — Puzzle / Order
+
+### 1) Sentence Builder Race
+- **Learning goal:** Reinforce word order and syntax.
+- **How to run it:** Rearrange scrambled chunks into correct sentence.
+- **Creative twist:** Include one distractor chunk.
+
+### 2) Process Sequencing (Science)
+- **Learning goal:** Understand procedural logic.
+- **How to run it:** Order steps of a scientific process/experiment.
+- **Creative twist:** Students justify why step 3 must precede step 4.
+
+### 3) Historical Event Chain
+- **Learning goal:** Build chronology + causation.
+- **How to run it:** Order events leading to an outcome.
+- **Creative twist:** Add one optional event and ask if it belongs.
+
+### 4) Paragraph Coherence Puzzle
+- **Learning goal:** Improve discourse organization.
+- **How to run it:** Reorder paragraph sentences for best flow.
+- **Creative twist:** Discuss which transition words gave clues.
+
+### 5) Problem-Solving Method Order
+- **Learning goal:** Internalize problem-solving routines.
+- **How to run it:** Sequence method steps (understand-plan-solve-check).
+- **Creative twist:** Students map where they usually skip steps.
+
+### 6) Dialogue Flow Organizer
+- **Learning goal:** Practice pragmatic conversation order.
+- **How to run it:** Reorder lines of a dialogue.
+- **Creative twist:** Add one alternate ending and vote best fit.
+
+### 7) Argument Structure Builder
+- **Learning goal:** Learn thesis→support→conclusion flow.
+- **How to run it:** Order argument fragments.
+- **Creative twist:** Ask students to improve one weak support piece.
+
+### 8) Story Arc Sequencing
+- **Learning goal:** Understand narrative structure.
+- **How to run it:** Order exposition, conflict, climax, resolution elements.
+- **Creative twist:** Students rewrite final line to change mood.
+
+### 9) Instruction Manual Rebuild
+- **Learning goal:** Improve technical writing logic.
+- **How to run it:** Sequence mixed instruction steps.
+- **Creative twist:** Identify which step is unsafe if misplaced.
+
+### 10) Multi-Path Puzzle Challenge
+- **Learning goal:** Recognize valid alternative orders when applicable.
+- **How to run it:** Puzzle where 2 orders are acceptable.
+- **Creative twist:** Compare why both are valid.
+
+---
+
+## Batch 10 — Slider
+
+### 1) Estimation Warm-Up
+- **Learning goal:** Improve numeric intuition.
+- **How to run it:** Slider guesses before exact calculation.
+- **Creative twist:** Award points by closeness bands.
+
+### 2) Confidence Meter Companion
+- **Learning goal:** Build self-assessment habits.
+- **How to run it:** Pair each answer with slider confidence (0–100).
+- **Creative twist:** Highlight high-confidence wrong answers for learning.
+
+### 3) Opinion Spectrum Debate
+- **Learning goal:** Encourage nuanced positions.
+- **How to run it:** Statement + slider from strongly disagree to strongly agree.
+- **Creative twist:** Students explain why they moved from first to second vote.
+
+### 4) Probability Sense Drill
+- **Learning goal:** Improve probabilistic reasoning.
+- **How to run it:** Estimate probability of outcomes before reveal.
+- **Creative twist:** Compare intuition vs real data.
+
+### 5) Reading Difficulty Scale
+- **Learning goal:** Calibrate text complexity awareness.
+- **How to run it:** Rate passage difficulty with slider.
+- **Creative twist:** Correlate perceived difficulty with actual errors.
+
+### 6) Pronunciation Self-Rating
+- **Learning goal:** Build reflective speaking practice.
+- **How to run it:** Students speak then slider-rate own clarity.
+- **Creative twist:** Pair with peer rating for calibration.
+
+### 7) Data Interpretation Magnitude
+- **Learning goal:** Interpret trends quantitatively.
+- **How to run it:** Slider estimate “how much change?” from graph.
+- **Creative twist:** Require one sentence justification.
+
+### 8) Time-on-Task Planning
+- **Learning goal:** Strengthen study planning.
+- **How to run it:** Slider: minutes needed for each homework task.
+- **Creative twist:** Compare plan vs actual next day.
+
+### 9) Risk Assessment Simulation
+- **Learning goal:** Practice decision-making under uncertainty.
+- **How to run it:** Scenario + slider risk score.
+- **Creative twist:** Students defend risk threshold differences.
+
+### 10) Prior Knowledge Thermometer
+- **Learning goal:** Activate schema before new unit.
+- **How to run it:** Slider “how familiar are you with this topic?”
+- **Creative twist:** Repeat after unit to show growth visually.
+
+---
+
+## Batch 11 — Pin on Image
+
+### 1) Map Literacy Locator
+- **Learning goal:** Strengthen spatial geography memory.
+- **How to run it:** Pin countries, rivers, capitals on map images.
+- **Creative twist:** Timed “lightning geography” rounds.
+
+### 2) Biology Diagram Targeting
+- **Learning goal:** Learn anatomy labels functionally.
+- **How to run it:** Pin organs/parts on diagrams.
+- **Creative twist:** Follow each pin with one function sentence.
+
+### 3) Geometry Feature Spotting
+- **Learning goal:** Identify angles/shapes/properties visually.
+- **How to run it:** Pin symmetry lines, right angles, centers.
+- **Creative twist:** Students explain why near-miss pins were wrong.
+
+### 4) Historical Image Analysis
+- **Learning goal:** Improve source reading from visuals.
+- **How to run it:** Pin evidence zones in historical photos/posters.
+- **Creative twist:** Ask what each pinned detail suggests about context.
+
+### 5) Lab Equipment Recognition
+- **Learning goal:** Improve practical readiness and safety.
+- **How to run it:** Pin correct tool in cluttered lab image.
+- **Creative twist:** Add “what is this NOT used for?” follow-up.
+
+### 6) Literary Setting Evidence Hunt
+- **Learning goal:** Connect text to visual inference.
+- **How to run it:** Pin image elements supporting setting mood/theme.
+- **Creative twist:** Students justify with one quote from text.
+
+### 7) Sports/Movement Technique Analysis
+- **Learning goal:** Improve observation precision.
+- **How to run it:** Pin posture/position errors in movement snapshot.
+- **Creative twist:** Students propose correction cue.
+
+### 8) Art Critique Focus Points
+- **Learning goal:** Train visual analysis vocabulary.
+- **How to run it:** Pin composition focal points, contrast zones, perspective lines.
+- **Creative twist:** Compare differing valid pins between students.
+
+### 9) Environmental Issue Mapping
+- **Learning goal:** Connect local-global environmental patterns.
+- **How to run it:** Pin pollution hotspots, protected areas, impact zones.
+- **Creative twist:** Add short “one local action” response.
+
+### 10) Safety Hazard Finder
+- **Learning goal:** Build real-world risk detection.
+- **How to run it:** Classroom/workshop image with hidden hazards to pin.
+- **Creative twist:** Teams create one hazard scene for another class.
+
+---
+
+## Batch 12 — Audio Question
+
+### 1) Minimal Pair Discrimination
+- **Learning goal:** Improve phonological awareness.
+- **How to run it:** Audio word; choose meaning/spelling.
+- **Creative twist:** Students record own minimal-pair challenge clips.
+
+### 2) Dictation Burst
+- **Learning goal:** Strengthen listening-to-writing accuracy.
+- **How to run it:** Short audio chunk, quick typed response.
+- **Creative twist:** Second play only for punctuation check.
+
+### 3) Accent Exposure Rotation
+- **Learning goal:** Build listening flexibility across accents.
+- **How to run it:** Same concept with different speaker accents.
+- **Creative twist:** Students identify clue words that unlocked meaning.
+
+### 4) Tone and Intent Decoder
+- **Learning goal:** Understand pragmatics and emotion in speech.
+- **How to run it:** Audio statement; infer intent (sarcasm, doubt, certainty).
+- **Creative twist:** Students mimic alternate tone and discuss meaning shift.
+
+### 5) Listening for Details
+- **Learning goal:** Improve selective attention.
+- **How to run it:** Audio with numbers/dates/names; students capture key details.
+- **Creative twist:** Include one distractor detail from prior item.
+
+### 6) Story Continuation from Audio Prompt
+- **Learning goal:** Link listening and creative writing.
+- **How to run it:** Play opening line; students complete the next two lines.
+- **Creative twist:** Class votes most coherent continuation.
+
+### 7) Subject CLIL Audio Capsule
+- **Learning goal:** Support content learning through English audio.
+- **How to run it:** Short science/history explanation clip + comprehension question.
+- **Creative twist:** Add glossary challenge for key terms heard.
+
+### 8) Error-in-Audio Catch
+- **Learning goal:** Sharpen grammar listening.
+- **How to run it:** Audio sentence includes one error; students identify/fix.
+- **Creative twist:** Students write corrected transcript.
+
+### 9) Debate Quote Reaction
+- **Learning goal:** Build critical listening.
+- **How to run it:** Audio opinion clip, students respond agree/disagree + reason.
+- **Creative twist:** Switch sides and argue opposite.
+
+### 10) Micro-Podcast Exit Ticket
+- **Learning goal:** Consolidate lesson via listening summary.
+- **How to run it:** 30-second recap audio + one synthesis question.
+- **Creative twist:** Rotate student-created recaps weekly.
+
+---
+
+## Batch 13 — Image Open
+
+### 1) Describe-Interpret-Evaluate
+- **Learning goal:** Build structured visual analysis.
+- **How to run it:** 3-part response: what you see, what it means, why it matters.
+- **Creative twist:** Limit each part to one sentence.
+
+### 2) Caption Upgrade Challenge
+- **Learning goal:** Improve concise expressive writing.
+- **How to run it:** Write best caption for image context.
+- **Creative twist:** Do neutral, persuasive, and humorous versions.
+
+### 3) Inference from Visual Clues
+- **Learning goal:** Train evidence-based inference.
+- **How to run it:** Students infer time/place/situation from image clues.
+- **Creative twist:** Require citing 2 visible clues.
+
+### 4) Before/After Narrative Prompt
+- **Learning goal:** Practice narrative tense control.
+- **How to run it:** “What happened just before and after this image?”
+- **Creative twist:** Force one past perfect and one future form.
+
+### 5) Character Voice Monologue
+- **Learning goal:** Build perspective writing.
+- **How to run it:** Write as one person/object in the image.
+- **Creative twist:** Add emotional constraint (worried, proud, confused).
+
+### 6) Problem-Solution from Scene
+- **Learning goal:** Develop practical reasoning.
+- **How to run it:** Identify problem visible in image + propose solution.
+- **Creative twist:** Students compare feasibility of solutions.
+
+### 7) Evidence for Theme (Literature/Art)
+- **Learning goal:** Connect visuals to thematic analysis.
+- **How to run it:** Explain which theme the image supports and why.
+- **Creative twist:** Link to one classroom text/unit concept.
+
+### 8) Data Comment from Infographic
+- **Learning goal:** Improve visual data literacy writing.
+- **How to run it:** Students summarize trend and implication from infographic image.
+- **Creative twist:** Require one caution about data limitations.
+
+### 9) Local Community Lens
+- **Learning goal:** Encourage civic relevance.
+- **How to run it:** Use local image (street, beach, transport) and ask for improvement idea.
+- **Creative twist:** Convert best idea into mini class action plan.
+
+### 10) Empathy Snapshot
+- **Learning goal:** Build social-emotional expression.
+- **How to run it:** Describe possible feelings of people shown and why.
+- **Creative twist:** Discuss respectful language choices.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -415,12 +793,12 @@ How to read this section:
 - [x] Batch 4: Text answer
 - [x] Batch 5: Context gap
 - [x] Batch 6: Match pairs
-- [ ] Batch 7: Error hunt
-- [ ] Batch 8: Open answer
-- [ ] Batch 9: Puzzle/order
-- [ ] Batch 10: Slider
-- [ ] Batch 11: Pin on image
-- [ ] Batch 12: Audio question
-- [ ] Batch 13: Image open
+- [x] Batch 7: Error hunt
+- [x] Batch 8: Open answer
+- [x] Batch 9: Puzzle/order
+- [x] Batch 10: Slider
+- [x] Batch 11: Pin on image
+- [x] Batch 12: Audio question
+- [x] Batch 13: Image open
 
-Next pass will continue with Batch 7 (Error hunt) and add 10+ creative classroom use-cases.
+All listed question-type batches are now completed (10+ use-cases each).
