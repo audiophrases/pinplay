@@ -2856,7 +2856,11 @@ function renderHostQuestion(state) {
         splash.className = 'question-intro-points';
         splash.textContent = `🎯 ${points} points`;
         hostQuestionAnswersEl.appendChild(splash);
-        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+        requestAnimationFrame(() => {
+          // Force one more render pass during intro even when host state payload is unchanged.
+          live.host.lastQuestionRenderKey = null;
+          renderHostState(live.host.state || {});
+        });
         return;
       }
 
@@ -2864,7 +2868,11 @@ function renderHostQuestion(state) {
         hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
         hostQuestionHintEl.textContent = '';
         hostQuestionAnswersEl.innerHTML = '';
-        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+        requestAnimationFrame(() => {
+          // Force one more render pass during intro even when host state payload is unchanged.
+          live.host.lastQuestionRenderKey = null;
+          renderHostState(live.host.state || {});
+        });
         return;
       }
 
