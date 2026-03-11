@@ -2597,7 +2597,9 @@ function renderHostState(state) {
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
-    playFx('answering');
+    if (!hasQuestionAudio(state.question)) {
+      playFx('answering');
+    }
     animatePulse(hostQuestionWrap || hostCardEl || hallCardEl);
     live.host.lastAllAnsweredKey = null;
     live.host.lastRevealKey = null;
@@ -5807,6 +5809,9 @@ function hasQuestionAudio(question) {
 
 function playQuestionAudio(question) {
   if (!hasQuestionAudio(question)) return;
+  // Prevent overlap with question background music/SFX.
+  stopFx('answering');
+
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
