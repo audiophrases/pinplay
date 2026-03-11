@@ -138,6 +138,7 @@ let previewMode = {
   simEdgeCaseProfile: 'none',
   simNames: [],
   simQuestionSeed: 0,
+  simTeacherByQ: {},
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -2121,7 +2122,15 @@ async function gradeOpenAnswer(playerId, points) {
   try {
     if (!playerId) return;
     if (previewMode.active) {
-      setStatus(hostStatusEl, 'Preview mode: grading actions are display-only in this batch.', 'ok');
+      const max = Number(live.host.state?.question?.points || 1000);
+      const value = Number(points);
+      const safePoints = Math.max(0, Math.min(max, Math.round(Number.isFinite(value) ? value : 0)));
+      setPreviewTeacherPatch(previewMode.index, playerId, {
+        graded: true,
+        pointsAwarded: safePoints,
+      });
+      setStatus(hostStatusEl, `Preview grade applied: ${safePoints} pts.`, 'ok');
+      renderPreviewFrame();
       return;
     }
     ensureHostReady();
@@ -2173,7 +2182,9 @@ async function hostHideOpenResponse(playerId) {
   try {
     if (!playerId) return;
     if (previewMode.active) {
-      setStatus(hostStatusEl, 'Preview mode: hide action is display-only in this batch.', 'ok');
+      setPreviewTeacherPatch(previewMode.index, playerId, { hidden: true });
+      setStatus(hostStatusEl, 'Preview hide applied.', 'ok');
+      renderPreviewFrame();
       return;
     }
     ensureHostReady();
@@ -2198,7 +2209,12 @@ async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer =
   try {
     if (!playerId) return;
     if (previewMode.active) {
-      setStatus(hostStatusEl, 'Preview mode: correction action is display-only in this batch.', 'ok');
+      const seed = String(currentText || '').trim() || String(studentAnswer || '').trim();
+      const text = prompt('Preview correction/feedback for student:', seed);
+      if (text == null) return;
+      setPreviewTeacherPatch(previewMode.index, playerId, { correction: String(text || '').slice(0, 280) });
+      setStatus(hostStatusEl, 'Preview correction saved.', 'ok');
+      renderPreviewFrame();
       return;
     }
     ensureHostReady();
@@ -2228,7 +2244,9 @@ async function hostToggleModelAnswer(playerId, nextValue) {
   try {
     if (!playerId) return;
     if (previewMode.active) {
-      setStatus(hostStatusEl, 'Preview mode: model-answer toggle is display-only in this batch.', 'ok');
+      setPreviewTeacherPatch(previewMode.index, playerId, { modelAnswer: !!nextValue });
+      setStatus(hostStatusEl, nextValue ? 'Preview: marked model answer.' : 'Preview: unmarked model answer.', 'ok');
+      renderPreviewFrame();
       return;
     }
     ensureHostReady();
@@ -4164,6 +4182,22 @@ function buildPreviewTextAnswer(name, quality, prompt = '') {
   return `${name}: Correct idea with simple explanation about ${topic}.`;
 }
 
+function getPreviewTeacherPatch(qIndex, playerId) {
+  const byQ = previewMode.simTeacherByQ || {};
+  const qKey = String(Number(qIndex || 0));
+  return byQ?.[qKey]?.[String(playerId || '')] || null;
+}
+
+function setPreviewTeacherPatch(qIndex, playerId, patch) {
+  const qKey = String(Number(qIndex || 0));
+  const pKey = String(playerId || '');
+  if (!previewMode.simTeacherByQ[qKey]) previewMode.simTeacherByQ[qKey] = {};
+  previewMode.simTeacherByQ[qKey][pKey] = {
+    ...(previewMode.simTeacherByQ[qKey][pKey] || {}),
+    ...(patch || {}),
+  };
+}
+
 function buildPreviewOpenResponses(question, simPlayers, quality) {
   const teacherGraded = question && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || (question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length));
   if (!teacherGraded) return [];
@@ -4175,7 +4209,7 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
       const answer = question.type === 'speaking'
         ? '__spoken__'
         : buildPreviewTextAnswer(p.name, q, question.prompt || '');
-      return {
+      const base = {
         playerId: p.id,
         name: p.name,
         answer,
@@ -4185,6 +4219,8 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
         correction: '',
         modelAnswer: false,
       };
+      const patch = getPreviewTeacherPatch(previewMode.index, p.id);
+      return patch ? { ...base, ...patch } : base;
     });
 }
 
