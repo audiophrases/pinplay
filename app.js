@@ -4221,6 +4221,35 @@ function renderPreviewStudentStack(sim) {
   });
 }
 
+function buildPreviewAnswerHistory(question, simPlayers, openResponses) {
+  const q = question || {};
+  const openMap = new Map((openResponses || []).map((r) => [String(r.playerId || ''), r]));
+  const entries = (simPlayers || []).map((p) => {
+    const r = openMap.get(String(p.id || ''));
+    const graded = !!r?.graded;
+    const pointsAwarded = Number(r?.pointsAwarded || 0);
+    const answerText = r ? String(r.answer || '') : summarizePreviewStudentAnswer(q, p, new Map((openResponses || []).map((x) => [String(x.playerId || ''), String(x.answer || '')])));
+    return {
+      playerId: p.id,
+      name: p.name,
+      answerText,
+      correct: p.previewResult === 'correct',
+      graded,
+      pointsAwarded,
+      hidden: false,
+      correction: String(r?.correction || ''),
+      modelAnswer: !!r?.modelAnswer,
+    };
+  });
+
+  return [{
+    qIndex: Number(previewMode.index || 0),
+    prompt: String(q.prompt || ''),
+    type: String(q.type || ''),
+    entries,
+  }];
+}
+
 function buildPreviewSimulationState(question) {
   const safeQuestion = buildPreviewHostQuestion(question);
   previewMode.simQuestionSeed = hashStringInt(`${previewMode.index}:${question?.id || question?.prompt || ''}`);
@@ -4234,6 +4263,7 @@ function buildPreviewSimulationState(question) {
   const answeredCount = simPlayers.filter((p) => p.answeredCurrent).length;
   const me = simPlayers[0] || { name: 'Preview Student', score: 0, answeredCurrent: false };
 
+  const openResponses = buildPreviewOpenResponses(question, simPlayers, previewMode.simTextQualityProfile);
   const hostState = {
     phase: 'question',
     currentIndex: previewMode.index,
@@ -4246,7 +4276,8 @@ function buildPreviewSimulationState(question) {
     questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
     correctAnswer: '',
     pollSummary: null,
-    openResponses: buildPreviewOpenResponses(question, simPlayers, previewMode.simTextQualityProfile),
+    openResponses,
+    answerHistory: buildPreviewAnswerHistory(question, simPlayers, openResponses),
     players: simPlayers,
     reactions: [],
   };
@@ -4285,6 +4316,7 @@ function renderPreviewFrame() {
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
   renderProjectorScores(sim.hostState.players || []);
   renderHostQuestion(sim.hostState);
+  renderHostAnswerHistory(sim.hostState);
   renderPreviewStudentStack(sim);
 }
 
