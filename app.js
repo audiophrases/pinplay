@@ -3809,19 +3809,8 @@ function renderJoinQuestion(question) {
 
 async function submitLiveAnswer() {
   try {
-    if (previewMode.active && previewMode.mode === 'student') {
-      const q = quiz.questions[previewMode.index];
-      if (!q) return;
-      const answer = readJoinAnswer();
-      if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
-
-      const verdict = evaluatePreviewAnswer(q, answer);
-      previewMode.answeredCurrent = true;
-      previewMode.revealedResult = verdict;
-      if (verdict.correct) {
-        previewMode.score += Number(q.points || 1000);
-      }
-      renderPreviewFrame();
+    if (previewMode.active) {
+      setStatus(joinFeedbackEl, 'Unified preview: use teacher controls to move/reveal rounds.', 'ok');
       return;
     }
 
@@ -3982,7 +3971,7 @@ function startPreviewMode(mode) {
   live.player.pinSelections = [];
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.toggle('hidden', mode !== 'student');
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
 
   renderPreviewFrame();
 }
@@ -4264,26 +4253,14 @@ function renderPreviewFrame() {
 
   const sim = buildPreviewSimulationState(q);
 
-  if (previewMode.mode === 'unified' || previewMode.mode === 'live') {
-    if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
-    if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.remove('hidden');
-    if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
-    if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
-    if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
-    renderProjectorScores(sim.hostState.players || []);
-    renderHostQuestion(sim.hostState);
-    renderPreviewStudentStack(sim);
-    return;
-  }
-
-  if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
-  renderPlayerState(sim.studentState);
-  if (previewMode.revealedResult) {
-    if (previewMode.revealedResult.correct) setStatus(joinFeedbackEl, `✅ Correct (+${Number(q.points || 1000)} pts)`, 'ok');
-    else if (previewMode.revealedResult.graded === false) setStatus(joinFeedbackEl, '⏳ Waiting for teacher grading.', 'ok');
-    else setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
-  }
+  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+  if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.remove('hidden');
+  if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
+  if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
+  if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
+  renderProjectorScores(sim.hostState.players || []);
+  renderHostQuestion(sim.hostState);
+  renderPreviewStudentStack(sim);
 }
 
 function ensureHostReady() {
