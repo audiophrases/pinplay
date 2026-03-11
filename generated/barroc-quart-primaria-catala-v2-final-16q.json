@@ -245,7 +245,8 @@
           "text": "una cantant d’òpera moderna",
           "correct": false
         }
-      ]
+      ],
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Artemisia_Gentileschi_-_Self-Portrait_as_the_Allegory_of_Painting.jpg/800px-Artemisia_Gentileschi_-_Self-Portrait_as_the_Allegory_of_Painting.jpg"
     },
     {
       "id": "q12",
