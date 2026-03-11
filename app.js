@@ -189,6 +189,7 @@ const live = {
     },
     questionIntroKey: null,
     questionIntroStartedAt: 0,
+    questionIntroDone: false,
   },
   player: {
     pin: null,
@@ -2796,6 +2797,7 @@ function renderHostQuestion(state) {
   if (!inQuestionIntro) {
     live.host.questionIntroKey = null;
     live.host.questionIntroStartedAt = 0;
+    live.host.questionIntroDone = false;
   }
 
   if (!question) {
@@ -2811,33 +2813,40 @@ function renderHostQuestion(state) {
   const qPrompt = question.prompt || '(No question text)';
 
   if (inQuestionIntro) {
-    const introKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
+    // Use index-only key for intro stability: some backends/relays may jitter questionStartedAt,
+    // which can repeatedly reset the intro and leave the splash stuck forever.
+    const introKey = `${state.currentIndex}`;
     if (live.host.questionIntroKey !== introKey) {
       live.host.questionIntroKey = introKey;
       live.host.questionIntroStartedAt = Date.now();
+      live.host.questionIntroDone = false;
     }
 
-    const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
-    if (elapsed < 1000) {
-      hostQuestionPromptEl.textContent = '';
-      hostQuestionHintEl.textContent = '';
-      hostQuestionAnswersEl.innerHTML = '';
+    if (!live.host.questionIntroDone) {
+      const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
+      if (elapsed < 1000) {
+        hostQuestionPromptEl.textContent = '';
+        hostQuestionHintEl.textContent = '';
+        hostQuestionAnswersEl.innerHTML = '';
 
-      const points = Number(question.points || 0).toLocaleString('en-US');
-      const splash = document.createElement('div');
-      splash.className = 'question-intro-points';
-      splash.textContent = `🎯 ${points} points`;
-      hostQuestionAnswersEl.appendChild(splash);
-      requestAnimationFrame(() => renderHostState(live.host.state || {}));
-      return;
-    }
+        const points = Number(question.points || 0).toLocaleString('en-US');
+        const splash = document.createElement('div');
+        splash.className = 'question-intro-points';
+        splash.textContent = `🎯 ${points} points`;
+        hostQuestionAnswersEl.appendChild(splash);
+        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+        return;
+      }
 
-    if (elapsed < 2000) {
-      hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
-      hostQuestionHintEl.textContent = '';
-      hostQuestionAnswersEl.innerHTML = '';
-      requestAnimationFrame(() => renderHostState(live.host.state || {}));
-      return;
+      if (elapsed < 2000) {
+        hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+        hostQuestionHintEl.textContent = '';
+        hostQuestionAnswersEl.innerHTML = '';
+        requestAnimationFrame(() => renderHostState(live.host.state || {}));
+        return;
+      }
+
+      live.host.questionIntroDone = true;
     }
   }
 
