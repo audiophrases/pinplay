@@ -58,6 +58,8 @@ const hostNextBtn = document.getElementById('hostNextBtn');
 const previewLiveBtn = document.getElementById('previewLiveBtn');
 const previewStudentBtn = document.getElementById('previewStudentBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
+const previewStudentCountEl = document.getElementById('previewStudentCount');
+const previewResponseProfileEl = document.getElementById('previewResponseProfile');
 const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
@@ -130,6 +132,8 @@ let previewMode = {
   score: 0,
   answeredCurrent: false,
   revealedResult: null,
+  simStudentCount: 10,
+  simProfile: 'balanced',
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -1645,6 +1649,20 @@ function bindLiveEvents() {
   if (previewLiveBtn) previewLiveBtn.addEventListener('click', () => startPreviewMode('live'));
   if (previewStudentBtn) previewStudentBtn.addEventListener('click', () => startPreviewMode('student'));
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
+
+  if (previewStudentCountEl) {
+    previewStudentCountEl.addEventListener('change', () => {
+      const n = Number(previewStudentCountEl.value || 10);
+      previewMode.simStudentCount = Math.max(1, Math.min(60, Number.isFinite(n) ? n : 10));
+      renderPreviewFrame();
+    });
+  }
+  if (previewResponseProfileEl) {
+    previewResponseProfileEl.addEventListener('change', () => {
+      previewMode.simProfile = String(previewResponseProfileEl.value || 'balanced');
+      renderPreviewFrame();
+    });
+  }
 
   if (randomNamesToggleEl) {
     randomNamesToggleEl.addEventListener('click', hostUpdateRandomNames);
@@ -3903,6 +3921,8 @@ function startPreviewMode(mode) {
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
+  previewMode.simStudentCount = Math.max(1, Math.min(60, Number(previewStudentCountEl?.value || previewMode.simStudentCount || 10)));
+  previewMode.simProfile = String(previewResponseProfileEl?.value || previewMode.simProfile || 'balanced');
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -4017,6 +4037,29 @@ function evaluatePreviewAnswer(q, answer) {
   return { correct: false };
 }
 
+function previewCorrectRatio(profile) {
+  if (profile === 'mostly_correct') return 0.75;
+  if (profile === 'mostly_wrong') return 0.25;
+  return 0.5;
+}
+
+function buildPreviewPlayersSim(count, profile, points = 1000) {
+  const total = Math.max(1, Math.min(60, Number(count || 10)));
+  const ratio = previewCorrectRatio(profile);
+  const players = [];
+  for (let i = 0; i < total; i++) {
+    const rank = i + 1;
+    const correct = rank <= Math.round(total * ratio);
+    players.push({
+      id: `p${rank}`,
+      name: `Student ${rank}`,
+      score: correct ? Math.max(0, points - (rank * 20)) : Math.max(0, Math.round(points * 0.1)),
+      answeredCurrent: true,
+    });
+  }
+  return players;
+}
+
 function renderPreviewFrame() {
   if (!previewMode.active) return;
   const q = quiz.questions[previewMode.index];
@@ -4024,12 +4067,13 @@ function renderPreviewFrame() {
 
   if (previewMode.mode === 'live') {
     if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+    const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, Number(q.points || 1000));
     const state = {
       phase: 'question',
       currentIndex: previewMode.index,
       totalQuestions: quiz.questions.length,
-      responseCount: previewMode.answeredCurrent ? 1 : 0,
-      playerCount: 1,
+      responseCount: simPlayers.length,
+      playerCount: simPlayers.length,
       question: buildPreviewHostQuestion(q),
       questionClosed: !!previewMode.showReveal,
       questionClosedAt: previewMode.showReveal ? Date.now() : null,
@@ -4037,7 +4081,7 @@ function renderPreviewFrame() {
       correctAnswer: '',
       pollSummary: null,
       openResponses: [],
-      players: [{ name: 'Preview Student', score: previewMode.score, answeredCurrent: previewMode.answeredCurrent }],
+      players: simPlayers,
       reactions: [],
     };
     if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
@@ -4049,12 +4093,14 @@ function renderPreviewFrame() {
   }
 
   if (studentPreviewCardEl) studentPreviewCardEl.classList.remove('hidden');
+  const simPlayers = buildPreviewPlayersSim(previewMode.simStudentCount, previewMode.simProfile, Number(q.points || 1000));
+  const me = simPlayers[0] || { name: 'Preview Student', score: 0 };
   const state = {
     phase: 'question',
-    name: 'Preview Student',
+    name: me.name,
     currentIndex: previewMode.index,
     totalQuestions: quiz.questions.length,
-    score: previewMode.score,
+    score: Number(me.score || 0),
     answeredCurrent: previewMode.answeredCurrent,
     question: buildPreviewHostQuestion(q),
     questionClosed: false,
@@ -4064,7 +4110,7 @@ function renderPreviewFrame() {
     questionCloseReason: null,
     correctAnswer: '',
     revealedResult: previewMode.revealedResult,
-    leaderboard: [{ name: 'Preview Student', score: previewMode.score }],
+    leaderboard: simPlayers.slice(0, 10).map((p) => ({ name: p.name, score: p.score })),
   };
   renderPlayerState(state);
   if (previewMode.revealedResult) {
