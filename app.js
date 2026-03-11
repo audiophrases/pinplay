@@ -143,6 +143,7 @@ let previewMode = {
   simClassSeed: 0,
   simQuestionSeed: 0,
   simTeacherByQ: {},
+  prevPrimaryAudioHost: null,
 };
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -2590,21 +2591,6 @@ function renderHostState(state) {
   updateHallScene(state);
   updateHostTimer(state);
 
-  // Preview mode should be silent: no auto music/SFX/question audio.
-  if (previewMode.active) {
-    stopHallMusic();
-    stopFx('answering');
-    stopFx('answered');
-    stopFx('counter');
-    stopFx('drumrollwinner');
-    stopFx('final');
-    live.host.lastHostAudioKey = null;
-    live.host.lastPhase = state.phase;
-    live.host.lastIndex = state.currentIndex;
-    live.host.lastResponseCount = state.responseCount;
-    return;
-  }
-
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
     playFx('answering');
@@ -4029,6 +4015,9 @@ function startPreviewMode() {
   }
 
   previewMode.active = true;
+  previewMode.prevPrimaryAudioHost = live.host.isPrimaryAudioHost;
+  // Preview runs locally, so allow audio even when not the primary live host.
+  live.host.isPrimaryAudioHost = true;
   previewMode.simStudentCount = 14;
   previewMode.simNames = randomPreviewNames(14);
   previewMode.simClassSeed = Date.now();
@@ -4062,6 +4051,10 @@ function startPreviewMode() {
 
 function stopPreviewMode() {
   previewMode.active = false;
+  if (previewMode.prevPrimaryAudioHost != null) {
+    live.host.isPrimaryAudioHost = !!previewMode.prevPrimaryAudioHost;
+    previewMode.prevPrimaryAudioHost = null;
+  }
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
