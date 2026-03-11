@@ -823,6 +823,50 @@ How to read this section:
 
 ---
 
+## Ready-to-Use Weekly Theme Packs
+
+### 1) Climate & Sustainability Week
+- **Focus mix:** context gap + match pairs + open answer + pin on image
+- **Fun hook:** “Save the city” mission storyline
+- **Outcome:** vocabulary retention + real-world action proposals
+
+### 2) Media Literacy Week
+- **Focus mix:** true/false + multi-select + text answer + audio
+- **Fun hook:** “Fake or fair?” newsroom challenge
+- **Outcome:** source evaluation + argumentation quality
+
+### 3) Exam Prep Week
+- **Focus mix:** MCQ + slider confidence + error hunt + puzzle/order
+- **Fun hook:** personal best leaderboard by improvement, not raw score
+- **Outcome:** better strategy, lower anxiety, clearer revision targets
+
+### 4) Speaking & Listening Week
+- **Focus mix:** audio + open answer + text + true/false
+- **Fun hook:** mini podcast + reaction rounds
+- **Outcome:** comprehension speed + spoken response structure
+
+### 5) Cross-Curricular CLIL Week
+- **Focus mix:** pin on image + context gap + match pairs + open response
+- **Fun hook:** “subject detective” challenges (science/history/geography)
+- **Outcome:** content mastery through language practice
+
+---
+
+## Teacher Workflow: 10-Minute Quiz Authoring Method
+
+1. Choose one precise learning objective.
+2. Pick 2 easy, 3 medium, 1 challenge question.
+3. Mix at least 3 question types.
+4. Add one deliberate misconception distractor.
+5. Add one reflection question at the end.
+6. Set timer by cognitive load (fast recall vs deep reasoning).
+7. Pre-write one reveal explanation per key question.
+8. Prepare one remediation question for common failure point.
+9. Run live.
+10. Export top mistakes into next lesson starter.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
