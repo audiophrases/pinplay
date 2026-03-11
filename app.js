@@ -3630,7 +3630,8 @@ function renderPlayerState(state) {
 }
 
 function renderJoinQuestion(question) {
-  joinPromptEl.textContent = question.prompt || '(No question text)';
+  // context_gap renders the sentence inline with blanks, so avoid duplicating the same text above.
+  joinPromptEl.textContent = question.type === 'context_gap' ? '' : (question.prompt || '(No question text)');
   joinAnswersEl.innerHTML = '';
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
