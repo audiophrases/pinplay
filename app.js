@@ -127,6 +127,7 @@ collapseAllQuestions(quiz);
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
+let activeQuestionAudioEl = null;
 let previewMode = {
   active: false,
   index: 0,
@@ -2445,12 +2446,19 @@ function renderHostState(state) {
     live.host.seenReactionKeys = new Set();
     if (liveReactionsEl) liveReactionsEl.innerHTML = '';
     if (projectorReactionsEl) projectorReactionsEl.innerHTML = '';
+    // Moving to another phase/question must cut any ongoing question audio immediately.
+    stopQuestionAudioPlayback();
     if (state.phase !== 'results') {
       live.host.finalRevealKey = null;
       live.host.finalRevealStartedAt = 0;
       live.host.finalRevealStagePlayed = { drumroll: false, final: false };
       stopFx('drumrollwinner');
     }
+  }
+
+  if (prevState && !prevState.questionClosed && state.questionClosed) {
+    // Teacher revealed/closed current question: stop any still-playing clip.
+    stopQuestionAudioPlayback();
   }
 
   if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
@@ -5811,10 +5819,27 @@ function hasQuestionAudio(question) {
   return !!question.audioEnabled;
 }
 
+function stopQuestionAudioPlayback() {
+  try {
+    if (activeQuestionAudioEl) {
+      activeQuestionAudioEl.pause();
+      activeQuestionAudioEl.currentTime = 0;
+      activeQuestionAudioEl = null;
+    }
+  } catch {}
+
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  } catch {}
+}
+
 function playQuestionAudio(question) {
   if (!hasQuestionAudio(question)) return;
   // Prevent overlap with question background music/SFX.
   stopFx('answering');
+  stopQuestionAudioPlayback();
 
   const maybeResumeQuestionMusic = () => {
     const s = live.host.state;
@@ -5826,7 +5851,11 @@ function playQuestionAudio(question) {
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
-      a.addEventListener('ended', maybeResumeQuestionMusic, { once: true });
+      activeQuestionAudioEl = a;
+      a.addEventListener('ended', () => {
+        if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
+        maybeResumeQuestionMusic();
+      }, { once: true });
       a.play().catch(() => {});
     } catch {}
     return;
