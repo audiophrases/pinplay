@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "title": "Barroc vs Renaixement (Quart de Primària) - Català",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "tf",
+      "prompt": "Al Renaixement, l’art buscava equilibri i calma; al Barroc, l’art buscava emoció, moviment i contrast.",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "Vertader", "correct": true },
+        { "text": "Fals", "correct": false }
+      ]
+    },
+    {
+      "id": "q2",
+      "type": "match_pairs",
+      "prompt": "Relaciona cada etapa amb la seva característica principal.",
+      "points": 1000,
+      "timeLimit": 0,
+      "pairs": [
+        { "left": "Renaixement", "right": "equilibri i proporció" },
+        { "left": "Barroc", "right": "moviment i emoció" },
+        { "left": "Renaixement", "right": "composició clara i ordenada" },
+        { "left": "Barroc", "right": "contrast de llum i ombra" }
+      ]
+    },
+    {
+      "id": "q3",
+      "type": "mcq",
+      "prompt": "Quan comença aproximadament el Barroc?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "fa uns 100 anys", "correct": false },
+        { "text": "fa uns 400 anys", "correct": true },
+        { "text": "a l’antiga Roma", "correct": false },
+        { "text": "al segle XX", "correct": false }
+      ]
+    },
+    {
+      "id": "q4",
+      "type": "mcq",
+      "prompt": "On es va estendre el Barroc després de començar a Itàlia?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "només a Itàlia", "correct": false },
+        { "text": "Itàlia, Espanya, França i Alemanya", "correct": true },
+        { "text": "només a Amèrica", "correct": false },
+        { "text": "només al nord d’Europa", "correct": false }
+      ]
+    },
+    {
+      "id": "q5",
+      "type": "mcq",
+      "prompt": "Quin artista del Barroc és famós pels contrastos molt forts entre llum i ombra?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "Caravaggio", "correct": true },
+        { "text": "Antoni Gaudí", "correct": false },
+        { "text": "Claude Monet", "correct": false },
+        { "text": "Salvador Dalí", "correct": false }
+      ]
+    },
+    {
+      "id": "q6",
+      "type": "match_pairs",
+      "prompt": "Relaciona artista i pista correcta.",
+      "points": 1000,
+      "timeLimit": 0,
+      "pairs": [
+        { "left": "Diego Velázquez", "right": "va pintar Les Menines" },
+        { "left": "Bernini", "right": "escultor de figures amb molt moviment" },
+        { "left": "Caravaggio", "right": "contrast fort de llum i ombra" },
+        { "left": "Artemisia Gentileschi", "right": "pintora barroca amb dones valentes com Judit" }
+      ]
+    },
+    {
+      "id": "q7",
+      "type": "tf",
+      "prompt": "Bernini era un escultor barroc que feia estàtues amb molt moviment i expressió.",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "Vertader", "correct": true },
+        { "text": "Fals", "correct": false }
+      ]
+    },
+    {
+      "id": "q8",
+      "type": "match_pairs",
+      "prompt": "Relaciona compositor i pista correcta.",
+      "points": 1000,
+      "timeLimit": 0,
+      "pairs": [
+        { "left": "Johann Sebastian Bach", "right": "va escriure molta música per a orgue i orquestra" },
+        { "left": "Antonio Vivaldi", "right": "és famós per Les Quatre Estacions" },
+        { "left": "Georg Friedrich Händel", "right": "va compondre el Messies" }
+      ]
+    },
+    {
+      "id": "q9",
+      "type": "mcq",
+      "prompt": "Quina frase explica millor l’òpera barroca?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "només és música instrumental sense veus", "correct": false },
+        { "text": "barreja música, teatre i decorats", "correct": true },
+        { "text": "és només dansa sense història", "correct": false },
+        { "text": "només es feia en pel·lícules", "correct": false }
+      ]
+    },
+    {
+      "id": "q10",
+      "type": "context_gap",
+      "prompt": "A la música barroca es feien servir instruments com el _____, el violí i l’_____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "gaps": [
+        "clavecí, clavicèmbal",
+        "orgue, òrgan"
+      ]
+    },
+    {
+      "id": "q11",
+      "type": "mcq",
+      "prompt": "Qui era Artemisia Gentileschi?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "una pintora barroca italiana molt important", "correct": true },
+        { "text": "un compositor barroc alemany", "correct": false },
+        { "text": "un escultor francès del Renaixement", "correct": false },
+        { "text": "una cantant d’òpera moderna", "correct": false }
+      ]
+    },
+    {
+      "id": "q12",
+      "type": "text",
+      "prompt": "Escriu una frase curta per explicar si aquesta descripció és més del Renaixement o del Barroc: molta emoció, moviment i contrast de llum i ombra.",
+      "points": 1000,
+      "timeLimit": 0,
+      "accepted": [
+        "barroc",
+        "és barroc",
+        "es del barroc",
+        "barroca"
+      ]
+    },
+    {
+      "id": "q13",
+      "type": "mcq",
+      "prompt": "Quin compositor barroc és famós per Les Quatre Estacions?",
+      "points": 1000,
+      "timeLimit": 0,
+      "answers": [
+        { "text": "Johann Sebastian Bach", "correct": false },
+        { "text": "Antonio Vivaldi", "correct": true },
+        { "text": "Georg Friedrich Händel", "correct": false },
+        { "text": "Diego Velázquez", "correct": false }
+      ]
+    },
+    {
+      "id": "q14",
+      "type": "speaking",
+      "prompt": "Explica en 20-30 segons dues diferències entre Renaixement i Barroc, i cita un artista o compositor del Barroc.",
+      "points": 2000,
+      "timeLimit": 0
+    }
+  ]
+}
