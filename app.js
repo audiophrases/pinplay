@@ -5812,14 +5812,22 @@ function playQuestionAudio(question) {
   // Prevent overlap with question background music/SFX.
   stopFx('answering');
 
+  const maybeResumeQuestionMusic = () => {
+    const s = live.host.state;
+    if (!s || s.phase !== 'question' || s.questionClosed) return;
+    if (!hasQuestionAudio(s.question || question)) return;
+    playFx('answering');
+  };
+
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
+      a.addEventListener('ended', maybeResumeQuestionMusic, { once: true });
       a.play().catch(() => {});
     } catch {}
     return;
   }
-  speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
+  speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave', maybeResumeQuestionMusic);
 }
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
@@ -6284,7 +6292,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   container.append(bank, resetBtn, selected);
 }
-function speakText(text, lang = 'en-US-Wave') {
+function speakText(text, lang = 'en-US-Wave', onEnd = null) {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
@@ -6292,6 +6300,9 @@ function speakText(text, lang = 'en-US-Wave') {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
     utterance.lang = lang || 'en-US-Wave';
+    if (typeof onEnd === 'function') {
+      utterance.addEventListener('end', () => onEnd(), { once: true });
+    }
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech errors silently
