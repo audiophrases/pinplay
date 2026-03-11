@@ -4342,6 +4342,13 @@ function buildPreviewAnswerHistory(question, simPlayers, openResponses) {
   }];
 }
 
+function previewCloseReasonForSeed(seed) {
+  const n = Number(seed || 0) % 3;
+  if (n === 0) return 'manual_reveal';
+  if (n === 1) return 'all_answered';
+  return 'timeout';
+}
+
 function buildPreviewSimulationState(question) {
   const safeQuestion = buildPreviewHostQuestion(question);
   previewMode.simQuestionSeed = hashStringInt(`${previewMode.simClassSeed}:${previewMode.index}:${question?.id || question?.prompt || ''}`);
@@ -4356,6 +4363,11 @@ function buildPreviewSimulationState(question) {
   const me = simPlayers[0] || { name: 'Preview Student', score: 0, answeredCurrent: false };
 
   const openResponses = buildPreviewOpenResponses(question, simPlayers, previewMode.simTextQualityProfile);
+  const now = Date.now();
+  const qLimit = Number(question?.timeLimit || 0);
+  const startedAt = now - 4000;
+  const deadlineAt = qLimit > 0 ? (startedAt + (qLimit * 1000)) : null;
+  const closeReason = previewMode.showReveal ? previewCloseReasonForSeed(previewMode.simQuestionSeed) : null;
   const hostState = {
     phase: 'question',
     currentIndex: previewMode.index,
@@ -4363,9 +4375,11 @@ function buildPreviewSimulationState(question) {
     responseCount: answeredCount,
     playerCount: simPlayers.length,
     question: safeQuestion,
+    questionStartedAt: startedAt,
+    questionDeadlineAt: deadlineAt,
     questionClosed: !!previewMode.showReveal,
-    questionClosedAt: previewMode.showReveal ? Date.now() : null,
-    questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
+    questionClosedAt: previewMode.showReveal ? now : null,
+    questionCloseReason: closeReason,
     correctAnswer: '',
     pollSummary: null,
     openResponses,
@@ -4383,10 +4397,10 @@ function buildPreviewSimulationState(question) {
     answeredCurrent: previewMode.answeredCurrent || !!me.answeredCurrent,
     question: safeQuestion,
     questionClosed: !!previewMode.showReveal,
-    questionStartedAt: null,
-    questionDeadlineAt: null,
-    questionClosedAt: previewMode.showReveal ? Date.now() : null,
-    questionCloseReason: previewMode.showReveal ? 'manual_reveal' : null,
+    questionStartedAt: startedAt,
+    questionDeadlineAt: deadlineAt,
+    questionClosedAt: previewMode.showReveal ? now : null,
+    questionCloseReason: closeReason,
     correctAnswer: '',
     revealedResult: previewMode.revealedResult,
     leaderboard: simPlayers.slice(0, 10).map((p) => ({ name: p.name, score: p.score })),
@@ -4404,6 +4418,10 @@ function renderPreviewFrame() {
 
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.remove('hidden');
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
+  if (livePhaseEl) {
+    const reason = sim.hostState.questionClosed ? ` · close=${sim.hostState.questionCloseReason || 'manual_reveal'}` : '';
+    livePhaseEl.textContent = `Phase: question${reason}`;
+  }
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
   renderProjectorScores(sim.hostState.players || []);
