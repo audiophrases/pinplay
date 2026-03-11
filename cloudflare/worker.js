@@ -1245,9 +1245,11 @@ export class QuizRoom {
         const timeoutClosed = closeQuestionIfTimedOut(room);
         if (timeoutClosed) await this.#setRoom(room);
 
-        if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
+        if (!(room.phase === 'question' || room.phase === 'results')) {
+          return json({ error: 'Question is not active.' }, 409);
+        }
 
-        const qIndex = room.currentIndex;
+        const qIndex = effectiveQuestionIndex(room);
         room.reactionsByQuestion = room.reactionsByQuestion || {};
         room.reactionsByQuestion[qIndex] = room.reactionsByQuestion[qIndex] || [];
 
