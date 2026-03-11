@@ -457,6 +457,16 @@ export default {
       if (!edgeUrl) return json({ error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' }, 501);
 
       try {
+        const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+        const cacheUrl = new URL(request.url);
+        cacheUrl.pathname = `/__edge_tts_cache/${hash}.mp3`;
+        cacheUrl.search = '';
+
+        const cache = caches.default;
+        const cacheReq = new Request(cacheUrl.toString(), { method: 'GET' });
+        const hit = await cache.match(cacheReq);
+        if (hit) return withCors(hit);
+
         const headers = { 'Content-Type': 'application/json' };
         const secret = String(env.EDGE_TTS_SECRET || '').trim();
         if (secret) headers['Authorization'] = `Bearer ${secret}`;
@@ -475,13 +485,15 @@ export default {
         }
 
         const audio = await ttsRes.arrayBuffer();
-        return withCors(new Response(audio, {
+        const out = new Response(audio, {
           status: 200,
           headers: {
             'Content-Type': ttsRes.headers.get('content-type') || 'audio/mpeg',
-            'Cache-Control': 'public, max-age=3600',
+            'Cache-Control': 'public, max-age=86400',
           },
-        }));
+        });
+        await cache.put(cacheReq, out.clone());
+        return withCors(out);
       } catch (err) {
         return json({ error: `Edge TTS request failed: ${err.message}` }, 502);
       }
@@ -2402,6 +2414,12 @@ function withCors(response) {
   const headers = new Headers(response.headers);
   Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
   return new Response(response.body, { status: response.status, headers });
+}
+
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(String(text || ''));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function json(data, status = 200) {

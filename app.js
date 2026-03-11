@@ -128,6 +128,7 @@ let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
+const edgeTtsBlobUrlCache = new Map();
 let previewMode = {
   active: false,
   index: 0,
@@ -5899,19 +5900,25 @@ async function playQuestionAudio(question) {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     if (!base) throw new Error('Backend URL is not configured.');
     const voice = String(question.language || 'en-US-AriaNeural').trim() || 'en-US-AriaNeural';
-    const res = await fetch(`${base}/api/tts/edge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice }),
-    });
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || `Edge TTS failed (${res.status}).`);
+    const key = `${voice}::${text}`;
+
+    let audioUrl = edgeTtsBlobUrlCache.get(key);
+    if (!audioUrl) {
+      const res = await fetch(`${base}/api/tts/edge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Edge TTS failed (${res.status}).`);
+      }
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      edgeTtsBlobUrlCache.set(key, audioUrl);
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = new Audio(url);
-    a.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+
+    const a = new Audio(audioUrl);
     playAudioEl(a);
   } catch (err) {
     setStatus(hostStatusEl, `Edge TTS error: ${err?.message || 'failed'}`, 'bad');
