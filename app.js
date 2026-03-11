@@ -3943,6 +3943,14 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
+function setUnifiedPreviewControlsEnabled(enabled) {
+  [previewStudentCountEl, previewResponseProfileEl, previewTimingProfileEl, previewTextQualityProfileEl, previewEdgeCaseProfileEl]
+    .forEach((el) => {
+      if (!el) return;
+      el.disabled = !enabled;
+    });
+}
+
 function startPreviewMode(mode = 'unified') {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
@@ -3959,11 +3967,15 @@ function startPreviewMode(mode = 'unified') {
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
-  previewMode.simStudentCount = Math.max(1, Math.min(60, Number(previewStudentCountEl?.value || previewMode.simStudentCount || 10)));
-  previewMode.simProfile = String(previewResponseProfileEl?.value || previewMode.simProfile || 'balanced');
-  previewMode.simTimingProfile = String(previewTimingProfileEl?.value || previewMode.simTimingProfile || 'staggered');
-  previewMode.simTextQualityProfile = String(previewTextQualityProfileEl?.value || previewMode.simTextQualityProfile || 'acceptable');
-  previewMode.simEdgeCaseProfile = String(previewEdgeCaseProfileEl?.value || previewMode.simEdgeCaseProfile || 'none');
+  previewMode.simStudentCount = 14;
+  previewMode.simProfile = 'balanced';
+  previewMode.simTimingProfile = 'staggered';
+  previewMode.simTextQualityProfile = 'acceptable';
+  previewMode.simEdgeCaseProfile = 'none';
+  if (previewResponseProfileEl) previewResponseProfileEl.value = 'balanced';
+  if (previewTimingProfileEl) previewTimingProfileEl.value = 'staggered';
+  if (previewTextQualityProfileEl) previewTextQualityProfileEl.value = 'acceptable';
+  if (previewEdgeCaseProfileEl) previewEdgeCaseProfileEl.value = 'none';
   live.player.renderKey = null;
   live.player.currentQuestion = null;
   live.player.pinSelection = null;
@@ -3971,6 +3983,7 @@ function startPreviewMode(mode = 'unified') {
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
   if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
+  setUnifiedPreviewControlsEnabled(false);
 
   renderPreviewFrame();
   hostQuestionCardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3985,6 +3998,7 @@ function stopPreviewMode() {
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
   if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
+  setUnifiedPreviewControlsEnabled(true);
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
 }
