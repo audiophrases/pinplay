@@ -57,7 +57,6 @@ const hostPrevBtn = document.getElementById('hostPrevBtn');
 const hostNextBtn = document.getElementById('hostNextBtn');
 const previewUnifiedBtn = document.getElementById('previewUnifiedBtn');
 const previewExitBtn = document.getElementById('previewExitBtn');
-const studentPreviewCardEl = document.getElementById('studentPreviewCard');
 const studentPreviewStackCardEl = document.getElementById('studentPreviewStackCard');
 const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary');
 const studentPreviewStackEl = document.getElementById('studentPreviewStack');
@@ -3933,7 +3932,6 @@ function startPreviewMode() {
   live.player.pinSelections = [];
 
   if (previewExitBtn) previewExitBtn.classList.remove('hidden');
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
@@ -3947,7 +3945,6 @@ function stopPreviewMode() {
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
   if (previewExitBtn) previewExitBtn.classList.add('hidden');
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
   setStatus(joinFeedbackEl, '', '');
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
@@ -4275,7 +4272,6 @@ function renderPreviewFrame() {
 
   const sim = buildPreviewSimulationState(q);
 
-  if (studentPreviewCardEl) studentPreviewCardEl.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.remove('hidden');
   if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
