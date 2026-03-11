@@ -4297,9 +4297,18 @@ function renderPreviewStudentStack(sim) {
     const status = p.previewResult === 'correct'
       ? 'submitted ✅'
       : (p.previewResult === 'wrong' ? 'submitted ❌' : 'no submission');
-    const betTxt = Number(p.previewBet || 0) > 0 ? ` · bet x${Number(p.previewBet)}` : '';
+    const bet = Number(p.previewBet || 0);
+    const betTxt = bet > 0 ? ` · bet x${bet}` : '';
     const answerText = summarizePreviewStudentAnswer(sim?.hostState?.question, p, openResponseMap);
-    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div><div class="small muted">Answer: ${escapeHtml(answerText)}</div>`;
+    const stateChip = p.previewResult === 'correct'
+      ? '<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#e8f8ee;color:#0f5e26;">correct</span>'
+      : (p.previewResult === 'wrong'
+        ? '<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#fdeaea;color:#8b1e1e;">wrong</span>'
+        : '<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:#334155;">no submit</span>');
+    const betChip = bet > 0
+      ? `<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#fef3c7;color:#7c2d12;">bet x${bet}</span>`
+      : '<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:#334155;">no bet</span>';
+    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="row gap top-space">${stateChip}${betChip}</div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div><div class="small muted">Answer: ${escapeHtml(answerText)}</div>`;
     studentPreviewStackEl.appendChild(card);
   });
 }
