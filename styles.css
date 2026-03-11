@@ -644,6 +644,18 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
+.question-intro-points {
+  margin-top: .8rem;
+  padding: .95rem 1rem;
+  border-radius: .8rem;
+  border: 2px solid #7c3aed;
+  background: #f5f3ff;
+  color: #4c1d95;
+  font-weight: 900;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  text-align: center;
+}
+
 #hostQuestionCard:fullscreen .project-text-reveal {
   font-size: clamp(2rem, 3.8vw, 3rem);
 }

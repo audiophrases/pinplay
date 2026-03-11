@@ -302,6 +302,8 @@ function renderPlayerState(state) {
 
   if (joinSubmitBtn) {
     joinSubmitBtn.disabled = questionClosed || state.answeredCurrent;
+    const pts = Number(state.question?.points || 0).toLocaleString('en-US');
+    joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
     if (!questionClosed && joinSubmitBtn.disabled) {
       setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
     }

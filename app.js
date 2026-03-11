@@ -173,6 +173,8 @@ const live = {
       drumroll: false,
       winner: false,
     },
+    questionIntroKey: null,
+    questionIntroStartedAt: 0,
   },
   player: {
     pin: null,
@@ -2666,6 +2668,12 @@ function renderHostQuestion(state) {
     return;
   }
 
+  const inQuestionIntro = phase === 'question' && !showReveal;
+  if (!inQuestionIntro) {
+    live.host.questionIntroKey = null;
+    live.host.questionIntroStartedAt = 0;
+  }
+
   if (!question) {
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
@@ -2677,6 +2685,38 @@ function renderHostQuestion(state) {
   hostQuestionWrap.classList.remove('hidden');
   const qIcon = iconForType(question.type);
   const qPrompt = question.prompt || '(No question text)';
+
+  if (inQuestionIntro) {
+    const introKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
+    if (live.host.questionIntroKey !== introKey) {
+      live.host.questionIntroKey = introKey;
+      live.host.questionIntroStartedAt = Date.now();
+    }
+
+    const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
+    if (elapsed < 1000) {
+      hostQuestionPromptEl.textContent = '';
+      hostQuestionHintEl.textContent = '';
+      hostQuestionAnswersEl.innerHTML = '';
+
+      const points = Number(question.points || 0).toLocaleString('en-US');
+      const splash = document.createElement('div');
+      splash.className = 'question-intro-points';
+      splash.textContent = `🎯 ${points} points`;
+      hostQuestionAnswersEl.appendChild(splash);
+      requestAnimationFrame(() => renderHostState(live.host.state || {}));
+      return;
+    }
+
+    if (elapsed < 2000) {
+      hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+      hostQuestionHintEl.textContent = '';
+      hostQuestionAnswersEl.innerHTML = '';
+      requestAnimationFrame(() => renderHostState(live.host.state || {}));
+      return;
+    }
+  }
+
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
   hostQuestionAnswersEl.innerHTML = '';
 
