@@ -656,9 +656,9 @@ function bindBuilderEvents() {
     const q = quiz.questions[idx];
 
     try {
-      q.imageData = await fileToDataUrl(file);
+      q.imageData = await imageFileToOptimizedDataUrl(file);
       renderBuilder();
-      setStatus(hostStatusEl, `Image pasted into Q${idx + 1}.`, 'ok');
+      setStatus(hostStatusEl, `Image pasted into Q${idx + 1} (optimized).`, 'ok');
     } catch (err) {
       setStatus(hostStatusEl, err.message || 'Could not paste image.', 'bad');
     }
@@ -750,7 +750,7 @@ function bindBuilderEvents() {
       }
 
       try {
-        q.imageData = await fileToDataUrl(file);
+        q.imageData = await imageFileToOptimizedDataUrl(file);
         renderBuilder();
       } catch (err) {
         alert(`Image load failed: ${err.message}`);
@@ -773,7 +773,7 @@ function bindBuilderEvents() {
       }
 
       try {
-        q.imageData = await fileToDataUrl(file);
+        q.imageData = await imageFileToOptimizedDataUrl(file);
         renderBuilder();
       } catch (err) {
         alert(`Image load failed: ${err.message}`);
@@ -6374,6 +6374,50 @@ function fileToDataUrl(file) {
     reader.onerror = () => reject(reader.error || new Error('Read error'));
     reader.readAsDataURL(file);
   });
+}
+
+const IMAGE_MAX_DIMENSION = 1600;
+const IMAGE_TARGET_BYTES = 450 * 1024;
+
+function estimateDataUrlBytes(dataUrl) {
+  const payload = String(dataUrl || '').split(',')[1] || '';
+  return Math.floor((payload.length * 3) / 4);
+}
+
+async function imageFileToOptimizedDataUrl(file) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Please choose an image file.');
+
+  const srcDataUrl = await fileToDataUrl(file);
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Could not decode image.'));
+    el.src = srcDataUrl;
+  });
+
+  const ratio = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(1, img.width, img.height));
+  const width = Math.max(1, Math.round(img.width * ratio));
+  const height = Math.max(1, Math.round(img.height * ratio));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Image processing unavailable.');
+  ctx.drawImage(img, 0, 0, width, height);
+
+  // Prefer JPEG for size safety unless source is transparent PNG/GIF/WebP.
+  const needsAlpha = /png|webp|gif/i.test(String(file.type || ''));
+  const outputType = needsAlpha ? 'image/webp' : 'image/jpeg';
+
+  let quality = 0.86;
+  let out = canvas.toDataURL(outputType, quality);
+  while (estimateDataUrlBytes(out) > IMAGE_TARGET_BYTES && quality > 0.42) {
+    quality = Math.max(0.42, quality - 0.08);
+    out = canvas.toDataURL(outputType, quality);
+  }
+
+  return out;
 }
 
 function setupImageLightbox() {
