@@ -284,7 +284,8 @@
           "text": "Diego Velázquez",
           "correct": false
         }
-      ]
+      ],
+      "imageData": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Vivaldi.jpg/800px-Vivaldi.jpg"
     },
     {
       "id": "q14",
