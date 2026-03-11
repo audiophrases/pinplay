@@ -200,6 +200,70 @@ How to read this section:
 
 ---
 
+## Batch 4 — Text Answer
+
+### 1) One-Sentence Mastery Check
+- **Learning goal:** Verify precise understanding in minimal format.
+- **How to run it:** Ask for one complete sentence explaining a concept.
+- **Creative twist:** Limit to 12 words to force clarity.
+
+### 2) Translate with Purpose
+- **Learning goal:** Practice accurate Catalan↔English transfer in context.
+- **How to run it:** Give short functional phrases (requests, apologies, opinions).
+- **Creative twist:** Students submit two versions: formal and informal.
+
+### 3) Keyword-Required Response
+- **Learning goal:** Ensure core vocabulary is actively used.
+- **How to run it:** Prompt + required words list (2–3 words must appear).
+- **Creative twist:** Add bonus for natural phrasing, not keyword stuffing.
+
+### 4) “Fix This Sentence” Micro-Edit
+- **Learning goal:** Improve grammar and editing habits.
+- **How to run it:** Show one incorrect sentence; students type corrected version.
+- **Creative twist:** Ask for the rule name in 3 words max.
+
+### 5) Explain Like I’m 10
+- **Learning goal:** Build conceptual simplification skills.
+- **How to run it:** Students explain a complex idea in child-friendly language.
+- **Creative twist:** Ban jargon words for that question.
+
+### 6) Evidence-in-Short-Form
+- **Learning goal:** Link claims to textual evidence.
+- **How to run it:** Ask for a claim + one evidence phrase from a reading.
+- **Creative twist:** Require quote marks around evidence.
+
+### 7) Compare in 2 Lines
+- **Learning goal:** Strengthen contrast reasoning.
+- **How to run it:** Prompt asks difference between two concepts in max 2 lines.
+- **Creative twist:** First line = similarity, second line = difference.
+
+### 8) Exit Ticket Pulse Check
+- **Learning goal:** Capture understanding at lesson end.
+- **How to run it:** One text question: “Most important thing learned today?”
+- **Creative twist:** Start next class with anonymous best answers.
+
+### 9) Error-Prediction Prompt
+- **Learning goal:** Build anticipation of common mistakes.
+- **How to run it:** Ask: “What mistake might a student make here?”
+- **Creative twist:** Then solve a question designed around that predicted error.
+
+### 10) Real-World Application Snap
+- **Learning goal:** Transfer school content to daily life.
+- **How to run it:** “Where would you use this this week?” one concrete example.
+- **Creative twist:** Peer vote on the most realistic example.
+
+### 11) Compressed Summary Challenge
+- **Learning goal:** Distill key points from longer input.
+- **How to run it:** Summarize a paragraph in 15–20 words.
+- **Creative twist:** Include one required transition word (however, because, therefore).
+
+### 12) Tone Switch Drill
+- **Learning goal:** Develop register awareness.
+- **How to run it:** Rewrite same message for friend vs teacher.
+- **Creative twist:** Class identifies which wording signals tone change.
+
+---
+
 ## Reusable MCQ Design Rules (Teacher Cheat Sheet)
 
 1. Keep stems clear and short (one idea per question).
@@ -220,7 +284,7 @@ How to read this section:
 - [x] Batch 1: MCQ
 - [x] Batch 2: Multi-select
 - [x] Batch 3: True/False
-- [ ] Batch 4: Text answer
+- [x] Batch 4: Text answer
 - [ ] Batch 5: Context gap
 - [ ] Batch 6: Match pairs
 - [ ] Batch 7: Error hunt
@@ -231,4 +295,4 @@ How to read this section:
 - [ ] Batch 12: Audio question
 - [ ] Batch 13: Image open
 
-Next pass will continue with Batch 4 (Text answer) and add 10+ creative classroom use-cases.
+Next pass will continue with Batch 5 (Context gap) and add 10+ creative classroom use-cases.
