@@ -194,6 +194,7 @@ const live = {
     questionIntroKey: null,
     questionIntroStartedAt: 0,
     questionIntroDone: false,
+    adaptiveFitRaf: null,
   },
   player: {
     pin: null,
@@ -230,6 +231,7 @@ function init() {
   bindBuilderEvents();
   bindLiveEvents();
   bindSoloEvents();
+  window.addEventListener('resize', scheduleHostAdaptiveFit);
 
   renderBuilder();
   refreshLocalPin();
@@ -2466,6 +2468,58 @@ function renderHostAnswerHistory(state) {
   });
 }
 
+function scheduleHostAdaptiveFit() {
+  if (live.host.adaptiveFitRaf) cancelAnimationFrame(live.host.adaptiveFitRaf);
+  live.host.adaptiveFitRaf = requestAnimationFrame(() => {
+    live.host.adaptiveFitRaf = null;
+    applyAdaptiveFitHost();
+  });
+}
+
+function applyAdaptiveFitHost() {
+  if (!hostQuestionCardEl || !hostQuestionWrap) return;
+
+  const active = !hostQuestionWrap.classList.contains('hidden')
+    && !!live.host.state
+    && (live.host.state.phase === 'question' || live.host.state.phase === 'results');
+
+  hostQuestionCardEl.classList.toggle('adaptive-active', active);
+
+  hostQuestionCardEl.classList.remove('fit-l1', 'fit-l2', 'fit-l3');
+  hostQuestionWrap.classList.remove('adaptive-scaled');
+  hostQuestionWrap.style.removeProperty('--adaptive-scale');
+
+  if (!active) {
+    hostQuestionCardEl.style.removeProperty('max-height');
+    return;
+  }
+
+  const rect = hostQuestionCardEl.getBoundingClientRect();
+  const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;
+  const available = Math.max(240, Math.floor(viewportH - rect.top - 10));
+  hostQuestionCardEl.style.maxHeight = `${available}px`;
+
+  const isOverflowing = () => (
+    hostQuestionCardEl.scrollHeight > hostQuestionCardEl.clientHeight + 2
+    || hostQuestionCardEl.scrollWidth > hostQuestionCardEl.clientWidth + 2
+  );
+
+  if (!isOverflowing()) return;
+  hostQuestionCardEl.classList.add('fit-l1');
+  if (!isOverflowing()) return;
+  hostQuestionCardEl.classList.add('fit-l2');
+  if (!isOverflowing()) return;
+  hostQuestionCardEl.classList.add('fit-l3');
+  if (!isOverflowing()) return;
+
+  const contentH = Math.max(1, hostQuestionWrap.scrollHeight);
+  const scale = Math.max(0.72, Math.min(1, (available - 8) / contentH));
+  if (scale < 0.995) {
+    hostQuestionWrap.classList.add('adaptive-scaled');
+    hostQuestionWrap.style.setProperty('--adaptive-scale', scale.toFixed(3));
+  }
+}
+
 function renderHostState(state) {
   const prevState = live.host.state;
   // Keep a stable "previous question" score snapshot for R count-up.
@@ -2639,6 +2693,7 @@ function renderHostState(state) {
 
   updateHallScene(state);
   updateHostTimer(state);
+  scheduleHostAdaptiveFit();
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');

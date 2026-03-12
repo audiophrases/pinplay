@@ -49,6 +49,7 @@ const live = {
     timerDeadlineAt: null,
     timerAnchorAt: null,
     timerInitialRemainingMs: null,
+    adaptiveFitRaf: null,
   },
 };
 
@@ -56,6 +57,7 @@ init();
 
 function init() {
   setupImageLightbox();
+  window.addEventListener('resize', scheduleJoinAdaptiveFit);
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -266,6 +268,7 @@ function renderPlayerState(state) {
       renderLeaderboardInJoin(state.leaderboard || []);
     }
     renderJoinReveal();
+    scheduleJoinAdaptiveFit();
     return;
   }
 
@@ -346,6 +349,55 @@ function renderPlayerState(state) {
   }
 
   renderJoinReveal();
+  scheduleJoinAdaptiveFit();
+}
+
+function scheduleJoinAdaptiveFit() {
+  if (live.player.adaptiveFitRaf) cancelAnimationFrame(live.player.adaptiveFitRaf);
+  live.player.adaptiveFitRaf = requestAnimationFrame(() => {
+    live.player.adaptiveFitRaf = null;
+    applyAdaptiveFitJoin();
+  });
+}
+
+function applyAdaptiveFitJoin() {
+  if (!joinCardEl || !joinQuestionWrap) return;
+
+  const active = !joinQuestionWrap.classList.contains('hidden');
+  joinCardEl.classList.toggle('adaptive-active', active);
+  joinCardEl.classList.remove('fit-l1', 'fit-l2', 'fit-l3');
+  joinQuestionWrap.classList.remove('adaptive-scaled');
+  joinQuestionWrap.style.removeProperty('--adaptive-scale');
+
+  if (!active) {
+    joinCardEl.style.removeProperty('max-height');
+    return;
+  }
+
+  const rect = joinCardEl.getBoundingClientRect();
+  const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;
+  const available = Math.max(220, Math.floor(viewportH - rect.top - 8));
+  joinCardEl.style.maxHeight = `${available}px`;
+
+  const isOverflowing = () => (
+    joinCardEl.scrollHeight > joinCardEl.clientHeight + 2
+    || joinCardEl.scrollWidth > joinCardEl.clientWidth + 2
+  );
+
+  if (!isOverflowing()) return;
+  joinCardEl.classList.add('fit-l1');
+  if (!isOverflowing()) return;
+  joinCardEl.classList.add('fit-l2');
+  if (!isOverflowing()) return;
+  joinCardEl.classList.add('fit-l3');
+  if (!isOverflowing()) return;
+
+  const contentH = Math.max(1, joinQuestionWrap.scrollHeight);
+  const scale = Math.max(0.74, Math.min(1, (available - 6) / contentH));
+  if (scale < 0.995) {
+    joinQuestionWrap.classList.add('adaptive-scaled');
+    joinQuestionWrap.style.setProperty('--adaptive-scale', scale.toFixed(3));
+  }
 }
 
 function renderJoinQuestion(question) {
