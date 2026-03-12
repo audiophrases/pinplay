@@ -225,6 +225,7 @@ init();
 
 function init() {
   setupImageLightbox();
+  pingEdgeTtsBridgeWarmup();
   bindTabs();
   bindBuilderEvents();
   bindLiveEvents();
@@ -240,6 +241,13 @@ function init() {
   }
 
   setupCreateAccess();
+}
+
+function pingEdgeTtsBridgeWarmup() {
+  // Best-effort wake ping whenever create app is loaded.
+  try {
+    fetch('https://edge-tts-bridge.onrender.com/', { method: 'GET', mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+  } catch {}
 }
 
 function setupCreateAccess() {
