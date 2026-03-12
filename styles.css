@@ -760,6 +760,102 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .28rem;
 }
 
+/* Batch 3: student layout compaction by question type */
+#joinCard.question-active {
+  padding: .72rem .8rem;
+}
+
+#joinCard.question-active #joinQuestionWrap .row.spread {
+  font-size: .92rem;
+}
+
+#joinCard.question-active #joinPrompt {
+  margin: .2rem 0 .36rem;
+  line-height: 1.18;
+}
+
+#joinCard.question-active #joinAnswers {
+  display: grid;
+  gap: .3rem;
+}
+
+#joinCard.question-active .answer-row {
+  gap: .38rem;
+}
+
+#joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding-top: .34rem;
+  margin-top: .5rem;
+  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 28%, rgba(247,248,251,1));
+}
+
+#joinCard.question-active.has-image #joinAnswers.has-question-image {
+  display: grid;
+  grid-template-columns: minmax(120px, 38%) minmax(0, 1fr);
+  gap: .28rem .6rem;
+  align-items: start;
+}
+
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
+  grid-column: 1;
+  grid-row: 1 / span 12;
+  margin-top: 0;
+}
+
+#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview) {
+  grid-column: 2;
+}
+
+#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
+  padding: .24rem .42rem;
+  font-size: .86rem;
+}
+
+#joinCard.question-active[data-qtype="error_hunt"] .join-answer-inline-row textarea,
+#joinCard.question-active[data-qtype="error_hunt"] .join-answer-inline-row input {
+  min-height: 2rem;
+  padding: .35rem .45rem;
+}
+
+#joinCard.question-active[data-qtype="context_gap"] .context-gap-inline {
+  gap: .26rem;
+}
+
+#joinCard.question-active[data-qtype="context_gap"] .context-gap-inline-input {
+  width: 66px;
+  min-width: 66px;
+  padding: .22rem .36rem;
+  font-size: .84rem;
+}
+
+#joinCard.question-active[data-qtype="match_pairs"] .match-pairs-wrap {
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: .38rem;
+}
+
+#joinCard.question-active[data-qtype="match_pairs"] .match-pairs-col .answer-row {
+  padding: .22rem .32rem;
+}
+
+#joinCard.question-active[data-qtype="pin"] .pin-preview {
+  max-width: 100%;
+}
+
+@media (max-width: 780px) {
+  #joinCard.question-active.has-image #joinAnswers.has-question-image {
+    grid-template-columns: 1fr;
+  }
+
+  #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
+  #joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
 /* Adaptive fit (batch 1): keep host/student question UI visible without scrolling */
 #hostQuestionCard.adaptive-active,
 #hostQuestionCard:fullscreen.adaptive-active,

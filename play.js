@@ -257,6 +257,7 @@ function renderPlayerState(state) {
   };
 
   if (state.phase !== 'question' || !state.question) {
+    applyJoinLayoutMode(false, null);
     stopJoinTimer();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
@@ -400,7 +401,17 @@ function applyAdaptiveFitJoin() {
   }
 }
 
+function applyJoinLayoutMode(active, question = null) {
+  if (!joinCardEl) return;
+  joinCardEl.classList.toggle('question-active', !!active);
+  const qType = String(question?.type || '').trim();
+  if (qType) joinCardEl.dataset.qtype = qType;
+  else delete joinCardEl.dataset.qtype;
+  joinCardEl.classList.toggle('has-image', !!question?.imageData);
+}
+
 function renderJoinQuestion(question) {
+  applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
