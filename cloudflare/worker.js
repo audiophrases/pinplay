@@ -848,7 +848,7 @@ export class QuizRoom {
             const vRes = await fetch(verifyUrl, {
               method: 'POST',
               headers: verifyHeaders,
-              body: JSON.stringify({ username: name, password, pin: room.pin }),
+              body: JSON.stringify({ username: name, password, pin: room.pin, secret: verifySecret }),
             });
             if (!vRes.ok) return json({ error: 'Invalid username or password.' }, 401);
             const vTxt = await vRes.text();
