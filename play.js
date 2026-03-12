@@ -8,6 +8,7 @@ const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
 const joinNameWrapEl = document.getElementById('joinNameWrap');
 const joinPasswordWrapEl = document.getElementById('joinPasswordWrap');
+const joinSignupHintEl = document.getElementById('joinSignupHint');
 
 const joinPinEl = document.getElementById('joinPin');
 const validatePinBtn = document.getElementById('validatePinBtn');
@@ -110,12 +111,14 @@ async function validatePin() {
     if (live.player.randomNamesMode) {
       if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
       if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
       if (joinModeHintEl) {
         joinModeHintEl.textContent = 'Random names mode: your nickname is assigned automatically.';
       }
     } else {
       if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
       if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
+      if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
       if (joinModeHintEl) {
         joinModeHintEl.textContent = 'Login required mode: enter valid username and password.';
       }
