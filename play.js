@@ -7,10 +7,12 @@ const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
 const joinNameWrapEl = document.getElementById('joinNameWrap');
+const joinPasswordWrapEl = document.getElementById('joinPasswordWrap');
 
 const joinPinEl = document.getElementById('joinPin');
 const validatePinBtn = document.getElementById('validatePinBtn');
 const joinNameEl = document.getElementById('joinName');
+const joinPasswordEl = document.getElementById('joinPassword');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
 const joinTitleEl = document.getElementById('joinTitle');
@@ -69,6 +71,12 @@ function init() {
     });
   }
 
+  if (joinPasswordEl) {
+    joinPasswordEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinLiveGame();
+    });
+  }
+
   if (joinAnswersEl) {
     joinAnswersEl.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
@@ -101,13 +109,15 @@ async function validatePin() {
 
     if (live.player.randomNamesMode) {
       if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
       if (joinModeHintEl) {
-        joinModeHintEl.textContent = '';
+        joinModeHintEl.textContent = 'Random names mode: your nickname is assigned automatically.';
       }
     } else {
       if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
       if (joinModeHintEl) {
-        joinModeHintEl.textContent = 'Open names mode. Enter your name to join.';
+        joinModeHintEl.textContent = 'Login required mode: enter valid username and password.';
       }
       if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
         joinNameEl.value = data.joinedPlayer.name;
@@ -128,14 +138,19 @@ async function joinLiveGame() {
       if (!live.player.pin) return;
     }
 
-    const name = String(joinNameEl?.value || '').trim();
-    if (!live.player.randomNamesMode && !name) throw new Error('Enter your name.');
+    const username = String(joinNameEl?.value || '').trim();
+    const password = String(joinPasswordEl?.value || '').trim();
+
+    if (!live.player.randomNamesMode) {
+      if (!username || !password) throw new Error('Enter valid username and password.');
+      if (username.length < 2 || password.length < 4) throw new Error('Enter valid username and password.');
+    }
 
     const data = await api('/api/join', {
       method: 'POST',
       body: {
         pin: live.player.pin,
-        name,
+        name: username,
         clientId: live.player.clientId,
       },
     });
@@ -148,7 +163,7 @@ async function joinLiveGame() {
     live.player.pinSelection = null;
     live.player.pinSelections = [];
 
-    const shownName = data.name || name || 'Student';
+    const shownName = data.name || username || 'Student';
     live.player.displayName = shownName;
     setJoinTitle(shownName);
 

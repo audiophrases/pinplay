@@ -1997,13 +1997,16 @@ async function hostRevealQuestion() {
 }
 
 function isRandomNamesEnabled() {
-  return !!randomNamesToggleEl?.classList.contains('active');
+  // UI active state means Login required, so random names is the inverse.
+  return !randomNamesToggleEl?.classList.contains('active');
 }
 
 function setRandomNamesToggleState(enabled) {
   if (!randomNamesToggleEl) return;
-  randomNamesToggleEl.classList.toggle('active', !!enabled);
-  randomNamesToggleEl.textContent = 'Random names';
+  const loginRequired = !enabled;
+  randomNamesToggleEl.classList.toggle('active', !!loginRequired);
+  randomNamesToggleEl.textContent = 'Login';
+  randomNamesToggleEl.title = loginRequired ? 'Login required (username + password)' : 'Random names assigned';
 }
 
 async function hostUpdateRandomNames() {
