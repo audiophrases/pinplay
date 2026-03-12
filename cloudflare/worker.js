@@ -801,6 +801,7 @@ export class QuizRoom {
             ? {
                 id: existing.id,
                 name: existing.name,
+                identity: existing.identity || null,
               }
             : null,
         });
@@ -820,12 +821,14 @@ export class QuizRoom {
               playerToken: existing.token,
               pin: room.pin,
               name: existing.name,
+              identity: existing.identity || null,
               alreadyJoined: true,
             });
           }
         }
 
         let name = rawName;
+        let verifiedIdentity = null;
         if (room.settings?.randomNames) {
           name = pickRandomName(room.players);
         }
@@ -856,12 +859,18 @@ export class QuizRoom {
             try { vData = vTxt ? JSON.parse(vTxt) : {}; } catch {}
             if (vData && vData.ok === false) return json({ error: 'Invalid username or password.' }, 401);
             if (vData?.displayName) name = sanitizeName(vData.displayName) || name;
+            verifiedIdentity = await normalizeStudentIdentity(vData, name);
           } catch {
             return json({ error: 'Login verification service unavailable.' }, 502);
           }
 
           const nameTaken = Object.values(room.players || {}).some((p) => normalizeNameKey(p.name) === normalizeNameKey(name));
           if (nameTaken) return json({ error: 'Name already in use in this game.' }, 409);
+
+          if (verifiedIdentity?.studentKey) {
+            const sameStudentAlreadyIn = Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '') === verifiedIdentity.studentKey);
+            if (sameStudentAlreadyIn) return json({ error: 'Student already joined in this game.' }, 409);
+          }
         }
 
         const playerId = randomId('p_');
@@ -874,12 +883,26 @@ export class QuizRoom {
           clientId: clientId || '',
           score: 0,
           joinedAt: Date.now(),
+          identity: verifiedIdentity || {
+            username: sanitizeName(name),
+            className: '',
+            email: '',
+            studentKey: '',
+            source: room.settings?.randomNames ? 'random' : 'manual',
+          },
         };
 
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
-        return json({ playerId, playerToken, pin: room.pin, name, alreadyJoined: false });
+        return json({
+          playerId,
+          playerToken,
+          pin: room.pin,
+          name,
+          identity: room.players[playerId].identity || null,
+          alreadyJoined: false,
+        });
       }
 
       if (url.pathname === '/host/state' && request.method === 'GET') {
@@ -1423,6 +1446,7 @@ function hostState(room) {
       name: p.name,
       score: p.score,
       answeredCurrent: !!responses[p.id],
+      identity: p.identity || null,
     }))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
@@ -1547,6 +1571,7 @@ function playerState(room, playerId) {
     phase: room.phase,
     pin: room.pin,
     name: player.name,
+    identity: player.identity || null,
     currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     score: player.score,
@@ -2233,6 +2258,47 @@ function sanitizePin(pin) {
 function sanitizeName(name) {
   const cleaned = String(name || '').replace(/\s+/g, ' ').trim();
   return cleaned.slice(0, 40);
+}
+
+function sanitizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email) return '';
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.slice(0, 120) : '';
+}
+
+function sanitizeClassName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+function normalizeStudentKeyInput(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9@._|:-]+/g, '');
+}
+
+async function normalizeStudentIdentity(verifyData, fallbackName) {
+  const data = verifyData && typeof verifyData === 'object' ? verifyData : {};
+
+  const username = sanitizeName(data.username || data.displayName || fallbackName || '');
+  const email = sanitizeEmail(data.email || data.schoolEmail || data.mail || data.userEmail);
+  const className = sanitizeClassName(data.class || data.className || data.group || data.section);
+
+  const studentIdRaw = sanitizeId(data.studentId || data.student_id || data.id || '');
+  const keySeed = normalizeStudentKeyInput(
+    data.studentKey
+    || data.student_key
+    || studentIdRaw
+    || email
+    || `${normalizeNameKey(username)}|${normalizeNameKey(className)}`,
+  );
+
+  const studentKey = keySeed ? `stu_${(await sha256Hex(`pinplay:${keySeed}`)).slice(0, 20)}` : '';
+
+  return {
+    username,
+    className,
+    email,
+    studentKey,
+    source: 'verified-login',
+  };
 }
 
 function sanitizeReaction(emoji) {

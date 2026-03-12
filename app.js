@@ -2618,7 +2618,11 @@ function renderHostState(state) {
       row.className = 'row spread';
 
       const name = document.createElement('span');
-      name.textContent = `${p.name} - ${p.score} pts${p.answeredCurrent ? ' [answered]' : ''}`;
+      const classLabel = String(p?.identity?.className || '').trim();
+      const userLabel = String(p?.identity?.username || '').trim();
+      const idSuffix = classLabel ? ` (${classLabel})` : '';
+      const userSuffix = userLabel && userLabel.trim().toLowerCase() !== String(p.name || '').trim().toLowerCase() ? ` · @${userLabel}` : '';
+      name.textContent = `${p.name}${idSuffix}${userSuffix} - ${p.score} pts${p.answeredCurrent ? ' [answered]' : ''}`;
 
       const actions = document.createElement('div');
       actions.className = 'row gap';
