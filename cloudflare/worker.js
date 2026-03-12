@@ -83,15 +83,21 @@ export default {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
       const name = sanitizeName(body?.name);
+      const password = String(body?.password || '').slice(0, 120);
       const clientId = sanitizeId(body?.clientId);
 
       if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      const headers = {};
+      if (env.STUDENT_LOGIN_VERIFY_URL) headers['X-Login-Verify-Url'] = String(env.STUDENT_LOGIN_VERIFY_URL);
+      if (env.STUDENT_LOGIN_VERIFY_SECRET) headers['X-Login-Verify-Secret'] = String(env.STUDENT_LOGIN_VERIFY_SECRET);
+
       return withCors(
         await stub.fetch('https://room/join', {
           method: 'POST',
-          body: JSON.stringify({ name, clientId }),
+          headers,
+          body: JSON.stringify({ name, password, clientId }),
         }),
       );
     }
@@ -803,6 +809,7 @@ export class QuizRoom {
       if (url.pathname === '/join' && request.method === 'POST') {
         const body = await safeJson(request);
         const rawName = sanitizeName(body?.name);
+        const password = String(body?.password || '').slice(0, 120);
         const clientId = sanitizeId(body?.clientId);
 
         if (clientId) {
@@ -829,6 +836,30 @@ export class QuizRoom {
         }
 
         if (!room.settings?.randomNames) {
+          if (!password) return json({ error: 'Username and password are required.' }, 401);
+
+          const verifyUrl = String(request.headers.get('X-Login-Verify-Url') || '').trim();
+          const verifySecret = String(request.headers.get('X-Login-Verify-Secret') || '').trim();
+          if (!verifyUrl) return json({ error: 'Login verification is not configured.' }, 501);
+
+          try {
+            const verifyHeaders = { 'Content-Type': 'application/json' };
+            if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
+            const vRes = await fetch(verifyUrl, {
+              method: 'POST',
+              headers: verifyHeaders,
+              body: JSON.stringify({ username: name, password, pin: room.pin }),
+            });
+            if (!vRes.ok) return json({ error: 'Invalid username or password.' }, 401);
+            const vTxt = await vRes.text();
+            let vData = {};
+            try { vData = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+            if (vData && vData.ok === false) return json({ error: 'Invalid username or password.' }, 401);
+            if (vData?.displayName) name = sanitizeName(vData.displayName) || name;
+          } catch {
+            return json({ error: 'Login verification service unavailable.' }, 502);
+          }
+
           const nameTaken = Object.values(room.players || {}).some((p) => normalizeNameKey(p.name) === normalizeNameKey(name));
           if (nameTaken) return json({ error: 'Name already in use in this game.' }, 409);
         }

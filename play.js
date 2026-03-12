@@ -151,6 +151,7 @@ async function joinLiveGame() {
       body: {
         pin: live.player.pin,
         name: username,
+        password,
         clientId: live.player.clientId,
       },
     });
