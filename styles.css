@@ -697,6 +697,69 @@ textarea { min-height: 72px; resize: vertical; }
   font-size: clamp(1.2rem, 2.4vw, 1.6rem);
 }
 
+/* Batch 2: projector type-aware compact layout while question is active */
+#hostQuestionCard.projector-question-active {
+  padding: .72rem .9rem;
+}
+
+#hostQuestionCard.projector-question-active #projectorHud {
+  margin-bottom: .15rem;
+  font-size: .86rem;
+}
+
+#hostQuestionCard.projector-question-active .projector-scoreboard {
+  max-height: 20vh;
+  overflow: hidden;
+}
+
+#hostQuestionCard.projector-question-active .projector-score-item {
+  padding: .16rem .34rem;
+  margin-bottom: .1rem;
+  font-size: .9rem;
+}
+
+#hostQuestionCard.projector-question-active .project-prompt {
+  margin: .15rem auto .28rem;
+  line-height: 1.12;
+}
+
+#hostQuestionCard.projector-question-active .project-answers {
+  gap: .36rem;
+}
+
+#hostQuestionCard.projector-question-active .project-answers .answer-row {
+  padding: .4rem .5rem;
+}
+
+#hostQuestionCard.projector-question-active.has-image .project-answers {
+  display: grid;
+  grid-template-columns: minmax(210px, 36%) minmax(0, 1fr);
+  gap: .34rem .65rem;
+  align-items: start;
+}
+
+#hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview {
+  grid-column: 1;
+  grid-row: 1 / span 20;
+  margin-top: 0;
+}
+
+#hostQuestionCard.projector-question-active.has-image .project-answers > :not(.question-image-preview) {
+  grid-column: 2;
+}
+
+#hostQuestionCard.projector-question-active[data-qtype="open"] .project-prompt,
+#hostQuestionCard.projector-question-active[data-qtype="speaking"] .project-prompt,
+#hostQuestionCard.projector-question-active[data-qtype="context_gap"] .project-prompt,
+#hostQuestionCard.projector-question-active[data-qtype="error_hunt"] .project-prompt {
+  font-size: clamp(1.35rem, 2.9vw, 2.15rem);
+}
+
+#hostQuestionCard.projector-question-active[data-qtype="match_pairs"] .project-answers,
+#hostQuestionCard.projector-question-active[data-qtype="puzzle"] .project-answers {
+  gap: .28rem;
+}
+
 /* Adaptive fit (batch 1): keep host/student question UI visible without scrolling */
 #hostQuestionCard.adaptive-active,
 #hostQuestionCard:fullscreen.adaptive-active,

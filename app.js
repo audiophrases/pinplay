@@ -2768,6 +2768,18 @@ function renderHostQuestion(state) {
   const question = state.question;
   const showReveal = !!state.questionClosed && (phase === 'question' || phase === 'results');
 
+  const applyProjectorLayoutMode = (active, q = null) => {
+    if (!hostQuestionCardEl) return;
+    hostQuestionCardEl.classList.toggle('projector-question-active', !!active);
+
+    const qType = String(q?.type || '').trim();
+    if (qType) hostQuestionCardEl.dataset.qtype = qType;
+    else delete hostQuestionCardEl.dataset.qtype;
+
+    hostQuestionCardEl.classList.toggle('has-image', !!q?.imageData);
+    hostQuestionCardEl.classList.toggle('poll-mode', !!q?.isPoll);
+  };
+
   const renderPollSummary = () => {
     const summary = state.pollSummary;
     if (!summary || !Array.isArray(summary.items) || !summary.items.length) {
@@ -2915,6 +2927,7 @@ function renderHostQuestion(state) {
   };
 
   if (phase === 'results') {
+    applyProjectorLayoutMode(false, null);
     hostQuestionWrap.classList.remove('hidden');
     hostQuestionPromptEl.textContent = '🏁 Final ranking reveal';
     hostQuestionAnswersEl.innerHTML = '';
@@ -2931,6 +2944,7 @@ function renderHostQuestion(state) {
   }
 
   if (!question) {
+    applyProjectorLayoutMode(false, null);
     hostQuestionCardEl?.classList.remove('intro-active');
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
@@ -2940,6 +2954,7 @@ function renderHostQuestion(state) {
   }
 
   hostQuestionWrap.classList.remove('hidden');
+  applyProjectorLayoutMode(phase === 'question', question);
   const qIcon = iconForType(question.type);
   const qPrompt = question.prompt || '(No question text)';
 
