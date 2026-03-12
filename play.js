@@ -366,7 +366,7 @@ function applyAdaptiveFitJoin() {
 
   const active = !joinQuestionWrap.classList.contains('hidden');
   joinCardEl.classList.toggle('adaptive-active', active);
-  joinCardEl.classList.remove('fit-l1', 'fit-l2', 'fit-l3');
+  joinCardEl.classList.remove('fit-l1', 'fit-l2', 'fit-l3', 'fit-l4', 'overflow-risk');
   joinQuestionWrap.classList.remove('adaptive-scaled');
   joinQuestionWrap.style.removeProperty('--adaptive-scale');
 
@@ -392,12 +392,24 @@ function applyAdaptiveFitJoin() {
   if (!isOverflowing()) return;
   joinCardEl.classList.add('fit-l3');
   if (!isOverflowing()) return;
+  joinCardEl.classList.add('fit-l4');
+  if (!isOverflowing()) return;
 
   const contentH = Math.max(1, joinQuestionWrap.scrollHeight);
-  const scale = Math.max(0.74, Math.min(1, (available - 6) / contentH));
+  const scale = Math.max(0.68, Math.min(1, (available - 6) / contentH));
   if (scale < 0.995) {
     joinQuestionWrap.classList.add('adaptive-scaled');
     joinQuestionWrap.style.setProperty('--adaptive-scale', scale.toFixed(3));
+  }
+
+  if (isOverflowing()) {
+    joinCardEl.classList.add('overflow-risk');
+    console.warn('[PinPlay][fit][student] Overflow risk remains', {
+      qType: live.player.currentQuestion?.type || null,
+      qPromptLen: String(live.player.currentQuestion?.prompt || '').length,
+      scrollH: joinCardEl.scrollHeight,
+      clientH: joinCardEl.clientHeight,
+    });
   }
 }
 
