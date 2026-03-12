@@ -31,6 +31,11 @@ app = FastAPI()
 SECRET = os.getenv("EDGE_TTS_SECRET", "").strip()
 
 
+@app.get("/health")
+async def health():
+    return {"ok": True, "service": "edge-tts-bridge"}
+
+
 @app.post("/tts")
 async def tts(req: TTSRequest, authorization: str | None = Header(default=None)):
     text = (req.text or "").strip()
