@@ -2781,7 +2781,13 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),
   };
-  if (includeQuiz) base.quiz = normalizeQuiz(assignment.quiz || {});
+  if (includeQuiz) {
+    const quiz = normalizeQuiz(assignment.quiz || {});
+    base.quiz = {
+      title: String(quiz?.title || ''),
+      questions: Array.isArray(quiz?.questions) ? quiz.questions.map((q) => publicQuestion(q)) : [],
+    };
+  }
   return base;
 }
 

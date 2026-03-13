@@ -50,6 +50,14 @@ const live = {
     timerAnchorAt: null,
     timerInitialRemainingMs: null,
     adaptiveFitRaf: null,
+    mode: 'live',
+    assignment: {
+      code: null,
+      attemptId: null,
+      state: null,
+      currentIndex: 0,
+      pollingTimer: null,
+    },
   },
 };
 
@@ -58,6 +66,7 @@ init();
 function init() {
   setupImageLightbox();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
+  initAssignmentFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -94,16 +103,53 @@ function init() {
   }
 }
 
+function initAssignmentFromUrl() {
+  const params = new URLSearchParams(window.location.search || '');
+  const code = String(params.get('assignment') || params.get('code') || '').trim().toUpperCase();
+  if (!code) return;
+
+  live.player.mode = 'assignment';
+  live.player.assignment.code = code;
+  if (joinPinEl) joinPinEl.value = code;
+  if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
+  if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+}
+
 async function validatePin() {
   try {
-    const pin = String(joinPinEl?.value || '').trim();
-    if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits.');
+    const raw = String(joinPinEl?.value || '').trim();
 
+    if (!/^\d{6}$/.test(raw)) {
+      const code = String(raw || live.player.assignment.code || '').trim().toUpperCase();
+      if (!code) throw new Error('Enter PIN or assignment code.');
+
+      const info = await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+      live.player.mode = 'assignment';
+      live.player.assignment.code = code;
+
+      if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+      if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
+      if (joinModeHintEl) {
+        const a = info?.assignment || {};
+        const dueAt = Number(a?.dueAt || 0);
+        const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+        joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText}`;
+      }
+      if (joinBtn) joinBtn.textContent = 'Start assignment';
+      setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
+      return;
+    }
+
+    const pin = raw;
     const data = await api(
       `/api/pin/check?pin=${encodeURIComponent(pin)}&clientId=${encodeURIComponent(live.player.clientId)}`,
       { method: 'GET' },
     );
 
+    live.player.mode = 'live';
     live.player.pin = pin;
     live.player.randomNamesMode = !!data?.settings?.randomNames;
 
@@ -138,6 +184,14 @@ async function validatePin() {
 
 async function joinLiveGame() {
   try {
+    if (live.player.mode === 'assignment') {
+      if (!live.player.assignment.code) {
+        await validatePin();
+        if (!live.player.assignment.code) return;
+      }
+      return startAssignmentAttempt();
+    }
+
     if (!live.player.pin) {
       await validatePin();
       if (!live.player.pin) return;
@@ -185,7 +239,100 @@ async function joinLiveGame() {
   }
 }
 
+function makeAssignmentStudentKey(name) {
+  const base = String(name || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '');
+  return base ? `usr_${base}`.slice(0, 96) : '';
+}
+
+function deriveAssignmentCurrentIndex(state) {
+  const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
+  if (total <= 0) return 0;
+  const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
+  for (let i = 0; i < total; i += 1) {
+    if (!answered.has(i)) return i;
+  }
+  return total - 1;
+}
+
+function mapAssignmentStateToPlayerState() {
+  const as = live.player.assignment.state;
+  if (!as?.attempt?.assignment) return null;
+
+  const attempt = as.attempt;
+  const assignment = attempt.assignment;
+  const quiz = assignment.quiz || {};
+  const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
+  const idx = Math.max(0, Math.min(live.player.assignment.currentIndex, Math.max(0, questions.length - 1)));
+  const question = questions[idx] || null;
+
+  return {
+    phase: question ? 'question' : 'results',
+    pin: assignment.code,
+    name: attempt.studentName || live.player.displayName || 'Student',
+    currentIndex: idx,
+    totalQuestions: Number(assignment.totalQuestions || questions.length || 0),
+    score: Number(attempt?.metrics?.autoScore || 0),
+    questionStartedAt: Date.now(),
+    questionDeadlineAt: assignment.dueAt || null,
+    questionClosed: false,
+    questionCloseReason: null,
+    answeredCurrent: (attempt.answeredQIndexes || []).includes(idx),
+    question,
+    correction: '',
+  };
+}
+
+async function loadAssignmentState() {
+  const code = String(live.player.assignment.code || '').trim();
+  const attemptId = String(live.player.assignment.attemptId || '').trim();
+  if (!code || !attemptId) return;
+
+  const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
+  live.player.assignment.state = data;
+  live.player.assignment.currentIndex = deriveAssignmentCurrentIndex(data);
+
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+}
+
+async function startAssignmentAttempt() {
+  const code = String(live.player.assignment.code || '').trim();
+  if (!code) throw new Error('Assignment code required.');
+
+  const username = String(joinNameEl?.value || '').trim();
+  if (!username || username.length < 2) throw new Error('Enter your username.');
+
+  const studentKey = makeAssignmentStudentKey(username);
+  if (!studentKey) throw new Error('Invalid username.');
+
+  const data = await api('/api/assignment/start', {
+    method: 'POST',
+    body: {
+      code,
+      studentKey,
+      studentName: username,
+    },
+  });
+
+  live.player.assignment.attemptId = data?.attempt?.id || null;
+  live.player.displayName = data?.attempt?.studentName || username;
+  setJoinTitle(`${live.player.displayName} · ${code}`);
+  if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
+  if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+  if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
+
+  setStatus(joinStatusEl, data?.alreadyStarted ? 'Resumed assignment ✅' : 'Assignment started ✅', 'ok');
+
+  if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
+  live.player.assignment.pollingTimer = setInterval(() => {
+    loadAssignmentState().catch(() => {});
+  }, 5000);
+
+  await loadAssignmentState();
+}
+
 async function pollPlayerState() {
+  if (live.player.mode !== 'live') return;
   if (!live.player.pin || !live.player.id || !live.player.token) return;
 
   try {
@@ -811,10 +958,31 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer() {
   try {
-    if (!live.player.pin || !live.player.id || !live.player.token) throw new Error('Join first.');
-
     const answer = readJoinAnswer();
     if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
+
+    if (live.player.mode === 'assignment') {
+      const code = String(live.player.assignment.code || '').trim();
+      const attemptId = String(live.player.assignment.attemptId || '').trim();
+      if (!code || !attemptId) throw new Error('Start assignment first.');
+
+      const qIndex = Number(live.player.assignment.currentIndex || 0);
+      await api('/api/assignment/answer', {
+        method: 'POST',
+        body: {
+          code,
+          attemptId,
+          qIndex,
+          answer,
+        },
+      });
+
+      setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
+      await loadAssignmentState();
+      return;
+    }
+
+    if (!live.player.pin || !live.player.id || !live.player.token) throw new Error('Join first.');
 
     const data = await api('/api/answer', {
       method: 'POST',
@@ -917,6 +1085,8 @@ function startPlayerPolling() {
 function stopPlayerPolling() {
   if (live.player.pollTimer) clearInterval(live.player.pollTimer);
   live.player.pollTimer = null;
+  if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
+  live.player.assignment.pollingTimer = null;
   stopJoinTimer();
 }
 
