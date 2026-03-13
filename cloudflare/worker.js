@@ -443,6 +443,20 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignment/submit' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/submit', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId }),
+      }));
+    }
+
     if (url.pathname === '/api/host/rename' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -1188,6 +1202,38 @@ export class QuizRoom {
           metrics,
           attempt: publicAssignmentAttempt(assignment, attempt),
         });
+      }
+
+      if (url.pathname === '/assignments/submit' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        if (attempt.submitted) return json({ ok: true, alreadySubmitted: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+
+        const metrics = evaluateAssignmentAttempt(assignment, attempt);
+        if (Number(metrics.answeredCount || 0) <= 0) {
+          return json({ error: 'Answer at least one question before submitting.' }, 409);
+        }
+
+        attempt.submitted = true;
+        attempt.submittedAt = Date.now();
+        attempt.updatedAt = attempt.submittedAt;
+        assignment.updatedAt = attempt.submittedAt;
+
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt) });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {

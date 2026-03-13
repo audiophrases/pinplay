@@ -24,6 +24,7 @@ const joinScoreEl = document.getElementById('joinScore');
 const joinPromptEl = document.getElementById('joinPrompt');
 const joinAnswersEl = document.getElementById('joinAnswers');
 const joinSubmitBtn = document.getElementById('joinSubmitBtn');
+const joinFinalizeBtn = document.getElementById('joinFinalizeBtn');
 const joinFeedbackEl = document.getElementById('joinFeedback');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
@@ -70,6 +71,7 @@ function init() {
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
+  if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', finalizeAssignmentAttempt);
 
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
@@ -176,6 +178,7 @@ async function validatePin() {
     }
 
     if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
+    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
     setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
@@ -271,12 +274,13 @@ function mapAssignmentStateToPlayerState() {
     name: attempt.studentName || live.player.displayName || 'Student',
     currentIndex: idx,
     totalQuestions: Number(assignment.totalQuestions || questions.length || 0),
-    score: Number(attempt?.metrics?.autoScore || 0),
+    score: Number(attempt?.metrics?.totalScore ?? attempt?.metrics?.autoScore ?? 0),
     questionStartedAt: Date.now(),
     questionDeadlineAt: assignment.dueAt || null,
     questionClosed: false,
     questionCloseReason: null,
     answeredCurrent: (attempt.answeredQIndexes || []).includes(idx),
+    assignmentSubmitted: !!attempt?.submitted,
     question,
     correction: '',
   };
@@ -320,6 +324,7 @@ async function startAssignmentAttempt() {
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
+  if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
   setStatus(joinStatusEl, data?.alreadyStarted ? 'Resumed assignment ✅' : 'Assignment started ✅', 'ok');
 
@@ -329,6 +334,29 @@ async function startAssignmentAttempt() {
   }, 5000);
 
   await loadAssignmentState();
+}
+
+async function finalizeAssignmentAttempt() {
+  try {
+    if (live.player.mode !== 'assignment') return;
+    const code = String(live.player.assignment.code || '').trim();
+    const attemptId = String(live.player.assignment.attemptId || '').trim();
+    if (!code || !attemptId) throw new Error('Start assignment first.');
+
+    if (joinFinalizeBtn) joinFinalizeBtn.disabled = true;
+    const data = await api('/api/assignment/submit', {
+      method: 'POST',
+      body: { code, attemptId },
+    });
+
+    live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
+    setStatus(joinFeedbackEl, data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅', 'ok');
+    await loadAssignmentState();
+  } catch (err) {
+    setStatus(joinFeedbackEl, String(err?.message || 'Could not submit assignment.'), 'bad');
+  } finally {
+    if (joinFinalizeBtn) joinFinalizeBtn.disabled = false;
+  }
 }
 
 async function pollPlayerState() {
@@ -446,13 +474,23 @@ function renderPlayerState(state) {
     startJoinTimer(state);
   }
 
+  const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
+
   if (joinSubmitBtn) {
-    joinSubmitBtn.disabled = questionClosed || state.answeredCurrent;
+    const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
+    joinSubmitBtn.disabled = shouldDisable;
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
-    if (!questionClosed && joinSubmitBtn.disabled) {
+    if (!questionClosed && shouldDisable && live.player.mode === 'live') {
       setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
     }
+  }
+
+  if (joinFinalizeBtn) {
+    const showFinalize = live.player.mode === 'assignment';
+    joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
+    joinFinalizeBtn.disabled = assignmentSubmitted;
+    joinFinalizeBtn.textContent = assignmentSubmitted ? 'Assignment submitted' : 'Submit assignment';
   }
 
   const rrNow = state.revealedResult;
@@ -485,15 +523,17 @@ function renderPlayerState(state) {
       }
       setStatus(joinStatusEl, 'Answer revealed.', 'ok');
     }
+  } else if (assignmentSubmitted) {
+    setStatus(joinStatusEl, 'Assignment submitted.', 'ok');
   } else if (state.answeredCurrent) {
     const rr = state.revealedResult;
     const corr = String(rr?.correction || '').trim();
     if (corr) {
       setStatus(joinFeedbackEl, '', '');
     }
-    setStatus(joinStatusEl, 'Answer received.', 'ok');
+    setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
   } else {
-    setStatus(joinStatusEl, 'Question live!', 'ok');
+    setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Assignment in progress.' : 'Question live!', 'ok');
   }
 
   renderJoinReveal();
