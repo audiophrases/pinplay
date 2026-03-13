@@ -14,6 +14,8 @@ const RANDOM_NAME_ADJECTIVES = [
   'Amber','Vivid','Classic','Modern','Royal','Sincere','Thoughtful','Helpful','Polite','Honorable','Passionate','Careful','Eager','Smiling','Hopeful','Optimistic',
   'Moody','Serious','Silent','Noisy','Wild','Gritty','Savage','Tough','Restless','Nervous','Shy','Awkward','Clumsy','Lazy','Sleepy','Hungry',
   'Sassy','Funny','Goofy','Chaotic','Dramatic','Mysterious','Reckless','Stubborn','Messy','Tiny','Tall','Short','Strong','Slim','Flashy','Stylish',
+  'Grumpy','Angry','Irritable','Bitter','Jealous','Envious','Gloomy','Pessimistic','Cynical','Sarcastic','Bossy','Rude','Mean','Cruel','Harsh','Cold',
+  'Arrogant','Egotistic','Impulsive','Impatient','Anxious','Panicky','Paranoid','Suspicious','Defensive','Spiteful','Grudging','Guilty','Ashamed','Toxic','Troubled','Unstable',
   'Vintage','Sporty','Urban','Casual','Formal','Funky','Quirky','Lucky','Unlucky','Balanced','Neutral','Zen','Hyper','Chill','Prime','Ultra'
 ];
 
