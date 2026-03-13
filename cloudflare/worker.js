@@ -390,6 +390,43 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/reopen-attempt' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/reopen-attempt', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId }),
+      }));
+    }
+
+    if (url.pathname === '/api/assignments/toggle-active' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const active = !!body?.active;
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/toggle-active', {
+        method: 'POST',
+        body: JSON.stringify({ code, active }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -1234,6 +1271,49 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/reopen-attempt' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        attempt.submitted = false;
+        attempt.submittedAt = null;
+        attempt.updatedAt = Date.now();
+        assignment.updatedAt = attempt.updatedAt;
+
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/toggle-active' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.active = !!body?.active;
+        assignment.updatedAt = Date.now();
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {

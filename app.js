@@ -1880,6 +1880,30 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
   });
 }
 
+async function reopenAssignmentAttempt(code, attemptId) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/reopen-attempt', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      attemptId,
+    },
+  });
+}
+
+async function setAssignmentActive(code, active) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/toggle-active', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      active: !!active,
+    },
+  });
+}
+
 async function fetchAssignmentAttemptDetail(code, attemptId) {
   try {
     const safeCode = String(code || '').trim().toUpperCase();
@@ -2018,11 +2042,32 @@ async function fetchAssignmentResults(code) {
 
       const row = document.createElement('div');
       row.className = 'row gap top-space';
+      const attemptId = String(a?.id || '');
+
       const gradeBtn = document.createElement('button');
       gradeBtn.className = 'btn';
       gradeBtn.textContent = 'Open grading';
-      gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, String(a?.id || '')));
+      gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, attemptId));
       row.appendChild(gradeBtn);
+
+      if (a?.submitted) {
+        const reopenBtn = document.createElement('button');
+        reopenBtn.className = 'btn';
+        reopenBtn.textContent = 'Reopen attempt';
+        reopenBtn.addEventListener('click', async () => {
+          try {
+            reopenBtn.disabled = true;
+            await reopenAssignmentAttempt(safeCode, attemptId);
+            if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopened attempt ${attemptId}.`;
+            await fetchAssignmentResults(safeCode);
+          } catch (err) {
+            if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopen error: ${err.message}`;
+          } finally {
+            reopenBtn.disabled = false;
+          }
+        });
+        row.appendChild(reopenBtn);
+      }
 
       li.append(top, meta, row);
       assignmentResultsListEl.appendChild(li);
@@ -2104,7 +2149,25 @@ async function refreshAssignmentsList() {
         fetchAssignmentResults(code);
       });
 
-      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn);
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'btn';
+      toggleBtn.textContent = a?.active ? 'Close assignment' : 'Reopen assignment';
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          toggleBtn.disabled = true;
+          await setAssignmentActive(code, !a?.active);
+          if (assignmentStatusEl) assignmentStatusEl.textContent = !a?.active
+            ? `Assignment ${code} reopened.`
+            : `Assignment ${code} closed.`;
+          await refreshAssignmentsList();
+        } catch (err) {
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Toggle error: ${err.message}`;
+        } finally {
+          toggleBtn.disabled = false;
+        }
+      });
+
+      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn, toggleBtn);
       li.append(title, meta, row);
       assignmentListEl.appendChild(li);
     });
