@@ -49,6 +49,10 @@ const RANDOM_NAME_PEOPLE = [
   // Fictional characters
   'Sherlock','Athena','Hermione','Frodo','Aragorn','Legolas','Leia','Anakin','Neo','Trinity','Katniss','Arya','Geralt','Yennefer','Zelda','Mario','LaraCroft','Spock','Picard','Wednesday',
   'Gandalf','DarthVader','LukeSkywalker','HanSolo','TonyStark','NatashaRomanoff','Batman','Joker','HarleyQuinn','Spiderman','Wolverine','Deadpool','Kratos','MasterChief','Ezio','GeronimoStilton','Tintin','Asterix','Obelix','Moana',
+  'Superman','WonderWoman','Flash','Aquaman','GreenLantern','DoctorStrange','ScarletWitch','BlackPanther','CaptainMarvel','Thor','Loki','Hulk','IronMan','BlackWidow','Hawkeye','AntMan','Venom','Magneto','StormXMen','ProfessorX',
+  'Sonic','Tails','Knuckles','Pikachu','Charizard','Mewtwo','Link','Ganondorf','Samus','Kirby','DonkeyKong','Yoshi','Bowser','Luigi','Peach','Cloud','Sephiroth','Tifa','Aerith','Sora',
+  'Dumbledore','Snape','Voldemort','Hagrid','RonWeasley','LunaLovegood','DracoMalfoy','SiriusBlack','RemusLupin','Bellatrix','Eleven','JonSnow','Daenerys','Tyrion','Sansa','BranStark','Cersei','JaimeLannister','TheHound','TheMandalorian',
+  'Grogu','Ahsoka','Padme','Kenobi','Rey','Finn','PoeDameron','KyloRen','BoKatan','CaptainPicard','Data','SevenOfNine','Ripley','SarahConnor','Ellen','MaxRockatansky','IndianaJones','JackSparrow','ElizabethSwann','OptimusPrime',
   // Russian / Slavic sounding
   'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman','Natasha','Ilya','Yuri','Vera','Mila','Ludmila','Stanislav','Galina',
   // South American sounding
