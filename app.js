@@ -42,6 +42,8 @@ const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
 const liveScreenSectionToggleEl = document.getElementById('liveScreenSectionToggle');
 const liveScreenCardBodyEl = document.getElementById('liveScreenCardBody');
+const gameControlsSectionToggleEl = document.getElementById('gameControlsSectionToggle');
+const gameControlsCardBodyEl = document.getElementById('gameControlsCardBody');
 const assignmentSectionToggleEl = document.getElementById('assignmentSectionToggle');
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 
@@ -370,6 +372,7 @@ function bindTabs() {
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: false, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
 }
 
