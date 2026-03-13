@@ -2529,22 +2529,41 @@ function renderHostAttemptsSnapshot(data) {
 
   filtered.forEach((s) => {
     const li = document.createElement('li');
+    li.className = 'attempt-item';
+
     const name = String(s.username || s.displayName || 'Student').trim();
     const className = String(s.className || '').trim();
     const classSuffix = className ? ` (${className})` : '';
+    const accuracyValue = Number(s.accuracy);
+    const accuracy = Number.isFinite(accuracyValue) ? `${accuracyValue}%` : '—';
+    const signal = Number.isFinite(accuracyValue)
+      ? (accuracyValue >= 80 ? '🟢' : (accuracyValue >= 55 ? '🟡' : '🔴'))
+      : '⚪';
 
-    const top = document.createElement('div');
-    top.innerHTML = `<strong>${escapeHtml(name)}${escapeHtml(classSuffix)}</strong> · ${Number(s.scoreCurrent || 0)} pts`;
+    const top = document.createElement('button');
+    top.type = 'button';
+    top.className = 'btn attempt-row-btn';
+    top.innerHTML = `<strong>${escapeHtml(name)}${escapeHtml(classSuffix)}</strong> · ${Number(s.scoreCurrent || 0)} pts · ${signal} ${accuracy}`;
 
     const detail = document.createElement('div');
     detail.className = 'small muted';
     const answered = Number(s.answeredCount || 0);
     const graded = Number(s.autoGradedCount || 0) + Number(s.teacherGradedCount || 0);
     const pending = Number(s.pendingTeacherGradeCount || 0);
-    const accuracy = Number.isFinite(Number(s.accuracy)) ? `${Number(s.accuracy)}%` : '—';
     detail.textContent = `Answered: ${answered} · Graded: ${graded} · Pending: ${pending} · Accuracy: ${accuracy}`;
 
-    li.append(top, detail);
+    const more = document.createElement('div');
+    more.className = 'small muted hidden';
+    const email = String(s.email || '').trim() || '—';
+    const lastAnswerAt = Number(s.lastAnswerAt || 0);
+    const lastAnswerText = lastAnswerAt ? new Date(lastAnswerAt).toLocaleString() : '—';
+    more.textContent = `Email: ${email} · Auto pts: ${Number(s.pointsAuto || 0)} · Teacher pts: ${Number(s.pointsTeacher || 0)} · Last answer: ${lastAnswerText} · Events: ${Number(s.eventCount || 0)}`;
+
+    top.addEventListener('click', () => {
+      more.classList.toggle('hidden');
+    });
+
+    li.append(top, detail, more);
     hostAttemptsListEl.appendChild(li);
   });
 }
