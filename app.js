@@ -369,6 +369,31 @@ function bindTabs() {
   });
 }
 
+function getTeacherCollapsibleSectionPairs() {
+  return [
+    [builderSectionToggleEl, builderCardBodyEl],
+    [liveScreenSectionToggleEl, liveScreenCardBodyEl],
+    [gameControlsSectionToggleEl, gameControlsCardBodyEl],
+    [assignmentSectionToggleEl, assignmentSectionBodyEl],
+  ].filter(([triggerEl, bodyEl]) => !!triggerEl && !!bodyEl);
+}
+
+function setAllTeacherSectionsCollapsed(collapsed) {
+  const pairs = getTeacherCollapsibleSectionPairs();
+  pairs.forEach(([triggerEl, bodyEl]) => {
+    setSectionCollapsed(triggerEl, bodyEl, collapsed);
+  });
+}
+
+function toggleTeacherSectionCollapseAll() {
+  const pairs = getTeacherCollapsibleSectionPairs();
+  if (!pairs.length) return;
+
+  const allCollapsed = pairs.every(([, bodyEl]) => bodyEl.classList.contains('hidden'));
+  // If everything is already collapsed, expand all; otherwise collapse all.
+  setAllTeacherSectionsCollapsed(!allCollapsed);
+}
+
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
@@ -2720,6 +2745,12 @@ function handleHostHotkeys(e) {
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     startRankingAnimationMode();
+    return;
+  }
+
+  if (e.key === 'c' || e.key === 'C') {
+    e.preventDefault();
+    toggleTeacherSectionCollapseAll();
     return;
   }
 
