@@ -12,7 +12,6 @@ const panels = document.querySelectorAll('.panel');
 // Builder
 const quizTitleEl = document.getElementById('quizTitle');
 const quizTtsLanguageEl = document.getElementById('quizTtsLanguage');
-const quizReadAllAloudEl = document.getElementById('quizReadAllAloud');
 const questionListEl = document.getElementById('questionList');
 const addMcqBtn = document.getElementById('addMcqBtn');
 const addMcqAudioBtn = document.getElementById('addMcqAudioBtn');
@@ -537,20 +536,14 @@ function bindBuilderEvents() {
 
   if (quizTtsLanguageEl) {
     quizTtsLanguageEl.addEventListener('change', () => {
-      const next = normalizeTtsLanguage(quizTtsLanguageEl.value);
-      quiz.ttsLanguage = next;
+      applyHearQuestionsMode(quiz, quizTtsLanguageEl.value);
+      const next = normalizeTtsLanguage(quiz.ttsLanguage);
       quiz.questions.forEach((q) => {
         if (!q || !supportsQuestionAudio(q.type)) return;
         q.ttsLanguage = next;
         q.language = getVoiceForTtsLanguage(next);
       });
       renderBuilder();
-    });
-  }
-
-  if (quizReadAllAloudEl) {
-    quizReadAllAloudEl.addEventListener('change', () => {
-      quiz.readAllQuestionsAloud = !!quizReadAllAloudEl.checked;
     });
   }
 
@@ -979,8 +972,7 @@ function findQuestionIndexFromBuilderEventTarget(target) {
 function renderBuilder() {
   normalizeQuizAudioDefaults(quiz);
   quizTitleEl.value = quiz.title || '';
-  if (quizTtsLanguageEl) quizTtsLanguageEl.value = normalizeTtsLanguage(quiz.ttsLanguage);
-  if (quizReadAllAloudEl) quizReadAllAloudEl.checked = !!quiz.readAllQuestionsAloud;
+  if (quizTtsLanguageEl) quizTtsLanguageEl.value = getHearQuestionsMode(quiz);
   questionListEl.innerHTML = '';
 
   if (!quiz.questions.length) {
@@ -1341,11 +1333,27 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
   return getVoiceForTtsLanguage(fallbackLanguage);
 }
 
+function getHearQuestionsMode(targetQuiz) {
+  const lang = normalizeTtsLanguage(targetQuiz?.ttsLanguage);
+  return targetQuiz?.readAllQuestionsAloud ? lang : 'READ';
+}
+
+function applyHearQuestionsMode(targetQuiz, modeValue) {
+  if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  const mode = String(modeValue || '').trim().toUpperCase();
+  if (mode === 'READ') {
+    targetQuiz.readAllQuestionsAloud = false;
+    return;
+  }
+  targetQuiz.ttsLanguage = normalizeTtsLanguage(mode);
+  targetQuiz.readAllQuestionsAloud = true;
+}
+
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   targetQuiz.ttsLanguage = ['EN', 'CA', 'FR'].includes(raw) ? raw : 'EN';
-  targetQuiz.readAllQuestionsAloud = !!targetQuiz.readAllQuestionsAloud;
+  targetQuiz.readAllQuestionsAloud = targetQuiz.readAllQuestionsAloud !== false;
 }
 
 function buildAudioSettingsMarkup(idx, q) {
@@ -1382,8 +1390,7 @@ function buildAudioSettingsMarkup(idx, q) {
 
 function syncQuizFromUI() {
   quiz.title = quizTitleEl.value.trim();
-  quiz.ttsLanguage = normalizeTtsLanguage(quizTtsLanguageEl?.value || quiz.ttsLanguage);
-  quiz.readAllQuestionsAloud = !!quizReadAllAloudEl?.checked;
+  applyHearQuestionsMode(quiz, quizTtsLanguageEl?.value || getHearQuestionsMode(quiz));
 
   quiz.questions.forEach((q, idx) => {
     const promptEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
@@ -5990,7 +5997,7 @@ function createEmptyQuiz() {
     version: 1,
     title: '',
     ttsLanguage: 'EN',
-    readAllQuestionsAloud: false,
+    readAllQuestionsAloud: true,
     questions: [],
   };
 }
