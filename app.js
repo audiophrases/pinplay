@@ -1345,7 +1345,8 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
 
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
-  targetQuiz.ttsLanguage = normalizeTtsLanguage(targetQuiz.ttsLanguage);
+  const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
+  targetQuiz.ttsLanguage = ['EN', 'CA', 'FR'].includes(raw) ? raw : 'EN';
   targetQuiz.readAllQuestionsAloud = !!targetQuiz.readAllQuestionsAloud;
 }
 
@@ -5990,7 +5991,7 @@ function createEmptyQuiz() {
   return {
     version: 1,
     title: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
+    ttsLanguage: 'EN',
     readAllQuestionsAloud: false,
     questions: [],
   };
