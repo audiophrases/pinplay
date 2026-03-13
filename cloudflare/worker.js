@@ -134,6 +134,21 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/attempts' && request.method === 'GET') {
+      const pin = sanitizePin(url.searchParams.get('pin'));
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/attempts', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
     if (url.pathname === '/api/host/join' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -959,6 +974,13 @@ export class QuizRoom {
           pin: room.pin,
           events: list.slice(Math.max(0, list.length - limit)),
         });
+      }
+
+      if (url.pathname === '/host/attempts' && request.method === 'GET') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        return json(buildAttemptSnapshots(room));
       }
 
       if (url.pathname === '/host/join' && request.method === 'POST') {
@@ -2451,6 +2473,114 @@ function appendRoomEvent(room, type, payload = {}) {
   if (room.eventLog.length > MAX_ROOM_EVENTS) {
     room.eventLog.splice(0, room.eventLog.length - MAX_ROOM_EVENTS);
   }
+}
+
+function buildAttemptSnapshots(room) {
+  const players = Object.values(room?.players || {});
+  const perStudent = new Map();
+
+  const ensure = (player) => {
+    const identity = player?.identity || {};
+    const key = String(identity.studentKey || player?.id || '').trim() || String(player?.id || 'unknown');
+    if (!perStudent.has(key)) {
+      perStudent.set(key, {
+        studentKey: key,
+        username: String(identity.username || player?.name || '').trim(),
+        className: String(identity.className || '').trim(),
+        email: String(identity.email || '').trim(),
+        displayName: String(player?.name || '').trim(),
+        source: String(identity.source || '').trim(),
+        joinedAt: Number(player?.joinedAt || 0) || null,
+        answeredCount: 0,
+        autoGradedCount: 0,
+        teacherGradedCount: 0,
+        pendingTeacherGradeCount: 0,
+        correctCount: 0,
+        pointsAuto: 0,
+        pointsTeacher: 0,
+        scoreCurrent: Number(player?.score || 0),
+        lastAnswerAt: null,
+        eventCount: 0,
+      });
+    }
+    return perStudent.get(key);
+  };
+
+  players.forEach((p) => ensure(p));
+
+  const responsesByQ = room?.responsesByQuestion || {};
+  Object.keys(responsesByQ).forEach((idxRaw) => {
+    const qIndex = Number(idxRaw);
+    const question = room?.quiz?.questions?.[qIndex];
+    const teacherGraded = !!(question && (
+      question.type === 'open'
+      || question.type === 'image_open'
+      || question.type === 'speaking'
+      || isTeacherGradedTextQuestion(question)
+    ));
+
+    const perQ = responsesByQ[idxRaw] || {};
+    Object.entries(perQ).forEach(([playerId, resp]) => {
+      const p = room?.players?.[playerId];
+      if (!p) return;
+      const row = ensure(p);
+      row.answeredCount += 1;
+
+      const submittedAt = Number(resp?.submittedAt || 0) || null;
+      if (submittedAt && (!row.lastAnswerAt || submittedAt > row.lastAnswerAt)) {
+        row.lastAnswerAt = submittedAt;
+      }
+
+      if (teacherGraded) {
+        if (resp?.graded) {
+          row.teacherGradedCount += 1;
+          row.pointsTeacher += Number(resp?.pointsAwarded || 0);
+        } else {
+          row.pendingTeacherGradeCount += 1;
+        }
+      } else {
+        row.autoGradedCount += 1;
+        row.pointsAuto += Number(resp?.pointsAwarded || 0);
+      }
+
+      if (resp?.correct) row.correctCount += 1;
+    });
+  });
+
+  const eventLog = Array.isArray(room?.eventLog) ? room.eventLog : [];
+  const byKey = new Map();
+  eventLog.forEach((ev) => {
+    const key = String(ev?.payload?.identity?.studentKey || '').trim();
+    if (!key) return;
+    byKey.set(key, (byKey.get(key) || 0) + 1);
+  });
+
+  const attempts = [...perStudent.values()]
+    .map((r) => ({
+      ...r,
+      pointsAuto: Math.round(Number(r.pointsAuto || 0)),
+      pointsTeacher: Math.round(Number(r.pointsTeacher || 0)),
+      scoreCurrent: Math.round(Number(r.scoreCurrent || 0)),
+      accuracy: r.answeredCount > 0 ? round((r.correctCount / r.answeredCount) * 100, 1) : null,
+      eventCount: Number(byKey.get(String(r.studentKey || '')) || 0),
+    }))
+    .sort((a, b) => {
+      const c = String(a.className || '').localeCompare(String(b.className || ''));
+      if (c !== 0) return c;
+      return String(a.username || a.displayName || '').localeCompare(String(b.username || b.displayName || ''));
+    });
+
+  return {
+    pin: room?.pin || '',
+    attemptId: `${room?.pin || 'room'}:${Number(room?.createdAt || 0) || 0}`,
+    createdAt: Number(room?.createdAt || 0) || null,
+    updatedAt: Number(room?.updatedAt || 0) || null,
+    quiz: {
+      title: String(room?.quiz?.title || '').trim(),
+      questions: Number(room?.quiz?.questions?.length || 0),
+    },
+    students: attempts,
+  };
 }
 
 function summarizePoll(question, responses) {
