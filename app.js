@@ -40,6 +40,8 @@ const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
+const liveScreenSectionToggleEl = document.getElementById('liveScreenSectionToggle');
+const liveScreenCardBodyEl = document.getElementById('liveScreenCardBody');
 const assignmentSectionToggleEl = document.getElementById('assignmentSectionToggle');
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 
@@ -367,6 +369,7 @@ function bindTabs() {
 
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
 }
 
