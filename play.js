@@ -381,7 +381,10 @@ async function startAssignmentAttempt() {
 
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = setInterval(() => {
-    loadAssignmentState().catch(() => {});
+    loadAssignmentState().catch((err) => {
+      const msg = String(err?.message || 'Could not refresh assignment state.');
+      setStatus(joinStatusEl, msg, 'bad');
+    });
   }, 5000);
 
   await loadAssignmentState();

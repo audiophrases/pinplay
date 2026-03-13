@@ -1251,6 +1251,10 @@ export class QuizRoom {
         const assignments = await loadAssignmentsMap(this.state.storage);
         const assignment = assignments?.[code] || null;
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+        if (Number(assignment.dueAt || 0) > 0 && Date.now() > Number(assignment.dueAt)) {
+          return json({ error: 'Assignment due date has passed.' }, 410);
+        }
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         const attempt = assignment.attempts?.[attemptId] || null;
