@@ -676,6 +676,25 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/player/reroll-name' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const playerId = sanitizeId(body?.playerId);
+      const playerToken = request.headers.get('X-Player-Token') || '';
+
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!playerId) return json({ error: 'playerId required.' }, 400);
+      if (!playerToken) return json({ error: 'player token required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/player/reroll-name', {
+          method: 'POST',
+          body: JSON.stringify({ playerId, playerToken }),
+        }),
+      );
+    }
+
     if (url.pathname === '/api/answer' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -1951,6 +1970,29 @@ export class QuizRoom {
         if (timeoutClosed) await this.#setRoom(room);
 
         return json(playerState(room, playerId));
+      }
+
+      if (url.pathname === '/player/reroll-name' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const playerToken = String(body?.playerToken || '');
+
+        const player = room.players[playerId];
+        if (!player || player.token !== playerToken) return json({ error: 'Unauthorized player.' }, 401);
+        if (!room.settings?.randomNames) return json({ error: 'Random names mode is disabled.' }, 409);
+        if (room.phase !== 'lobby') return json({ error: 'Name can only be changed before game start.' }, 409);
+
+        const nextName = pickRandomName(room.players);
+        player.name = nextName;
+        player.identity = player.identity || {};
+        player.identity.username = sanitizeName(nextName);
+        player.identity.displayName = sanitizeName(nextName);
+        player.identity.source = 'random';
+
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+
+        return json({ ok: true, name: nextName });
       }
 
       if (url.pathname === '/answer' && request.method === 'POST') {

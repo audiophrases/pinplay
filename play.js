@@ -16,6 +16,7 @@ const joinNameEl = document.getElementById('joinName');
 const joinPasswordEl = document.getElementById('joinPassword');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
+const rerollNameBtn = document.getElementById('rerollNameBtn');
 const joinTitleEl = document.getElementById('joinTitle');
 const joinQuestionWrap = document.getElementById('joinQuestionWrap');
 const joinProgressEl = document.getElementById('joinProgress');
@@ -77,6 +78,7 @@ function init() {
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
+  if (rerollNameBtn) rerollNameBtn.addEventListener('click', rerollRandomName);
   if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', finalizeAssignmentAttempt);
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
@@ -447,6 +449,34 @@ async function pollPlayerState() {
   }
 }
 
+async function rerollRandomName() {
+  try {
+    if (!live.player.pin || !live.player.id || !live.player.token) return;
+    if (!live.player.randomNamesMode) return;
+    if (rerollNameBtn) rerollNameBtn.disabled = true;
+
+    const data = await api('/api/player/reroll-name', {
+      method: 'POST',
+      headers: { 'X-Player-Token': live.player.token },
+      body: {
+        pin: live.player.pin,
+        playerId: live.player.id,
+      },
+    });
+
+    const nextName = String(data?.name || '').trim();
+    if (nextName) {
+      live.player.displayName = nextName;
+      setJoinTitle(nextName);
+      setStatus(joinStatusEl, `New random name: ${nextName} ✅`, 'ok');
+    }
+  } catch (err) {
+    setStatus(joinStatusEl, String(err?.message || 'Could not change name.'), 'bad');
+  } finally {
+    if (rerollNameBtn) rerollNameBtn.disabled = false;
+  }
+}
+
 function renderPlayerState(state) {
   const renderJoinReveal = () => {
     if (!joinAnswersEl) return;
@@ -505,6 +535,9 @@ function renderPlayerState(state) {
     if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
 
+    const canReroll = state.phase === 'lobby' && !!live.player.randomNamesMode;
+    if (rerollNameBtn) rerollNameBtn.classList.toggle('hidden', !canReroll);
+
     if (state.phase === 'lobby') {
       setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
     } else if (state.phase === 'results') {
@@ -517,6 +550,7 @@ function renderPlayerState(state) {
   }
 
   if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
+  if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
 
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
   const shouldRenderQuestion = live.player.renderKey !== key;
