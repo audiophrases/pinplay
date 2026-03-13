@@ -70,8 +70,30 @@ const RANDOM_NAME_PEOPLE = [
   // South American sounding
   'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno','Gael','Julieta','Franco','Bianca','Enzo','Milagros','Facundo','Thiaguito','Benicio',
   // Global mixed
-  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe','Aiko','Kenji','Fatima','Yara','Ines','Samira','Noura','Kai'
+  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe','Aiko','Kenji','Fatima','Yara','Ines','Samira','Noura','Kai',
+  // Extra women-focused expansion (target ~50% women)
+  'Maria','Laura','Sara','Julia','Claudia','Andrea','Patricia','Cristina','Silvia','Raquel','Beatriz','Teresa','Mónica','Veronica','Eva','Miriam','Noelia','Carla','Sonia','Lucia',
+  'Daniela','Valeria','Camila','Juliana','Mariana','Gabriela','Isabela','Antonella','Renata','Bianca','Milagros','Catalina','Florencia','Agustina','Pilar','Lourdes','Alicia','Elisa','Ingrid','Natalia',
+  'Frida','Rosalind','Ada','MarieCurie','Hypatia','MaryWollstonecraft','VirginiaWoolf','Simone','Hannah','JudithButler','AngelaDavis','Emmeline','RosaParks','Malala','Rigoberta','Greta','Amelia','ValentinaTereshkova','SallyRide','MaeJemison',
+  'AlexMorgan','MeganRapinoe','LucyBronze','AdaHegerberg','CarolineGrahamHansen','MartaVieira','SamKerr','WendieRenard','MapiLeon2','Aitana2','Alexia2','Patri2','ClaudiaPina2','Mariona2','OnaBatlle2','IreneParedes2','Jenni2','Salma2','Leila2','Vicky2'
 ];
+
+const FEMALE_NAME_HINTS = new Set([
+  'yasmine','nadia','leila','salma','amina','imane','zineb','khadija','meriem','ibtissam','naima',
+  'nuria','laia','jana','berta','martina','aina','ona','mariona','roser','mireia','montserrat','gemma','neus','judit','txell','ariadna','clara','nora','helena','ivet','bruna','queralt','celia','mar','carlota','paula','irene','anna','joana','marta','nerea','laura','alba',
+  'alexiaputellas','aitanabonmati','mapileon','patriguijarro','claudiapina','marionacaldentey','vickylopez','sandrapaños','laiacodina','onabatlle','ireneparedes','jennihermoso','salmaparalluelo','martatorrejon','leilaouahabi','arisánchez','gemmatriay','mireiabelmonte',
+  'giulia','francesca','chiara','elisa','sofia','giorgia','marta','alessia',
+  'hypatia','hannaharendt','simonedebeauvoir','woolf','austen','isabelallende','murasaki',
+  'rihanna','adele','beyonce','dualipa','rosalia','karolg','sia','shakira',
+  'cleopatra','catherine','elizabeth','victoria','wuzetian','hatshepsut','nefertiti','isabella','theodora','boudica','mariatheresa',
+  'athena','hermione','leia','trinity','katniss','arya','yennefer','zelda','laracroft','wednesday','wonderwoman','scarletwitch','captainmarvel','blackwidow','harleyquinn','peach','tifa','aerith','lunalovegood','bellatrix','daenerys','sansa','cersei','ahsoka','padme','rey','bokatan','ripley','sarahconnor','ellen','elizabethswann',
+  'anastasia','svetlana','irina','tatiana','yelena','olga','ekaterina','marina','natasha','vera','mila','ludmila','galina',
+  'sofia','valentina','camila','lucia','valeria','emilia','antonella','renata','julieta','bianca','milagros',
+  'maya','priya','emma','olivia','mia','elena','nora','chloe','zoe','aiko','fatima','yara','ines','samira','noura',
+  'maria','sara','julia','claudia','andrea','patricia','cristina','silvia','raquel','beatriz','teresa','mónica','veronica','eva','miriam','noelia','carla','sonia','daniela','juliana','mariana','gabriela','isabela','florencia','agustina','pilar','lourdes','alicia','ingrid','natalia',
+  'frida','rosalind','ada','mariecurie','marywollstonecraft','simone','judithbutler','angeladavis','emmeline','rosaparks','malala','rigoberta','greta','amelia','valentinatereshkova','sallyride','maejemison',
+  'alexmorgan','meganrapinoe','lucybronze','adahegerberg','carolinegrahamhansen','martavieira','samkerr','wendierenard'
+]);
 
 const BLOCKED_NICK_PATTERNS = [
   /\bnazi\b/i,
@@ -3618,13 +3640,22 @@ function pickRandomName(playersMap) {
 
   const adjectives = RANDOM_NAME_ADJECTIVES;
   const people = RANDOM_NAME_PEOPLE;
-  const total = adjectives.length * people.length;
+  const womenPeople = people.filter((n) => FEMALE_NAME_HINTS.has(String(n || '').toLowerCase()));
+  const peopleTarget = womenPeople.length > 0 && Math.random() < 0.5 ? womenPeople : people;
+  const total = adjectives.length * peopleTarget.length;
 
-  for (let i = 0; i < Math.min(total, 240); i += 1) {
+  for (let i = 0; i < Math.min(total, 320); i += 1) {
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)] || 'Happy';
-    const person = people[Math.floor(Math.random() * people.length)] || 'Player';
+    const person = peopleTarget[Math.floor(Math.random() * peopleTarget.length)] || 'Player';
     const candidate = `${adj} ${person}`;
     if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+
+  for (const adj of adjectives) {
+    for (const person of peopleTarget) {
+      const candidate = `${adj} ${person}`;
+      if (!used.has(candidate.toLowerCase())) return candidate;
+    }
   }
 
   for (const adj of adjectives) {
