@@ -66,6 +66,11 @@ const studentPreviewSummaryEl = document.getElementById('studentPreviewSummary')
 const studentPreviewStackEl = document.getElementById('studentPreviewStack');
 const hostJoinPinEl = document.getElementById('hostJoinPin');
 const hostJoinBtn = document.getElementById('hostJoinBtn');
+const assignmentClassEl = document.getElementById('assignmentClass');
+const assignmentDueAtEl = document.getElementById('assignmentDueAt');
+const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
+const createAssignmentBtn = document.getElementById('createAssignmentBtn');
+const assignmentStatusEl = document.getElementById('assignmentStatus');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -153,6 +158,7 @@ let previewMode = {
   simTeacherByQ: {},
   prevPrimaryAudioHost: null,
 };
+let createSessionPassword = '';
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -291,6 +297,7 @@ function setupCreateAccess() {
         body: { password: value },
       });
 
+      createSessionPassword = value;
       sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
       if (createWorkspace) createWorkspace.classList.remove('hidden');
       if (createAuthCard) createAuthCard.classList.add('hidden');
@@ -1703,6 +1710,7 @@ function bindLiveEvents() {
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
+  if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -1827,6 +1835,54 @@ async function createLiveGame() {
     startHostPolling();
     await pollHostState();
   } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+async function createAssignmentFromCurrentQuiz() {
+  try {
+    syncQuizFromUI();
+    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
+
+    if (!createSessionPassword) {
+      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
+    const attemptsLimit = Math.max(1, Math.min(10, Number(assignmentAttemptsEl?.value || 1) || 1));
+    const className = String(assignmentClassEl?.value || '').trim();
+
+    let dueAt = null;
+    const dueText = String(assignmentDueAtEl?.value || '').trim();
+    if (dueText) {
+      const t = new Date(dueText).getTime();
+      if (Number.isFinite(t) && t > 0) dueAt = Math.round(t);
+    }
+
+    const data = await api('/api/assignments/create', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        title: quiz.title,
+        className,
+        attemptsLimit,
+        dueAt,
+        quiz: normalizeQuizForLive(quiz),
+      },
+    });
+
+    const code = String(data?.assignment?.code || '').trim();
+    const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
+    const link = `${base}?assignment=${encodeURIComponent(code)}`;
+    const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''}`;
+
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `${msg} · Link: ${link}`;
+    setStatus(hostStatusEl, msg, 'ok');
+  } catch (err) {
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment error: ${err.message}`;
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
