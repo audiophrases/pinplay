@@ -11,6 +11,8 @@ const panels = document.querySelectorAll('.panel');
 
 // Builder
 const quizTitleEl = document.getElementById('quizTitle');
+const quizTtsLanguageEl = document.getElementById('quizTtsLanguage');
+const quizReadAllAloudEl = document.getElementById('quizReadAllAloud');
 const questionListEl = document.getElementById('questionList');
 const addMcqBtn = document.getElementById('addMcqBtn');
 const addMcqAudioBtn = document.getElementById('addMcqAudioBtn');
@@ -150,6 +152,7 @@ const resultCard = document.getElementById('resultCard');
 
 const shouldAutoloadQuiz = !window.location.pathname.includes('/create/');
 let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQuiz();
+normalizeQuizAudioDefaults(quiz);
 collapseAllQuestions(quiz);
 let soloGame = null;
 let pendingScrollQuestionIndex = null;
@@ -533,6 +536,25 @@ function bindBuilderEvents() {
   addPinBtn.addEventListener('click', () => {
     addQuestionToBuilder(makePinQuestion());
   });
+
+  if (quizTtsLanguageEl) {
+    quizTtsLanguageEl.addEventListener('change', () => {
+      const next = normalizeTtsLanguage(quizTtsLanguageEl.value);
+      quiz.ttsLanguage = next;
+      quiz.questions.forEach((q) => {
+        if (!q || !supportsQuestionAudio(q.type)) return;
+        q.ttsLanguage = next;
+        q.language = getVoiceForTtsLanguage(next);
+      });
+      renderBuilder();
+    });
+  }
+
+  if (quizReadAllAloudEl) {
+    quizReadAllAloudEl.addEventListener('change', () => {
+      quiz.readAllQuestionsAloud = !!quizReadAllAloudEl.checked;
+    });
+  }
 
   saveBtn.addEventListener('click', async () => {
     try {
@@ -957,7 +979,10 @@ function findQuestionIndexFromBuilderEventTarget(target) {
 }
 
 function renderBuilder() {
+  normalizeQuizAudioDefaults(quiz);
   quizTitleEl.value = quiz.title || '';
+  if (quizTtsLanguageEl) quizTtsLanguageEl.value = normalizeTtsLanguage(quiz.ttsLanguage);
+  if (quizReadAllAloudEl) quizReadAllAloudEl.checked = !!quiz.readAllQuestionsAloud;
   questionListEl.innerHTML = '';
 
   if (!quiz.questions.length) {
@@ -1318,13 +1343,16 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
   return getVoiceForTtsLanguage(fallbackLanguage);
 }
 
+function normalizeQuizAudioDefaults(targetQuiz) {
+  if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  targetQuiz.ttsLanguage = normalizeTtsLanguage(targetQuiz.ttsLanguage);
+  targetQuiz.readAllQuestionsAloud = !!targetQuiz.readAllQuestionsAloud;
+}
+
 function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
   const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
   const voice = normalizeTtsVoice(q.language, ttsLanguage);
-  const languageOptions = EDGE_TTS_LANGUAGE_OPTIONS
-    .map((l) => `<option value="${l.value}" ${ttsLanguage === l.value ? 'selected' : ''}>${l.label}</option>`)
-    .join('');
   const voiceOptions = EDGE_TTS_VOICE_OPTIONS
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
     .join('');
@@ -1345,8 +1373,6 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
-      <label>TTS Language</label>
-      <select data-q="${idx}" data-field="ttsLanguage">${languageOptions}</select>
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
@@ -1357,6 +1383,8 @@ function buildAudioSettingsMarkup(idx, q) {
 
 function syncQuizFromUI() {
   quiz.title = quizTitleEl.value.trim();
+  quiz.ttsLanguage = normalizeTtsLanguage(quizTtsLanguageEl?.value || quiz.ttsLanguage);
+  quiz.readAllQuestionsAloud = !!quizReadAllAloudEl?.checked;
 
   quiz.questions.forEach((q, idx) => {
     const promptEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
@@ -1407,20 +1435,15 @@ function syncQuizFromUI() {
       const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
       const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
-      const ttsLanguageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="ttsLanguage"]`);
 
-      const prevTtsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
+      const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
 
-      const nextTtsLanguage = normalizeTtsLanguage(ttsLanguageEl?.value || prevTtsLanguage);
-      q.ttsLanguage = nextTtsLanguage;
-      if (nextTtsLanguage !== prevTtsLanguage) {
-        q.language = getVoiceForTtsLanguage(nextTtsLanguage);
-      } else {
-        const pickedVoice = String(languageEl?.value || '').slice(0, 64);
-        q.language = normalizeTtsVoice(pickedVoice, nextTtsLanguage);
-      }
+      // Quiz-level language is the source of truth for automatic quiz-wide TTS flow.
+      q.ttsLanguage = quizTtsLanguage;
+      const pickedVoice = String(languageEl?.value || '').slice(0, 64);
+      q.language = normalizeTtsVoice(pickedVoice, quizTtsLanguage);
 
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
 
@@ -5967,6 +5990,8 @@ function createEmptyQuiz() {
   return {
     version: 1,
     title: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
+    readAllQuestionsAloud: false,
     questions: [],
   };
 }
@@ -6250,6 +6275,8 @@ function normalizeQuizForLive(raw) {
   const normalized = {
     version: 1,
     title: String(raw.title || '').slice(0, 1200),
+    ttsLanguage: normalizeTtsLanguage(raw.ttsLanguage),
+    readAllQuestionsAloud: !!raw.readAllQuestionsAloud,
     questions: [],
   };
 
@@ -6479,7 +6506,10 @@ async function generateMp3FromTts({ text, voice }) {
 }
 
 async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true } = {}) {
+  normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
+  const readAllQuestionsAloud = !!quiz.readAllQuestionsAloud;
   let converted = 0;
 
   for (let i = 0; i < questions.length; i += 1) {
@@ -6496,12 +6526,20 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     }
 
-    const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
-    const ttsText = String(q.audioText || q.prompt || '').trim();
+    if (supportsQuestionAudio(q.type)) {
+      q.ttsLanguage = quizLanguage;
+      q.language = getVoiceForTtsLanguage(quizLanguage);
+    }
 
-    if (convertTtsToMp3 && wantsTts && ttsText) {
+    const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
+    const overrideText = String(q.audioText || '').trim();
+    const promptText = String(q.prompt || '').trim();
+    const ttsText = (overrideText || promptText).slice(0, 1200);
+    const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
+
+    if (convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText) {
       try {
-        const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || DEFAULT_EDGE_TTS_VOICE });
+        const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || getVoiceForTtsLanguage(quizLanguage) });
         if (audioData) {
           q.audioData = audioData;
           q.audioMode = 'file';

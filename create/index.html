@@ -45,6 +45,20 @@
             <label>Quiz title</label>
             <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
+            <div class="row gap top-space" id="quizAudioDefaultsRow">
+              <div style="min-width:180px;">
+                <label>Quiz TTS language</label>
+                <select id="quizTtsLanguage">
+                  <option value="EN">English</option>
+                  <option value="CA">Català</option>
+                  <option value="FR">Français</option>
+                </select>
+              </div>
+              <label style="display:flex; align-items:center; gap:.45rem; margin-top:1.35rem; font-weight:600;">
+                <input id="quizReadAllAloud" type="checkbox" /> Read all questions aloud (auto MP3 on Save/Export/Publish/Live/Assignment)
+              </label>
+            </div>
+
             <div class="top-space">
               <p class="small"><strong>Question types</strong></p>
               <div class="question-type-grid" id="questionTypeGrid">
