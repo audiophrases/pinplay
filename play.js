@@ -25,6 +25,10 @@ const joinPromptEl = document.getElementById('joinPrompt');
 const joinAnswersEl = document.getElementById('joinAnswers');
 const joinSubmitBtn = document.getElementById('joinSubmitBtn');
 const joinFinalizeBtn = document.getElementById('joinFinalizeBtn');
+const assignmentPrevBtn = document.getElementById('assignmentPrevBtn');
+const assignmentNextBtn = document.getElementById('assignmentNextBtn');
+const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
+const assignmentBannerEl = document.getElementById('assignmentBanner');
 const joinFeedbackEl = document.getElementById('joinFeedback');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
@@ -58,6 +62,7 @@ const live = {
       state: null,
       currentIndex: 0,
       pollingTimer: null,
+      forceAutoAdvance: false,
     },
   },
 };
@@ -72,6 +77,9 @@ function init() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
   if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', finalizeAssignmentAttempt);
+  if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
+  if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
+  if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
 
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
@@ -257,6 +265,40 @@ function deriveAssignmentCurrentIndex(state) {
   return total - 1;
 }
 
+function clampAssignmentIndex(index, total) {
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.max(0, Math.min(Math.round(Number(index || 0)), total - 1));
+}
+
+function moveAssignmentIndex(delta) {
+  if (live.player.mode !== 'assignment') return;
+  const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
+  if (total <= 0) return;
+  live.player.assignment.currentIndex = clampAssignmentIndex(Number(live.player.assignment.currentIndex || 0) + Number(delta || 0), total);
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+}
+
+function moveAssignmentToNextUnanswered() {
+  if (live.player.mode !== 'assignment') return;
+  const state = live.player.assignment.state;
+  const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
+  if (total <= 0) return;
+
+  const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
+  const current = clampAssignmentIndex(live.player.assignment.currentIndex || 0, total);
+
+  for (let step = 1; step <= total; step += 1) {
+    const idx = (current + step) % total;
+    if (!answered.has(idx)) {
+      live.player.assignment.currentIndex = idx;
+      const mapped = mapAssignmentStateToPlayerState();
+      if (mapped) renderPlayerState(mapped);
+      return;
+    }
+  }
+}
+
 function mapAssignmentStateToPlayerState() {
   const as = live.player.assignment.state;
   if (!as?.attempt?.assignment) return null;
@@ -281,6 +323,7 @@ function mapAssignmentStateToPlayerState() {
     questionCloseReason: null,
     answeredCurrent: (attempt.answeredQIndexes || []).includes(idx),
     assignmentSubmitted: !!attempt?.submitted,
+    answeredQIndexes: Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : [],
     question,
     correction: '',
   };
@@ -293,7 +336,15 @@ async function loadAssignmentState() {
 
   const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
   live.player.assignment.state = data;
-  live.player.assignment.currentIndex = deriveAssignmentCurrentIndex(data);
+
+  const total = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
+  const autoIdx = deriveAssignmentCurrentIndex(data);
+  if (live.player.assignment.forceAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
+    live.player.assignment.currentIndex = autoIdx;
+    live.player.assignment.forceAutoAdvance = false;
+  } else {
+    live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
+  }
 
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
@@ -491,6 +542,41 @@ function renderPlayerState(state) {
     joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
     joinFinalizeBtn.disabled = assignmentSubmitted;
     joinFinalizeBtn.textContent = assignmentSubmitted ? 'Assignment submitted' : 'Submit assignment';
+  }
+
+  if (live.player.mode === 'assignment') {
+    const total = Number(state.totalQuestions || 0);
+    const idx = Number(state.currentIndex || 0);
+    const answered = new Set(Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.map((x) => Number(x)) : []);
+    const hasUnanswered = [...Array(Math.max(0, total)).keys()].some((i) => !answered.has(i));
+
+    if (assignmentPrevBtn) {
+      assignmentPrevBtn.classList.remove('hidden');
+      assignmentPrevBtn.disabled = idx <= 0 || assignmentSubmitted;
+    }
+    if (assignmentNextBtn) {
+      assignmentNextBtn.classList.remove('hidden');
+      assignmentNextBtn.disabled = idx >= Math.max(0, total - 1) || assignmentSubmitted;
+    }
+    if (assignmentNextPendingBtn) {
+      assignmentNextPendingBtn.classList.remove('hidden');
+      assignmentNextPendingBtn.disabled = !hasUnanswered || assignmentSubmitted;
+    }
+
+    if (assignmentBannerEl) {
+      assignmentBannerEl.classList.remove('hidden');
+      assignmentBannerEl.textContent = assignmentSubmitted
+        ? 'Assignment submitted. Waiting for teacher review.'
+        : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
+    }
+  } else {
+    if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
+    if (assignmentNextBtn) assignmentNextBtn.classList.add('hidden');
+    if (assignmentNextPendingBtn) assignmentNextPendingBtn.classList.add('hidden');
+    if (assignmentBannerEl) {
+      assignmentBannerEl.classList.add('hidden');
+      assignmentBannerEl.textContent = '';
+    }
   }
 
   const rrNow = state.revealedResult;
@@ -1017,6 +1103,7 @@ async function submitLiveAnswer() {
         },
       });
 
+      live.player.assignment.forceAutoAdvance = true;
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
       await loadAssignmentState();
       return;
