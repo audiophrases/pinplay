@@ -22,7 +22,9 @@ const RANDOM_NAME_PEOPLE = [
   'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman',
   'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Isabella','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno',
   'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe',
-  'Iker','Ainhoa','Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Claudia','Joan','Martina','Arnau','Noa'
+  'Iker','Ainhoa','Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Claudia','Joan','Martina','Arnau','Noa',
+  'Oriol','Xavi','Ferran','Gerard','Nil','Roc','Blai','Adria','Carles','Quim','Meritxell','Montserrat','Naiara','Ariadna','Mireia','Txell',
+  'Judit','Gemma','Neus','Aina','Ona','Arlet','Mariona','Biel','Jan','Pere','Aleix','Cesc','Roser','Eulalia','Marti','Esteve'
 ];
 
 const BLOCKED_NICK_PATTERNS = [
