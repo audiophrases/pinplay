@@ -7,24 +7,37 @@ const CORS_HEADERS = {
 };
 
 const RANDOM_NAME_ADJECTIVES = [
-  'Happy','Joyful','Brave','Calm','Bold','Bright','Clever','Kind','Gentle','Fierce','Mighty','Swift','Quick','Patient','Lucky','Fearless',
-  'Curious','Honest','Loyal','Noble','Proud','Sharp','Witty','Sincere','Dreamy','Sunny','Cheerful','Wild','Silent','Noisy','Serious','Playful',
-  'Epic','Legendary','Magic','Radiant','Electric','Cosmic','Golden','Silver','Crimson','Azure','Emerald','Ivory','Amber','Vivid','Daring','Steady',
-  'Smooth','Tough','Resilient','Wise','Humble','Friendly','Charming','Creative','Focused','Driven','Glorious','Heroic','Cool','Fiery','Icy','Gentlemanly',
-  'Graceful','Agile','Dynamic','Classic','Modern','Royal','Savage','Elegant','Lovely','HappyGo','Sad','Moody','Brilliant','Gritty','Shiny','Stormy',
-  'Chill','Confident','Passionate','Careful','Eager','LuckyStar','Prime','Ultra','Super','Top','Smiling','Thoughtful','Helpful','Polite','Honorable','Valiant'
+  'Happy','Joyful','Cheerful','Delighted','Excited','Calm','Relaxed','Peaceful','Focused','Driven','Patient','Brave','Fearless','Bold','Daring','Valiant',
+  'Curious','Clever','Sharp','Witty','Wise','Brilliant','Creative','Imaginative','Playful','Friendly','Kind','Gentle','Honest','Loyal','Noble','Humble',
+  'Confident','Proud','Radiant','Glorious','Heroic','Legendary','Epic','Magnetic','Charming','Elegant','Graceful','Agile','Swift','Mighty','Resilient','Steady',
+  'Dynamic','Energetic','Electric','Fiery','Icy','Cool','Sunny','Stormy','Dreamy','Cosmic','Golden','Silver','Crimson','Azure','Emerald','Ivory',
+  'Amber','Vivid','Classic','Modern','Royal','Sincere','Thoughtful','Helpful','Polite','Honorable','Passionate','Careful','Eager','Smiling','Hopeful','Optimistic',
+  'Moody','Serious','Silent','Noisy','Wild','Gritty','Savage','Tough','Restless','Nervous','Shy','Awkward','Clumsy','Lazy','Sleepy','Hungry',
+  'Sassy','Funny','Goofy','Chaotic','Dramatic','Mysterious','Reckless','Stubborn','Messy','Tiny','Tall','Short','Strong','Slim','Flashy','Stylish',
+  'Vintage','Sporty','Urban','Casual','Formal','Funky','Quirky','Lucky','Unlucky','Balanced','Neutral','Zen','Hyper','Chill','Prime','Ultra'
 ];
 
 const RANDOM_NAME_PEOPLE = [
-  'Amir','Yasmine','Karim','Nadia','Samir','Leila','Rachid','Salma','Amina','Youssef','Hakim','Imane','Zineb','Omar','Anas','Soufiane',
-  'Messi','Ronaldo','Neymar','Mbappe','Modric','Iniesta','Xavi','Salah','Benzema','Lewandowski','Pedri','Gavi','Lamine','Aitana','Putellas','Bonmati',
-  'Shakira','Rihanna','Adele','Beyonce','DuaLipa','TheWeeknd','Drake','Rosalia','BadBunny','KarolG','Maluma','Enrique','Sia','Stromae','Aya','EdSheeran',
-  'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman',
-  'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Isabella','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno',
-  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe',
-  'Iker','Ainhoa','Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Claudia','Joan','Martina','Arnau','Noa',
-  'Oriol','Xavi','Ferran','Gerard','Nil','Roc','Blai','Adria','Carles','Quim','Meritxell','Montserrat','Naiara','Ariadna','Mireia','Txell',
-  'Judit','Gemma','Neus','Aina','Ona','Arlet','Mariona','Biel','Jan','Pere','Aleix','Cesc','Roser','Eulalia','Marti','Esteve'
+  // Moroccan / Maghrebi
+  'Amir','Yasmine','Karim','Nadia','Samir','Leila','Rachid','Salma','Amina','Youssef','Hakim','Imane','Zineb','Omar','Anas','Soufiane','Hamza','Khadija','Nabil','Meriem',
+  // Catalan / Iberian
+  'Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Joan','Martina','Arnau','Aina','Ona','Mariona','Biel','Jan','Pere','Aleix','Roser','Oriol','Mireia','Carles','Marti',
+  // Football-inspired
+  'Messi','Ronaldo','Neymar','Mbappe','Modric','Iniesta','Xavi','Salah','Benzema','Lewandowski','Pedri','Gavi','Lamine','Aitana','Putellas','Bonmati','Haaland','Bellingham','Vinicius','Yamal',
+  // Musicians / singers / composers
+  'Mozart','Beethoven','Bach','Vivaldi','Chopin','Tchaikovsky','Ravel','Debussy','Bizet','Verdi','Shakira','Rihanna','Adele','Beyonce','DuaLipa','Rosalia','Stromae','KarolG','EdSheeran','Sia',
+  // Philosophers / thinkers / scientists
+  'Socrates','Plato','Aristotle','Hypatia','Averroes','Avicenna','Descartes','Spinoza','Nietzsche','Kant','Voltaire','Rousseau','Confucius','Laozi','HannahArendt','SimoneDeBeauvoir','Curie','Einstein','Turing','DaVinci',
+  // Historical leaders / emperors / queens
+  'Augustus','Hadrian','MarcusAurelius','Cleopatra','Akbar','Saladin','Catherine','Elizabeth','Victoria','Napoleon','Charlemagne','WuZetian','Hatshepsut','Cyrus','Pericles','Leonidas','Tutankhamun','Nefertiti','Isabella','Ferdinand',
+  // Fictional characters
+  'Sherlock','Athena','Hermione','Frodo','Aragorn','Legolas','Leia','Anakin','Neo','Trinity','Katniss','Arya','Geralt','Yennefer','Zelda','Mario','LaraCroft','Spock','Picard','Wednesday',
+  // Russian / Slavic sounding
+  'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman','Natasha','Ilya','Yuri','Vera',
+  // South American sounding
+  'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno','Gael','Julieta','Franco','Bianca','Enzo',
+  // Global mixed
+  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe','Aiko','Kenji','Fatima','Yara'
 ];
 
 const BLOCKED_NICK_PATTERNS = [
