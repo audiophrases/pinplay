@@ -32,6 +32,8 @@ const RANDOM_NAME_PEOPLE = [
   'AinaClotet','PaulaBadosa','AlexiaPutellas','AitanaBonmati','MapiLeon','PatriGuijarro','ClaudiaPina','MarionaCaldentey','VickyLopez','SandraPaños','LaiaCodina','OnaBatlle','IreneParedes','JenniHermoso','SalmaParalluelo','MartaTorrejon','LeilaOuahabi','AriSánchez','GemmaTriay','MireiaBelmonte',
   'PauGasol','MarcGasol','RickyRubio','AlexAbrines','RaulEntrerrios','AlexCorretja','CarlosAlcaraz','Garbiñe','RafaNadal','JorgeMartin',
   'Puyol','Busquets','Alba','Pique','Valdes','XaviHernandez','Iniesta','Pedro','CescFabregas','SergiRoberto','ThiagoAlcantara','Bojan','Muniesa','Bartra','Deulofeu','JoanGarcia','DaniOlmo','AleixGarcia','EricGarcia','Cubarsi',
+  // Catalan/Spain social creators & tiktok-style names
+  'LolaLolita','TwinMelo','NaimDarrechi','MartinaDAntiochia','VioletaMangriñan','MartaDiaz','Dulceida','LauraEscanes','AidaDomenech','BelenHostalet',
   // Italian names
   'Luca','Giulia','Francesca','Marco','Alessandro','Giovanni','Matteo','Chiara','Elisa','Sofia','Giorgia','Riccardo','Davide','Federico','Paolo','Marta','Gabriele','Simone','Alessia','Franco',
   // FC Barcelona current/previous + football-inspired
