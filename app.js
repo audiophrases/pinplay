@@ -73,6 +73,8 @@ const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
+const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
+const assignmentResultsListEl = document.getElementById('assignmentResultsList');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -1861,6 +1863,58 @@ async function copyTextSmart(text) {
   }
 }
 
+async function fetchAssignmentResults(code) {
+  try {
+    const safeCode = String(code || '').trim().toUpperCase();
+    if (!safeCode) throw new Error('Assignment code required.');
+    if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Loading results for ${safeCode}...`;
+    if (assignmentResultsListEl) assignmentResultsListEl.innerHTML = '';
+
+    const data = await api('/api/assignments/results', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        code: safeCode,
+      },
+    });
+
+    const assignment = data?.assignment || {};
+    const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
+    if (assignmentResultsSummaryEl) {
+      assignmentResultsSummaryEl.textContent = `${assignment?.title || safeCode} · Attempts: ${attempts.length}`;
+    }
+
+    if (!assignmentResultsListEl) return;
+    if (!attempts.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No attempts yet.';
+      assignmentResultsListEl.appendChild(li);
+      return;
+    }
+
+    attempts.forEach((a) => {
+      const li = document.createElement('li');
+      const top = document.createElement('div');
+      top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong> · ${Number(a?.metrics?.autoScore || 0)} pts`;
+
+      const meta = document.createElement('div');
+      meta.className = 'small muted';
+      const answered = Number(a?.metrics?.answeredCount || 0);
+      const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+      const total = Number(a?.metrics?.totalQuestions || 0);
+      const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
+      meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
+
+      li.append(top, meta);
+      assignmentResultsListEl.appendChild(li);
+    });
+  } catch (err) {
+    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Results error: ${err.message}`;
+  }
+}
+
 async function refreshAssignmentsList() {
   try {
     if (!createSessionPassword) {
@@ -1924,7 +1978,14 @@ async function refreshAssignmentsList() {
         if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
       });
 
-      row.append(copyCodeBtn, copyLinkBtn);
+      const viewResultsBtn = document.createElement('button');
+      viewResultsBtn.className = 'btn';
+      viewResultsBtn.textContent = 'View results';
+      viewResultsBtn.addEventListener('click', () => {
+        fetchAssignmentResults(code);
+      });
+
+      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn);
       li.append(title, meta, row);
       assignmentListEl.appendChild(li);
     });

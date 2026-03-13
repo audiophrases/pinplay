@@ -325,6 +325,22 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/results' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/results?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -961,6 +977,26 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, alreadyStarted: false, attempt: publicAssignmentAttempt(assignment, attempt) }, 201);
+      }
+
+      if (url.pathname === '/assignments/results' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempts = Object.values(assignment.attempts || {})
+          .map((a) => publicAssignmentAttemptSummary(assignment, a))
+          .sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+          attempts,
+        });
       }
 
       if (url.pathname === '/assignments/state' && request.method === 'GET') {
@@ -2742,6 +2778,21 @@ function publicAssignmentAttempt(assignment, attempt) {
     assignment: publicAssignment(assignment, { includeQuiz: true }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
+  };
+}
+
+function publicAssignmentAttemptSummary(assignment, attempt) {
+  const full = publicAssignmentAttempt(assignment, attempt);
+  return {
+    id: full.id,
+    studentKey: full.studentKey,
+    studentName: full.studentName,
+    startedAt: full.startedAt,
+    updatedAt: full.updatedAt,
+    submitted: full.submitted,
+    submittedAt: full.submittedAt,
+    metrics: full.metrics,
+    answeredQIndexes: full.answeredQIndexes,
   };
 }
 
