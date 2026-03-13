@@ -998,9 +998,10 @@ textarea { min-height: 72px; resize: vertical; }
 
 .risk-bet-wrap {
   position: relative;
-  display: inline-block;
-  width: auto;
-  max-width: 100%;
+  display: inline-flex;
+  width: fit-content;
+  max-width: fit-content;
+  align-self: flex-start;
   border-radius: .7rem;
   border: 1px solid #b98b54;
   padding: .55rem .6rem .5rem;
