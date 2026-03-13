@@ -74,6 +74,7 @@ const liveReactionsEl = document.getElementById('liveReactions');
 const hostPlayersEl = document.getElementById('hostPlayers');
 const hostAnswerHistoryEl = document.getElementById('hostAnswerHistory');
 const hostAttemptsRefreshBtn = document.getElementById('hostAttemptsRefreshBtn');
+const hostAttemptsExportBtn = document.getElementById('hostAttemptsExportBtn');
 const hostAttemptsClassFilterEl = document.getElementById('hostAttemptsClassFilter');
 const hostAttemptsSearchEl = document.getElementById('hostAttemptsSearch');
 const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
@@ -1695,6 +1696,7 @@ function bindLiveEvents() {
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
+  if (hostAttemptsExportBtn) hostAttemptsExportBtn.addEventListener('click', exportHostAttemptsCsv);
   if (hostAttemptsClassFilterEl) hostAttemptsClassFilterEl.addEventListener('change', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
   if (hostAttemptsSearchEl) hostAttemptsSearchEl.addEventListener('input', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
@@ -2484,6 +2486,20 @@ function renderHostAnswerHistory(state) {
   });
 }
 
+function getFilteredHostAttempts(students) {
+  const classFilter = String(hostAttemptsClassFilterEl?.value || '').trim().toLowerCase();
+  const search = String(hostAttemptsSearchEl?.value || '').trim().toLowerCase();
+
+  return (Array.isArray(students) ? students : []).filter((s) => {
+    const cls = String(s.className || '').trim().toLowerCase();
+    const name = String(s.username || s.displayName || '').trim().toLowerCase();
+    const email = String(s.email || '').trim().toLowerCase();
+    const classOk = !classFilter || cls === classFilter;
+    const searchOk = !search || name.includes(search) || email.includes(search) || cls.includes(search);
+    return classOk && searchOk;
+  });
+}
+
 function renderHostAttemptsSnapshot(data) {
   const students = Array.isArray(data?.students) ? data.students : [];
   const quizTitle = String(data?.quiz?.title || '').trim() || '(untitled quiz)';
@@ -2501,17 +2517,7 @@ function renderHostAttemptsSnapshot(data) {
     if (current && classes.includes(current)) hostAttemptsClassFilterEl.value = current;
   }
 
-  const classFilter = String(hostAttemptsClassFilterEl?.value || '').trim().toLowerCase();
-  const search = String(hostAttemptsSearchEl?.value || '').trim().toLowerCase();
-
-  const filtered = students.filter((s) => {
-    const cls = String(s.className || '').trim().toLowerCase();
-    const name = String(s.username || s.displayName || '').trim().toLowerCase();
-    const email = String(s.email || '').trim().toLowerCase();
-    const classOk = !classFilter || cls === classFilter;
-    const searchOk = !search || name.includes(search) || email.includes(search) || cls.includes(search);
-    return classOk && searchOk;
-  });
+  const filtered = getFilteredHostAttempts(students);
 
   if (hostAttemptsSummaryEl) {
     hostAttemptsSummaryEl.textContent = `Quiz: ${quizTitle} · Showing ${filtered.length}/${students.length} students`;
@@ -2566,6 +2572,52 @@ function renderHostAttemptsSnapshot(data) {
     li.append(top, detail, more);
     hostAttemptsListEl.appendChild(li);
   });
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  if (!/[",\n]/.test(s)) return s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function exportHostAttemptsCsv() {
+  const data = live.host.attemptsCache;
+  const students = Array.isArray(data?.students) ? data.students : [];
+  const filtered = getFilteredHostAttempts(students);
+  if (!filtered.length) {
+    setStatus(hostStatusEl, 'No rows to export for current filters.', 'bad');
+    return;
+  }
+
+  const header = [
+    'studentKey', 'username', 'className', 'email',
+    'scoreCurrent', 'answeredCount', 'autoGradedCount', 'teacherGradedCount',
+    'pendingTeacherGradeCount', 'correctCount', 'accuracy', 'pointsAuto', 'pointsTeacher', 'lastAnswerAt',
+  ];
+
+  const lines = [header.join(',')];
+  filtered.forEach((s) => {
+    const row = [
+      s.studentKey, s.username || s.displayName || '', s.className || '', s.email || '',
+      Number(s.scoreCurrent || 0), Number(s.answeredCount || 0), Number(s.autoGradedCount || 0), Number(s.teacherGradedCount || 0),
+      Number(s.pendingTeacherGradeCount || 0), Number(s.correctCount || 0), Number(s.accuracy ?? ''), Number(s.pointsAuto || 0), Number(s.pointsTeacher || 0),
+      Number(s.lastAnswerAt || 0) ? new Date(Number(s.lastAnswerAt)).toISOString() : '',
+    ];
+    lines.push(row.map(csvEscape).join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safePin = String(live.host.pin || 'pinplay').replace(/[^a-z0-9_-]/gi, '');
+  a.href = url;
+  a.download = `pinplay-attempts-${safePin}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  setStatus(hostStatusEl, `CSV exported (${filtered.length} rows).`, 'ok');
 }
 
 async function fetchHostAttempts({ force = false } = {}) {
