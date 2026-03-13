@@ -34,6 +34,10 @@ const RANDOM_NAME_PEOPLE = [
   'Puyol','Busquets','Alba','Pique','Valdes','XaviHernandez','Iniesta','Pedro','CescFabregas','SergiRoberto','ThiagoAlcantara','Bojan','Muniesa','Bartra','Deulofeu','JoanGarcia','DaniOlmo','AleixGarcia','EricGarcia','Cubarsi',
   // Catalan/Spain social creators & tiktok-style names
   'LolaLolita','TwinMelo','NaimDarrechi','MartinaDAntiochia','VioletaMangriñan','MartaDiaz','Dulceida','LauraEscanes','AidaDomenech','BelenHostalet',
+  'MarLucas','SergioCarrallo','DanielMarrero','IbanGarcia','AlvaroSole','MireiaOriol','PauPique','JuditMasco','MartaPombo','MariaPombo',
+  'LuciaBellan','AbrilCols','NoeVargas','IreneFerreiro','AriGeli','NoraBurgos','NinaUrgel','ClaudiaRiera','AinaSimon','LaiaGrassi',
+  'TxellMiras','GemmaPinto','NeusSanz','MarionaRibas','OnaGonfaus','AriadnaTapia','BertaAroca','JanaLlorens','MireiaCodina','NuriaCasas',
+  'PolGise','ArnauMarin','SergiPedri','NilOjeda','RocMassaguer','AdriaSolaPastor','CarlesTamayo','XaviCanalias','FerranExposito','GerardRomero',
   // Italian names
   'Luca','Giulia','Francesca','Marco','Alessandro','Giovanni','Matteo','Chiara','Elisa','Sofia','Giorgia','Riccardo','Davide','Federico','Paolo','Marta','Gabriele','Simone','Alessia','Franco',
   // FC Barcelona current/previous + football-inspired
