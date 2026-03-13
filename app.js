@@ -295,16 +295,9 @@ function pingEdgeTtsBridgeWarmup() {
 }
 
 function setupCreateAccess() {
-  let pendingDeadAcute = false;
-
   const unlock = async () => {
     try {
-      let value = String(createPasswordEl?.value || '');
-      if (pendingDeadAcute && value && !value.endsWith('´')) {
-        value += '´';
-        if (createPasswordEl) createPasswordEl.value = value;
-      }
-      pendingDeadAcute = false;
+      const value = String(createPasswordEl?.value || '');
       if (!value) {
         setStatus(createAuthStatusEl, 'Enter password', 'bad');
         return;
@@ -342,20 +335,10 @@ function setupCreateAccess() {
   if (unlockCreateBtn) unlockCreateBtn.addEventListener('click', unlock);
   if (createPasswordEl) {
     createPasswordEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Dead') {
-        pendingDeadAcute = true;
-        return;
-      }
       if (e.key === 'Enter') {
-        if (pendingDeadAcute && createPasswordEl.value && !createPasswordEl.value.endsWith('´')) {
-          createPasswordEl.value = `${createPasswordEl.value}´`;
-        }
-        pendingDeadAcute = false;
+        e.preventDefault();
         unlock();
       }
-    });
-    createPasswordEl.addEventListener('input', () => {
-      pendingDeadAcute = false;
     });
   }
 }
