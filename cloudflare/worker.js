@@ -372,6 +372,24 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/attempt' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/attempt?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, {
+        method: 'GET',
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -1095,6 +1113,28 @@ export class QuizRoom {
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/attempt' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        const attemptId = sanitizeAssignmentAttemptId(url.searchParams.get('attemptId'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+          attempt: publicAssignmentAttemptSummary(assignment, attempt),
+          gradingItems: buildTeacherGradingItems(assignment, attempt),
+        });
       }
 
       if (url.pathname === '/assignments/answer' && request.method === 'POST') {
@@ -2891,6 +2931,42 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
   };
+}
+
+function buildTeacherGradingItems(assignment, attempt) {
+  const questions = assignment?.quiz?.questions || [];
+  const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+
+  return Object.entries(answersByQ)
+    .map(([idxRaw, item]) => {
+      const qIndex = Number(idxRaw);
+      const question = questions[qIndex];
+      if (!question) return null;
+
+      const teacher = isAssignmentTeacherGradedQuestion(question);
+      const grade = item?.teacherGrade || null;
+      const maxPoints = Math.max(0, Math.round(Number(question?.points || 1000)));
+
+      return {
+        qIndex,
+        qType: String(question?.type || ''),
+        prompt: String(question?.prompt || ''),
+        teacherGraded: teacher,
+        answer: item?.answer ?? null,
+        answerText: summarizeHistoryAnswer(question, item?.answer),
+        maxPoints,
+        grade: grade && typeof grade === 'object'
+          ? {
+              graded: !!grade.graded,
+              pointsAwarded: Number(grade.pointsAwarded || 0),
+              correction: String(grade.correction || ''),
+              gradedAt: Number(grade.gradedAt || 0) || null,
+            }
+          : null,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(a.qIndex || 0) - Number(b.qIndex || 0));
 }
 
 async function loadAssignmentsMap(storage) {

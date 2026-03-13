@@ -75,6 +75,8 @@ const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
 const assignmentResultsListEl = document.getElementById('assignmentResultsList');
+const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
+const assignmentGradingListEl = document.getElementById('assignmentGradingList');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -1863,36 +1865,109 @@ async function copyTextSmart(text) {
   }
 }
 
-async function quickGradeAssignmentAttempt(code, attemptId) {
+async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correction = '') {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/grade', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      attemptId,
+      qIndex,
+      points,
+      correction,
+    },
+  });
+}
+
+async function fetchAssignmentAttemptDetail(code, attemptId) {
   try {
+    const safeCode = String(code || '').trim().toUpperCase();
+    const safeAttemptId = String(attemptId || '').trim();
+    if (!safeCode || !safeAttemptId) throw new Error('Missing code/attemptId.');
     if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-    const qIndexRaw = prompt('Question index to grade (0-based):', '0');
-    if (qIndexRaw == null) return;
-    const pointsRaw = prompt('Points to award:', '1000');
-    if (pointsRaw == null) return;
-    const correction = prompt('Optional correction/feedback:', '') ?? '';
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading grading detail for ${safeAttemptId}...`;
+    if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
 
-    const qIndex = Number(qIndexRaw);
-    const points = Number(pointsRaw);
-    if (!Number.isFinite(qIndex) || !Number.isFinite(points)) throw new Error('Invalid qIndex or points.');
-
-    await api('/api/assignments/grade', {
+    const data = await api('/api/assignments/attempt', {
       method: 'POST',
       body: {
         password: createSessionPassword,
-        code,
-        attemptId,
-        qIndex,
-        points,
-        correction,
+        code: safeCode,
+        attemptId: safeAttemptId,
       },
     });
 
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded ${attemptId} Q${qIndex} with ${Math.round(points)} pts.`;
-    await fetchAssignmentResults(code);
+    const items = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading ${safeAttemptId} · Items: ${items.length}`;
+    if (!assignmentGradingListEl) return;
+
+    if (!items.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No submitted answers yet.';
+      assignmentGradingListEl.appendChild(li);
+      return;
+    }
+
+    items.forEach((it) => {
+      const li = document.createElement('li');
+
+      const head = document.createElement('div');
+      head.innerHTML = `<strong>Q${Number(it?.qIndex || 0) + 1} · ${escapeHtml(String(it?.qType || 'question'))}</strong>`;
+
+      const prompt = document.createElement('div');
+      prompt.className = 'small muted';
+      prompt.textContent = String(it?.prompt || '').slice(0, 220);
+
+      const answer = document.createElement('div');
+      answer.className = 'small';
+      answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
+
+      li.append(head, prompt, answer);
+
+      if (it?.teacherGraded) {
+        const row = document.createElement('div');
+        row.className = 'row gap top-space';
+
+        const pointsInput = document.createElement('input');
+        pointsInput.type = 'number';
+        pointsInput.min = '0';
+        pointsInput.max = String(Number(it?.maxPoints || 1000));
+        pointsInput.value = String(Number(it?.grade?.pointsAwarded || 0));
+        pointsInput.style.width = '90px';
+
+        const correctionInput = document.createElement('input');
+        correctionInput.type = 'text';
+        correctionInput.placeholder = 'Correction (optional)';
+        correctionInput.value = String(it?.grade?.correction || '');
+        correctionInput.style.maxWidth = '320px';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn';
+        saveBtn.textContent = it?.grade?.graded ? 'Update grade' : 'Save grade';
+        saveBtn.addEventListener('click', async () => {
+          try {
+            saveBtn.disabled = true;
+            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), String(correctionInput.value || ''));
+            if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${safeAttemptId}.`;
+            await fetchAssignmentResults(safeCode);
+            await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
+          } catch (err) {
+            if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+          } finally {
+            saveBtn.disabled = false;
+          }
+        });
+
+        row.append(pointsInput, correctionInput, saveBtn);
+        li.appendChild(row);
+      }
+
+      assignmentGradingListEl.appendChild(li);
+    });
   } catch (err) {
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading error: ${err.message}`;
   }
 }
 
@@ -1945,8 +2020,8 @@ async function fetchAssignmentResults(code) {
       row.className = 'row gap top-space';
       const gradeBtn = document.createElement('button');
       gradeBtn.className = 'btn';
-      gradeBtn.textContent = 'Quick grade';
-      gradeBtn.addEventListener('click', () => quickGradeAssignmentAttempt(safeCode, String(a?.id || '')));
+      gradeBtn.textContent = 'Open grading';
+      gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, String(a?.id || '')));
       row.appendChild(gradeBtn);
 
       li.append(top, meta, row);
@@ -1968,6 +2043,8 @@ async function refreshAssignmentsList() {
 
     if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = true;
     if (assignmentListEl) assignmentListEl.innerHTML = '';
+    if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open an attempt to grade teacher-graded answers.';
 
     const data = await api('/api/assignments/list', {
       method: 'POST',
