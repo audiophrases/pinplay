@@ -999,19 +999,13 @@ textarea { min-height: 72px; resize: vertical; }
 .risk-bet-wrap {
   position: relative;
   display: inline-block;
-  width: fit-content;
+  width: auto;
   max-width: 100%;
-  align-self: flex-start;
-  justify-self: start;
   border-radius: .7rem;
   border: 1px solid #b98b54;
   padding: .55rem .6rem .5rem;
   background: linear-gradient(90deg, rgba(18,112,64,.36) 0%, rgba(161,98,7,.4) 50%, rgba(153,27,27,.38) 100%);
   overflow: hidden;
-}
-
-#joinAnswers .risk-bet-wrap {
-  margin-right: auto;
 }
 
 .risk-danger-bg {
