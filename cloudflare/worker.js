@@ -26,6 +26,7 @@ const ALLOWED_REACTIONS = new Set([
   '👍','👏','🔥','😂','🤯','🙌','☕','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'
 ]);
 const MAX_ROOM_EVENTS = 4000;
+const ASSIGNMENTS_DO_NAME = '__assignments_registry__';
 
 export default {
   async fetch(request, env) {
@@ -285,6 +286,53 @@ export default {
       const ok = await verifyCreatePassword(env, password);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
       return json({ ok: true }, 200);
+    }
+
+    if (url.pathname === '/api/assignments/create' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      if (!password) return json({ error: 'Password required.' }, 400);
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const quiz = normalizeQuiz(body?.quiz || {});
+      if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+      const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Assignment';
+      const className = sanitizeClassName(body?.className);
+      const attemptsLimit = clamp(Math.round(Number(body?.attemptsLimit || 1)), 1, 10);
+      const dueAtRaw = Number(body?.dueAt || 0);
+      const dueAt = Number.isFinite(dueAtRaw) && dueAtRaw > 0 ? Math.round(dueAtRaw) : null;
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/create', {
+        method: 'POST',
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, quiz }),
+      }));
+    }
+
+    if (url.pathname === '/api/assignments/list' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      if (!password) return json({ error: 'Password required.' }, 400);
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const limit = Math.max(1, Math.min(200, Number(body?.limit || 50)));
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/list?limit=${encodeURIComponent(limit)}`, {
+        method: 'GET',
+      }));
+    }
+
+    if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
+      const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      }));
     }
 
     if (url.pathname === '/api/host/rename' && request.method === 'POST') {
@@ -768,6 +816,56 @@ export class QuizRoom {
 
       if (request.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+
+      if (url.pathname === '/assignments/create' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const quiz = normalizeQuiz(body?.quiz || {});
+        if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+        const now = Date.now();
+        const assignment = {
+          id: randomId('as_'),
+          code: await nextAssignmentCode(this.state.storage),
+          createdAt: now,
+          updatedAt: now,
+          title: String(body?.title || quiz.title || 'Assignment').trim().slice(0, 120) || 'Assignment',
+          className: sanitizeClassName(body?.className),
+          attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit || 1)), 1, 10),
+          dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
+          active: true,
+          quiz,
+        };
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        assignments[assignment.code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+        }, 201);
+      }
+
+      if (url.pathname === '/assignments/list' && request.method === 'GET') {
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50)));
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const list = Object.values(assignments || {})
+          .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+          .slice(0, limit)
+          .map((a) => publicAssignment(a, { includeQuiz: false }));
+        return json({ ok: true, assignments: list });
+      }
+
+      if (url.pathname === '/assignments/get' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+
+        return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: true }) });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {
@@ -2377,6 +2475,50 @@ async function sha256Hex(input) {
 function sanitizePin(pin) {
   const p = String(pin || '').trim();
   return /^\d{6}$/.test(p) ? p : '';
+}
+
+function sanitizeAssignmentCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+async function loadAssignmentsMap(storage) {
+  const map = await storage.get('assignments');
+  if (!map || typeof map !== 'object') return {};
+  return map;
+}
+
+async function nextAssignmentCode(storage) {
+  const assignments = await loadAssignmentsMap(storage);
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  for (let tries = 0; tries < 40; tries += 1) {
+    let code = '';
+    for (let i = 0; i < 6; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    if (!assignments[code]) return code;
+  }
+
+  return sanitizeAssignmentCode(randomId('A').slice(-6));
+}
+
+function publicAssignment(assignment, { includeQuiz = false } = {}) {
+  if (!assignment || typeof assignment !== 'object') return null;
+  const base = {
+    id: String(assignment.id || ''),
+    code: sanitizeAssignmentCode(assignment.code),
+    createdAt: Number(assignment.createdAt || 0) || null,
+    updatedAt: Number(assignment.updatedAt || 0) || null,
+    title: String(assignment.title || '').slice(0, 120),
+    className: sanitizeClassName(assignment.className || ''),
+    attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit || 1)), 1, 10),
+    dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
+    active: !!assignment.active,
+    quizTitle: String(assignment.quiz?.title || ''),
+    totalQuestions: Number(assignment.quiz?.questions?.length || 0),
+  };
+  if (includeQuiz) base.quiz = normalizeQuiz(assignment.quiz || {});
+  return base;
 }
 
 function sanitizeName(name) {
