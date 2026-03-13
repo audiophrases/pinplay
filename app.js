@@ -457,15 +457,20 @@ function bindBuilderEvents() {
     addQuestionToBuilder(makePinQuestion());
   });
 
-  saveBtn.addEventListener('click', () => {
-    syncQuizFromUI();
-    saveQuiz(quiz);
+  saveBtn.addEventListener('click', async () => {
+    try {
+      syncQuizFromUI();
+      await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-    const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
-    const autoName = `${fallback} (${new Date().toLocaleString()})`;
-    const saved = saveQuizToLibrary(autoName, quiz);
-    setStatus(hostStatusEl, `Saved locally: ${saved.name}`, 'ok');
-    openLocalLibraryDialog({ highlightId: saved.id });
+      saveQuiz(quiz);
+      const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
+      const autoName = `${fallback} (${new Date().toLocaleString()})`;
+      const saved = saveQuizToLibrary(autoName, quiz);
+      setStatus(hostStatusEl, `Saved locally: ${saved.name}`, 'ok');
+      openLocalLibraryDialog({ highlightId: saved.id });
+    } catch (err) {
+      setStatus(hostStatusEl, `Save failed: ${err.message}`, 'bad');
+    }
   });
 
   if (openLocalBtn) {
@@ -475,9 +480,15 @@ function bindBuilderEvents() {
     importBtn.addEventListener('click', () => importInput.click());
   }
 
-  exportBtn.addEventListener('click', () => {
-    syncQuizFromUI();
-    downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
+  exportBtn.addEventListener('click', async () => {
+    try {
+      syncQuizFromUI();
+      await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
+      downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
+      setStatus(hostStatusEl, 'Exported with validated media + local MP3 audio.', 'ok');
+    } catch (err) {
+      setStatus(hostStatusEl, `Export failed: ${err.message}`, 'bad');
+    }
   });
 
   if (publishDriveBtn) {
@@ -500,6 +511,7 @@ function bindBuilderEvents() {
       quiz = parsed;
       collapseAllQuestions(quiz);
       renderBuilder();
+      await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
       const savedOk = saveQuiz(quiz);
       if (savedOk) {
         alert('Quiz imported ✅');
@@ -1401,6 +1413,7 @@ async function publishQuizToDrive() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
+    await ensureQuizMediaReady({ contextLabel: 'publish to drive', convertTtsToMp3: true, strictMediaCheck: true });
     const payload = normalizeQuizForLive(quiz);
     const data = await api(DRIVE_PUBLISH_ENDPOINT, {
       method: 'POST',
@@ -1817,6 +1830,7 @@ async function createLiveGame() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
+    await ensureQuizMediaReady({ contextLabel: 'create live game', convertTtsToMp3: true, strictMediaCheck: true });
     const payload = normalizeQuizForLive(quiz);
     const data = await api('/api/create', {
       method: 'POST',
@@ -2328,6 +2342,8 @@ async function createAssignmentFromCurrentQuiz() {
     syncQuizFromUI();
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
+
+    await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true });
 
     if (!createSessionPassword) {
       const typed = prompt('Teacher password (needed once for assignment API):', '');
@@ -6254,6 +6270,138 @@ function normalizeQuizForLive(raw) {
   }
 
   return normalized;
+}
+
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Blob read error'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function validateImageDataUrl(dataUrl, timeoutMs = 6000) {
+  const src = String(dataUrl || '').trim();
+  if (!/^data:image\//i.test(src)) throw new Error('Image is not a valid data URL.');
+
+  await new Promise((resolve, reject) => {
+    const img = new Image();
+    const timer = setTimeout(() => reject(new Error('Image load timed out.')), timeoutMs);
+    img.onload = () => { clearTimeout(timer); resolve(true); };
+    img.onerror = () => { clearTimeout(timer); reject(new Error('Image failed to decode.')); };
+    img.src = src;
+  });
+}
+
+async function validateAudioDataUrl(dataUrl, timeoutMs = 8000) {
+  const src = String(dataUrl || '').trim();
+  if (!/^data:audio\//i.test(src)) throw new Error('Audio is not a valid audio data URL.');
+
+  await new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const cleanup = () => {
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+      audio.removeAttribute('src');
+      try { audio.load(); } catch {}
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Audio load timed out.'));
+    }, timeoutMs);
+
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(true);
+    };
+    audio.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('Audio failed to decode.'));
+    };
+    audio.src = src;
+  });
+}
+
+async function generateMp3FromTts({ text, voice }) {
+  const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+  if (!base) throw new Error('Backend URL is not configured.');
+
+  const safeText = String(text || '').trim().slice(0, 1200);
+  if (!safeText) return '';
+
+  const rawVoice = String(voice || DEFAULT_EDGE_TTS_VOICE).trim();
+  const safeVoice = /neural/i.test(rawVoice)
+    ? rawVoice
+    : (rawVoice.toLowerCase().startsWith('en-gb') ? 'en-GB-SoniaNeural' : DEFAULT_EDGE_TTS_VOICE);
+
+  const res = await fetch(`${base}/api/tts/edge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: safeText, voice: safeVoice, rate: '+0%' }),
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || `Edge TTS failed (${res.status}).`);
+  }
+
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
+}
+
+async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true } = {}) {
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  let converted = 0;
+
+  for (let i = 0; i < questions.length; i += 1) {
+    const q = questions[i];
+    if (!q || typeof q !== 'object') continue;
+
+    if (q.imageData) {
+      if (strictMediaCheck) {
+        try {
+          await validateImageDataUrl(q.imageData);
+        } catch (err) {
+          throw new Error(`Q${i + 1} image check failed: ${err.message}`);
+        }
+      }
+    }
+
+    const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
+    const ttsText = String(q.audioText || q.prompt || '').trim();
+
+    if (convertTtsToMp3 && wantsTts && ttsText) {
+      try {
+        const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || DEFAULT_EDGE_TTS_VOICE });
+        if (audioData) {
+          q.audioData = audioData;
+          q.audioMode = 'file';
+          q.audioEnabled = true;
+          converted += 1;
+        }
+      } catch (err) {
+        throw new Error(`Q${i + 1} TTS->MP3 failed: ${err.message}`);
+      }
+    }
+
+    if (q.audioData && strictMediaCheck) {
+      try {
+        await validateAudioDataUrl(q.audioData);
+      } catch (err) {
+        throw new Error(`Q${i + 1} audio check failed: ${err.message}`);
+      }
+    }
+  }
+
+  if (converted > 0) {
+    renderBuilder();
+    setStatus(hostStatusEl, `${contextLabel}: converted ${converted} TTS item(s) to local MP3 + media checks passed.`, 'ok');
+  } else if (strictMediaCheck) {
+    setStatus(hostStatusEl, `${contextLabel}: media checks passed.`, 'ok');
+  }
 }
 
 function loadQuiz() {
