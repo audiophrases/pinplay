@@ -257,8 +257,6 @@ const audioFx = {
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
 
-init();
-
 function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
@@ -7726,4 +7724,7 @@ function setupImageLightbox() {
 }
 
 
+
+
+init();
 
