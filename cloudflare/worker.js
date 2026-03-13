@@ -335,6 +335,49 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignment/start' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/start', {
+        method: 'POST',
+        body: JSON.stringify({ code, studentKey, studentName }),
+      }));
+    }
+
+    if (url.pathname === '/api/assignment/state' && request.method === 'GET') {
+      const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+      const attemptId = sanitizeAssignmentAttemptId(url.searchParams.get('attemptId'));
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, {
+        method: 'GET',
+      }));
+    }
+
+    if (url.pathname === '/api/assignment/answer' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const qIndex = Number(body?.qIndex);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+      if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/answer', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId, qIndex: Math.round(qIndex), answer: body?.answer }),
+      }));
+    }
+
     if (url.pathname === '/api/host/rename' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -866,6 +909,126 @@ export class QuizRoom {
         if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: true }) });
+      }
+
+      if (url.pathname === '/assignments/start' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+
+        const now = Date.now();
+        if (Number(assignment.dueAt || 0) > 0 && now > Number(assignment.dueAt)) {
+          return json({ error: 'Assignment due date has passed.' }, 410);
+        }
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempts = Object.values(assignment.attempts || {});
+
+        const existingOpen = attempts.find((a) => String(a?.studentKey || '') === studentKey && !a?.submitted);
+        if (existingOpen) {
+          return json({ ok: true, alreadyStarted: true, attempt: publicAssignmentAttempt(assignment, existingOpen) });
+        }
+
+        const startedCount = attempts.filter((a) => String(a?.studentKey || '') === studentKey).length;
+        const limit = clamp(Math.round(Number(assignment.attemptsLimit || 1)), 1, 10);
+        if (startedCount >= limit) {
+          return json({ error: 'Attempts limit reached for this assignment.' }, 409);
+        }
+
+        const attempt = {
+          id: randomId('at_'),
+          studentKey,
+          studentName,
+          startedAt: now,
+          updatedAt: now,
+          submitted: false,
+          submittedAt: null,
+          answersByQ: {},
+          autoScore: 0,
+        };
+
+        assignment.attempts[attempt.id] = attempt;
+        assignment.updatedAt = now;
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, alreadyStarted: false, attempt: publicAssignmentAttempt(assignment, attempt) }, 201);
+      }
+
+      if (url.pathname === '/assignments/state' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        const attemptId = sanitizeAssignmentAttemptId(url.searchParams.get('attemptId'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/answer' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        const qIndex = Math.round(Number(body?.qIndex));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+        if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+
+        const now = Date.now();
+        if (Number(assignment.dueAt || 0) > 0 && now > Number(assignment.dueAt)) {
+          return json({ error: 'Assignment due date has passed.' }, 410);
+        }
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
+
+        const question = assignment.quiz?.questions?.[qIndex];
+        if (!question) return json({ error: 'Question not found.' }, 404);
+
+        const safeAnswer = sanitizeAssignmentAnswer(question, body?.answer);
+        attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+        attempt.answersByQ[String(qIndex)] = {
+          answer: safeAnswer,
+          updatedAt: now,
+        };
+
+        const metrics = evaluateAssignmentAttempt(assignment, attempt);
+        attempt.autoScore = metrics.autoScore;
+        attempt.updatedAt = now;
+
+        assignment.updatedAt = now;
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({
+          ok: true,
+          saved: true,
+          qIndex,
+          metrics,
+          attempt: publicAssignmentAttempt(assignment, attempt),
+        });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {
@@ -2479,6 +2642,107 @@ function sanitizePin(pin) {
 
 function sanitizeAssignmentCode(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+function sanitizeAssignmentAttemptId(value) {
+  return String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+}
+
+function sanitizeAssignmentStudentKey(value) {
+  const normalized = normalizeStudentKeyInput(value || '');
+  return normalized.slice(0, 96);
+}
+
+function sanitizeAssignmentAnswer(_question, raw) {
+  const walk = (v, depth = 0) => {
+    if (depth > 3) return null;
+    if (v == null) return null;
+    if (typeof v === 'string') return v.slice(0, 500);
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    if (typeof v === 'boolean') return v;
+    if (Array.isArray(v)) return v.slice(0, 50).map((x) => walk(x, depth + 1));
+    if (typeof v === 'object') {
+      const out = {};
+      Object.keys(v).slice(0, 20).forEach((k) => {
+        out[String(k).slice(0, 40)] = walk(v[k], depth + 1);
+      });
+      return out;
+    }
+    return null;
+  };
+  return walk(raw, 0);
+}
+
+function isAssignmentTeacherGradedQuestion(question) {
+  if (!question) return false;
+  return question.type === 'open'
+    || question.type === 'image_open'
+    || question.type === 'speaking'
+    || isTeacherGradedTextQuestion(question);
+}
+
+function evaluateAssignmentAttempt(assignment, attempt) {
+  const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+  const quizQuestions = assignment?.quiz?.questions || [];
+
+  let answeredCount = 0;
+  let correctCount = 0;
+  let pendingTeacherGradeCount = 0;
+  let autoGradedCount = 0;
+  let autoScore = 0;
+
+  Object.entries(answersByQ).forEach(([idxRaw, item]) => {
+    const qIndex = Number(idxRaw);
+    const question = quizQuestions[qIndex];
+    if (!question) return;
+
+    answeredCount += 1;
+    if (isAssignmentTeacherGradedQuestion(question)) {
+      pendingTeacherGradeCount += 1;
+      return;
+    }
+
+    if (question.isPoll) {
+      autoGradedCount += 1;
+      return;
+    }
+
+    const verdict = evaluate(question, item?.answer);
+    autoGradedCount += 1;
+    if (verdict?.correct) {
+      correctCount += 1;
+      autoScore += Math.round(Number(question.points || 1000));
+    }
+  });
+
+  const accuracy = autoGradedCount > 0 ? round((correctCount / autoGradedCount) * 100, 1) : null;
+
+  return {
+    answeredCount,
+    correctCount,
+    pendingTeacherGradeCount,
+    autoGradedCount,
+    autoScore: Math.round(autoScore),
+    accuracy,
+    totalQuestions: Number(quizQuestions.length || 0),
+  };
+}
+
+function publicAssignmentAttempt(assignment, attempt) {
+  const metrics = evaluateAssignmentAttempt(assignment, attempt);
+  return {
+    id: sanitizeAssignmentAttemptId(attempt?.id),
+    code: sanitizeAssignmentCode(assignment?.code),
+    studentKey: sanitizeAssignmentStudentKey(attempt?.studentKey),
+    studentName: sanitizeName(attempt?.studentName || 'Student'),
+    startedAt: Number(attempt?.startedAt || 0) || null,
+    updatedAt: Number(attempt?.updatedAt || 0) || null,
+    submitted: !!attempt?.submitted,
+    submittedAt: Number(attempt?.submittedAt || 0) || null,
+    assignment: publicAssignment(assignment, { includeQuiz: true }),
+    metrics,
+    answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
+  };
 }
 
 async function loadAssignmentsMap(storage) {
