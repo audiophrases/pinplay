@@ -292,9 +292,16 @@ function pingEdgeTtsBridgeWarmup() {
 }
 
 function setupCreateAccess() {
+  let pendingDeadAcute = false;
+
   const unlock = async () => {
     try {
-      const value = String(createPasswordEl?.value || '');
+      let value = String(createPasswordEl?.value || '');
+      if (pendingDeadAcute && value && !value.endsWith('´')) {
+        value += '´';
+        if (createPasswordEl) createPasswordEl.value = value;
+      }
+      pendingDeadAcute = false;
       if (!value) {
         setStatus(createAuthStatusEl, 'Enter password', 'bad');
         return;
@@ -332,7 +339,20 @@ function setupCreateAccess() {
   if (unlockCreateBtn) unlockCreateBtn.addEventListener('click', unlock);
   if (createPasswordEl) {
     createPasswordEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') unlock();
+      if (e.key === 'Dead') {
+        pendingDeadAcute = true;
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (pendingDeadAcute && createPasswordEl.value && !createPasswordEl.value.endsWith('´')) {
+          createPasswordEl.value = `${createPasswordEl.value}´`;
+        }
+        pendingDeadAcute = false;
+        unlock();
+      }
+    });
+    createPasswordEl.addEventListener('input', () => {
+      pendingDeadAcute = false;
     });
   }
 }
@@ -349,19 +369,11 @@ function bindTabs() {
   });
 }
 
-const collapsibleSections = [];
-
 function bindCollapsibleSections() {
-  registerSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
-  registerSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
-  registerSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: false, keyboard: true });
-  registerSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
-}
-
-function registerSectionToggle(triggerEl, bodyEl, options = {}) {
-  if (!triggerEl || !bodyEl) return;
-  collapsibleSections.push({ triggerEl, bodyEl });
-  bindSectionToggle(triggerEl, bodyEl, options);
+  bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
 }
 
 function bindSectionToggle(triggerEl, bodyEl, options = {}) {
@@ -398,18 +410,6 @@ function setSectionCollapsed(triggerEl, bodyEl, collapsed) {
 
   const chevron = triggerEl.querySelector('.collapse-chevron');
   if (chevron) chevron.textContent = collapsed ? '▸' : '▾';
-}
-
-function setAllSectionsCollapsed(collapsed) {
-  collapsibleSections.forEach(({ triggerEl, bodyEl }) => {
-    setSectionCollapsed(triggerEl, bodyEl, !!collapsed);
-  });
-}
-
-function toggleAllSectionsCollapsed() {
-  if (!collapsibleSections.length) return;
-  const hasExpanded = collapsibleSections.some(({ bodyEl }) => !bodyEl.classList.contains('hidden'));
-  setAllSectionsCollapsed(hasExpanded);
 }
 
 // ---------- Builder ----------
@@ -2720,12 +2720,6 @@ function handleHostHotkeys(e) {
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     startRankingAnimationMode();
-    return;
-  }
-
-  if (e.key === 'c' || e.key === 'C') {
-    e.preventDefault();
-    toggleAllSectionsCollapsed();
     return;
   }
 
