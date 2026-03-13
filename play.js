@@ -71,6 +71,7 @@ init();
 
 function init() {
   setupImageLightbox();
+  pingEdgeTtsBridgeWarmup();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
   initAssignmentFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
@@ -111,6 +112,19 @@ function init() {
       submitLiveAnswer();
     });
   }
+}
+
+function pingEdgeTtsBridgeWarmup() {
+  // Student-side best-effort wake ping so TTS bridge is warm before playback is needed.
+  // Same wake pattern as teacher/create side.
+  const url = 'https://edge-tts-bridge.onrender.com/health';
+  const ping = () => {
+    try {
+      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => {});
+    } catch {}
+  };
+  ping();
+  setTimeout(ping, 3500);
 }
 
 function initAssignmentFromUrl() {
