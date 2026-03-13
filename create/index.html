@@ -140,7 +140,14 @@
                 <button id="refreshAssignmentsBtn" class="btn">Refresh assignments</button>
               </div>
               <ul id="assignmentList" class="list"></ul>
-              <p id="assignmentResultsSummary" class="small muted top-space">Select assignment to view results.</p>
+              <div class="row gap top-space">
+                <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
+                <select id="assignmentResultsFilter" style="max-width:180px;">
+                  <option value="all">All attempts</option>
+                  <option value="pending">Pending grading</option>
+                  <option value="submitted">Submitted only</option>
+                </select>
+              </div>
               <ul id="assignmentResultsList" class="list"></ul>
               <p id="assignmentGradingSummary" class="small muted top-space">Open an attempt to grade teacher-graded answers.</p>
               <ul id="assignmentGradingList" class="list"></ul>

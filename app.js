@@ -74,6 +74,7 @@ const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
+const assignmentResultsFilterEl = document.getElementById('assignmentResultsFilter');
 const assignmentResultsListEl = document.getElementById('assignmentResultsList');
 const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
@@ -165,6 +166,7 @@ let previewMode = {
   prevPrimaryAudioHost: null,
 };
 let createSessionPassword = '';
+let assignmentResultsCache = null;
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -1718,6 +1720,11 @@ function bindLiveEvents() {
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
+  if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
+    if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
+      renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
+    }
+  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -1995,6 +2002,78 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
   }
 }
 
+function renderAssignmentResults(safeCode, data) {
+  const assignment = data?.assignment || {};
+  const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
+  const filter = String(assignmentResultsFilterEl?.value || 'all');
+
+  const filtered = attempts.filter((a) => {
+    if (filter === 'submitted') return !!a?.submitted;
+    if (filter === 'pending') return Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0;
+    return true;
+  });
+
+  if (assignmentResultsSummaryEl) {
+    assignmentResultsSummaryEl.textContent = `${assignment?.title || safeCode} · Showing ${filtered.length}/${attempts.length} attempts`;
+  }
+
+  if (!assignmentResultsListEl) return;
+  assignmentResultsListEl.innerHTML = '';
+  if (!filtered.length) {
+    const li = document.createElement('li');
+    li.textContent = attempts.length ? 'No attempts match current filter.' : 'No attempts yet.';
+    assignmentResultsListEl.appendChild(li);
+    return;
+  }
+
+  filtered.forEach((a) => {
+    const li = document.createElement('li');
+    const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
+    const top = document.createElement('div');
+    top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong> · ${totalScore} pts`;
+
+    const meta = document.createElement('div');
+    meta.className = 'small muted';
+    const answered = Number(a?.metrics?.answeredCount || 0);
+    const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    const total = Number(a?.metrics?.totalQuestions || 0);
+    const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
+    meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
+
+    const row = document.createElement('div');
+    row.className = 'row gap top-space';
+    const attemptId = String(a?.id || '');
+
+    const gradeBtn = document.createElement('button');
+    gradeBtn.className = 'btn';
+    gradeBtn.textContent = 'Open grading';
+    gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, attemptId));
+    row.appendChild(gradeBtn);
+
+    if (a?.submitted) {
+      const reopenBtn = document.createElement('button');
+      reopenBtn.className = 'btn';
+      reopenBtn.textContent = 'Reopen attempt';
+      reopenBtn.addEventListener('click', async () => {
+        try {
+          reopenBtn.disabled = true;
+          await reopenAssignmentAttempt(safeCode, attemptId);
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopened attempt ${attemptId}.`;
+          await fetchAssignmentResults(safeCode);
+        } catch (err) {
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopen error: ${err.message}`;
+        } finally {
+          reopenBtn.disabled = false;
+        }
+      });
+      row.appendChild(reopenBtn);
+    }
+
+    li.append(top, meta, row);
+    assignmentResultsListEl.appendChild(li);
+  });
+}
+
 async function fetchAssignmentResults(code) {
   try {
     const safeCode = String(code || '').trim().toUpperCase();
@@ -2012,66 +2091,8 @@ async function fetchAssignmentResults(code) {
       },
     });
 
-    const assignment = data?.assignment || {};
-    const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
-    if (assignmentResultsSummaryEl) {
-      assignmentResultsSummaryEl.textContent = `${assignment?.title || safeCode} · Attempts: ${attempts.length}`;
-    }
-
-    if (!assignmentResultsListEl) return;
-    if (!attempts.length) {
-      const li = document.createElement('li');
-      li.textContent = 'No attempts yet.';
-      assignmentResultsListEl.appendChild(li);
-      return;
-    }
-
-    attempts.forEach((a) => {
-      const li = document.createElement('li');
-      const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
-      const top = document.createElement('div');
-      top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong> · ${totalScore} pts`;
-
-      const meta = document.createElement('div');
-      meta.className = 'small muted';
-      const answered = Number(a?.metrics?.answeredCount || 0);
-      const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
-      const total = Number(a?.metrics?.totalQuestions || 0);
-      const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
-      meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
-
-      const row = document.createElement('div');
-      row.className = 'row gap top-space';
-      const attemptId = String(a?.id || '');
-
-      const gradeBtn = document.createElement('button');
-      gradeBtn.className = 'btn';
-      gradeBtn.textContent = 'Open grading';
-      gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, attemptId));
-      row.appendChild(gradeBtn);
-
-      if (a?.submitted) {
-        const reopenBtn = document.createElement('button');
-        reopenBtn.className = 'btn';
-        reopenBtn.textContent = 'Reopen attempt';
-        reopenBtn.addEventListener('click', async () => {
-          try {
-            reopenBtn.disabled = true;
-            await reopenAssignmentAttempt(safeCode, attemptId);
-            if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopened attempt ${attemptId}.`;
-            await fetchAssignmentResults(safeCode);
-          } catch (err) {
-            if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopen error: ${err.message}`;
-          } finally {
-            reopenBtn.disabled = false;
-          }
-        });
-        row.appendChild(reopenBtn);
-      }
-
-      li.append(top, meta, row);
-      assignmentResultsListEl.appendChild(li);
-    });
+    assignmentResultsCache = { code: safeCode, data };
+    renderAssignmentResults(safeCode, data);
   } catch (err) {
     if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Results error: ${err.message}`;
   }
@@ -2087,6 +2108,7 @@ async function refreshAssignmentsList() {
     if (!createSessionPassword) throw new Error('Teacher password is required.');
 
     if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = true;
+    assignmentResultsCache = null;
     if (assignmentListEl) assignmentListEl.innerHTML = '';
     if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
     if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open an attempt to grade teacher-graded answers.';
