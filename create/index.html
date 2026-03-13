@@ -98,8 +98,12 @@
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
+            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              Live screen <span class="collapse-chevron" aria-hidden="true">▾</span>
+            </h2>
+            <div id="liveScreenCardBody">
             <div class="row spread gap">
-              <strong>Live screen</strong>
+              <strong>Projector</strong>
               <button id="projectorFullscreenBtn" class="btn">Fullscreen</button>
             </div>
             <div class="row gap top-space small" id="projectorHud">
@@ -117,10 +121,15 @@
               <strong>Scoreboard</strong>
               <ul id="projectorScores" class="list"></ul>
             </div>
+            </div>
           </div>
 
 
           <div class="card" id="hostCard">
+            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              Game controls <span class="collapse-chevron" aria-hidden="true">▾</span>
+            </h2>
+            <div id="gameControlsCardBody">
             <div class="row gap top-space" id="hostActionRow">
               <button id="randomNamesToggle" class="btn" type="button">Login</button>
               <button id="createLiveBtn" class="btn primary">Live Pin</button>
@@ -217,6 +226,7 @@
               </div>
               <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
               <ul id="hostAttemptsList" class="list"></ul>
+            </div>
             </div>
           </div>
         </div>
