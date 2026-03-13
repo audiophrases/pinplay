@@ -70,7 +70,9 @@ const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
+const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentStatusEl = document.getElementById('assignmentStatus');
+const assignmentListEl = document.getElementById('assignmentList');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -1711,6 +1713,7 @@ function bindLiveEvents() {
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
+  if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -1839,6 +1842,99 @@ async function createLiveGame() {
   }
 }
 
+async function copyTextSmart(text) {
+  const value = String(text || '');
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const input = document.createElement('input');
+    input.value = value;
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    document.body.appendChild(input);
+    input.select();
+    const ok = document.execCommand('copy');
+    input.remove();
+    return !!ok;
+  }
+}
+
+async function refreshAssignmentsList() {
+  try {
+    if (!createSessionPassword) {
+      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
+    if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = true;
+    if (assignmentListEl) assignmentListEl.innerHTML = '';
+
+    const data = await api('/api/assignments/list', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        limit: 50,
+      },
+    });
+
+    const list = Array.isArray(data?.assignments) ? data.assignments : [];
+    if (!assignmentListEl) return;
+    if (!list.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No assignments yet.';
+      assignmentListEl.appendChild(li);
+      return;
+    }
+
+    const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
+    list.forEach((a) => {
+      const code = String(a?.code || '').trim();
+      const link = `${base}?assignment=${encodeURIComponent(code)}`;
+      const li = document.createElement('li');
+
+      const title = document.createElement('div');
+      title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q`;
+
+      const meta = document.createElement('div');
+      meta.className = 'small muted';
+      const dueAt = Number(a?.dueAt || 0);
+      const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
+      meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${Number(a?.attemptsLimit || 1)} · ${dueText}`;
+
+      const row = document.createElement('div');
+      row.className = 'row gap top-space';
+
+      const copyCodeBtn = document.createElement('button');
+      copyCodeBtn.className = 'btn';
+      copyCodeBtn.textContent = 'Copy code';
+      copyCodeBtn.addEventListener('click', async () => {
+        const ok = await copyTextSmart(code);
+        if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied code: ${code}` : 'Copy failed';
+      });
+
+      const copyLinkBtn = document.createElement('button');
+      copyLinkBtn.className = 'btn';
+      copyLinkBtn.textContent = 'Copy link';
+      copyLinkBtn.addEventListener('click', async () => {
+        const ok = await copyTextSmart(link);
+        if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
+      });
+
+      row.append(copyCodeBtn, copyLinkBtn);
+      li.append(title, meta, row);
+      assignmentListEl.appendChild(li);
+    });
+  } catch (err) {
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment list error: ${err.message}`;
+  } finally {
+    if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = false;
+  }
+}
+
 async function createAssignmentFromCurrentQuiz() {
   try {
     syncQuizFromUI();
@@ -1881,6 +1977,7 @@ async function createAssignmentFromCurrentQuiz() {
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = `${msg} · Link: ${link}`;
     setStatus(hostStatusEl, msg, 'ok');
+    await refreshAssignmentsList();
   } catch (err) {
     if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment error: ${err.message}`;
     setStatus(hostStatusEl, err.message, 'bad');
