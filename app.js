@@ -266,6 +266,9 @@ function init() {
   bindSoloEvents();
   window.addEventListener('resize', scheduleHostAdaptiveFit);
 
+  // Keep teacher unlock responsive even if later create-page rendering hits an error.
+  setupCreateAccess();
+
   renderBuilder();
   refreshLocalPin();
 
@@ -274,8 +277,6 @@ function init() {
   if (!normalizeBackendUrl(savedBackend)) {
     saveBackendUrl(initialBackend);
   }
-
-  setupCreateAccess();
 }
 
 function pingEdgeTtsBridgeWarmup() {
