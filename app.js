@@ -2743,6 +2743,7 @@ function shouldIgnoreHostHotkey(e) {
 
 function handleHostHotkeys(e) {
   if (shouldIgnoreHostHotkey(e)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   if (e.key === 'l' || e.key === 'L') {
     e.preventDefault();
