@@ -6,12 +6,23 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
 };
 
-const RANDOM_NAMES = [
-  'Neon Ninja', 'Cosmic Panda', 'Turbo Otter', 'Pixel Falcon', 'Comet Rider', 'Laser Lynx',
-  'Captain Mango', 'Nova Turtle', 'Rainbow Fox', 'Thunder Koala', 'Moon Cheetah', 'Rocket Gecko',
-  'Shadow Penguin', 'Blaze Sparrow', 'Mystic Dolphin', 'Cobalt Tiger', 'Breeze Dragon', 'Jade Wolf',
-  'Berry Falcon', 'Sunny Shark', 'Nimbus Owl', 'Echo Raccoon', 'Orion Rabbit', 'Coral Panther',
-  'Maple Jaguar', 'Ruby Seahorse', 'Aster Viper', 'Lemon Phoenix', 'Juniper Eagle', 'Tango Lion',
+const RANDOM_NAME_ADJECTIVES = [
+  'Happy','Joyful','Brave','Calm','Bold','Bright','Clever','Kind','Gentle','Fierce','Mighty','Swift','Quick','Patient','Lucky','Fearless',
+  'Curious','Honest','Loyal','Noble','Proud','Sharp','Witty','Sincere','Dreamy','Sunny','Cheerful','Wild','Silent','Noisy','Serious','Playful',
+  'Epic','Legendary','Magic','Radiant','Electric','Cosmic','Golden','Silver','Crimson','Azure','Emerald','Ivory','Amber','Vivid','Daring','Steady',
+  'Smooth','Tough','Resilient','Wise','Humble','Friendly','Charming','Creative','Focused','Driven','Glorious','Heroic','Cool','Fiery','Icy','Gentlemanly',
+  'Graceful','Agile','Dynamic','Classic','Modern','Royal','Savage','Elegant','Lovely','HappyGo','Sad','Moody','Brilliant','Gritty','Shiny','Stormy',
+  'Chill','Confident','Passionate','Careful','Eager','LuckyStar','Prime','Ultra','Super','Top','Smiling','Thoughtful','Helpful','Polite','Honorable','Valiant'
+];
+
+const RANDOM_NAME_PEOPLE = [
+  'Amir','Yasmine','Karim','Nadia','Samir','Leila','Rachid','Salma','Amina','Youssef','Hakim','Imane','Zineb','Omar','Anas','Soufiane',
+  'Messi','Ronaldo','Neymar','Mbappe','Modric','Iniesta','Xavi','Salah','Benzema','Lewandowski','Pedri','Gavi','Lamine','Aitana','Putellas','Bonmati',
+  'Shakira','Rihanna','Adele','Beyonce','DuaLipa','TheWeeknd','Drake','Rosalia','BadBunny','KarolG','Maluma','Enrique','Sia','Stromae','Aya','EdSheeran',
+  'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman',
+  'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Isabella','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno',
+  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe',
+  'Iker','Ainhoa','Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Claudia','Joan','Martina','Arnau','Noa'
 ];
 
 const BLOCKED_NICK_PATTERNS = [
@@ -3515,14 +3526,28 @@ function hasBlockedNickname(name) {
 function pickRandomName(playersMap) {
   const used = new Set(Object.values(playersMap || {}).map((p) => String(p.name || '').toLowerCase()));
 
-  for (const base of RANDOM_NAMES) {
-    if (!used.has(base.toLowerCase())) return base;
+  const adjectives = RANDOM_NAME_ADJECTIVES;
+  const people = RANDOM_NAME_PEOPLE;
+  const total = adjectives.length * people.length;
+
+  for (let i = 0; i < Math.min(total, 240); i += 1) {
+    const adj = adjectives[Math.floor(Math.random() * adjectives.length)] || 'Happy';
+    const person = people[Math.floor(Math.random() * people.length)] || 'Player';
+    const candidate = `${adj} ${person}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
   }
 
-  const base = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)] || 'Player';
+  for (const adj of adjectives) {
+    for (const person of people) {
+      const candidate = `${adj} ${person}`;
+      if (!used.has(candidate.toLowerCase())) return candidate;
+    }
+  }
+
+  const fallback = `${adjectives[0] || 'Happy'} ${people[0] || 'Player'}`;
   let n = 2;
-  while (used.has(`${base.toLowerCase()} ${n}`)) n += 1;
-  return `${base} ${n}`;
+  while (used.has(`${fallback.toLowerCase()} ${n}`)) n += 1;
+  return `${fallback} ${n}`;
 }
 
 function isHttpUrl(value) {
