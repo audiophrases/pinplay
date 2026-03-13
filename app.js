@@ -1281,30 +1281,50 @@ function renderBuilder() {
   }
 }
 
-const EDGE_TTS_VOICE_OPTIONS = [
-  'en-US-AnaNeural',
-  'en-US-AndrewMultilingualNeural',
-  'en-US-AndrewNeural',
-  'en-US-AriaNeural',
-  'en-US-AvaMultilingualNeural',
-  'en-US-AvaNeural',
-  'en-US-BrianMultilingualNeural',
-  'en-US-BrianNeural',
-  'en-US-ChristopherNeural',
-  'en-US-EmmaMultilingualNeural',
-  'en-US-EmmaNeural',
-  'en-US-EricNeural',
-  'en-US-GuyNeural',
-  'en-US-JennyNeural',
-  'en-US-MichelleNeural',
-  'en-US-RogerNeural',
-  'en-US-SteffanNeural',
+const EDGE_TTS_LANGUAGE_DEFAULTS = {
+  EN: 'en-US-AndrewMultilingualNeural',
+  CA: 'ca-ES-JoanaNeural',
+  FR: 'fr-FR-DeniseNeural',
+};
+const EDGE_TTS_LANGUAGE_OPTIONS = [
+  { value: 'EN', label: 'English' },
+  { value: 'CA', label: 'Català' },
+  { value: 'FR', label: 'Français' },
 ];
-const DEFAULT_EDGE_TTS_VOICE = 'en-US-AndrewMultilingualNeural';
+const EDGE_TTS_VOICE_OPTIONS = Object.values(EDGE_TTS_LANGUAGE_DEFAULTS);
+const DEFAULT_EDGE_TTS_LANGUAGE = 'EN';
+const DEFAULT_EDGE_TTS_VOICE = EDGE_TTS_LANGUAGE_DEFAULTS[DEFAULT_EDGE_TTS_LANGUAGE];
+
+function normalizeTtsLanguage(value) {
+  const key = String(value || '').trim().toUpperCase();
+  return EDGE_TTS_LANGUAGE_DEFAULTS[key] ? key : DEFAULT_EDGE_TTS_LANGUAGE;
+}
+
+function guessTtsLanguageFromVoice(voice) {
+  const v = String(voice || '').trim().toLowerCase();
+  if (v.startsWith('ca-')) return 'CA';
+  if (v.startsWith('fr-')) return 'FR';
+  return 'EN';
+}
+
+function getVoiceForTtsLanguage(language) {
+  const lang = normalizeTtsLanguage(language);
+  return EDGE_TTS_LANGUAGE_DEFAULTS[lang] || DEFAULT_EDGE_TTS_VOICE;
+}
+
+function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) {
+  const raw = String(voice || '').trim();
+  if (EDGE_TTS_VOICE_OPTIONS.includes(raw)) return raw;
+  return getVoiceForTtsLanguage(fallbackLanguage);
+}
 
 function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
-  const voice = String(q.language || DEFAULT_EDGE_TTS_VOICE);
+  const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
+  const voice = normalizeTtsVoice(q.language, ttsLanguage);
+  const languageOptions = EDGE_TTS_LANGUAGE_OPTIONS
+    .map((l) => `<option value="${l.value}" ${ttsLanguage === l.value ? 'selected' : ''}>${l.label}</option>`)
+    .join('');
   const voiceOptions = EDGE_TTS_VOICE_OPTIONS
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
     .join('');
@@ -1325,6 +1345,8 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <label>TTS Language</label>
+      <select data-q="${idx}" data-field="ttsLanguage">${languageOptions}</select>
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
@@ -1385,11 +1407,21 @@ function syncQuizFromUI() {
       const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
       const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
+      const ttsLanguageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="ttsLanguage"]`);
 
+      const prevTtsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
-      const pickedVoice = String(languageEl?.value || DEFAULT_EDGE_TTS_VOICE).slice(0, 64);
-      q.language = EDGE_TTS_VOICE_OPTIONS.includes(pickedVoice) ? pickedVoice : DEFAULT_EDGE_TTS_VOICE;
+
+      const nextTtsLanguage = normalizeTtsLanguage(ttsLanguageEl?.value || prevTtsLanguage);
+      q.ttsLanguage = nextTtsLanguage;
+      if (nextTtsLanguage !== prevTtsLanguage) {
+        q.language = getVoiceForTtsLanguage(nextTtsLanguage);
+      } else {
+        const pickedVoice = String(languageEl?.value || '').slice(0, 64);
+        q.language = normalizeTtsVoice(pickedVoice, nextTtsLanguage);
+      }
+
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
 
       // New rule: no checkbox.
@@ -5956,6 +5988,7 @@ function makeMcqQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
@@ -5977,6 +6010,7 @@ function makeMultiQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
@@ -5998,6 +6032,7 @@ function makeTfQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
@@ -6017,6 +6052,7 @@ function makeTextQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     accepted: ['', '', '', ''],
@@ -6033,6 +6069,7 @@ function makeOpenQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6048,6 +6085,7 @@ function makeSpeakingQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6064,6 +6102,7 @@ function makeImageOpenQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6080,6 +6119,7 @@ function makeContextGapQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6101,6 +6141,7 @@ function makeMatchPairsQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6117,6 +6158,7 @@ function makeErrorHuntQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
@@ -6132,6 +6174,7 @@ function makePuzzleQuestion(opts = {}) {
     audioEnabled: !!opts.withAudio,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     items: Array.from({ length: 9 }, () => ''),
@@ -6146,6 +6189,7 @@ function makeAudioQuestion() {
     audioEnabled: true,
     audioMode: 'tts',
     audioText: '',
+    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     points: 1000,
@@ -6219,7 +6263,8 @@ function normalizeQuizForLive(raw) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1200),
-      language: String(q.language || DEFAULT_EDGE_TTS_VOICE).slice(0, 32) || DEFAULT_EDGE_TTS_VOICE,
+      ttsLanguage: normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language)),
+      language: normalizeTtsVoice(q.language, q.ttsLanguage || guessTtsLanguageFromVoice(q.language)),
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
     };
@@ -6416,10 +6461,7 @@ async function generateMp3FromTts({ text, voice }) {
   const safeText = String(text || '').trim().slice(0, 1200);
   if (!safeText) return '';
 
-  const rawVoice = String(voice || DEFAULT_EDGE_TTS_VOICE).trim();
-  const safeVoice = /neural/i.test(rawVoice)
-    ? rawVoice
-    : (rawVoice.toLowerCase().startsWith('en-gb') ? 'en-GB-SoniaNeural' : DEFAULT_EDGE_TTS_VOICE);
+  const safeVoice = normalizeTtsVoice(voice, DEFAULT_EDGE_TTS_LANGUAGE);
 
   const res = await fetch(`${base}/api/tts/edge`, {
     method: 'POST',
@@ -7021,10 +7063,7 @@ async function playQuestionAudio(question, opts = {}) {
   try {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     if (!base) throw new Error('Backend URL is not configured.');
-    const rawVoice = String(question.language || 'en-US-AriaNeural').trim();
-    const voice = /neural/i.test(rawVoice)
-      ? rawVoice
-      : (rawVoice.toLowerCase().startsWith('en-gb') ? 'en-GB-SoniaNeural' : 'en-US-AriaNeural');
+    const voice = normalizeTtsVoice(question.language, question.ttsLanguage || guessTtsLanguageFromVoice(question.language));
     const key = `${voice}::${text}`;
 
     const ratePct = `${safeSpeed >= 1 ? '+' : ''}${Math.round((safeSpeed - 1) * 100)}%`;
@@ -7645,5 +7684,6 @@ function setupImageLightbox() {
     modal.classList.remove('hidden');
   });
 }
+
 
 
