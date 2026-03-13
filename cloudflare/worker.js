@@ -25,6 +25,7 @@ const BLOCKED_NICK_PATTERNS = [
 const ALLOWED_REACTIONS = new Set([
   '👍','👏','🔥','😂','🤯','🙌','☕','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'
 ]);
+const MAX_ROOM_EVENTS = 4000;
 
 export default {
   async fetch(request, env) {
@@ -111,6 +112,22 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
       return withCors(
         await stub.fetch('https://room/host/state', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/host/events' && request.method === 'GET') {
+      const pin = sanitizePin(url.searchParams.get('pin'));
+      const token = readBearer(request);
+      const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 120)));
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch(`https://room/host/events?limit=${encodeURIComponent(limit)}`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         }),
@@ -769,10 +786,18 @@ export class QuizRoom {
           responsesByQuestion: {},
           scoreLocksByQuestion: {},
           reactionsByQuestion: {},
+          eventLog: [],
           settings: {
             randomNames: !!options.randomNames,
           },
         };
+
+        appendRoomEvent(room, 'room_created', {
+          pin: room.pin,
+          randomNames: !!room.settings?.randomNames,
+          quizTitle: String(room.quiz?.title || '').slice(0, 120),
+          quizQuestions: Number(room.quiz?.questions?.length || 0),
+        });
 
         await this.#setRoom(room);
         return json({ pin, hostToken: room.hostToken, settings: room.settings }, 201);
@@ -785,6 +810,8 @@ export class QuizRoom {
         await this.state.storage.delete('room');
         return json({ error: 'Room expired.' }, 410);
       }
+
+      if (!Array.isArray(room.eventLog)) room.eventLog = [];
 
       if (url.pathname === '/pin/check' && request.method === 'GET') {
         const clientId = sanitizeId(url.searchParams.get('clientId'));
@@ -892,6 +919,13 @@ export class QuizRoom {
           },
         };
 
+        appendRoomEvent(room, 'player_joined', {
+          playerId,
+          name,
+          identity: room.players[playerId].identity || null,
+          via: room.settings?.randomNames ? 'random-names' : 'login',
+        });
+
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
@@ -913,6 +947,18 @@ export class QuizRoom {
         if (timeoutClosed) await this.#setRoom(room);
 
         return json(hostState(room));
+      }
+
+      if (url.pathname === '/host/events' && request.method === 'GET') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+
+        const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 120)));
+        const list = Array.isArray(room.eventLog) ? room.eventLog : [];
+        return json({
+          pin: room.pin,
+          events: list.slice(Math.max(0, list.length - limit)),
+        });
       }
 
       if (url.pathname === '/host/join' && request.method === 'POST') {
@@ -967,6 +1013,10 @@ export class QuizRoom {
             room.questionClosed = true;
             room.questionClosedAt = Date.now();
             room.questionCloseReason = 'finished';
+            appendRoomEvent(room, 'game_finished', {
+              totalQuestions: Number(room.quiz?.questions?.length || 0),
+              finishedAt: room.questionClosedAt,
+            });
             room.updatedAt = Date.now();
           }
         }
@@ -1027,12 +1077,20 @@ export class QuizRoom {
         const playerId = sanitizeId(body?.playerId);
         if (!playerId || !room.players[playerId]) return json({ error: 'Player not found.' }, 404);
 
+        const removed = room.players[playerId] || null;
         delete room.players[playerId];
 
         Object.keys(room.responsesByQuestion || {}).forEach((qIdx) => {
           if (room.responsesByQuestion[qIdx]?.[playerId]) {
             delete room.responsesByQuestion[qIdx][playerId];
           }
+        });
+
+        appendRoomEvent(room, 'player_removed', {
+          playerId,
+          name: removed?.name || '',
+          identity: removed?.identity || null,
+          actor: 'host',
         });
 
         room.updatedAt = Date.now();
@@ -1075,6 +1133,14 @@ export class QuizRoom {
         if (!Number.isFinite(delta) || delta === 0) return json({ error: 'delta must be a non-zero number.' }, 400);
 
         room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) + Math.round(delta));
+        appendRoomEvent(room, 'score_adjusted', {
+          playerId,
+          name: room.players[playerId]?.name || '',
+          identity: room.players[playerId]?.identity || null,
+          delta: Math.round(delta),
+          scoreAfter: Number(room.players[playerId]?.score || 0),
+          actor: 'host',
+        });
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
@@ -1113,6 +1179,17 @@ export class QuizRoom {
         if (typeof resp.correction !== 'string') resp.correction = '';
 
         room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) - prev + adjustedPoints);
+        appendRoomEvent(room, 'answer_graded', {
+          playerId,
+          name: room.players[playerId]?.name || '',
+          identity: room.players[playerId]?.identity || null,
+          qIndex,
+          qType: String(question?.type || ''),
+          rawPoints,
+          pointsAwarded: Number(adjustedPoints || 0),
+          scoreAfter: Number(room.players[playerId]?.score || 0),
+          actor: 'host',
+        });
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
@@ -1329,6 +1406,21 @@ export class QuizRoom {
         }
 
         room.players[playerId].score = Math.max(0, Number(room.players[playerId].score || 0) + Math.round(pointsAwarded));
+
+        appendRoomEvent(room, 'answer_submitted', {
+          playerId,
+          name: room.players[playerId]?.name || '',
+          identity: room.players[playerId]?.identity || null,
+          qIndex,
+          qType: String(question?.type || ''),
+          isPoll: !!question?.isPoll,
+          correct: !!verdict.correct,
+          graded: !!room.responsesByQuestion[qIndex]?.[playerId]?.graded,
+          pointsAwarded: Number(pointsAwarded || 0),
+          scoreAfter: Number(room.players[playerId]?.score || 0),
+          bet,
+          submittedAt: Number(room.responsesByQuestion[qIndex]?.[playerId]?.submittedAt || Date.now()),
+        });
 
         const totalPlayers = Object.keys(room.players || {}).length;
         const answeredCount = Object.keys(room.responsesByQuestion[qIndex] || {}).length;
@@ -1682,6 +1774,11 @@ function closeCurrentQuestion(room, reason = 'manual_reveal') {
   room.questionClosed = true;
   room.questionClosedAt = Date.now();
   room.questionCloseReason = String(reason || 'manual_reveal');
+  appendRoomEvent(room, 'question_closed', {
+    qIndex: Number(room.currentIndex || 0),
+    reason: room.questionCloseReason,
+    closedAt: room.questionClosedAt,
+  });
   room.updatedAt = Date.now();
   return true;
 }
@@ -1718,6 +1815,11 @@ function startQuestion(room, index) {
   room.responsesByQuestion[qIndex] = {};
   room.scoreLocksByQuestion = room.scoreLocksByQuestion || {};
   room.scoreLocksByQuestion[qIndex] = room.scoreLocksByQuestion[qIndex] || {};
+  appendRoomEvent(room, 'question_started', {
+    qIndex,
+    qType: String(room.quiz?.questions?.[qIndex]?.type || ''),
+    startedAt: room.questionStartedAt,
+  });
   room.updatedAt = Date.now();
   return true;
 }
@@ -2334,6 +2436,21 @@ function normalizeNameKey(name) {
 function findPlayerByClientId(room, clientId) {
   if (!clientId) return null;
   return Object.values(room.players || {}).find((p) => String(p.clientId || '') === clientId) || null;
+}
+
+function appendRoomEvent(room, type, payload = {}) {
+  if (!room || typeof room !== 'object') return;
+  room.eventLog = Array.isArray(room.eventLog) ? room.eventLog : [];
+  const event = {
+    id: randomId('ev_'),
+    at: Date.now(),
+    type: String(type || 'event'),
+    payload: payload && typeof payload === 'object' ? payload : {},
+  };
+  room.eventLog.push(event);
+  if (room.eventLog.length > MAX_ROOM_EVENTS) {
+    room.eventLog.splice(0, room.eventLog.length - MAX_ROOM_EVENTS);
+  }
 }
 
 function summarizePoll(question, responses) {
