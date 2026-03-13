@@ -166,6 +166,12 @@
                 <strong>Student performance snapshot</strong>
                 <button id="hostAttemptsRefreshBtn" class="btn">Refresh snapshot</button>
               </div>
+              <div class="row gap top-space">
+                <select id="hostAttemptsClassFilter" style="max-width:200px;">
+                  <option value="">All classes</option>
+                </select>
+                <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
+              </div>
               <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
               <ul id="hostAttemptsList" class="list"></ul>
             </div>

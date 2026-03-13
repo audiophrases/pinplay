@@ -74,6 +74,8 @@ const liveReactionsEl = document.getElementById('liveReactions');
 const hostPlayersEl = document.getElementById('hostPlayers');
 const hostAnswerHistoryEl = document.getElementById('hostAnswerHistory');
 const hostAttemptsRefreshBtn = document.getElementById('hostAttemptsRefreshBtn');
+const hostAttemptsClassFilterEl = document.getElementById('hostAttemptsClassFilter');
+const hostAttemptsSearchEl = document.getElementById('hostAttemptsSearch');
 const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
 const hostAttemptsListEl = document.getElementById('hostAttemptsList');
 const hostStatusEl = document.getElementById('hostStatus');
@@ -1693,6 +1695,8 @@ function bindLiveEvents() {
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
+  if (hostAttemptsClassFilterEl) hostAttemptsClassFilterEl.addEventListener('change', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
+  if (hostAttemptsSearchEl) hostAttemptsSearchEl.addEventListener('input', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
@@ -2481,24 +2485,49 @@ function renderHostAnswerHistory(state) {
 }
 
 function renderHostAttemptsSnapshot(data) {
+  const students = Array.isArray(data?.students) ? data.students : [];
+  const quizTitle = String(data?.quiz?.title || '').trim() || '(untitled quiz)';
+
+  if (hostAttemptsClassFilterEl) {
+    const current = String(hostAttemptsClassFilterEl.value || '');
+    const classes = [...new Set(students.map((s) => String(s.className || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    hostAttemptsClassFilterEl.innerHTML = '<option value="">All classes</option>';
+    classes.forEach((c) => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      hostAttemptsClassFilterEl.appendChild(opt);
+    });
+    if (current && classes.includes(current)) hostAttemptsClassFilterEl.value = current;
+  }
+
+  const classFilter = String(hostAttemptsClassFilterEl?.value || '').trim().toLowerCase();
+  const search = String(hostAttemptsSearchEl?.value || '').trim().toLowerCase();
+
+  const filtered = students.filter((s) => {
+    const cls = String(s.className || '').trim().toLowerCase();
+    const name = String(s.username || s.displayName || '').trim().toLowerCase();
+    const email = String(s.email || '').trim().toLowerCase();
+    const classOk = !classFilter || cls === classFilter;
+    const searchOk = !search || name.includes(search) || email.includes(search) || cls.includes(search);
+    return classOk && searchOk;
+  });
+
   if (hostAttemptsSummaryEl) {
-    const count = Array.isArray(data?.students) ? data.students.length : 0;
-    const quizTitle = String(data?.quiz?.title || '').trim() || '(untitled quiz)';
-    hostAttemptsSummaryEl.textContent = `Quiz: ${quizTitle} · Students: ${count}`;
+    hostAttemptsSummaryEl.textContent = `Quiz: ${quizTitle} · Showing ${filtered.length}/${students.length} students`;
   }
 
   if (!hostAttemptsListEl) return;
   hostAttemptsListEl.innerHTML = '';
 
-  const students = Array.isArray(data?.students) ? data.students : [];
-  if (!students.length) {
+  if (!filtered.length) {
     const li = document.createElement('li');
-    li.textContent = 'No student attempt data yet.';
+    li.textContent = students.length ? 'No students match current filters.' : 'No student attempt data yet.';
     hostAttemptsListEl.appendChild(li);
     return;
   }
 
-  students.forEach((s) => {
+  filtered.forEach((s) => {
     const li = document.createElement('li');
     const name = String(s.username || s.displayName || 'Student').trim();
     const className = String(s.className || '').trim();
