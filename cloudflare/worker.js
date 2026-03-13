@@ -1450,8 +1450,14 @@ export class QuizRoom {
             let vData = {};
             try { vData = vTxt ? JSON.parse(vTxt) : {}; } catch {}
             if (vData && vData.ok === false) return json({ error: 'Invalid username or password.' }, 401);
-            if (vData?.displayName) name = sanitizeName(vData.displayName) || name;
             verifiedIdentity = await normalizeStudentIdentity(vData, name);
+            const preferredDisplay = sanitizeName(
+              verifiedIdentity?.displayName
+              || vData?.displayName
+              || vData?.display_name
+              || name,
+            ) || name;
+            name = preferredDisplay;
           } catch {
             return json({ error: 'Login verification service unavailable.' }, 502);
           }
@@ -1477,6 +1483,7 @@ export class QuizRoom {
           joinedAt: Date.now(),
           identity: verifiedIdentity || {
             username: sanitizeName(name),
+            displayName: sanitizeName(name),
             className: '',
             email: '',
             studentKey: '',
@@ -1686,7 +1693,21 @@ export class QuizRoom {
         const nameTaken = Object.values(room.players || {}).some((p) => p.id !== playerId && normalizeNameKey(p.name) === normalizeNameKey(nextName));
         if (nameTaken) return json({ error: 'Name already in use.' }, 409);
 
+        const prevName = room.players[playerId].name;
         room.players[playerId].name = nextName;
+        room.players[playerId].identity = room.players[playerId].identity && typeof room.players[playerId].identity === 'object'
+          ? room.players[playerId].identity
+          : { username: sanitizeName(nextName), displayName: sanitizeName(nextName), className: '', email: '', studentKey: '', source: 'manual' };
+        room.players[playerId].identity.displayName = nextName;
+
+        appendRoomEvent(room, 'player_renamed', {
+          playerId,
+          previousName: prevName,
+          nextName,
+          identity: room.players[playerId].identity || null,
+          actor: 'host',
+        });
+
         room.updatedAt = Date.now();
         await this.#setRoom(room);
 
@@ -3167,10 +3188,10 @@ function normalizeStudentKeyInput(value) {
 async function normalizeStudentIdentity(verifyData, fallbackName) {
   const data = verifyData && typeof verifyData === 'object' ? verifyData : {};
 
-  const username = sanitizeName(data.username || data.displayName || fallbackName || '');
+  const username = sanitizeName(data.username || data.user || fallbackName || '');
+  const displayName = sanitizeName(data.displayName || data.display_name || username || fallbackName || '');
   const email = sanitizeEmail(data.email || data.schoolEmail || data.mail || data.userEmail);
   const className = sanitizeClassName(data.class || data.className || data.group || data.section);
-
   const studentIdRaw = sanitizeId(data.studentId || data.student_id || data.id || '');
   const keySeed = normalizeStudentKeyInput(
     data.studentKey
@@ -3184,6 +3205,7 @@ async function normalizeStudentIdentity(verifyData, fallbackName) {
 
   return {
     username,
+    displayName,
     className,
     email,
     studentKey,
