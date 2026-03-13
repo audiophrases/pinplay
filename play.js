@@ -1015,6 +1015,7 @@ function appendRiskBetBar() {
 
   if (joinSubmitBtn) {
     joinSubmitBtn.classList.remove('top-space');
+    joinSubmitBtn.classList.add('risk-submit-btn');
     controls.appendChild(joinSubmitBtn);
   }
 

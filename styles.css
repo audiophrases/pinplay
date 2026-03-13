@@ -1022,8 +1022,19 @@ textarea { min-height: 72px; resize: vertical; }
 
 .risk-bet-controls {
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: .35rem;
   padding-top: .4rem;
+}
+
+.risk-bet-row {
+  gap: .3rem;
+  margin-left: 0;
+}
+
+.risk-submit-btn {
+  margin-right: .1rem;
 }
 
 .risk-bet-row .risk-bet-btn {
