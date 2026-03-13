@@ -73,6 +73,9 @@ const liveResponsesEl = document.getElementById('liveResponses');
 const liveReactionsEl = document.getElementById('liveReactions');
 const hostPlayersEl = document.getElementById('hostPlayers');
 const hostAnswerHistoryEl = document.getElementById('hostAnswerHistory');
+const hostAttemptsRefreshBtn = document.getElementById('hostAttemptsRefreshBtn');
+const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
+const hostAttemptsListEl = document.getElementById('hostAttemptsList');
 const hostStatusEl = document.getElementById('hostStatus');
 const hostQuestionWrap = document.getElementById('hostQuestionWrap');
 const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
@@ -195,6 +198,9 @@ const live = {
     questionIntroStartedAt: 0,
     questionIntroDone: false,
     adaptiveFitRaf: null,
+    attemptsCache: null,
+    attemptsFetchedAt: 0,
+    attemptsLoading: false,
   },
   player: {
     pin: null,
@@ -1686,6 +1692,7 @@ function bindLiveEvents() {
   if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
+  if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
@@ -1802,6 +1809,8 @@ async function createLiveGame() {
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     live.host.state = null;
+    live.host.attemptsCache = null;
+    live.host.attemptsFetchedAt = 0;
     live.host.isPrimaryAudioHost = true;
 
     stopFx('answering');
@@ -1870,6 +1879,8 @@ async function joinLiveGameAsHostByPin() {
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     live.host.state = null;
+    live.host.attemptsCache = null;
+    live.host.attemptsFetchedAt = 0;
     live.host.isPrimaryAudioHost = false;
 
     if (livePinEl) livePinEl.textContent = data.pin;
@@ -2371,6 +2382,7 @@ async function pollHostState() {
       headers: { Authorization: `Bearer ${live.host.token}` },
     });
     renderHostState(data);
+    fetchHostAttempts({ force: false });
   } catch (err) {
     setStatus(hostStatusEl, `Host poll failed: ${err.message}`, 'bad');
     stopHostPolling();
@@ -2466,6 +2478,73 @@ function renderHostAnswerHistory(state) {
 
     hostAnswerHistoryEl.appendChild(li);
   });
+}
+
+function renderHostAttemptsSnapshot(data) {
+  if (hostAttemptsSummaryEl) {
+    const count = Array.isArray(data?.students) ? data.students.length : 0;
+    const quizTitle = String(data?.quiz?.title || '').trim() || '(untitled quiz)';
+    hostAttemptsSummaryEl.textContent = `Quiz: ${quizTitle} · Students: ${count}`;
+  }
+
+  if (!hostAttemptsListEl) return;
+  hostAttemptsListEl.innerHTML = '';
+
+  const students = Array.isArray(data?.students) ? data.students : [];
+  if (!students.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No student attempt data yet.';
+    hostAttemptsListEl.appendChild(li);
+    return;
+  }
+
+  students.forEach((s) => {
+    const li = document.createElement('li');
+    const name = String(s.username || s.displayName || 'Student').trim();
+    const className = String(s.className || '').trim();
+    const classSuffix = className ? ` (${className})` : '';
+
+    const top = document.createElement('div');
+    top.innerHTML = `<strong>${escapeHtml(name)}${escapeHtml(classSuffix)}</strong> · ${Number(s.scoreCurrent || 0)} pts`;
+
+    const detail = document.createElement('div');
+    detail.className = 'small muted';
+    const answered = Number(s.answeredCount || 0);
+    const graded = Number(s.autoGradedCount || 0) + Number(s.teacherGradedCount || 0);
+    const pending = Number(s.pendingTeacherGradeCount || 0);
+    const accuracy = Number.isFinite(Number(s.accuracy)) ? `${Number(s.accuracy)}%` : '—';
+    detail.textContent = `Answered: ${answered} · Graded: ${graded} · Pending: ${pending} · Accuracy: ${accuracy}`;
+
+    li.append(top, detail);
+    hostAttemptsListEl.appendChild(li);
+  });
+}
+
+async function fetchHostAttempts({ force = false } = {}) {
+  if (!live.host.pin || !live.host.token) return;
+  if (live.host.attemptsLoading) return;
+
+  const now = Date.now();
+  if (!force && live.host.attemptsFetchedAt && now - live.host.attemptsFetchedAt < 6000) return;
+
+  live.host.attemptsLoading = true;
+  if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.disabled = true;
+
+  try {
+    const data = await api(`/api/host/attempts?pin=${encodeURIComponent(live.host.pin)}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+    });
+
+    live.host.attemptsCache = data;
+    live.host.attemptsFetchedAt = Date.now();
+    renderHostAttemptsSnapshot(data);
+  } catch (err) {
+    if (hostAttemptsSummaryEl) hostAttemptsSummaryEl.textContent = `Attempt snapshot error: ${err.message}`;
+  } finally {
+    live.host.attemptsLoading = false;
+    if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.disabled = false;
+  }
 }
 
 function scheduleHostAdaptiveFit() {
@@ -3670,6 +3749,7 @@ function stopHostPolling() {
   live.host.pollTimer = null;
   live.host.state = null;
   live.host.timerStartedAtMs = null;
+  live.host.attemptsLoading = false;
   stopHostTimerTicker();
 }
 async function joinLiveGame() {
