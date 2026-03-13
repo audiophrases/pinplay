@@ -1863,6 +1863,39 @@ async function copyTextSmart(text) {
   }
 }
 
+async function quickGradeAssignmentAttempt(code, attemptId) {
+  try {
+    if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+    const qIndexRaw = prompt('Question index to grade (0-based):', '0');
+    if (qIndexRaw == null) return;
+    const pointsRaw = prompt('Points to award:', '1000');
+    if (pointsRaw == null) return;
+    const correction = prompt('Optional correction/feedback:', '') ?? '';
+
+    const qIndex = Number(qIndexRaw);
+    const points = Number(pointsRaw);
+    if (!Number.isFinite(qIndex) || !Number.isFinite(points)) throw new Error('Invalid qIndex or points.');
+
+    await api('/api/assignments/grade', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        code,
+        attemptId,
+        qIndex,
+        points,
+        correction,
+      },
+    });
+
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded ${attemptId} Q${qIndex} with ${Math.round(points)} pts.`;
+    await fetchAssignmentResults(code);
+  } catch (err) {
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+  }
+}
+
 async function fetchAssignmentResults(code) {
   try {
     const safeCode = String(code || '').trim().toUpperCase();
@@ -1896,8 +1929,9 @@ async function fetchAssignmentResults(code) {
 
     attempts.forEach((a) => {
       const li = document.createElement('li');
+      const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
       const top = document.createElement('div');
-      top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong> · ${Number(a?.metrics?.autoScore || 0)} pts`;
+      top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong> · ${totalScore} pts`;
 
       const meta = document.createElement('div');
       meta.className = 'small muted';
@@ -1907,7 +1941,15 @@ async function fetchAssignmentResults(code) {
       const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
       meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
 
-      li.append(top, meta);
+      const row = document.createElement('div');
+      row.className = 'row gap top-space';
+      const gradeBtn = document.createElement('button');
+      gradeBtn.className = 'btn';
+      gradeBtn.textContent = 'Quick grade';
+      gradeBtn.addEventListener('click', () => quickGradeAssignmentAttempt(safeCode, String(a?.id || '')));
+      row.appendChild(gradeBtn);
+
+      li.append(top, meta, row);
       assignmentResultsListEl.appendChild(li);
     });
   } catch (err) {

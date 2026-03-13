@@ -341,6 +341,37 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/grade' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const qIndex = Number(body?.qIndex);
+      const points = Number(body?.points);
+      const correction = String(body?.correction || '').slice(0, 400);
+
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+      if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+      if (!Number.isFinite(points)) return json({ error: 'points required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/grade', {
+        method: 'POST',
+        body: JSON.stringify({
+          code,
+          attemptId,
+          qIndex: Math.round(qIndex),
+          points,
+          correction,
+        }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -999,6 +1030,56 @@ export class QuizRoom {
         });
       }
 
+      if (url.pathname === '/assignments/grade' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        const qIndex = Math.round(Number(body?.qIndex));
+        const pointsRaw = Number(body?.points);
+        const correction = String(body?.correction || '').slice(0, 400);
+
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+        if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+        if (!Number.isFinite(pointsRaw)) return json({ error: 'points required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        const question = assignment.quiz?.questions?.[qIndex];
+        if (!question) return json({ error: 'Question not found.' }, 404);
+        if (!isAssignmentTeacherGradedQuestion(question)) {
+          return json({ error: 'Question is not teacher-graded.' }, 409);
+        }
+
+        const maxPoints = Math.max(0, Math.round(Number(question?.points || 1000)));
+        const pointsAwarded = Math.max(0, Math.min(maxPoints, Math.round(pointsRaw)));
+
+        attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+        attempt.answersByQ[String(qIndex)] = {
+          ...(attempt.answersByQ[String(qIndex)] || {}),
+          teacherGrade: {
+            graded: true,
+            pointsAwarded,
+            correction,
+            gradedAt: Date.now(),
+          },
+          updatedAt: Date.now(),
+        };
+
+        attempt.updatedAt = Date.now();
+        assignment.updatedAt = Date.now();
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
       if (url.pathname === '/assignments/state' && request.method === 'GET') {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
         const attemptId = sanitizeAssignmentAttemptId(url.searchParams.get('attemptId'));
@@ -1046,7 +1127,9 @@ export class QuizRoom {
         const safeAnswer = sanitizeAssignmentAnswer(question, body?.answer);
         attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
         attempt.answersByQ[String(qIndex)] = {
+          ...(attempt.answersByQ[String(qIndex)] || {}),
           answer: safeAnswer,
+          teacherGrade: isAssignmentTeacherGradedQuestion(question) ? null : (attempt.answersByQ[String(qIndex)]?.teacherGrade || null),
           updatedAt: now,
         };
 
@@ -2725,7 +2808,9 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   let correctCount = 0;
   let pendingTeacherGradeCount = 0;
   let autoGradedCount = 0;
+  let teacherGradedCount = 0;
   let autoScore = 0;
+  let teacherScore = 0;
 
   Object.entries(answersByQ).forEach(([idxRaw, item]) => {
     const qIndex = Number(idxRaw);
@@ -2734,7 +2819,15 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 
     answeredCount += 1;
     if (isAssignmentTeacherGradedQuestion(question)) {
-      pendingTeacherGradeCount += 1;
+      const grade = item?.teacherGrade;
+      if (grade?.graded) {
+        teacherGradedCount += 1;
+        const pts = Math.max(0, Math.round(Number(grade?.pointsAwarded || 0)));
+        teacherScore += pts;
+        if (pts > 0) correctCount += 1;
+      } else {
+        pendingTeacherGradeCount += 1;
+      }
       return;
     }
 
@@ -2751,14 +2844,18 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     }
   });
 
-  const accuracy = autoGradedCount > 0 ? round((correctCount / autoGradedCount) * 100, 1) : null;
+  const gradedCount = autoGradedCount + teacherGradedCount;
+  const accuracy = gradedCount > 0 ? round((correctCount / gradedCount) * 100, 1) : null;
 
   return {
     answeredCount,
     correctCount,
     pendingTeacherGradeCount,
     autoGradedCount,
+    teacherGradedCount,
     autoScore: Math.round(autoScore),
+    teacherScore: Math.round(teacherScore),
+    totalScore: Math.round(autoScore + teacherScore),
     accuracy,
     totalQuestions: Number(quizQuestions.length || 0),
   };
