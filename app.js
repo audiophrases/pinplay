@@ -71,6 +71,7 @@ const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
+const assignmentSelfCheckBtn = document.getElementById('assignmentSelfCheckBtn');
 const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
@@ -1720,6 +1721,7 @@ function bindLiveEvents() {
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
+  if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.addEventListener('click', runAssignmentSelfCheck);
   if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
     if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
       renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
@@ -1909,6 +1911,127 @@ async function setAssignmentActive(code, active) {
       active: !!active,
     },
   });
+}
+
+async function runAssignmentSelfCheck() {
+  const startedAt = Date.now();
+  const steps = [];
+  const mark = (name, ok, info = '') => {
+    steps.push(`${ok ? '✅' : '❌'} ${name}${info ? ` — ${info}` : ''}`);
+  };
+
+  try {
+    if (!createSessionPassword) {
+      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
+    if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.disabled = true;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = 'Running assignment self-check...';
+
+    const quiz = {
+      title: 'SelfCheck Quiz',
+      questions: [
+        {
+          id: 'selfcheck_q1',
+          type: 'mcq',
+          prompt: 'Self-check: select B',
+          answers: ['A', 'B', 'C'],
+          correctAnswer: 1,
+          points: 1000,
+          timeLimit: 0,
+          isPoll: false,
+        },
+      ],
+    };
+
+    const created = await api('/api/assignments/create', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        title: `SelfCheck ${new Date().toISOString()}`,
+        className: 'SELFTEST',
+        attemptsLimit: 2,
+        dueAt: null,
+        quiz,
+      },
+    });
+    const code = String(created?.assignment?.code || '').trim();
+    if (!code) throw new Error('Create returned no code.');
+    mark('Create assignment', true, code);
+
+    await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+    mark('Fetch assignment by code', true);
+
+    const started = await api('/api/assignment/start', {
+      method: 'POST',
+      body: {
+        code,
+        studentKey: 'selfcheck_student',
+        studentName: 'SelfCheck Student',
+      },
+    });
+    const attemptId = String(started?.attempt?.id || '').trim();
+    if (!attemptId) throw new Error('Start returned no attemptId.');
+    mark('Start attempt', true, attemptId);
+
+    await api('/api/assignment/answer', {
+      method: 'POST',
+      body: {
+        code,
+        attemptId,
+        qIndex: 0,
+        answer: 1,
+      },
+    });
+    mark('Save answer', true);
+
+    await api('/api/assignment/submit', {
+      method: 'POST',
+      body: { code, attemptId },
+    });
+    mark('Submit attempt', true);
+
+    const results = await api('/api/assignments/results', {
+      method: 'POST',
+      body: { password: createSessionPassword, code },
+    });
+    const hasAttempt = Array.isArray(results?.attempts) && results.attempts.some((a) => String(a?.id || '') === attemptId);
+    if (!hasAttempt) throw new Error('Attempt not found in teacher results.');
+    mark('Teacher results include attempt', true);
+
+    await api('/api/assignments/reopen-attempt', {
+      method: 'POST',
+      body: { password: createSessionPassword, code, attemptId },
+    });
+    mark('Reopen attempt', true);
+
+    await api('/api/assignments/toggle-active', {
+      method: 'POST',
+      body: { password: createSessionPassword, code, active: false },
+    });
+    mark('Close assignment', true);
+
+    await api('/api/assignments/toggle-active', {
+      method: 'POST',
+      body: { password: createSessionPassword, code, active: true },
+    });
+    mark('Reopen assignment', true);
+
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    if (assignmentStatusEl) {
+      assignmentStatusEl.textContent = `Self-check passed in ${elapsed}s\n${steps.join('\n')}`;
+    }
+
+    await refreshAssignmentsList();
+  } catch (err) {
+    mark('Self-check failed', false, String(err?.message || err));
+    if (assignmentStatusEl) assignmentStatusEl.textContent = steps.join('\n');
+  } finally {
+    if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.disabled = false;
+  }
 }
 
 async function fetchAssignmentAttemptDetail(code, attemptId) {
