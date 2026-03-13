@@ -16,6 +16,10 @@ const RANDOM_NAME_ADJECTIVES = [
   'Sassy','Funny','Goofy','Chaotic','Dramatic','Mysterious','Reckless','Stubborn','Messy','Tiny','Tall','Short','Strong','Slim','Flashy','Stylish',
   'Grumpy','Angry','Irritable','Bitter','Jealous','Envious','Gloomy','Pessimistic','Cynical','Sarcastic','Bossy','Rude','Mean','Cruel','Harsh','Cold',
   'Arrogant','Egotistic','Impulsive','Impatient','Anxious','Panicky','Paranoid','Suspicious','Defensive','Spiteful','Grudging','Guilty','Ashamed','Toxic','Troubled','Unstable',
+  'Annoyed','Cranky','Snappy','MoodyAF','Doubtful','Petty','Salty','Nasty','Hostile','Bored','Melancholic','Doomy','Skeptical','Snobbish','Whiny','Glum',
+  'Goofy','Clownish','MemeLord','BananaMode','Wacky','Nutty','Zany','Silly','Cheeky','Derpy','Giggly','Snorty','Jokey','Pranky','FunkyChicken','Disco',
+  'Tall','Short','Tiny','Giant','Strong','Slim','Chubby','Skinny','Muscular','Lean','Wide','Narrow','BroadShouldered','LongLegged','FastFooted','SlowPaced',
+  'Freckled','Pale','Tanned','Curly','StraightHaired','Braided','Bearded','Bald','SharpEyed','SleepyEyed','LoudVoiced','SoftSpoken','LeftHanded','RightHanded','Fit','Wobbly',
   'Vintage','Sporty','Urban','Casual','Formal','Funky','Quirky','Lucky','Unlucky','Balanced','Neutral','Zen','Hyper','Chill','Prime','Ultra'
 ];
 
