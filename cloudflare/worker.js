@@ -22,8 +22,12 @@ const RANDOM_NAME_ADJECTIVES = [
 const RANDOM_NAME_PEOPLE = [
   // Moroccan / Maghrebi
   'Amir','Yasmine','Karim','Nadia','Samir','Leila','Rachid','Salma','Amina','Youssef','Hakim','Imane','Zineb','Omar','Anas','Soufiane','Hamza','Khadija','Nabil','Meriem','Tarik','Ayoub','Ibtissam','Naima',
-  // Catalan / Iberian
+  // Catalan / Iberian (expanded, with many female + athlete/soccer names)
   'Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Joan','Martina','Arnau','Aina','Ona','Mariona','Biel','Jan','Pere','Aleix','Roser','Oriol','Mireia','Carles','Marti','Montserrat','Gemma','Neus','Adria','Xavi','Ferran','Gerard','Nil','Roc','Blai','Judit','Txell',
+  'Ariadna','Noelia','Naiara','Clara','Nora','Helena','Ivet','Bruna','Queralt','Celia','Mar','Carlota','Paula','Irene','Anna','Joana','Marta','Nerea','Laura','Alba',
+  'AinaClotet','PaulaBadosa','AlexiaPutellas','AitanaBonmati','MapiLeon','PatriGuijarro','ClaudiaPina','MarionaCaldentey','VickyLopez','SandraPaños','LaiaCodina','OnaBatlle','IreneParedes','JenniHermoso','SalmaParalluelo','MartaTorrejon','LeilaOuahabi','AriSánchez','GemmaTriay','MireiaBelmonte',
+  'PauGasol','MarcGasol','RickyRubio','AlexAbrines','RaulEntrerrios','AlexCorretja','CarlosAlcaraz','Garbiñe','RafaNadal','JorgeMartin',
+  'Puyol','Busquets','Alba','Pique','Valdes','XaviHernandez','Iniesta','Pedro','CescFabregas','SergiRoberto','ThiagoAlcantara','Bojan','Muniesa','Bartra','Deulofeu','JoanGarcia','DaniOlmo','AleixGarcia','EricGarcia','Cubarsi',
   // Italian names
   'Luca','Giulia','Francesca','Marco','Alessandro','Giovanni','Matteo','Chiara','Elisa','Sofia','Giorgia','Riccardo','Davide','Federico','Paolo','Marta','Gabriele','Simone','Alessia','Franco',
   // FC Barcelona current/previous + football-inspired
