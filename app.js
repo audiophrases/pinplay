@@ -38,6 +38,10 @@ const openDriveBtn = document.getElementById('openDriveBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
+const builderSectionToggleEl = document.getElementById('builderSectionToggle');
+const builderCardBodyEl = document.getElementById('builderCardBody');
+const assignmentSectionToggleEl = document.getElementById('assignmentSectionToggle');
+const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 
 // Create-side auth
 const createAuthCard = document.getElementById('createAuthCard');
@@ -254,6 +258,7 @@ function init() {
   bindTabs();
   bindBuilderEvents();
   bindLiveEvents();
+  bindCollapsibleSections();
   bindSoloEvents();
   window.addEventListener('resize', scheduleHostAdaptiveFit);
 
@@ -358,6 +363,47 @@ function bindTabs() {
       document.getElementById(tab.dataset.tab).classList.add('active');
     });
   });
+}
+
+function bindCollapsibleSections() {
+  bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+}
+
+function bindSectionToggle(triggerEl, bodyEl, options = {}) {
+  if (!triggerEl || !bodyEl) return;
+
+  const defaultCollapsed = !!options.defaultCollapsed;
+  const supportsKeyboard = !!options.keyboard;
+
+  const toggle = () => {
+    const collapsed = bodyEl.classList.contains('hidden');
+    setSectionCollapsed(triggerEl, bodyEl, !collapsed);
+  };
+
+  triggerEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    toggle();
+  });
+
+  if (supportsKeyboard) {
+    triggerEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      toggle();
+    });
+  }
+
+  setSectionCollapsed(triggerEl, bodyEl, defaultCollapsed);
+}
+
+function setSectionCollapsed(triggerEl, bodyEl, collapsed) {
+  bodyEl.classList.toggle('hidden', !!collapsed);
+  triggerEl.classList.toggle('collapsed', !!collapsed);
+  triggerEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+
+  const chevron = triggerEl.querySelector('.collapse-chevron');
+  if (chevron) chevron.textContent = collapsed ? '▸' : '▾';
 }
 
 // ---------- Builder ----------

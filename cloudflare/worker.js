@@ -1440,21 +1440,42 @@ export class QuizRoom {
           try {
             const verifyHeaders = { 'Content-Type': 'application/json' };
             if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
-            const vRes = await fetch(verifyUrl, {
-              method: 'POST',
-              headers: verifyHeaders,
-              body: JSON.stringify({ username: name, password, pin: room.pin, secret: verifySecret }),
-            });
-            if (!vRes.ok) return json({ error: 'Invalid username or password.' }, 401);
-            const vTxt = await vRes.text();
-            let vData = {};
-            try { vData = vTxt ? JSON.parse(vTxt) : {}; } catch {}
-            if (vData && vData.ok === false) return json({ error: 'Invalid username or password.' }, 401);
-            verifiedIdentity = await normalizeStudentIdentity(vData, name);
+
+            const verifyNames = [name];
+            const lowerName = sanitizeName(name).toLowerCase();
+            if (lowerName && !verifyNames.includes(lowerName)) {
+              verifyNames.push(lowerName);
+            }
+
+            let vData = null;
+            let verifiedWithName = name;
+            let verified = false;
+
+            for (const candidateName of verifyNames) {
+              const vRes = await fetch(verifyUrl, {
+                method: 'POST',
+                headers: verifyHeaders,
+                body: JSON.stringify({ username: candidateName, password, pin: room.pin, secret: verifySecret }),
+              });
+              const vTxt = await vRes.text();
+              let parsed = {};
+              try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+
+              if (!vRes.ok) continue;
+              if (parsed && parsed.ok === false) continue;
+
+              vData = parsed;
+              verifiedWithName = candidateName;
+              verified = true;
+              break;
+            }
+
+            if (!verified) return json({ error: 'Invalid username or password.' }, 401);
+
+            verifiedIdentity = await normalizeStudentIdentity(vData || {}, verifiedWithName);
             const preferredDisplay = sanitizeName(
               verifiedIdentity?.displayName
-              || vData?.displayName
-              || vData?.display_name
+              || (vData && (vData.displayName || vData.display_name))
               || name,
             ) || name;
             name = preferredDisplay;

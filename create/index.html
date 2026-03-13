@@ -27,7 +27,10 @@
 
         <div id="createWorkspace" class="hidden">
           <div class="card" id="builderCard">
-            <h2>Quiz builder</h2>
+            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              Quiz builder <span class="collapse-chevron" aria-hidden="true">▾</span>
+            </h2>
+            <div id="builderCardBody">
             <div class="row gap top-space quiz-actions" id="builderActionRow">
               <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
               <button id="openLocalBtn" class="btn">Open</button>
@@ -91,6 +94,7 @@
             </div>
 
             <div id="questionList" class="question-list"></div>
+            </div>
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
@@ -127,33 +131,41 @@
               <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" />
               <button id="hostJoinBtn" class="btn">Join as host</button>
             </div>
-            <div class="row gap top-space" id="assignmentActionRow">
-              <input id="assignmentClass" type="text" placeholder="Class (optional)" style="max-width:150px;" />
-              <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" />
-              <input id="assignmentAttempts" type="number" min="1" max="10" value="1" style="width:80px;" />
-              <button id="createAssignmentBtn" class="btn">Create assignment</button>
-            </div>
-            <p id="assignmentStatus" class="small muted"></p>
-            <div class="top-space">
-              <div class="row spread gap">
-                <strong>Assignments</strong>
-                <div class="row gap">
-                  <button id="assignmentSelfCheckBtn" class="btn">Run self-check</button>
-                  <button id="refreshAssignmentsBtn" class="btn">Refresh assignments</button>
+            <div class="top-space assignment-section" id="assignmentSection">
+              <button id="assignmentSectionToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span>Assignments</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="assignmentSectionBody" class="section-collapsible-body hidden">
+                <div class="row gap top-space" id="assignmentActionRow">
+                  <input id="assignmentClass" type="text" placeholder="Class (optional)" style="max-width:150px;" />
+                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" />
+                  <input id="assignmentAttempts" type="number" min="1" max="10" value="1" style="width:80px;" />
+                  <button id="createAssignmentBtn" class="btn">Create assignment</button>
+                </div>
+                <p id="assignmentStatus" class="small muted"></p>
+                <div class="top-space">
+                  <div class="row spread gap">
+                    <strong>Assignments list</strong>
+                    <div class="row gap">
+                      <button id="assignmentSelfCheckBtn" class="btn">Run self-check</button>
+                      <button id="refreshAssignmentsBtn" class="btn">Refresh assignments</button>
+                    </div>
+                  </div>
+                  <ul id="assignmentList" class="list"></ul>
+                  <div class="row gap top-space">
+                    <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
+                    <select id="assignmentResultsFilter" style="max-width:180px;">
+                      <option value="all">All attempts</option>
+                      <option value="pending">Pending grading</option>
+                      <option value="submitted">Submitted only</option>
+                    </select>
+                  </div>
+                  <ul id="assignmentResultsList" class="list"></ul>
+                  <p id="assignmentGradingSummary" class="small muted top-space">Open an attempt to grade teacher-graded answers.</p>
+                  <ul id="assignmentGradingList" class="list"></ul>
                 </div>
               </div>
-              <ul id="assignmentList" class="list"></ul>
-              <div class="row gap top-space">
-                <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
-                <select id="assignmentResultsFilter" style="max-width:180px;">
-                  <option value="all">All attempts</option>
-                  <option value="pending">Pending grading</option>
-                  <option value="submitted">Submitted only</option>
-                </select>
-              </div>
-              <ul id="assignmentResultsList" class="list"></ul>
-              <p id="assignmentGradingSummary" class="small muted top-space">Open an attempt to grade teacher-graded answers.</p>
-              <ul id="assignmentGradingList" class="list"></ul>
             </div>
 
             <div class="hall top-space" id="hallCard">
