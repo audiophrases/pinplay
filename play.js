@@ -139,22 +139,13 @@ function initAssignmentFromUrl() {
   if (joinPinEl) joinPinEl.value = code;
   if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
   if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+
+  // Assignment links should behave like a direct entry point:
+  // open the assignment immediately and reveal the correct identity mode
+  // instead of leaving the generic PIN/login screen visible.
   setTimeout(() => {
     validatePin().catch(() => {});
   }, 0);
-}
-
-function applyJoinIdentityMode({ randomNames = false, modeText = '', buttonText = 'Join live game' } = {}) {
-  live.player.randomNamesMode = !!randomNames;
-
-  if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
-  if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
-
-  if (joinNameWrapEl) joinNameWrapEl.classList.toggle('hidden', !!randomNames);
-  if (joinPasswordWrapEl) joinPasswordWrapEl.classList.toggle('hidden', !!randomNames);
-  if (joinSignupHintEl) joinSignupHintEl.classList.toggle('hidden', !!randomNames);
-  if (joinModeHintEl) joinModeHintEl.textContent = String(modeText || '');
-  if (joinBtn) joinBtn.textContent = buttonText;
 }
 
 async function validatePin() {
@@ -170,14 +161,31 @@ async function validatePin() {
       live.player.assignment.code = code;
 
       const a = info?.assignment || {};
-      const dueAt = Number(a?.dueAt || 0);
-      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-      const label = `Assignment: ${a?.title || code}${dueText} · ${a?.randomNames ? 'Random names mode' : 'Login required'}`;
-      applyJoinIdentityMode({
-        randomNames: !!a?.randomNames,
-        modeText: label,
-        buttonText: 'Start assignment',
-      });
+      live.player.randomNamesMode = !!a?.randomNames;
+
+      if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+      if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+
+      if (live.player.randomNamesMode) {
+        if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+        if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
+        if (joinModeHintEl) {
+          const dueAt = Number(a?.dueAt || 0);
+          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
+        }
+      } else {
+        if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
+        if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
+        if (joinModeHintEl) {
+          const dueAt = Number(a?.dueAt || 0);
+          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
+        }
+      }
+      if (joinBtn) joinBtn.textContent = 'Start assignment';
       setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
       return;
     }
@@ -190,18 +198,31 @@ async function validatePin() {
 
     live.player.mode = 'live';
     live.player.pin = pin;
+    live.player.randomNamesMode = !!data?.settings?.randomNames;
 
-    applyJoinIdentityMode({
-      randomNames: !!data?.settings?.randomNames,
-      modeText: data?.settings?.randomNames
-        ? 'Random names mode: your nickname is assigned automatically.'
-        : 'Login required mode: enter valid username and password.',
-      buttonText: data.alreadyJoined ? 'Rejoin game' : 'Join live game',
-    });
+    if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+    if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
 
-    if (!live.player.randomNamesMode && data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
-      joinNameEl.value = data.joinedPlayer.name;
+    if (live.player.randomNamesMode) {
+      if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
+      if (joinModeHintEl) {
+        joinModeHintEl.textContent = 'Random names mode: your nickname is assigned automatically.';
+      }
+    } else {
+      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
+      if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
+      if (joinModeHintEl) {
+        joinModeHintEl.textContent = 'Login required mode: enter valid username and password.';
+      }
+      if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
+        joinNameEl.value = data.joinedPlayer.name;
+      }
     }
+
+    if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
     if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
     setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
   } catch (err) {
@@ -212,9 +233,9 @@ async function validatePin() {
 async function joinLiveGame() {
   try {
     if (live.player.mode === 'assignment') {
-      if (!live.player.assignment.code || (joinStepPinEl && !joinStepPinEl.classList.contains('hidden'))) {
+      if (!live.player.assignment.code) {
         await validatePin();
-        if (!live.player.assignment.code || (joinStepPinEl && !joinStepPinEl.classList.contains('hidden'))) return;
+        if (!live.player.assignment.code) return;
       }
       return startAssignmentAttempt();
     }
