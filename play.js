@@ -412,11 +412,11 @@ async function startAssignmentAttempt() {
 
   const data = await api('/api/assignment/start', {
     method: 'POST',
-    headers: live.player.randomNamesMode ? {} : { 'X-Student-Password': password },
     body: {
       code,
       studentKey,
       studentName: username,
+      password,
     },
   });
 
