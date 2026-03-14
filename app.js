@@ -2526,7 +2526,27 @@ async function refreshAssignmentsList() {
         }
       });
 
-      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn, toggleBtn);
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete assignment ${code}? This cannot be undone.`)) return;
+        try {
+          deleteBtn.disabled = true;
+          await api('/api/assignments/delete', {
+            method: 'POST',
+            body: { password: createSessionPassword, code },
+          });
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
+          await refreshAssignmentsList();
+        } catch (err) {
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete error: ${err.message}`;
+        } finally {
+          deleteBtn.disabled = false;
+        }
+      });
+
+      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn, toggleBtn, deleteBtn);
       li.append(title, meta, row);
       assignmentListEl.appendChild(li);
     });

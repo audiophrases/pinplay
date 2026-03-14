@@ -508,6 +508,23 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/delete' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/delete', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -1418,6 +1435,25 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
+      }
+
+      if (url.pathname === '/assignments/delete' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const room = await this.#getRoom();
+        const hostToken = readBearer(request);
+        if (!room || hostToken !== room.hostToken) return json({ error: 'Unauthorized.' }, 401);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        delete assignments[code];
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, deleted: code });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {
