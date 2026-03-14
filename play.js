@@ -34,9 +34,6 @@ const joinFeedbackEl = document.getElementById('joinFeedback');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
-let activeQuestionAudioEl = null;
-const edgeTtsBlobUrlCache = new Map();
-
 const live = {
   player: {
     pin: null,
@@ -59,7 +56,6 @@ const live = {
     timerAnchorAt: null,
     timerInitialRemainingMs: null,
     adaptiveFitRaf: null,
-    audioSpeed: 0.95,
     mode: 'live',
     assignment: {
       code: null,
@@ -68,8 +64,6 @@ const live = {
       currentIndex: 0,
       pollingTimer: null,
       forceAutoAdvance: false,
-      info: null,
-      infoLoadedFor: null,
     },
   },
 };
@@ -145,50 +139,22 @@ function initAssignmentFromUrl() {
   if (joinPinEl) joinPinEl.value = code;
   if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
   if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
-
-  loadAssignmentInfo(code).catch((err) => {
-    setStatus(joinStatusEl, String(err?.message || 'Could not open assignment.'), 'bad');
-  });
+  setTimeout(() => {
+    validatePin().catch(() => {});
+  }, 0);
 }
 
-async function loadAssignmentInfo(rawCode) {
-  const code = String(rawCode || joinPinEl?.value || live.player.assignment.code || '').trim().toUpperCase();
-  if (!code) throw new Error('Enter PIN or assignment code.');
-
-  const info = await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
-  live.player.mode = 'assignment';
-  live.player.assignment.code = code;
-  live.player.assignment.info = info?.assignment || null;
-  live.player.assignment.infoLoadedFor = code;
-
-  const a = info?.assignment || {};
-  live.player.randomNamesMode = !!a?.randomNames;
+function applyJoinIdentityMode({ randomNames = false, modeText = '', buttonText = 'Join live game' } = {}) {
+  live.player.randomNamesMode = !!randomNames;
 
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
 
-  if (live.player.randomNamesMode) {
-    if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
-    if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-    if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
-    if (joinModeHintEl) {
-      const dueAt = Number(a?.dueAt || 0);
-      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-      joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
-    }
-  } else {
-    if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-    if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
-    if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
-    if (joinModeHintEl) {
-      const dueAt = Number(a?.dueAt || 0);
-      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-      joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
-    }
-  }
-  if (joinBtn) joinBtn.textContent = 'Start assignment';
-  setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
-  return info;
+  if (joinNameWrapEl) joinNameWrapEl.classList.toggle('hidden', !!randomNames);
+  if (joinPasswordWrapEl) joinPasswordWrapEl.classList.toggle('hidden', !!randomNames);
+  if (joinSignupHintEl) joinSignupHintEl.classList.toggle('hidden', !!randomNames);
+  if (joinModeHintEl) joinModeHintEl.textContent = String(modeText || '');
+  if (joinBtn) joinBtn.textContent = buttonText;
 }
 
 async function validatePin() {
@@ -196,7 +162,23 @@ async function validatePin() {
     const raw = String(joinPinEl?.value || '').trim();
 
     if (!/^\d{6}$/.test(raw)) {
-      await loadAssignmentInfo(raw || live.player.assignment.code || '');
+      const code = String(raw || live.player.assignment.code || '').trim().toUpperCase();
+      if (!code) throw new Error('Enter PIN or assignment code.');
+
+      const info = await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+      live.player.mode = 'assignment';
+      live.player.assignment.code = code;
+
+      const a = info?.assignment || {};
+      const dueAt = Number(a?.dueAt || 0);
+      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+      const label = `Assignment: ${a?.title || code}${dueText} · ${a?.randomNames ? 'Random names mode' : 'Login required'}`;
+      applyJoinIdentityMode({
+        randomNames: !!a?.randomNames,
+        modeText: label,
+        buttonText: 'Start assignment',
+      });
+      setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
       return;
     }
 
@@ -208,31 +190,18 @@ async function validatePin() {
 
     live.player.mode = 'live';
     live.player.pin = pin;
-    live.player.randomNamesMode = !!data?.settings?.randomNames;
 
-    if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
-    if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+    applyJoinIdentityMode({
+      randomNames: !!data?.settings?.randomNames,
+      modeText: data?.settings?.randomNames
+        ? 'Random names mode: your nickname is assigned automatically.'
+        : 'Login required mode: enter valid username and password.',
+      buttonText: data.alreadyJoined ? 'Rejoin game' : 'Join live game',
+    });
 
-    if (live.player.randomNamesMode) {
-      if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
-      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
-      if (joinModeHintEl) {
-        joinModeHintEl.textContent = 'Random names mode: your nickname is assigned automatically.';
-      }
-    } else {
-      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
-      if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
-      if (joinModeHintEl) {
-        joinModeHintEl.textContent = 'Login required mode: enter valid username and password.';
-      }
-      if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
-        joinNameEl.value = data.joinedPlayer.name;
-      }
+    if (!live.player.randomNamesMode && data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
+      joinNameEl.value = data.joinedPlayer.name;
     }
-
-    if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
     if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
     setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
   } catch (err) {
@@ -243,12 +212,9 @@ async function validatePin() {
 async function joinLiveGame() {
   try {
     if (live.player.mode === 'assignment') {
-      const code = String(live.player.assignment.code || joinPinEl?.value || '').trim().toUpperCase();
-      if (!code) {
+      if (!live.player.assignment.code || (joinStepPinEl && !joinStepPinEl.classList.contains('hidden'))) {
         await validatePin();
-        if (!live.player.assignment.code) return;
-      } else if (live.player.assignment.infoLoadedFor !== code) {
-        await loadAssignmentInfo(code);
+        if (!live.player.assignment.code || (joinStepPinEl && !joinStepPinEl.classList.contains('hidden'))) return;
       }
       return startAssignmentAttempt();
     }
@@ -596,8 +562,6 @@ function renderPlayerState(state) {
       || (live.player.mode === 'assignment' && !!live.player.randomNamesMode && !live.player.assignment.attemptId);
     if (rerollNameBtn) rerollNameBtn.classList.toggle('hidden', !canReroll);
 
-    stopQuestionAudioPlayback();
-
     if (state.phase === 'lobby') {
       setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
     } else if (state.phase === 'results') {
@@ -622,9 +586,6 @@ function renderPlayerState(state) {
     live.player.pinSelections = [];
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
-    if (live.player.mode === 'assignment' && !state.answeredCurrent) {
-      queueQuestionAudioAutoplay(state.question, { speed: live.player.audioSpeed || 0.95 });
-    }
     setStatus(joinFeedbackEl, '', '');
     animatePulse(joinQuestionWrap);
   }
@@ -634,7 +595,6 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     stopJoinTimer();
-    stopQuestionAudioPlayback();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: 0s';
   } else {
     startJoinTimer(state);
@@ -811,47 +771,11 @@ function applyJoinLayoutMode(active, question = null) {
 }
 
 function renderJoinQuestion(question) {
-  stopQuestionAudioPlayback();
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
-
-  if (hasQuestionAudio(question)) {
-    const audioRow = document.createElement('div');
-    audioRow.className = 'row gap top-space';
-
-    const audioBtn = document.createElement('button');
-    audioBtn.type = 'button';
-    audioBtn.className = 'btn';
-    audioBtn.textContent = '🔊 Play audio';
-
-    const speedSel = document.createElement('select');
-    speedSel.className = 'btn';
-    speedSel.title = 'TTS speed';
-    speedSel.style.width = 'auto';
-    speedSel.style.minWidth = '0';
-    speedSel.style.padding = '0 .45rem';
-    [['1.0','100%'],['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v, label]) => {
-      const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = label;
-      if (Math.abs(Number(v) - Number(live.player.audioSpeed || 0.95)) < 0.001) opt.selected = true;
-      speedSel.appendChild(opt);
-    });
-
-    speedSel.addEventListener('change', () => {
-      live.player.audioSpeed = Number(speedSel.value || 0.95);
-    });
-
-    audioBtn.addEventListener('click', () => {
-      playQuestionAudio(question, { speed: Number(speedSel.value || live.player.audioSpeed || 0.95) });
-    });
-
-    audioRow.append(audioBtn, speedSel);
-    joinAnswersEl.appendChild(audioRow);
-  }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
@@ -902,6 +826,14 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(hint);
     }
 
+    if (question.type === 'audio') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn top-space';
+      btn.textContent = '🔊 Play audio';
+      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
+      joinAnswersEl.appendChild(btn);
+    }
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -1909,114 +1841,14 @@ function normalizeBackendUrl(url) {
   }
 }
 
-function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
-}
-
-function hasQuestionAudio(question) {
-  if (!question) return false;
-  if (question.type === 'audio') return true;
-  if (!supportsQuestionAudio(question.type)) return false;
-  return !!question.audioEnabled;
-}
-
-function stopQuestionAudioPlayback() {
-  try {
-    if (activeQuestionAudioEl) {
-      activeQuestionAudioEl.pause();
-      activeQuestionAudioEl.currentTime = 0;
-      activeQuestionAudioEl = null;
-    }
-  } catch {}
-
-  try {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-  } catch {}
-}
-
-async function playQuestionAudio(question, opts = {}) {
-  if (!hasQuestionAudio(question)) return;
-
-  stopQuestionAudioPlayback();
-
-  const speed = Number(opts?.speed ?? live.player.audioSpeed ?? 0.95);
-  const safeSpeed = Number.isFinite(speed) ? Math.max(0.6, Math.min(1.4, speed)) : 0.95;
-  live.player.audioSpeed = safeSpeed;
-
-  const playAudioEl = (audioEl) => {
-    activeQuestionAudioEl = audioEl;
-    try {
-      audioEl.playbackRate = safeSpeed;
-    } catch {}
-    audioEl.addEventListener('ended', () => {
-      if (activeQuestionAudioEl === audioEl) activeQuestionAudioEl = null;
-    }, { once: true });
-    audioEl.play().catch(() => {});
-  };
-
-  if (question.audioMode === 'file' && question.audioData) {
-    try {
-      const a = new Audio(question.audioData);
-      playAudioEl(a);
-    } catch {}
-    return;
-  }
-
-  const value = String(question.audioText || question.prompt || '').trim();
-  if (!value) return;
-
-  try {
-    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
-    if (!base) throw new Error('Backend URL is not configured.');
-
-    const voice = String(question.language || 'en-US-AriaNeural').trim() || 'en-US-AriaNeural';
-    const ratePct = `${safeSpeed >= 1 ? '+' : ''}${Math.round((safeSpeed - 1) * 100)}%`;
-    const cacheKey = `${voice}::${value}::${ratePct}`;
-
-    let audioUrl = edgeTtsBlobUrlCache.get(cacheKey);
-    if (!audioUrl) {
-      const res = await fetch(`${base}/api/tts/edge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: value, voice, rate: ratePct }),
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Edge TTS failed (${res.status}).`);
-      }
-      const blob = await res.blob();
-      audioUrl = URL.createObjectURL(blob);
-      edgeTtsBlobUrlCache.set(cacheKey, audioUrl);
-    }
-
-    const a = new Audio(audioUrl);
-    playAudioEl(a);
-  } catch (err) {
-    const fallbackLang = String(question.language || 'en-US').split('-').slice(0, 2).join('-') || 'en-US';
-    speakText(value, fallbackLang, safeSpeed);
-    const msg = String(err?.message || '').trim();
-    if (msg) console.warn('[PinPlay][audio] Falling back to browser speech synthesis:', msg);
-  }
-}
-
-function queueQuestionAudioAutoplay(question, opts = {}) {
-  if (!hasQuestionAudio(question)) return;
-  window.setTimeout(() => {
-    playQuestionAudio(question, opts).catch?.(() => {});
-  }, Number(opts?.delayMs || 160));
-}
-
-function speakText(text, lang = 'en-US', rate = 1) {
+function speakText(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = lang || 'en-US';
-    utterance.rate = Number.isFinite(rate) ? Math.max(0.6, Math.min(1.4, rate)) : 1;
+    utterance.lang = lang || 'en-US-Wave';
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech errors silently
