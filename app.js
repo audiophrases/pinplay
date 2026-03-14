@@ -1390,6 +1390,10 @@ function buildAudioSettingsMarkup(idx, q) {
   const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
   const voice = normalizeTtsVoice(q.language, ttsLanguage);
   const showOtherSearch = ttsLanguage === 'OTHER';
+  const ttsLanguageOptions = EDGE_TTS_LANGUAGE_OPTIONS
+    .filter((x) => x.value !== 'READ')
+    .map((x) => `<option value="${x.value}" ${ttsLanguage === x.value ? 'selected' : ''}>${x.label}</option>`)
+    .join('');
 
   const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : Object.values(EDGE_TTS_LANGUAGE_DEFAULTS).slice(0, 3);
   const voiceOptions = [...new Set(voiceSource)]
@@ -1416,6 +1420,8 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <label>TTS text language</label>
+      <select data-q="${idx}" data-field="ttsLanguageQuestion">${ttsLanguageOptions}</select>
       ${showOtherSearch ? `<label class="top-space">Find Edge voice (language · country · person · code)</label>
       <input data-q="${idx}" data-field="voiceSearch" list="edgeVoiceIndex" value="${escapeHtml(voice)}" placeholder="Type language/country/person/code" />
       <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
@@ -1480,18 +1486,19 @@ function syncQuizFromUI() {
       const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
       const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
+      const ttsLanguageQuestionEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="ttsLanguageQuestion"]`);
       const voiceSearchEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="voiceSearch"]`);
 
       const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
       q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
 
-      // Quiz-level language is the source of truth for automatic quiz-wide TTS flow.
-      q.ttsLanguage = quizTtsLanguage;
+      const textLang = normalizeTtsLanguage(ttsLanguageQuestionEl?.value || q.ttsLanguage || quizTtsLanguage);
+      q.ttsLanguage = textLang;
       const pickedVoice = String(languageEl?.value || '').slice(0, 64);
-      let resolvedVoice = normalizeTtsVoice(pickedVoice, quizTtsLanguage);
+      let resolvedVoice = normalizeTtsVoice(pickedVoice, textLang);
 
-      if (quizTtsLanguage === 'OTHER' && voiceSearchEl) {
+      if (textLang === 'OTHER' && voiceSearchEl) {
         const rawSearch = String(voiceSearchEl.value || '').trim();
         if (rawSearch) {
           const rawLower = rawSearch.toLowerCase();
@@ -6586,13 +6593,17 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     }
 
+    const overrideText = String(q.audioText || '').trim();
+
     if (supportsQuestionAudio(q.type)) {
-      q.ttsLanguage = quizLanguage;
-      q.language = getVoiceForTtsLanguage(quizLanguage);
+      const langForQuestion = overrideText
+        ? normalizeTtsLanguage(q.ttsLanguage || quizLanguage)
+        : quizLanguage;
+      q.ttsLanguage = langForQuestion;
+      q.language = normalizeTtsVoice(q.language, langForQuestion);
     }
 
     const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
-    const overrideText = String(q.audioText || '').trim();
     const promptText = String(q.prompt || '').trim();
     const ttsText = (overrideText || promptText).slice(0, 1200);
     const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
