@@ -3,7 +3,7 @@ const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token,X-Student-Password',
 };
 
 const RANDOM_NAME_ADJECTIVES = [
@@ -543,7 +543,7 @@ export default {
       const code = sanitizeAssignmentCode(body?.code);
       const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
       const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
-      const password = String(request.headers.get('X-Student-Password') || '').trim();
+      const password = String(body?.password || request.headers.get('X-Student-Password') || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
