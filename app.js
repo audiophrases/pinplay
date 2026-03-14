@@ -2564,6 +2564,11 @@ async function createAssignmentFromCurrentQuiz() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
+    // Snapshot the current shared login/random-names toggle immediately on click.
+    // The same control is also synced by live polling, so we should not re-read it
+    // after async work and accidentally create the assignment with the wrong mode.
+    const randomNamesEnabled = isRandomNamesEnabled();
+
     await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true });
 
     if (!createSessionPassword) {
@@ -2591,7 +2596,7 @@ async function createAssignmentFromCurrentQuiz() {
         className,
         attemptsLimit,
         dueAt,
-        randomNames: !randomNamesToggleEl?.classList.contains('active'),
+        randomNames: randomNamesEnabled,
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -2599,7 +2604,8 @@ async function createAssignmentFromCurrentQuiz() {
     const code = String(data?.assignment?.code || '').trim();
     const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
     const link = `${base}?assignment=${encodeURIComponent(code)}`;
-    const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''}`;
+    const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
+    const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}`;
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = `${msg} · Link: ${link}`;
     setStatus(hostStatusEl, msg, 'ok');
