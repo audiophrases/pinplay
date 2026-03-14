@@ -381,7 +381,7 @@ export default {
 
       const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Assignment';
       const className = sanitizeClassName(body?.className);
-      const attemptsLimit = clamp(Math.round(Number(body?.attemptsLimit || 1)), 1, 10);
+      const attemptsLimit = clamp(Math.round(Number(body?.attemptsLimit ?? 1)), 0, 10);
       const dueAtRaw = Number(body?.dueAt || 0);
       const dueAt = Number.isFinite(dueAtRaw) && dueAtRaw > 0 ? Math.round(dueAtRaw) : null;
 
@@ -1090,7 +1090,7 @@ export class QuizRoom {
           updatedAt: now,
           title: String(body?.title || quiz.title || 'Assignment').trim().slice(0, 120) || 'Assignment',
           className: sanitizeClassName(body?.className),
-          attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit || 1)), 1, 10),
+          attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit ?? 1)), 0, 10),
           dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
           active: true,
           quiz,
@@ -1154,8 +1154,8 @@ export class QuizRoom {
         }
 
         const startedCount = attempts.filter((a) => String(a?.studentKey || '') === studentKey).length;
-        const limit = clamp(Math.round(Number(assignment.attemptsLimit || 1)), 1, 10);
-        if (startedCount >= limit) {
+        const limit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
+        if (limit > 0 && startedCount >= limit) {
           return json({ error: 'Attempts limit reached for this assignment.' }, 409);
         }
 
@@ -3294,7 +3294,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     updatedAt: Number(assignment.updatedAt || 0) || null,
     title: String(assignment.title || '').slice(0, 120),
     className: sanitizeClassName(assignment.className || ''),
-    attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit || 1)), 1, 10),
+    attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10),
     dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
     active: !!assignment.active,
     quizTitle: String(assignment.quiz?.title || ''),
@@ -3736,4 +3736,5 @@ function json(data, status = 200) {
     },
   });
 }
+
 
