@@ -3,7 +3,7 @@ const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token,X-Student-Password',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
 };
 
 const RANDOM_NAME_ADJECTIVES = [
@@ -387,7 +387,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, quiz }),
       }));
     }
 
@@ -548,24 +548,12 @@ export default {
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-
-      // Check assignment login mode and verify password only when the assignment requires it.
-      let assignment = null;
-      try {
-        const infoRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
-          method: 'GET',
-        });
-        const infoTxt = await infoRes.text();
-        let info = {};
-        try { info = infoTxt ? JSON.parse(infoTxt) : {}; } catch {}
-        if (!infoRes.ok) {
-          return withCors(json({ error: info?.error || 'Assignment not found.' }, infoRes.status || 404));
-        }
-        assignment = info?.assignment || null;
-      } catch {
-        return withCors(json({ error: 'Could not load assignment.' }, 502));
-      }
-
+      const assignmentRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      });
+      if (!assignmentRes.ok) return withCors(assignmentRes);
+      const assignmentData = await assignmentRes.json();
+      const assignment = assignmentData?.assignment || null;
       if (!assignment) return withCors(json({ error: 'Assignment not found.' }, 404));
 
       if (assignment.randomNames === false) {
