@@ -1442,10 +1442,6 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const room = await this.#getRoom();
-        const hostToken = readBearer(request);
-        if (!room || hostToken !== room.hostToken) return json({ error: 'Unauthorized.' }, 401);
-
         const assignments = await loadAssignmentsMap(this.state.storage);
         const assignment = assignments?.[code] || null;
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
