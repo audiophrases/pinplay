@@ -68,6 +68,8 @@ const live = {
       currentIndex: 0,
       pollingTimer: null,
       forceAutoAdvance: false,
+      info: null,
+      infoLoadedFor: null,
     },
   },
 };
@@ -143,6 +145,50 @@ function initAssignmentFromUrl() {
   if (joinPinEl) joinPinEl.value = code;
   if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
   if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+
+  loadAssignmentInfo(code).catch((err) => {
+    setStatus(joinStatusEl, String(err?.message || 'Could not open assignment.'), 'bad');
+  });
+}
+
+async function loadAssignmentInfo(rawCode) {
+  const code = String(rawCode || joinPinEl?.value || live.player.assignment.code || '').trim().toUpperCase();
+  if (!code) throw new Error('Enter PIN or assignment code.');
+
+  const info = await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+  live.player.mode = 'assignment';
+  live.player.assignment.code = code;
+  live.player.assignment.info = info?.assignment || null;
+  live.player.assignment.infoLoadedFor = code;
+
+  const a = info?.assignment || {};
+  live.player.randomNamesMode = !!a?.randomNames;
+
+  if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+  if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+
+  if (live.player.randomNamesMode) {
+    if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+    if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+    if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
+    if (joinModeHintEl) {
+      const dueAt = Number(a?.dueAt || 0);
+      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+      joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
+    }
+  } else {
+    if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+    if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
+    if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
+    if (joinModeHintEl) {
+      const dueAt = Number(a?.dueAt || 0);
+      const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+      joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
+    }
+  }
+  if (joinBtn) joinBtn.textContent = 'Start assignment';
+  setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
+  return info;
 }
 
 async function validatePin() {
@@ -150,40 +196,7 @@ async function validatePin() {
     const raw = String(joinPinEl?.value || '').trim();
 
     if (!/^\d{6}$/.test(raw)) {
-      const code = String(raw || live.player.assignment.code || '').trim().toUpperCase();
-      if (!code) throw new Error('Enter PIN or assignment code.');
-
-      const info = await api(`/api/assignment/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
-      live.player.mode = 'assignment';
-      live.player.assignment.code = code;
-
-      const a = info?.assignment || {};
-      live.player.randomNamesMode = !!a?.randomNames;
-
-      if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
-      if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
-
-      if (live.player.randomNamesMode) {
-        if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
-        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-        if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
-        if (joinModeHintEl) {
-          const dueAt = Number(a?.dueAt || 0);
-          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
-        }
-      } else {
-        if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
-        if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
-        if (joinModeHintEl) {
-          const dueAt = Number(a?.dueAt || 0);
-          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
-        }
-      }
-      if (joinBtn) joinBtn.textContent = 'Start assignment';
-      setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
+      await loadAssignmentInfo(raw || live.player.assignment.code || '');
       return;
     }
 
@@ -230,9 +243,12 @@ async function validatePin() {
 async function joinLiveGame() {
   try {
     if (live.player.mode === 'assignment') {
-      if (!live.player.assignment.code) {
+      const code = String(live.player.assignment.code || joinPinEl?.value || '').trim().toUpperCase();
+      if (!code) {
         await validatePin();
         if (!live.player.assignment.code) return;
+      } else if (live.player.assignment.infoLoadedFor !== code) {
+        await loadAssignmentInfo(code);
       }
       return startAssignmentAttempt();
     }
