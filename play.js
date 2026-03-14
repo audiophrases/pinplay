@@ -400,11 +400,15 @@ async function startAssignmentAttempt() {
 
   if (!username || username.length < 2) throw new Error('Enter your username.');
 
+  const password = live.player.randomNamesMode ? '' : String(joinPasswordEl?.value || '').trim();
+  if (!live.player.randomNamesMode && !password) throw new Error('Enter your password.');
+
   const studentKey = makeAssignmentStudentKey(username);
   if (!studentKey) throw new Error('Invalid username.');
 
   const data = await api('/api/assignment/start', {
     method: 'POST',
+    headers: live.player.randomNamesMode ? {} : { 'X-Student-Password': password },
     body: {
       code,
       studentKey,

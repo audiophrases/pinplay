@@ -543,8 +543,40 @@ export default {
       const code = sanitizeAssignmentCode(body?.code);
       const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
       const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
+      const password = String(request.headers.get('X-Student-Password') || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+      // Check assignment login mode and verify password if needed
+      const assignments = await loadAssignmentsMap(this.state.storage);
+      const assignment = assignments?.[code] || null;
+      if (assignment && assignment.randomNames === false) {
+        if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
+
+        const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
+        const verifySecret = String(env.STUDENT_LOGIN_VERIFY_SECRET || '').trim();
+        if (!verifyUrl) return withCors(json({ error: 'Login verification is not configured.' }, 501));
+
+        try {
+          const verifyHeaders = { 'Content-Type': 'application/json' };
+          if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
+
+          const vRes = await fetch(verifyUrl, {
+            method: 'POST',
+            headers: verifyHeaders,
+            body: JSON.stringify({ username: studentName, password, pin: code, secret: verifySecret }),
+          });
+          const vTxt = await vRes.text();
+          let parsed = {};
+          try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+
+          if (!vRes.ok || (parsed && parsed.ok === false)) {
+            return withCors(json({ error: 'Invalid username or password.' }, 401));
+          }
+        } catch {
+          return withCors(json({ error: 'Login verification service unavailable.' }, 502));
+        }
+      }
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
