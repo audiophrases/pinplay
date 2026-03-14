@@ -597,7 +597,6 @@ function renderPlayerState(state) {
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
-    animatePulse(joinQuestionWrap);
   }
 
   const questionClosed = !!state.questionClosed;
@@ -712,7 +711,7 @@ function renderPlayerState(state) {
 }
 
 function scheduleJoinAdaptiveFit() {
-  if (live.player.adaptiveFitRaf) cancelAnimationFrame(live.player.adaptiveFitRaf);
+  if (live.player.adaptiveFitRaf) return;
   live.player.adaptiveFitRaf = requestAnimationFrame(() => {
     live.player.adaptiveFitRaf = null;
     applyAdaptiveFitJoin();

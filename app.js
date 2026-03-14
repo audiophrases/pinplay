@@ -78,7 +78,6 @@ const hostJoinBtn = document.getElementById('hostJoinBtn');
 const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
-const assignmentRandomNamesToggleEl = document.getElementById('assignmentRandomNamesToggle');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentSelfCheckBtn = document.getElementById('assignmentSelfCheckBtn');
@@ -211,6 +210,7 @@ const live = {
     rankingAnimRafId: null,
     lastScoresByPlayer: {},
     currentAnsweringFx: null,
+    currentAnsweringFxKey: null,
     lastAnsweringFxIndex: -1,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
@@ -1934,14 +1934,6 @@ function bindLiveEvents() {
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
-if (assignmentRandomNamesToggleEl) {
-  assignmentRandomNamesToggleEl.addEventListener('click', () => {
-    const isRandom = assignmentRandomNamesToggleEl.classList.contains('active');
-    assignmentRandomNamesToggleEl.classList.toggle('active', !isRandom);
-    assignmentRandomNamesToggleEl.textContent = isRandom ? 'Login' : 'Random';
-    assignmentRandomNamesToggleEl.title = isRandom ? 'Login required (username + password)' : 'Random names assigned';
-  });
-}
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.addEventListener('click', runAssignmentSelfCheck);
   if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
@@ -2599,7 +2591,7 @@ async function createAssignmentFromCurrentQuiz() {
         className,
         attemptsLimit,
         dueAt,
-        randomNames: assignmentRandomNamesToggleEl?.classList.contains('active') ?? true,
+        randomNames: randomNamesToggleEl?.classList.contains('active') ?? true,
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -4608,11 +4600,10 @@ function stopFx(name) {
     if (!a) return;
     try {
       a.pause();
-      a.currentTime = 0;
+      // Don't reset currentTime — allow resume later
     } catch {
       // ignore
     }
-    live.host.currentAnsweringFx = null;
     return;
   }
 
@@ -4624,6 +4615,63 @@ function stopFx(name) {
   } catch {
     // ignore
   }
+}
+
+function resetFx(name) {
+  if (name === 'answering') {
+    const a = live.host.currentAnsweringFx;
+    if (!a) return;
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {
+      // ignore
+    }
+    live.host.currentAnsweringFx = null;
+    live.host.lastAnsweringFxIndex = -1;
+    live.host.currentAnsweringFxKey = null;
+    return;
+  }
+
+  const a = audioFx[name];
+  if (!a) return;
+  try {
+    a.pause();
+    a.currentTime = 0;
+  } catch {
+    // ignore
+  }
+}
+
+function resumeFx(name) {
+  if (name === 'answering') {
+    const a = live.host.currentAnsweringFx;
+    if (!a) return;
+    try {
+      a.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  const a = audioFx[name];
+  if (!a) return;
+  try {
+    a.play().catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
+function isFxPlaying(name) {
+  if (name === 'answering') {
+    const a = live.host.currentAnsweringFx;
+    return a && !a.paused;
+  }
+
+  const a = audioFx[name];
+  return a && !a.paused;
 }
 
 function animatePulse(el) {
@@ -7166,15 +7214,30 @@ function stopQuestionAudioPlayback() {
 
 async function playQuestionAudio(question, opts = {}) {
   if (!hasQuestionAudio(question)) return;
-  // Prevent overlap with question background music/SFX.
-  stopFx('answering');
+
+  const qIndex = live.host.state?.question?.index;
+  const answeringKey = `answering_q${qIndex}`;
+  const alreadyPlaying = activeQuestionAudioEl && live.host.currentAnsweringFxKey === answeringKey;
+
+  // For new question: reset answering FX and start fresh one after TTS/MP3
+  if (!alreadyPlaying) {
+    resetFx('answering');
+    live.host.currentAnsweringFxKey = answeringKey;
+    // Play the new answering FX immediately after starting the TTS
+    setTimeout(() => {
+      if (live.host.currentAnsweringFxKey === answeringKey) {
+        playFx('answering');
+      }
+    }, 200);
+  }
   stopQuestionAudioPlayback();
 
   const maybeResumeQuestionMusic = () => {
     const s = live.host.state;
     if (!s || s.phase !== 'question' || s.questionClosed) return;
     if (!hasQuestionAudio(s.question || question)) return;
-    playFx('answering');
+    // Just resume the paused answering FX — don't pick a new one
+    resumeFx('answering');
   };
 
   const speed = Number(opts?.speed || 1);
@@ -7185,6 +7248,7 @@ async function playQuestionAudio(question, opts = {}) {
     try { a.playbackRate = safeSpeed; } catch {}
     a.addEventListener('ended', () => {
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
+      live.host.currentAnsweringFxKey = null;
       maybeResumeQuestionMusic();
     }, { once: true });
     a.play().catch(() => {});

@@ -29,13 +29,8 @@ const RANDOM_NAME_PEOPLE = [
   // Catalan / Iberian (expanded, with many female + athlete/soccer names)
   'Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Joan','Martina','Arnau','Aina','Ona','Mariona','Biel','Jan','Pere','Aleix','Roser','Oriol','Mireia','Carles','Marti','Montserrat','Gemma','Neus','Adria','Xavi','Ferran','Gerard','Nil','Roc','Blai','Judit','Txell',
   'Ariadna','Noelia','Naiara','Clara','Nora','Helena','Ivet','Bruna','Queralt','Celia','Mar','Carlota','Paula','Irene','Anna','Joana','Marta','Nerea','Laura','Alba',
-  'AinaClotet','PaulaBadosa','AlexiaPutellas','AitanaBonmati','MapiLeon','PatriGuijarro','ClaudiaPina','MarionaCaldentey','VickyLopez','SandraPaños','LaiaCodina','OnaBatlle','IreneParedes','JenniHermoso','SalmaParalluelo','MartaTorrejon','LeilaOuahabi','AriSánchez','GemmaTriay','MireiaBelmonte',
   'PauGasol','MarcGasol','RickyRubio','AlexAbrines','RaulEntrerrios','AlexCorretja','CarlosAlcaraz','Garbiñe','RafaNadal','JorgeMartin',
   'Puyol','Busquets','Alba','Pique','Valdes','XaviHernandez','Iniesta','Pedro','CescFabregas','SergiRoberto','ThiagoAlcantara','Bojan','Muniesa','Bartra','Deulofeu','JoanGarcia','DaniOlmo','AleixGarcia','EricGarcia','Cubarsi',
-  // Catalan social creators & tiktok-style names
-  'MireiaOriol','JuditMasco','AriGeli','ClaudiaRiera','AinaSimon','LaiaGrassi','TxellMiras','GemmaPinto','NeusSanz','MarionaRibas',
-  'OnaGonfaus','AriadnaTapia','BertaAroca','JanaLlorens','MireiaCodina','NuriaCasas','PolGise','ArnauMarin','RocMassaguer','AdriaSolaPastor',
-  'CarlesTamayo','XaviCanalias','FerranExposito','GerardRomero',
   // Italian names
   'Luca','Giulia','Francesca','Marco','Alessandro','Giovanni','Matteo','Chiara','Elisa','Sofia','Giorgia','Riccardo','Davide','Federico','Paolo','Marta','Gabriele','Simone','Alessia','Franco',
   // FC Barcelona current/previous + football-inspired
@@ -64,6 +59,9 @@ const RANDOM_NAME_PEOPLE = [
   'Superman','WonderWoman','Flash','Aquaman','GreenLantern','DoctorStrange','ScarletWitch','BlackPanther','CaptainMarvel','Thor','Loki','Hulk','IronMan','BlackWidow','Hawkeye','AntMan','Venom','Magneto','Storm','ProfessorX',
   'Sonic','Tails','Knuckles','Pikachu','Charizard','Mewtwo','Link','Ganondorf','Samus','Kirby','DonkeyKong','Yoshi','Bowser','Luigi','Peach','Cloud','Sephiroth','Tifa','Aerith','Sora',
   'Dumbledore','Snape','Voldemort','Hagrid','RonWeasley','LunaLovegood','DracoMalfoy','SiriusBlack','RemusLupin','Bellatrix','Eleven','JonSnow','Daenerys','Tyrion','Sansa','BranStark','Cersei','JaimeLannister','TheHound','TheMandalorian',
+  // Stranger Things
+  'Will','Mike','Dustin','Lucas','Max','Billy','Hopper','Joyce','Steve','Robin','Nancy','Jonathan','Erica','Bob','Alexei','Murray','Argyle','Eddie','Vickie','Suzie',
+  // More fictional
   'Grogu','Ahsoka','Padme','Kenobi','Rey','Finn','PoeDameron','KyloRen','BoKatan','CaptainPicard','Data','SevenOfNine','Ripley','SarahConnor','Ellen','MaxRockatansky','IndianaJones','JackSparrow','ElizabethSwann','OptimusPrime',
   // Russian / Slavic sounding
   'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman','Natasha','Ilya','Yuri','Vera','Mila','Ludmila','Stanislav','Galina',
@@ -75,7 +73,7 @@ const RANDOM_NAME_PEOPLE = [
   'Maria','Laura','Sara','Julia','Claudia','Andrea','Patricia','Cristina','Silvia','Raquel','Beatriz','Teresa','Mónica','Veronica','Eva','Miriam','Noelia','Carla','Sonia','Lucia',
   'Daniela','Valeria','Camila','Juliana','Mariana','Gabriela','Isabela','Antonella','Renata','Bianca','Milagros','Catalina','Florencia','Agustina','Pilar','Lourdes','Alicia','Elisa','Ingrid','Natalia',
   'Frida','Rosalind','Ada','MarieCurie','Hypatia','MaryWollstonecraft','VirginiaWoolf','Simone','Hannah','JudithButler','AngelaDavis','Emmeline','RosaParks','Malala','Rigoberta','Greta','Amelia','ValentinaTereshkova','SallyRide','MaeJemison',
-  'AlexMorgan','MeganRapinoe','LucyBronze','AdaHegerberg','CarolineGrahamHansen','MartaVieira','SamKerr','WendieRenard','MapiLeon2','Aitana2','Alexia2','Patri2','ClaudiaPina2','Mariona2','OnaBatlle2','IreneParedes2','Jenni2','Salma2','Leila2','Vicky2'
+  'AlexMorgan','MeganRapinoe','LucyBronze','AdaHegerberg','CarolineGrahamHansen','MartaVieira','SamKerr','WendieRenard'
 ];
 
 const FEMALE_NAME_HINTS = new Set([
@@ -92,7 +90,8 @@ const FEMALE_NAME_HINTS = new Set([
   'maya','priya','emma','olivia','mia','elena','nora','chloe','zoe','aiko','fatima','yara','ines','samira','noura',
   'maria','sara','julia','claudia','andrea','patricia','cristina','silvia','raquel','beatriz','teresa','mónica','veronica','eva','miriam','noelia','carla','sonia','daniela','juliana','mariana','gabriela','isabela','florencia','agustina','pilar','lourdes','alicia','ingrid','natalia',
   'frida','rosalind','ada','mariecurie','marywollstonecraft','simone','judithbutler','angeladavis','emmeline','rosaparks','malala','rigoberta','greta','amelia','valentinatereshkova','sallyride','maejemison',
-  'alexmorgan','meganrapinoe','lucybronze','adahegerberg','carolinegrahamhansen','martavieira','samkerr','wendierenard'
+  'alexmorgan','meganrapinoe','lucybronze','adahegerberg','carolinegrahamhansen','martavieira','samkerr','wendierenard',
+  'max','joyce','nancy','robin','erica','vickie','suzie','eleven'
 ]);
 
 const BLOCKED_NICK_PATTERNS = [
