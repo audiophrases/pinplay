@@ -547,10 +547,28 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
-      // Check assignment login mode and verify password if needed
-      const assignments = await loadAssignmentsMap(this.state.storage);
-      const assignment = assignments?.[code] || null;
-      if (assignment && assignment.randomNames === false) {
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+
+      // Check assignment login mode and verify password only when the assignment requires it.
+      let assignment = null;
+      try {
+        const infoRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+          method: 'GET',
+        });
+        const infoTxt = await infoRes.text();
+        let info = {};
+        try { info = infoTxt ? JSON.parse(infoTxt) : {}; } catch {}
+        if (!infoRes.ok) {
+          return withCors(json({ error: info?.error || 'Assignment not found.' }, infoRes.status || 404));
+        }
+        assignment = info?.assignment || null;
+      } catch {
+        return withCors(json({ error: 'Could not load assignment.' }, 502));
+      }
+
+      if (!assignment) return withCors(json({ error: 'Assignment not found.' }, 404));
+
+      if (assignment.randomNames === false) {
         if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
 
         const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
@@ -578,7 +596,6 @@ export default {
         }
       }
 
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
         body: JSON.stringify({ code, studentKey, studentName }),
