@@ -387,7 +387,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, quiz }),
       }));
     }
 
@@ -543,25 +543,13 @@ export default {
       const code = sanitizeAssignmentCode(body?.code);
       const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
       const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
-      const password = String(body?.password || request.headers.get('X-Student-Password') || '').trim();
+      const password = String(request.headers.get('X-Student-Password') || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-
-      // Check assignment login mode through the assignments registry DO.
-      // Using this.state.storage here would crash because this is the top-level worker fetch handler.
-      const infoRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
-        method: 'GET',
-      });
-      const infoText = await infoRes.text();
-      let info = {};
-      try { info = infoText ? JSON.parse(infoText) : {}; } catch {}
-      if (!infoRes.ok) {
-        return withCors(json({ error: info?.error || 'Assignment not found.' }, infoRes.status || 404));
-      }
-
-      const assignment = info?.assignment || null;
+      // Check assignment login mode and verify password if needed
+      const assignments = await loadAssignmentsMap(this.state.storage);
+      const assignment = assignments?.[code] || null;
       if (assignment && assignment.randomNames === false) {
         if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
 
@@ -590,6 +578,7 @@ export default {
         }
       }
 
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
         body: JSON.stringify({ code, studentKey, studentName }),
