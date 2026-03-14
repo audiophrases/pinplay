@@ -34,6 +34,9 @@ const joinFeedbackEl = document.getElementById('joinFeedback');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
+let activeQuestionAudioEl = null;
+const edgeTtsBlobUrlCache = new Map();
+
 const live = {
   player: {
     pin: null,
@@ -56,6 +59,7 @@ const live = {
     timerAnchorAt: null,
     timerInitialRemainingMs: null,
     adaptiveFitRaf: null,
+    audioSpeed: 0.95,
     mode: 'live',
     assignment: {
       code: null,
@@ -576,6 +580,8 @@ function renderPlayerState(state) {
       || (live.player.mode === 'assignment' && !!live.player.randomNamesMode && !live.player.assignment.attemptId);
     if (rerollNameBtn) rerollNameBtn.classList.toggle('hidden', !canReroll);
 
+    stopQuestionAudioPlayback();
+
     if (state.phase === 'lobby') {
       setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
     } else if (state.phase === 'results') {
@@ -600,6 +606,9 @@ function renderPlayerState(state) {
     live.player.pinSelections = [];
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
+    if (live.player.mode === 'assignment' && !state.answeredCurrent) {
+      queueQuestionAudioAutoplay(state.question, { speed: live.player.audioSpeed || 0.95 });
+    }
     setStatus(joinFeedbackEl, '', '');
     animatePulse(joinQuestionWrap);
   }
@@ -609,6 +618,7 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     stopJoinTimer();
+    stopQuestionAudioPlayback();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: 0s';
   } else {
     startJoinTimer(state);
@@ -785,11 +795,47 @@ function applyJoinLayoutMode(active, question = null) {
 }
 
 function renderJoinQuestion(question) {
+  stopQuestionAudioPlayback();
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
+
+  if (hasQuestionAudio(question)) {
+    const audioRow = document.createElement('div');
+    audioRow.className = 'row gap top-space';
+
+    const audioBtn = document.createElement('button');
+    audioBtn.type = 'button';
+    audioBtn.className = 'btn';
+    audioBtn.textContent = '🔊 Play audio';
+
+    const speedSel = document.createElement('select');
+    speedSel.className = 'btn';
+    speedSel.title = 'TTS speed';
+    speedSel.style.width = 'auto';
+    speedSel.style.minWidth = '0';
+    speedSel.style.padding = '0 .45rem';
+    [['1.0','100%'],['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v, label]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = label;
+      if (Math.abs(Number(v) - Number(live.player.audioSpeed || 0.95)) < 0.001) opt.selected = true;
+      speedSel.appendChild(opt);
+    });
+
+    speedSel.addEventListener('change', () => {
+      live.player.audioSpeed = Number(speedSel.value || 0.95);
+    });
+
+    audioBtn.addEventListener('click', () => {
+      playQuestionAudio(question, { speed: Number(speedSel.value || live.player.audioSpeed || 0.95) });
+    });
+
+    audioRow.append(audioBtn, speedSel);
+    joinAnswersEl.appendChild(audioRow);
+  }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
@@ -840,14 +886,6 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(hint);
     }
 
-    if (question.type === 'audio') {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn top-space';
-      btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
-      joinAnswersEl.appendChild(btn);
-    }
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -1855,14 +1893,114 @@ function normalizeBackendUrl(url) {
   }
 }
 
-function speakText(text, lang = 'en-US-Wave') {
+function supportsQuestionAudio(type) {
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
+}
+
+function hasQuestionAudio(question) {
+  if (!question) return false;
+  if (question.type === 'audio') return true;
+  if (!supportsQuestionAudio(question.type)) return false;
+  return !!question.audioEnabled;
+}
+
+function stopQuestionAudioPlayback() {
+  try {
+    if (activeQuestionAudioEl) {
+      activeQuestionAudioEl.pause();
+      activeQuestionAudioEl.currentTime = 0;
+      activeQuestionAudioEl = null;
+    }
+  } catch {}
+
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  } catch {}
+}
+
+async function playQuestionAudio(question, opts = {}) {
+  if (!hasQuestionAudio(question)) return;
+
+  stopQuestionAudioPlayback();
+
+  const speed = Number(opts?.speed ?? live.player.audioSpeed ?? 0.95);
+  const safeSpeed = Number.isFinite(speed) ? Math.max(0.6, Math.min(1.4, speed)) : 0.95;
+  live.player.audioSpeed = safeSpeed;
+
+  const playAudioEl = (audioEl) => {
+    activeQuestionAudioEl = audioEl;
+    try {
+      audioEl.playbackRate = safeSpeed;
+    } catch {}
+    audioEl.addEventListener('ended', () => {
+      if (activeQuestionAudioEl === audioEl) activeQuestionAudioEl = null;
+    }, { once: true });
+    audioEl.play().catch(() => {});
+  };
+
+  if (question.audioMode === 'file' && question.audioData) {
+    try {
+      const a = new Audio(question.audioData);
+      playAudioEl(a);
+    } catch {}
+    return;
+  }
+
+  const value = String(question.audioText || question.prompt || '').trim();
+  if (!value) return;
+
+  try {
+    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    if (!base) throw new Error('Backend URL is not configured.');
+
+    const voice = String(question.language || 'en-US-AriaNeural').trim() || 'en-US-AriaNeural';
+    const ratePct = `${safeSpeed >= 1 ? '+' : ''}${Math.round((safeSpeed - 1) * 100)}%`;
+    const cacheKey = `${voice}::${value}::${ratePct}`;
+
+    let audioUrl = edgeTtsBlobUrlCache.get(cacheKey);
+    if (!audioUrl) {
+      const res = await fetch(`${base}/api/tts/edge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: value, voice, rate: ratePct }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Edge TTS failed (${res.status}).`);
+      }
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      edgeTtsBlobUrlCache.set(cacheKey, audioUrl);
+    }
+
+    const a = new Audio(audioUrl);
+    playAudioEl(a);
+  } catch (err) {
+    const fallbackLang = String(question.language || 'en-US').split('-').slice(0, 2).join('-') || 'en-US';
+    speakText(value, fallbackLang, safeSpeed);
+    const msg = String(err?.message || '').trim();
+    if (msg) console.warn('[PinPlay][audio] Falling back to browser speech synthesis:', msg);
+  }
+}
+
+function queueQuestionAudioAutoplay(question, opts = {}) {
+  if (!hasQuestionAudio(question)) return;
+  window.setTimeout(() => {
+    playQuestionAudio(question, opts).catch?.(() => {});
+  }, Number(opts?.delayMs || 160));
+}
+
+function speakText(text, lang = 'en-US', rate = 1) {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
 
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = lang || 'en-US-Wave';
+    utterance.lang = lang || 'en-US';
+    utterance.rate = Number.isFinite(rate) ? Math.max(0.6, Math.min(1.4, rate)) : 1;
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech errors silently
