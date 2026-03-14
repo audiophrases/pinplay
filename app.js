@@ -1381,7 +1381,8 @@ function applyHearQuestionsMode(targetQuiz, modeValue) {
 
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
-  targetQuiz.ttsLanguage = normalizeTtsLanguage(targetQuiz.ttsLanguage);
+  const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
+  targetQuiz.ttsLanguage = ['EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'EN';
   targetQuiz.readAllQuestionsAloud = targetQuiz.readAllQuestionsAloud !== false;
 }
 
