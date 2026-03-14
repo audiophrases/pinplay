@@ -387,7 +387,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, quiz }),
       }));
     }
 
@@ -548,15 +548,21 @@ export default {
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      const assignmentRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+
+      // Check assignment login mode through the assignments registry DO.
+      // Using this.state.storage here would crash because this is the top-level worker fetch handler.
+      const infoRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
         method: 'GET',
       });
-      if (!assignmentRes.ok) return withCors(assignmentRes);
-      const assignmentData = await assignmentRes.json();
-      const assignment = assignmentData?.assignment || null;
-      if (!assignment) return withCors(json({ error: 'Assignment not found.' }, 404));
+      const infoText = await infoRes.text();
+      let info = {};
+      try { info = infoText ? JSON.parse(infoText) : {}; } catch {}
+      if (!infoRes.ok) {
+        return withCors(json({ error: info?.error || 'Assignment not found.' }, infoRes.status || 404));
+      }
 
-      if (assignment.randomNames === false) {
+      const assignment = info?.assignment || null;
+      if (assignment && assignment.randomNames === false) {
         if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
 
         const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
