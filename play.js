@@ -347,7 +347,7 @@ function mapAssignmentStateToPlayerState() {
     currentIndex: idx,
     totalQuestions: Number(assignment.totalQuestions || questions.length || 0),
     score: Number(attempt?.metrics?.totalScore ?? attempt?.metrics?.autoScore ?? 0),
-    questionStartedAt: Date.now(),
+    questionStartedAt: attempt.startedAt || assignment.startedAt || 0,
     questionDeadlineAt: assignment.dueAt || null,
     questionClosed: false,
     questionCloseReason: null,
@@ -597,6 +597,7 @@ function renderPlayerState(state) {
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
     setStatus(joinFeedbackEl, '', '');
+    animatePulse(joinQuestionWrap);
   }
 
   const questionClosed = !!state.questionClosed;
