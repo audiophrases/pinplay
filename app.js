@@ -1300,19 +1300,48 @@ const EDGE_TTS_LANGUAGE_DEFAULTS = {
   EN: 'en-US-AndrewMultilingualNeural',
   CA: 'ca-ES-JoanaNeural',
   FR: 'fr-FR-DeniseNeural',
+  OTHER: 'en-US-AndrewMultilingualNeural',
 };
 const EDGE_TTS_LANGUAGE_OPTIONS = [
   { value: 'EN', label: 'English' },
   { value: 'CA', label: 'Català' },
   { value: 'FR', label: 'Français' },
+  { value: 'OTHER', label: 'Other' },
 ];
-const EDGE_TTS_VOICE_OPTIONS = Object.values(EDGE_TTS_LANGUAGE_DEFAULTS);
+const EDGE_TTS_VOICE_INDEX = [
+  { code: 'en-US-AndrewMultilingualNeural', language: 'English', country: 'United States', person: 'Andrew' },
+  { code: 'en-US-AvaMultilingualNeural', language: 'English', country: 'United States', person: 'Ava' },
+  { code: 'en-US-EmmaMultilingualNeural', language: 'English', country: 'United States', person: 'Emma' },
+  { code: 'en-GB-RyanNeural', language: 'English', country: 'United Kingdom', person: 'Ryan' },
+  { code: 'en-GB-SoniaNeural', language: 'English', country: 'United Kingdom', person: 'Sonia' },
+  { code: 'ca-ES-JoanaNeural', language: 'Català', country: 'Spain', person: 'Joana' },
+  { code: 'ca-ES-EnricNeural', language: 'Català', country: 'Spain', person: 'Enric' },
+  { code: 'fr-FR-DeniseNeural', language: 'Français', country: 'France', person: 'Denise' },
+  { code: 'fr-FR-HenriNeural', language: 'Français', country: 'France', person: 'Henri' },
+  { code: 'es-ES-ElviraNeural', language: 'Español', country: 'Spain', person: 'Elvira' },
+  { code: 'es-ES-AlvaroNeural', language: 'Español', country: 'Spain', person: 'Alvaro' },
+  { code: 'it-IT-ElsaNeural', language: 'Italiano', country: 'Italy', person: 'Elsa' },
+  { code: 'it-IT-DiegoNeural', language: 'Italiano', country: 'Italy', person: 'Diego' },
+  { code: 'de-DE-KatjaNeural', language: 'Deutsch', country: 'Germany', person: 'Katja' },
+  { code: 'de-DE-ConradNeural', language: 'Deutsch', country: 'Germany', person: 'Conrad' },
+  { code: 'pt-BR-FranciscaNeural', language: 'Português', country: 'Brazil', person: 'Francisca' },
+  { code: 'pt-BR-AntonioNeural', language: 'Português', country: 'Brazil', person: 'Antonio' },
+  { code: 'ru-RU-SvetlanaNeural', language: 'Русский', country: 'Russia', person: 'Svetlana' },
+  { code: 'ru-RU-DmitryNeural', language: 'Русский', country: 'Russia', person: 'Dmitry' },
+  { code: 'ja-JP-NanamiNeural', language: '日本語', country: 'Japan', person: 'Nanami' },
+  { code: 'ja-JP-KeitaNeural', language: '日本語', country: 'Japan', person: 'Keita' },
+];
+const EDGE_TTS_VOICE_OPTIONS = [...new Set([...Object.values(EDGE_TTS_LANGUAGE_DEFAULTS), ...EDGE_TTS_VOICE_INDEX.map((v) => v.code)])];
 const DEFAULT_EDGE_TTS_LANGUAGE = 'EN';
 const DEFAULT_EDGE_TTS_VOICE = EDGE_TTS_LANGUAGE_DEFAULTS[DEFAULT_EDGE_TTS_LANGUAGE];
 
 function normalizeTtsLanguage(value) {
   const key = String(value || '').trim().toUpperCase();
   return EDGE_TTS_LANGUAGE_DEFAULTS[key] ? key : DEFAULT_EDGE_TTS_LANGUAGE;
+}
+
+function formatVoiceIndexLabel(v) {
+  return `${v.language} · ${v.country} · ${v.person} · ${v.code}`;
 }
 
 function guessTtsLanguageFromVoice(voice) {
@@ -1334,14 +1363,15 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
 }
 
 function getHearQuestionsMode(targetQuiz) {
-  const lang = normalizeTtsLanguage(targetQuiz?.ttsLanguage);
-  return targetQuiz?.readAllQuestionsAloud ? lang : 'READ';
+  return normalizeTtsLanguage(targetQuiz?.ttsLanguage);
 }
 
 function applyHearQuestionsMode(targetQuiz, modeValue) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const mode = String(modeValue || '').trim().toUpperCase();
+  // Legacy support for old saved mode.
   if (mode === 'READ') {
+    targetQuiz.ttsLanguage = DEFAULT_EDGE_TTS_LANGUAGE;
     targetQuiz.readAllQuestionsAloud = false;
     return;
   }
@@ -1351,8 +1381,7 @@ function applyHearQuestionsMode(targetQuiz, modeValue) {
 
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
-  const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
-  targetQuiz.ttsLanguage = ['EN', 'CA', 'FR'].includes(raw) ? raw : 'EN';
+  targetQuiz.ttsLanguage = normalizeTtsLanguage(targetQuiz.ttsLanguage);
   targetQuiz.readAllQuestionsAloud = targetQuiz.readAllQuestionsAloud !== false;
 }
 
@@ -1360,9 +1389,16 @@ function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
   const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
   const voice = normalizeTtsVoice(q.language, ttsLanguage);
-  const voiceOptions = EDGE_TTS_VOICE_OPTIONS
+  const showOtherSearch = ttsLanguage === 'OTHER';
+
+  const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : Object.values(EDGE_TTS_LANGUAGE_DEFAULTS).slice(0, 3);
+  const voiceOptions = [...new Set(voiceSource)]
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
     .join('');
+  const voiceIndexOptions = EDGE_TTS_VOICE_INDEX
+    .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
+    .join('');
+
   return `
     <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
       <div class="row gap top-space">
@@ -1380,6 +1416,9 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      ${showOtherSearch ? `<label class="top-space">Find Edge voice (language · country · person · code)</label>
+      <input data-q="${idx}" data-field="voiceSearch" list="edgeVoiceIndex" value="${escapeHtml(voice)}" placeholder="Type language/country/person/code" />
+      <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
       <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
@@ -1441,6 +1480,7 @@ function syncQuizFromUI() {
       const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
       const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
+      const voiceSearchEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="voiceSearch"]`);
 
       const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
@@ -1449,7 +1489,21 @@ function syncQuizFromUI() {
       // Quiz-level language is the source of truth for automatic quiz-wide TTS flow.
       q.ttsLanguage = quizTtsLanguage;
       const pickedVoice = String(languageEl?.value || '').slice(0, 64);
-      q.language = normalizeTtsVoice(pickedVoice, quizTtsLanguage);
+      let resolvedVoice = normalizeTtsVoice(pickedVoice, quizTtsLanguage);
+
+      if (quizTtsLanguage === 'OTHER' && voiceSearchEl) {
+        const rawSearch = String(voiceSearchEl.value || '').trim();
+        if (rawSearch) {
+          const rawLower = rawSearch.toLowerCase();
+          const hit = EDGE_TTS_VOICE_INDEX.find((v) => {
+            const label = formatVoiceIndexLabel(v).toLowerCase();
+            return v.code.toLowerCase() === rawLower || label.includes(rawLower);
+          });
+          if (hit) resolvedVoice = hit.code;
+        }
+      }
+
+      q.language = normalizeTtsVoice(resolvedVoice, quizTtsLanguage);
 
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
 
