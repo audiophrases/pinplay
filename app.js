@@ -396,9 +396,9 @@ function toggleTeacherSectionCollapseAll() {
 }
 
 function bindCollapsibleSections() {
-  bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: false, keyboard: true });
-  bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: false, keyboard: true });
-  bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: false, keyboard: true });
+  bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
 }
 
