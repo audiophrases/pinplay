@@ -4664,6 +4664,35 @@ function resumeFx(name) {
   }
 }
 
+function primeAnsweringFx(answeringKey) {
+  if (!live.host.isPrimaryAudioHost) return null;
+  if (!answeringFxPool.length) return null;
+
+  if (live.host.currentAnsweringFx && live.host.currentAnsweringFxKey === answeringKey) {
+    return live.host.currentAnsweringFx;
+  }
+
+  resetFx('answering');
+
+  let idx = Math.floor(Math.random() * answeringFxPool.length);
+  if (answeringFxPool.length > 1 && idx === live.host.lastAnsweringFxIndex) {
+    idx = (idx + 1) % answeringFxPool.length;
+  }
+
+  live.host.lastAnsweringFxIndex = idx;
+  live.host.currentAnsweringFx = answeringFxPool[idx];
+  live.host.currentAnsweringFxKey = answeringKey;
+
+  try {
+    live.host.currentAnsweringFx.pause();
+    live.host.currentAnsweringFx.currentTime = 0;
+  } catch {
+    // ignore
+  }
+
+  return live.host.currentAnsweringFx;
+}
+
 function isFxPlaying(name) {
   if (name === 'answering') {
     const a = live.host.currentAnsweringFx;
@@ -7215,28 +7244,20 @@ function stopQuestionAudioPlayback() {
 async function playQuestionAudio(question, opts = {}) {
   if (!hasQuestionAudio(question)) return;
 
-  const qIndex = live.host.state?.question?.index;
-  const answeringKey = `answering_q${qIndex}`;
-  const alreadyPlaying = activeQuestionAudioEl && live.host.currentAnsweringFxKey === answeringKey;
+  const qIndex = Number(live.host.state?.question?.index);
+  const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
 
-  // For new question: reset answering FX and start fresh one after TTS/MP3
-  if (!alreadyPlaying) {
-    resetFx('answering');
-    live.host.currentAnsweringFxKey = answeringKey;
-    // Play the new answering FX immediately after starting the TTS
-    setTimeout(() => {
-      if (live.host.currentAnsweringFxKey === answeringKey) {
-        playFx('answering');
-      }
-    }, 200);
-  }
+  // Keep one stable answering FX per question.
+  // For audio questions, pause it during the prompt audio and resume the same clip after playback ends.
+  primeAnsweringFx(answeringKey);
+  stopFx('answering');
   stopQuestionAudioPlayback();
 
   const maybeResumeQuestionMusic = () => {
     const s = live.host.state;
     if (!s || s.phase !== 'question' || s.questionClosed) return;
     if (!hasQuestionAudio(s.question || question)) return;
-    // Just resume the paused answering FX — don't pick a new one
+    if (live.host.currentAnsweringFxKey !== answeringKey) return;
     resumeFx('answering');
   };
 
@@ -7246,25 +7267,35 @@ async function playQuestionAudio(question, opts = {}) {
   const playAudioEl = (a) => {
     activeQuestionAudioEl = a;
     try { a.playbackRate = safeSpeed; } catch {}
-    a.addEventListener('ended', () => {
+
+    const onFinish = () => {
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
-      live.host.currentAnsweringFxKey = null;
       maybeResumeQuestionMusic();
-    }, { once: true });
-    a.play().catch(() => {});
+    };
+
+    a.addEventListener('ended', onFinish, { once: true });
+    a.addEventListener('error', onFinish, { once: true });
+    a.play().catch(() => {
+      onFinish();
+    });
   };
 
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
       playAudioEl(a);
-    } catch {}
+    } catch {
+      maybeResumeQuestionMusic();
+    }
     return;
   }
 
   // TTS mode: Edge TTS only (no fallback).
   const text = String(question.audioText || question.prompt || '').trim();
-  if (!text) return;
+  if (!text) {
+    maybeResumeQuestionMusic();
+    return;
+  }
   try {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     if (!base) throw new Error('Backend URL is not configured.');
@@ -7292,6 +7323,7 @@ async function playQuestionAudio(question, opts = {}) {
     const a = new Audio(audioUrl);
     playAudioEl(a);
   } catch (err) {
+    maybeResumeQuestionMusic();
     setStatus(hostStatusEl, `Edge TTS error: ${err?.message || 'failed'}`, 'bad');
   }
 }
