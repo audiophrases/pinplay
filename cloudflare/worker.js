@@ -535,6 +535,10 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/player/random-name' && request.method === 'GET') {
+      return withCors(json({ ok: true, name: pickRandomName({}) }));
+    }
+
     if (url.pathname === '/api/assignment/start' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -1109,6 +1113,7 @@ export class QuizRoom {
           className: sanitizeClassName(body?.className),
           attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit ?? 1)), 0, 10),
           dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
+          randomNames: !!body?.randomNames,
           active: true,
           quiz,
         };
@@ -3328,6 +3333,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     className: sanitizeClassName(assignment.className || ''),
     attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10),
     dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
+    randomNames: !!assignment.randomNames,
     active: !!assignment.active,
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),

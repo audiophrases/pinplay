@@ -78,6 +78,7 @@ const hostJoinBtn = document.getElementById('hostJoinBtn');
 const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
+const assignmentRandomNamesToggleEl = document.getElementById('assignmentRandomNamesToggle');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentSelfCheckBtn = document.getElementById('assignmentSelfCheckBtn');
@@ -1933,6 +1934,14 @@ function bindLiveEvents() {
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
+if (assignmentRandomNamesToggleEl) {
+  assignmentRandomNamesToggleEl.addEventListener('click', () => {
+    const isRandom = assignmentRandomNamesToggleEl.classList.contains('active');
+    assignmentRandomNamesToggleEl.classList.toggle('active', !isRandom);
+    assignmentRandomNamesToggleEl.textContent = isRandom ? 'Login' : 'Random';
+    assignmentRandomNamesToggleEl.title = isRandom ? 'Login required (username + password)' : 'Random names assigned';
+  });
+}
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.addEventListener('click', runAssignmentSelfCheck);
   if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
@@ -2590,6 +2599,7 @@ async function createAssignmentFromCurrentQuiz() {
         className,
         attemptsLimit,
         dueAt,
+        randomNames: assignmentRandomNamesToggleEl?.classList.contains('active') ?? true,
         quiz: normalizeQuizForLive(quiz),
       },
     });

@@ -153,16 +153,30 @@ async function validatePin() {
       live.player.mode = 'assignment';
       live.player.assignment.code = code;
 
+      const a = info?.assignment || {};
+      live.player.randomNamesMode = !!a?.randomNames;
+
       if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
       if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
-      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
-      if (joinModeHintEl) {
-        const a = info?.assignment || {};
-        const dueAt = Number(a?.dueAt || 0);
-        const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-        joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText}`;
+
+      if (live.player.randomNamesMode) {
+        if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
+        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
+        if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
+        if (joinModeHintEl) {
+          const dueAt = Number(a?.dueAt || 0);
+          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
+        }
+      } else {
+        if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
+        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
+        if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
+        if (joinModeHintEl) {
+          const dueAt = Number(a?.dueAt || 0);
+          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
+          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
+        }
       }
       if (joinBtn) joinBtn.textContent = 'Start assignment';
       setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
@@ -370,7 +384,20 @@ async function startAssignmentAttempt() {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
 
-  const username = String(joinNameEl?.value || '').trim();
+  let username = String(joinNameEl?.value || '').trim();
+
+  if (live.player.randomNamesMode) {
+    if (!live.player.displayName) {
+      try {
+        const res = await api('/api/player/random-name', { method: 'GET' });
+        live.player.displayName = String(res?.name || '').trim() || `Player${Math.floor(Math.random() * 999)}`;
+      } catch {
+        live.player.displayName = `Player${Math.floor(Math.random() * 999)}`;
+      }
+    }
+    username = live.player.displayName;
+  }
+
   if (!username || username.length < 2) throw new Error('Enter your username.');
 
   const studentKey = makeAssignmentStudentKey(username);
@@ -390,6 +417,7 @@ async function startAssignmentAttempt() {
   setJoinTitle(`${live.player.displayName} · ${code}`);
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+  if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
   if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
   if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
@@ -451,20 +479,25 @@ async function pollPlayerState() {
 
 async function rerollRandomName() {
   try {
-    if (!live.player.pin || !live.player.id || !live.player.token) return;
     if (!live.player.randomNamesMode) return;
     if (rerollNameBtn) rerollNameBtn.disabled = true;
 
-    const data = await api('/api/player/reroll-name', {
-      method: 'POST',
-      headers: { 'X-Player-Token': live.player.token },
-      body: {
-        pin: live.player.pin,
-        playerId: live.player.id,
-      },
-    });
+    let nextName;
+    if (live.player.mode === 'assignment') {
+      const res = await api('/api/player/random-name', { method: 'GET' });
+      nextName = String(res?.name || '').trim();
+    } else if (live.player.pin && live.player.id && live.player.token) {
+      const data = await api('/api/player/reroll-name', {
+        method: 'POST',
+        headers: { 'X-Player-Token': live.player.token },
+        body: {
+          pin: live.player.pin,
+          playerId: live.player.id,
+        },
+      });
+      nextName = String(data?.name || '').trim();
+    }
 
-    const nextName = String(data?.name || '').trim();
     if (nextName) {
       live.player.displayName = nextName;
       setJoinTitle(nextName);
@@ -535,7 +568,8 @@ function renderPlayerState(state) {
     if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
 
-    const canReroll = state.phase === 'lobby' && !!live.player.randomNamesMode;
+    const canReroll = (state.phase === 'lobby' && !!live.player.randomNamesMode)
+      || (live.player.mode === 'assignment' && !!live.player.randomNamesMode && !live.player.assignment.attemptId);
     if (rerollNameBtn) rerollNameBtn.classList.toggle('hidden', !canReroll);
 
     if (state.phase === 'lobby') {
