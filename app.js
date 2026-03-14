@@ -2591,7 +2591,7 @@ async function createAssignmentFromCurrentQuiz() {
         className,
         attemptsLimit,
         dueAt,
-        randomNames: randomNamesToggleEl?.classList.contains('active') ?? true,
+        randomNames: !randomNamesToggleEl?.classList.contains('active'),
         quiz: normalizeQuizForLive(quiz),
       },
     });
