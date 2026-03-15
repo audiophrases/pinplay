@@ -1759,7 +1759,10 @@ async function openImageSearchDialog(questionIdx) {
             card.style.pointerEvents = 'none';
             const imported = await api('/api/images/fetch', { method: 'POST', body: { url: item.url } });
             if (!imported?.dataUrl) throw new Error('Image import failed.');
-            q.imageData = imported.dataUrl;
+            // Resize web image before storing
+            const blob = dataUrlToBlob(imported.dataUrl);
+            const resized = await imageFileToOptimizedDataUrl(blob);
+            q.imageData = resized;
             renderBuilder();
             setStatus(hostStatusEl, 'Image added from web search.', 'ok');
             overlay.remove();
@@ -7860,6 +7863,17 @@ const IMAGE_TARGET_BYTES = 450 * 1024;
 function estimateDataUrlBytes(dataUrl) {
   const payload = String(dataUrl || '').split(',')[1] || '';
   return Math.floor((payload.length * 3) / 4);
+}
+
+// Convert data URL to Blob for resizing
+function dataUrlToBlob(dataUrl) {
+  const parts = dataUrl.split(',');
+  const b64 = atob(parts[1]);
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const buf = new ArrayBuffer(b64.length);
+  const arr = new Uint8Array(buf);
+  for (let i = 0; i < b64.length; i++) arr[i] = b64.charCodeAt(i);
+  return new Blob([buf], { type: mime });
 }
 
 async function imageFileToOptimizedDataUrl(file) {
