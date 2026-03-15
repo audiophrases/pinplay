@@ -1002,11 +1002,12 @@ function renderJoinQuestion(question) {
   if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
-    const img = document.createElement('img');
-    img.src = question.imageData;
-    img.alt = 'Question image';
-    img.dataset.zoomable = '1';
-    preview.appendChild(img);
+    preview.style.backgroundImage = `url(${question.imageData})`;
+    preview.style.backgroundRepeat = 'no-repeat';
+    preview.style.backgroundPosition = 'center';
+    preview.style.backgroundSize = 'contain';
+    preview.dataset.zoomable = '1';
+    preview.dataset.bgImageSrc = question.imageData; // for lightbox
     joinAnswersEl.appendChild(preview);
   }
 
@@ -1053,11 +1054,12 @@ function renderJoinQuestion(question) {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
-      const img = document.createElement('img');
-      img.src = question.imageData;
-      img.alt = 'Image prompt';
-      img.dataset.zoomable = '1';
-      wrap.appendChild(img);
+      wrap.style.backgroundImage = `url(${question.imageData})`;
+      wrap.style.backgroundRepeat = 'no-repeat';
+      wrap.style.backgroundPosition = 'center';
+      wrap.style.backgroundSize = 'contain';
+      wrap.dataset.zoomable = '1';
+      wrap.dataset.bgImageSrc = question.imageData; // for lightbox
       joinAnswersEl.appendChild(wrap);
     }
 
