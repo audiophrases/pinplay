@@ -73,6 +73,7 @@ init();
 function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
+  initAssignmentSfx();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
   initAssignmentFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
@@ -1960,6 +1961,31 @@ function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
   joinTitleEl.textContent = safe ? safe : '';
+}
+
+// Assignment sound effects
+const assignmentSfx = {
+  correct: null,
+  wrong: null,
+  tick: null,
+};
+
+function initAssignmentSfx() {
+  try {
+    assignmentSfx.correct = new Audio('music/answered.mp3');
+    assignmentSfx.wrong = new Audio('music/correctanswer.mp3');
+    assignmentSfx.tick = new Audio('music/counter.mp3');
+    Object.values(assignmentSfx).forEach(a => { if (a) a.volume = 0.8; });
+  } catch {}
+}
+
+function playAssignmentSfx(name) {
+  try {
+    const a = assignmentSfx[name];
+    if (!a) return;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {}
 }
 
 function ensureTimerProgressBar(cardEl, id) {

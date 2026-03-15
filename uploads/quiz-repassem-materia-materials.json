@@ -1,0 +1,501 @@
+{
+  "version": 3,
+  "title": "Repassem: Matèria, Propietats i Canvis d'Estat",
+  "description": "Exercicis de repàs sobre la matèria, les seves propietats, els canvis d'estat i els materials.",
+  "questions": [
+    {
+      "id": "q1-properties",
+      "type": "mcq",
+      "prompt": "Quina és la característica més representativa del vidre?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Transparència", "correct": true },
+        { "text": "Elasticitat", "correct": false },
+        { "text": "Impermeabilitat", "correct": false },
+        { "text": "Duresa", "correct": false }
+      ]
+    },
+    {
+      "id": "q2-properties",
+      "type": "mcq",
+      "prompt": "Quina propietat té una goma elàstica?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Transparència", "correct": false },
+        { "text": "Elasticitat", "correct": true },
+        { "text": "Impermeabilitat", "correct": false },
+        { "text": "Duresa", "correct": false }
+      ]
+    },
+    {
+      "id": "q3-properties",
+      "type": "mcq",
+      "prompt": "Quina propietat té un impermeable de plàstic?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Transparència", "correct": false },
+        { "text": "Elasticitat", "correct": false },
+        { "text": "Impermeabilitat", "correct": true },
+        { "text": "Duresa", "correct": false }
+      ]
+    },
+    {
+      "id": "q4-properties",
+      "type": "mcq",
+      "prompt": "Quina propietat té un martell?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Transparència", "correct": false },
+        { "text": "Elasticitat", "correct": false },
+        { "text": "Impermeabilitat", "correct": false },
+        { "text": "Duresa", "correct": true }
+      ]
+    },
+    {
+      "id": "q5-matter-mass",
+      "type": "tf",
+      "prompt": "Tota la matèria té massa i volum.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": true },
+        { "text": "Fals", "correct": false }
+      ]
+    },
+    {
+      "id": "q6-matter-electricity",
+      "type": "tf",
+      "prompt": "La matèria aïllant condueix l'electricitat.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q7-matter-pure",
+      "type": "tf",
+      "prompt": "Un batut és una substància pura.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q8-matter-heat",
+      "type": "tf",
+      "prompt": "La calor és una propietat de la matèria.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q9-combustion",
+      "type": "tf",
+      "prompt": "La combustió és un canvi reversible.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q10-leather",
+      "type": "tf",
+      "prompt": "El cuir és un material artificial.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q11-state-changes",
+      "type": "multi",
+      "prompt": "Quins canvis d'estat corresponen a aquests processos? (Selecciona TOTS els correctes)\nSòlid → Líquid = ?\nLíquid → Gas = ?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Fusió (sòlid → líquid)", "correct": true },
+        { "text": "Vaporització (líquid → gas)", "correct": true },
+        { "text": "Solidificació (sòlid → líquid)", "correct": false },
+        { "text": "Condensació (líquid → gas)", "correct": false }
+      ]
+    },
+    {
+      "id": "q12-state-changes2",
+      "type": "multi",
+      "prompt": "Quins canvis d'estat corresponen a aquests processos? (Selecciona TOTS els correctes)\nLíquid → Sòlid = ?\nGas → Líquid = ?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Solidificació (líquid → sòlid)", "correct": true },
+        { "text": "Condensació (gas → líquid)", "correct": true },
+        { "text": "Fusió (líquid → sòlid)", "correct": false },
+        { "text": "Vaporització (gas → líquid)", "correct": false }
+      ]
+    },
+    {
+      "id": "q13-heat-temp",
+      "type": "mcq",
+      "prompt": "Quina és la diferència entre calor i temperatura?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "La calor és energia en traspasso i la temperatura és l'agitació molecular", "correct": true },
+        { "text": "La calor i la temperatura són el mateix", "correct": false },
+        { "text": "La temperatura és energia en traspasso", "correct": false },
+        { "text": "La calor mesura els graus d'un termòmetre", "correct": false }
+      ]
+    },
+    {
+      "id": "q14-reversible",
+      "type": "mcq",
+      "prompt": "Quin tipus de canvi és fondre gel?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Reversible i físic", "correct": true },
+        { "text": "Irreversible i físic", "correct": false },
+        { "text": "Reversible i químic", "correct": false },
+        { "text": "Irreversible i químic", "correct": false }
+      ]
+    },
+    {
+      "id": "q15-cooking-egg",
+      "type": "mcq",
+      "prompt": "Quin tipus de canvi és coure un ou?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Reversible i físic", "correct": false },
+        { "text": "Irreversible i físic", "correct": false },
+        { "text": "Reversible i químic", "correct": false },
+        { "text": "Irreversible i químic", "correct": true }
+      ]
+    },
+    {
+      "id": "q16-material-origin",
+      "type": "mcq",
+      "prompt": "D'on prové la fusta?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Dels arbres", "correct": true },
+        { "text": "Del petroli", "correct": false },
+        { "text": "Del metall", "correct": false },
+        { "text": "De la roca", "correct": false }
+      ]
+    },
+    {
+      "id": "q17-material-origin",
+      "type": "mcq",
+      "prompt": "D'on prové el plàstic?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Dels arbres", "correct": false },
+        { "text": "Del petroli", "correct": true },
+        { "text": "Dels animals", "correct": false },
+        { "text": "De la planta del cotó", "correct": false }
+      ]
+    },
+    {
+      "id": "q18-material-origin",
+      "type": "mcq",
+      "prompt": "D'on prové el cuir?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "De la pell dels animals", "correct": true },
+        { "text": "Del petroli", "correct": false },
+        { "text": "De la planta del cotó", "correct": false },
+        { "text": "De la fusta", "correct": false }
+      ]
+    },
+    {
+      "id": "q19-material-origin",
+      "type": "mcq",
+      "prompt": "D'on prové la tela (roba de cotó)?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "De la planta del cotó", "correct": true },
+        { "text": "De la pell dels animals", "correct": false },
+        { "text": "Del petroli", "correct": false },
+        { "text": "De la fusta", "correct": false }
+      ]
+    },
+    {
+      "id": "q20-velcro-reading",
+      "type": "mcq",
+      "prompt": "Per què va triar Mestral el niló per elaborar el velcro?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Perquè era resistent", "correct": true },
+        { "text": "Perquè era barat", "correct": false },
+        { "text": "Perquè era transparent", "correct": false },
+        { "text": "Perquè era elàstic", "correct": false }
+      ]
+    },
+    {
+      "id": "q21-velcro-reading",
+      "type": "mcq",
+      "prompt": "Qui va fer servir el velcro per primera vegada?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Els astronautes", "correct": true },
+        { "text": "Els esquiadors", "correct": false },
+        { "text": "Els nens petits", "correct": false },
+        { "text": "George de Mestral", "correct": false }
+      ]
+    },
+    {
+      "id": "q22-velcro-reading",
+      "type": "mcq",
+      "prompt": "Què va observar George de Mestral al seu gos?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Petites plantes enganxades amb força", "correct": true },
+        { "text": "Un paràsit al pelatge", "correct": false },
+        { "text": "Una ferida a la pell", "correct": false },
+        { "text": "Una flor enganxada", "correct": false }
+      ]
+    },
+    {
+      "id": "q23-velcro-reading",
+      "type": "tf",
+      "prompt": "El velcro va ser un invent francès.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": false },
+        { "text": "Fals", "correct": true }
+      ]
+    },
+    {
+      "id": "q24-materials-matching",
+      "type": "mcq",
+      "prompt": "Un martell es pot fabricar amb...",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Metall", "correct": true },
+        { "text": "Fusta", "correct": false },
+        { "text": "Plàstic", "correct": false },
+        { "text": "Tela", "correct": false }
+      ]
+    },
+    {
+      "id": "q25-materials-matching",
+      "type": "mcq",
+      "prompt": "Una finestra transparent es pot fabricar amb...",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Vidre", "correct": true },
+        { "text": "Fusta", "correct": false },
+        { "text": "Roca", "correct": false },
+        { "text": "Tela", "correct": false }
+      ]
+    },
+    {
+      "id": "q26-summary",
+      "type": "mcq",
+      "prompt": "Quin és l'origen principal dels materials artificials com el plàstic?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "El petroli", "correct": true },
+        { "text": "Les plantes", "correct": false },
+        { "text": "Els minerals", "correct": false },
+        { "text": "Els animals", "correct": false }
+      ]
+    },
+    {
+      "id": "q27-states-diagram",
+      "type": "mcq",
+      "prompt": "En el diagrama de canvis d'estat, quin procés representa anar de núvol (gas) a gota d'aigua (líquid)?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Condensació", "correct": true },
+        { "text": "Vaporització", "correct": false },
+        { "text": "Fusió", "correct": false },
+        { "text": "Solidificació", "correct": false }
+      ]
+    },
+    {
+      "id": "q28-states-diagram",
+      "type": "mcq",
+      "prompt": "En el diagrama de canvis d'estat, quin procés representa anar de gel (sòlid) a aigua (líquid)?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Fusió", "correct": true },
+        { "text": "Solidificació", "correct": false },
+        { "text": "Condensació", "correct": false },
+        { "text": "Vaporització", "correct": false }
+      ]
+    },
+    {
+      "id": "q29-properties-match",
+      "type": "multi",
+      "prompt": "Quines propietats físiques es poden observar en aquests objectes? (Selecciona TOTS els correctes)\nUn paraigua → ?\nUna pilota de tenis → ?\nUn diamant → ?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Impermeabilitat (paraigua)", "correct": true },
+        { "text": "Elasticitat (pilota)", "correct": true },
+        { "text": "Duresa (diamant)", "correct": true },
+        { "text": "Transparència (paraigua)", "correct": false }
+      ]
+    },
+    {
+      "id": "q30-review",
+      "type": "tf",
+      "prompt": "La temperatura mesura l'energia interna d'un cos, mentre que la calor és l'energia que es traspassa entre cossos amb diferent temperatura.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "ca-ES",
+      "answers": [
+        { "text": "Cert", "correct": true },
+        { "text": "Fals", "correct": false }
+      ]
+    }
+  ]
+}
