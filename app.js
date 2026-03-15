@@ -1793,7 +1793,7 @@ async function openImageSearchDialog(questionIdx) {
   dialog.append(head, row, status, results);
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
-  setTimeout(() => input.focus(), 50);
+  setTimeout(() => { input.focus(); input.select(); }, 50);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
