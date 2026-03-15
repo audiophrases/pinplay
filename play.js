@@ -313,6 +313,7 @@ function moveAssignmentIndex(delta) {
   const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
   if (total <= 0) return;
   live.player.assignment.currentIndex = clampAssignmentIndex(Number(live.player.assignment.currentIndex || 0) + Number(delta || 0), total);
+  pickNewAnsweringTrack();
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 }
@@ -330,6 +331,7 @@ function moveAssignmentToNextUnanswered() {
     const idx = (current + step) % total;
     if (!answered.has(idx)) {
       live.player.assignment.currentIndex = idx;
+      pickNewAnsweringTrack();
       const mapped = mapAssignmentStateToPlayerState();
       if (mapped) renderPlayerState(mapped);
       return;
