@@ -1659,6 +1659,7 @@ async function openImageSearchDialog(questionIdx) {
   input.type = 'text';
   input.placeholder = 'Search query';
   input.value = String(q.prompt || q.type || '').slice(0, 140);
+  input.focus();
   const searchBtn = document.createElement('button');
   searchBtn.className = 'btn primary';
   searchBtn.textContent = 'Search';
