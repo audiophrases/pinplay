@@ -832,7 +832,6 @@ function renderPlayerState(state) {
       } else {
         setStatus(joinFeedbackEl, closedMsg, 'ok');
       }
-      setStatus(joinStatusEl, 'Answer revealed.', 'ok');
     }
   } else if (assignmentSubmitted) {
     setStatus(joinStatusEl, 'Assignment submitted.', 'ok');
