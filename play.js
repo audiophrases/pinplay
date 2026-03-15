@@ -400,6 +400,70 @@ async function loadAssignmentState() {
   if (mapped) renderPlayerState(mapped);
 }
 
+// Load and display previous attempts for a student
+async function loadAttemptHistory(code, studentKey) {
+  try {
+    const data = await api(`/api/assignment/results?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
+    const attempts = data?.attempts || [];
+    
+    if (attempts.length === 0) return;
+    
+    // Show previous attempts in the status area
+    const historyHtml = attempts.map((a, i) => {
+      const num = i + 1;
+      const score = Number(a.autoScore || 0);
+      const total = Number(a.totalQuestions || 0);
+      const pct = total > 0 ? Math.round((score / total) * 100) : 0;
+      const submitted = !!a.submitted;
+      const statusIcon = submitted ? '✅' : '📝';
+      return `<div style="padding:4px 0;font-size:13px;">${statusIcon} Attempt ${num}: <strong>${score}/${total}</strong> (${pct}%) ${submitted ? '' : '(in progress)'}</div>`;
+    }).join('');
+    
+    // Create or update history panel
+    let historyPanel = document.getElementById('joinHistoryPanel');
+    if (!historyPanel) {
+      historyPanel = document.createElement('div');
+      historyPanel.id = 'joinHistoryPanel';
+      historyPanel.style.cssText = 'background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
+      if (joinStepIdentityEl && !joinStepIdentityEl.classList.contains('hidden')) {
+        joinStepIdentityEl.parentNode.insertBefore(historyPanel, joinStepIdentityEl.nextSibling);
+      } else if (joinQuestionWrap) {
+        joinQuestionWrap.parentNode.insertBefore(historyPanel, joinQuestionWrap.nextSibling);
+      }
+    }
+    
+    // Calculate improvement
+    const submittedAttempts = attempts.filter(a => a.submitted);
+    let improvementText = '';
+    if (submittedAttempts.length >= 2) {
+      const first = submittedAttempts[submittedAttempts.length - 1];
+      const last = submittedAttempts[0];
+      const firstPct = Number(first.totalQuestions || 0) > 0 ? Math.round((Number(first.autoScore || 0) / Number(first.totalQuestions)) * 100) : 0;
+      const lastPct = Number(last.totalQuestions || 0) > 0 ? Math.round((Number(last.autoScore || 0) / Number(last.totalQuestions)) * 100) : 0;
+      const diff = lastPct - firstPct;
+      if (diff > 0) improvementText = `<div style="color:#3fb950;margin-top:8px;font-weight:bold;">📈 Improving! +${diff}% from first attempt</div>`;
+      else if (diff < 0) improvementText = `<div style="color:#d29922;margin-top:8px;">📉 ${Math.abs(diff)}% below first attempt</div>`;
+      else improvementText = `<div style="color:#8b949e;margin-top:8px;">📊 Same score as first attempt</div>`;
+    }
+    
+    historyPanel.innerHTML = `
+      <div style="font-weight:bold;color:#58a6ff;margin-bottom:4px;">📚 Previous Attempts (${attempts.length})</div>
+      ${historyHtml}
+      ${improvementText}
+    `;
+    
+    historyPanel.style.display = 'block';
+    
+    // Add "new attempt" button if previous attempt was submitted
+    const lastAttempt = attempts[0];
+    if (lastAttempt?.submitted && joinSubmitBtn) {
+      // Already showing attempt history, new attempt will start when they answer
+    }
+  } catch (e) {
+    console.log('Could not load attempt history:', e);
+  }
+}
+
 async function startAssignmentAttempt() {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
@@ -458,6 +522,9 @@ async function startAssignmentAttempt() {
   if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
   setStatus(joinStatusEl, data?.alreadyStarted ? 'Resumed assignment ✅' : 'Assignment started ✅', 'ok');
+
+  // Load previous attempts for this student
+  loadAttemptHistory(code, studentKey).catch(() => {});
 
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = setInterval(() => {
