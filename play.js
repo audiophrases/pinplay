@@ -342,6 +342,7 @@ function moveAssignmentToNextUnanswered() {
     if (!answered.has(idx)) {
       live.player.assignment.currentIndex = idx;
       pickNewAnsweringTrack();
+      playAssignmentSfx('answering');
       const mapped = mapAssignmentStateToPlayerState();
       if (mapped) renderPlayerState(mapped);
       return;
@@ -392,7 +393,8 @@ async function loadAssignmentState() {
   if (live.player.assignment.forceAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
     live.player.assignment.currentIndex = autoIdx;
     live.player.assignment.forceAutoAdvance = false;
-    pickNewAnsweringTrack(); // New question via auto-advance
+    pickNewAnsweringTrack();
+    playAssignmentSfx('answering');
   } else {
     live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
   }
@@ -979,7 +981,7 @@ function renderJoinQuestion(question) {
   if (hasAudio) {
     playBtn.onclick = () => {
       const text = question.audioText || question.prompt || '';
-      const lang = question.language || 'en-US-Wave';
+      const lang = question.language || 'en-US-AndrewMultilingualNeural';
       speakText(text, lang);
     };
   }
