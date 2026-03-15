@@ -459,8 +459,74 @@ async function loadAttemptHistory(code, studentKey) {
     if (lastAttempt?.submitted && joinSubmitBtn) {
       // Already showing attempt history, new attempt will start when they answer
     }
+    
+    // Fetch and display teacher feedback for the most recent submitted attempt
+    const recentSubmitted = attempts.find(a => a.submitted);
+    if (recentSubmitted) {
+      await showTeacherFeedback(code, recentSubmitted.id);
+    }
   } catch (e) {
     console.log('Could not load attempt history:', e);
+  }
+}
+
+// Fetch and display teacher feedback for a submitted attempt
+async function showTeacherFeedback(code, attemptId) {
+  try {
+    // Fetch the full attempt data including answers with teacher grades
+    const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
+    const answers = data?.attempt?.answersByQ || {};
+    const questions = data?.attempt?.assignment?.quiz?.questions || [];
+    
+    // Find questions with teacher feedback
+    const feedbackItems = [];
+    for (const [qIdx, answer] of Object.entries(answers)) {
+      const question = questions[Number(qIdx)];
+      if (!question) continue;
+      
+      const grade = answer?.teacherGrade;
+      const isTeacherGraded = question?.type === 'open' || question?.type === 'image_open' || question?.type === 'speaking';
+      
+      if (grade?.graded && grade?.correction) {
+        feedbackItems.push({
+          qIndex: Number(qIdx),
+          question: question.prompt?.slice(0, 80) || `Question ${Number(qIdx) + 1}`,
+          correction: grade.correction,
+          gradedAt: grade.gradedAt,
+        });
+      }
+    }
+    
+    if (feedbackItems.length === 0) return;
+    
+    // Create or update feedback panel
+    let feedbackPanel = document.getElementById('joinFeedbackPanel');
+    if (!feedbackPanel) {
+      feedbackPanel = document.createElement('div');
+      feedbackPanel.id = 'joinFeedbackPanel';
+      feedbackPanel.style.cssText = 'background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
+      const historyPanel = document.getElementById('joinHistoryPanel');
+      if (historyPanel) {
+        historyPanel.parentNode.insertBefore(feedbackPanel, historyPanel.nextSibling);
+      } else if (joinQuestionWrap) {
+        joinQuestionWrap.parentNode.insertBefore(feedbackPanel, joinQuestionWrap.nextSibling);
+      }
+    }
+    
+    const feedbackHtml = feedbackItems.map(item => `
+      <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
+        <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
+        <div style="color:#3fb950;">💬 ${esc(item.correction)}</div>
+      </div>
+    `).join('');
+    
+    feedbackPanel.innerHTML = `
+      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>
+      ${feedbackHtml}
+    `;
+    feedbackPanel.style.display = 'block';
+  } catch (e) {
+    console.log('Could not load teacher feedback:', e);
   }
 }
 
