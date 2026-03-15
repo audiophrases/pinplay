@@ -2021,6 +2021,17 @@ function setStatus(el, text, mode = '') {
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
   if (mode === 'bad') el.classList.add('bad');
+
+  // Overlay for answer feedback
+  if (el.id === 'joinFeedback') {
+    if (text) {
+      el.classList.add('visible');
+      document.body.classList.add('no-overlay');
+    } else {
+      el.classList.remove('visible');
+      document.body.classList.remove('no-overlay');
+    }
+  }
 }
 
 function showLoginError(msg) {
