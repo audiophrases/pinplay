@@ -245,7 +245,8 @@ async function joinLiveGame() {
         await validatePin();
         if (!live.player.assignment.code) return;
       }
-      return startAssignmentAttempt();
+      await startAssignmentAttempt();
+      return;
     }
 
     if (!live.player.pin) {
