@@ -387,6 +387,119 @@ async function loadAssignmentState() {
   if (mapped) renderPlayerState(mapped);
 }
 
+// Load and display previous attempts for a student
+async function loadAttemptHistory(code, studentKey) {
+  try {
+    const data = await api(`/api/assignment/attempts?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
+    const attempts = data?.attempts || [];
+    
+    if (attempts.length === 0) return;
+    
+    // Show previous attempts
+    const historyHtml = attempts.map((a, i) => {
+      const num = attempts.length - i;
+      const score = Number(a.autoScore || 0);
+      const total = Number(a.totalQuestions || 0);
+      const pct = total > 0 ? Math.round((score / total) * 100) : 0;
+      const submitted = !!a.submitted;
+      const statusIcon = submitted ? '✅' : '📝';
+      return `<div style="padding:4px 0;font-size:13px;">${statusIcon} Attempt ${num}: <strong>${score}/${total}</strong> (${pct}%) ${submitted ? '' : '(in progress)'}</div>`;
+    }).join('');
+    
+    // Calculate improvement
+    const submittedAttempts = attempts.filter(a => a.submitted);
+    let improvementText = '';
+    if (submittedAttempts.length >= 2) {
+      const first = submittedAttempts[submittedAttempts.length - 1];
+      const last = submittedAttempts[0];
+      const firstPct = Number(first.totalQuestions || 0) > 0 ? Math.round((Number(first.autoScore || 0) / Number(first.totalQuestions)) * 100) : 0;
+      const lastPct = Number(last.totalQuestions || 0) > 0 ? Math.round((Number(last.autoScore || 0) / Number(last.totalQuestions)) * 100) : 0;
+      const diff = lastPct - firstPct;
+      if (diff > 0) improvementText = `<div style="color:#3fb950;margin-top:8px;font-weight:bold;">📈 Improving! +${diff}% from first attempt</div>`;
+      else if (diff < 0) improvementText = `<div style="color:#d29922;margin-top:8px;">📉 ${Math.abs(diff)}% below first attempt</div>`;
+      else improvementText = `<div style="color:#8b949e;margin-top:8px;">📊 Same score as first attempt</div>`;
+    }
+    
+    // Create or update history panel
+    let historyPanel = document.getElementById('joinHistoryPanel');
+    if (!historyPanel) {
+      historyPanel = document.createElement('div');
+      historyPanel.id = 'joinHistoryPanel';
+      historyPanel.style.cssText = 'background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
+      if (joinStepIdentityEl && !joinStepIdentityEl.classList.contains('hidden')) {
+        joinStepIdentityEl.parentNode.insertBefore(historyPanel, joinStepIdentityEl.nextSibling);
+      } else if (joinQuestionWrap) {
+        joinQuestionWrap.parentNode.insertBefore(historyPanel, joinQuestionWrap.nextSibling);
+      }
+    }
+    
+    historyPanel.innerHTML = `
+      <div style="font-weight:bold;color:#58a6ff;margin-bottom:4px;">📚 Previous Attempts (${attempts.length})</div>
+      ${historyHtml}
+      ${improvementText}
+    `;
+    historyPanel.style.display = 'block';
+    
+    // Fetch and display teacher feedback for most recent submitted attempt
+    const recentSubmitted = attempts.find(a => a.submitted);
+    if (recentSubmitted) {
+      await showTeacherFeedback(code, recentSubmitted.id);
+    }
+  } catch (e) {
+    console.log('Could not load attempt history:', e);
+  }
+}
+
+// Show teacher feedback for graded open answers
+async function showTeacherFeedback(code, attemptId) {
+  try {
+    const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
+    const answers = data?.attempt?.answersByQ || {};
+    const questions = data?.attempt?.assignment?.quiz?.questions || [];
+    
+    const feedbackItems = [];
+    for (const [qIdx, answer] of Object.entries(answers)) {
+      const question = questions[Number(qIdx)];
+      if (!question) continue;
+      const grade = answer?.teacherGrade;
+      if (grade?.graded && grade?.correction) {
+        feedbackItems.push({
+          qIndex: Number(qIdx),
+          question: question.prompt?.slice(0, 80) || `Question ${Number(qIdx) + 1}`,
+          correction: grade.correction,
+          gradedAt: grade.gradedAt,
+        });
+      }
+    }
+    
+    if (feedbackItems.length === 0) return;
+    
+    let feedbackPanel = document.getElementById('joinFeedbackPanel');
+    if (!feedbackPanel) {
+      feedbackPanel = document.createElement('div');
+      feedbackPanel.id = 'joinFeedbackPanel';
+      feedbackPanel.style.cssText = 'background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
+      const historyPanel = document.getElementById('joinHistoryPanel');
+      if (historyPanel) historyPanel.parentNode.insertBefore(feedbackPanel, historyPanel.nextSibling);
+    }
+    
+    const feedbackHtml = feedbackItems.map(item => `
+      <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
+        <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
+        <div style="color:#3fb950;">💬 Teacher: ${esc(item.correction)}</div>
+      </div>
+    `).join('');
+    
+    feedbackPanel.innerHTML = `
+      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>
+      ${feedbackHtml}
+    `;
+    feedbackPanel.style.display = 'block';
+  } catch (e) {
+    console.log('Could not load teacher feedback:', e);
+  }
+}
+
 async function startAssignmentAttempt() {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
@@ -432,7 +545,20 @@ async function startAssignmentAttempt() {
   if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
   if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
-  setStatus(joinStatusEl, data?.alreadyStarted ? 'Resumed assignment ✅' : 'Assignment started ✅', 'ok');
+  // Show attempt number info
+  if (data?.alreadyStarted) {
+    setStatus(joinStatusEl, 'Resumed previous attempt ✅', 'ok');
+  } else {
+    setStatus(joinStatusEl, 'New attempt started ✅', 'ok');
+    if (data?.attempt?.attemptNumber) {
+      const num = data.attempt.attemptNumber;
+      const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
+      setStatus(joinStatusEl, `Attempt ${num}${suffix} started ✅`, 'ok');
+    }
+  }
+  
+  // Load attempt history and teacher feedback
+  loadAttemptHistory(code, studentKey).catch(() => {});
 
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = setInterval(() => {
