@@ -75,7 +75,6 @@ function init() {
   pingEdgeTtsBridgeWarmup();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
   initAssignmentFromUrl();
-  initAssignmentSfx();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -176,18 +175,6 @@ async function validatePin() {
           const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
           joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
         }
-        // Show dice button for random names mode
-        if (rerollNameBtn) rerollNameBtn.classList.remove('hidden');
-        // Get initial random name
-        if (!live.player.displayName) {
-          try {
-            const res = await api('/api/player/random-name', { method: 'GET' });
-            live.player.displayName = String(res?.name || '').trim() || `Player${Math.floor(Math.random() * 999)}`;
-          } catch {
-            live.player.displayName = `Player${Math.floor(Math.random() * 999)}`;
-          }
-        }
-        if (joinNameEl) joinNameEl.value = live.player.displayName;
       } else {
         if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
         if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
@@ -400,136 +387,6 @@ async function loadAssignmentState() {
   if (mapped) renderPlayerState(mapped);
 }
 
-// Load and display previous attempts for a student
-async function loadAttemptHistory(code, studentKey) {
-  try {
-    const data = await api(`/api/assignment/attempts?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
-    const attempts = data?.attempts || [];
-    
-    if (attempts.length === 0) return;
-    
-    // Show previous attempts in the status area
-    const historyHtml = attempts.map((a, i) => {
-      const num = i + 1;
-      const score = Number(a.autoScore || 0);
-      const total = Number(a.totalQuestions || 0);
-      const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-      const submitted = !!a.submitted;
-      const statusIcon = submitted ? '✅' : '📝';
-      return `<div style="padding:4px 0;font-size:13px;">${statusIcon} Attempt ${num}: <strong>${score}/${total}</strong> (${pct}%) ${submitted ? '' : '(in progress)'}</div>`;
-    }).join('');
-    
-    // Create or update history panel
-    let historyPanel = document.getElementById('joinHistoryPanel');
-    if (!historyPanel) {
-      historyPanel = document.createElement('div');
-      historyPanel.id = 'joinHistoryPanel';
-      historyPanel.style.cssText = 'background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
-      if (joinStepIdentityEl && !joinStepIdentityEl.classList.contains('hidden')) {
-        joinStepIdentityEl.parentNode.insertBefore(historyPanel, joinStepIdentityEl.nextSibling);
-      } else if (joinQuestionWrap) {
-        joinQuestionWrap.parentNode.insertBefore(historyPanel, joinQuestionWrap.nextSibling);
-      }
-    }
-    
-    // Calculate improvement
-    const submittedAttempts = attempts.filter(a => a.submitted);
-    let improvementText = '';
-    if (submittedAttempts.length >= 2) {
-      const first = submittedAttempts[submittedAttempts.length - 1];
-      const last = submittedAttempts[0];
-      const firstPct = Number(first.totalQuestions || 0) > 0 ? Math.round((Number(first.autoScore || 0) / Number(first.totalQuestions)) * 100) : 0;
-      const lastPct = Number(last.totalQuestions || 0) > 0 ? Math.round((Number(last.autoScore || 0) / Number(last.totalQuestions)) * 100) : 0;
-      const diff = lastPct - firstPct;
-      if (diff > 0) improvementText = `<div style="color:#3fb950;margin-top:8px;font-weight:bold;">📈 Improving! +${diff}% from first attempt</div>`;
-      else if (diff < 0) improvementText = `<div style="color:#d29922;margin-top:8px;">📉 ${Math.abs(diff)}% below first attempt</div>`;
-      else improvementText = `<div style="color:#8b949e;margin-top:8px;">📊 Same score as first attempt</div>`;
-    }
-    
-    historyPanel.innerHTML = `
-      <div style="font-weight:bold;color:#58a6ff;margin-bottom:4px;">📚 Previous Attempts (${attempts.length})</div>
-      ${historyHtml}
-      ${improvementText}
-    `;
-    
-    historyPanel.style.display = 'block';
-    
-    // Add "new attempt" button if previous attempt was submitted
-    const lastAttempt = attempts[0];
-    if (lastAttempt?.submitted && joinSubmitBtn) {
-      // Already showing attempt history, new attempt will start when they answer
-    }
-    
-    // Fetch and display teacher feedback for the most recent submitted attempt
-    const recentSubmitted = attempts.find(a => a.submitted);
-    if (recentSubmitted) {
-      await showTeacherFeedback(code, recentSubmitted.id);
-    }
-  } catch (e) {
-    console.log('Could not load attempt history:', e);
-  }
-}
-
-// Fetch and display teacher feedback for a submitted attempt
-async function showTeacherFeedback(code, attemptId) {
-  try {
-    // Fetch the full attempt data including answers with teacher grades
-    const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
-    const answers = data?.attempt?.answersByQ || {};
-    const questions = data?.attempt?.assignment?.quiz?.questions || [];
-    
-    // Find questions with teacher feedback
-    const feedbackItems = [];
-    for (const [qIdx, answer] of Object.entries(answers)) {
-      const question = questions[Number(qIdx)];
-      if (!question) continue;
-      
-      const grade = answer?.teacherGrade;
-      const isTeacherGraded = question?.type === 'open' || question?.type === 'image_open' || question?.type === 'speaking';
-      
-      if (grade?.graded && grade?.correction) {
-        feedbackItems.push({
-          qIndex: Number(qIdx),
-          question: question.prompt?.slice(0, 80) || `Question ${Number(qIdx) + 1}`,
-          correction: grade.correction,
-          gradedAt: grade.gradedAt,
-        });
-      }
-    }
-    
-    if (feedbackItems.length === 0) return;
-    
-    // Create or update feedback panel
-    let feedbackPanel = document.getElementById('joinFeedbackPanel');
-    if (!feedbackPanel) {
-      feedbackPanel = document.createElement('div');
-      feedbackPanel.id = 'joinFeedbackPanel';
-      feedbackPanel.style.cssText = 'background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:8px;padding:12px 16px;margin-top:12px;';
-      const historyPanel = document.getElementById('joinHistoryPanel');
-      if (historyPanel) {
-        historyPanel.parentNode.insertBefore(feedbackPanel, historyPanel.nextSibling);
-      } else if (joinQuestionWrap) {
-        joinQuestionWrap.parentNode.insertBefore(feedbackPanel, joinQuestionWrap.nextSibling);
-      }
-    }
-    
-    const feedbackHtml = feedbackItems.map(item => `
-      <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
-        <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
-        <div style="color:#3fb950;">💬 ${esc(item.correction)}</div>
-      </div>
-    `).join('');
-    
-    feedbackPanel.innerHTML = `
-      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>
-      ${feedbackHtml}
-    `;
-    feedbackPanel.style.display = 'block';
-  } catch (e) {
-    console.log('Could not load teacher feedback:', e);
-  }
-}
-
 async function startAssignmentAttempt() {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
@@ -556,27 +413,15 @@ async function startAssignmentAttempt() {
   const studentKey = makeAssignmentStudentKey(username);
   if (!studentKey) throw new Error('Invalid username.');
 
-  // Show loading state
-  if (joinBtn) joinBtn.disabled = true;
-  if (joinBtn) joinBtn.textContent = 'Starting...';
-  setStatus(joinStatusEl, 'Verifying credentials...', 'ok');
-
-  let data;
-  try {
-    data = await api('/api/assignment/start', {
-      method: 'POST',
-      body: { code, studentKey, studentName: username, password },
-    });
-  } catch (err) {
-    if (joinBtn) joinBtn.disabled = false;
-    if (joinBtn) joinBtn.textContent = 'Start assignment';
-    const msg = String(err?.message || 'Login failed.');
-    // Show error prominently
-    setStatus(joinStatusEl, `❌ ${msg}`, 'bad');
-    throw err;
-  }
-
-  if (joinBtn) joinBtn.disabled = false;
+  const data = await api('/api/assignment/start', {
+    method: 'POST',
+    body: {
+      code,
+      studentKey,
+      studentName: username,
+      password,
+    },
+  });
 
   live.player.assignment.attemptId = data?.attempt?.id || null;
   live.player.displayName = data?.attempt?.studentName || username;
@@ -588,9 +433,6 @@ async function startAssignmentAttempt() {
   if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
   setStatus(joinStatusEl, data?.alreadyStarted ? 'Resumed assignment ✅' : 'Assignment started ✅', 'ok');
-
-  // Load previous attempts for this student
-  loadAttemptHistory(code, studentKey).catch(() => {});
 
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = setInterval(() => {
@@ -659,16 +501,18 @@ async function rerollRandomName() {
       const data = await api('/api/player/reroll-name', {
         method: 'POST',
         headers: { 'X-Player-Token': live.player.token },
-        body: { pin: live.player.pin, playerId: live.player.id },
+        body: {
+          pin: live.player.pin,
+          playerId: live.player.id,
+        },
       });
       nextName = String(data?.name || '').trim();
     }
 
     if (nextName) {
       live.player.displayName = nextName;
-      if (joinNameEl) joinNameEl.value = nextName;
       setJoinTitle(nextName);
-      setStatus(joinStatusEl, `New name: ${nextName} 🎲`, 'ok');
+      setStatus(joinStatusEl, `New random name: ${nextName} ✅`, 'ok');
     }
   } catch (err) {
     setStatus(joinStatusEl, String(err?.message || 'Could not change name.'), 'bad');
@@ -678,25 +522,6 @@ async function rerollRandomName() {
 }
 
 function renderPlayerState(state) {
-  // Play sound when question closes (answer revealed)
-  if (state.questionClosed && !live.player._lastRevealSound) {
-    live.player._lastRevealSound = true;
-    const q = live.player.currentQuestion;
-    if (q) {
-      // Check if answer was correct by comparing selected answer to correct answer
-      const selectedInput = joinAnswersEl?.querySelector('input[name="join-answer"]:checked');
-      const selectedIdx = selectedInput ? parseInt(selectedInput.value) : -1;
-      const correctIdx = (q.answers || []).findIndex(a => a.correct);
-      
-      if (selectedIdx >= 0 && correctIdx >= 0) {
-        if (selectedIdx === correctIdx) playAssignmentSfx('correct');
-        else playAssignmentSfx('wrong');
-      }
-    }
-  } else if (!state.questionClosed) {
-    live.player._lastRevealSound = false;
-  }
-
   const renderJoinReveal = () => {
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
@@ -977,91 +802,6 @@ function renderJoinQuestion(question) {
   const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
   if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
-
-  // Question audio button for audio-enabled questions
-  const qHasAudio = (question.type === 'audio') || (question.audioEnabled && question.audioText);
-  if (qHasAudio) {
-    const audioBtn = document.createElement('button');
-    audioBtn.type = 'button';
-    audioBtn.className = 'btn top-space';
-    audioBtn.textContent = '🔊 Hear Question';
-    audioBtn.addEventListener('click', () => {
-      const text = question.audioText || question.prompt || '';
-      const lang = question.language || 'en-US';
-      playAssignmentAudio(text, lang);
-    });
-    if (joinPromptEl) joinPromptEl.appendChild(audioBtn);
-    
-    // Auto-play question audio
-    if (question.audioEnabled) {
-      setTimeout(() => {
-        const text = question.audioText || question.prompt || '';
-        const lang = question.language || 'en-US';
-        playAssignmentAudio(text, lang);
-      }, 500);
-    }
-  }
-
-  // Lock answers after first click for assignment mode
-  if (live.player.mode === 'assignment' && joinAnswersEl) {
-    // Track which answer was first clicked (for locking)
-    const lockAnswers = () => {
-      joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(input => {
-        input.addEventListener('change', () => {
-          // Mark this question as answered for locking
-          if (!live.player.assignment.lockedAnswers) live.player.assignment.lockedAnswers = {};
-          live.player.assignment.lockedAnswers[live.player.assignment.currentIndex] = input.value;
-          
-          // Show locked state visually
-          joinAnswersEl.classList.add('answers-locked');
-          joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(inp => {
-            inp.disabled = true;
-            const row = inp.closest('label');
-            if (row) {
-              row.classList.add('locked');
-              if (inp.value === input.value) row.classList.add('selected-locked');
-            }
-          });
-          
-          // Add locked indicator
-          const lockMsg = document.createElement('p');
-          lockMsg.className = 'small lock-message';
-          lockMsg.textContent = '🔒 Answer locked — cannot be changed';
-          lockMsg.style.color = '#d29922';
-          lockMsg.style.marginTop = '8px';
-          joinAnswersEl.appendChild(lockMsg);
-        });
-      });
-    };
-    
-    // Check if already answered (returning student)
-    const currentIdx = live.player.assignment.currentIndex;
-    const existingAnswer = live.player.assignment.lockedAnswers?.[currentIdx];
-    if (existingAnswer !== undefined) {
-      // Already answered - show locked state
-      setTimeout(() => {
-        joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(inp => {
-          inp.disabled = true;
-          const row = inp.closest('label');
-          if (row) {
-            row.classList.add('locked');
-            if (inp.value === existingAnswer) row.classList.add('selected-locked');
-          }
-        });
-        joinAnswersEl.classList.add('answers-locked');
-        
-        const lockMsg = document.createElement('p');
-        lockMsg.className = 'small lock-message';
-        lockMsg.textContent = '🔒 Already answered on previous visit';
-        lockMsg.style.color = '#8b949e';
-        lockMsg.style.marginTop = '8px';
-        joinAnswersEl.appendChild(lockMsg);
-      }, 100);
-    } else {
-      // Not answered yet - set up locking
-      setTimeout(lockAnswers, 100);
-    }
-  }
 
   if (question.isPoll) {
     const note = document.createElement('p');
@@ -1462,7 +1202,6 @@ async function submitLiveAnswer() {
 
       live.player.assignment.forceAutoAdvance = true;
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
-      playAssignmentSfx('correct');
       await loadAssignmentState();
       return;
     }
@@ -2095,56 +1834,6 @@ function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
   joinTitleEl.textContent = safe ? safe : '';
-}
-
-// Assignment audio playback using Edge TTS bridge
-let assignmentAudioEl = null;
-function playAssignmentAudio(text, lang = 'en-US-Wave') {
-  const value = String(text || '').trim();
-  if (!value) return;
-
-  // Stop any current playback
-  if (assignmentAudioEl) {
-    assignmentAudioEl.pause();
-    assignmentAudioEl.currentTime = 0;
-    assignmentAudioEl = null;
-  }
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-
-  // Use browser speech synthesis for assignment mode
-  try {
-    const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = (lang || 'en-US').replace('-Wave', '');
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.onend = () => { assignmentAudioEl = null; };
-    window.speechSynthesis.speak(utterance);
-  } catch {}
-}
-
-// Assignment sound effects
-const assignmentSfx = {
-  correct: null,
-  wrong: null,
-  tick: null,
-};
-
-function initAssignmentSfx() {
-  try {
-    assignmentSfx.correct = new Audio('../music/answered.mp3');
-    assignmentSfx.wrong = new Audio('../music/correctanswer.mp3');  // or 'wronganswer.mp3'
-    assignmentSfx.tick = new Audio('../music/counter.mp3');
-    Object.values(assignmentSfx).forEach(a => { if (a) a.volume = 0.8; });
-  } catch {}
-}
-
-function playAssignmentSfx(name) {
-  try {
-    const a = assignmentSfx[name];
-    if (!a) return;
-    a.currentTime = 0;
-    a.play().catch(() => {});
-  } catch {}
 }
 
 function ensureTimerProgressBar(cardEl, id) {
