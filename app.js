@@ -7858,8 +7858,8 @@ function fileToDataUrl(file) {
   });
 }
 
-const IMAGE_MAX_DIMENSION = 1600;
-const IMAGE_TARGET_BYTES = 450 * 1024;
+const IMAGE_MAX_DIMENSION = 800;
+const IMAGE_TARGET_BYTES = 150 * 1024;
 
 function estimateDataUrlBytes(dataUrl) {
   const payload = String(dataUrl || '').split(',')[1] || '';
