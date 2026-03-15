@@ -1328,6 +1328,7 @@ async function submitLiveAnswer() {
       });
 
       live.player.assignment.forceAutoAdvance = true;
+      playAssignmentSfx('answering');
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
       await loadAssignmentState();
       return;
@@ -1963,28 +1964,45 @@ function setJoinTitle(name = '') {
   joinTitleEl.textContent = safe ? safe : '';
 }
 
-// Assignment sound effects
-const assignmentSfx = {
-  correct: null,
-  wrong: null,
-  tick: null,
+// Ambient sounds for assignment mode (like live mode)
+const assignmentAmbient = {
+  hall: null,
+  final: null,
+  answering: [],
 };
 
 function initAssignmentSfx() {
   try {
-    assignmentSfx.correct = new Audio('music/answered.mp3');
-    assignmentSfx.wrong = new Audio('music/correctanswer.mp3');
-    assignmentSfx.tick = new Audio('music/counter.mp3');
-    Object.values(assignmentSfx).forEach(a => { if (a) a.volume = 0.8; });
+    assignmentAmbient.hall = new Audio('music/hall.mp3');
+    assignmentAmbient.final = new Audio('music/final.mp3');
+    // All answering sounds
+    assignmentAmbient.answering = [
+      new Audio('music/answering.mp3'),
+      new Audio('music/answering2.mp3'),
+      new Audio('music/answering3.mp3'),
+      new Audio('music/answering4.mp3'),
+      new Audio('music/answering5.mp3'),
+      new Audio('music/answering6.mp3'),
+      new Audio('music/answering7.mp3'),
+      new Audio('music/answering8.mp3'),
+      new Audio('music/answering9.mp3'),
+      new Audio('music/answering10.mp3'),
+      new Audio('music/answering11.mp3'),
+    ];
+    Object.values(assignmentAmbient).flat().forEach(a => { if (a) a.volume = 0.7; });
   } catch {}
 }
 
 function playAssignmentSfx(name) {
   try {
-    const a = assignmentSfx[name];
-    if (!a) return;
-    a.currentTime = 0;
-    a.play().catch(() => {});
+    if (name === 'answering') {
+      const idx = Math.floor(Math.random() * assignmentAmbient.answering.length);
+      const a = assignmentAmbient.answering[idx];
+      if (a) { a.currentTime = 0; a.play().catch(() => {}); }
+    } else {
+      const a = assignmentAmbient[name];
+      if (a) { a.currentTime = 0; a.play().catch(() => {}); }
+    }
   } catch {}
 }
 
@@ -2241,5 +2259,6 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
+
 
 
