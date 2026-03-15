@@ -380,6 +380,7 @@ async function loadAssignmentState() {
   if (live.player.assignment.forceAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
     live.player.assignment.currentIndex = autoIdx;
     live.player.assignment.forceAutoAdvance = false;
+    pickNewAnsweringTrack(); // New question via auto-advance
   } else {
     live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
   }
@@ -1329,6 +1330,7 @@ async function submitLiveAnswer() {
       });
 
       live.player.assignment.forceAutoAdvance = true;
+      pickNewAnsweringTrack();
       playAssignmentSfx('answering');
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
       await loadAssignmentState();
@@ -1988,6 +1990,7 @@ const assignmentAmbient = {
   final: null,
   answering: [],
 };
+let currentAnsweringIdx = -1; // Track current answering track per question
 
 function initAssignmentSfx() {
   try {
@@ -2014,14 +2017,19 @@ function initAssignmentSfx() {
 function playAssignmentSfx(name) {
   try {
     if (name === 'answering') {
-      const idx = Math.floor(Math.random() * assignmentAmbient.answering.length);
-      const a = assignmentAmbient.answering[idx];
+      // Use pre-selected track for current question
+      if (currentAnsweringIdx < 0) currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
+      const a = assignmentAmbient.answering[currentAnsweringIdx];
       if (a) { a.currentTime = 0; a.play().catch(() => {}); }
     } else {
       const a = assignmentAmbient[name];
       if (a) { a.currentTime = 0; a.play().catch(() => {}); }
     }
   } catch {}
+}
+
+function pickNewAnsweringTrack() {
+  currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
 }
 
 function ensureTimerProgressBar(cardEl, id) {
@@ -2277,6 +2285,8 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
+
+
 
 
 
