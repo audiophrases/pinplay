@@ -979,7 +979,7 @@ function renderJoinQuestion(question) {
   if (hasAudio) {
     playBtn.onclick = () => {
       const text = question.audioText || question.prompt || '';
-      const lang = question.language || 'en-US-WaveNet';
+      const lang = question.language || 'en-US-Wave';
       speakText(text, lang);
     };
   }
@@ -2072,11 +2072,21 @@ function initAssignmentSfx() {
   } catch {}
 }
 
+function stopAllAssignmentAmbient() {
+  try {
+    if (assignmentAmbient.hall) { assignmentAmbient.hall.pause(); assignmentAmbient.hall.currentTime = 0; }
+    if (assignmentAmbient.final) { assignmentAmbient.final.pause(); assignmentAmbient.final.currentTime = 0; }
+    assignmentAmbient.answering.forEach(a => { a.pause(); a.currentTime = 0; });
+  } catch {}
+}
+
 function playAssignmentSfx(name) {
   try {
+    // Stop any currently playing ambient first
+    stopAllAssignmentAmbient();
     if (name === 'answering') {
       // Use pre-selected track for current question
-      if (currentAnsweringIdx < 0) currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
+      if (currentAnsweringIdx < 0) pickNewAnsweringTrack();
       const a = assignmentAmbient.answering[currentAnsweringIdx];
       if (a) { a.currentTime = 0; a.play().catch(() => {}); }
     } else {
