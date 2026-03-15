@@ -2343,10 +2343,11 @@ function setupImageLightbox() {
   });
 
   document.addEventListener('click', (e) => {
-    const img = e.target?.closest?.('img[data-zoomable="1"]');
-    if (!img) return;
-    if (!(img instanceof HTMLImageElement)) return;
-    modalImg.src = img.src;
+    const zoomableEl = e.target?.closest?.('[data-zoomable="1"]');
+    if (!zoomableEl) return;
+    const src = zoomableEl.dataset.bgImageSrc || (zoomableEl instanceof HTMLImageElement ? zoomableEl.src : null);
+    if (!src) return;
+    modalImg.src = src;
     modal.classList.remove('hidden');
   });
 }
