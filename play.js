@@ -167,6 +167,12 @@ async function validatePin() {
       if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
       if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
 
+      // Show dice button in assignment mode before attempt starts (if random names enabled)
+      if (rerollNameBtn) {
+        const show = live.player.mode === 'assignment' && live.player.randomNamesMode && !live.player.assignment.attemptId;
+        rerollNameBtn.classList.toggle('hidden', !show);
+      }
+
       if (live.player.randomNamesMode) {
         if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
         if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
@@ -680,6 +686,9 @@ function renderPlayerState(state) {
 
   if (joinProgressEl) joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
+
+  // Clear previous feedback to avoid carryover between questions
+  setStatus(joinFeedbackEl, '', '');
 
   const renderInlinePoints = (_points) => {
     // Removed by request: do not show separate inline "+X pts" row.
