@@ -541,6 +541,7 @@ async function startAssignmentAttempt() {
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
+  hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
   if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
@@ -1955,7 +1956,24 @@ function setStatus(el, text, mode = '') {
   el.textContent = text;
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
-  if (mode === 'bad') el.classList.add('bad');
+  if (mode === 'bad') {
+    el.classList.add('bad');
+    showLoginError(text);
+  }
+}
+
+function showLoginError(msg) {
+  const panel = document.getElementById('loginErrorPanel');
+  const text = document.getElementById('loginErrorText');
+  if (panel && text) {
+    text.textContent = '❌ ' + msg;
+    panel.classList.remove('hidden');
+  }
+}
+
+function hideLoginError() {
+  const panel = document.getElementById('loginErrorPanel');
+  if (panel) panel.classList.add('hidden');
 }
 
 function setJoinTitle(name = '') {
