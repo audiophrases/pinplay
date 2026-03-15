@@ -553,6 +553,10 @@ async function startAssignmentAttempt() {
   live.player.assignment.attemptId = data?.attempt?.id || null;
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
+  // Reset ambient state for new assignment
+  lastRenderedQuestionIndex = -1;
+  lastClosedQuestionIndex = -1;
+  assignmentFinalPlayed = false;
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -730,6 +734,10 @@ function renderPlayerState(state) {
     if (state.phase === 'lobby') {
       setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
     } else if (state.phase === 'results') {
+      if (!assignmentFinalPlayed) {
+        playAssignmentSfx('final');
+        assignmentFinalPlayed = true;
+      }
       setStatus(joinStatusEl, 'Game finished 🎉', 'ok');
       renderLeaderboardInJoin(state.leaderboard || []);
     }
@@ -772,6 +780,12 @@ function renderPlayerState(state) {
     if (joinTimerEl) joinTimerEl.textContent = 'Time: 0s';
   } else {
     startJoinTimer(state);
+  }
+
+  // Play hall sound when question just closed (once per question)
+  if (questionClosed && state.currentIndex !== lastClosedQuestionIndex) {
+    playAssignmentSfx('hall');
+    lastClosedQuestionIndex = state.currentIndex;
   }
 
   const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
@@ -947,6 +961,29 @@ function renderJoinQuestion(question) {
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
+
+  // Add play button for question audio (TTS)
+  let playBtn = document.getElementById('joinPlayQuestionBtn');
+  if (!playBtn) {
+    playBtn = document.createElement('button');
+    playBtn.id = 'joinPlayQuestionBtn';
+    playBtn.className = 'btn small';
+    playBtn.style.marginLeft = '8px';
+    playBtn.textContent = '🔊 Play';
+    if (joinPromptEl && joinPromptEl.parentNode) {
+      joinPromptEl.parentNode.insertBefore(playBtn, joinPromptEl.nextSibling);
+    }
+  }
+  const hasAudio = !!(question.audioText || question.prompt);
+  playBtn.style.display = hasAudio ? 'inline-block' : 'none';
+  if (hasAudio) {
+    playBtn.onclick = () => {
+      const text = question.audioText || question.prompt || '';
+      const lang = question.language || 'en-US-WaveNet';
+      speakText(text, lang);
+    };
+  }
+
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;
 
@@ -1353,8 +1390,6 @@ async function submitLiveAnswer() {
       });
 
       live.player.assignment.forceAutoAdvance = true;
-      pickNewAnsweringTrack();
-      playAssignmentSfx('answering');
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
       await loadAssignmentState();
       return;
@@ -2012,6 +2047,8 @@ const assignmentAmbient = {
 };
 let currentAnsweringIdx = -1; // Track current answering track per question
 let lastRenderedQuestionIndex = -1; // Track last rendered question to play ambient on change
+let lastClosedQuestionIndex = -1; // Track last question where hall sound was played
+let assignmentFinalPlayed = false; // Track final sound for completed assignment
 
 function initAssignmentSfx() {
   try {
