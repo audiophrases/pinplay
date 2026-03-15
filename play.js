@@ -228,6 +228,7 @@ async function validatePin() {
     setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
+    showLoginError(err.message);
   }
 }
 
@@ -278,6 +279,7 @@ async function joinLiveGame() {
 
     const prefix = data.alreadyJoined ? 'Rejoined' : 'Joined';
     setStatus(joinStatusEl, `${prefix} as ${shownName} ✅`, 'ok');
+    hideLoginError();
 
     if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
 
@@ -285,6 +287,7 @@ async function joinLiveGame() {
     await pollPlayerState();
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
+    showLoginError(err.message);
   }
 }
 
@@ -1959,10 +1962,7 @@ function setStatus(el, text, mode = '') {
   el.textContent = text;
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
-  if (mode === 'bad') {
-    el.classList.add('bad');
-    showLoginError(text);
-  }
+  if (mode === 'bad') el.classList.add('bad');
 }
 
 function showLoginError(msg) {
