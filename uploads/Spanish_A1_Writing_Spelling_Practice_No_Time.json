@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "title": "Spanish A1 · Writing & Spelling Practice (No Time Limit)",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq",
+      "prompt": "Listen and choose the exact sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yo quiero una manzana, por favor.",
+      "language": "es-ES",
+      "answers": [
+        { "text": "Yo quiero una manzana, por favor.", "correct": true },
+        { "text": "Yo quiero un manzana, por favor.", "correct": false },
+        { "text": "Yo quiere una manzana, por favor.", "correct": false },
+        { "text": "Yo quiero una manzana porfavor.", "correct": false }
+      ]
+    },
+    {
+      "id": "q2",
+      "type": "tf",
+      "prompt": "The audio says: \"Yo quiero una manzana, por favor.\"",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yo quiero una manzana, por favor.",
+      "language": "es-ES",
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "q3",
+      "type": "context_gap",
+      "prompt": "Fill the blanks from the audio: Yo ____ una manzana, por ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yo quiero una manzana, por favor.",
+      "language": "es-ES",
+      "gaps": ["quiero", "favor"]
+    },
+    {
+      "id": "q4",
+      "type": "text",
+      "prompt": "Write the full sentence. Hint: starts with \"Yo q...\"",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yo quiero una manzana, por favor.",
+      "language": "es-ES",
+      "accepted": [
+        "yo quiero una manzana por favor",
+        "yo quiero una manzana, por favor"
+      ]
+    },
+    {
+      "id": "q5",
+      "type": "text",
+      "prompt": "Write exactly what you hear.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Yo quiero una manzana, por favor.",
+      "language": "es-ES",
+      "accepted": [
+        "yo quiero una manzana por favor",
+        "yo quiero una manzana, por favor"
+      ]
+    },
+    {
+      "id": "q6",
+      "type": "mcq",
+      "prompt": "New sentence: choose the exact text you hear.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Hoy estudio español en casa.",
+      "language": "es-ES",
+      "answers": [
+        { "text": "Hoy estudio español en casa.", "correct": true },
+        { "text": "Hoy estudio espanol en casa.", "correct": false },
+        { "text": "Hoy estudia español en casa.", "correct": false },
+        { "text": "Hoy estudio español a casa.", "correct": false }
+      ]
+    },
+    {
+      "id": "q7",
+      "type": "context_gap",
+      "prompt": "Fill the blanks from the audio: Hoy ____ español en ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Hoy estudio español en casa.",
+      "language": "es-ES",
+      "gaps": ["estudio", "casa"]
+    },
+    {
+      "id": "q8",
+      "type": "text",
+      "prompt": "Write the sentence. Hint: Hoy...",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Hoy estudio español en casa.",
+      "language": "es-ES",
+      "accepted": [
+        "hoy estudio español en casa",
+        "hoy estudio espanol en casa"
+      ]
+    },
+    {
+      "id": "q9",
+      "type": "text",
+      "prompt": "No hint now: write exactly what you hear.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Hoy estudio español en casa.",
+      "language": "es-ES",
+      "accepted": [
+        "hoy estudio español en casa",
+        "hoy estudio espanol en casa"
+      ]
+    },
+    {
+      "id": "q10",
+      "type": "open",
+      "prompt": "Confidence step: write ONE similar sentence about yourself (A1 level). Example idea: \"Hoy estudio inglés en casa.\"",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "es-ES"
+    }
+  ]
+}

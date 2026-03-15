@@ -75,6 +75,7 @@ function init() {
   pingEdgeTtsBridgeWarmup();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
   initAssignmentFromUrl();
+  initAssignmentSfx();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -139,6 +140,13 @@ function initAssignmentFromUrl() {
   if (joinPinEl) joinPinEl.value = code;
   if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
   if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+
+  // Assignment links should behave like a direct entry point:
+  // open the assignment immediately and reveal the correct identity mode
+  // instead of leaving the generic PIN/login screen visible.
+  setTimeout(() => {
+    validatePin().catch(() => {});
+  }, 0);
 }
 
 async function validatePin() {
@@ -168,6 +176,18 @@ async function validatePin() {
           const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
           joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
         }
+        // Show dice button for random names mode
+        if (rerollNameBtn) rerollNameBtn.classList.remove('hidden');
+        // Get initial random name
+        if (!live.player.displayName) {
+          try {
+            const res = await api('/api/player/random-name', { method: 'GET' });
+            live.player.displayName = String(res?.name || '').trim() || `Player${Math.floor(Math.random() * 999)}`;
+          } catch {
+            live.player.displayName = `Player${Math.floor(Math.random() * 999)}`;
+          }
+        }
+        if (joinNameEl) joinNameEl.value = live.player.displayName;
       } else {
         if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
         if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
@@ -406,15 +426,27 @@ async function startAssignmentAttempt() {
   const studentKey = makeAssignmentStudentKey(username);
   if (!studentKey) throw new Error('Invalid username.');
 
-  const data = await api('/api/assignment/start', {
-    method: 'POST',
-    headers: live.player.randomNamesMode ? {} : { 'X-Student-Password': password },
-    body: {
-      code,
-      studentKey,
-      studentName: username,
-    },
-  });
+  // Show loading state
+  if (joinBtn) joinBtn.disabled = true;
+  if (joinBtn) joinBtn.textContent = 'Starting...';
+  setStatus(joinStatusEl, 'Verifying credentials...', 'ok');
+
+  let data;
+  try {
+    data = await api('/api/assignment/start', {
+      method: 'POST',
+      body: { code, studentKey, studentName: username, password },
+    });
+  } catch (err) {
+    if (joinBtn) joinBtn.disabled = false;
+    if (joinBtn) joinBtn.textContent = 'Start assignment';
+    const msg = String(err?.message || 'Login failed.');
+    // Show error prominently
+    setStatus(joinStatusEl, `❌ ${msg}`, 'bad');
+    throw err;
+  }
+
+  if (joinBtn) joinBtn.disabled = false;
 
   live.player.assignment.attemptId = data?.attempt?.id || null;
   live.player.displayName = data?.attempt?.studentName || username;
@@ -494,18 +526,16 @@ async function rerollRandomName() {
       const data = await api('/api/player/reroll-name', {
         method: 'POST',
         headers: { 'X-Player-Token': live.player.token },
-        body: {
-          pin: live.player.pin,
-          playerId: live.player.id,
-        },
+        body: { pin: live.player.pin, playerId: live.player.id },
       });
       nextName = String(data?.name || '').trim();
     }
 
     if (nextName) {
       live.player.displayName = nextName;
+      if (joinNameEl) joinNameEl.value = nextName;
       setJoinTitle(nextName);
-      setStatus(joinStatusEl, `New random name: ${nextName} ✅`, 'ok');
+      setStatus(joinStatusEl, `New name: ${nextName} 🎲`, 'ok');
     }
   } catch (err) {
     setStatus(joinStatusEl, String(err?.message || 'Could not change name.'), 'bad');
@@ -515,6 +545,25 @@ async function rerollRandomName() {
 }
 
 function renderPlayerState(state) {
+  // Play sound when question closes (answer revealed)
+  if (state.questionClosed && !live.player._lastRevealSound) {
+    live.player._lastRevealSound = true;
+    const q = live.player.currentQuestion;
+    if (q) {
+      // Check if answer was correct by comparing selected answer to correct answer
+      const selectedInput = joinAnswersEl?.querySelector('input[name="join-answer"]:checked');
+      const selectedIdx = selectedInput ? parseInt(selectedInput.value) : -1;
+      const correctIdx = (q.answers || []).findIndex(a => a.correct);
+      
+      if (selectedIdx >= 0 && correctIdx >= 0) {
+        if (selectedIdx === correctIdx) playAssignmentSfx('correct');
+        else playAssignmentSfx('wrong');
+      }
+    }
+  } else if (!state.questionClosed) {
+    live.player._lastRevealSound = false;
+  }
+
   const renderJoinReveal = () => {
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
@@ -795,6 +844,30 @@ function renderJoinQuestion(question) {
   const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
   if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+
+  // Question audio button for audio-enabled questions
+  const qHasAudio = (question.type === 'audio') || (question.audioEnabled && question.audioText);
+  if (qHasAudio) {
+    const audioBtn = document.createElement('button');
+    audioBtn.type = 'button';
+    audioBtn.className = 'btn top-space';
+    audioBtn.textContent = '🔊 Hear Question';
+    audioBtn.addEventListener('click', () => {
+      const text = question.audioText || question.prompt || '';
+      const lang = question.language || 'en-US';
+      playAssignmentAudio(text, lang);
+    });
+    if (joinPromptEl) joinPromptEl.appendChild(audioBtn);
+    
+    // Auto-play question audio
+    if (question.audioEnabled) {
+      setTimeout(() => {
+        const text = question.audioText || question.prompt || '';
+        const lang = question.language || 'en-US';
+        playAssignmentAudio(text, lang);
+      }, 500);
+    }
+  }
 
   if (question.isPoll) {
     const note = document.createElement('p');
@@ -1195,6 +1268,7 @@ async function submitLiveAnswer() {
 
       live.player.assignment.forceAutoAdvance = true;
       setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
+      playAssignmentSfx('correct');
       await loadAssignmentState();
       return;
     }
@@ -1827,6 +1901,56 @@ function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
   joinTitleEl.textContent = safe ? safe : '';
+}
+
+// Assignment audio playback using Edge TTS bridge
+let assignmentAudioEl = null;
+function playAssignmentAudio(text, lang = 'en-US-Wave') {
+  const value = String(text || '').trim();
+  if (!value) return;
+
+  // Stop any current playback
+  if (assignmentAudioEl) {
+    assignmentAudioEl.pause();
+    assignmentAudioEl.currentTime = 0;
+    assignmentAudioEl = null;
+  }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+  // Use browser speech synthesis for assignment mode
+  try {
+    const utterance = new SpeechSynthesisUtterance(value);
+    utterance.lang = (lang || 'en-US').replace('-Wave', '');
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => { assignmentAudioEl = null; };
+    window.speechSynthesis.speak(utterance);
+  } catch {}
+}
+
+// Assignment sound effects
+const assignmentSfx = {
+  correct: null,
+  wrong: null,
+  tick: null,
+};
+
+function initAssignmentSfx() {
+  try {
+    assignmentSfx.correct = new Audio('../music/answered.mp3');
+    assignmentSfx.wrong = new Audio('../music/correctanswer.mp3');  // or 'wronganswer.mp3'
+    assignmentSfx.tick = new Audio('../music/counter.mp3');
+    Object.values(assignmentSfx).forEach(a => { if (a) a.volume = 0.8; });
+  } catch {}
+}
+
+function playAssignmentSfx(name) {
+  try {
+    const a = assignmentSfx[name];
+    if (!a) return;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {}
 }
 
 function ensureTimerProgressBar(cardEl, id) {

@@ -387,7 +387,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, quiz }),
       }));
     }
 
@@ -543,13 +543,20 @@ export default {
       const code = sanitizeAssignmentCode(body?.code);
       const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
       const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
-      const password = String(request.headers.get('X-Student-Password') || '').trim();
+      const password = String(body?.password || request.headers.get('X-Student-Password') || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+
       // Check assignment login mode and verify password if needed
-      const assignments = await loadAssignmentsMap(this.state.storage);
-      const assignment = assignments?.[code] || null;
+      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      });
+      if (!getRes.ok) return withCors(getRes);
+      const getData = await getRes.json();
+      const assignment = getData?.assignment || null;
+
       if (assignment && assignment.randomNames === false) {
         if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
 
@@ -561,16 +568,33 @@ export default {
           const verifyHeaders = { 'Content-Type': 'application/json' };
           if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
 
-          const vRes = await fetch(verifyUrl, {
-            method: 'POST',
-            headers: verifyHeaders,
-            body: JSON.stringify({ username: studentName, password, pin: code, secret: verifySecret }),
-          });
-          const vTxt = await vRes.text();
-          let parsed = {};
-          try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+          // Try original name and lowercase variant (same as live mode)
+          const verifyNames = [studentName];
+          const lowerName = sanitizeName ? sanitizeName(studentName).toLowerCase() : studentName.toLowerCase();
+          if (lowerName && !verifyNames.includes(lowerName)) {
+            verifyNames.push(lowerName);
+          }
 
-          if (!vRes.ok || (parsed && parsed.ok === false)) {
+          let verified = false;
+          for (const candidateName of verifyNames) {
+            const vRes = await fetch(verifyUrl, {
+              method: 'POST',
+              headers: verifyHeaders,
+              body: JSON.stringify({ username: candidateName, password, pin: code, secret: verifySecret }),
+            });
+            const vTxt = await vRes.text();
+            let parsed = {};
+            try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+
+            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, statusCode: vRes.ok, response: vTxt.slice(0, 200) });
+
+            if (vRes.ok && (!parsed || parsed.ok !== false)) {
+              verified = true;
+              break;
+            }
+          }
+
+          if (!verified) {
             return withCors(json({ error: 'Invalid username or password.' }, 401));
           }
         } catch {
@@ -578,7 +602,6 @@ export default {
         }
       }
 
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
         body: JSON.stringify({ code, studentKey, studentName }),
