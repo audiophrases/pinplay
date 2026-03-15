@@ -1320,3 +1320,27 @@ textarea { min-height: 72px; resize: vertical; }
     grid-template-columns: 1fr;
   }
 }
+/* Background image containers for controlled fit */
+.question-image-preview, .pin-preview {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  width: 100%;
+  min-height: 100px;
+}
+#joinCard.fit-l1 .question-image-preview, #joinCard.fit-l1 .pin-preview,
+#hostQuestionCard.fit-l1 .question-image-preview, #hostQuestionCard.fit-l1 .pin-preview {
+  max-height: min(30vh, 270px);
+}
+#joinCard.fit-l2 .question-image-preview, #joinCard.fit-l2 .pin-preview,
+#hostQuestionCard.fit-l2 .question-image-preview, #hostQuestionCard.fit-l2 .pin-preview {
+  max-height: min(26vh, 230px);
+}
+#joinCard.fit-l3 .question-image-preview, #joinCard.fit-l3 .pin-preview,
+#hostQuestionCard.fit-l3 .question-image-preview, #hostQuestionCard.fit-l3 .pin-preview {
+  max-height: min(22vh, 190px);
+}
+#joinCard.fit-l4 .question-image-preview, #joinCard.fit-l4 .pin-preview,
+#hostQuestionCard.fit-l4 .question-image-preview, #hostQuestionCard.fit-l4 .pin-preview {
+  max-height: min(18vh, 150px);
+}
