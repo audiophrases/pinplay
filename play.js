@@ -732,6 +732,15 @@ function renderPlayerState(state) {
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
 
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
+
+  // Play answering ambient when entering a new question in assignment mode
+  if (live.player.mode === 'assignment' && state.phase === 'question') {
+    if (state.currentIndex !== lastRenderedQuestionIndex) {
+      lastRenderedQuestionIndex = state.currentIndex;
+      pickNewAnsweringTrack();
+      playAssignmentSfx('answering');
+    }
+  }
   const shouldRenderQuestion = live.player.renderKey !== key;
   if (shouldRenderQuestion) {
     live.player.renderKey = key;
@@ -1992,6 +2001,7 @@ const assignmentAmbient = {
   answering: [],
 };
 let currentAnsweringIdx = -1; // Track current answering track per question
+let lastRenderedQuestionIndex = -1; // Track last rendered question to play ambient on change
 
 function initAssignmentSfx() {
   try {
