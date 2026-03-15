@@ -869,6 +869,67 @@ function renderJoinQuestion(question) {
     }
   }
 
+  // Lock answers after first click for assignment mode
+  if (live.player.mode === 'assignment' && joinAnswersEl) {
+    // Track which answer was first clicked (for locking)
+    const lockAnswers = () => {
+      joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(input => {
+        input.addEventListener('change', () => {
+          // Mark this question as answered for locking
+          if (!live.player.assignment.lockedAnswers) live.player.assignment.lockedAnswers = {};
+          live.player.assignment.lockedAnswers[live.player.assignment.currentIndex] = input.value;
+          
+          // Show locked state visually
+          joinAnswersEl.classList.add('answers-locked');
+          joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(inp => {
+            inp.disabled = true;
+            const row = inp.closest('label');
+            if (row) {
+              row.classList.add('locked');
+              if (inp.value === input.value) row.classList.add('selected-locked');
+            }
+          });
+          
+          // Add locked indicator
+          const lockMsg = document.createElement('p');
+          lockMsg.className = 'small lock-message';
+          lockMsg.textContent = '🔒 Answer locked — cannot be changed';
+          lockMsg.style.color = '#d29922';
+          lockMsg.style.marginTop = '8px';
+          joinAnswersEl.appendChild(lockMsg);
+        });
+      });
+    };
+    
+    // Check if already answered (returning student)
+    const currentIdx = live.player.assignment.currentIndex;
+    const existingAnswer = live.player.assignment.lockedAnswers?.[currentIdx];
+    if (existingAnswer !== undefined) {
+      // Already answered - show locked state
+      setTimeout(() => {
+        joinAnswersEl.querySelectorAll('input[data-join-answer]').forEach(inp => {
+          inp.disabled = true;
+          const row = inp.closest('label');
+          if (row) {
+            row.classList.add('locked');
+            if (inp.value === existingAnswer) row.classList.add('selected-locked');
+          }
+        });
+        joinAnswersEl.classList.add('answers-locked');
+        
+        const lockMsg = document.createElement('p');
+        lockMsg.className = 'small lock-message';
+        lockMsg.textContent = '🔒 Already answered on previous visit';
+        lockMsg.style.color = '#8b949e';
+        lockMsg.style.marginTop = '8px';
+        joinAnswersEl.appendChild(lockMsg);
+      }, 100);
+    } else {
+      // Not answered yet - set up locking
+      setTimeout(lockAnswers, 100);
+    }
+  }
+
   if (question.isPoll) {
     const note = document.createElement('p');
     note.className = 'small';

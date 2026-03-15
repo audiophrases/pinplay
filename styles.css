@@ -882,6 +882,26 @@ textarea { min-height: 72px; resize: vertical; }
   grid-column: 2;
 }
 
+/* Assignment answer locking */
+#joinAnswers.answers-locked .answer-row.locked {
+  opacity: 0.7;
+  pointer-events: none;
+}
+#joinAnswers .answer-row.locked.selected-locked {
+  background: rgba(210, 153, 34, 0.15);
+  border-color: #d29922;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+}
+#joinAnswers .answer-row.locked input:disabled + span {
+  color: #d29922;
+}
+#joinAnswers .lock-message {
+  font-style: italic;
+  text-align: center;
+}
+
 #joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
   padding: .24rem .42rem;
   font-size: .86rem;
