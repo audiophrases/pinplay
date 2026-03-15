@@ -140,6 +140,7 @@ function initAssignmentFromUrl() {
   if (joinPinEl) joinPinEl.value = code;
   if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
   if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+  document.body.classList.add('assignment-mode');
 
   // Assignment links should behave like a direct entry point:
   // open the assignment immediately and reveal the correct identity mode

@@ -1344,3 +1344,42 @@ textarea { min-height: 72px; resize: vertical; }
 #hostQuestionCard.fit-l4 .question-image-preview, #hostQuestionCard.fit-l4 .pin-preview {
   max-height: min(18vh, 150px);
 }
+
+/* --- UI simplifications --- */
+
+/* Compact single-line header */
+.join-header-lg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.join-header-lg .join-title { font-weight: 600; font-size: 1rem; flex-shrink: 0; }
+.join-header-lg .join-progress, .join-header-lg .join-timer, .join-header-lg .join-score {
+  color: #8b949e;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* Bottom row compact */
+#joinSubmission { margin-top: 0.25rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap; }
+.bet-indicator .bet-label {
+  font-weight: 700; color: #3fb950; background: rgba(63,185,80,0.15);
+  padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.9rem; white-space: nowrap;
+}
+#joinEmoji { font-size: 1.4rem; margin-left: auto; }
+
+/* Answer feedback overlay */
+#joinFeedback {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: #e6edf3; background: rgba(0,0,0,0.85);
+  z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+#joinFeedback.visible { opacity: 1; pointer-events: auto; }
+body.no-overlay { overflow: hidden; }
+
+/* Assignment mode: hide navigation buttons */
+.assignment-mode #assignmentPrevBtn, .assignment-mode #assignmentNextBtn { display: none !important; }

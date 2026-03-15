@@ -2485,7 +2485,8 @@ async function refreshAssignmentsList() {
       meta.className = 'small muted';
       const dueAt = Number(a?.dueAt || 0);
       const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
-      meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${Number(a?.attemptsLimit || 1)} · ${dueText}`;
+      const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
+      meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${attemptsText} · ${dueText}`;
 
       const row = document.createElement('div');
       row.className = 'row gap top-space';
@@ -2582,7 +2583,9 @@ async function createAssignmentFromCurrentQuiz() {
     }
     if (!createSessionPassword) throw new Error('Teacher password is required.');
 
-    const attemptsLimit = Math.max(1, Math.min(10, Number(assignmentAttemptsEl?.value || 1) || 1));
+    // 0 = unlimited (assignment stays open until teacher closes)
+    const attemptsLimitRaw = Number(assignmentAttemptsEl?.value || 1);
+    const attemptsLimit = attemptsLimitRaw === 0 ? 0 : Math.max(1, Math.min(10, attemptsLimitRaw));
     const className = String(assignmentClassEl?.value || '').trim();
 
     let dueAt = null;
