@@ -1659,7 +1659,6 @@ async function openImageSearchDialog(questionIdx) {
   input.type = 'text';
   input.placeholder = 'Search query';
   input.value = String(q.prompt || q.type || '').slice(0, 140);
-  input.focus();
   const searchBtn = document.createElement('button');
   searchBtn.className = 'btn primary';
   searchBtn.textContent = 'Search';
@@ -1793,13 +1792,12 @@ async function openImageSearchDialog(questionIdx) {
 
   dialog.append(head, row, status, results);
   overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  setTimeout(() => input.focus(), 50);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
-  document.body.appendChild(overlay);
-}
-
-function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {
+}({ title, items, onOpen, onDelete, highlightId = null }) {
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
 
