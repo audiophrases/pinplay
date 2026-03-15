@@ -403,7 +403,7 @@ async function loadAssignmentState() {
 // Load and display previous attempts for a student
 async function loadAttemptHistory(code, studentKey) {
   try {
-    const data = await api(`/api/assignment/results?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
+    const data = await api(`/api/assignment/attempts?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
     const attempts = data?.attempts || [];
     
     if (attempts.length === 0) return;

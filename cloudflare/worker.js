@@ -620,6 +620,19 @@ export default {
       }));
     }
 
+    // Student-facing attempt history endpoint
+    if (url.pathname === '/api/assignment/attempts' && request.method === 'GET') {
+      const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+      const studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/results?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, {
+        method: 'GET',
+      }));
+    }
+
     if (url.pathname === '/api/assignment/answer' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -1257,6 +1270,7 @@ export class QuizRoom {
 
       if (url.pathname === '/assignments/results' && request.method === 'GET') {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        const studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
         const assignments = await loadAssignmentsMap(this.state.storage);
@@ -1264,7 +1278,14 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempts = Object.values(assignment.attempts || {})
+        let attempts = Object.values(assignment.attempts || {});
+        
+        // Filter by studentKey if provided (student-facing request)
+        if (studentKey) {
+          attempts = attempts.filter((a) => String(a?.studentKey || '') === studentKey);
+        }
+        
+        attempts = attempts
           .map((a) => publicAssignmentAttemptSummary(assignment, a))
           .sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
 
