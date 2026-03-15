@@ -1797,7 +1797,9 @@ async function openImageSearchDialog(questionIdx) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
-}({ title, items, onOpen, onDelete, highlightId = null }) {
+}
+
+function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
 
