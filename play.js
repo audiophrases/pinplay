@@ -769,10 +769,10 @@ function renderPlayerState(state) {
         playAssignmentSfx('final');
         assignmentFinalPlayed = true;
       }
-      setStatus(joinStatusEl, 'Game finished 🎉', 'ok');
       // Update header for finished state
       const modeLabel = document.getElementById('joinModeLabel');
       if (modeLabel) modeLabel.textContent = 'Game finished 🎉';
+      // Clear status (shown in header now)
       renderLeaderboardInJoin(state.leaderboard || []);
     }
     renderJoinReveal();
@@ -927,7 +927,8 @@ function renderPlayerState(state) {
     }
     setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
   } else {
-    setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Assignment in progress.' : 'Question live!', 'ok');
+    // Status shown in header row now, no need for separate status line
+    setStatus(joinStatusEl, '', '');
   }
 
   renderJoinReveal();
