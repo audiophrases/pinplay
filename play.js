@@ -710,19 +710,9 @@ async function rerollRandomName() {
 
 function renderPlayerState(state) {
   const renderJoinReveal = () => {
+    // Removed - item highlighting replaces text reveal
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
-
-    const isPoll = !!state.question?.isPoll;
-    const show = !!state.questionClosed && !isPoll;
-    const text = String(state.correctAnswer || '').trim();
-    if (!show || !text) return;
-
-    const reveal = document.createElement('div');
-    reveal.className = 'project-text-reveal';
-    reveal.dataset.joinCorrectReveal = '1';
-    reveal.textContent = text;
-    joinAnswersEl.appendChild(reveal);
   };
 
   const latestName = String(state?.name || '').trim();

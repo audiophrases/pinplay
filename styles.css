@@ -810,25 +810,30 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
-#hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview {
+#hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview,
+#hostQuestionCard.projector-question-active.has-image .project-answers > .pin-preview {
+  max-width: 100% !important;
   width: 100%;
   max-height: 50vh;
   margin: 0 0 0.75rem 0;
+  border: none !important;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
+  cursor: default;
 }
-#hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview img {
+#hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview img,
+#hostQuestionCard.projector-question-active.has-image .project-answers > .pin-preview img {
   max-width: 100%;
   max-height: 50vh;
   object-fit: contain;
   border-radius: 12px;
 }
 
-#hostQuestionCard.projector-question-active.has-image .project-answers > :not(.question-image-preview) {
+#hostQuestionCard.projector-question-active.has-image .project-answers > :not(.question-image-preview):not(.pin-preview) {
   position: relative;
   z-index: 1;
   text-align: left;
@@ -884,25 +889,30 @@ textarea { min-height: 72px; resize: vertical; }
   position: relative;
 }
 
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview {
+  max-width: 100% !important;
   width: 100%;
   max-height: 45vh;
   margin: 0 0 0.75rem 0;
+  border: none !important;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
+  cursor: default;
 }
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview img {
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview img,
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview img {
   max-width: 100%;
   max-height: 45vh;
   object-fit: contain;
   border-radius: 8px;
 }
 
-#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview) {
+#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview):not(.pin-preview) {
   position: relative;
   z-index: 1;
 }
