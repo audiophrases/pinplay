@@ -1703,3 +1703,22 @@ body.question-active .join-title-row { display: none !important; }
 body.question-active #joinStatus {
   display: none !important;
 }
+
+/* Remove feedback overlay - use inline text instead */
+.feedback-overlay {
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: inherit !important;
+  z-index: auto !important;
+  margin: 0.5rem 0;
+  padding: 0;
+  text-align: left;
+}
+.feedback-overlay.visible { display: block !important; }
+.feedback-overlay.dismissed { display: none !important; }
+body.no-overlay { overflow: auto !important; }

@@ -102,17 +102,6 @@ function init() {
     }
   });
 
-  // Click to dismiss overlay feedback permanently
-  document.addEventListener('click', (e) => {
-    const fb = document.getElementById('joinFeedback');
-    if (fb && fb.classList.contains('visible') && e.target === fb) {
-      fb.classList.remove('visible');
-      fb.classList.add('dismissed');
-      fb.textContent = '';
-      feedbackDismissed = true;
-    }
-  });
-
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') validatePin();
@@ -699,9 +688,6 @@ async function rerollRandomName() {
 }
 
 function renderPlayerState(state) {
-  // Reset feedback dismissed state for new question
-  feedbackDismissed = false;
-  
   const renderJoinReveal = () => {
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
@@ -2096,32 +2082,12 @@ function animatePulse(el) {
   el.classList.add('fx-pop');
 }
 
-// Track if feedback was permanently dismissed
-let feedbackDismissed = false;
-
 function setStatus(el, text, mode = '') {
   if (!el) return;
   el.textContent = text;
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
   if (mode === 'bad') el.classList.add('bad');
-
-  // Overlay for answer feedback
-  if (el.id === 'joinFeedback') {
-    // Only show if not permanently dismissed
-    if (feedbackDismissed) {
-      el.classList.remove('visible');
-      document.body.classList.remove('no-overlay');
-      return;
-    }
-    if (text) {
-      el.classList.add('visible');
-      document.body.classList.add('no-overlay');
-    } else {
-      el.classList.remove('visible');
-      document.body.classList.remove('no-overlay');
-    }
-  }
 }
 
 function showLoginError(msg) {
