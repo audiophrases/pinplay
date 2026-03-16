@@ -109,6 +109,7 @@ function init() {
       fb.classList.remove('visible');
       fb.classList.add('dismissed');
       fb.textContent = '';
+      feedbackDismissed = true;
     }
   });
 
@@ -698,6 +699,9 @@ async function rerollRandomName() {
 }
 
 function renderPlayerState(state) {
+  // Reset feedback dismissed state for new question
+  feedbackDismissed = false;
+  
   const renderJoinReveal = () => {
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
@@ -2092,6 +2096,9 @@ function animatePulse(el) {
   el.classList.add('fx-pop');
 }
 
+// Track if feedback was permanently dismissed
+let feedbackDismissed = false;
+
 function setStatus(el, text, mode = '') {
   if (!el) return;
   el.textContent = text;
@@ -2101,7 +2108,12 @@ function setStatus(el, text, mode = '') {
 
   // Overlay for answer feedback
   if (el.id === 'joinFeedback') {
-    el.classList.remove('dismissed'); // Reset dismissed state on new feedback
+    // Only show if not permanently dismissed
+    if (feedbackDismissed) {
+      el.classList.remove('visible');
+      document.body.classList.remove('no-overlay');
+      return;
+    }
     if (text) {
       el.classList.add('visible');
       document.body.classList.add('no-overlay');
