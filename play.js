@@ -349,6 +349,7 @@ function moveAssignmentIndex(delta) {
   if (total <= 0) return;
   live.player.assignment.currentIndex = clampAssignmentIndex(Number(live.player.assignment.currentIndex || 0) + Number(delta || 0), total);
   pickNewAnsweringTrack();
+  playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 }
