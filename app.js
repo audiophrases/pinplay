@@ -4013,21 +4013,32 @@ function renderHostQuestion(state) {
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
   hostQuestionAnswersEl.innerHTML = '';
 
+  // Remove old audio buttons if any
+  const oldAudioRow = hostQuestionPromptEl.parentNode?.querySelector('.audio-controls-row');
+  if (oldAudioRow) oldAudioRow.remove();
+
   if (hasQuestionAudio(question)) {
-    const audioRow = document.createElement('div');
-    audioRow.className = 'row gap top-space';
+    const audioRow = document.createElement('span');
+    audioRow.className = 'audio-controls-row';
+    audioRow.style.marginLeft = '0.75rem';
+    audioRow.style.display = 'inline-flex';
+    audioRow.style.gap = '0.25rem';
+    audioRow.style.verticalAlign = 'middle';
 
     const audioBtn = document.createElement('button');
     audioBtn.type = 'button';
     audioBtn.className = 'btn';
-    audioBtn.textContent = '🔊 Play audio';
+    audioBtn.style.padding = '0.2rem 0.5rem';
+    audioBtn.style.fontSize = '0.85rem';
+    audioBtn.textContent = '🔊 Play';
 
     const speedSel = document.createElement('select');
     speedSel.className = 'btn';
     speedSel.title = 'TTS speed';
     speedSel.style.width = 'auto';
     speedSel.style.minWidth = '0';
-    speedSel.style.padding = '0 .45rem';
+    speedSel.style.padding = '0.2rem 0.3rem';
+    speedSel.style.fontSize = '0.8rem';
     [['1.0','100%'],['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v,label]) => {
       const opt = document.createElement('option');
       opt.value = v;
@@ -4040,8 +4051,9 @@ function renderHostQuestion(state) {
       playQuestionAudio(question, { speed: Number(speedSel.value || 1) });
     });
 
-    audioRow.append(audioBtn, speedSel);
-    hostQuestionAnswersEl.appendChild(audioRow);
+    audioRow.appendChild(audioBtn);
+    audioRow.appendChild(speedSel);
+    hostQuestionPromptEl.after(audioRow);
   }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
