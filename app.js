@@ -2913,6 +2913,15 @@ function handleHostHotkeys(e) {
     return;
   }
 
+  if (e.key === 'p' || e.key === 'P') {
+    e.preventDefault();
+    const q = live.host.state?.question;
+    if (q && hasQuestionAudio(q)) {
+      playQuestionAudio(q);
+    }
+    return;
+  }
+
   if (previewMode.active) {
     if (e.key === 'ArrowRight') {
       e.preventDefault();
