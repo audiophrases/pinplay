@@ -85,6 +85,30 @@ function init() {
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
 
+  // Keyboard nav for assignment mode (arrow keys + space)
+  document.addEventListener('keydown', (e) => {
+    if (live.player.mode !== 'assignment') return;
+    if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      moveAssignmentIndex(1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      moveAssignmentIndex(-1);
+    }
+  });
+
+  // Click to dismiss overlay feedback
+  document.addEventListener('click', (e) => {
+    const fb = document.getElementById('joinFeedback');
+    if (fb && fb.classList.contains('visible') && e.target === fb) {
+      fb.classList.remove('visible');
+      fb.textContent = '';
+    }
+  });
+
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') validatePin();
@@ -752,6 +776,12 @@ function renderPlayerState(state) {
   if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
 
+  // Update mode label in header row
+  const modeLabel = document.getElementById('joinModeLabel');
+  if (modeLabel) {
+    modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : 'Question live!';
+  }
+
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
 
   // Play answering ambient when entering a new question in assignment mode
@@ -1233,6 +1263,16 @@ function renderJoinQuestion(question) {
 }
 
 function appendRiskBetBar() {
+  // Simplified: show only +40% indicator, no full bet bar
+  const betInd = document.getElementById('betIndicator');
+  if (betInd) {
+    betInd.style.display = 'inline-flex';
+    const label = betInd.querySelector('.bet-label');
+    if (label) label.textContent = '🤑 +40%';
+  }
+  return; // Skip full bet bar
+  
+  // Old code preserved for reference:
   if (!joinAnswersEl) return;
 
   const wrap = document.createElement('div');

@@ -44,23 +44,23 @@
             <p id="loginErrorText" style="color:#f85149;font-weight:600;font-size:14px;"></p>
           </div>
 
-          <div id="joinQuestionWrap" class="hidden top-space">
-            <div class="join-header-lg">
-              <div id="joinProgress">Question 1 / 1</div>
-              <div id="joinTimer">Time: —</div>
-              <div id="joinScore">Score: 0</div>
+          <div id="joinQuestionWrap" class="hidden">
+            <div id="joinHeaderRow">
+              <span id="joinModeLabel"></span>
+              <span id="joinProgress">Question 1 / 1</span>
+              <span id="joinTimer">Time: —</span>
+              <span id="joinScore">Score: 0</span>
             </div>
             <h3 id="joinPrompt"></h3>
             <div id="joinAnswers"></div>
-            <div id="joinSubmission" class="row gap top-space">
+            <div id="joinSubmission">
               <button id="joinSubmitBtn" class="btn primary">Submit</button>
-              <button id="joinFinalizeBtn" class="btn hidden">Submit assignment</button>
-              <button id="assignmentPrevBtn" class="btn hidden">← Prev</button>
-              <button id="assignmentNextBtn" class="btn hidden">Next →</button>
-              <button id="assignmentNextPendingBtn" class="btn hidden">Next unanswered</button>
+              <span id="betIndicator" class="bet-indicator" style="display:none">
+                <span class="bet-label">🤑 +40%</span>
+              </span>
+              <span id="joinEmoji" class="join-emoji" title="">👍</span>
             </div>
-            <p id="assignmentBanner" class="small muted hidden"></p>
-            <p id="joinFeedback" class="feedback"></p>
+            <p id="joinFeedback" class="feedback-overlay"></p>
           </div>
         </div>
       </section>
