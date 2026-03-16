@@ -4018,9 +4018,6 @@ function renderHostQuestion(state) {
   if (oldAudioRow) oldAudioRow.remove();
 
   // Audio controls removed - use 'p' key to play instead
-    audioRow.appendChild(speedSel);
-    hostQuestionPromptEl.after(audioRow);
-  }
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
