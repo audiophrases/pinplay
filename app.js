@@ -3691,9 +3691,8 @@ function renderHostState(state) {
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
-    if (!hasQuestionAudio(state.question)) {
-      playFx('answering');
-    }
+    // Always play random ambient track for each new question
+    playFx('answering');
     animatePulse(hostQuestionWrap || hostCardEl || hallCardEl);
     live.host.lastAllAnsweredKey = null;
     live.host.lastRevealKey = null;
