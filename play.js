@@ -2089,6 +2089,24 @@ function highlightAnswerItems(isCorrect, state) {
     highlightContextGap(question);
     return;
   }
+
+  // Slider: show correct value
+  if (question.type === 'slider') {
+    showSliderFeedback(question, state);
+    return;
+  }
+
+  // Pin: show correct zone on image
+  if (question.type === 'pin') {
+    showPinFeedback(question, state);
+    return;
+  }
+
+  // Open/Speaking/Image_open: show correct answer text
+  if (['open', 'speaking', 'image_open', 'text'].includes(question.type)) {
+    showTextAnswerFeedback(question, state);
+    return;
+  }
 }
 
 // MCQ/TF/Multi highlighting
@@ -2162,6 +2180,47 @@ function highlightErrorHunt(question) {
       token.classList.add('incorrect-highlight');
     }
   });
+}
+
+// Slider: show correct value with visual indicator
+function showSliderFeedback(question, state) {
+  const slider = document.getElementById('joinSlider');
+  const out = document.getElementById('joinSliderValue');
+  if (!slider) return;
+  slider.disabled = true;
+  const correctVal = Number(question.correctSliderValue ?? question.correctAnswer);
+  const studentVal = Number(slider.value);
+  if (!isNaN(correctVal)) {
+    slider.value = correctVal;
+    const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
+    if (out) out.innerHTML = `Your answer: ${studentVal}${unit} · Correct: <strong>${correctVal}${unit}</strong>`;
+  }
+}
+
+// Pin: show correct zone marker on the image
+function showPinFeedback(question, state) {
+  const preview = joinAnswersEl.querySelector('.pin-preview');
+  if (!preview) return;
+  // Disable further picks
+  preview.style.pointerEvents = 'none';
+  // Show correct position if available
+  const correctPin = question.correctPinZone || question.correctAnswer;
+  if (correctPin && typeof correctPin === 'object') {
+    const marker = document.createElement('div');
+    marker.className = 'pin-correct-marker';
+    marker.style.cssText = `position:absolute;left:${correctPin.x * 100}%;top:${correctPin.y * 100}%;width:${(correctPin.w || 0.08) * 100}%;height:${(correctPin.h || 0.08) * 100}%;border:3px solid var(--ok);background:rgba(19,138,54,0.15);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:50;`;
+    preview.appendChild(marker);
+  }
+}
+
+// Open/Speaking/Image_open/Text: show correct answer text
+function showTextAnswerFeedback(question, state) {
+  const el = joinFeedbackEl;
+  if (!el) return;
+  const correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
+  if (correct) {
+    el.innerHTML = `<span style="color:var(--ok)">✓</span> <strong>${escapeHtml(correct)}</strong>`;
+  }
 }
 
 // Context gap: highlight each input
