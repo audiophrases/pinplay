@@ -2013,3 +2013,12 @@ body.no-overlay { overflow: auto !important; }
   background: rgba(96,93,255,0.06);
   white-space: nowrap;
 }
+
+/* Student HUD status (top row) */
+.join-hud-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.join-hud-status.ok { color: var(--ok); }
+.join-hud-status.bad { color: var(--bad); }

@@ -30,7 +30,7 @@ const assignmentPrevBtn = document.getElementById('assignmentPrevBtn');
 const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
 const assignmentBannerEl = document.getElementById('assignmentBanner');
-const joinFeedbackEl = document.getElementById('joinFeedback');
+const joinStatusHudEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
@@ -646,10 +646,10 @@ async function finalizeAssignmentAttempt() {
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
-    setStatus(joinFeedbackEl, data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅', 'ok');
+    setJoinStatusHud( data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅', 'ok');
     await loadAssignmentState();
   } catch (err) {
-    setStatus(joinFeedbackEl, String(err?.message || 'Could not submit assignment.'), 'bad');
+    setJoinStatusHud( String(err?.message || 'Could not submit assignment.'), 'bad');
   } finally {
     if (joinFinalizeBtn) joinFinalizeBtn.disabled = false;
   }
@@ -725,7 +725,7 @@ function renderPlayerState(state) {
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   // Clear previous feedback to avoid carryover between questions
-  setStatus(joinFeedbackEl, '', '');
+  setJoinStatusHud( '', '');
 
   const renderInlinePoints = (_points) => {
     // Removed by request: do not show separate inline "+X pts" row.
@@ -746,8 +746,8 @@ function renderPlayerState(state) {
     p.className = 'join-correction-inline top-space';
     p.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
 
-    if (joinFeedbackEl && joinFeedbackEl.parentElement) {
-      joinFeedbackEl.insertAdjacentElement('afterend', p);
+    if (joinAnswersEl) {
+      joinAnswersEl.appendChild(p);
     } else {
       host.appendChild(p);
     }
@@ -791,7 +791,7 @@ function renderPlayerState(state) {
   // Update mode label in header row
   const modeLabel = document.getElementById('joinModeLabel');
   if (modeLabel) {
-    modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : 'Question live!';
+    modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : '';
   }
 
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
@@ -813,7 +813,7 @@ function renderPlayerState(state) {
     live.player.pinSelections = [];
     live.player.selectedBet = 0;
     renderJoinQuestion(state.question);
-    setStatus(joinFeedbackEl, '', '');
+    setJoinStatusHud( '', '');
     animatePulse(joinQuestionWrap);
   }
 
@@ -841,7 +841,7 @@ function renderPlayerState(state) {
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
     if (!questionClosed && shouldDisable && live.player.mode === 'live') {
-      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
+      setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
     }
   }
 
@@ -893,7 +893,7 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     if (isPoll) {
-      setStatus(joinFeedbackEl, '🗳️ Poll closed. Results on projector.', 'ok');
+      setJoinStatusHud( '🗳️ Poll closed. Results on projector.', 'ok');
       setStatus(joinStatusEl, 'Poll closed.', 'ok');
     } else {
       const rr = state.revealedResult;
@@ -904,16 +904,16 @@ function renderPlayerState(state) {
       if (rr) {
         const corr = String(rr.correction || '').trim();
         if (corr) {
-          setStatus(joinFeedbackEl, '', '');
+          setJoinStatusHud( '', '');
         } else if (rr.graded === false) {
-          setStatus(joinFeedbackEl, '📝 Waiting for teacher grading.', 'ok');
+          setJoinStatusHud( '📝 Waiting for teacher grading.', 'ok');
         } else {
           // Highlight items: green for correct, red for student's wrong answer
-          setStatus(joinFeedbackEl, '', '');
+          setJoinStatusHud( '', '');
           highlightAnswerItems(rr.correct, state);
         }
       } else {
-        setStatus(joinFeedbackEl, closedMsg, 'ok');
+        setJoinStatusHud( closedMsg, 'ok');
       }
     }
   } else if (assignmentSubmitted) {
@@ -922,7 +922,7 @@ function renderPlayerState(state) {
     const rr = state.revealedResult;
     const corr = String(rr?.correction || '').trim();
     if (corr) {
-      setStatus(joinFeedbackEl, '', '');
+      setJoinStatusHud( '', '');
     }
     setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
   } else {
@@ -1437,7 +1437,7 @@ async function submitLiveAnswer() {
       });
 
       live.player.assignment.forceAutoAdvance = true;
-      setStatus(joinFeedbackEl, 'Answer saved ✅', 'ok');
+      setJoinStatusHud( 'Answer saved ✅', 'ok');
       await loadAssignmentState();
       return;
     }
@@ -1458,17 +1458,17 @@ async function submitLiveAnswer() {
     live.player.submittedForIndex = data.currentIndex;
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
 
-    setStatus(joinFeedbackEl, 'Answer submitted. Waiting for reveal…', 'ok');
+    setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
 
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
     const msg = String(err?.message || 'Could not submit answer.');
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
-      setStatus(joinFeedbackEl, 'Question is closed. Waiting for next one…', 'ok');
+      setJoinStatusHud( 'Question is closed. Waiting for next one…', 'ok');
       return;
     }
-    setStatus(joinFeedbackEl, msg, 'bad');
+    setJoinStatusHud( msg, 'bad');
   }
 }
 
@@ -2248,6 +2248,38 @@ function setStatus(el, text, mode = '') {
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
   if (mode === 'bad') el.classList.add('bad');
+}
+
+// Condensed status messages for the student HUD (top row, right of Score)
+function setJoinStatusHud(text, mode = '') {
+  if (!joinStatusHudEl) return;
+  const condensed = condenseStatusText(text);
+  joinStatusHudEl.textContent = condensed;
+  joinStatusHudEl.className = 'join-hud-status';
+  if (mode === 'ok') joinStatusHudEl.classList.add('ok');
+  if (mode === 'bad') joinStatusHudEl.classList.add('bad');
+}
+
+function condenseStatusText(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  // Waiting states
+  if (/Waiting for next question/i.test(t)) return 'Waiting…';
+  if (/Waiting for teacher grading/i.test(t)) return 'Grading…';
+  if (/Waiting for reveal/i.test(t)) return 'Waiting…';
+  if (/Teacher closed.*Waiting/i.test(t)) return 'Waiting…';
+  if (/Question is closed.*Waiting/i.test(t)) return 'Waiting…';
+  // Submitted states
+  if (/Answer submitted/i.test(t)) return 'Submitted ✓';
+  if (/Assignment submitted/i.test(t)) return 'Submitted ✓';
+  if (/Assignment was already submitted/i.test(t)) return 'Already submitted';
+  if (/Could not submit/i.test(t)) return 'Submit failed';
+  // Poll
+  if (/Poll closed/i.test(t)) return 'Poll closed ✓';
+  // Saved
+  if (/Answer saved/i.test(t)) return 'Saved ✓';
+  // Default: return first 30 chars
+  return t.length > 30 ? t.slice(0, 27) + '…' : t;
 }
 
 function showLoginError(msg) {
