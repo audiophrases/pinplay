@@ -1311,27 +1311,248 @@ const EDGE_TTS_LANGUAGE_OPTIONS = [
   { value: 'OTHER', label: 'Other' },
 ];
 const EDGE_TTS_VOICE_INDEX = [
-  { code: 'en-US-AndrewMultilingualNeural', language: 'English', country: 'United States', person: 'Andrew' },
-  { code: 'en-US-AvaMultilingualNeural', language: 'English', country: 'United States', person: 'Ava' },
-  { code: 'en-US-EmmaMultilingualNeural', language: 'English', country: 'United States', person: 'Emma' },
+  // English
+  { code: 'en-US-AndrewMultilingualNeural', language: 'English', country: 'United States', person: 'Andrew (Multi)' },
+  { code: 'en-US-AvaMultilingualNeural', language: 'English', country: 'United States', person: 'Ava (Multi)' },
+  { code: 'en-US-EmmaMultilingualNeural', language: 'English', country: 'United States', person: 'Emma (Multi)' },
+  { code: 'en-US-BrianMultilingualNeural', language: 'English', country: 'United States', person: 'Brian (Multi)' },
+  { code: 'en-US-AndrewNeural', language: 'English', country: 'United States', person: 'Andrew' },
+  { code: 'en-US-AvaNeural', language: 'English', country: 'United States', person: 'Ava' },
+  { code: 'en-US-EmmaNeural', language: 'English', country: 'United States', person: 'Emma' },
+  { code: 'en-US-BrianNeural', language: 'English', country: 'United States', person: 'Brian' },
   { code: 'en-GB-RyanNeural', language: 'English', country: 'United Kingdom', person: 'Ryan' },
   { code: 'en-GB-SoniaNeural', language: 'English', country: 'United Kingdom', person: 'Sonia' },
+  { code: 'en-AU-WilliamNeural', language: 'English', country: 'Australia', person: 'William' },
+  { code: 'en-AU-NatashaNeural', language: 'English', country: 'Australia', person: 'Natasha' },
+  { code: 'en-CA-LiamNeural', language: 'English', country: 'Canada', person: 'Liam' },
+  { code: 'en-CA-ClaraNeural', language: 'English', country: 'Canada', person: 'Clara' },
+  { code: 'en-IN-PrabhatNeural', language: 'English', country: 'India', person: 'Prabhat' },
+  { code: 'en-IN-NeerjaNeural', language: 'English', country: 'India', person: 'Neerja' },
+  { code: 'en-IE-ConnorNeural', language: 'English', country: 'Ireland', person: 'Connor' },
+  { code: 'en-IE-EmilyNeural', language: 'English', country: 'Ireland', person: 'Emily' },
+  { code: 'en-SG-WayneNeural', language: 'English', country: 'Singapore', person: 'Wayne' },
+  { code: 'en-SG-LunaNeural', language: 'English', country: 'Singapore', person: 'Luna' },
+  { code: 'en-HK-SamNeural', language: 'English', country: 'Hong Kong', person: 'Sam' },
+  { code: 'en-HK-YanNeural', language: 'English', country: 'Hong Kong', person: 'Yan' },
+  { code: 'en-KE-ChilembaNeural', language: 'English', country: 'Kenya', person: 'Chilemba' },
+  { code: 'en-KE-AsiliaNeural', language: 'English', country: 'Kenya', person: 'Asilia' },
+  { code: 'en-NG-AbeoNeural', language: 'English', country: 'Nigeria', person: 'Abeo' },
+  { code: 'en-NG-EzinneNeural', language: 'English', country: 'Nigeria', person: 'Ezinne' },
+  { code: 'en-NZ-MitchellNeural', language: 'English', country: 'New Zealand', person: 'Mitchell' },
+  { code: 'en-NZ-MollyNeural', language: 'English', country: 'New Zealand', person: 'Molly' },
+  { code: 'en-PH-JamesNeural', language: 'English', country: 'Philippines', person: 'James' },
+  { code: 'en-PH-RosaNeural', language: 'English', country: 'Philippines', person: 'Rosa' },
+  { code: 'en-TZ-ElimuNeural', language: 'English', country: 'Tanzania', person: 'Elimu' },
+  { code: 'en-TZ-ImaniNeural', language: 'English', country: 'Tanzania', person: 'Imani' },
+  { code: 'en-ZA-LukeNeural', language: 'English', country: 'South Africa', person: 'Luke' },
+  { code: 'en-ZA-LeahNeural', language: 'English', country: 'South Africa', person: 'Leah' },
+
+  // Catalan
   { code: 'ca-ES-JoanaNeural', language: 'Català', country: 'Spain', person: 'Joana' },
   { code: 'ca-ES-EnricNeural', language: 'Català', country: 'Spain', person: 'Enric' },
+
+  // French
   { code: 'fr-FR-DeniseNeural', language: 'Français', country: 'France', person: 'Denise' },
   { code: 'fr-FR-HenriNeural', language: 'Français', country: 'France', person: 'Henri' },
+  { code: 'fr-CA-SylvieNeural', language: 'Français', country: 'Canada', person: 'Sylvie' },
+  { code: 'fr-CA-AntoineNeural', language: 'Français', country: 'Canada', person: 'Antoine' },
+  { code: 'fr-BE-CharlineNeural', language: 'Français', country: 'Belgium', person: 'Charline' },
+  { code: 'fr-BE-GerardNeural', language: 'Français', country: 'Belgium', person: 'Gerard' },
+  { code: 'fr-CH-ArianeNeural', language: 'Français', country: 'Switzerland', person: 'Ariane' },
+  { code: 'fr-CH-FabriceNeural', language: 'Français', country: 'Switzerland', person: 'Fabrice' },
+
+  // Spanish
   { code: 'es-ES-ElviraNeural', language: 'Español', country: 'Spain', person: 'Elvira' },
   { code: 'es-ES-AlvaroNeural', language: 'Español', country: 'Spain', person: 'Alvaro' },
+  { code: 'es-MX-DaliaNeural', language: 'Español', country: 'Mexico', person: 'Dalia' },
+  { code: 'es-MX-JorgeNeural', language: 'Español', country: 'Mexico', person: 'Jorge' },
+  { code: 'es-AR-ElenaNeural', language: 'Español', country: 'Argentina', person: 'Elena' },
+  { code: 'es-AR-TomasNeural', language: 'Español', country: 'Argentina', person: 'Tomas' },
+  { code: 'es-CO-SalomeNeural', language: 'Español', country: 'Colombia', person: 'Salome' },
+  { code: 'es-CO-GonzaloNeural', language: 'Español', country: 'Colombia', person: 'Gonzalo' },
+  { code: 'es-CL-CatalinaNeural', language: 'Español', country: 'Chile', person: 'Catalina' },
+  { code: 'es-CL-LorenzoNeural', language: 'Español', country: 'Chile', person: 'Lorenzo' },
+  { code: 'es-US-PalomaNeural', language: 'Español', country: 'United States', person: 'Paloma' },
+  { code: 'es-US-AlonsoNeural', language: 'Español', country: 'United States', person: 'Alonso' },
+  { code: 'es-PE-CamilaNeural', language: 'Español', country: 'Peru', person: 'Camila' },
+  { code: 'es-PE-AlexNeural', language: 'Español', country: 'Peru', person: 'Alex' },
+
+  // Italian
   { code: 'it-IT-ElsaNeural', language: 'Italiano', country: 'Italy', person: 'Elsa' },
   { code: 'it-IT-DiegoNeural', language: 'Italiano', country: 'Italy', person: 'Diego' },
+  { code: 'it-CH-LuisaNeural', language: 'Italiano', country: 'Switzerland', person: 'Luisa' },
+
+  // German
   { code: 'de-DE-KatjaNeural', language: 'Deutsch', country: 'Germany', person: 'Katja' },
   { code: 'de-DE-ConradNeural', language: 'Deutsch', country: 'Germany', person: 'Conrad' },
+  { code: 'de-AT-IngridNeural', language: 'Deutsch', country: 'Austria', person: 'Ingrid' },
+  { code: 'de-AT-JonasNeural', language: 'Deutsch', country: 'Austria', person: 'Jonas' },
+  { code: 'de-CH-LeniNeural', language: 'Deutsch', country: 'Switzerland', person: 'Leni' },
+  { code: 'de-CH-JanNeural', language: 'Deutsch', country: 'Switzerland', person: 'Jan' },
+
+  // Portuguese
   { code: 'pt-BR-FranciscaNeural', language: 'Português', country: 'Brazil', person: 'Francisca' },
   { code: 'pt-BR-AntonioNeural', language: 'Português', country: 'Brazil', person: 'Antonio' },
+  { code: 'pt-PT-RaquelNeural', language: 'Português', country: 'Portugal', person: 'Raquel' },
+  { code: 'pt-PT-DuarteNeural', language: 'Português', country: 'Portugal', person: 'Duarte' },
+
+  // Russian
   { code: 'ru-RU-SvetlanaNeural', language: 'Русский', country: 'Russia', person: 'Svetlana' },
   { code: 'ru-RU-DmitryNeural', language: 'Русский', country: 'Russia', person: 'Dmitry' },
+
+  // Japanese
   { code: 'ja-JP-NanamiNeural', language: '日本語', country: 'Japan', person: 'Nanami' },
   { code: 'ja-JP-KeitaNeural', language: '日本語', country: 'Japan', person: 'Keita' },
+
+  // Chinese
+  { code: 'zh-CN-XiaoxiaoNeural', language: '中文', country: 'China', person: 'Xiaoxiao' },
+  { code: 'zh-CN-YunxiNeural', language: '中文', country: 'China', person: 'Yunxi' },
+  { code: 'zh-CN-XiaoyiNeural', language: '中文', country: 'China', person: 'Xiaoyi' },
+  { code: 'zh-TW-HsiaoChenNeural', language: '中文', country: 'Taiwan', person: 'HsiaoChen' },
+  { code: 'zh-TW-YunJheNeural', language: '中文', country: 'Taiwan', person: 'YunJhe' },
+  { code: 'zh-HK-HiuMaanNeural', language: '中文', country: 'Hong Kong', person: 'HiuMaan' },
+  { code: 'zh-HK-WanLungNeural', language: '中文', country: 'Hong Kong', person: 'WanLung' },
+
+  // Korean
+  { code: 'ko-KR-SunHiNeural', language: '한국어', country: 'South Korea', person: 'SunHi' },
+  { code: 'ko-KR-InJoonNeural', language: '한국어', country: 'South Korea', person: 'InJoon' },
+
+  // Arabic
+  { code: 'ar-SA-ZariyahNeural', language: 'العربية', country: 'Saudi Arabia', person: 'Zariyah' },
+  { code: 'ar-SA-HamedNeural', language: 'العربية', country: 'Saudi Arabia', person: 'Hamed' },
+  { code: 'ar-EG-SalmaNeural', language: 'العربية', country: 'Egypt', person: 'Salma' },
+  { code: 'ar-EG-ShakirNeural', language: 'العربية', country: 'Egypt', person: 'Shakir' },
+  { code: 'ar-AE-FatimaNeural', language: 'العربية', country: 'UAE', person: 'Fatima' },
+  { code: 'ar-AE-HamdanNeural', language: 'العربية', country: 'UAE', person: 'Hamdan' },
+
+  // Hindi
+  { code: 'hi-IN-SwaraNeural', language: 'हिन्दी', country: 'India', person: 'Swara' },
+  { code: 'hi-IN-MadhurNeural', language: 'हिन्दी', country: 'India', person: 'Madhur' },
+
+  // Dutch
+  { code: 'nl-NL-ColetteNeural', language: 'Nederlands', country: 'Netherlands', person: 'Colette' },
+  { code: 'nl-NL-MaartenNeural', language: 'Nederlands', country: 'Netherlands', person: 'Maarten' },
+  { code: 'nl-BE-DenaNeural', language: 'Nederlands', country: 'Belgium', person: 'Dena' },
+  { code: 'nl-BE-ArnaudNeural', language: 'Nederlands', country: 'Belgium', person: 'Arnaud' },
+
+  // Polish
+  { code: 'pl-PL-AgnieszkaNeural', language: 'Polski', country: 'Poland', person: 'Agnieszka' },
+  { code: 'pl-PL-MarekNeural', language: 'Polski', country: 'Poland', person: 'Marek' },
+
+  // Turkish
+  { code: 'tr-TR-EmelNeural', language: 'Türkçe', country: 'Turkey', person: 'Emel' },
+  { code: 'tr-TR-AhmetNeural', language: 'Türkçe', country: 'Turkey', person: 'Ahmet' },
+
+  // Swedish
+  { code: 'sv-SE-SofieNeural', language: 'Svenska', country: 'Sweden', person: 'Sofie' },
+  { code: 'sv-SE-MattiasNeural', language: 'Svenska', country: 'Sweden', person: 'Mattias' },
+
+  // Norwegian
+  { code: 'nb-NO-PernilleNeural', language: 'Norsk', country: 'Norway', person: 'Pernille' },
+  { code: 'nb-NO-FinnNeural', language: 'Norsk', country: 'Norway', person: 'Finn' },
+
+  // Danish
+  { code: 'da-DK-ChristelNeural', language: 'Dansk', country: 'Denmark', person: 'Christel' },
+  { code: 'da-DK-JeppeNeural', language: 'Dansk', country: 'Denmark', person: 'Jeppe' },
+
+  // Finnish
+  { code: 'fi-FI-NooraNeural', language: 'Suomi', country: 'Finland', person: 'Noora' },
+  { code: 'fi-FI-SelmaNeural', language: 'Suomi', country: 'Finland', person: 'Selma' },
+  { code: 'fi-FI-HarriNeural', language: 'Suomi', country: 'Finland', person: 'Harri' },
+
+  // Greek
+  { code: 'el-GR-AthinaNeural', language: 'Ελληνικά', country: 'Greece', person: 'Athina' },
+  { code: 'el-GR-NestorasNeural', language: 'Ελληνικά', country: 'Greece', person: 'Nestoras' },
+
+  // Czech
+  { code: 'cs-CZ-VlastaNeural', language: 'Čeština', country: 'Czech Republic', person: 'Vlasta' },
+  { code: 'cs-CZ-AntoninNeural', language: 'Čeština', country: 'Czech Republic', person: 'Antonin' },
+
+  // Hungarian
+  { code: 'hu-HU-NoemiNeural', language: 'Magyar', country: 'Hungary', person: 'Noemi' },
+  { code: 'hu-HU-TamasNeural', language: 'Magyar', country: 'Hungary', person: 'Tamas' },
+
+  // Romanian
+  { code: 'ro-RO-AlinaNeural', language: 'Română', country: 'Romania', person: 'Alina' },
+  { code: 'ro-RO-EmilNeural', language: 'Română', country: 'Romania', person: 'Emil' },
+
+  // Ukrainian
+  { code: 'uk-UA-PolinaNeural', language: 'Українська', country: 'Ukraine', person: 'Polina' },
+  { code: 'uk-UA-OstapNeural', language: 'Українська', country: 'Ukraine', person: 'Ostap' },
+
+  // Bulgarian
+  { code: 'bg-BG-KalinaNeural', language: 'Български', country: 'Bulgaria', person: 'Kalina' },
+  { code: 'bg-BG-BorislavNeural', language: 'Български', country: 'Bulgaria', person: 'Borislav' },
+
+  // Slovak
+  { code: 'sk-SK-ViktoriaNeural', language: 'Slovenčina', country: 'Slovakia', person: 'Viktoria' },
+  { code: 'sk-SK-LukasNeural', language: 'Slovenčina', country: 'Slovakia', person: 'Lukas' },
+
+  // Croatian
+  { code: 'hr-HR-GabrijelaNeural', language: 'Hrvatski', country: 'Croatia', person: 'Gabrijela' },
+  { code: 'hr-HR-SreckoNeural', language: 'Hrvatski', country: 'Croatia', person: 'Srecko' },
+
+  // Serbian
+  { code: 'sr-RS-SophieNeural', language: 'Srpski', country: 'Serbia', person: 'Sophie' },
+  { code: 'sr-RS-NicholasNeural', language: 'Srpski', country: 'Serbia', person: 'Nicholas' },
+
+  // Slovenian
+  { code: 'sl-SI-PetraNeural', language: 'Slovenščina', country: 'Slovenia', person: 'Petra' },
+  { code: 'sl-SI-RokNeural', language: 'Slovenščina', country: 'Slovenia', person: 'Rok' },
+
+  // Thai
+  { code: 'th-TH-PremwadeeNeural', language: 'ไทย', country: 'Thailand', person: 'Premwadee' },
+  { code: 'th-TH-NiwatNeural', language: 'ไทย', country: 'Thailand', person: 'Niwat' },
+
+  // Vietnamese
+  { code: 'vi-VN-HoaiMyNeural', language: 'Tiếng Việt', country: 'Vietnam', person: 'HoaiMy' },
+  { code: 'vi-VN-NamMinhNeural', language: 'Tiếng Việt', country: 'Vietnam', person: 'NamMinh' },
+
+  // Indonesian
+  { code: 'id-ID-GadisNeural', language: 'Bahasa', country: 'Indonesia', person: 'Gadis' },
+  { code: 'id-ID-ArdiNeural', language: 'Bahasa', country: 'Indonesia', person: 'Ardi' },
+
+  // Malay
+  { code: 'ms-MY-YasminNeural', language: 'Bahasa', country: 'Malaysia', person: 'Yasmin' },
+  { code: 'ms-MY-OsmanNeural', language: 'Bahasa', country: 'Malaysia', person: 'Osman' },
+
+  // Hebrew
+  { code: 'he-IL-HilaNeural', language: 'עברית', country: 'Israel', person: 'Hila' },
+  { code: 'he-IL-AvriNeural', language: 'עברית', country: 'Israel', person: 'Avri' },
+
+  // Persian
+  { code: 'fa-IR-DilaraNeural', language: 'فارسی', country: 'Iran', person: 'Dilara' },
+  { code: 'fa-IR-FaridNeural', language: 'فارسی', country: 'Iran', person: 'Farid' },
+
+  // Bengali
+  { code: 'bn-IN-TanishaaNeural', language: 'বাংলা', country: 'India', person: 'Tanishaa' },
+  { code: 'bn-IN-BashkarNeural', language: 'বাংলা', country: 'India', person: 'Bashkar' },
+  { code: 'bn-BD-NabanitaNeural', language: 'বাংলা', country: 'Bangladesh', person: 'Nabanita' },
+  { code: 'bn-BD-PradeepNeural', language: 'বাংলা', country: 'Bangladesh', person: 'Pradeep' },
+
+  // Tamil
+  { code: 'ta-IN-PallaviNeural', language: 'தமிழ்', country: 'India', person: 'Pallavi' },
+  { code: 'ta-IN-ValluvarNeural', language: 'தமிழ்', country: 'India', person: 'Valluvar' },
+
+  // Telugu
+  { code: 'te-IN-ShrutiNeural', language: 'తెలుగు', country: 'India', person: 'Shruti' },
+  { code: 'te-IN-MohanNeural', language: 'తెలుగు', country: 'India', person: 'Mohan' },
+
+  // Urdu
+  { code: 'ur-IN-GulNeural', language: 'اردو', country: 'India', person: 'Gul' },
+  { code: 'ur-IN-SalmanNeural', language: 'اردو', country: 'India', person: 'Salman' },
+  { code: 'ur-PK-UzmaNeural', language: 'اردو', country: 'Pakistan', person: 'Uzma' },
+  { code: 'ur-PK-AsadNeural', language: 'اردو', country: 'Pakistan', person: 'Asad' },
+
+  // Afrikaans
+  { code: 'af-ZA-AdriNeural', language: 'Afrikaans', country: 'South Africa', person: 'Adri' },
+  { code: 'af-ZA-WillemNeural', language: 'Afrikaans', country: 'South Africa', person: 'Willem' },
+
+  // Swahili
+  { code: 'sw-KE-ZuriNeural', language: 'Kiswahili', country: 'Kenya', person: 'Zuri' },
+  { code: 'sw-KE-RafikiNeural', language: 'Kiswahili', country: 'Kenya', person: 'Rafiki' },
+  { code: 'sw-TZ-RehemaNeural', language: 'Kiswahili', country: 'Tanzania', person: 'Rehema' },
+  { code: 'sw-TZ-DaudiNeural', language: 'Kiswahili', country: 'Tanzania', person: 'Daudi' },
 ];
 const EDGE_TTS_VOICE_OPTIONS = [...new Set([...Object.values(EDGE_TTS_LANGUAGE_DEFAULTS), ...EDGE_TTS_VOICE_INDEX.map((v) => v.code)])];
 const DEFAULT_EDGE_TTS_LANGUAGE = 'EN';
