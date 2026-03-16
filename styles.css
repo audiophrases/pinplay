@@ -804,21 +804,25 @@ textarea { min-height: 72px; resize: vertical; }
   padding: .4rem .5rem;
 }
 
+/* Projector: Image hero layout */
 #hostQuestionCard.projector-question-active.has-image .project-answers {
-  display: grid;
-  grid-template-columns: minmax(210px, 36%) minmax(0, 1fr);
-  gap: .34rem .65rem;
-  align-items: start;
+  display: block;
 }
 
 #hostQuestionCard.projector-question-active.has-image .project-answers > .question-image-preview {
-  grid-column: 1;
-  grid-row: 1 / span 20;
-  margin-top: 0;
+  width: 100%;
+  max-height: 50vh;
+  min-height: 30vh;
+  margin: 0 0 0.75rem 0;
+  border-radius: 12px;
+  background-size: contain !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
 }
 
 #hostQuestionCard.projector-question-active.has-image .project-answers > :not(.question-image-preview) {
-  grid-column: 2;
+  position: relative;
+  z-index: 1;
 }
 
 #hostQuestionCard.projector-question-active[data-qtype="open"] .project-prompt,
@@ -865,21 +869,33 @@ textarea { min-height: 72px; resize: vertical; }
   background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 28%, rgba(247,248,251,1));
 }
 
+/* Image hero layout - full width, items below */
 #joinCard.question-active.has-image #joinAnswers.has-question-image {
-  display: grid;
-  grid-template-columns: minmax(120px, 38%) minmax(0, 1fr);
-  gap: .28rem .6rem;
-  align-items: start;
+  display: block;
+  position: relative;
 }
 
 #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-  grid-column: 1;
-  grid-row: 1 / span 12;
-  margin-top: 0;
+  width: 100%;
+  max-height: 45vh;
+  min-height: 25vh;
+  margin: 0 0 0.5rem 0;
+  border-radius: 8px;
+  background-size: contain !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
 }
 
 #joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview) {
-  grid-column: 2;
+  position: relative;
+  z-index: 1;
+}
+
+/* Items flow in a flex row below image */
+#joinCard.question-active.has-image #joinAnswers.has-question-image .answer-row {
+  display: inline-block;
+  width: auto;
+  margin: 0.15rem 0.3rem 0.15rem 0;
 }
 
 /* Assignment answer locking */
@@ -938,14 +954,10 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (max-width: 780px) {
-  #joinCard.question-active.has-image #joinAnswers.has-question-image {
-    grid-template-columns: 1fr;
-  }
-
-  #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
-  #joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview) {
-    grid-column: auto;
-    grid-row: auto;
+  /* Image hero layout is already responsive - no grid to override */
+  #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
+    max-height: 35vh;
+    min-height: 20vh;
   }
 }
 
