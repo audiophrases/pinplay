@@ -1039,13 +1039,14 @@ function renderJoinQuestion(question) {
 
   if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
-    preview.className = 'pin-preview question-image-preview';
-    preview.style.backgroundImage = `url(${question.imageData})`;
-    preview.style.backgroundRepeat = 'no-repeat';
-    preview.style.backgroundPosition = 'center';
-    preview.style.backgroundSize = 'contain';
+    preview.className = 'question-image-preview';
+    const img = document.createElement('img');
+    img.src = question.imageData;
+    img.alt = 'Question image';
+    img.dataset.zoomable = '1';
+    preview.appendChild(img);
     preview.dataset.zoomable = '1';
-    preview.dataset.bgImageSrc = question.imageData; // for lightbox
+    preview.dataset.bgImageSrc = question.imageData;
     joinAnswersEl.appendChild(preview);
   }
 
