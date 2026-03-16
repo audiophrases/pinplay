@@ -102,11 +102,12 @@ function init() {
     }
   });
 
-  // Click to dismiss overlay feedback
+  // Click to dismiss overlay feedback permanently
   document.addEventListener('click', (e) => {
     const fb = document.getElementById('joinFeedback');
     if (fb && fb.classList.contains('visible') && e.target === fb) {
       fb.classList.remove('visible');
+      fb.classList.add('dismissed');
       fb.textContent = '';
     }
   });
@@ -719,7 +720,7 @@ function renderPlayerState(state) {
     setJoinTitle(latestName);
   }
 
-  if (joinProgressEl) joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
+  if (joinProgressEl) joinProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   // Clear previous feedback to avoid carryover between questions
@@ -2093,6 +2094,7 @@ function setStatus(el, text, mode = '') {
 
   // Overlay for answer feedback
   if (el.id === 'joinFeedback') {
+    el.classList.remove('dismissed'); // Reset dismissed state on new feedback
     if (text) {
       el.classList.add('visible');
       document.body.classList.add('no-overlay');

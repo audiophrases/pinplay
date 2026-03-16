@@ -1653,3 +1653,35 @@ body.question-active .join-title-row { display: none !important; }
 
 /* Hide the big title row when game is active */
 body.question-active .join-title-row { display: none !important; }
+
+/* Username bigger and green (like mode label) */
+#joinPlayerName {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #3fb950;
+}
+
+/* Mode label - make it smaller contrast */
+#joinModeLabel {
+  font-weight: 600;
+  color: #8b949e;
+}
+
+/* Make question text bigger */
+#joinPrompt {
+  font-size: 1.25rem !important;
+}
+
+/* Make answer options bigger */
+#joinAnswers {
+  font-size: 1.05rem;
+}
+#joinAnswers .answer-row {
+  font-size: 1rem;
+  padding: 0.6rem 0.8rem;
+}
+
+/* Feedback overlay - permanent dismiss on click */
+.feedback-overlay.dismissed {
+  display: none !important;
+}
