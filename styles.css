@@ -1597,3 +1597,35 @@ body.question-active { padding-top: 0; }
 .card {
   margin-bottom: 0.5rem;
 }
+
+/* Hide old title row when game active */
+body.question-active .join-title-row { display: none !important; }
+
+/* Images - larger with minimal margins */
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
+  margin: 0;
+  padding: 0;
+  min-height: 40vh;
+  max-height: 60vh;
+}
+#joinCard.question-active.has-image #joinAnswers.has-question-image {
+  gap: 0.15rem;
+}
+.question-image-preview, .pin-preview {
+  background-size: contain;
+  background-position: center;
+}
+
+/* Question prompt inline with play button */
+#joinPrompt {
+  display: inline;
+  margin: 0 0.5rem 0 0;
+  vertical-align: middle;
+}
+#joinPlayQuestionBtn {
+  display: inline-block !important;
+  vertical-align: middle;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+}

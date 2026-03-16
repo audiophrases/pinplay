@@ -2132,7 +2132,7 @@ function initBetControl() {
   betBtn.addEventListener('click', () => {
     betSelected = !betSelected;
     betBtn.classList.toggle('selected', betSelected);
-    live.player.selectedBet = betSelected ? 1 : 0;
+    live.player.selectedBet = betSelected ? 3 : 0; // 3 = +40%
   });
 }
 
@@ -2160,9 +2160,9 @@ function initReactionRow() {
 async function sendReaction(emoji) {
   if (!live.player.pin || !live.player.id || !live.player.token) return;
   try {
-    await api('/api/player/reaction', {
+    await api('/react', {
       method: 'POST',
-      body: { emoji, pin: live.player.pin, playerId: live.player.id, token: live.player.token }
+      body: { emoji, playerId: live.player.id, playerToken: live.player.token }
     });
   } catch {}
 }
