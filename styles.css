@@ -1722,3 +1722,36 @@ body.question-active #joinStatus {
 .feedback-overlay.visible { display: block !important; }
 .feedback-overlay.dismissed { display: none !important; }
 body.no-overlay { overflow: auto !important; }
+
+/* Student UI: header top, content middle, submit bottom */
+#joinQuestionWrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 80vh;
+}
+
+#joinQuestionWrap > #joinHeaderRow {
+  flex-shrink: 0;
+}
+
+#joinQuestionWrap > #joinPrompt {
+  flex-shrink: 0;
+  margin-top: 0.5rem;
+}
+
+#joinQuestionWrap > #joinAnswers {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#joinQuestionWrap > #joinFeedback {
+  flex-shrink: 0;
+}
+
+#joinSubmission {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
