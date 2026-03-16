@@ -1629,3 +1629,8 @@ body.question-active .join-title-row { display: none !important; }
   padding: 0.2rem 0.5rem;
   font-size: 0.85rem;
 }
+
+/* Card titles - move slightly right */
+.section-toggle-title, #hostQuestionPrompt {
+  padding-left: 0.5rem;
+}
