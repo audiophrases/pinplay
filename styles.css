@@ -2003,3 +2003,13 @@ body.no-overlay { overflow: auto !important; }
   border: 2px dashed rgba(19,138,54,0.4) !important;
   opacity: 0.7;
 }
+
+/* Live HUD pin badge */
+#projectorPin {
+  font-weight: 700;
+  border: 1.5px solid var(--primary);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  background: rgba(96,93,255,0.06);
+  white-space: nowrap;
+}

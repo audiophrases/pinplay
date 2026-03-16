@@ -110,6 +110,7 @@ const randomNamesToggleEl = document.getElementById('randomNamesToggle');
 const hallCardEl = document.getElementById('hallCard');
 const hostQuestionCardEl = document.getElementById('hostQuestionCard');
 const livePinBigEl = document.getElementById('livePinBig');
+const livePinHudEl = document.getElementById('livePinHud');
 const hallHintEl = document.getElementById('hallHint');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
 const projectorTimerEl = document.getElementById('projectorTimer');
@@ -2065,6 +2066,7 @@ async function createLiveGame() {
     stopFx('answering');
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
+    if (livePinHudEl) livePinHudEl.textContent = data.pin;
     setStatus(hostStatusEl, 'Live game created. Share the PIN with students.', 'ok');
 
     startHostPolling();
@@ -2683,6 +2685,7 @@ async function joinLiveGameAsHostByPin() {
 
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
+    if (livePinHudEl) livePinHudEl.textContent = data.pin;
     setStatus(hostStatusEl, 'Joined as host by PIN. Controls are live.', 'ok');
 
     startHostPolling();
@@ -3557,6 +3560,7 @@ function renderHostState(state) {
   renderReactionPop(state.reactions || []);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
+  if (livePinHudEl) livePinHudEl.textContent = state.pin || '-';
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
   if (projectorScoresEl) {
