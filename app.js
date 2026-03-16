@@ -3691,18 +3691,8 @@ function renderHostState(state) {
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
-    // If question has audio, wait for it to finish before playing ambient
-    if (hasQuestionAudio(state.question)) {
-      // Delay ambient to let question audio play (same 3s delay as auto-play)
-      setTimeout(() => {
-        const s = live.host.state;
-        if (s?.phase === 'question' && !s?.questionClosed) {
-          playFx('answering');
-        }
-      }, 3500);
-    } else {
-      playFx('answering');
-    }
+    // Start ambient - it will be paused/resumed by the question audio playback
+    playFx('answering');
     animatePulse(hostQuestionWrap || hostCardEl || hallCardEl);
     live.host.lastAllAnsweredKey = null;
     live.host.lastRevealKey = null;
