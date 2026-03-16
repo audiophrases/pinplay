@@ -770,6 +770,9 @@ function renderPlayerState(state) {
         assignmentFinalPlayed = true;
       }
       setStatus(joinStatusEl, 'Game finished 🎉', 'ok');
+      // Update header for finished state
+      const modeLabel = document.getElementById('joinModeLabel');
+      if (modeLabel) modeLabel.textContent = 'Game finished 🎉';
       renderLeaderboardInJoin(state.leaderboard || []);
     }
     renderJoinReveal();
