@@ -2136,8 +2136,7 @@ function initBetControl() {
   });
 }
 
-// Reaction emojis (live mode only)
-const REACTION_EMOJIS = ['👍','👏','🔥','😂','🤯','🙌','☕','🤔','👀','🧠','😎','🫶','6️⃣','7️⃣'];
+// Reaction emojis (live mode only) - defined at top of file
 function initReactionRow() {
   const row = document.getElementById('reactionRow');
   if (!row) return;
