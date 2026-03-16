@@ -1650,3 +1650,6 @@ body.question-active .join-title-row { display: none !important; }
   color: #8b949e;
   font-weight: normal;
 }
+
+/* Hide the big title row when game is active */
+body.question-active .join-title-row { display: none !important; }
