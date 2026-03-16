@@ -2059,7 +2059,8 @@ function animatePulse(el) {
   el.classList.add('fx-pop');
 }
 
-// Highlight answer items green (correct) or red (student's wrong pick)
+// Highlight answer items with visual feedback
+// Green = correct selected, Red = wrong selected, Dim green = correct but missed (multi)
 function highlightAnswerItems(isCorrect, state) {
   if (!joinAnswersEl) return;
   const rows = joinAnswersEl.querySelectorAll('.answer-row');
@@ -2067,15 +2068,36 @@ function highlightAnswerItems(isCorrect, state) {
   const question = state?.question;
   if (!question?.answers) return;
 
+  const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
   question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
 
-  const selectedInput = joinAnswersEl.querySelector('input:checked');
-  const selectedIndex = selectedInput ? Number(selectedInput.value) : -1;
+  // Get all selected answers
+  const selectedIndexes = new Set();
+  joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
+    selectedIndexes.add(Number(input.value));
+  });
 
   rows.forEach((row, idx) => {
-    if (correctIndexes.has(idx)) row.classList.add('correct-highlight');
-    if (idx === selectedIndex && !correctIndexes.has(idx)) row.classList.add('incorrect-highlight');
+    const isCorrect = correctIndexes.has(idx);
+    const isSelected = selectedIndexes.has(idx);
+
+    if (isCorrect && isSelected) {
+      // Correctly selected → bright green
+      row.classList.add('correct-highlight');
+    } else if (isCorrect && !isSelected) {
+      if (isMulti) {
+        // Correct but missed → dim green outline
+        row.classList.add('correct-missed');
+      } else {
+        // Single select: show correct answer (even if not picked)
+        row.classList.add('correct-highlight');
+      }
+    } else if (!isCorrect && isSelected) {
+      // Incorrectly selected → bright red
+      row.classList.add('incorrect-highlight');
+    }
+    // Incorrect + not selected → no highlight (correctly left alone)
   });
 }
 

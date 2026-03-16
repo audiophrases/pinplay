@@ -1962,3 +1962,15 @@ body.no-overlay { overflow: auto !important; }
 #joinFeedback.visible { display: block !important; }
 #joinFeedback.dismissed { display: none !important; }
 body.no-overlay { overflow: auto !important; }
+
+/* Correct but missed (multi-select) - dim green outline */
+#joinAnswers .answer-row.correct-missed {
+  border-color: rgba(19,138,54,0.4) !important;
+  background: rgba(19,138,54,0.06) !important;
+  opacity: 0.7;
+}
+#joinAnswers .answer-row.correct-missed::after {
+  content: ' ○';
+  color: rgba(19,138,54,0.5);
+  font-weight: bold;
+}
