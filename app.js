@@ -3691,9 +3691,12 @@ function renderHostState(state) {
 
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
-    // If question has audio, wait for it to finish before starting ambient
+    // If question has audio, prime the ambient but don't play it yet - it will resume after audio ends
     if (hasQuestionAudio(state.question)) {
-      // Will be started by maybeResumeQuestionMusic after audio ends
+      const qIndex = state.currentIndex;
+      const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
+      primeAnsweringFx(answeringKey);
+      stopFx('answering'); // Stop immediately so it doesn't play yet
     } else {
       playFx('answering');
     }
