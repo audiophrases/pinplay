@@ -1396,6 +1396,9 @@ function buildCorrectionDiffHtml(correction, original) {
 }
 
 function appendReactionBar() {
+  // Disabled - reactions are now in the submission row
+  return;
+  
   const host = joinAnswersEl;
   if (!host) return;
 
