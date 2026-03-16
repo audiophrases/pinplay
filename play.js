@@ -903,9 +903,11 @@ function renderPlayerState(state) {
         } else if (rr.graded === false) {
           setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
         } else if (rr.correct) {
-          setStatus(joinFeedbackEl, `✅ Correct (+${Number(rr.pointsAwarded || 0)} pts)`, 'ok');
+          const correct = state?.correctAnswer || '';
+          setStatus(joinFeedbackEl, `✅ Correct! ${correct}`, 'ok');
         } else {
-          setStatus(joinFeedbackEl, '❌ Incorrect', 'bad');
+          const correct = state?.correctAnswer || '';
+          setStatus(joinFeedbackEl, `❌ Incorrect. The answer was: ${correct}`, 'bad');
         }
       } else {
         setStatus(joinFeedbackEl, closedMsg, 'ok');

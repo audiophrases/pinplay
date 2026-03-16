@@ -1634,3 +1634,19 @@ body.question-active .join-title-row { display: none !important; }
 .section-toggle-title, #hostQuestionPrompt {
   padding-left: 0.5rem;
 }
+
+/* Answer feedback overlay - smaller, more aesthetic */
+.feedback-overlay {
+  font-size: 1.2rem !important;
+  line-height: 1.4;
+  padding: 1rem;
+  text-align: center;
+  word-break: break-word;
+}
+.feedback-overlay .correct-answer {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: #8b949e;
+  font-weight: normal;
+}
