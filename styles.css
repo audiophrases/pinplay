@@ -1809,3 +1809,24 @@ body.no-overlay { overflow: auto !important; }
 #joinQuestionWrap {
   padding-bottom: 0 !important;
 }
+
+/* Remove image background frame/border */
+.question-image-preview, .pin-preview {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.question-image-preview img, .pin-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Submit button row further down */
+#joinQuestionWrap {
+  min-height: 95vh !important;
+  justify-content: space-between;
+}
+#joinSubmission {
+  margin-top: auto !important;
+  margin-bottom: 2rem !important;
+}

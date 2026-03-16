@@ -102,6 +102,27 @@ function init() {
     }
   });
 
+  // Press 'p' to play question audio
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P') {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const q = live.player.currentQuestion;
+      if (!q) return;
+      // Play recorded audio file if available
+      if (q.audioMode === 'file' && q.audioData) {
+        try {
+          const audio = new Audio(q.audioData);
+          audio.play();
+        } catch (e) { console.warn('Audio playback failed:', e); }
+        return;
+      }
+      // Otherwise use Edge TTS
+      const text = q.audioText || q.prompt || '';
+      const lang = q.language || 'en-US-AndrewMultilingualNeural';
+      speakText(text, lang);
+    }
+  });
+
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') validatePin();
@@ -999,41 +1020,8 @@ function renderJoinQuestion(question) {
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
 
-  // Add play button for question audio (TTS)
-  let playBtn = document.getElementById('joinPlayQuestionBtn');
-  if (!playBtn) {
-    playBtn = document.createElement('button');
-    playBtn.id = 'joinPlayQuestionBtn';
-    playBtn.className = 'btn small';
-    playBtn.style.marginLeft = '8px';
-    playBtn.textContent = '🔊 Play';
-    if (joinPromptEl && joinPromptEl.parentNode) {
-      joinPromptEl.parentNode.insertBefore(playBtn, joinPromptEl.nextSibling);
-    }
-  }
-  // Check for audio file (recorded) or TTS text
-  const hasAudioFile = question.audioMode === 'file' && question.audioData;
-  const hasAudioText = !!(question.audioText || question.prompt);
-  const hasAudio = hasAudioFile || hasAudioText;
-  playBtn.style.display = hasAudio ? 'inline-block' : 'none';
-  if (hasAudio) {
-    playBtn.onclick = () => {
-      // Play recorded audio file if available
-      if (hasAudioFile) {
-        try {
-          const audio = new Audio(question.audioData);
-          audio.play();
-        } catch (e) {
-          console.warn('Audio playback failed:', e);
-        }
-        return;
-      }
-      // Otherwise use Edge TTS with quiz language
-      const text = question.audioText || question.prompt || '';
-      const lang = question.language || 'en-US-AndrewMultilingualNeural';
-      speakText(text, lang);
-    };
-  }
+  // Store current question for keyboard shortcut
+  live.player.currentQuestion = question;
 
   if (joinAnswersEl) joinAnswersEl.innerHTML = '';
   if (!joinAnswersEl) return;

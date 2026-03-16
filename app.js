@@ -4017,41 +4017,7 @@ function renderHostQuestion(state) {
   const oldAudioRow = hostQuestionPromptEl.parentNode?.querySelector('.audio-controls-row');
   if (oldAudioRow) oldAudioRow.remove();
 
-  if (hasQuestionAudio(question)) {
-    const audioRow = document.createElement('span');
-    audioRow.className = 'audio-controls-row';
-    audioRow.style.marginLeft = '0.75rem';
-    audioRow.style.display = 'inline-flex';
-    audioRow.style.gap = '0.25rem';
-    audioRow.style.verticalAlign = 'middle';
-
-    const audioBtn = document.createElement('button');
-    audioBtn.type = 'button';
-    audioBtn.className = 'btn';
-    audioBtn.style.padding = '0.2rem 0.5rem';
-    audioBtn.style.fontSize = '0.85rem';
-    audioBtn.textContent = '🔊 Play';
-
-    const speedSel = document.createElement('select');
-    speedSel.className = 'btn';
-    speedSel.title = 'TTS speed';
-    speedSel.style.width = 'auto';
-    speedSel.style.minWidth = '0';
-    speedSel.style.padding = '0.2rem 0.3rem';
-    speedSel.style.fontSize = '0.8rem';
-    [['1.0','100%'],['0.95','95%'],['0.9','90%'],['0.85','85%'],['0.8','80%']].forEach(([v,label]) => {
-      const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = label;
-      if (v === '0.95') opt.selected = true;
-      speedSel.appendChild(opt);
-    });
-
-    audioBtn.addEventListener('click', () => {
-      playQuestionAudio(question, { speed: Number(speedSel.value || 1) });
-    });
-
-    audioRow.appendChild(audioBtn);
+  // Audio controls removed - use 'p' key to play instead
     audioRow.appendChild(speedSel);
     hostQuestionPromptEl.after(audioRow);
   }
