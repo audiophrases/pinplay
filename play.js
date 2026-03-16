@@ -74,6 +74,8 @@ function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
   initAssignmentSfx();
+  initBetControl();
+  initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
   initAssignmentFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
@@ -776,6 +778,10 @@ function renderPlayerState(state) {
 
   if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
+  
+  // Add body class to hide topbar
+  document.body.classList.add('question-active');
+  initReactionRow(); // Re-init to set correct mode
 
   // Update mode label in header row
   const modeLabel = document.getElementById('joinModeLabel');
@@ -1278,12 +1284,16 @@ function renderJoinQuestion(question) {
 }
 
 function appendRiskBetBar() {
-  // Simplified: show only +40% indicator, no full bet bar
+  // Show +40% bet button only in live mode (not assignment)
   const betInd = document.getElementById('betIndicator');
   if (betInd) {
-    betInd.style.display = 'inline-flex';
-    const label = betInd.querySelector('.bet-label');
-    if (label) label.textContent = '🤑 +40%';
+    if (live.player.mode === 'assignment') {
+      betInd.style.display = 'none';
+    } else {
+      betInd.style.display = 'inline-flex';
+      const btn = betInd.querySelector('.bet-btn');
+      if (btn) btn.textContent = '+40%';
+    }
   }
   return; // Skip full bet bar
   
@@ -1647,6 +1657,7 @@ function renderLeaderboardInJoin(leaderboard) {
   if (!joinQuestionWrap || !joinPromptEl || !joinAnswersEl) return;
 
   joinQuestionWrap.classList.remove('hidden');
+  document.body.classList.add('question-active');
   joinPromptEl.textContent = 'Final leaderboard';
   joinAnswersEl.innerHTML = '';
   if (joinSubmitBtn) joinSubmitBtn.classList.add('hidden');
@@ -2108,6 +2119,53 @@ function setJoinTitle(name = '') {
   if (!joinTitleEl) return;
   const safe = String(name || '').trim();
   joinTitleEl.textContent = safe ? safe : '';
+  // Also update player name in header row
+  const playerNameEl = document.getElementById('joinPlayerName');
+  if (playerNameEl) playerNameEl.textContent = safe ? safe : '';
+}
+
+// Bet selection toggle
+let betSelected = false;
+function initBetControl() {
+  const betBtn = document.getElementById('betIndicator');
+  if (!betBtn) return;
+  betBtn.addEventListener('click', () => {
+    betSelected = !betSelected;
+    betBtn.classList.toggle('selected', betSelected);
+    live.player.selectedBet = betSelected ? 1 : 0;
+  });
+}
+
+// Reaction emojis (live mode only)
+const REACTION_EMOJIS = ['👍','👏','🔥','😂','🤯','🙌','☕','🤔','👀','🧠','😎','🫶','6️⃣','7️⃣'];
+function initReactionRow() {
+  const row = document.getElementById('reactionRow');
+  if (!row) return;
+  // Only show in live mode (not assignment)
+  if (live.player.mode === 'assignment') {
+    row.style.display = 'none';
+    return;
+  }
+  row.innerHTML = '';
+  REACTION_EMOJIS.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'reaction-btn';
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => sendReaction(emoji));
+    row.appendChild(btn);
+  });
+}
+
+// Send reaction to live game
+async function sendReaction(emoji) {
+  if (!live.player.pin || !live.player.id || !live.player.token) return;
+  try {
+    await api('/api/player/reaction', {
+      method: 'POST',
+      body: { emoji, pin: live.player.pin, playerId: live.player.id, token: live.player.token }
+    });
+  } catch {}
 }
 
 // Ambient sounds for assignment mode (like live mode)

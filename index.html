@@ -46,19 +46,24 @@
 
           <div id="joinQuestionWrap" class="hidden">
             <div id="joinHeaderRow">
+              <span id="joinPlayerName"></span>
+              <span class="sep">·</span>
               <span id="joinModeLabel"></span>
+              <span class="sep">·</span>
               <span id="joinProgress">Question 1 / 1</span>
+              <span class="sep">·</span>
               <span id="joinTimer">Time: —</span>
+              <span class="sep">·</span>
               <span id="joinScore">Score: 0</span>
             </div>
             <h3 id="joinPrompt"></h3>
             <div id="joinAnswers"></div>
             <div id="joinSubmission">
               <button id="joinSubmitBtn" class="btn primary">Submit</button>
-              <span id="betIndicator" class="bet-indicator" style="display:none">
-                <span class="bet-label">🤑 +40%</span>
-              </span>
-              <span id="joinEmoji" class="join-emoji" title="">👍</span>
+              <button id="betIndicator" class="bet-indicator" style="display:none">
+                <span class="bet-btn">+40%</span>
+              </button>
+              <span id="reactionRow"></span>
             </div>
             <p id="joinFeedback" class="feedback-overlay"></p>
           </div>
