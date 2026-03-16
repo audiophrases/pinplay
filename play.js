@@ -2158,17 +2158,6 @@ function initReactionRow() {
   });
 }
 
-// Send reaction to live game
-async function sendReaction(emoji) {
-  if (!live.player.pin || !live.player.id || !live.player.token) return;
-  try {
-    await api('/react', {
-      method: 'POST',
-      body: { emoji, playerId: live.player.id, playerToken: live.player.token }
-    });
-  } catch {}
-}
-
 // Ambient sounds for assignment mode (like live mode)
 const assignmentAmbient = {
   hall: null,
