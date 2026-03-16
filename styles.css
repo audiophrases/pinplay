@@ -1800,3 +1800,12 @@ body.no-overlay { overflow: auto !important; }
   min-height: 50vh !important;
   max-height: 75vh !important;
 }
+
+/* Remove bottom padding below submit button */
+#joinSubmission {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+#joinQuestionWrap {
+  padding-bottom: 0 !important;
+}
