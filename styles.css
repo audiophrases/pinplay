@@ -1974,3 +1974,32 @@ body.no-overlay { overflow: auto !important; }
   color: rgba(19,138,54,0.5);
   font-weight: bold;
 }
+
+/* Highlight support for match pairs, error hunt, context gap */
+.match-pairs-wrap .answer-row.correct-highlight,
+.context-gap-inline.correct-highlight {
+  border-color: var(--ok) !important;
+  background: rgba(19,138,54,0.12) !important;
+}
+.match-pairs-wrap .answer-row.incorrect-highlight,
+.context-gap-inline.incorrect-highlight {
+  border-color: var(--bad) !important;
+  background: rgba(193,18,31,0.12) !important;
+}
+
+/* Error hunt tokens */
+.error-token-chip.correct-highlight {
+  background: rgba(19,138,54,0.2) !important;
+  border-color: var(--ok) !important;
+  color: var(--ok) !important;
+}
+.error-token-chip.incorrect-highlight {
+  background: rgba(193,18,31,0.2) !important;
+  border-color: var(--bad) !important;
+  color: var(--bad) !important;
+}
+.error-token-chip.correct-missed {
+  background: rgba(19,138,54,0.08) !important;
+  border: 2px dashed rgba(19,138,54,0.4) !important;
+  opacity: 0.7;
+}

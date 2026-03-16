@@ -2060,19 +2060,45 @@ function animatePulse(el) {
 }
 
 // Highlight answer items with visual feedback
-// Green = correct selected, Red = wrong selected, Dim green = correct but missed (multi)
+// Dispatches by question type for appropriate feedback
 function highlightAnswerItems(isCorrect, state) {
   if (!joinAnswersEl) return;
+  const question = state?.question;
+  if (!question) return;
+
+  // MCQ / TF / Multi-select
+  if (['mcq', 'tf', 'multi'].includes(question.type)) {
+    highlightChoiceAnswers(question);
+    return;
+  }
+
+  // Match pairs
+  if (question.type === 'match_pairs') {
+    highlightMatchPairs(question);
+    return;
+  }
+
+  // Error hunt
+  if (question.type === 'error_hunt') {
+    highlightErrorHunt(question);
+    return;
+  }
+
+  // Context gap
+  if (question.type === 'context_gap') {
+    highlightContextGap(question);
+    return;
+  }
+}
+
+// MCQ/TF/Multi highlighting
+function highlightChoiceAnswers(question) {
   const rows = joinAnswersEl.querySelectorAll('.answer-row');
   if (!rows.length) return;
-  const question = state?.question;
-  if (!question?.answers) return;
-
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
   question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
 
-  // Get all selected answers
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
     selectedIndexes.add(Number(input.value));
@@ -2081,23 +2107,78 @@ function highlightAnswerItems(isCorrect, state) {
   rows.forEach((row, idx) => {
     const isCorrect = correctIndexes.has(idx);
     const isSelected = selectedIndexes.has(idx);
-
     if (isCorrect && isSelected) {
-      // Correctly selected → bright green
       row.classList.add('correct-highlight');
     } else if (isCorrect && !isSelected) {
-      if (isMulti) {
-        // Correct but missed → dim green outline
-        row.classList.add('correct-missed');
-      } else {
-        // Single select: show correct answer (even if not picked)
-        row.classList.add('correct-highlight');
-      }
+      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight');
     } else if (!isCorrect && isSelected) {
-      // Incorrectly selected → bright red
       row.classList.add('incorrect-highlight');
     }
-    // Incorrect + not selected → no highlight (correctly left alone)
+  });
+}
+
+// Match pairs: highlight each pair row
+function highlightMatchPairs(question) {
+  const pairs = question.pairs || [];
+  const fields = joinAnswersEl.querySelectorAll('[data-join-pair]');
+  fields.forEach((field, idx) => {
+    const val = String(field.value || '').trim();
+    if (!val) return;
+    const correct = pairs[idx]?.[1] || '';
+    const row = field.closest('.answer-row') || field.parentElement;
+    if (!row) return;
+    if (val.toLowerCase() === correct.toLowerCase()) {
+      row.classList.add('correct-highlight');
+    } else {
+      row.classList.add('incorrect-highlight');
+    }
+  });
+}
+
+// Error hunt: highlight selected tokens
+function highlightErrorHunt(question) {
+  const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
+  const promptWords = (question.prompt || '').split(/\s+/);
+  const correctedWords = (question.corrected || '').split(/\s+/);
+  // Build set of error token indexes (words that differ between prompt and corrected)
+  const errorIndexes = new Set();
+  let pi = 0, ci = 0;
+  const pWords = tokenizeWords(question.prompt || '');
+  const cWords = tokenizeWords(question.corrected || '');
+  // Simple diff: mark positions where prompt word != corrected word
+  for (let i = 0; i < pWords.length; i++) {
+    if (!cWords[i] || pWords[i].toLowerCase() !== cWords[i].toLowerCase()) {
+      errorIndexes.add(i);
+    }
+  }
+
+  tokens.forEach((token, idx) => {
+    const isActive = token.classList.contains('active');
+    if (errorIndexes.has(idx) && isActive) {
+      token.classList.add('correct-highlight');
+    } else if (errorIndexes.has(idx) && !isActive) {
+      token.classList.add('correct-missed');
+    } else if (!errorIndexes.has(idx) && isActive) {
+      token.classList.add('incorrect-highlight');
+    }
+  });
+}
+
+// Context gap: highlight each input
+function highlightContextGap(question) {
+  const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
+  const gaps = question.gaps || [];
+  fields.forEach((field, idx) => {
+    const val = String(field.value || '').trim().toLowerCase();
+    if (!val) return;
+    const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
+    const row = field.closest('.answer-row') || field.parentElement;
+    if (!row) return;
+    if (accepted.includes(val)) {
+      row.classList.add('correct-highlight');
+    } else {
+      row.classList.add('incorrect-highlight');
+    }
   });
 }
 
