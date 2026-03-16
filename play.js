@@ -918,11 +918,10 @@ function renderPlayerState(state) {
         } else if (rr.graded === false) {
           setStatus(joinFeedbackEl, '📝 Answer submitted. Waiting for teacher grading.', 'ok');
         } else if (rr.correct) {
-          const correct = state?.correctAnswer || '';
-          setStatus(joinFeedbackEl, `✅ Correct! ${correct}`, 'ok');
+          setStatus(joinFeedbackEl, '✅ Correct!', 'ok');
         } else {
           const correct = state?.correctAnswer || '';
-          setStatus(joinFeedbackEl, `❌ Incorrect. The answer was: ${correct}`, 'bad');
+          setStatus(joinFeedbackEl, `❌ Incorrect\n${correct}`, 'bad');
         }
       } else {
         setStatus(joinFeedbackEl, closedMsg, 'ok');

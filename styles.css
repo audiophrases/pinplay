@@ -1871,3 +1871,31 @@ body.no-overlay { overflow: auto !important; }
 .project-answers.has-question-image > :not(.question-image-preview) {
   grid-column: 1;
 }
+
+/* Answer feedback - card style */
+#joinFeedback {
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  background: var(--card) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  font-size: 1rem !important;
+  text-align: left;
+  z-index: auto !important;
+}
+#joinFeedback.ok {
+  border-left: 4px solid var(--ok);
+  color: var(--ok);
+}
+#joinFeedback.bad {
+  border-left: 4px solid var(--bad);
+  color: var(--bad);
+}
+#joinFeedback.visible { display: block !important; }
+#joinFeedback.dismissed { display: none !important; }
+body.no-overlay { overflow: auto !important; }
