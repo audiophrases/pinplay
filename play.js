@@ -1007,10 +1007,24 @@ function renderJoinQuestion(question) {
       joinPromptEl.parentNode.insertBefore(playBtn, joinPromptEl.nextSibling);
     }
   }
-  const hasAudio = !!(question.audioText || question.prompt);
+  // Check for audio file (recorded) or TTS text
+  const hasAudioFile = question.audioMode === 'file' && question.audioData;
+  const hasAudioText = !!(question.audioText || question.prompt);
+  const hasAudio = hasAudioFile || hasAudioText;
   playBtn.style.display = hasAudio ? 'inline-block' : 'none';
   if (hasAudio) {
     playBtn.onclick = () => {
+      // Play recorded audio file if available
+      if (hasAudioFile) {
+        try {
+          const audio = new Audio(question.audioData);
+          audio.play();
+        } catch (e) {
+          console.warn('Audio playback failed:', e);
+        }
+        return;
+      }
+      // Otherwise use Edge TTS with quiz language
       const text = question.audioText || question.prompt || '';
       const lang = question.language || 'en-US-AndrewMultilingualNeural';
       speakText(text, lang);
@@ -2182,10 +2196,52 @@ function normalizeBackendUrl(url) {
   }
 }
 
-function speakText(text, lang = 'en-US-Wave') {
+// Edge TTS cache for student UI
+const studentEdgeTtsCache = new Map();
+
+async function speakText(text, lang = 'en-US-Wave') {
+  const value = String(text || '').trim();
+  if (!value) return;
+
+  // Use Edge TTS via backend API (same as teacher UI)
+  try {
+    const base = 'https://pinplay-api.eugenime.workers.dev';
+    // Map lang to Edge TTS voice format (e.g., 'en-US' -> 'en-US-JennyNeural')
+    const voice = lang?.includes('Neural') ? lang : (lang?.replace('-Wave', '') || 'en-US') + '-JennyNeural';
+    const key = `${voice}::${value}`;
+
+    let audioUrl = studentEdgeTtsCache.get(key);
+    if (!audioUrl) {
+      const res = await fetch(`${base}/api/tts/edge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: value, voice }),
+      });
+      if (!res.ok) {
+        console.warn('Edge TTS failed, falling back to browser TTS');
+        speakTextBrowser(value, lang);
+        return;
+      }
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      studentEdgeTtsCache.set(key, audioUrl);
+    }
+
+    const audio = new Audio(audioUrl);
+    audio.play().catch(() => {
+      // Fallback to browser TTS if Edge fails
+      speakTextBrowser(value, lang);
+    });
+  } catch (e) {
+    console.warn('Edge TTS error:', e);
+    speakTextBrowser(value, lang);
+  }
+}
+
+// Browser TTS fallback
+function speakTextBrowser(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();
   if (!value || !('speechSynthesis' in window)) return;
-
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(value);
