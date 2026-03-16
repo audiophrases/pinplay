@@ -1830,3 +1830,44 @@ body.no-overlay { overflow: auto !important; }
   margin-top: auto !important;
   margin-bottom: 2rem !important;
 }
+
+/* Live screen: title row with HUD inline */
+.live-hud-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  font-weight: normal;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Question items hug text (not full width) */
+.project-answers .answer-row {
+  display: inline-block;
+  width: auto;
+  margin-right: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Space between question and items */
+#hostQuestionWrap {
+  margin-top: 0.75rem;
+}
+
+/* Image layout: items left, image center/right */
+.project-answers.has-question-image {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.project-answers.has-question-image .question-image-preview {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.project-answers.has-question-image > :not(.question-image-preview) {
+  grid-column: 1;
+}

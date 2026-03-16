@@ -111,16 +111,14 @@
 
           <div class="card project-screen" id="hostQuestionCard">
             <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              Live screen <span class="collapse-chevron" aria-hidden="true">▾</span>
+              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▾</span></span>
+              <span class="live-hud-row">
+                <span id="projectorTimer" class="small">⏱ Time: —</span>
+                <span id="projectorAnswers" class="small">👥 Answers: —</span>
+                <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;">Fullscreen</button>
+              </span>
             </h2>
             <div id="liveScreenCardBody">
-            <div class="row spread gap">
-              <button id="projectorFullscreenBtn" class="btn">Fullscreen</button>
-            </div>
-            <div class="row gap top-space small" id="projectorHud">
-              <span id="projectorTimer">⏱ Time: —</span>
-              <span id="projectorAnswers">Answers: —</span>
-            </div>
             <div id="projectorCorrect"></div>
             <p class="small" id="hostQuestionHint">Question will appear here when game starts.</p>
             <div id="hostQuestionWrap" class="hidden top-space">
