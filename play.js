@@ -2188,7 +2188,7 @@ function showSliderFeedback(question, state) {
   const out = document.getElementById('joinSliderValue');
   if (!slider) return;
   slider.disabled = true;
-  const correctVal = Number(question.correctSliderValue ?? question.correctAnswer);
+  const correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
   const studentVal = Number(slider.value);
   if (!isNaN(correctVal)) {
     slider.value = correctVal;
@@ -2203,14 +2203,15 @@ function showPinFeedback(question, state) {
   if (!preview) return;
   // Disable further picks
   preview.style.pointerEvents = 'none';
-  // Show correct position if available
-  const correctPin = question.correctPinZone || question.correctAnswer;
-  if (correctPin && typeof correctPin === 'object') {
+  // Show correct zone(s) as green circles
+  const zones = Array.isArray(question.zones) ? question.zones : [];
+  zones.forEach(zone => {
     const marker = document.createElement('div');
     marker.className = 'pin-correct-marker';
-    marker.style.cssText = `position:absolute;left:${correctPin.x * 100}%;top:${correctPin.y * 100}%;width:${(correctPin.w || 0.08) * 100}%;height:${(correctPin.h || 0.08) * 100}%;border:3px solid var(--ok);background:rgba(19,138,54,0.15);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:50;`;
+    const r = (zone.r || 15) / 100;
+    marker.style.cssText = `position:absolute;left:${zone.x}%;top:${zone.y}%;width:${r * 200}%;height:${r * 200}%;border:3px solid var(--ok);background:rgba(19,138,54,0.15);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:50;`;
     preview.appendChild(marker);
-  }
+  });
 }
 
 // Open/Speaking/Image_open/Text: show correct answer text
