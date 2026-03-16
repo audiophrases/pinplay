@@ -1755,3 +1755,48 @@ body.no-overlay { overflow: auto !important; }
   margin-top: auto;
   padding-top: 0.5rem;
 }
+
+/* Play button inline with question, hug text */
+#joinPrompt {
+  display: inline;
+  vertical-align: middle;
+}
+#joinPlayQuestionBtn {
+  display: inline-block !important;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.5rem !important;
+  font-size: 0.85rem !important;
+  width: auto !important;
+}
+
+/* Question text 15% bigger */
+#joinPrompt {
+  font-size: 1.4rem !important;
+}
+
+/* Answer feedback smaller with emojis */
+.feedback {
+  font-size: 0.9rem !important;
+}
+.feedback.ok { color: #3fb950; }
+.feedback.bad { color: #f85149; }
+
+/* Question options/elements bigger */
+#joinAnswers .answer-row {
+  font-size: 1.15rem;
+  padding: 0.7rem 0.9rem;
+}
+
+/* Images - as big as possible, keep aspect ratio */
+.question-image-preview, .pin-preview {
+  background-size: contain !important;
+  background-position: center !important;
+  width: 100% !important;
+  min-height: 40vh !important;
+  max-height: 70vh !important;
+}
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
+  min-height: 50vh !important;
+  max-height: 75vh !important;
+}
