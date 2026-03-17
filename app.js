@@ -102,6 +102,19 @@ const hostAttemptsSearchEl = document.getElementById('hostAttemptsSearch');
 const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
 const hostAttemptsListEl = document.getElementById('hostAttemptsList');
 const hostStatusEl = document.getElementById('hostStatus');
+const mediaProgressEl = document.getElementById('mediaProgressEl') || createMediaProgressEl();
+
+function createMediaProgressEl() {
+  const el = document.createElement('div');
+  el.id = 'mediaProgressEl';
+  el.className = 'media-progress';
+  el.style.cssText = 'display:none; padding:8px 12px; margin:8px 0; border-radius:6px; font-size:0.9rem; font-weight:600;';
+  const hostStatus = document.getElementById('hostStatus');
+  if (hostStatus && hostStatus.parentNode) {
+    hostStatus.parentNode.insertBefore(el, hostStatus.nextSibling);
+  }
+  return el;
+}
 const hostQuestionWrap = document.getElementById('hostQuestionWrap');
 const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
 const hostQuestionAnswersEl = document.getElementById('hostQuestionAnswers');
@@ -7020,27 +7033,53 @@ async function generateMp3FromTts({ text, voice }) {
   return blobToDataUrl(blob);
 }
 
-async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true } = {}) {
+async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true } = {}) {
   normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
   const readAllQuestionsAloud = !!quiz.readAllQuestionsAloud;
   let converted = 0;
+  let uploaded = 0;
+
+  const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  quiz._r2QuizId = quizId;
+  const r2Base = `${loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev'}/api/media`;
+
+  // Show progress indicator
+  const progressEl = document.getElementById('mediaProgressEl');
+  if (progressEl) {
+    progressEl.style.display = 'block';
+    progressEl.textContent = `🔄 ${contextLabel}: checking media...`;
+    progressEl.className = 'media-progress checking';
+  }
+
+  const setProgress = (msg, status = 'checking') => {
+    if (progressEl) {
+      progressEl.textContent = msg;
+      progressEl.className = `media-progress ${status}`;
+    }
+  };
 
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
     if (!q || typeof q !== 'object') continue;
 
+    // Upload base64 images to R2, replace with URL
+    if (q.imageData && q.imageData.startsWith('data:') && uploadToR2) {
+      setProgress(`🔄 Uploading Q${i + 1} image to cloud...`);
+      try {
+        const key = `${quizId}/images/q${i}${mimeToExt(q.imageData)}`;
+        await uploadMediaToR2(q.imageData, key);
+        q.imageData = `${r2Base}/${key}`;
+        uploaded += 1;
+      } catch (err) {
+        console.warn(`Q${i + 1} image upload failed:`, err);
+      }
+    }
+
     if (q.imageData) {
-      if (strictMediaCheck) {
-        // Skip validation for base64 data URLs - Worker will extract to R2
-        if (!q.imageData.startsWith('data:')) {
-          try {
-            await validateImageDataUrl(q.imageData);
-          } catch (err) {
-            throw new Error(`Q${i + 1} image check failed: ${err.message}`);
-          }
-        }
+      if (strictMediaCheck && !q.imageData.startsWith('data:')) {
+        try { await validateImageDataUrl(q.imageData); } catch (err) { throw new Error(`Q${i + 1} image check failed: ${err.message}`); }
       }
     }
 
@@ -7059,38 +7098,93 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     const ttsText = (overrideText || promptText).slice(0, 1200);
     const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
 
+    // Auto-regenerate TTS if question text changed
+    if (q.audioMode === 'file' && q.audioData && q._lastPrompt && q._lastPrompt !== promptText) {
+      setProgress(`🔄 Regenerating Q${i + 1} audio (text changed)...`);
+      q.audioMode = 'tts'; // Force TTS regeneration
+      q.audioData = null;
+      converted += 1;
+    }
+    q._lastPrompt = promptText;
+
     if (convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText) {
+      setProgress(`🔄 Generating Q${i + 1} audio...`);
       try {
         const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || getVoiceForTtsLanguage(quizLanguage) });
         if (audioData) {
-          q.audioData = audioData;
+          // Upload to R2, replace with URL
+          if (uploadToR2) {
+            setProgress(`🔄 Uploading Q${i + 1} audio to cloud...`);
+            try {
+              const key = `${quizId}/audio/q${i}.mp3`;
+              await uploadMediaToR2(audioData, key);
+              q.audioData = `${r2Base}/${key}`;
+            } catch (err) {
+              console.warn(`Q${i + 1} audio upload failed, keeping data URL:`, err);
+              q.audioData = audioData; // fallback to data URL
+            }
+          } else {
+            q.audioData = audioData;
+          }
           q.audioMode = 'file';
           q.audioEnabled = true;
-          converted += 1;
+          uploaded += 1;
         }
       } catch (err) {
         throw new Error(`Q${i + 1} TTS->MP3 failed: ${err.message}`);
       }
     }
 
-    if (q.audioData && strictMediaCheck) {
-      // Skip validation for base64 data URLs - Worker will extract to R2
-      if (!q.audioData.startsWith('data:')) {
-        try {
-          await validateAudioDataUrl(q.audioData);
-        } catch (err) {
-          throw new Error(`Q${i + 1} audio check failed: ${err.message}`);
-        }
-      }
+    if (q.audioData && strictMediaCheck && !q.audioData.startsWith('data:')) {
+      try { await validateAudioDataUrl(q.audioData); } catch (err) { throw new Error(`Q${i + 1} audio check failed: ${err.message}`); }
     }
   }
 
-  if (converted > 0) {
+  // Update progress
+  if (uploaded > 0 || converted > 0) {
     renderBuilder();
-    setStatus(hostStatusEl, `${contextLabel}: converted ${converted} TTS item(s) to local MP3 + media checks passed.`, 'ok');
+    setProgress(`✅ Media synced: ${uploaded} uploaded, ${converted} generated`, 'ok');
   } else if (strictMediaCheck) {
-    setStatus(hostStatusEl, `${contextLabel}: media checks passed.`, 'ok');
+    setProgress('✅ Media ready', 'ok');
+  } else {
+    if (progressEl) progressEl.style.display = 'none';
   }
+
+  // Auto-hide progress after 3s
+  setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 3000);
+}
+
+// Upload base64 data to R2 via Worker API
+async function uploadMediaToR2(dataUrl, key) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid data URL');
+  
+  const mime = match[1];
+  const binaryStr = atob(match[2]);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  
+  const form = new FormData();
+  form.append('file', blob, key.split('/').pop());
+  form.append('path', key);
+  
+  const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+  const res = await fetch(`${base}/api/media/upload`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
+  return await res.json();
+}
+
+function mimeToExt(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,/);
+  if (!match) return '.bin';
+  const mime = match[1];
+  if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return '.jpg';
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('gif')) return '.gif';
+  return '.bin';
 }
 
 function loadQuiz() {
