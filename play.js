@@ -1041,19 +1041,28 @@ function renderJoinQuestion(question) {
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
-    question.answers.forEach((a, idx) => {
+
+    // Shuffle answer order for presentation (Fisher-Yates)
+    const indices = question.answers.map((_, i) => i);
+    for (let s = indices.length - 1; s > 0; s--) {
+      const j = Math.floor(Math.random() * (s + 1));
+      [indices[s], indices[j]] = [indices[j], indices[s]];
+    }
+
+    indices.forEach((origIdx, displayNum) => {
+      const a = question.answers[origIdx];
       const row = document.createElement('label');
       row.className = 'answer-row';
 
       const input = document.createElement('input');
       input.type = isMulti ? 'checkbox' : 'radio';
       if (!isMulti) input.name = 'join-answer';
-      input.value = String(idx);
+      input.value = String(origIdx);
       input.dataset.joinAnswer = '1';
 
       const num = document.createElement('strong');
       num.className = 'answer-num';
-      num.textContent = `${idx + 1}.`;
+      num.textContent = `${displayNum + 1}.`;
 
       const text = document.createElement('span');
       text.textContent = a.text;
@@ -2126,9 +2135,10 @@ function highlightChoiceAnswers(question) {
     selectedIndexes.add(Number(input.value));
   });
 
-  rows.forEach((row, idx) => {
-    const isCorrect = correctIndexes.has(idx);
-    const isSelected = selectedIndexes.has(idx);
+  rows.forEach((row) => {
+    const origIdx = Number(row.querySelector('input')?.value ?? -1);
+    const isCorrect = correctIndexes.has(origIdx);
+    const isSelected = selectedIndexes.has(origIdx);
     if (isCorrect && isSelected) {
       row.classList.add('correct-highlight');
     } else if (isCorrect && !isSelected) {

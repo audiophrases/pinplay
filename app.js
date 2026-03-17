@@ -4311,13 +4311,21 @@ function renderHostQuestion(state) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const correctSet = new Set(Array.isArray(question.correctIndexes) ? question.correctIndexes : []);
 
-    (question.answers || []).forEach((a, idx) => {
+    // Shuffle answer order for presentation (Fisher-Yates), same as student view
+    const indices = (question.answers || []).map((_, i) => i);
+    for (let s = indices.length - 1; s > 0; s--) {
+      const j = Math.floor(Math.random() * (s + 1));
+      [indices[s], indices[j]] = [indices[j], indices[s]];
+    }
+
+    indices.forEach((origIdx, displayNum) => {
+      const a = question.answers[origIdx];
       const row = document.createElement('div');
       row.className = 'answer-row';
-      if (showReveal && correctSet.has(idx)) row.classList.add('answer-row-correct');
+      if (showReveal && correctSet.has(origIdx)) row.classList.add('answer-row-correct');
 
       const tag = document.createElement('strong');
-      tag.textContent = `${idx + 1}.`;
+      tag.textContent = `${displayNum + 1}.`;
       const txt = document.createElement('span');
       txt.textContent = a.text;
       row.append(tag, txt);
