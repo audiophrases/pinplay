@@ -7042,8 +7042,10 @@ async function autoFillImages(quizData, onProgress) {
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (!q || q.imageData) { skipped++; continue; }
-    const query = String(q.prompt || q.type || '').trim().slice(0, 140);
-    if (!query) { skipped++; continue; }
+    const rawQuery = String(q.prompt || q.type || '').trim().slice(0, 140);
+    if (!rawQuery) { skipped++; continue; }
+    // Quote multi-word queries so they're searched as a phrase
+    const query = rawQuery.includes(' ') ? `"${rawQuery}"` : rawQuery;
 
     onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
 
