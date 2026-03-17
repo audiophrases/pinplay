@@ -1476,17 +1476,17 @@ body.no-overlay { overflow: hidden; }
 #joinHeaderRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.8rem;
+  gap: 0.35rem 0.5rem;
   align-items: center;
   margin-bottom: 0.3rem;
   font-size: 0.85rem;
 }
-#joinPlayerName { color: #2da44e; font-weight: 600; }
-#joinModeLabel { color: #58a6ff; font-weight: 600; }
-#joinProgress { color: #6e7681; }
-#joinTimer { color: #d29922; }
-#joinScore { color: #8957e5; font-weight: 600; }
-#joinStatusHud { color: #cf6a87; }
+#joinPlayerName { background: #1a3320; padding: 3px 10px; border-radius: 4px; color: #3fb950; font-weight: 600; }
+#joinModeLabel { background: #1a2a3d; padding: 3px 10px; border-radius: 4px; color: #58a6ff; font-weight: 600; }
+#joinProgress { background: #1c1f26; padding: 3px 10px; border-radius: 4px; color: #8b949e; }
+#joinTimer { background: #2a2210; padding: 3px 10px; border-radius: 4px; color: #d29922; }
+#joinScore { background: #1e1a2e; padding: 3px 10px; border-radius: 4px; color: #8957e5; font-weight: 600; }
+#joinStatusHud { background: #2a1a20; padding: 3px 10px; border-radius: 4px; color: #cf6a87; }
 
 /* Question prompt inline with play button */
 #joinPrompt {

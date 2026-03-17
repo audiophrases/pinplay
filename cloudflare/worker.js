@@ -120,6 +120,44 @@ export default {
       return json({ ok: true, service: 'pinplay-api' });
     }
 
+    // Serve quiz media (audio/images) from R2
+    if (url.pathname.startsWith('/api/media/') && request.method === 'GET') {
+      const key = url.pathname.replace('/api/media/', '');
+      if (!key || key.length < 3) return json({ error: 'Invalid media path' }, 400);
+      try {
+        const obj = await env.QUIZ_MEDIA.get(key);
+        if (!obj) return json({ error: 'File not found' }, 404);
+        const headers = { 'Cache-Control': 'public, max-age=31536000' };
+        if (key.endsWith('.mp3')) headers['Content-Type'] = 'audio/mpeg';
+        else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
+        else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
+        else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
+        return new Response(obj.body, { headers });
+      } catch (e) {
+        return json({ error: 'Failed to load media' }, 500);
+      }
+    }
+
+    // Upload quiz media to R2 (authenticated)
+    if (url.pathname === '/api/media/upload' && request.method === 'POST') {
+      const contentType = request.headers.get('content-type') || '';
+      if (!contentType.includes('multipart/form-data')) {
+        return json({ error: 'Use multipart/form-data' }, 400);
+      }
+      try {
+        const formData = await request.formData();
+        const file = formData.get('file');
+        const path = formData.get('path');
+        if (!file || !path) return json({ error: 'Missing file or path' }, 400);
+        await env.QUIZ_MEDIA.put(path, file.stream(), {
+          httpMetadata: { contentType: file.type }
+        });
+        return json({ ok: true, path, size: file.size });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     if (url.pathname === '/api/create' && request.method === 'POST') {
       const body = await safeJson(request);
       const quiz = body?.quiz;

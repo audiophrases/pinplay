@@ -6505,8 +6505,8 @@ function createEmptyQuiz() {
   return {
     version: 1,
     title: '',
-    ttsLanguage: 'EN',
-    readAllQuestionsAloud: true,
+    ttsLanguage: 'NONE',
+    readAllQuestionsAloud: false,
     questions: [],
   };
 }

@@ -111,7 +111,13 @@ function init() {
       // Play recorded audio file if available
       if (q.audioMode === 'file' && q.audioData) {
         try {
-          const audio = new Audio(q.audioData);
+          // Support relative paths - prepend Worker API base URL
+          let audioUrl = q.audioData;
+          if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
+            const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+            audioUrl = `${base}/api/media/${audioUrl}`;
+          }
+          const audio = new Audio(audioUrl);
           audio.play();
         } catch (e) { console.warn('Audio playback failed:', e); }
         return;
@@ -1030,12 +1036,12 @@ function renderJoinQuestion(question) {
     const preview = document.createElement('div');
     preview.className = 'question-image-preview';
     const img = document.createElement('img');
-    img.src = question.imageData;
+    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
     img.alt = 'Question image';
     img.dataset.zoomable = '1';
     preview.appendChild(img);
     preview.dataset.zoomable = '1';
-    preview.dataset.bgImageSrc = question.imageData;
+    preview.dataset.bgImageSrc = imgSrc;
     joinAnswersEl.appendChild(preview);
   }
 
@@ -1083,7 +1089,20 @@ function renderJoinQuestion(question) {
       btn.type = 'button';
       btn.className = 'btn top-space';
       btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
+      btn.addEventListener('click', () => {
+        // Prefer pre-recorded audio file if available
+        if (question.audioMode === 'file' && question.audioData) {
+          let audioUrl = question.audioData;
+          if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
+            const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+            audioUrl = `${base}/api/media/${audioUrl}`;
+          }
+          const audio = new Audio(audioUrl);
+          audio.play().catch(() => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
+        } else {
+          speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
+        }
+      });
       joinAnswersEl.appendChild(btn);
     }
     appendRiskBetBar();
@@ -1095,7 +1114,7 @@ function renderJoinQuestion(question) {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
-      wrap.style.backgroundImage = `url(${question.imageData})`;
+      let bgSrc = question.imageData; if (!bgSrc.StartsWith("http") && !bgSrc.StartsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; bgSrc = `${base}/api/media/${bgSrc}`; } wrap.style.backgroundImage = `url(${bgSrc})`;
       wrap.style.backgroundRepeat = 'no-repeat';
       wrap.style.backgroundPosition = 'center';
       wrap.style.backgroundSize = 'contain';
@@ -1218,7 +1237,7 @@ function renderJoinQuestion(question) {
     wrap.className = 'pin-preview';
 
     const img = document.createElement('img');
-    img.src = question.imageData;
+    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
     img.alt = 'Pin question image';
 
     const picksLayer = document.createElement('div');
