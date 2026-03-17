@@ -554,6 +554,19 @@ function bindBuilderEvents() {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
+      // Auto-fill missing images from web search
+      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      if (missing > 0) {
+        setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
+        const result = await autoFillImages(quiz, ({ index, total, status }) => {
+          setStatus(hostStatusEl, `Image search: Q${index + 1}/${total} — ${status}`, 'ok');
+        });
+        renderBuilder();
+        if (result.filled > 0) {
+          setStatus(hostStatusEl, `Auto-filled ${result.filled} image(s), skipped ${result.skipped}.`, 'ok');
+        }
+      }
+
       saveQuiz(quiz);
       const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
       const autoName = `${fallback} (${new Date().toLocaleString()})`;
@@ -576,8 +589,19 @@ function bindBuilderEvents() {
     try {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
+
+      // Auto-fill missing images from web search
+      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      if (missing > 0) {
+        setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
+        await autoFillImages(quiz, ({ index, total, status }) => {
+          setStatus(hostStatusEl, `Image search: Q${index + 1}/${total} — ${status}`, 'ok');
+        });
+        renderBuilder();
+      }
+
       downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
-      setStatus(hostStatusEl, 'Exported with validated media + local MP3 audio.', 'ok');
+      setStatus(hostStatusEl, 'Exported with validated media + auto-filled images.', 'ok');
     } catch (err) {
       setStatus(hostStatusEl, `Export failed: ${err.message}`, 'bad');
     }
@@ -604,6 +628,17 @@ function bindBuilderEvents() {
       collapseAllQuestions(quiz);
       renderBuilder();
       await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
+
+      // Auto-fill missing images from web search
+      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      if (missing > 0) {
+        const doAuto = confirm(`Auto-search images for ${missing} question(s) without images?`);
+        if (doAuto) {
+          await autoFillImages(quiz);
+          renderBuilder();
+        }
+      }
+
       const savedOk = saveQuiz(quiz);
       if (savedOk) {
         alert('Quiz imported ✅');
@@ -6989,6 +7024,83 @@ function isStorageQuotaError(err) {
   const name = String(err.name || '').toLowerCase();
   const msg = String(err.message || '').toLowerCase();
   return name.includes('quota') || msg.includes('exceeded the quota') || msg.includes('quota exceeded');
+}
+
+/**
+ * Auto-fill missing images for questions that have no imageData but have a prompt.
+ * Uses the existing Openverse + Pexels search pipeline. Takes the first result.
+ * @param {object} quizData - The quiz object
+ * @param {function} onProgress - Optional callback({ index, total, status })
+ * @returns {{ filled: number, skipped: number }}
+ */
+async function autoFillImages(quizData, onProgress) {
+  const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
+  let filled = 0;
+  let skipped = 0;
+  const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    if (!q || q.imageData) { skipped++; continue; }
+    const query = String(q.prompt || q.type || '').trim().slice(0, 140);
+    if (!query) { skipped++; continue; }
+
+    onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
+
+    try {
+      // 1) Try Openverse first (browser-side)
+      let imageUrl = '';
+      try {
+        const ovUrl = new URL('https://api.openverse.org/v1/images/');
+        ovUrl.searchParams.set('q', query);
+        ovUrl.searchParams.set('page_size', '5');
+        ovUrl.searchParams.set('page', '1');
+        ovUrl.searchParams.set('mature', 'false');
+        const ovRes = await fetch(ovUrl.toString(), {
+          method: 'GET',
+          headers: { Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8' },
+        });
+        if (ovRes.ok) {
+          const ovData = await ovRes.json();
+          const first = (ovData?.results || []).find(it => it?.url);
+          if (first) imageUrl = String(first.url);
+        }
+      } catch { /* continue to Pexels */ }
+
+      // 2) Fallback to backend Pexels search
+      if (!imageUrl && beUrl) {
+        try {
+          const res = await fetch(`${beUrl}/api/images/search?q=${encodeURIComponent(query)}&count=5`);
+          const data = await res.json();
+          const first = (data?.items || []).find(it => it?.url);
+          if (first) imageUrl = String(first.url);
+        } catch { /* skip */ }
+      }
+
+      if (!imageUrl) { skipped++; continue; }
+
+      onProgress?.({ index: i, total: questions.length, status: 'Importing...' });
+
+      // 3) Fetch image via proxy and resize
+      if (!beUrl) { skipped++; continue; }
+      const res = await fetch(`${beUrl}/api/images/fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: imageUrl }),
+      });
+      const data = await res.json();
+      if (!data?.dataUrl) { skipped++; continue; }
+
+      const blob = dataUrlToBlob(data.dataUrl);
+      const resized = await imageFileToOptimizedDataUrl(blob);
+      q.imageData = resized;
+      filled++;
+    } catch {
+      skipped++;
+    }
+  }
+
+  return { filled, skipped };
 }
 
 function saveQuiz(data) {
