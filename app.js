@@ -536,14 +536,67 @@ function bindBuilderEvents() {
     addQuestionToBuilder(makePinQuestion());
   });
 
+  const quizTtsOtherWrap = document.getElementById('quizTtsOtherWrap');
+  const quizTtsOtherVoiceEl = document.getElementById('quizTtsOtherVoice');
+
+  // Populate the "Other" voice search dropdown from the full voice index
+  if (quizTtsOtherVoiceEl) {
+    const voiceOptions = EDGE_TTS_VOICE_INDEX
+      .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
+      .join('');
+    quizTtsOtherVoiceEl.innerHTML = voiceOptions;
+  }
+
   if (quizTtsLanguageEl) {
     quizTtsLanguageEl.addEventListener('change', () => {
-      applyHearQuestionsMode(quiz, quizTtsLanguageEl.value);
-      const next = normalizeTtsLanguage(quiz.ttsLanguage);
+      const mode = quizTtsLanguageEl.value;
+      applyHearQuestionsMode(quiz, mode);
+
+      // Show/hide the "Other" voice selector
+      if (quizTtsOtherWrap) {
+        quizTtsOtherWrap.style.display = mode === 'OTHER' ? '' : 'none';
+      }
+
+      if (mode === 'NONE') {
+        // Don't hear questions — disable TTS for all questions
+        quiz.questions.forEach((q) => {
+          if (!q) return;
+          q.audioEnabled = false;
+          q.audioMode = 'tts';
+        });
+      } else if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) {
+        // Apply the selected voice from the search dropdown
+        const voice = quizTtsOtherVoiceEl.value;
+        quiz.questions.forEach((q) => {
+          if (!q || !supportsQuestionAudio(q.type)) return;
+          q.language = voice;
+          q.ttsLanguage = 'OTHER';
+          q.audioEnabled = true;
+          q.audioMode = 'tts';
+        });
+      } else {
+        const next = normalizeTtsLanguage(quiz.ttsLanguage);
+        quiz.questions.forEach((q) => {
+          if (!q || !supportsQuestionAudio(q.type)) return;
+          q.ttsLanguage = next;
+          q.language = getVoiceForTtsLanguage(next);
+          q.audioEnabled = true;
+          q.audioMode = 'tts';
+        });
+      }
+      renderBuilder();
+    });
+  }
+
+  // Also update all questions when the "Other" voice changes
+  if (quizTtsOtherVoiceEl) {
+    quizTtsOtherVoiceEl.addEventListener('change', () => {
+      if (quizTtsLanguageEl?.value !== 'OTHER') return;
+      const voice = quizTtsOtherVoiceEl.value;
       quiz.questions.forEach((q) => {
         if (!q || !supportsQuestionAudio(q.type)) return;
-        q.ttsLanguage = next;
-        q.language = getVoiceForTtsLanguage(next);
+        q.language = voice;
+        q.ttsLanguage = 'OTHER';
       });
       renderBuilder();
     });
@@ -1010,6 +1063,10 @@ function renderBuilder() {
   normalizeQuizAudioDefaults(quiz);
   quizTitleEl.value = quiz.title || '';
   if (quizTtsLanguageEl) quizTtsLanguageEl.value = getHearQuestionsMode(quiz);
+  // Show/hide "Other" voice selector based on saved mode
+  if (quizTtsOtherWrap) {
+    quizTtsOtherWrap.style.display = getHearQuestionsMode(quiz) === 'OTHER' ? '' : 'none';
+  }
   questionListEl.innerHTML = '';
 
   if (!quiz.questions.length) {
@@ -1621,12 +1678,20 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
 }
 
 function getHearQuestionsMode(targetQuiz) {
+  const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
+  if (raw === 'NONE') return 'NONE';
   return normalizeTtsLanguage(targetQuiz?.ttsLanguage);
 }
 
 function applyHearQuestionsMode(targetQuiz, modeValue) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const mode = String(modeValue || '').trim().toUpperCase();
+  // "Don't hear questions" — disable TTS
+  if (mode === 'NONE') {
+    targetQuiz.ttsLanguage = 'NONE';
+    targetQuiz.readAllQuestionsAloud = false;
+    return;
+  }
   // Legacy support for old saved mode.
   if (mode === 'READ') {
     targetQuiz.ttsLanguage = DEFAULT_EDGE_TTS_LANGUAGE;
@@ -1640,8 +1705,8 @@ function applyHearQuestionsMode(targetQuiz, modeValue) {
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
-  targetQuiz.ttsLanguage = ['EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'EN';
-  targetQuiz.readAllQuestionsAloud = targetQuiz.readAllQuestionsAloud !== false;
+  targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
+  targetQuiz.readAllQuestionsAloud = targetQuiz.ttsLanguage !== 'NONE' && targetQuiz.readAllQuestionsAloud !== false;
 }
 
 function buildAudioSettingsMarkup(idx, q) {
