@@ -1051,10 +1051,14 @@ function renderJoinQuestion(question) {
       input.value = String(idx);
       input.dataset.joinAnswer = '1';
 
+      const num = document.createElement('strong');
+      num.className = 'answer-num';
+      num.textContent = `${idx + 1}.`;
+
       const text = document.createElement('span');
       text.textContent = a.text;
 
-      row.append(input, text);
+      row.append(num, input, text);
       joinAnswersEl.appendChild(row);
     });
 
