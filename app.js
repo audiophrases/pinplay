@@ -607,8 +607,8 @@ function bindBuilderEvents() {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      // Auto-fill missing images from web search
-      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      // Auto-fill missing images for questions with imageKeyword set
+      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
       if (missing > 0) {
         setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
         const result = await autoFillImages(quiz, ({ index, total, status }) => {
@@ -643,8 +643,8 @@ function bindBuilderEvents() {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      // Auto-fill missing images from web search
-      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      // Auto-fill missing images for questions with imageKeyword set
+      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
       if (missing > 0) {
         setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
         await autoFillImages(quiz, ({ index, total, status }) => {
@@ -682,10 +682,10 @@ function bindBuilderEvents() {
       renderBuilder();
       await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      // Auto-fill missing images from web search
-      const missing = quiz.questions?.filter(q => q && !q.imageData && (q.prompt || q.type)).length || 0;
+      // Auto-fill missing images for questions with imageKeyword set
+      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
       if (missing > 0) {
-        const doAuto = confirm(`Auto-search images for ${missing} question(s) without images?`);
+        const doAuto = confirm(`Auto-search images for ${missing} question(s) with keywords?`);
         if (doAuto) {
           await autoFillImages(quiz);
           renderBuilder();
@@ -1313,6 +1313,8 @@ function renderBuilder() {
           <button type="button" class="btn" data-image-search="${idx}">Search web image</button>
           <button type="button" class="btn" data-clear-image="${idx}">Clear image</button>
         </div>
+        <label class="top-space">Image keyword (auto-search on save)</label>
+        <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. map of Spain, human heart" />
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
           <div style="min-width:220px;">
@@ -1354,6 +1356,8 @@ function renderBuilder() {
         <label class="top-space">Question image (optional)</label>
         <input data-image-upload="${idx}" type="file" accept="image/*" />
         <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
+        <label class="top-space">Image keyword (auto-search on save)</label>
+        <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
       `;
       if (q.imageData) {
         specific += `
@@ -7100,7 +7104,8 @@ function isStorageQuotaError(err) {
 }
 
 /**
- * Auto-fill missing images for questions that have no imageData but have a prompt.
+ * Auto-fill missing images for questions that have no imageData but have an imageKeyword set.
+ * If imageKeyword is empty, the question is skipped (creator doesn't want an auto-image).
  * Uses the existing Openverse + Pexels search pipeline. Takes the first result.
  * @param {object} quizData - The quiz object
  * @param {function} onProgress - Optional callback({ index, total, status })
@@ -7115,7 +7120,8 @@ async function autoFillImages(quizData, onProgress) {
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (!q || q.imageData) { skipped++; continue; }
-    const rawQuery = String(q.prompt || q.type || '').trim().slice(0, 140);
+    // Only use the explicit imageKeyword field — if empty, skip (creator doesn't want auto-image)
+    const rawQuery = String(q.imageKeyword || '').trim().slice(0, 140);
     if (!rawQuery) { skipped++; continue; }
     // Quote multi-word queries so they're searched as a phrase
     const query = rawQuery.includes(' ') ? `"${rawQuery}"` : rawQuery;

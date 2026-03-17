@@ -36,7 +36,11 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - Per-question points (0, 1000, 2000)
 - Per-question time limit (0 = no limit)
 - Per-question audio (upload MP3 or use TTS with language selection)
-- Image support (upload or search Wikimedia Commons / optional Google Images)
+- Image support (upload, search web, or **auto-fill by keyword**)
+  - Each question has an **Image keyword** field (e.g. "rubber band", "volcano")
+  - On save/export, questions with a keyword and no image are auto-searched (Openverse + Pexels)
+  - Leave the keyword empty to skip auto-image for that question
+  - New quizzes default to "Don't hear questions" in the audio/language dropdown at the top
 - Local save via localStorage + JSON import/export
 - Google Drive publish/open/delete (optional, via Apps Script bridge)
 - Unified preview with simulated students, re-roll, and jump-to-question
