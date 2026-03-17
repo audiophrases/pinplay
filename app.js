@@ -7033,10 +7033,13 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
 
     if (q.imageData) {
       if (strictMediaCheck) {
-        try {
-          await validateImageDataUrl(q.imageData);
-        } catch (err) {
-          throw new Error(`Q${i + 1} image check failed: ${err.message}`);
+        // Skip validation for base64 data URLs - Worker will extract to R2
+        if (!q.imageData.startsWith('data:')) {
+          try {
+            await validateImageDataUrl(q.imageData);
+          } catch (err) {
+            throw new Error(`Q${i + 1} image check failed: ${err.message}`);
+          }
         }
       }
     }
@@ -7071,10 +7074,13 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     }
 
     if (q.audioData && strictMediaCheck) {
-      try {
-        await validateAudioDataUrl(q.audioData);
-      } catch (err) {
-        throw new Error(`Q${i + 1} audio check failed: ${err.message}`);
+      // Skip validation for base64 data URLs - Worker will extract to R2
+      if (!q.audioData.startsWith('data:')) {
+        try {
+          await validateAudioDataUrl(q.audioData);
+        } catch (err) {
+          throw new Error(`Q${i + 1} audio check failed: ${err.message}`);
+        }
       }
     }
   }
