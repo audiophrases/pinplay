@@ -38,6 +38,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - Per-question audio (upload MP3 or use TTS with language selection)
 - Image support (upload, search web, or **auto-fill by keyword**)
   - Each question has an **Image keyword** field (e.g. "rubber band", "volcano")
+  - Keep keywords to **3 words max** for best search results
   - On save/export, questions with a keyword and no image are auto-searched (Openverse + Pexels)
   - Leave the keyword empty to skip auto-image for that question
   - New quizzes default to "Don't hear questions" in the audio/language dropdown at the top
