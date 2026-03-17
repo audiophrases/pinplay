@@ -917,21 +917,22 @@ textarea { min-height: 72px; resize: vertical; }
   z-index: 1;
 }
 
-/* Student answer items - match live screen style */
+/* Student answer items */
 #joinAnswers .answer-row {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.4rem;
   width: 100%;
-  padding: 0.65rem 0.85rem;
-  margin: 0.25rem 0;
+  padding: 0.35rem 0.65rem;
+  margin: 0.15rem 0;
   border: 1px solid var(--line);
-  border-radius: 0.65rem;
+  border-radius: 0.5rem;
   background: var(--card);
-  font-size: 1rem;
+  font-size: 1.15rem;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
   text-align: left;
+  align-items: center;
 }
 #joinAnswers .answer-row .answer-num {
   font-weight: 700;
@@ -939,10 +940,21 @@ textarea { min-height: 72px; resize: vertical; }
 }
 #joinAnswers .answer-row input[type="radio"],
 #joinAnswers .answer-row input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--primary);
+  margin: 0;
+}
+#joinAnswers .answer-row .answer-num {
+  font-weight: 700;
+  color: var(--text);
+}
+#joinAnswers .answer-row input[type="radio"],
+#joinAnswers .answer-row input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--primary);
+  margin: 0;
 }
 #joinAnswers .answer-row:hover {
   border-color: var(--primary);

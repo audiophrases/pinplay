@@ -1073,7 +1073,7 @@ function renderJoinQuestion(question) {
       const text = document.createElement('span');
       text.textContent = a.text;
 
-      row.append(num, input, text);
+      row.append(num, text, input);
       joinAnswersEl.appendChild(row);
     });
 
