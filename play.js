@@ -92,7 +92,7 @@ function init() {
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    
+
     if (e.key === 'ArrowRight' || e.key === ' ') {
       e.preventDefault();
       moveAssignmentIndex(1);
@@ -454,9 +454,9 @@ async function loadAttemptHistory(code, studentKey) {
   try {
     const data = await api(`/api/assignment/attempts?code=${encodeURIComponent(code)}&studentKey=${encodeURIComponent(studentKey)}`, { method: 'GET' });
     const attempts = data?.attempts || [];
-    
+
     if (attempts.length === 0) return;
-    
+
     // Show previous attempts
     const historyHtml = attempts.map((a, i) => {
       const num = attempts.length - i;
@@ -467,7 +467,7 @@ async function loadAttemptHistory(code, studentKey) {
       const statusIcon = submitted ? '✅' : '📝';
       return `<div style="padding:4px 0;font-size:13px;">${statusIcon} Attempt ${num}: <strong>${score}/${total}</strong> (${pct}%) ${submitted ? '' : '(in progress)'}</div>`;
     }).join('');
-    
+
     // Calculate improvement
     const submittedAttempts = attempts.filter(a => a.submitted);
     let improvementText = '';
@@ -481,7 +481,7 @@ async function loadAttemptHistory(code, studentKey) {
       else if (diff < 0) improvementText = `<div style="color:#d29922;margin-top:8px;">📉 ${Math.abs(diff)}% below first attempt</div>`;
       else improvementText = `<div style="color:#8b949e;margin-top:8px;">📊 Same score as first attempt</div>`;
     }
-    
+
     // Create or update history panel
     let historyPanel = document.getElementById('joinHistoryPanel');
     if (!historyPanel) {
@@ -494,14 +494,14 @@ async function loadAttemptHistory(code, studentKey) {
         joinQuestionWrap.parentNode.insertBefore(historyPanel, joinQuestionWrap.nextSibling);
       }
     }
-    
+
     historyPanel.innerHTML = `
       <div style="font-weight:bold;color:#58a6ff;margin-bottom:4px;">📚 Previous Attempts (${attempts.length})</div>
       ${historyHtml}
       ${improvementText}
     `;
     historyPanel.style.display = 'block';
-    
+
     // Fetch and display teacher feedback for most recent submitted attempt
     const recentSubmitted = attempts.find(a => a.submitted);
     if (recentSubmitted) {
@@ -518,7 +518,7 @@ async function showTeacherFeedback(code, attemptId) {
     const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
     const answers = data?.attempt?.answersByQ || {};
     const questions = data?.attempt?.assignment?.quiz?.questions || [];
-    
+
     const feedbackItems = [];
     for (const [qIdx, answer] of Object.entries(answers)) {
       const question = questions[Number(qIdx)];
@@ -533,9 +533,9 @@ async function showTeacherFeedback(code, attemptId) {
         });
       }
     }
-    
+
     if (feedbackItems.length === 0) return;
-    
+
     let feedbackPanel = document.getElementById('joinFeedbackPanel');
     if (!feedbackPanel) {
       feedbackPanel = document.createElement('div');
@@ -544,14 +544,14 @@ async function showTeacherFeedback(code, attemptId) {
       const historyPanel = document.getElementById('joinHistoryPanel');
       if (historyPanel) historyPanel.parentNode.insertBefore(feedbackPanel, historyPanel.nextSibling);
     }
-    
+
     const feedbackHtml = feedbackItems.map(item => `
       <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
         <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
         <div style="color:#3fb950;">💬 Teacher: ${esc(item.correction)}</div>
       </div>
     `).join('');
-    
+
     feedbackPanel.innerHTML = `
       <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>
       ${feedbackHtml}
@@ -623,7 +623,7 @@ async function startAssignmentAttempt() {
       setStatus(joinStatusEl, `Attempt ${num}${suffix} started ✅`, 'ok');
     }
   }
-  
+
   // Load attempt history and teacher feedback
   loadAttemptHistory(code, studentKey).catch(() => {});
 
@@ -762,7 +762,7 @@ function renderPlayerState(state) {
   if (state.phase !== 'question' || !state.question) {
     applyJoinLayoutMode(false, null);
     stopJoinTimer();
-    if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
+    if (joinTimerEl) joinTimerEl.textContent = 'Time: -';
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
 
     const canReroll = (state.phase === 'lobby' && !!live.player.randomNamesMode)
@@ -780,7 +780,11 @@ function renderPlayerState(state) {
       const modeLabel = document.getElementById('joinModeLabel');
       if (modeLabel) modeLabel.textContent = 'Game finished 🎉';
       // Clear status (shown in header now)
-      renderLeaderboardInJoin(state.leaderboard || []);
+      renderLeaderboardInJoin(state.leaderboard || [], {
+        answerText: live?.player?.lastAnswerText || '',
+        isCorrect: live?.player?.lastAnswerCorrect,
+        correctText: live?.player?.correctAnswerText || state.correctAnswer || ''
+      });
     }
     renderJoinReveal();
     scheduleJoinAdaptiveFit();
@@ -789,7 +793,7 @@ function renderPlayerState(state) {
 
   if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
-  
+
   // Add body class to hide topbar
   document.body.classList.add('question-active');
   initReactionRow(); // Re-init to set correct mode
@@ -1305,7 +1309,7 @@ function appendRiskBetBar() {
     }
   }
   return; // Skip full bet bar
-  
+
   // Old code preserved for reference:
   if (!joinAnswersEl) return;
 
@@ -1404,7 +1408,7 @@ function buildCorrectionDiffHtml(correction, original) {
 function appendReactionBar() {
   // Disabled - reactions are now in the submission row
   return;
-  
+
   const host = joinAnswersEl;
   if (!host) return;
 
@@ -1492,6 +1496,14 @@ async function submitLiveAnswer() {
 
     live.player.submittedForIndex = data.currentIndex;
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
+
+    // Store answer info for leaderboard feedback
+    const question = live.player.currentQuestion;
+    const correctIdx = (question?.answers || []).findIndex(a => a.correct);
+    live.player.correctAnswerText = correctIdx >= 0 ? (question?.answers?.[correctIdx]?.text || '') : '';
+    const answerIdx = Number(answer);
+    live.player.lastAnswerText = (question?.answers?.[answerIdx]?.text || '');
+    live.player.lastAnswerCorrect = !!data.correct;
 
     setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
 
@@ -1665,7 +1677,7 @@ function stopJoinTimer() {
   }
 }
 
-function renderLeaderboardInJoin(leaderboard) {
+function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
   if (!joinQuestionWrap || !joinPromptEl || !joinAnswersEl) return;
 
   joinQuestionWrap.classList.remove('hidden');
@@ -1680,7 +1692,16 @@ function renderLeaderboardInJoin(leaderboard) {
 
     leaderboard.forEach((p, i) => {
       const li = document.createElement('li');
-      li.textContent = `${i + 1}. ${p.name} — ${p.score} pts`;
+      let text = `${i + 1}. ${p.name} - ${p.score} pts`;
+      // Show answer feedback if available
+      if (lastQuestionState?.answerText) {
+        const isCorrect = !!lastQuestionState.isCorrect;
+        const correctText = lastQuestionState.correctText || '';
+        text += isCorrect
+          ? ` ✅ "${lastQuestionState.answerText}"`
+          : ` ❌ "${lastQuestionState.answerText}" → "${correctText}"`;
+      }
+      li.textContent = text;
       ul.appendChild(li);
     });
 
@@ -2151,7 +2172,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
 
-  
+
 
   // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
   if (correctAnswerStr && typeof correctAnswerStr === 'string') {
@@ -2171,7 +2192,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
 
-  
+
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
