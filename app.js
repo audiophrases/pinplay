@@ -677,16 +677,6 @@ function bindBuilderEvents() {
       renderBuilder();
       await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      // Auto-fill missing images for questions with imageKeyword set
-      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
-      if (missing > 0) {
-        const doAuto = confirm(`Auto-search images for ${missing} question(s) with keywords?`);
-        if (doAuto) {
-          await autoFillImages(quiz);
-          renderBuilder();
-        }
-      }
-
       const savedOk = saveQuiz(quiz);
       if (savedOk) {
         alert('Quiz imported ✅');
