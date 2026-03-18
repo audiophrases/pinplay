@@ -919,14 +919,14 @@ textarea { min-height: 72px; resize: vertical; }
 
 /* Student answer items */
 #joinAnswers .answer-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.45rem 0.75rem;
+  padding: 0.55rem 0.85rem;
   margin: 0.12rem 0;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: 0.6rem;
   background: var(--card);
   font-size: 1.35rem;
   cursor: pointer;
@@ -1753,14 +1753,14 @@ body.question-active .join-title-row { display: none !important; }
   font-size: 1.05rem;
 }
 #joinAnswers .answer-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
   font-size: 1.35rem;
-  padding: 0.45rem 0.75rem;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 0.65rem;
+  border-radius: 0.6rem;
   background: var(--card);
   cursor: pointer;
   text-align: left;
@@ -1876,14 +1876,14 @@ body.no-overlay { overflow: auto !important; }
 
 /* Question options/elements bigger */
 #joinAnswers .answer-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
   font-size: 1.35rem;
-  padding: 0.45rem 0.75rem;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 0.65rem;
+  border-radius: 0.6rem;
   background: var(--card);
   cursor: pointer;
   text-align: left;
