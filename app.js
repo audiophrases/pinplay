@@ -2294,7 +2294,8 @@ async function openQuizFromCloud() {
 // Save quiz to Cloud (R2)
 async function saveQuizToCloud() {
   try {
-    ensureQuizDefaults(quiz);
+    syncQuizFromUI();
+    await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
     
