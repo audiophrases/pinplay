@@ -867,6 +867,7 @@ textarea { min-height: 72px; resize: vertical; }
 
 #joinCard.question-active #joinAnswers {
   display: grid;
+  grid-template-columns: 1fr;
   gap: .3rem;
 }
 
