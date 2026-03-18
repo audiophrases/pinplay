@@ -2113,3 +2113,16 @@ body.no-overlay { overflow: auto !important; }
   background: rgba(248,81,73,0.15);
   color: #f85149;
 }
+
+
+/* Cloud button */
+#openCloudBtn {
+  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+  border-color: #93c5fd;
+  color: #1e40af;
+  font-weight: 600;
+}
+#openCloudBtn:hover {
+  background: linear-gradient(135deg, #dbeafe, #c7d2fe);
+  transform: translateY(-1px);
+}

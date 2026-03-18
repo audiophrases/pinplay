@@ -36,6 +36,7 @@ const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
+const openCloudBtn = document.getElementById('openCloudBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
@@ -679,6 +680,10 @@ function bindBuilderEvents() {
 
   if (openDriveBtn) {
     openDriveBtn.addEventListener('click', () => openQuizFromDrive());
+  }
+
+  if (openCloudBtn) {
+    openCloudBtn.addEventListener('click', () => openQuizFromCloud());
   }
 
   // delete actions are integrated into open dialogs
@@ -2260,6 +2265,29 @@ async function openQuizFromDrive(opts = {}) {
     });
   } catch (err) {
     setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
+  }
+}
+
+// Open quiz from Cloud (R2)
+async function openQuizFromCloud() {
+  try {
+    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
+    
+    // For now, prompt for PIN - future: list all quizzes in R2
+    const pin = prompt('Enter quiz PIN to load from cloud:');
+    if (!pin) return;
+    
+    const data = await api(`/api/host/state?pin=${encodeURIComponent(pin)}`, { method: 'GET' });
+    const loadedQuiz = data?.room?.quiz;
+    validateImportedQuiz(loadedQuiz);
+    quiz = loadedQuiz;
+    collapseAllQuestions(quiz);
+    renderBuilder();
+    saveQuiz(quiz);
+    setStatus(hostStatusEl, `✅ Loaded from Cloud: PIN ${pin}`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Cloud load failed: ${err.message}`, 'bad');
   }
 }
 
