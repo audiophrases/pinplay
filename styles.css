@@ -919,11 +919,11 @@ textarea { min-height: 72px; resize: vertical; }
 
 /* Student answer items */
 #joinAnswers .answer-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   margin: 0.12rem 0;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
@@ -932,7 +932,6 @@ textarea { min-height: 72px; resize: vertical; }
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
   text-align: left;
-  align-items: center;
 }
 #joinAnswers .answer-row input[type="radio"],
 #joinAnswers .answer-row input[type="checkbox"] {
@@ -1754,12 +1753,12 @@ body.question-active .join-title-row { display: none !important; }
   font-size: 1.05rem;
 }
 #joinAnswers .answer-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
   width: 100%;
   font-size: 1.35rem;
-  padding: 0.55rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.65rem;
   background: var(--card);
@@ -1877,12 +1876,12 @@ body.no-overlay { overflow: auto !important; }
 
 /* Question options/elements bigger */
 #joinAnswers .answer-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
   width: 100%;
   font-size: 1.35rem;
-  padding: 0.55rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.65rem;
   background: var(--card);
