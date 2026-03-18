@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PinPlay Feedback Color Test</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+    .test-section { margin: 2rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+    .test-section h3 { margin-top: 0; }
+    .test-row { margin: 0.5rem 0; padding: 0.5rem; display: flex; align-items: center; gap: 1rem; }
+    .label { min-width: 200px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>🎯 PinPlay Feedback Color Test</h1>
+
+  <div class="test-section">
+    <h3>1. Text Feedback Colors (.feedback)</h3>
+    <div class="test-row">
+      <span class="label">.feedback (default)</span>
+      <p class="feedback">No status set</p>
+    </div>
+    <div class="test-row">
+      <span class="label">.feedback.ok (correct)</span>
+      <p class="feedback ok">Correct ✅ (+1000)</p>
+    </div>
+    <div class="test-row">
+      <span class="label">.feedback.bad (incorrect)</span>
+      <p class="feedback bad">Not correct ❌</p>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>2. Join Feedback Card (#joinFeedback)</h3>
+    <div class="test-row">
+      <span class="label">#joinFeedback.ok</span>
+      <p id="joinFeedback-ok" class="feedback ok">Graded ✓ (+1000)</p>
+    </div>
+    <div class="test-row">
+      <span class="label">#joinFeedback.bad</span>
+      <p id="joinFeedback-bad" class="feedback bad">Teacher correction: The correct answer is 4</p>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>3. Small Status Text (.small)</h3>
+    <div class="test-row">
+      <span class="label">.small.ok</span>
+      <span class="small ok">Unlocked ✅</span>
+    </div>
+    <div class="test-row">
+      <span class="label">.small.bad</span>
+      <span class="small bad">Wrong password</span>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>4. Preview Student Chips (inline styles)</h3>
+    <div class="test-row">
+      <span class="label">Correct chip</span>
+      <span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#e8f8ee;color:#0f5e26;">correct</span>
+    </div>
+    <div class="test-row">
+      <span class="label">Wrong chip</span>
+      <span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#fdeaea;color:#8b1e1e;">wrong</span>
+    </div>
+    <div class="test-row">
+      <span class="label">No submit chip</span>
+      <span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:#334155;">no submit</span>
+    </div>
+    <div class="test-row">
+      <span class="label">Bet chip</span>
+      <span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#fef3c7;color:#7c2d12;">bet x3</span>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>5. Answer Row Highlights (host projector)</h3>
+    <div class="test-row">
+      <span class="label">.answer-row-correct</span>
+      <div class="answer-row-correct" style="padding: 0.5rem; border-radius: 4px; flex: 1;">
+        ✅ Correct answer highlighted (green background)
+      </div>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>6. Color Variable Values</h3>
+    <div class="test-row">
+      <span class="label">--ok</span>
+      <code style="background: var(--ok); color: white; padding: 2px 8px; border-radius: 4px;">#138a36</code>
+    </div>
+    <div class="test-row">
+      <span class="label">--bad</span>
+      <code style="background: var(--bad); color: white; padding: 2px 8px; border-radius: 4px;">#c1121f</code>
+    </div>
+    <div class="test-row">
+      <span class="label">Inline green</span>
+      <code style="background: #3fb950; color: white; padding: 2px 8px; border-radius: 4px;">#3fb950</code>
+    </div>
+    <div class="test-row">
+      <span class="label">Inline red</span>
+      <code style="background: #f85149; color: white; padding: 2px 8px; border-radius: 4px;">#f85149</code>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>7. Media Progress States</h3>
+    <div class="test-row">
+      <span class="label">.media-progress.ok</span>
+      <div class="media-progress ok" style="width: 100px; height: 8px; background: var(--ok); border-radius: 4px;"></div>
+    </div>
+    <div class="test-row">
+      <span class="label">.media-progress.bad</span>
+      <div class="media-progress bad" style="width: 100px; height: 8px; background: var(--bad); border-radius: 4px;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Test setStatus function behavior
+    function setStatus(el, text, mode = '') {
+      if (!el) return;
+      el.textContent = text;
+      el.className = 'feedback';
+      if (mode === 'ok') el.classList.add('ok');
+      if (mode === 'bad') el.classList.add('bad');
+    }
+
+    // Add interactive test
+    const testSection = document.createElement('div');
+    testSection.className = 'test-section';
+    testSection.innerHTML = `
+      <h3>8. Interactive setStatus Test</h3>
+      <div class="test-row">
+        <button onclick="setStatus(document.getElementById('testFeedback'), 'Correct ✅ (+1000)', 'ok')">Set OK</button>
+        <button onclick="setStatus(document.getElementById('testFeedback'), 'Not correct ❌', 'bad')">Set BAD</button>
+        <button onclick="setStatus(document.getElementById('testFeedback'), '', '')">Clear</button>
+        <span id="testFeedback" class="feedback"></span>
+      </div>
+    `;
+    document.body.appendChild(testSection);
+  </script>
+</body>
+</html>

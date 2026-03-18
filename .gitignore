@@ -7,3 +7,9 @@ uploads/
 !.dev.vars.example
 .env*
 !.env.example
+
+# Secrets (never commit)
+~/.pinplay-secrets.json
+*.secrets.json
+.env
+cloudflare/restore-secrets.local.cmd

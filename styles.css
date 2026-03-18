@@ -1156,6 +1156,8 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .risk-bet-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: .3rem;
   margin-left: 0;
 }
@@ -1165,9 +1167,9 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .risk-bet-row .risk-bet-btn {
-  min-width: 3.7rem;
-  width: 3.7rem;
-  height: 2.05rem;
+  min-width: 3rem;
+  width: 3rem;
+  height: 1.9rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1225,6 +1227,9 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .join-reaction-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
   margin-top: 0;
 }
 
@@ -1786,6 +1791,14 @@ body.question-active .join-title-row { display: none !important; }
   opacity: 0;
   width: 0;
   height: 0;
+}
+
+/* Visual indicator when answer is selected */
+#joinAnswers .answer-row:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(96,93,255,0.12);
+  border-width: 2px;
+  padding: calc(0.65rem - 1px) calc(0.85rem - 1px);
 }
 
 /* Feedback overlay - permanent dismiss on click */
