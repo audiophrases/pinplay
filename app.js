@@ -1673,7 +1673,7 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
 
 function getHearQuestionsMode(targetQuiz) {
   const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
-  if (raw === 'NONE') return 'NONE';
+  if (raw === 'NONE' || !raw) return 'NONE';
   return normalizeTtsLanguage(targetQuiz?.ttsLanguage);
 }
 
