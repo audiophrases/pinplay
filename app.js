@@ -7108,8 +7108,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     }
 
-    if (q.imageData) {
-      if (strictMediaCheck && !q.imageData.startsWith('data:')) {
+    if (q.imageData && q.imageData.startsWith('data:')) {
+      if (strictMediaCheck) {
         try { await validateImageDataUrl(q.imageData); } catch (err) { throw new Error(`Q${i + 1} image check failed: ${err.message}`); }
       }
     }
@@ -7169,8 +7169,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     }
 
-    if (q.audioData && strictMediaCheck && !q.audioData.startsWith('data:')) {
-      // Skip validation for TTS mode, disabled audio, and data URLs
+    // Validate audio: skip for TTS mode, disabled audio, R2 URLs, or empty
+    if (q.audioData && strictMediaCheck && q.audioData.startsWith('data:')) {
       const audioMode = String(q.audioMode || '').toLowerCase();
       if (audioMode !== 'tts' && audioMode !== 'none' && q.audioEnabled !== false) {
         try { await validateAudioDataUrl(q.audioData); } catch (err) { throw new Error(`Q${i + 1} audio check failed: ${err.message}`); }
