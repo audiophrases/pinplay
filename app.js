@@ -2259,21 +2259,23 @@ async function openQuizFromCloud() {
       items: cloudQuizzes.map((q, i) => ({ 
         id: q.key, 
         raw: q, 
-        label: `${q.key.replace('.json', '')} (${(q.size / 1024).toFixed(0)} KB)`
+        label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`
       })),
       onOpen: async (item) => {
         const quizKey = item.raw.key;
-        // Load from Worker API (R2)
         const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+        setStatus(hostStatusEl, '☁️ Loading from cloud...', 'ok');
         const res = await fetch(`${base}/api/media/${quizKey}`);
         if (!res.ok) throw new Error('Failed to load quiz from cloud');
         const loadedQuiz = await res.json();
+        // The quiz JSON is stored directly (not wrapped)
         validateImportedQuiz(loadedQuiz);
-        quiz = loadedQuiz.quiz || loadedQuiz;
+        quiz = loadedQuiz;
+        quiz._r2QuizId = quizKey.replace('quizzes/', '').replace('.json', '');
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
-        setStatus(hostStatusEl, `✅ Loaded from Cloud: ${item.label}`, 'ok');
+        setStatus(hostStatusEl, `✅ Loaded: ${item.label}`, 'ok');
       },
       onDelete: async (item) => {
         // Delete from R2 via Worker API
@@ -2298,8 +2300,9 @@ async function saveQuizToCloud() {
     
     const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
     quiz._r2QuizId = quizId;
+    quiz.title = quiz.title || 'Untitled Quiz';
     
-    // Upload quiz JSON
+    // Upload quiz JSON to R2 (with title and questions for listing)
     const res = await fetch(`${base}/api/quizzes/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2309,7 +2312,7 @@ async function saveQuizToCloud() {
     if (!res.ok) throw new Error('Upload failed');
     const data = await res.json();
     
-    setStatus(hostStatusEl, `✅ Saved to Cloud! PIN: ${quiz.pin || 'N/A'}`, 'ok');
+    setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
   }

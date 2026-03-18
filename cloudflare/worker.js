@@ -142,14 +142,26 @@ export default {
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
       try {
         const listed = await env.QUIZ_MEDIA.list({ limit: 100 });
-        // Find quiz JSON files (top-level .json files, not media files)
         const quizzes = (listed.objects || [])
-          .filter(obj => obj.key.endsWith('.json'))
+          .filter(obj => obj.key.startsWith('quizzes/') && obj.key.endsWith('.json'))
           .map(obj => ({
             key: obj.key,
+            pin: obj.key.replace('quizzes/', '').replace('.json', ''),
             size: obj.size,
-            uploaded: obj.uploaded
+            uploaded: obj.uploaded,
+            title: obj.key.replace('quizzes/', '').replace('.json', '')
           }));
+        // Fetch titles from quiz data
+        for (const q of quizzes) {
+          try {
+            const obj = await env.QUIZ_MEDIA.get(q.key);
+            if (obj) {
+              const data = await obj.json();
+              if (data?.title) q.title = data.title;
+              if (data?.questions?.length) q.questionCount = data.questions.length;
+            }
+          } catch (e) { /* skip */ }
+        }
         return json({ quizzes });
       } catch (e) {
         return json({ error: e.message }, 500);
