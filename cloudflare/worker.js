@@ -138,6 +138,35 @@ export default {
       }
     }
 
+    // List quizzes stored in R2
+    if (url.pathname === '/api/quizzes' && request.method === 'GET') {
+      try {
+        const prefix = 'quizzes/';
+        const listed = await env.QUIZ_MEDIA.list({ prefix, limit: 100 });
+        const quizzes = (listed.objects || []).map(obj => ({
+          key: obj.key.replace(prefix, ''),
+          size: obj.size,
+          uploaded: obj.uploaded
+        })).filter(q => q.key.endsWith('.json'));
+        return json({ quizzes });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
+    // Upload quiz JSON to R2
+    if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
+      try {
+        const body = await safeJson(request);
+        const quizId = body?.quizId || `quiz-${Date.now()}`;
+        const key = `quizzes/${quizId}.json`;
+        await env.QUIZ_MEDIA.put(key, JSON.stringify(body.quiz || body), { httpMetadata: { contentType: 'application/json' } });
+        return json({ ok: true, key, quizId });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     // Upload quiz media to R2 (authenticated)
     if (url.pathname === '/api/media/upload' && request.method === 'POST') {
       const contentType = request.headers.get('content-type') || '';

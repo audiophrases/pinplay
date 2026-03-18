@@ -2274,18 +2274,41 @@ async function openQuizFromCloud() {
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
     
-    // For now, prompt for PIN - future: list all quizzes in R2
-    const pin = prompt('Enter quiz PIN to load from cloud:');
-    if (!pin) return;
+    const data = await api('/api/quizzes', { method: 'GET' });
+    const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
     
-    const data = await api(`/api/host/state?pin=${encodeURIComponent(pin)}`, { method: 'GET' });
-    const loadedQuiz = data?.room?.quiz;
-    validateImportedQuiz(loadedQuiz);
-    quiz = loadedQuiz;
-    collapseAllQuestions(quiz);
-    renderBuilder();
-    saveQuiz(quiz);
-    setStatus(hostStatusEl, `✅ Loaded from Cloud: PIN ${pin}`, 'ok');
+    if (!cloudQuizzes.length) {
+      setStatus(hostStatusEl, 'No quizzes in cloud yet. Import a quiz first!', 'ok');
+      return;
+    }
+
+    showQuizManagerDialog({
+      title: '☁️ Cloud quizzes (R2)',
+      items: cloudQuizzes.map((q, i) => ({ 
+        id: q.key, 
+        raw: q, 
+        label: `${q.key.replace('.json', '')} (${(q.size / 1024).toFixed(0)} KB)`
+      })),
+      onOpen: async (item) => {
+        const quizKey = item.raw.key;
+        const res = await fetch(`${base}/api/quizzes/${quizKey}`);
+        if (!res.ok) throw new Error('Failed to load quiz from cloud');
+        const loadedQuiz = await res.json();
+        validateImportedQuiz(loadedQuiz);
+        quiz = loadedQuiz;
+        collapseAllQuestions(quiz);
+        renderBuilder();
+        saveQuiz(quiz);
+        setStatus(hostStatusEl, `✅ Loaded from Cloud: ${item.label}`, 'ok');
+      },
+      onDelete: async (item) => {
+        // Delete from R2 via Worker API
+        const quizKey = item.raw.key;
+        await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE' });
+        setStatus(hostStatusEl, `Deleted from Cloud: ${item.label}`, 'ok');
+      },
+      highlightId: null,
+    });
   } catch (err) {
     setStatus(hostStatusEl, `Cloud load failed: ${err.message}`, 'bad');
   }
