@@ -1048,10 +1048,13 @@ function renderJoinQuestion(question) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
-    // Shuffle answer order for presentation (Fisher-Yates)
+    // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
+    const seed = Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
     const indices = question.answers.map((_, i) => i);
+    let sr = seed;
     for (let s = indices.length - 1; s > 0; s--) {
-      const j = Math.floor(Math.random() * (s + 1));
+      sr = (sr * 16807) % 2147483647;
+      const j = sr % (s + 1);
       [indices[s], indices[j]] = [indices[j], indices[s]];
     }
 
