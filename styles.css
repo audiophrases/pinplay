@@ -870,6 +870,10 @@ textarea { min-height: 72px; resize: vertical; }
   grid-template-columns: 1fr;
   gap: .3rem;
 }
+#joinCard.question-active #joinAnswers.two-col {
+  grid-template-columns: 1fr 1fr;
+  gap: .3rem .4rem;
+}
 
 #joinCard.question-active .answer-row {
   gap: .38rem;
@@ -1216,6 +1220,8 @@ textarea { min-height: 72px; resize: vertical; }
   flex-wrap: wrap;
   gap: 0.25rem;
   margin-top: 0;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .pin-preview {

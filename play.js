@@ -1,7 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-const REACTION_EMOJIS = ['👍','👏','🔥','😂','🤯','🙌','☕','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'];
+const REACTION_EMOJIS = ['👍','🔥','😂','🤯','🙌','☕','🤔','👀','🧠','❤️','😅','😎','6️⃣','7️⃣'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
@@ -1079,6 +1079,11 @@ function renderJoinQuestion(question) {
       row.append(text, input);
       joinAnswersEl.appendChild(row);
     });
+
+    // Two-column layout for 4+ answer items
+    if (indices.length >= 4) {
+      joinAnswersEl.classList.add('two-col');
+    }
 
     if (question.type === 'multi') {
       const hint = document.createElement('p');
