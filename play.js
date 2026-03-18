@@ -2151,10 +2151,11 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
 
+  console.log('[PinPlay][highlight] correctAnswerStr:', correctAnswerStr, 'question.answers:', question.answers);
+
   // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
   if (correctAnswerStr && typeof correctAnswerStr === 'string') {
     if (isMulti) {
-      // Multi-select: "1. A | 3. C" format
       correctAnswerStr.split('|').forEach(part => {
         const match = part.trim().match(/^(\d+)\./);
         if (match) correctIndexes.add(Number(match[1]) - 1);
@@ -2169,6 +2170,8 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   if (correctIndexes.size === 0) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
+
+  console.log('[PinPlay][highlight] correctIndexes:', [...correctIndexes]);
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
