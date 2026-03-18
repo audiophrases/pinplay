@@ -37,6 +37,7 @@ const exportBtn = document.getElementById('exportBtn');
 const publishDriveBtn = document.getElementById('publishDriveBtn');
 const openDriveBtn = document.getElementById('openDriveBtn');
 const openCloudBtn = document.getElementById('openCloudBtn');
+const saveCloudBtn = document.getElementById('saveCloudBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
@@ -661,6 +662,10 @@ function bindBuilderEvents() {
 
   if (openCloudBtn) {
     openCloudBtn.addEventListener('click', () => openQuizFromCloud());
+  }
+
+  if (saveCloudBtn) {
+    saveCloudBtn.addEventListener('click', saveQuizToCloud);
   }
 
   // delete actions are integrated into open dialogs
@@ -2280,6 +2285,33 @@ async function openQuizFromCloud() {
     });
   } catch (err) {
     setStatus(hostStatusEl, `Cloud load failed: ${err.message}`, 'bad');
+  }
+}
+
+
+// Save quiz to Cloud (R2)
+async function saveQuizToCloud() {
+  try {
+    ensureQuizDefaults(quiz);
+    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
+    
+    const quizId = quiz._r2QuizId || quiz-;
+    quiz._r2QuizId = quizId;
+    
+    // Upload quiz JSON
+    const res = await fetch(${base}/api/quizzes/upload, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quiz, quizId })
+    });
+    
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    
+    setStatus(hostStatusEl, ✅ Saved to Cloud! PIN: , 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, Cloud save failed: , 'bad');
   }
 }
 

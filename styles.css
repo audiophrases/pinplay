@@ -2126,3 +2126,16 @@ body.no-overlay { overflow: auto !important; }
   background: linear-gradient(135deg, #dbeafe, #c7d2fe);
   transform: translateY(-1px);
 }
+
+
+/* Save Cloud button */
+#saveCloudBtn {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  border-color: #6ee7b7;
+  color: #065f46;
+  font-weight: 600;
+}
+#saveCloudBtn:hover {
+  background: linear-gradient(135deg, #a7f3d0, #6ee7b7);
+  transform: translateY(-1px);
+}
