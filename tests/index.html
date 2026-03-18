@@ -398,7 +398,7 @@ describe('evaluate: error hunt', ({ it }) => {
 describe('isAssignmentTeacherGradedQuestion', ({ it }) => {
   it('open/speaking/image_open', () => { ok(isAssignmentTeacherGradedQuestion({type:'open'})); ok(isAssignmentTeacherGradedQuestion({type:'speaking'})); ok(isAssignmentTeacherGradedQuestion({type:'image_open'})); });
   it('text empty accepted', () => { ok(isAssignmentTeacherGradedQuestion({type:'text',accepted:[]})); });
-  it('text with answers → auto', () => { ok(!isAssignmentTeacherGradedQuestion({type:'text',accepted:['Paris']}); });
+  it('text with answers → auto', () => { ok(!isAssignmentTeacherGradedQuestion({type:'text',accepted:['Paris']})); });
   it('mcq → auto', () => { ok(!isAssignmentTeacherGradedQuestion({type:'mcq'})); });
   it('null → false', () => { ok(!isAssignmentTeacherGradedQuestion(null)); });
 });
