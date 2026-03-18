@@ -177,6 +177,18 @@ function formatHistoryAnswer(entry) {
   return String(entry.answerText || '(no answer)');
 }
 
+// Worker functions
+function sliderTolerance(margin, min, max) { const range = Math.max(0, Number(max) - Number(min)); const map = { none: 0, low: range*0.05, medium: range*0.1, high: range*0.2, maximum: range }; return map[margin] ?? map.medium; }
+function distance2D(x1, y1, x2, y2) { return Math.sqrt((x1-x2)**2 + (y1-y2)**2); }
+function countErrorHuntRequiredTokens(prompt, corrected) { const s = tokenizeWords(prompt), t = tokenizeWords(corrected), rows = s.length+1, cols = t.length+1, dp = Array.from({length:rows},()=>Array(cols).fill(0)); for(let i=0;i<rows;i++) dp[i][0]=i; for(let j=0;j<cols;j++) dp[0][j]=j; for(let i=1;i<rows;i++) for(let j=1;j<cols;j++) { const same=normalizeTextAnswer(s[i-1])===normalizeTextAnswer(t[j-1]); dp[i][j]=same?dp[i-1][j-1]:Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+1); } return dp[s.length][t.length]; }
+function evaluate(question, answer) { if(!question) return {correct:false}; if(['mcq','tf','audio'].includes(question.type)){const s=Number(answer);if(!Number.isFinite(s))return{correct:false};const ci=(question.answers||[]).findIndex(a=>!!a.correct);return{correct:s===ci};} if(question.type==='multi'){const sel=Array.isArray(answer)?answer.map(Number).filter(Number.isFinite):[];const exp=(question.answers||[]).map((a,i)=>a.correct?i:null).filter(x=>x!==null);if(sel.length!==exp.length)return{correct:false};return{correct:sel.every(i=>exp.includes(i))};} if(question.type==='text'){return{correct:(question.accepted||[]).map(normalizeTextAnswer).filter(Boolean).includes(normalizeTextAnswer(answer))};} if(question.type==='context_gap')return{correct:isContextGapCorrect(answer,question.gaps||[])}; if(question.type==='match_pairs')return{correct:isMatchPairsCorrect(answer,question.pairs||[])}; if(question.type==='slider'){const v=Number(answer);if(!Number.isFinite(v))return{correct:false};return{correct:Math.abs(v-Number(question.target))<=sliderTolerance(question.margin,question.min,question.max)};} if(question.type==='pin'){const zones=(Array.isArray(question.zones)&&question.zones.length?question.zones:[question.zone||{x:50,y:50,r:15}]).slice(0,12);const picks=(Array.isArray(answer)?answer:[]).map(p=>({x:Number(p?.x),y:Number(p?.y)})).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!picks.length)return{correct:false};const covered=zones.filter(z=>picks.some(p=>distance2D(p.x,p.y,Number(z?.x??50),Number(z?.y??50))<=Number(z?.r??15))).length;const ok=String(question.pinMode||'all')==='any'?covered>=1:covered>=zones.length;return{correct:ok};} if(question.type==='error_hunt'){const rewrite=normalizeTextAnswer(answer?.rewrite??answer);const expected=normalizeTextAnswer(question.corrected||'');const sel=Array.isArray(answer?.selectedTokens)?answer.selectedTokens.map(Number).filter(Number.isFinite):[];const req=countErrorHuntRequiredTokens(question.prompt,question.corrected);if(new Set(sel).size!==req)return{correct:false};return{correct:!!rewrite&&rewrite===expected};} if(question.type==='puzzle'){const guess=Array.isArray(answer)?answer.map(normalizeTextAnswer):[];const exp=(question.items||[]).map(normalizeTextAnswer);if(!guess.length||guess.length!==exp.length)return{correct:false};return{correct:JSON.stringify(guess)===JSON.stringify(exp)};} return {correct:false}; }
+function isAssignmentTeacherGradedQuestion(q) { if(!q) return false; if(q.type==='open'||q.type==='image_open'||q.type==='speaking') return true; if(q.type==='text') return (q.accepted||[]).map(x=>String(x||'').trim()).filter(Boolean).length===0; return false; }
+function csvEscape(value) { const s=String(value??''); if(!/[",\n]/.test(s)) return s; return `"${s.replace(/"/g,'""')}"`; }
+function evaluateAssignmentAttempt(assignment, attempt) { const abq=attempt?.answersByQ&&typeof attempt.answersByQ==='object'?attempt.answersByQ:{}; const qs=assignment?.quiz?.questions||[]; let ac=0,cc=0,pt=0,ag=0,tg=0,as=0; Object.entries(abq).forEach(([r,item])=>{const qi=Number(r),q=qs[qi];if(!q)return;ac++;if(isAssignmentTeacherGradedQuestion(q)){const g=item?.teacherGrade;if(g?.graded){tg++;const p=Math.max(0,Math.round(Number(g?.pointsAwarded||0)));as+=p;if(p>0)cc++;}else{pt++;}return;}if(q.isPoll){ag++;return;}const v=evaluate(q,item?.answer);ag++;if(v?.correct){cc++;as+=Math.round(Number(q.points||1000));}});const gc=ag+tg;return{answeredCount:ac,correctCount:cc,pendingTeacherGradeCount:pt,autoGradedCount:ag,teacherGradedCount:tg,autoScore:Math.round(as),accuracy:gc>0?Math.round((cc/gc)*100*10)/10:null,totalQuestions:Number(qs.length||0)}; }
+function normalizeQuiz(quiz) { return {version:1,title:String(quiz.title||'').slice(0,1200),questions:(quiz.questions||[]).map(q=>{const b={id:q.id||'test',type:q.type,prompt:String(q.prompt||'').slice(0,1200),points:[0,1000,2000].includes(Number(q.points))?Number(q.points):1000,isPoll:!!q.isPoll};if(['mcq','multi','audio'].includes(q.type)){const a=(q.answers||[]).slice(0,10).map(x=>({text:String(x.text||'').slice(0,90),correct:!!x.correct})).filter(x=>x.text.trim().length>0);if(a.length<2)return null;if(q.type==='multi'&&a.filter(x=>x.correct).length<2){for(let i=0;i<a.length&&a.filter(x=>x.correct).length<2;i++){if(!a[i].correct)a[i].correct=true;}}else if(q.type!=='multi'&&!a.some(x=>x.correct))a[0].correct=true;b.answers=a;}if(q.type==='text'){b.accepted=(q.accepted||[]).map(x=>String(x||'').trim()).filter(Boolean);if(!b.accepted.length)return null;}if(q.type==='slider'){b.min=Number(q.min??0);b.max=Number(q.max??100);b.target=Number(q.target??50);b.margin=['none','low','medium','high','maximum'].includes(q.margin)?q.margin:'medium';}if(q.type==='context_gap'){b.gaps=(q.gaps||[]).map(x=>String(x||'').trim()).slice(0,10);if(!b.gaps.length)return null;}if(q.type==='match_pairs'){b.pairs=(q.pairs||[]).map(p=>({left:String(p?.left||'').trim(),right:String(p?.right||'').trim()})).filter(p=>p.left&&p.right);if(b.pairs.length<2)return null;}if(q.type==='pin'){b.zones=(q.zones||[]).map(z=>({x:Number(z?.x??50),y:Number(z?.y??50),r:Number(z?.r??15)})).slice(0,12);b.pinMode=String(q.pinMode||'all');}if(q.type==='puzzle'){b.items=(q.items||[]).map(x=>String(x||'').trim()).slice(0,12);if(!b.items.length)return null;}if(q.type==='error_hunt'){b.prompt=String(q.prompt||'').slice(0,1200);b.corrected=String(q.corrected||'').slice(0,1200);}return b;}).filter(Boolean)}; }
+function hasBlockedNickname(name) { const v=String(name||'').trim(); if(!v) return true; return [/\bnazi\b/i,/\bhitler\b/i,/\bterrorist\b/i].some(re=>re.test(v)); }
+const REACTION_EMOJIS_NEW = ['👍','👏','🔥','😂','🤯','🙌','☕','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'];
+
 // ---- Test framework ----
 const suites = [];
 function describe(name, fn) {
@@ -327,6 +339,106 @@ describe('Auto-fill image detection', ({ it }) => {
   it('finds needs', () => { const qs = [{imageKeyword:'',imageData:null},{imageKeyword:'volcano',imageData:null},{imageKeyword:'x',imageData:'data:...'},{imageKeyword:'y',imageData:'https://r2.dev'}]; const n = qs.filter(q => !q.imageData && q.imageKeyword); eq(n.length, 1); eq(n[0].imageKeyword, 'volcano'); });
   it('skips no-keyword', () => { eq([{imageKeyword:'',imageData:null}].filter(q => !q.imageData && q.imageKeyword).length, 0); });
   it('skips has-image', () => { eq([{imageKeyword:'x',imageData:'https://...'}].filter(q => !q.imageData && q.imageKeyword).length, 0); });
+});
+
+describe('evaluate: MCQ/TF', ({ it }) => {
+  it('correct MCQ', () => { ok(evaluate({type:'mcq',answers:[{text:'A',correct:false},{text:'B',correct:true},{text:'C',correct:false}]}, 1).correct); });
+  it('wrong MCQ', () => { ok(!evaluate({type:'mcq',answers:[{text:'A',correct:false},{text:'B',correct:true}]}, 0).correct); });
+  it('TF true correct', () => { ok(evaluate({type:'tf',answers:[{text:'T',correct:true},{text:'F',correct:false}]}, 0).correct); });
+  it('TF false wrong', () => { ok(!evaluate({type:'tf',answers:[{text:'T',correct:true},{text:'F',correct:false}]}, 1).correct); });
+  it('handles non-numeric', () => { ok(!evaluate({type:'mcq',answers:[{text:'A',correct:true},{text:'B',correct:false}]}, 'abc').correct); ok(!evaluate({type:'mcq',answers:[{text:'A',correct:true}]}, undefined).correct); });
+  it('null question → false', () => { ok(!evaluate(null, 0).correct); });
+});
+
+describe('evaluate: multi-select', ({ it }) => {
+  it('all correct', () => { ok(evaluate({type:'multi',answers:[{text:'A',correct:true},{text:'B',correct:true},{text:'C',correct:false},{text:'D',correct:false}]}, [0,1]).correct); });
+  it('partial → wrong', () => { ok(!evaluate({type:'multi',answers:[{text:'A',correct:true},{text:'B',correct:true},{text:'C',correct:false}]}, [0]).correct); });
+  it('extra → wrong', () => { ok(!evaluate({type:'multi',answers:[{text:'A',correct:true},{text:'B',correct:true},{text:'C',correct:false}]}, [0,1,2]).correct); });
+});
+
+describe('evaluate: text answer', ({ it }) => {
+  it('accepts', () => { ok(evaluate({type:'text',accepted:['Paris','paris']}, 'paris').correct); });
+  it('rejects', () => { ok(!evaluate({type:'text',accepted:['Paris']}, 'london').correct); });
+  it('punctuation-insensitive', () => { ok(evaluate({type:'text',accepted:["don't"]}, 'don t').correct); ok(evaluate({type:'text',accepted:["don't"]}, "DON'T").correct); });
+});
+
+describe('evaluate: context gap / match pairs', ({ it }) => {
+  it('correct gaps', () => { ok(evaluate({type:'context_gap',gaps:['Madrid','Spain']}, ['Madrid','Spain']).correct); });
+  it('wrong gaps', () => { ok(!evaluate({type:'context_gap',gaps:['Madrid','Spain']}, ['London','UK']).correct); });
+  it('correct pairs', () => { ok(evaluate({type:'match_pairs',pairs:[{left:'A',right:'1'},{left:'B',right:'2'}]}, [{left:'A',right:'1'},{left:'B',right:'2'}]).correct); });
+  it('wrong pairs', () => { ok(!evaluate({type:'match_pairs',pairs:[{left:'A',right:'1'}]}, [{left:'A',right:'2'}]).correct); });
+});
+
+describe('evaluate: slider', ({ it }) => {
+  it('exact target', () => { ok(evaluate({type:'slider',min:0,max:100,target:50,margin:'medium'}, 50).correct); });
+  it('within tolerance', () => { ok(evaluate({type:'slider',min:0,max:100,target:50,margin:'medium'}, 55).correct); });
+  it('outside tolerance', () => { ok(!evaluate({type:'slider',min:0,max:100,target:50,margin:'medium'}, 70).correct); });
+  it('none margin', () => { ok(evaluate({type:'slider',min:0,max:100,target:50,margin:'none'}, 50).correct); ok(!evaluate({type:'slider',min:0,max:100,target:50,margin:'none'}, 51).correct); });
+});
+
+describe('evaluate: pin on image', ({ it }) => {
+  it('pin in zone', () => { ok(evaluate({type:'pin',zones:[{x:50,y:50,r:20}],pinMode:'all'}, [{x:52,y:52}]).correct); });
+  it('pin outside zone', () => { ok(!evaluate({type:'pin',zones:[{x:50,y:50,r:5}],pinMode:'all'}, [{x:90,y:90}]).correct); });
+  it('any mode', () => { ok(evaluate({type:'pin',zones:[{x:20,y:20,r:5},{x:80,y:80,r:5}],pinMode:'any'}, [{x:21,y:21}]).correct); });
+  it('all mode partial', () => { ok(!evaluate({type:'pin',zones:[{x:20,y:20,r:5},{x:80,y:80,r:5}],pinMode:'all'}, [{x:21,y:21}]).correct); });
+  it('empty picks', () => { ok(!evaluate({type:'pin',zones:[{x:50,y:50,r:15}]}, []).correct); });
+});
+
+describe('evaluate: puzzle', ({ it }) => {
+  it('correct order', () => { ok(evaluate({type:'puzzle',items:['a','b','c']}, ['a','b','c']).correct); });
+  it('wrong order', () => { ok(!evaluate({type:'puzzle',items:['a','b','c']}, ['c','a','b']).correct); });
+  it('wrong count', () => { ok(!evaluate({type:'puzzle',items:['a','b','c']}, ['a','b']).correct); });
+});
+
+describe('evaluate: error hunt', ({ it }) => {
+  it('correct + tokens', () => { const q={type:'error_hunt',prompt:'She say go',corrected:'She said went'}; const req=countErrorHuntRequiredTokens(q.prompt,q.corrected); ok(req>0); });
+  it('wrong rewrite', () => { ok(!evaluate({type:'error_hunt',prompt:'She say go',corrected:'She said went'}, {rewrite:'wrong',selectedTokens:[1,2]}).correct); });
+});
+
+describe('isAssignmentTeacherGradedQuestion', ({ it }) => {
+  it('open/speaking/image_open', () => { ok(isAssignmentTeacherGradedQuestion({type:'open'})); ok(isAssignmentTeacherGradedQuestion({type:'speaking'})); ok(isAssignmentTeacherGradedQuestion({type:'image_open'})); });
+  it('text empty accepted', () => { ok(isAssignmentTeacherGradedQuestion({type:'text',accepted:[]})); });
+  it('text with answers → auto', () => { ok(!isAssignmentTeacherGradedQuestion({type:'text',accepted:['Paris']}); });
+  it('mcq → auto', () => { ok(!isAssignmentTeacherGradedQuestion({type:'mcq'})); });
+  it('null → false', () => { ok(!isAssignmentTeacherGradedQuestion(null)); });
+});
+
+describe('evaluateAssignmentAttempt', ({ it }) => {
+  it('scores correct MCQ', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'mcq',points:1000,answers:[{text:'A',correct:false},{text:'B',correct:true}]}]}},{answersByQ:{0:{answer:1}}}); eq(r.autoScore,1000); eq(r.correctCount,1); eq(r.accuracy,100); });
+  it('scores mixed', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'tf',points:1000,answers:[{text:'T',correct:true}]},{type:'tf',points:1000,answers:[{text:'T',correct:true}]}]}},{answersByQ:{0:{answer:0},1:{answer:1}}}); eq(r.autoScore,1000); eq(r.accuracy,50); });
+  it('empty answers', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'mcq',points:1000,answers:[{text:'A',correct:true}]}]}},{answersByQ:{}}); eq(r.answeredCount,0); eq(r.accuracy,null); });
+  it('poll → no score', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'mcq',points:1000,isPoll:true,answers:[{text:'A',correct:true}]}]}},{answersByQ:{0:{answer:0}}}); eq(r.autoScore,0); });
+  it('teacher-graded pending', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'open',points:1000}]}},{answersByQ:{0:{answer:'essay'}}}); eq(r.pendingTeacherGradeCount,1); eq(r.autoScore,0); });
+  it('teacher-graded with score', () => { const r=evaluateAssignmentAttempt({quiz:{questions:[{type:'open',points:1000}]}},{answersByQ:{0:{answer:'essay',teacherGrade:{graded:true,pointsAwarded:800}}}}); eq(r.autoScore,800); eq(r.correctCount,1); });
+});
+
+describe('csvEscape', ({ it }) => {
+  it('plain', () => { eq(csvEscape('hello'),'hello'); });
+  it('commas', () => { eq(csvEscape('a,b'),'"a,b"'); });
+  it('quotes', () => { eq(csvEscape('say "hi"'),'"say ""hi"""'); });
+  it('newlines', () => { eq(csvEscape('a\nb'),'"a\nb"'); });
+  it('null/undefined', () => { eq(csvEscape(null),''); eq(csvEscape(undefined),''); });
+});
+
+describe('sliderTolerance / distance2D', ({ it }) => {
+  it('tolerance: none=0,medium=10%,maximum=100%', () => { eq(sliderTolerance('none',0,100),0); eq(sliderTolerance('medium',0,100),10); eq(sliderTolerance('maximum',0,100),100); });
+  it('distance: same=0', () => { eq(distance2D(50,50,50,50),0); });
+  it('distance: 3-4-5', () => { eq(distance2D(0,0,3,4),5); });
+  it('zone check', () => { ok(distance2D(52,52,50,50)<=5); ok(distance2D(90,90,50,50)>5); });
+});
+
+describe('normalizeQuiz', ({ it }) => {
+  it('trims title to 1200', () => { eq(normalizeQuiz({title:'A'.repeat(2000),questions:[]}).title.length,1200); });
+  it('filters MCQ < 2 answers', () => { eq(normalizeQuiz({title:'T',questions:[{type:'mcq',answers:[{text:'only',correct:true}]}]}).questions.length,0); });
+  it('enforces multi 2+ correct', () => { const r=normalizeQuiz({title:'T',questions:[{type:'multi',answers:[{text:'A',correct:true},{text:'B',correct:false},{text:'C',correct:false}]}]}); eq(r.questions[0].answers.filter(a=>a.correct).length,2); });
+  it('normalizes points', () => { eq(normalizeQuiz({title:'T',questions:[{type:'mcq',answers:[{text:'A',correct:true},{text:'B',correct:false}],points:999}]}).questions[0].points,1000); });
+});
+
+describe('hasBlockedNickname / REACTION_EMOJIS', ({ it }) => {
+  it('blocks empty/profanity', () => { ok(hasBlockedNickname('')); ok(hasBlockedNickname('nazi')); ok(hasBlockedNickname('I am a terrorist')); });
+  it('allows normal', () => { ok(!hasBlockedNickname('Eugeni')); });
+  it('17 emojis', () => { eq(REACTION_EMOJIS_NEW.length,17); });
+  it('includes 👍🔥🧠❤️', () => { ['👍','🔥','🧠','❤️'].forEach(e => ok(REACTION_EMOJIS_NEW.includes(e), e)); });
 });
 
 // ---- Helpers ----
