@@ -282,7 +282,7 @@ describe('formatHistoryAnswer', ({ it }) => {
 });
 
 describe('Seeded shuffle', ({ it }) => {
-  it('host/student match', () => { deepEq(shuffleSeeded('Q?','','A','B','C','D'), shuffleSeeded('Q?','','A','B','C','D')); });
+  it('host/student match', () => { const a = ['A','B','C','D']; deepEq(shuffleSeeded('Q?','',a), shuffleSeeded('Q?','',a)); });
   it('different prompts diverge', () => { const a = ['A','B','C','D','E']; notDeepEq(shuffleSeeded('X','',a), shuffleSeeded('Y','',a)); });
   it('handles empty', () => { deepEq(shuffleSeeded('t','',[]), []); });
   it('preserves items', () => { const a = ['A','B','C']; deepEq(shuffleSeeded('t','',a).sort(), a.sort()); });
