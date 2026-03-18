@@ -2151,7 +2151,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
 
-  console.log('[PinPlay][highlight] correctAnswerStr:', correctAnswerStr, 'question.answers:', question.answers);
+  
 
   // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
   if (correctAnswerStr && typeof correctAnswerStr === 'string') {
@@ -2171,7 +2171,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
 
-  console.log('[PinPlay][highlight] correctIndexes:', [...correctIndexes]);
+  
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
