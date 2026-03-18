@@ -1073,14 +1073,10 @@ function renderJoinQuestion(question) {
       input.value = String(origIdx);
       input.dataset.joinAnswer = '1';
 
-      const num = document.createElement('strong');
-      num.className = 'answer-num';
-      num.textContent = `${displayNum + 1}.`;
-
       const text = document.createElement('span');
       text.textContent = a.text;
 
-      row.append(num, text, input);
+      row.append(text, input);
       joinAnswersEl.appendChild(row);
     });
 
