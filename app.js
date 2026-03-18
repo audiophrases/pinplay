@@ -1837,7 +1837,10 @@ function syncQuizFromUI() {
       q.audioEnabled = q.type === 'audio'
         ? true
         : (q.audioMode === 'file' ? !!q.audioData : !!String(q.audioText || '').trim());
-    }
+
+    // Sync imageKeyword from form
+    const imageKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="imageKeyword"]`);
+    if (imageKeywordEl) q.imageKeyword = String(imageKeywordEl.value || '').trim().slice(0, 140);
 
     if (q.type === 'text') {
       const accepted = [];
