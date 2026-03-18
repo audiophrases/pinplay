@@ -1693,16 +1693,7 @@ function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
 
     leaderboard.forEach((p, i) => {
       const li = document.createElement('li');
-      let text = `${i + 1}. ${p.name} - ${p.score} pts`;
-      // Show answer feedback if available
-      if (lastQuestionState?.answerText) {
-        const isCorrect = !!lastQuestionState.isCorrect;
-        const correctText = lastQuestionState.correctText || '';
-        text += isCorrect
-          ? ` ✅ "${lastQuestionState.answerText}"`
-          : ` ❌ "${lastQuestionState.answerText}" → "${correctText}"`;
-      }
-      li.textContent = text;
+      li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
       ul.appendChild(li);
     });
 
