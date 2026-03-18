@@ -7099,6 +7099,16 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   let converted = 0;
   let uploaded = 0;
 
+  // Show progress indicator (defined early so setProgress is available everywhere)
+  const progressEl = document.getElementById('mediaProgressEl');
+  const setProgress = (msg, status = 'checking') => {
+    if (progressEl) {
+      progressEl.style.display = 'block';
+      progressEl.textContent = msg;
+      progressEl.className = `media-progress ${status}`;
+    }
+  };
+
   // Auto-fill missing images for questions with imageKeyword set
   const missing = questions.filter(q => q && !q.imageData && q.imageKeyword).length;
   if (missing > 0) {
@@ -7112,21 +7122,6 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   quiz._r2QuizId = quizId;
   const r2Base = `${loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev'}/api/media`;
-
-  // Show progress indicator
-  const progressEl = document.getElementById('mediaProgressEl');
-  if (progressEl) {
-    progressEl.style.display = 'block';
-    progressEl.textContent = `🔄 ${contextLabel}: checking media...`;
-    progressEl.className = 'media-progress checking';
-  }
-
-  const setProgress = (msg, status = 'checking') => {
-    if (progressEl) {
-      progressEl.textContent = msg;
-      progressEl.className = `media-progress ${status}`;
-    }
-  };
 
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
