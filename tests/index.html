@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PinPlay Test Suite</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
+h1 { margin-bottom: 8px; color: #58a6ff; font-size: 1.4rem; }
+.summary { display: flex; gap: 16px; margin: 16px 0; font-size: 0.95rem; }
+.badge { padding: 4px 12px; border-radius: 12px; font-weight: 600; }
+.badge.pass { background: #1a3d2a; color: #3fb950; }
+.badge.fail { background: #3d1a1a; color: #f85149; }
+.badge.total { background: #1a2a3d; color: #58a6ff; }
+.suite { margin: 12px 0; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+.suite-name { background: #161b22; padding: 10px 16px; font-weight: 600; cursor: pointer; user-select: none; }
+.suite-name:hover { background: #1c2333; }
+.suite-name .arrow { display: inline-block; transition: transform 0.2s; margin-right: 8px; }
+.suite-name.open .arrow { transform: rotate(90deg); }
+.tests { display: none; padding: 4px 0; }
+.tests.show { display: block; }
+.test { padding: 6px 16px; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.test::before { font-size: 0.8rem; }
+.test.pass::before { content: '✅'; }
+.test.fail::before { content: '❌'; }
+.test .name { flex: 1; }
+.test .duration { color: #8b949e; font-size: 0.8rem; }
+.error { color: #f85149; font-size: 0.8rem; margin-left: 24px; padding: 4px 16px; background: rgba(248,81,73,0.1); border-left: 2px solid #f85149; }
+#runBtn { background: #238636; color: #fff; border: none; padding: 8px 20px; border-radius: 6px; font-size: 0.95rem; cursor: pointer; font-weight: 600; margin: 12px 0; }
+#runBtn:hover { background: #2ea043; }
+#results { margin-top: 16px; }
+#timer { color: #8b949e; font-size: 0.85rem; margin-left: auto; }
+</style>
+</head>
+<body>
+<h1>🧪 PinPlay Test Suite</h1>
+<p style="color:#8b949e;font-size:0.85rem;">Run from the PinPlay root — functions extracted from app.js/play.js</p>
+<button id="runBtn" onclick="runAll()">▶ Run Tests</button>
+<div class="summary" id="summary" style="display:none"></div>
+<div id="results"></div>
+
+<script>
+// ---- Functions under test (extracted from app.js/play.js) ----
+
+function normalizeTtsLanguage(value) {
+  const key = String(value || '').trim().toUpperCase();
+  const EDGE_TTS_LANGUAGE_DEFAULTS = { EN: 'en-US-AriaNeural', CA: 'ca-ES-EnricNeural', FR: 'fr-FR-DeniseNeural' };
+  return EDGE_TTS_LANGUAGE_DEFAULTS[key] ? key : 'EN';
+}
+
+function normalizeQuizAudioDefaults(targetQuiz) {
+  if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
+  targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
+  targetQuiz.readAllQuestionsAloud = targetQuiz.ttsLanguage !== 'NONE' && targetQuiz.readAllQuestionsAloud !== false;
+}
+
+function getHearQuestionsMode(targetQuiz) {
+  const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
+  if (raw === 'NONE' || !raw) return 'NONE';
+  return normalizeTtsLanguage(targetQuiz?.ttsLanguage);
+}
+
+function applyHearQuestionsMode(targetQuiz, modeValue) {
+  if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  const mode = String(modeValue || '').trim().toUpperCase();
+  if (mode === 'NONE') { targetQuiz.ttsLanguage = 'NONE'; targetQuiz.readAllQuestionsAloud = false; return; }
+  if (mode === 'READ') { targetQuiz.ttsLanguage = 'EN'; targetQuiz.readAllQuestionsAloud = false; return; }
+  targetQuiz.ttsLanguage = normalizeTtsLanguage(mode);
+  targetQuiz.readAllQuestionsAloud = true;
+}
+
+function createEmptyQuiz() {
+  return { version: 1, title: '', ttsLanguage: 'NONE', readAllQuestionsAloud: false, questions: [] };
+}
+
+function mimeToExt(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,/);
+  if (!match) return '.bin';
+  const mime = match[1];
+  if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return '.jpg';
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('gif')) return '.gif';
+  return '.bin';
+}
+
+function shuffleSeeded(prompt, id, answers) {
+  const seed = Math.abs([...((prompt || '') + (id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
+  const indices = answers.map((_, i) => i);
+  let sr = seed;
+  for (let s = indices.length - 1; s > 0; s--) {
+    sr = (sr * 16807) % 2147483647;
+    const j = sr % (s + 1);
+    [indices[s], indices[j]] = [indices[j], indices[s]];
+  }
+  return indices.map(i => answers[i]);
+}
+
+// ---- Test framework ----
+const suites = [];
+
+function describe(name, fn) {
+  const tests = [];
+  fn({ it: (tName, tFn) => tests.push({ name: tName, fn: tFn }) });
+  suites.push({ name, tests });
+}
+
+function eq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+// ---- Test suites ----
+
+describe('normalizeTtsLanguage', ({ it }) => {
+  it('returns known language as-is', () => { if (normalizeTtsLanguage('EN') !== 'EN') throw 'expected EN'; if (normalizeTtsLanguage('CA') !== 'CA') throw 'expected CA'; });
+  it('returns EN for unknown', () => { if (normalizeTtsLanguage('DE') !== 'EN') throw 'expected EN'; });
+  it('handles empty/null/undefined', () => { if (normalizeTtsLanguage('') !== 'EN') throw ''; if (normalizeTtsLanguage(null) !== 'EN') throw ''; if (normalizeTtsLanguage(undefined) !== 'EN') throw ''; });
+  it('is case-insensitive', () => { if (normalizeTtsLanguage('en') !== 'EN') throw ''; if (normalizeTtsLanguage('ca') !== 'CA') throw ''; });
+});
+
+describe('normalizeQuizAudioDefaults', ({ it }) => {
+  it('defaults to NONE for empty', () => { const q = {}; normalizeQuizAudioDefaults(q); if (q.ttsLanguage !== 'NONE' || q.readAllQuestionsAloud !== false) throw eq(q, {}); });
+  it('sets readAllQuestionsAloud=true for EN', () => { const q = { ttsLanguage: 'EN' }; normalizeQuizAudioDefaults(q); if (q.readAllQuestionsAloud !== true) throw eq(q); });
+  it('keeps false when explicitly disabled', () => { const q = { ttsLanguage: 'EN', readAllQuestionsAloud: false }; normalizeQuizAudioDefaults(q); if (q.readAllQuestionsAloud !== false) throw eq(q); });
+  it('forces false when NONE', () => { const q = { ttsLanguage: 'NONE', readAllQuestionsAloud: true }; normalizeQuizAudioDefaults(q); if (q.readAllQuestionsAloud !== false) throw eq(q); });
+  it('converts legacy READ', () => { const q = { ttsLanguage: 'READ' }; normalizeQuizAudioDefaults(q); if (q.ttsLanguage !== 'NONE') throw eq(q); });
+  it('handles null', () => { normalizeQuizAudioDefaults(null); });
+});
+
+describe('getHearQuestionsMode', ({ it }) => {
+  it('returns NONE for empty', () => { if (getHearQuestionsMode({ ttsLanguage: '' }) !== 'NONE') throw ''; });
+  it('returns NONE for undefined', () => { if (getHearQuestionsMode({}) !== 'NONE') throw ''; });
+  it('returns NONE for null', () => { if (getHearQuestionsMode(null) !== 'NONE') throw ''; });
+  it('returns NONE when NONE', () => { if (getHearQuestionsMode({ ttsLanguage: 'NONE' }) !== 'NONE') throw ''; });
+  it('returns EN for EN', () => { if (getHearQuestionsMode({ ttsLanguage: 'EN' }) !== 'EN') throw ''; });
+});
+
+describe('applyHearQuestionsMode', ({ it }) => {
+  it('sets NONE', () => { const q = { ttsLanguage: 'EN', readAllQuestionsAloud: true }; applyHearQuestionsMode(q, 'NONE'); if (q.ttsLanguage !== 'NONE' || q.readAllQuestionsAloud) throw eq(q); });
+  it('converts READ', () => { const q = {}; applyHearQuestionsMode(q, 'READ'); if (q.ttsLanguage !== 'EN' || q.readAllQuestionsAloud) throw eq(q); });
+  it('sets CA with readAll', () => { const q = {}; applyHearQuestionsMode(q, 'CA'); if (q.ttsLanguage !== 'CA' || !q.readAllQuestionsAloud) throw eq(q); });
+  it('handles null', () => { applyHearQuestionsMode(null, 'EN'); });
+});
+
+describe('createEmptyQuiz', ({ it }) => {
+  it('has correct defaults', () => { const q = createEmptyQuiz(); if (q.ttsLanguage !== 'NONE' || q.readAllQuestionsAloud !== false || q.questions.length !== 0) throw eq(q); });
+});
+
+describe('mimeToExt', ({ it }) => {
+  it('maps jpg/png/webp/gif/mp3', () => {
+    if (mimeToExt('data:image/jpeg;base64,x') !== '.jpg') throw '';
+    if (mimeToExt('data:image/png;base64,x') !== '.png') throw '';
+    if (mimeToExt('data:image/webp;base64,x') !== '.webp') throw '';
+    if (mimeToExt('data:image/gif;base64,x') !== '.gif') throw '';
+    if (mimeToExt('data:audio/mpeg;base64,x') !== '.mp3') throw '';
+  });
+  it('returns .bin for unknown', () => { if (mimeToExt('data:application/octet-stream;base64,x') !== '.bin') throw ''; });
+  it('returns .bin for non-data URL', () => { if (mimeToExt('https://x.com/img.jpg') !== '.bin') throw ''; });
+});
+
+describe('Seeded shuffle', ({ it }) => {
+  it('host/student match', () => { if (!eq(shuffleSeeded('Q?','',['A','B','C','D']), shuffleSeeded('Q?','',['A','B','C','D']))) throw 'mismatch'; });
+  it('different prompts → different order', () => { if (eq(shuffleSeeded('A','',['1','2','3','4']), shuffleSeeded('B','',['1','2','3','4']))) throw 'should differ'; });
+  it('single answer', () => { if (!eq(shuffleSeeded('t','',['x']), ['x'])) throw ''; });
+  it('empty answers', () => { if (!eq(shuffleSeeded('t','',[]), [])) throw ''; });
+  it('null prompt/id', () => { if (!eq(shuffleSeeded(null,null,['X','Y']), shuffleSeeded(null,null,['X','Y']))) throw ''; });
+  it('preserves all items', () => { const r = shuffleSeeded('t','',['R','G','B']); if (!eq(r.slice().sort(), ['B','G','R'])) throw eq(r); });
+  it('unicode prompt', () => { if (!eq(shuffleSeeded('Català, gràcies','',['a','b','c']), shuffleSeeded('Català, gràcies','',['a','b','c']))) throw ''; });
+});
+
+describe('Auto-fill image detection', ({ it }) => {
+  it('finds questions needing images', () => {
+    const qs = [
+      { imageKeyword: '', imageData: null },
+      { imageKeyword: 'volcano', imageData: null },
+      { imageKeyword: 'x', imageData: 'data:...' },
+      { imageKeyword: 'y', imageData: 'https://r2.dev/...' },
+    ];
+    const needs = qs.filter(q => !q.imageData && q.imageKeyword);
+    if (needs.length !== 1 || needs[0].imageKeyword !== 'volcano') throw `got ${needs.length}`;
+  });
+  it('skips no-keyword', () => {
+    const qs = [{ imageKeyword: '', imageData: null }, { imageKeyword: undefined, imageData: null }];
+    if (qs.filter(q => !q.imageData && q.imageKeyword).length !== 0) throw '';
+  });
+});
+
+// ---- Test runner ----
+async function runAll() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Running...';
+  const resultsEl = document.getElementById('results');
+  const summaryEl = document.getElementById('summary');
+  resultsEl.innerHTML = '';
+  summaryEl.style.display = 'none';
+
+  let pass = 0, fail = 0;
+  const t0 = performance.now();
+
+  for (const suite of suites) {
+    const div = document.createElement('div');
+    div.className = 'suite';
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'suite-name open';
+    nameDiv.innerHTML = `<span class="arrow">▶</span>${suite.name}`;
+    nameDiv.onclick = () => { nameDiv.classList.toggle('open'); testsDiv.classList.toggle('show'); };
+    const testsDiv = document.createElement('div');
+    testsDiv.className = 'tests show';
+
+    for (const t of suite.tests) {
+      const testDiv = document.createElement('div');
+      const tStart = performance.now();
+      let err = null;
+      try { await t.fn(); } catch (e) { err = e; }
+      const dur = (performance.now() - tStart).toFixed(1);
+
+      if (err) {
+        testDiv.className = 'test fail';
+        fail++;
+      } else {
+        testDiv.className = 'test pass';
+        pass++;
+      }
+      testDiv.innerHTML = `<span class="name">${t.name}</span><span class="duration">${dur}ms</span>`;
+      testsDiv.appendChild(testDiv);
+
+      if (err) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'error';
+        errDiv.textContent = String(err);
+        testsDiv.appendChild(errDiv);
+      }
+    }
+
+    div.appendChild(nameDiv);
+    div.appendChild(testsDiv);
+    resultsEl.appendChild(div);
+  }
+
+  const total = pass + fail;
+  const elapsed = (performance.now() - t0).toFixed(0);
+  summaryEl.style.display = 'flex';
+  summaryEl.innerHTML = `
+    <span class="badge total">${total} tests</span>
+    <span class="badge pass">${pass} passed</span>
+    <span class="badge fail">${fail} failed</span>
+    <span id="timer">⏱ ${elapsed}ms</span>
+  `;
+  btn.disabled = false; btn.textContent = '▶ Run Tests';
+}
+</script>
+</body>
+</html>
+
+
+
