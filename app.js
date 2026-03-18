@@ -7162,10 +7162,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
           uploaded += 1;
         }
       } catch (err) {
-        // TTS generation failed - fall back to browser TTS (no error thrown)
-        console.warn(`Q${i + 1} TTS failed, will use browser TTS:`, err.message);
-        q.audioMode = 'tts';
-        q.audioEnabled = true;
+        throw new Error(`Q${i + 1} TTS->MP3 failed: ${err.message}`);
       }
     }
 
