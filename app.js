@@ -2296,11 +2296,11 @@ async function saveQuizToCloud() {
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
     
-    const quizId = quiz._r2QuizId || quiz-;
+    const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
     quiz._r2QuizId = quizId;
     
     // Upload quiz JSON
-    const res = await fetch(${base}/api/quizzes/upload, {
+    const res = await fetch(`${base}/api/quizzes/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ quiz, quizId })
@@ -2309,9 +2309,9 @@ async function saveQuizToCloud() {
     if (!res.ok) throw new Error('Upload failed');
     const data = await res.json();
     
-    setStatus(hostStatusEl, ✅ Saved to Cloud! PIN: , 'ok');
+    setStatus(hostStatusEl, `✅ Saved to Cloud! PIN: ${quiz.pin || 'N/A'}`, 'ok');
   } catch (err) {
-    setStatus(hostStatusEl, Cloud save failed: , 'bad');
+    setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
   }
 }
 
