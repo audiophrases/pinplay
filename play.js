@@ -2103,7 +2103,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // MCQ / TF / Multi-select
   if (['mcq', 'tf', 'multi'].includes(question.type)) {
-    highlightChoiceAnswers(question);
+    highlightChoiceAnswers(question, state.correctAnswer);
     return;
   }
 
@@ -2145,12 +2145,30 @@ function highlightAnswerItems(isCorrect, state) {
 }
 
 // MCQ/TF/Multi highlighting
-function highlightChoiceAnswers(question) {
+function highlightChoiceAnswers(question, correctAnswerStr) {
   const rows = joinAnswersEl.querySelectorAll('.answer-row');
   if (!rows.length) return;
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
-  question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
+
+  // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
+  if (correctAnswerStr && typeof correctAnswerStr === 'string') {
+    if (isMulti) {
+      // Multi-select: "1. A | 3. C" format
+      correctAnswerStr.split('|').forEach(part => {
+        const match = part.trim().match(/^(\d+)\./);
+        if (match) correctIndexes.add(Number(match[1]) - 1);
+      });
+    } else {
+      const match = correctAnswerStr.trim().match(/^(\d+)\./);
+      if (match) correctIndexes.add(Number(match[1]) - 1);
+    }
+  }
+
+  // Fallback: use question.answers[].correct if available (teacher/host side)
+  if (correctIndexes.size === 0) {
+    question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
+  }
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
