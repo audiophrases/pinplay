@@ -7162,12 +7162,19 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
           uploaded += 1;
         }
       } catch (err) {
-        throw new Error(`Q${i + 1} TTS->MP3 failed: ${err.message}`);
+        // TTS generation failed - fall back to browser TTS (no error thrown)
+        console.warn(`Q${i + 1} TTS failed, will use browser TTS:`, err.message);
+        q.audioMode = 'tts';
+        q.audioEnabled = true;
       }
     }
 
     if (q.audioData && strictMediaCheck && !q.audioData.startsWith('data:')) {
-      try { await validateAudioDataUrl(q.audioData); } catch (err) { throw new Error(`Q${i + 1} audio check failed: ${err.message}`); }
+      // Skip validation for TTS mode, disabled audio, and data URLs
+      const audioMode = String(q.audioMode || '').toLowerCase();
+      if (audioMode !== 'tts' && audioMode !== 'none' && q.audioEnabled !== false) {
+        try { await validateAudioDataUrl(q.audioData); } catch (err) { throw new Error(`Q${i + 1} audio check failed: ${err.message}`); }
+      }
     }
   }
 
