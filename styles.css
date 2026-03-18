@@ -890,8 +890,12 @@ textarea { min-height: 72px; resize: vertical; }
 
 /* Image hero layout - full width, items below */
 #joinCard.question-active.has-image #joinAnswers.has-question-image {
-  display: block;
+  display: grid;
+  grid-template-columns: 1fr;
   position: relative;
+}
+#joinCard.question-active.has-image #joinAnswers.has-question-image.two-col {
+  grid-template-columns: 1fr 1fr;
 }
 
 #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
@@ -908,6 +912,7 @@ textarea { min-height: 72px; resize: vertical; }
   justify-content: center;
   background: transparent;
   cursor: default;
+  grid-column: 1 / -1;
 }
 #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview img,
 #joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview img {
