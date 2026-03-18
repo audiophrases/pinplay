@@ -621,19 +621,6 @@ function bindBuilderEvents() {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      // Auto-fill missing images for questions with imageKeyword set
-      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
-      if (missing > 0) {
-        setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
-        const result = await autoFillImages(quiz, ({ index, total, status }) => {
-          setStatus(hostStatusEl, `Image search: Q${index + 1}/${total} — ${status}`, 'ok');
-        });
-        renderBuilder();
-        if (result.filled > 0) {
-          setStatus(hostStatusEl, `Auto-filled ${result.filled} image(s), skipped ${result.skipped}.`, 'ok');
-        }
-      }
-
       saveQuiz(quiz);
       const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
       const autoName = `${fallback} (${new Date().toLocaleString()})`;
@@ -656,16 +643,6 @@ function bindBuilderEvents() {
     try {
       syncQuizFromUI();
       await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
-
-      // Auto-fill missing images for questions with imageKeyword set
-      const missing = quiz.questions?.filter(q => q && !q.imageData && q.imageKeyword).length || 0;
-      if (missing > 0) {
-        setStatus(hostStatusEl, `Auto-searching images for ${missing} question(s)...`, 'ok');
-        await autoFillImages(quiz, ({ index, total, status }) => {
-          setStatus(hostStatusEl, `Image search: Q${index + 1}/${total} — ${status}`, 'ok');
-        });
-        renderBuilder();
-      }
 
       downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
       setStatus(hostStatusEl, 'Exported with validated media + auto-filled images.', 'ok');
@@ -2291,11 +2268,13 @@ async function openQuizFromCloud() {
       })),
       onOpen: async (item) => {
         const quizKey = item.raw.key;
-        const res = await fetch(`${base}/api/quizzes/${quizKey}`);
+        // Load from Worker API (R2)
+        const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+        const res = await fetch(`${base}/api/media/${quizKey}`);
         if (!res.ok) throw new Error('Failed to load quiz from cloud');
         const loadedQuiz = await res.json();
         validateImportedQuiz(loadedQuiz);
-        quiz = loadedQuiz;
+        quiz = loadedQuiz.quiz || loadedQuiz;
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
@@ -7094,6 +7073,16 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   const readAllQuestionsAloud = !!quiz.readAllQuestionsAloud;
   let converted = 0;
   let uploaded = 0;
+
+  // Auto-fill missing images for questions with imageKeyword set
+  const missing = questions.filter(q => q && !q.imageData && q.imageKeyword).length;
+  if (missing > 0) {
+    setProgress(`🔍 Auto-searching images for ${missing} question(s)...`);
+    const result = await autoFillImages(quiz, ({ index, total, status }) => {
+      setProgress(`🔍 Searching images: ${index + 1}/${total} — ${status}`);
+    });
+    if (result.filled > 0) setProgress(`✅ Auto-filled ${result.filled} image(s)`);
+  }
 
   const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   quiz._r2QuizId = quizId;

@@ -141,13 +141,15 @@ export default {
     // List quizzes stored in R2
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
       try {
-        const prefix = 'quizzes/';
-        const listed = await env.QUIZ_MEDIA.list({ prefix, limit: 100 });
-        const quizzes = (listed.objects || []).map(obj => ({
-          key: obj.key.replace(prefix, ''),
-          size: obj.size,
-          uploaded: obj.uploaded
-        })).filter(q => q.key.endsWith('.json'));
+        const listed = await env.QUIZ_MEDIA.list({ limit: 100 });
+        // Find quiz JSON files (top-level .json files, not media files)
+        const quizzes = (listed.objects || [])
+          .filter(obj => obj.key.endsWith('.json'))
+          .map(obj => ({
+            key: obj.key,
+            size: obj.size,
+            uploaded: obj.uploaded
+          }));
         return json({ quizzes });
       } catch (e) {
         return json({ error: e.message }, 500);
