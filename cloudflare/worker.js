@@ -238,6 +238,15 @@ export default {
 
         if (initRes.status === 201) {
           const data = await initRes.json();
+          // Also save quiz JSON to R2 for Cloud listing
+          if (env.QUIZ_MEDIA) {
+            const quizKey = `quizzes/${pin}.json`;
+            try {
+              await env.QUIZ_MEDIA.put(quizKey, JSON.stringify(quiz), {
+                httpMetadata: { contentType: 'application/json' }
+              });
+            } catch (e) { /* non-critical */ }
+          }
           return json(data, 201);
         }
       }
