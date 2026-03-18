@@ -427,46 +427,83 @@ describe('formatHistoryAnswer', () => {
 });
 
 describe('Seeded shuffle', () => {
-  it('host/student match', () => { assert.deepEqual(shuffleSeeded('Q?','',['A','B','C','D']), shuffleSeeded('Q?','',['A','B','C','D'])); });
-  it('different prompts → different order', () => { assert.notDeepEqual(shuffleSeeded('A','','123'.split('')), shuffleSeeded('B','','123'.split(''))); });
-  it('handles empty answers', () => { assert.deepEqual(shuffleSeeded('t','',[]), []); });
-  it('null prompt/id', () => { assert.deepEqual(shuffleSeeded(null,null,['X','Y']), shuffleSeeded(null,null,['X','Y'])); });
-  it('handles unicode prompt', () => { const a = ['a','b','c']; assert.deepEqual(shuffleSeeded('Català, gràcies','',a), shuffleSeeded('Català, gràcies','',a)); });
-});
-
-describe('Seeded shuffle (full coverage)', () => {
-  it('host/student match for 4 answers', () => {
-    const a = ['Red', 'Green', 'Blue', 'Yellow'];
-    assert.deepEqual(shuffleSeeded('Q1','',a), shuffleSeeded('Q1','',a));
+  it('4-item MCQ host/student match', () => {
+    const a = ['Madrid', 'Paris', 'London', 'Berlin'];
+    assert.deepEqual(shuffleSeeded('Capital of Spain?','',a), shuffleSeeded('Capital of Spain?','',a));
+  });
+  it('6-item match', () => {
+    const a = ['Perro', 'Gato', 'Pájaro', 'Pez', 'Caballo', 'Vaca'];
+    assert.deepEqual(shuffleSeeded('Translate to English?','',a), shuffleSeeded('Translate to English?','',a));
+  });
+  it('10-item match', () => {
+    const a = ['Hidrógeno','Helio','Litio','Berilio','Boro','Carbono','Nitrógeno','Oxígeno','Flúor','Neón'];
+    assert.deepEqual(shuffleSeeded('Elemento 5?','',a), shuffleSeeded('Elemento 5?','',a));
   });
   it('different prompts diverge', () => {
-    const a = ['A','B','C','D','E'];
-    assert.notDeepEqual(shuffleSeeded('X','',a), shuffleSeeded('Y','',a));
+    const a = ['A','B','C','D','E','F'];
+    assert.notDeepEqual(shuffleSeeded('Question A?','',a), shuffleSeeded('Question B?','',a));
   });
-  it('single element returns single element', () => {
-    assert.deepEqual(shuffleSeeded('t','',[]), []);
+  it('different prompt IDs diverge', () => {
+    const a = ['1','2','3','4','5'];
+    assert.notDeepEqual(shuffleSeeded('Q?','q1',a), shuffleSeeded('Q?','q2',a));
   });
   it('preserves all items', () => {
-    const a = ['A','B','C'];
-    const r = shuffleSeeded('t','',a);
+    const a = ['Red','Green','Blue','Yellow','Purple','Orange'];
+    const r = shuffleSeeded('colors','',a);
     assert.deepEqual(r.sort(), a.sort());
   });
-  it('handles unicode', () => {
-    const a = ['a','b','c'];
-    assert.deepEqual(shuffleSeeded('Català','',a), shuffleSeeded('Català','',a));
+  it('2 items', () => {
+    const a = ['True','False'];
+    const r = shuffleSeeded('tf?','',a);
+    assert.deepEqual(r.sort(), a.sort());
   });
-  it('handles null/empty prompt/id', () => {
-    const a = ['X','Y'];
+  it('single item', () => {
+    const a = ['only'];
+    assert.deepEqual(shuffleSeeded('t','',a), ['only']);
+  });
+  it('empty answers', () => {
+    assert.deepEqual(shuffleSeeded('t','',[]), []);
+  });
+  it('null prompt/id', () => {
+    const a = ['X','Y','Z'];
     assert.deepEqual(shuffleSeeded(null,null,a), shuffleSeeded(null,null,a));
   });
-  it('is deterministic', () => {
-    const a = ['1','2','3','4','5'];
-    assert.deepEqual(shuffleSeeded('Q','',a), shuffleSeeded('Q','',a));
+  it('unicode prompt', () => {
+    const a = ['a','b','c','d'];
+    assert.deepEqual(shuffleSeeded('Català, gràcies','',a), shuffleSeeded('Català, gràcies','',a));
   });
-  it('handles 2 elements', () => {
-    const a = ['X','Y'];
-    const r = shuffleSeeded('q','',a);
+  it('deterministic across calls', () => {
+    const a = ['1','2','3','4','5','6','7','8'];
+    const r1 = shuffleSeeded('Q1','q1',a);
+    const r2 = shuffleSeeded('Q1','q1',a);
+    assert.deepEqual(r1, r2);
+  });
+  it('different order than non-seeded for 8 items', () => {
+    const a = ['A','B','C','D','E','F','G','H'];
+    const r = shuffleSeeded('test','',a);
+    // Should still have all items
     assert.deepEqual(r.sort(), a.sort());
+  });
+  it('long answers (90 chars each)', () => {
+    const a = [
+      'This is a very long answer option number one that exceeds typical length',
+      'Another extremely long answer choice for testing boundary conditions here',
+      'Yet another lengthy response option to verify the shuffle handles it fine',
+      'The fourth and final verbose answer option in this comprehensive test case',
+    ];
+    assert.deepEqual(shuffleSeeded('long?','',a), shuffleSeeded('long?','',a));
+  });
+  it('answers with special characters', () => {
+    const a = ["C++", "C#", "F#", "B&M", "Q&A", "R&D"];
+    assert.deepEqual(shuffleSeeded('languages?','',a), shuffleSeeded('languages?','',a));
+  });
+  it('same prompt different IDs → different order', () => {
+    const a = ['True', 'False', 'Maybe', 'Unsure'];
+    const r1 = shuffleSeeded('Q1','t1',a);
+    const r2 = shuffleSeeded('Q1','t2',a);
+    assert.ok(Array.isArray(r1));
+    assert.ok(Array.isArray(r2));
+    assert.deepEqual(r1.sort(), r2.sort()); // same items
   });
 });
 

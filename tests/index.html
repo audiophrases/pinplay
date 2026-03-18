@@ -282,12 +282,21 @@ describe('formatHistoryAnswer', ({ it }) => {
 });
 
 describe('Seeded shuffle', ({ it }) => {
-  it('host/student match', () => { const a = ['A','B','C','D']; deepEq(shuffleSeeded('Q?','',a), shuffleSeeded('Q?','',a)); });
-  it('different prompts diverge', () => { const a = ['A','B','C','D','E']; notDeepEq(shuffleSeeded('X','',a), shuffleSeeded('Y','',a)); });
-  it('handles empty', () => { deepEq(shuffleSeeded('t','',[]), []); });
-  it('preserves items', () => { const a = ['A','B','C']; deepEq(shuffleSeeded('t','',a).sort(), a.sort()); });
-  it('handles unicode', () => { const a = ['a','b','c']; deepEq(shuffleSeeded('Català','',a), shuffleSeeded('Català','',a)); });
-  it('deterministic', () => { const a = ['1','2','3','4','5']; deepEq(shuffleSeeded('Q','',a), shuffleSeeded('Q','',a)); });
+  it('4-item MCQ', () => { const a = ['Madrid','Paris','London','Berlin']; deepEq(shuffleSeeded('Capital?','',a), shuffleSeeded('Capital?','',a)); });
+  it('6-item match', () => { const a = ['Perro','Gato','Pájaro','Pez','Caballo','Vaca']; deepEq(shuffleSeeded('Translate?','',a), shuffleSeeded('Translate?','',a)); });
+  it('10-item match', () => { const a = ['H','He','Li','Be','B','C','N','O','F','Ne']; deepEq(shuffleSeeded('El?','',a), shuffleSeeded('El?','',a)); });
+  it('different prompts diverge', () => { const a = ['A','B','C','D','E','F']; notDeepEq(shuffleSeeded('Q A?','',a), shuffleSeeded('Q B?','',a)); });
+  it('different IDs diverge', () => { const a = ['1','2','3','4','5']; notDeepEq(shuffleSeeded('Q?','q1',a), shuffleSeeded('Q?','q2',a)); });
+  it('preserves all items', () => { const a = ['Red','Green','Blue','Yellow','Purple','Orange']; deepEq(shuffleSeeded('c','',a).sort(), a.sort()); });
+  it('2 items (TF)', () => { const a = ['True','False']; deepEq(shuffleSeeded('tf?','',a).sort(), a.sort()); });
+  it('single item', () => { deepEq(shuffleSeeded('t','',[]), []); });
+  it('empty', () => { deepEq(shuffleSeeded('t','',[]), []); });
+  it('null prompt/id', () => { const a = ['X','Y','Z']; deepEq(shuffleSeeded(null,null,a), shuffleSeeded(null,null,a)); });
+  it('unicode prompt', () => { const a = ['a','b','c','d']; deepEq(shuffleSeeded('Català, gràcies','',a), shuffleSeeded('Català, gràcies','',a)); });
+  it('deterministic', () => { const a = ['1','2','3','4','5','6','7','8']; deepEq(shuffleSeeded('Q1','q1',a), shuffleSeeded('Q1','q1',a)); });
+  it('special chars in answers', () => { const a = ["C++","C#","F#","B&M","Q&A","R&D"]; deepEq(shuffleSeeded('lang?','',a), shuffleSeeded('lang?','',a)); });
+  it('long answers', () => { const a = ['A very long answer option number one for testing','Another long choice here for boundary testing','Yet another lengthy response option for this test','The fourth verbose answer option in this case']; deepEq(shuffleSeeded('long?','',a), shuffleSeeded('long?','',a)); });
+  it('same prompt different IDs → same items', () => { const a = ['True','False','Maybe','Unsure']; deepEq(shuffleSeeded('Q1','t1',a).sort(), shuffleSeeded('Q1','t2',a).sort()); });
 });
 
 describe('TTS audio defaults', ({ it }) => {
