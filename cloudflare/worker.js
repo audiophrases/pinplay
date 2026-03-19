@@ -163,6 +163,13 @@ export default {
             }
           } catch (e) { /* skip */ }
         }
+        // Sort newest-first by uploaded timestamp (fallback to pin desc)
+        quizzes.sort((a, b) => {
+          const ta = a.uploaded ? new Date(a.uploaded).getTime() : 0;
+          const tb = b.uploaded ? new Date(b.uploaded).getTime() : 0;
+          if (ta !== tb) return tb - ta;
+          return String(b.pin || '').localeCompare(String(a.pin || ''));
+        });
         return json({ quizzes });
       } catch (e) {
         return json({ error: e.message }, 500);
