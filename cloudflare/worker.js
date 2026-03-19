@@ -141,9 +141,10 @@ export default {
     // List quizzes stored in R2
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
       try {
-        const listed = await env.QUIZ_MEDIA.list({ limit: 100 });
+        // List quiz JSONs stored in R2 (prefix filter to be safe across jurisdictions)
+        const listed = await env.QUIZ_MEDIA.list({ limit: 1000, prefix: 'quizzes/' });
         const quizzes = (listed.objects || [])
-          .filter(obj => obj.key.startsWith('quizzes/') && obj.key.endsWith('.json'))
+          .filter(obj => obj.key.endsWith('.json'))
           .map(obj => ({
             key: obj.key,
             pin: obj.key.replace('quizzes/', '').replace('.json', ''),
