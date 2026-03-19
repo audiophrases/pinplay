@@ -1086,10 +1086,10 @@ function renderJoinQuestion(question) {
     }
 
     if (question.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Select all correct answers.';
-      joinAnswersEl.appendChild(hint);
+      const badge = document.createElement('p');
+      badge.className = 'multi-select-badge';
+      badge.textContent = '☑️ Select ALL correct answers';
+      joinAnswersEl.appendChild(badge);
     }
 
     if (question.type === 'audio') {

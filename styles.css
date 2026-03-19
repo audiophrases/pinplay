@@ -988,6 +988,19 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
+/* Multi-select badge: prominent visual indicator */
+.multi-select-badge {
+  font-size: .95rem;
+  font-weight: 600;
+  color: #605dff;
+  background: #eef0ff;
+  border: 1.5px solid #c5c9ff;
+  border-radius: .5rem;
+  padding: .3rem .6rem;
+  margin-top: .35rem;
+  text-align: center;
+}
+
 #joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
   padding: .28rem .5rem;
   font-size: .92rem;
@@ -1036,6 +1049,12 @@ textarea { min-height: 72px; resize: vertical; }
 
 /* Match pairs: make the shared image full-width (skip small portrait) */
 #joinCard.question-active[data-qtype="match_pairs"].has-image #joinAnswers.has-question-image > .question-image-preview {
+  max-height: 22vh;
+  min-height: 14vh;
+}
+
+/* Order puzzle: same full-width image treatment */
+#joinCard.question-active[data-qtype="puzzle"].has-image #joinAnswers.has-question-image > .question-image-preview {
   max-height: 22vh;
   min-height: 14vh;
 }
