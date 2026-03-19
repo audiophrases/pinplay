@@ -567,15 +567,18 @@ function bindBuilderEvents() {
       const mode = quizTtsLanguageEl.value;
       applyHearQuestionsMode(quiz, mode);
 
-      // If user changed the "hear questions" mode, drop any file-based audio (mp3) already attached
+      // If user changed the "hear questions" mode, drop any TTS-generated mp3s (keep user-uploaded audio)
       let clearedAudio = false;
       quiz.questions.forEach((q) => {
         if (!q) return;
         const audio = String(q.audioData || '');
         const isMp3 = /\.mp3(\?|$)/i.test(audio) || audio.startsWith('data:audio/mpeg') || audio.startsWith('data:audio/mp3');
-        if (q.audioMode === 'file' && audio && isMp3) {
+        const looksLikeTts = q._ttsGenerated || /\/quiz-[^/]+\/audio\/q\d+\.mp3(\?|$)/i.test(audio);
+        if (q.audioMode === 'file' && audio && isMp3 && looksLikeTts) {
           q.audioData = '';
           q.audioMode = 'tts';
+          q._ttsGenerated = false;
+          q._userAudioUploaded = false;
           clearedAudio = true;
         }
       });
@@ -1037,6 +1040,8 @@ function bindBuilderEvents() {
         q.audioData = await fileToDataUrl(file);
         q.audioMode = 'file';
         q.audioEnabled = true;
+        q._ttsGenerated = false;
+        q._userAudioUploaded = true;
         renderBuilder();
       } catch (err) {
         alert(`Audio load failed: ${err.message}`);
@@ -7184,6 +7189,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       setProgress(`🔄 Regenerating Q${i + 1} audio (text changed)...`);
       q.audioMode = 'tts'; // Force TTS regeneration
       q.audioData = null;
+      q._ttsGenerated = false;
+      q._userAudioUploaded = false;
       converted += 1;
     }
     q._lastPrompt = promptText;
@@ -7209,6 +7216,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
           }
           q.audioMode = 'file';
           q.audioEnabled = true;
+          q._ttsGenerated = true;
+          q._userAudioUploaded = false;
           uploaded += 1;
         }
       } catch (err) {
