@@ -1048,6 +1048,7 @@ export default {
     if (url.pathname === '/api/drive/publish' && request.method === 'POST') {
       const body = await safeJson(request);
       const quiz = body?.quiz;
+      const fileId = sanitizeId(body?.fileId);
 
       if (!quiz?.questions?.length) return json({ error: 'Quiz must include at least one question.' }, 400);
 
@@ -1060,6 +1061,7 @@ export default {
         source: 'pinplay',
         secret: String(env.DRIVE_SHARED_SECRET || ''),
         quiz,
+        fileId: fileId || undefined,
       };
 
       try {

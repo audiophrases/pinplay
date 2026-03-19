@@ -167,7 +167,7 @@ Then configure the Worker secrets (`EDGE_TTS_URL` and `EDGE_TTS_SECRET`) and red
 
 ## Google Drive Integration (Optional)
 
-Enables the quiz builder's shared **☁️ Open (Drive)** / **☁️ Save (Drive)** workflow. In hybrid mode, quiz JSON lives in the configured Drive folder while live games and assignments still use the Worker + R2 backend for media delivery. If the worker has not been configured with `DRIVE_PUBLISH_URL` yet, the builder now falls back to the legacy R2 cloud library instead of hard-failing.
+Enables the quiz builder's shared **☁️ Open (Drive)** / **☁️ Save (Drive)** workflow. In hybrid mode, quiz JSON lives in the configured Drive folder while live games and assignments still use the Worker + R2 backend for media delivery. The worker now treats Drive as the only cloud library for quiz open/save, and the Drive bridge supports reopening, updating, and deleting files directly from the configured folder.
 
 ### 1) Create Apps Script Bridge
 

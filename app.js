@@ -1937,17 +1937,20 @@ async function publishQuizToDrive({ successPrefix = 'Published to Drive' } = {})
 
     await ensureQuizMediaReady({ contextLabel: 'publish to drive', convertTtsToMp3: true, strictMediaCheck: true });
     const payload = normalizeQuizForLive(quiz);
+    const existingFileId = String(quiz?._driveFileId || '').trim();
     const data = await api(DRIVE_PUBLISH_ENDPOINT, {
       method: 'POST',
       body: {
         quiz: payload,
+        fileId: existingFileId || undefined,
       },
     });
 
     const fileName = data?.file?.name || 'quiz.json';
     const fileId = data?.file?.id || null;
+    setDriveFileMetadata(data?.file);
 
-    setStatus(hostStatusEl, `${successPrefix}: ${fileName}`, 'ok');
+    setStatus(hostStatusEl, `${successPrefix}: ${fileName}${existingFileId ? ' (updated)' : ''}`, 'ok');
     await openQuizFromDrive({ highlightId: fileId });
   } catch (err) {
     setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
@@ -2213,6 +2216,15 @@ function openLocalLibraryDialog(opts = {}) {
   });
 }
 
+function setDriveFileMetadata(file) {
+  if (!quiz || typeof quiz !== 'object') return;
+  if (file?.id) quiz._driveFileId = String(file.id);
+  else delete quiz._driveFileId;
+
+  if (file?.name) quiz._driveFileName = String(file.name);
+  else delete quiz._driveFileName;
+}
+
 async function openQuizFromDrive(opts = {}) {
   try {
     const list = await api('/api/drive/list', { method: 'GET' });
@@ -2232,6 +2244,7 @@ async function openQuizFromDrive(opts = {}) {
         const loadedQuiz = openData?.quiz;
         validateImportedQuiz(loadedQuiz);
         quiz = loadedQuiz;
+        setDriveFileMetadata(openData?.file || chosen);
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
@@ -2243,6 +2256,7 @@ async function openQuizFromDrive(opts = {}) {
           method: 'POST',
           body: { fileId: chosen.id },
         });
+        if (quiz?._driveFileId === String(chosen.id)) setDriveFileMetadata(null);
         setStatus(hostStatusEl, `Deleted from cloud Drive: ${chosen.name || chosen.id}`, 'ok');
       },
       highlightId: opts.highlightId || null,
@@ -2254,94 +2268,17 @@ async function openQuizFromDrive(opts = {}) {
   }
 }
 
-function isDriveCloudUnavailableError(err) {
-  const msg = String(err?.message || err || '');
-  return msg.includes('Drive publish is not configured on worker (DRIVE_PUBLISH_URL).');
-}
-
-async function openQuizFromR2CloudLibrary() {
-  const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-  const data = await api('/api/quizzes', { method: 'GET' });
-  const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
-
-  if (!cloudQuizzes.length) {
-    setStatus(hostStatusEl, 'No quizzes in cloud yet. Import a quiz first!', 'ok');
-    return;
-  }
-
-  showQuizManagerDialog({
-    title: '☁️ Cloud quizzes (R2 fallback)',
-    items: cloudQuizzes.map((q) => ({
-      id: q.key,
-      raw: q,
-      label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`,
-    })),
-    onOpen: async (item) => {
-      const quizKey = item.raw.key;
-      setStatus(hostStatusEl, '☁️ Loading from R2 cloud fallback...', 'ok');
-      const res = await fetch(`${base}/api/media/${quizKey}`);
-      if (!res.ok) throw new Error('Failed to load quiz from R2 cloud fallback');
-      const loadedQuiz = await res.json();
-      validateImportedQuiz(loadedQuiz);
-      quiz = loadedQuiz;
-      quiz._r2QuizId = quizKey.replace('quizzes/', '').replace('.json', '');
-      collapseAllQuestions(quiz);
-      renderBuilder();
-      saveQuiz(quiz);
-      setStatus(hostStatusEl, `Loaded from R2 cloud fallback: ${item.label}`, 'ok');
-    },
-    onDelete: async (item) => {
-      const quizKey = item.raw.key;
-      await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE' });
-      setStatus(hostStatusEl, `Deleted from R2 cloud fallback: ${item.label}`, 'ok');
-    },
-    highlightId: null,
-  });
-}
-
-async function saveQuizToR2CloudLibrary() {
-  syncQuizFromUI();
-  await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
-  const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-  setStatus(hostStatusEl, '☁️ Uploading quiz to R2 cloud fallback...', 'ok');
-
-  const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
-  quiz._r2QuizId = quizId;
-  quiz.title = quiz.title || 'Untitled Quiz';
-
-  const res = await fetch(`${base}/api/quizzes/upload`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quiz, quizId }),
-  });
-
-  if (!res.ok) throw new Error('Upload failed');
-  setStatus(hostStatusEl, `Saved to R2 cloud fallback: ${quiz.title || 'Quiz'}`, 'ok');
-}
-
-// Open quiz from Cloud (hybrid mode = Drive library + R2 media)
+// Open quiz from Cloud (Drive library + R2 media)
 async function openQuizFromCloud() {
-  try {
-    setStatus(hostStatusEl, '☁️ Loading cloud library from Drive…', 'ok');
-    await openQuizFromDrive({ title: '☁️ Cloud quizzes (Drive folder)' });
-  } catch (err) {
-    if (!isDriveCloudUnavailableError(err)) return;
-    setStatus(hostStatusEl, 'Drive cloud is not configured on the worker yet; falling back to the legacy R2 cloud library.', 'ok');
-    await openQuizFromR2CloudLibrary();
-  }
+  setStatus(hostStatusEl, '☁️ Loading cloud library from Drive…', 'ok');
+  await openQuizFromDrive({ title: '☁️ Cloud quizzes (Drive folder)' });
 }
 
 
-// Save quiz to Cloud (hybrid mode = Drive library + R2 media)
+// Save quiz to Cloud (Drive library + R2 media)
 async function saveQuizToCloud() {
-  try {
-    setStatus(hostStatusEl, '☁️ Saving cloud quiz to Drive…', 'ok');
-    await publishQuizToDrive({ successPrefix: 'Saved to cloud Drive' });
-  } catch (err) {
-    if (!isDriveCloudUnavailableError(err)) return;
-    setStatus(hostStatusEl, 'Drive cloud is not configured on the worker yet; saving to the legacy R2 cloud library instead.', 'ok');
-    await saveQuizToR2CloudLibrary();
-  }
+  setStatus(hostStatusEl, '☁️ Saving cloud quiz to Drive…', 'ok');
+  await publishQuizToDrive({ successPrefix: 'Saved to cloud Drive' });
 }
 
 // ---------- Live mode ----------

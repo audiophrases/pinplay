@@ -15,17 +15,32 @@ function doPost(e) {
       return jsonOut({ error: 'Quiz must include at least one question.' });
     }
 
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const payload = JSON.stringify(quiz, null, 2);
     const title = String(quiz.title || 'pinplay-quiz').trim();
     const safeTitle = title.replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80) || 'pinplay-quiz';
     const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Europe/Paris', 'yyyy-MM-dd_HH-mm-ss');
     const fileName = `${safeTitle}__${stamp}.json`;
+    const requestedFileId = String(body.fileId || '').trim();
 
-    const payload = JSON.stringify(quiz, null, 2);
-    const folder = DriveApp.getFolderById(FOLDER_ID);
-    const file = folder.createFile(fileName, payload, MimeType.PLAIN_TEXT);
+    let file = null;
+    let operation = 'created';
+
+    if (requestedFileId) {
+      file = DriveApp.getFileById(requestedFileId);
+      if (!isFileInFolder(file, folder)) {
+        return jsonOut({ error: 'File is not in configured folder.' });
+      }
+      file.setContent(payload);
+      file.setName(fileName);
+      operation = 'updated';
+    } else {
+      file = folder.createFile(fileName, payload, MimeType.PLAIN_TEXT);
+    }
 
     return jsonOut({
       ok: true,
+      operation,
       file: driveFileInfo(file),
       folder: driveFolderInfo(folder),
     });
@@ -71,6 +86,9 @@ function doGet(e) {
 
       const file = DriveApp.getFileById(fileId);
       const folder = DriveApp.getFolderById(FOLDER_ID);
+      if (!isFileInFolder(file, folder)) {
+        return jsonOut({ error: 'File is not in configured folder.' });
+      }
       const content = file.getBlob().getDataAsString('UTF-8');
       const quiz = JSON.parse(content);
 
@@ -122,6 +140,7 @@ function driveFileInfo(file) {
   return {
     id: file.getId(),
     name: file.getName(),
+    updatedAt: file.getLastUpdated().toISOString(),
     webViewLink: `https://drive.google.com/file/d/${file.getId()}/view`,
   };
 }
