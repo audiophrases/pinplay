@@ -567,6 +567,19 @@ function bindBuilderEvents() {
       const mode = quizTtsLanguageEl.value;
       applyHearQuestionsMode(quiz, mode);
 
+      // If user changed the "hear questions" mode, drop any file-based audio (mp3) already attached
+      let clearedAudio = false;
+      quiz.questions.forEach((q) => {
+        if (!q) return;
+        const audio = String(q.audioData || '');
+        const isMp3 = /\.mp3(\?|$)/i.test(audio) || audio.startsWith('data:audio/mpeg') || audio.startsWith('data:audio/mp3');
+        if (q.audioMode === 'file' && audio && isMp3) {
+          q.audioData = '';
+          q.audioMode = 'tts';
+          clearedAudio = true;
+        }
+      });
+
       // Show/hide the "Other" voice selector
       if (quizTtsOtherWrap) {
         quizTtsOtherWrap.style.display = mode === 'OTHER' ? '' : 'none';
