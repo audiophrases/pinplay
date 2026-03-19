@@ -4,7 +4,6 @@ const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
-const DRIVE_CLOUD_FOLDER_URL = 'https://drive.google.com/drive/folders/1NKH51CDu2rGeOB1VCyTA8NtkvLuf1STZ?usp=drive_link';
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -1928,7 +1927,7 @@ function syncQuizFromUI() {
   });
 }
 
-async function publishQuizToDrive({ successPrefix = 'Published to Drive' } = {}) {
+async function publishQuizToDrive() {
   try {
     syncQuizFromUI();
 
@@ -1947,7 +1946,7 @@ async function publishQuizToDrive({ successPrefix = 'Published to Drive' } = {})
     const fileName = data?.file?.name || 'quiz.json';
     const fileId = data?.file?.id || null;
 
-    setStatus(hostStatusEl, `${successPrefix}: ${fileName}`, 'ok');
+    setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
     await openQuizFromDrive({ highlightId: fileId });
   } catch (err) {
     setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
@@ -2216,15 +2215,9 @@ async function openQuizFromDrive(opts = {}) {
   try {
     const list = await api('/api/drive/list', { method: 'GET' });
     const files = Array.isArray(list?.files) ? list.files : [];
-    const title = String(opts.title || '☁️ Cloud quizzes (Drive folder)');
-    const folderUrl = String(list?.folder?.webViewLink || DRIVE_CLOUD_FOLDER_URL);
     showQuizManagerDialog({
-      title,
-      items: files.map((f) => ({
-        id: f.id,
-        raw: f,
-        label: `${String(f.name || f.id)}${f.updatedAt ? ` — ${new Date(f.updatedAt).toLocaleString()}` : ''}`,
-      })),
+      title: 'Drive quizzes',
+      items: files.map((f) => ({ id: f.id, raw: f, label: String(f.name || f.id) })),
       onOpen: async (item) => {
         const chosen = item.raw;
         const openData = await api(`/api/drive/open?fileId=${encodeURIComponent(chosen.id)}`, { method: 'GET' });
@@ -2234,7 +2227,7 @@ async function openQuizFromDrive(opts = {}) {
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
-        setStatus(hostStatusEl, `Loaded from cloud Drive: ${chosen.name || chosen.id}`, 'ok');
+        setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name || chosen.id}`, 'ok');
       },
       onDelete: async (item) => {
         const chosen = item.raw;
@@ -2242,27 +2235,92 @@ async function openQuizFromDrive(opts = {}) {
           method: 'POST',
           body: { fileId: chosen.id },
         });
-        setStatus(hostStatusEl, `Deleted from cloud Drive: ${chosen.name || chosen.id}`, 'ok');
+        setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
       },
       highlightId: opts.highlightId || null,
     });
-    setStatus(hostStatusEl, `Cloud library loaded from Drive folder: ${folderUrl}`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
   }
 }
 
-// Open quiz from Cloud (hybrid mode = Drive library + R2 media)
+// Open quiz from Cloud (R2)
 async function openQuizFromCloud() {
-  setStatus(hostStatusEl, '☁️ Loading cloud library from Drive…', 'ok');
-  await openQuizFromDrive({ title: '☁️ Cloud quizzes (Drive folder)' });
+  try {
+    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
+    
+    const data = await api('/api/quizzes', { method: 'GET' });
+    const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
+    
+    if (!cloudQuizzes.length) {
+      setStatus(hostStatusEl, 'No quizzes in cloud yet. Import a quiz first!', 'ok');
+      return;
+    }
+
+    showQuizManagerDialog({
+      title: '☁️ Cloud quizzes (R2)',
+      items: cloudQuizzes.map((q, i) => ({ 
+        id: q.key, 
+        raw: q, 
+        label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`
+      })),
+      onOpen: async (item) => {
+        const quizKey = item.raw.key;
+        const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+        setStatus(hostStatusEl, '☁️ Loading from cloud...', 'ok');
+        const res = await fetch(`${base}/api/media/${quizKey}`);
+        if (!res.ok) throw new Error('Failed to load quiz from cloud');
+        const loadedQuiz = await res.json();
+        // The quiz JSON is stored directly (not wrapped)
+        validateImportedQuiz(loadedQuiz);
+        quiz = loadedQuiz;
+        quiz._r2QuizId = quizKey.replace('quizzes/', '').replace('.json', '');
+        collapseAllQuestions(quiz);
+        renderBuilder();
+        saveQuiz(quiz);
+        setStatus(hostStatusEl, `✅ Loaded: ${item.label}`, 'ok');
+      },
+      onDelete: async (item) => {
+        // Delete from R2 via Worker API
+        const quizKey = item.raw.key;
+        await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE' });
+        setStatus(hostStatusEl, `Deleted from Cloud: ${item.label}`, 'ok');
+      },
+      highlightId: null,
+    });
+  } catch (err) {
+    setStatus(hostStatusEl, `Cloud load failed: ${err.message}`, 'bad');
+  }
 }
 
 
-// Save quiz to Cloud (hybrid mode = Drive library + R2 media)
+// Save quiz to Cloud (R2)
 async function saveQuizToCloud() {
-  setStatus(hostStatusEl, '☁️ Saving cloud quiz to Drive…', 'ok');
-  await publishQuizToDrive({ successPrefix: 'Saved to cloud Drive' });
+  try {
+    syncQuizFromUI();
+    await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
+    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
+    
+    const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
+    quiz._r2QuizId = quizId;
+    quiz.title = quiz.title || 'Untitled Quiz';
+    
+    // Upload quiz JSON to R2 (with title and questions for listing)
+    const res = await fetch(`${base}/api/quizzes/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quiz, quizId })
+    });
+    
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    
+    setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
+  }
 }
 
 // ---------- Live mode ----------
@@ -8472,3 +8530,4 @@ function setupImageLightbox() {
 
 
 init();
+
