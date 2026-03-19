@@ -2,7 +2,7 @@ const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS,DELETE',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
 };
 
@@ -183,6 +183,7 @@ export default {
         const raw = url.pathname.replace('/api/quizzes/', '');
         if (!raw) return json({ error: 'quiz key required' }, 400);
         let key = raw.startsWith('quizzes/') ? raw : `quizzes/${raw}`;
+        if (key.startsWith('quizzes/quizzes/')) key = key.replace(/^quizzes\//, '');
         if (!key.endsWith('.json')) key = `${key}.json`;
         const quizId = key.replace('quizzes/', '').replace('.json', '');
 
