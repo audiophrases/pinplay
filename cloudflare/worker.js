@@ -127,12 +127,15 @@ export default {
       try {
         const obj = await env.QUIZ_MEDIA.get(key);
         if (!obj) return withCors(json({ error: 'File not found' }, 404));
-        const headers = { 'Cache-Control': 'public, max-age=31536000' };
-        if (key.endsWith('.mp3')) headers['Content-Type'] = 'audio/mpeg';
-        else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
-        else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
-        else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
-        return withCors(new Response(obj.body, { headers }));
+
+        const headers = new Headers({ 'Cache-Control': 'public, max-age=31536000' });
+        if (key.endsWith('.json')) headers.set('Content-Type', 'application/json; charset=utf-8');
+        else if (key.endsWith('.mp3')) headers.set('Content-Type', 'audio/mpeg');
+        else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers.set('Content-Type', 'image/jpeg');
+        else if (key.endsWith('.png')) headers.set('Content-Type', 'image/png');
+        else if (key.endsWith('.webp')) headers.set('Content-Type', 'image/webp');
+
+        return withCors(new Response(obj.body, { status: 200, headers }));
       } catch (e) {
         return withCors(json({ error: 'Failed to load media' }, 500));
       }
