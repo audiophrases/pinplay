@@ -123,18 +123,18 @@ export default {
     // Serve quiz media (audio/images) from R2
     if (url.pathname.startsWith('/api/media/') && request.method === 'GET') {
       const key = url.pathname.replace('/api/media/', '');
-      if (!key || key.length < 3) return json({ error: 'Invalid media path' }, 400);
+      if (!key || key.length < 3) return withCors(json({ error: 'Invalid media path' }, 400));
       try {
         const obj = await env.QUIZ_MEDIA.get(key);
-        if (!obj) return json({ error: 'File not found' }, 404);
+        if (!obj) return withCors(json({ error: 'File not found' }, 404));
         const headers = { 'Cache-Control': 'public, max-age=31536000' };
         if (key.endsWith('.mp3')) headers['Content-Type'] = 'audio/mpeg';
         else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
         else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
         else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
-        return new Response(obj.body, { headers });
+        return withCors(new Response(obj.body, { headers }));
       } catch (e) {
-        return json({ error: 'Failed to load media' }, 500);
+        return withCors(json({ error: 'Failed to load media' }, 500));
       }
     }
 
