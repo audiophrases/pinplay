@@ -144,43 +144,23 @@ export default {
       }
     }
 
-    // List quizzes stored in R2
+    // List saved quiz manifests from the dedicated `quizzes/` namespace only. Media files intentionally live elsewhere in the bucket.
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
       try {
-        const listed = await env.QUIZ_MEDIA.list({ limit: 100 });
-        const quizzes = (listed.objects || [])
-          .filter(obj => obj.key.startsWith('quizzes/') && obj.key.endsWith('.json'))
-          .map(obj => ({
-            key: obj.key,
-            pin: obj.key.replace('quizzes/', '').replace('.json', ''),
-            size: obj.size,
-            uploaded: obj.uploaded,
-            title: obj.key.replace('quizzes/', '').replace('.json', '')
-          }));
-        // Fetch titles from quiz data
-        for (const q of quizzes) {
-          try {
-            const obj = await env.QUIZ_MEDIA.get(q.key);
-            if (obj) {
-              const data = await obj.json();
-              if (data?.title) q.title = data.title;
-              if (data?.questions?.length) q.questionCount = data.questions.length;
-            }
-          } catch (e) { /* skip */ }
-        }
+        const quizzes = await listSavedQuizObjects(env);
         return json({ quizzes });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
     }
 
-    // Upload quiz JSON to R2
+    // Upload quiz JSON to the authoritative `quizzes/` manifest namespace. Runtime media stays outside this prefix.
     if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
       try {
         const body = await safeJson(request);
         const quizId = body?.quizId || `quiz-${Date.now()}`;
-        const key = `quizzes/${quizId}.json`;
-        await env.QUIZ_MEDIA.put(key, JSON.stringify(body.quiz || body), { httpMetadata: { contentType: 'application/json' } });
+        const quizData = body.quiz || body;
+        const key = await saveQuizManifest(env, quizId, quizData);
         return json({ ok: true, key, quizId });
       } catch (e) {
         return json({ error: e.message }, 500);
@@ -256,13 +236,10 @@ export default {
 
         if (initRes.status === 201) {
           const data = await initRes.json();
-          // Also save quiz JSON to R2 for Cloud listing
+          // Also save the quiz manifest to the dedicated `quizzes/` namespace used by teacher-facing cloud listing.
           if (env.QUIZ_MEDIA) {
-            const quizKey = `quizzes/${pin}.json`;
             try {
-              await env.QUIZ_MEDIA.put(quizKey, JSON.stringify(quiz), {
-                httpMetadata: { contentType: 'application/json' }
-              });
+              await saveQuizManifest(env, pin, quiz);
             } catch (e) { /* non-critical */ }
           }
           return json(data, 201);
@@ -3921,6 +3898,62 @@ function arrayBufferToBase64(buffer) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+const QUIZ_MANIFEST_PREFIX = 'quizzes/';
+
+function makeQuizManifestKey(quizId) {
+  const cleanId = String(quizId || '').trim() || `quiz-${Date.now()}`;
+  return `${QUIZ_MANIFEST_PREFIX}${cleanId}.json`;
+}
+
+function getQuizManifestMetadata(quiz) {
+  const title = String(quiz?.title || '').trim();
+  const questionCount = Array.isArray(quiz?.questions) ? quiz.questions.length : 0;
+  return {
+    title: title || '',
+    questionCount: String(questionCount),
+  };
+}
+
+async function saveQuizManifest(env, quizId, quiz) {
+  if (!env?.QUIZ_MEDIA) throw new Error('QUIZ_MEDIA binding is required');
+  const key = makeQuizManifestKey(quizId);
+
+  // Saved quiz manifests intentionally live under `quizzes/`, while runtime media keys live under per-quiz media folders.
+  // Keeping these namespaces separate prevents future routes from scanning the full bucket and mixing manifests with assets.
+  await env.QUIZ_MEDIA.put(key, JSON.stringify(quiz), {
+    httpMetadata: { contentType: 'application/json' },
+    customMetadata: getQuizManifestMetadata(quiz),
+  });
+
+  return key;
+}
+
+async function listSavedQuizObjects(env) {
+  if (!env?.QUIZ_MEDIA) return [];
+
+  const listed = await env.QUIZ_MEDIA.list({
+    prefix: QUIZ_MANIFEST_PREFIX,
+    limit: 100,
+  });
+
+  return (listed.objects || [])
+    .filter((obj) => obj.key.endsWith('.json'))
+    .map((obj) => {
+      const manifestId = obj.key.slice(QUIZ_MANIFEST_PREFIX.length, -'.json'.length);
+      const title = String(obj.customMetadata?.title || '').trim() || manifestId;
+      const questionCount = Number(obj.customMetadata?.questionCount || 0);
+
+      return {
+        key: obj.key,
+        pin: manifestId,
+        size: obj.size,
+        uploaded: obj.uploaded,
+        title,
+        questionCount: Number.isFinite(questionCount) ? questionCount : 0,
+      };
+    });
 }
 
 function sanitizeId(id) {
