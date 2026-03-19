@@ -594,6 +594,8 @@ function bindBuilderEvents() {
           if (!q) return;
           q.audioEnabled = false;
           q.audioMode = 'tts';
+          q.ttsLanguage = 'NONE';
+          q.language = '';
         });
       } else if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) {
         // Apply the selected voice from the search dropdown
@@ -7184,6 +7186,9 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     const ttsText = (overrideText || promptText).slice(0, 1200);
     const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
 
+    // If hearing is disabled, skip TTS generation
+    const hearingDisabled = (quizLanguage === 'NONE') || (String(q.ttsLanguage || '').toUpperCase() === 'NONE');
+
     // Auto-regenerate TTS if question text changed
     if (q.audioMode === 'file' && q.audioData && q._lastPrompt && q._lastPrompt !== promptText) {
       setProgress(`🔄 Regenerating Q${i + 1} audio (text changed)...`);
@@ -7195,7 +7200,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     }
     q._lastPrompt = promptText;
 
-    if (convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText) {
+    if (!hearingDisabled && convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText) {
       setProgress(`🔄 Generating Q${i + 1} audio...`);
       try {
         const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || getVoiceForTtsLanguage(quizLanguage) });
