@@ -132,6 +132,7 @@ export default {
         else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
         else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
         else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
+        Object.assign(headers, CORS_HEADERS);
         return new Response(obj.body, { headers });
       } catch (e) {
         return json({ error: 'Failed to load media' }, 500);
