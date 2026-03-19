@@ -989,8 +989,22 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
-  padding: .24rem .42rem;
-  font-size: .86rem;
+  padding: .28rem .5rem;
+  font-size: .92rem;
+  border: 2px solid var(--line);
+  border-radius: .45rem;
+  background: #fff;
+  transition: border-color .15s, background .15s, transform .1s;
+}
+#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip.active {
+  border-color: var(--bad);
+  background: #ffe8ea;
+  color: var(--bad);
+  font-weight: 600;
 }
 
 #joinCard.question-active[data-qtype="error_hunt"] .join-answer-inline-row textarea,
@@ -1011,16 +1025,29 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #joinCard.question-active[data-qtype="match_pairs"] .match-pairs-wrap {
-  grid-template-columns: minmax(120px, 1fr) auto;
-  gap: .38rem;
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr);
+  gap: .6rem;
 }
 
 #joinCard.question-active[data-qtype="match_pairs"] .match-pairs-col .answer-row {
-  padding: .22rem .32rem;
+  padding: .28rem .4rem;
+  font-size: .95rem;
+}
+
+/* Match pairs: make the shared image full-width (skip small portrait) */
+#joinCard.question-active[data-qtype="match_pairs"].has-image #joinAnswers.has-question-image > .question-image-preview {
+  max-height: 22vh;
+  min-height: 14vh;
 }
 
 #joinCard.question-active[data-qtype="pin"] .pin-preview {
   max-width: 100%;
+}
+
+/* Pin on image: make student map much bigger for tap accuracy */
+#joinCard.question-active[data-qtype="pin"] .pin-preview img {
+  max-height: 55vh;
+  min-height: 200px;
 }
 
 @media (max-width: 780px) {
