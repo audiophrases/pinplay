@@ -177,6 +177,32 @@ export default {
       }
     }
 
+    // Delete quiz JSON and associated media prefix from R2
+    if (url.pathname.startsWith('/api/quizzes/') && request.method === 'DELETE') {
+      try {
+        const raw = url.pathname.replace('/api/quizzes/', '');
+        if (!raw) return json({ error: 'quiz key required' }, 400);
+        let key = raw.startsWith('quizzes/') ? raw : `quizzes/${raw}`;
+        if (!key.endsWith('.json')) key = `${key}.json`;
+        const quizId = key.replace('quizzes/', '').replace('.json', '');
+
+        // Delete the quiz JSON
+        await env.QUIZ_MEDIA.delete(key);
+
+        // Delete associated media under quizId/
+        let deletedMedia = 0;
+        const listed = await env.QUIZ_MEDIA.list({ prefix: `${quizId}/`, limit: 1000 });
+        for (const obj of listed.objects || []) {
+          await env.QUIZ_MEDIA.delete(obj.key);
+          deletedMedia += 1;
+        }
+
+        return json({ ok: true, deletedMedia, deletedKey: key, quizId });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     // Upload quiz JSON to R2
     if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
       try {
