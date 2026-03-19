@@ -553,13 +553,27 @@ function bindBuilderEvents() {
 
   const quizTtsOtherWrap = document.getElementById('quizTtsOtherWrap');
   const quizTtsOtherVoiceEl = document.getElementById('quizTtsOtherVoice');
+  const quizTtsOtherSearchEl = document.getElementById('quizTtsOtherSearch');
 
-  // Populate the "Other" voice search dropdown from the full voice index
-  if (quizTtsOtherVoiceEl) {
-    const voiceOptions = EDGE_TTS_VOICE_INDEX
+  // Populate/filter the "Other" voice dropdown from the full voice index
+  const renderOtherVoiceOptions = (filter = '') => {
+    if (!quizTtsOtherVoiceEl) return;
+    const needle = String(filter || '').trim().toLowerCase();
+    const filtered = EDGE_TTS_VOICE_INDEX.filter((v) => {
+      if (!needle) return true;
+      const haystack = `${v.code} ${v.language} ${v.country} ${v.person}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+    const voiceOptions = filtered
       .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
       .join('');
     quizTtsOtherVoiceEl.innerHTML = voiceOptions;
+  };
+  if (quizTtsOtherVoiceEl) {
+    renderOtherVoiceOptions();
+  }
+  if (quizTtsOtherSearchEl) {
+    quizTtsOtherSearchEl.addEventListener('input', () => renderOtherVoiceOptions(quizTtsOtherSearchEl.value));
   }
 
   if (quizTtsLanguageEl) {
