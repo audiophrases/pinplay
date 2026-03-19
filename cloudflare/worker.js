@@ -3933,13 +3933,28 @@ async function saveQuizManifest(env, quizId, quiz) {
 async function listSavedQuizObjects(env) {
   if (!env?.QUIZ_MEDIA) return [];
 
-  const listed = await env.QUIZ_MEDIA.list({
-    prefix: QUIZ_MANIFEST_PREFIX,
-    limit: 100,
-  });
+  const manifestObjects = [];
+  let cursor;
+  const seenCursors = new Set();
 
-  return (listed.objects || [])
-    .filter((obj) => obj.key.endsWith('.json'))
+  do {
+    const listed = await env.QUIZ_MEDIA.list({
+      prefix: QUIZ_MANIFEST_PREFIX,
+      limit: 100,
+      ...(cursor ? { cursor } : {}),
+    });
+
+    manifestObjects.push(
+      ...(listed.objects || []).filter((obj) => obj.key.endsWith('.json'))
+    );
+
+    const nextCursor = listed.truncated ? listed.cursor : undefined;
+    if (!nextCursor || seenCursors.has(nextCursor)) break;
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  } while (cursor);
+
+  return manifestObjects
     .map((obj) => {
       const manifestId = obj.key.slice(QUIZ_MANIFEST_PREFIX.length, -'.json'.length);
       const title = String(obj.customMetadata?.title || '').trim() || manifestId;
@@ -4006,5 +4021,4 @@ function json(data, status = 200) {
     },
   });
 }
-
 
