@@ -43,7 +43,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
   - Leave the keyword empty to skip auto-image for that question
   - New quizzes default to "Don't hear questions" in the audio/language dropdown at the top
 - Local save via localStorage + JSON import/export
-- Hybrid cloud storage: ☁️ Open/Save uses a shared Google Drive folder while live/assignment media stays on Cloudflare R2
+- Google Drive publish/open/delete (optional, via Apps Script bridge)
 - Unified preview with simulated students, re-roll, and jump-to-question
 - Inline editing of answer choices with instant preview
 - Poll mode toggle per question
@@ -167,7 +167,7 @@ Then configure the Worker secrets (`EDGE_TTS_URL` and `EDGE_TTS_SECRET`) and red
 
 ## Google Drive Integration (Optional)
 
-Enables the quiz builder's shared **☁️ Open (Drive)** / **☁️ Save (Drive)** workflow. In hybrid mode, quiz JSON lives in the configured Drive folder while live games and assignments still use the Worker + R2 backend for media delivery.
+Enables **Publish to Drive**, **Open from Drive**, and **Delete from Drive** buttons in the quiz builder.
 
 ### 1) Create Apps Script Bridge
 
