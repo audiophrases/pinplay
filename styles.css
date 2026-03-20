@@ -398,6 +398,38 @@ textarea { min-height: 72px; resize: vertical; }
   filter: saturate(.65);
 }
 
+/* Puzzle layout: center and prevent overflow */
+.puzzle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .55rem;
+  width: 100%;
+}
+.puzzle-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  justify-content: center;
+  width: 100%;
+  max-width: 720px;
+}
+.puzzle-bank .btn {
+  min-width: 96px;
+}
+.answers-grid.puzzle-selected {
+  width: 100%;
+  max-width: 720px;
+  justify-items: stretch;
+}
+.answers-grid.puzzle-selected .answer-row {
+  width: 100%;
+  justify-content: center;
+}
+.btn.puzzle-reset {
+  align-self: center;
+}
+
 .poll-word-cloud {
   display: flex;
   flex-wrap: wrap;

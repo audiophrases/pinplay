@@ -1890,18 +1890,21 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
 }
 
 function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
+  const wrap = document.createElement('div');
+  wrap.className = 'puzzle-wrap';
+
   const bank = document.createElement('div');
-  bank.className = 'row gap';
-  bank.style.flexWrap = 'wrap';
+  bank.className = 'puzzle-bank';
 
   const selected = document.createElement('div');
-  selected.className = 'answers-grid top-space';
+  selected.className = 'answers-grid puzzle-selected top-space';
   selected.dataset.puzzleList = listId;
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'btn top-space';
+  resetBtn.className = 'btn top-space puzzle-reset';
   resetBtn.textContent = 'Reset order';
+  resetBtn.style.alignSelf = 'center';
 
   let draggedRow = null;
 
@@ -1982,7 +1985,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const buildBankButton = (value, pieceId) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'btn';
+    btn.className = 'btn puzzle-bank-btn';
     btn.dataset.puzzleBankPiece = value;
     btn.dataset.puzzleBankId = String(pieceId);
     btn.textContent = value;
@@ -2057,7 +2060,8 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   });
   refreshBankButtons();
 
-  container.append(bank, resetBtn, selected);
+  wrap.append(bank, selected, resetBtn);
+  container.appendChild(wrap);
 }
 
 async function api(path, opts = {}) {
