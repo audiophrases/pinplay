@@ -1149,6 +1149,7 @@ function renderJoinQuestion(question) {
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'row gap';
       tokenWrap.style.flexWrap = 'wrap';
+      tokenWrap.style.justifyContent = 'center';
       const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
@@ -1242,8 +1243,15 @@ function renderJoinQuestion(question) {
       return;
     }
 
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+    container.style.gap = '.4rem';
+
     const wrap = document.createElement('div');
     wrap.className = 'pin-preview';
+    wrap.style.margin = '0 auto';
 
     const img = document.createElement('img');
     let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
@@ -1258,11 +1266,11 @@ function renderJoinQuestion(question) {
 
     const countLabel = document.createElement('p');
     countLabel.className = 'small';
-    countLabel.textContent = `Pin all correct spots: 0 / ${required}`;
+    countLabel.textContent = pinMode === 'all' ? `Pin all correct spots: 0 / ${required}` : 'Pin one correct spot: 0 / 1';
 
     wrap.append(img, picksLayer);
-    joinAnswersEl.appendChild(wrap);
-    joinAnswersEl.appendChild(countLabel);
+    container.append(countLabel, wrap);
+    joinAnswersEl.appendChild(container);
 
     const renderPicks = () => {
       picksLayer.innerHTML = '';
