@@ -420,39 +420,43 @@ textarea { min-height: 72px; resize: vertical; }
   min-width: 96px;
 }
 /* Puzzle: keep selected pieces inline and hug content */
+/* Puzzle: force tight inline sentence layout */
 .answers-grid.puzzle-selected {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: .28rem;
+  gap: .2rem .28rem;
   justify-content: center;
   align-items: center;
-  width: 100%;
-  max-width: 900px;
+  width: auto;
+  max-width: 880px;
   margin: 0 auto;
+  padding: 0;
 }
 .answers-grid.puzzle-selected .answer-row {
   display: inline-flex;
   align-items: center;
-  gap: .3rem;
+  gap: .2rem;
   width: auto;
   min-width: 0;
   max-width: none;
-  padding: .32rem .55rem;
+  padding: .22rem .42rem;
+  margin: 0;
   white-space: nowrap;
+  border-radius: .45rem;
 }
-.answers-grid.puzzle-selected .answer-row strong {
-  display: none;
-}
+.answers-grid.puzzle-selected .answer-row strong { display: none; }
 
+#joinCard.question-active[data-qtype="puzzle"] #joinAnswers {
+  justify-items: center;
+  align-items: center;
+  grid-template-columns: 1fr;
+}
 #joinCard.question-active[data-qtype="puzzle"] #joinAnswers .answer-row {
   width: auto !important;
   max-width: none !important;
   display: inline-flex;
-  padding: .32rem .55rem;
+  padding: .22rem .42rem;
   white-space: nowrap;
-}
-#joinCard.question-active[data-qtype="puzzle"] #joinAnswers {
-  justify-items: center;
 }
 .btn.puzzle-reset {
   align-self: center;
