@@ -1147,7 +1147,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
-      tokenWrap.className = 'row gap';
+      tokenWrap.className = 'error-token-wrap';
       tokenWrap.style.flexWrap = 'wrap';
       tokenWrap.style.justifyContent = 'center';
       const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);

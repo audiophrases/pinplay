@@ -1033,13 +1033,24 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
+#joinCard.question-active[data-qtype="error_hunt"] .error-token-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  justify-content: center;
+  width: 100%;
+}
 #joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: .28rem .5rem;
   font-size: .92rem;
   border: 2px solid var(--line);
   border-radius: .45rem;
   background: #fff;
   transition: border-color .15s, background .15s, transform .1s;
+  width: auto;
 }
 #joinCard.question-active[data-qtype="error_hunt"] .error-token-chip:hover {
   border-color: var(--primary);
