@@ -7093,7 +7093,8 @@ function normalizeQuizForLive(raw) {
       const variants = getCorrectedVariantsList(q.corrected, q.correctedVariants).map((v) => v.slice(0, 160)).filter(Boolean);
       const corrected = variants[0] || '';
       if (!corrected) return;
-      normalized.questions.push({ ...base, corrected, correctedVariants: variants });
+      const requiredErrors = Number(q.requiredErrors || 0) || undefined;
+      normalized.questions.push({ ...base, corrected, correctedVariants: variants, requiredErrors });
       return;
     }
 
