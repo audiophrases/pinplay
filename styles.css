@@ -889,6 +889,14 @@ textarea { min-height: 72px; resize: vertical; }
 /* Batch 3: student layout compaction by question type */
 #joinCard.question-active {
   padding: .72rem .8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#joinCard.question-active #joinQuestionWrap {
+  width: 100%;
+  max-width: 760px;
 }
 
 #joinCard.question-active #joinQuestionWrap .row.spread {
@@ -898,12 +906,17 @@ textarea { min-height: 72px; resize: vertical; }
 #joinCard.question-active #joinPrompt {
   margin: .2rem 0 .36rem;
   line-height: 1.18;
+  text-align: center;
 }
 
 #joinCard.question-active #joinAnswers {
+  width: 100%;
+  max-width: 760px;
   display: grid;
   grid-template-columns: 1fr;
   gap: .3rem;
+  justify-items: center;
+  margin: 0 auto;
 }
 #joinCard.question-active #joinAnswers.two-col {
   grid-template-columns: 1fr 1fr;
@@ -912,6 +925,9 @@ textarea { min-height: 72px; resize: vertical; }
 
 #joinCard.question-active .answer-row {
   gap: .38rem;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 #joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
