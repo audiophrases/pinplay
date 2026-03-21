@@ -419,28 +419,40 @@ textarea { min-height: 72px; resize: vertical; }
 .puzzle-bank .btn {
   min-width: 96px;
 }
+/* Puzzle: keep selected pieces inline and hug content */
 .answers-grid.puzzle-selected {
   display: flex;
   flex-wrap: wrap;
-  gap: .3rem;
+  gap: .28rem;
   justify-content: center;
   align-items: center;
   width: 100%;
-  max-width: 760px;
+  max-width: 900px;
   margin: 0 auto;
 }
 .answers-grid.puzzle-selected .answer-row {
   display: inline-flex;
   align-items: center;
-  gap: .35rem;
+  gap: .3rem;
   width: auto;
   min-width: 0;
   max-width: none;
-  padding: .42rem .65rem;
+  padding: .32rem .55rem;
   white-space: nowrap;
 }
 .answers-grid.puzzle-selected .answer-row strong {
   display: none;
+}
+
+#joinCard.question-active[data-qtype="puzzle"] #joinAnswers .answer-row {
+  width: auto !important;
+  max-width: none !important;
+  display: inline-flex;
+  padding: .32rem .55rem;
+  white-space: nowrap;
+}
+#joinCard.question-active[data-qtype="puzzle"] #joinAnswers {
+  justify-items: center;
 }
 .btn.puzzle-reset {
   align-self: center;
