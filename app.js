@@ -1268,10 +1268,11 @@ function renderBuilder() {
     }
 
     if (q.type === 'error_hunt') {
+      const correctedBlock = Array.isArray(q.correctedVariants) ? q.correctedVariants.join('\n') : (q.corrected || '');
       specific += `
-        <label class="top-space">Corrected sentence (target)</label>
-        <textarea data-q="${idx}" data-field="corrected" maxlength="160">${escapeHtml(q.corrected || '')}</textarea>
-        <p class="small">Error count is auto-calculated from token differences between prompt and corrected sentence.</p>
+        <label class="top-space">Accepted corrections (one per line)</label>
+        <textarea data-q="${idx}" data-field="corrected" maxlength="400">${escapeHtml(correctedBlock)}</textarea>
+        <p class="small">Add multiple acceptable rewrites on separate lines. Error count auto-calculates from the first variant.</p>
       `;
     }
 
@@ -1909,7 +1910,10 @@ function syncQuizFromUI() {
 
     if (q.type === 'error_hunt') {
       const correctedEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
-      q.corrected = String(correctedEl?.value || '').slice(0, 160);
+      const correctedRaw = String(correctedEl?.value || '').trimEnd();
+      const variants = correctedRaw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
+      q.correctedVariants = variants;
+      q.corrected = variants[0] || '';
     }
 
     if (q.type === 'puzzle') {
@@ -5385,7 +5389,7 @@ function renderJoinQuestion(question) {
       const count = Math.max(1, Math.min(10, Number(question.gapCount || 1)));
       renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
     } else if (question.type === 'error_hunt') {
-      const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
+      const required = getErrorHuntRequired(question);
       const info = document.createElement('p');
       info.className = 'small';
       info.textContent = `Find ${required} wrong token(s), then rewrite.`;
@@ -5632,7 +5636,7 @@ function readJoinAnswer() {
     const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
     if (!rewrite) return null;
     const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
-    const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
+    const required = getErrorHuntRequired(q);
     if (selected.length !== required) return null;
     return { rewrite, selectedTokens: selected };
   }
@@ -5785,7 +5789,7 @@ function buildPreviewHostQuestion(q) {
       pairs: q.pairs || [],
     };
   }
-  if (q.type === 'error_hunt') return { ...base, corrected: q.corrected, requiredErrors: q.requiredErrors };
+  if (q.type === 'error_hunt') return { ...base, corrected: q.corrected, correctedVariants: q.correctedVariants, requiredErrors: q.requiredErrors };
   return base;
 }
 
@@ -5815,9 +5819,8 @@ function evaluatePreviewAnswer(q, answer) {
     return { correct: isMatchPairsCorrect(guess, q.pairs || []) };
   }
   if (q.type === 'error_hunt') {
-    const rewrite = normalizeTextAnswer(answer?.rewrite || '');
-    const corrected = normalizeTextAnswer(q.corrected || '');
-    return { correct: rewrite && rewrite === corrected };
+    const rewrite = String(answer?.rewrite || '').trim();
+    return { correct: isErrorHuntRewriteCorrect(rewrite, q) };
   }
   if (q.type === 'puzzle') {
     const expected = (q.items || []).map(normalizeTextAnswer).filter(Boolean);
@@ -6325,7 +6328,7 @@ function renderSoloQuestion() {
       const count = Math.max(1, Math.min(10, Number((q.gaps || []).filter(Boolean).length || 1)));
       renderInlineContextGapInputs(answersEl, q.prompt, count, 'soloGap');
     } else if (q.type === 'error_hunt') {
-      const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
+      const required = getErrorHuntRequired(q);
       const info = document.createElement('p');
       info.className = 'small';
       info.textContent = `Find ${required} wrong token(s), then rewrite.`;
@@ -6523,9 +6526,10 @@ function evaluateSoloQuestion(q) {
     const rewrite = String(document.getElementById('soloErrorRewrite')?.value || '').trim();
     if (!rewrite) return { correct: false, hint: 'Rewrite the sentence first.' };
     const selected = [...answersEl.querySelectorAll('[data-solo-error-token].active')];
-    const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
+    const required = getErrorHuntRequired(q);
     if (selected.length !== required) return { correct: false, hint: `Select exactly ${required} token(s).` };
-    return { correct: normalizeTextAnswer(rewrite) === normalizeTextAnswer(q.corrected || ''), hint: `Corrected: ${q.corrected || ''}` };
+    const ok = isErrorHuntRewriteCorrect(rewrite, q);
+    return { correct: ok, hint: ok ? '' : `Expected: ${getCorrectedVariantsList(q.corrected, q.correctedVariants)[0] || ''}` };
   }
 
   if (q.type === 'puzzle') {
@@ -7002,9 +7006,10 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'error_hunt') {
-      const corrected = String(q.corrected || '').slice(0, 160).trim();
+      const variants = getCorrectedVariantsList(q.corrected, q.correctedVariants).map((v) => v.slice(0, 160)).filter(Boolean);
+      const corrected = variants[0] || '';
       if (!corrected) return;
-      normalized.questions.push({ ...base, corrected });
+      normalized.questions.push({ ...base, corrected, correctedVariants: variants });
       return;
     }
 
@@ -7620,7 +7625,37 @@ function tokenizeWords(text) {
   return String(text || '').trim().split(/\s+/).filter(Boolean);
 }
 
-function countErrorHuntRequiredTokens(prompt, corrected) {
+function tokenEditDistance(aTokens, bTokens) {
+  const a = aTokens || [];
+  const b = bTokens || [];
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const same = normalizeTextAnswer(a[i - 1]) === normalizeTextAnswer(b[j - 1]);
+      dp[i][j] = same
+        ? dp[i - 1][j - 1]
+        : Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + 1);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function getCorrectedVariantsList(corrected, correctedVariants) {
+  if (Array.isArray(correctedVariants) && correctedVariants.length) {
+    return correctedVariants.map((v) => String(v || '').trim()).filter(Boolean);
+  }
+  const raw = String(corrected || '').trim();
+  if (!raw) return [];
+  return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
+}
+
+function countErrorHuntRequiredTokens(prompt, correctedSource) {
+  const variants = getCorrectedVariantsList(correctedSource, Array.isArray(correctedSource) ? correctedSource : null);
+  const corrected = variants[0] || '';
   const source = tokenizeWords(prompt);
   const target = tokenizeWords(corrected);
   const rows = source.length + 1;
@@ -7645,7 +7680,26 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  return dp[source.length][target.length];
+  return dp[source.length][target.length] || 1;
+}
+
+function getErrorHuntRequired(q) {
+  if (!q) return 1;
+  return Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, getCorrectedVariantsList(q.corrected, q.correctedVariants))));
+}
+
+function isErrorHuntRewriteCorrect(rewrite, q) {
+  const variants = getCorrectedVariantsList(q?.corrected, q?.correctedVariants);
+  if (!variants.length) return false;
+  const rewriteNorm = normalizeTextAnswer(rewrite);
+  const rewriteTokens = tokenizeWords(rewriteNorm);
+  for (const v of variants) {
+    const vNorm = normalizeTextAnswer(v);
+    if (rewriteNorm === vNorm) return true;
+    const dist = tokenEditDistance(rewriteTokens, tokenizeWords(vNorm));
+    if (dist <= 1) return true;
+  }
+  return false;
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
