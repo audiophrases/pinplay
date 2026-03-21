@@ -5407,6 +5407,7 @@ function renderJoinQuestion(question) {
         b.dataset.tokenText = tok;
         b.textContent = tok;
 
+        const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
         const makeEditable = () => {
           const input = document.createElement('input');
           input.type = 'text';
@@ -5421,10 +5422,9 @@ function renderJoinQuestion(question) {
           input.addEventListener('blur', () => {
             const newText = String(input.value || '').trim();
             if (newText) {
-              // Merge with next token if it matches concatenation (e.g., every + day => everyday)
               const nextBtn = b.nextElementSibling?.dataset?.tokenText ? b.nextElementSibling : null;
               const mergedCandidate = (b.dataset.tokenText || '') + (nextBtn ? nextBtn.dataset.tokenText || '' : '');
-              if (nextBtn && newText.toLowerCase() === mergedCandidate.toLowerCase()) {
+              if (nextBtn && normalizeToken(newText) === normalizeToken(mergedCandidate)) {
                 nextBtn.remove();
               }
               b.dataset.tokenText = newText;
@@ -6388,6 +6388,7 @@ function renderSoloQuestion() {
         b.dataset.tokenText = tok;
         b.textContent = tok;
 
+        const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
         const makeEditable = () => {
           const input = document.createElement('input');
           input.type = 'text';
@@ -6404,7 +6405,7 @@ function renderSoloQuestion() {
             if (newText) {
               const nextBtn = b.nextElementSibling?.dataset?.tokenText ? b.nextElementSibling : null;
               const mergedCandidate = (b.dataset.tokenText || '') + (nextBtn ? nextBtn.dataset.tokenText || '' : '');
-              if (nextBtn && newText.toLowerCase() === mergedCandidate.toLowerCase()) {
+              if (nextBtn && normalizeToken(newText) === normalizeToken(mergedCandidate)) {
                 nextBtn.remove();
               }
               b.dataset.tokenText = newText;
