@@ -5406,7 +5406,46 @@ function renderJoinQuestion(question) {
         b.dataset.errorToken = String(i);
         b.dataset.tokenText = tok;
         b.textContent = tok;
-        b.addEventListener('click', () => {
+
+        const makeEditable = () => {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = b.dataset.tokenText || b.textContent || '';
+          input.style.minWidth = '80px';
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              input.blur();
+            }
+          });
+          input.addEventListener('blur', () => {
+            const newText = String(input.value || '').trim();
+            if (newText) {
+              // Merge with next token if it matches concatenation (e.g., every + day => everyday)
+              const nextBtn = b.nextElementSibling?.dataset?.tokenText ? b.nextElementSibling : null;
+              const mergedCandidate = (b.dataset.tokenText || '') + (nextBtn ? nextBtn.dataset.tokenText || '' : '');
+              if (nextBtn && newText.toLowerCase() === mergedCandidate.toLowerCase()) {
+                nextBtn.remove();
+              }
+              b.dataset.tokenText = newText;
+              b.textContent = newText;
+            }
+            b.classList.remove('editing');
+            if (b.contains(input)) b.removeChild(input);
+          });
+          b.classList.add('editing');
+          b.innerHTML = '';
+          b.appendChild(input);
+          input.focus();
+          input.select();
+        };
+
+        b.addEventListener('click', (e) => {
+          if (b.classList.contains('editing')) return;
+          if (e.altKey || e.metaKey || e.ctrlKey) {
+            makeEditable();
+            return;
+          }
           const isActive = b.classList.contains('active');
           if (isActive) {
             b.classList.remove('active');
@@ -5416,6 +5455,9 @@ function renderJoinQuestion(question) {
           if (activeCount >= required) return;
           b.classList.add('active');
         });
+
+        b.addEventListener('dblclick', () => makeEditable());
+
         tokenWrap.appendChild(b);
       });
       joinAnswersEl.appendChild(tokenWrap);
@@ -6345,7 +6387,45 @@ function renderSoloQuestion() {
         b.dataset.soloErrorToken = String(i);
         b.dataset.tokenText = tok;
         b.textContent = tok;
-        b.addEventListener('click', () => {
+
+        const makeEditable = () => {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = b.dataset.tokenText || b.textContent || '';
+          input.style.minWidth = '80px';
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              input.blur();
+            }
+          });
+          input.addEventListener('blur', () => {
+            const newText = String(input.value || '').trim();
+            if (newText) {
+              const nextBtn = b.nextElementSibling?.dataset?.tokenText ? b.nextElementSibling : null;
+              const mergedCandidate = (b.dataset.tokenText || '') + (nextBtn ? nextBtn.dataset.tokenText || '' : '');
+              if (nextBtn && newText.toLowerCase() === mergedCandidate.toLowerCase()) {
+                nextBtn.remove();
+              }
+              b.dataset.tokenText = newText;
+              b.textContent = newText;
+            }
+            b.classList.remove('editing');
+            if (b.contains(input)) b.removeChild(input);
+          });
+          b.classList.add('editing');
+          b.innerHTML = '';
+          b.appendChild(input);
+          input.focus();
+          input.select();
+        };
+
+        b.addEventListener('click', (e) => {
+          if (b.classList.contains('editing')) return;
+          if (e.altKey || e.metaKey || e.ctrlKey) {
+            makeEditable();
+            return;
+          }
           const isActive = b.classList.contains('active');
           if (isActive) {
             b.classList.remove('active');
@@ -6355,6 +6435,9 @@ function renderSoloQuestion() {
           if (activeCount >= required) return;
           b.classList.add('active');
         });
+
+        b.addEventListener('dblclick', () => makeEditable());
+
         tokenWrap.appendChild(b);
       });
       answersEl.appendChild(tokenWrap);
