@@ -440,8 +440,7 @@ textarea { min-height: 72px; resize: vertical; }
   white-space: nowrap;
 }
 .answers-grid.puzzle-selected .answer-row strong {
-  min-width: 0;
-  font-weight: 700;
+  display: none;
 }
 .btn.puzzle-reset {
   align-self: center;
