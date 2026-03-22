@@ -967,6 +967,8 @@ textarea { min-height: 72px; resize: vertical; }
   flex-direction: column;
   align-items: center;
   min-height: auto;
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 #joinCard.question-active #joinAnswers {
@@ -977,20 +979,21 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .3rem;
   justify-items: center;
   margin: 0 auto;
+  flex: 1 1 auto;
 }
 #joinCard.question-active #joinAnswers.two-col {
   grid-template-columns: 1fr 1fr;
   gap: .3rem .4rem;
 }
 
-/* When no image, avoid large vertical gap; allow flow with slight padding */
+/* When no image, center content but keep footer sticky */
 #joinCard.question-active:not(.has-image) #joinAnswers {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
-  padding-bottom: 1.5rem;
+  min-height: 50vh;
+  padding-bottom: 0.5rem;
 }
 
 #joinCard.question-active .answer-row {
@@ -1005,23 +1008,23 @@ textarea { min-height: 72px; resize: vertical; }
   position: sticky;
   bottom: 0;
   z-index: 4;
-  padding-top: .3rem;
-  margin-top: .4rem;
+  padding-top: .2rem;
+  margin-top: .3rem;
   margin-bottom: 0;
-  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 35%, rgba(247,248,251,1));
+  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 40%, rgba(247,248,251,1));
 }
 
 /* Trim bottom spacing and make submission sticky */
-#joinCard.question-active { padding-bottom: 0.2rem; }
+#joinCard.question-active { padding-bottom: 0.1rem; }
 #joinSubmission {
   position: sticky;
   bottom: 0;
   margin-bottom: 0;
-  padding: 0.25rem 0;
+  padding: 0.18rem 0;
   background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,1));
   z-index: 4;
 }
-#joinSubmission .btn { padding: 0.3rem 0.85rem; }
+#joinSubmission .btn { padding: 0.25rem 0.8rem; }
 
 /* Image hero layout - full width, items below */
 #joinCard.question-active.has-image #joinAnswers.has-question-image {
