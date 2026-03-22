@@ -826,7 +826,7 @@ function bindBuilderEvents() {
       if (!q || q.type !== 'pin') return;
       const zones = normalizePinZones(q);
       if (zones.length >= 12) return;
-      zones.push({ x: 50, y: 50, r: zones[0]?.r || 15 });
+      zones.push({ x: 50, y: 50, r: zones[0]?.r || 7 });
       q.zones = zones;
       renderBuilder();
       return;
@@ -839,7 +839,7 @@ function bindBuilderEvents() {
       const q = quiz.questions[idx];
       if (!q || q.type !== 'pin') return;
       const zones = normalizePinZones(q).filter((_, i) => i !== zi);
-      q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
+      q.zones = zones;
       renderBuilder();
       return;
     }
@@ -7014,22 +7014,25 @@ function makePinQuestion() {
     points: 1000,
     timeLimit: 0,
     imageData: '',
-    zones: [{ x: 50, y: 50, r: 15 }],
+    zones: [],
     pinMode: 'all',
   };
 }
 
 function normalizePinZones(question) {
-  const source = Array.isArray(question?.zones) && question.zones.length
-    ? question.zones
-    : (question?.zone ? [question.zone] : [{ x: 50, y: 50, r: 15 }]);
+  let source = [];
+  if (Array.isArray(question?.zones) && question.zones.length) {
+    source = question.zones;
+  } else if (question?.zone) {
+    source = [question.zone];
+  }
 
   return source
     .slice(0, 12)
     .map((z) => ({
       x: round(clamp(Number(z?.x ?? 50), 0, 100), 1),
       y: round(clamp(Number(z?.y ?? 50), 0, 100), 1),
-      r: round(clamp(Number(z?.r ?? 15), 1, 100), 1),
+      r: round(clamp(Number(z?.r ?? 7), 1, 100), 1),
     }));
 }
 
