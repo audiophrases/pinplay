@@ -194,7 +194,8 @@ let previewMode = {
   prevPrimaryAudioHost: null,
 };
 let createSessionPassword = '';
-let assignmentResultsCache = null;\nlet assignmentInstantFeedbackEnabled = false;
+let assignmentResultsCache = null;
+let assignmentInstantFeedbackEnabled = false;
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -2670,7 +2671,11 @@ async function runAssignmentSelfCheck() {
 
     const results = await api('/api/assignments/results', {
       method: 'POST',
-      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code },
+      body: {
+        password: createSessionPassword,
+        instantFeedback: assignmentInstantFeedbackEnabled,
+        code,
+      },
     });
     const hasAttempt = Array.isArray(results?.attempts) && results.attempts.some((a) => String(a?.id || '') === attemptId);
     if (!hasAttempt) throw new Error('Attempt not found in teacher results.');
@@ -2678,19 +2683,34 @@ async function runAssignmentSelfCheck() {
 
     await api('/api/assignments/reopen-attempt', {
       method: 'POST',
-      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, attemptId },
+      body: {
+        password: createSessionPassword,
+        instantFeedback: assignmentInstantFeedbackEnabled,
+        code,
+        attemptId,
+      },
     });
     mark('Reopen attempt', true);
 
     await api('/api/assignments/toggle-active', {
       method: 'POST',
-      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, active: false },
+      body: {
+        password: createSessionPassword,
+        instantFeedback: assignmentInstantFeedbackEnabled,
+        code,
+        active: false,
+      },
     });
     mark('Close assignment', true);
 
     await api('/api/assignments/toggle-active', {
       method: 'POST',
-      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, active: true },
+      body: {
+        password: createSessionPassword,
+        instantFeedback: assignmentInstantFeedbackEnabled,
+        code,
+        active: true,
+      },
     });
     mark('Reopen assignment', true);
 
@@ -2996,7 +3016,11 @@ async function refreshAssignmentsList() {
           deleteBtn.disabled = true;
           await api('/api/assignments/delete', {
             method: 'POST',
-            body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code },
+            body: {
+              password: createSessionPassword,
+              instantFeedback: assignmentInstantFeedbackEnabled,
+              code,
+            },
           });
           if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
           await refreshAssignmentsList();
@@ -3018,7 +3042,15 @@ async function refreshAssignmentsList() {
   }
 }
 
-async function toggleInstantFeedbackMode() {\n  assignmentInstantFeedbackEnabled = !assignmentInstantFeedbackEnabled;\n  if (assignmentInstantFeedbackBtn) {\n    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentInstantFeedbackEnabled);\n    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentInstantFeedbackEnabled ? 'true' : 'false');\n  }\n}\n\nfunction createAssignmentFromCurrentQuiz() {
+async function toggleInstantFeedbackMode() {
+  assignmentInstantFeedbackEnabled = !assignmentInstantFeedbackEnabled;
+  if (assignmentInstantFeedbackBtn) {
+    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentInstantFeedbackEnabled);
+    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentInstantFeedbackEnabled ? 'true' : 'false');
+  }
+}
+
+async function createAssignmentFromCurrentQuiz() {
   try {
     syncQuizFromUI();
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
