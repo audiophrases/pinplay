@@ -709,6 +709,21 @@ function bindBuilderEvents() {
       const text = await file.text();
       const parsed = JSON.parse(text);
       validateImportedQuiz(parsed);
+      // Normalize prompts/corrections on import for compatibility
+      parsed.questions = (parsed.questions || []).map((q) => {
+        const next = { ...q };
+        if (!next.prompt && next.question) next.prompt = next.question;
+        if (!Array.isArray(next.correctedVariants) && next.corrected) {
+          next.correctedVariants = String(next.corrected).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
+        }
+        if (!next.corrected && Array.isArray(next.correctedVariants) && next.correctedVariants.length) {
+          next.corrected = next.correctedVariants[0];
+        }
+        if (!next.requiredErrors && next.prompt && next.corrected) {
+          next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
+        }
+        return next;
+      });
       quiz = parsed;
       collapseAllQuestions(quiz);
       renderBuilder();
