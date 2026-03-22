@@ -1140,7 +1140,7 @@ function renderJoinQuestion(question) {
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
       renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
     } else if (question.type === 'error_hunt') {
-      const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected])));
+      const required = Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
       const promptEl = document.getElementById('joinPrompt');
       if (promptEl) {
         promptEl.innerHTML = '';
@@ -1569,7 +1569,7 @@ function readJoinAnswer() {
   if (q.type === 'error_hunt') {
     const selectedChips = [...joinAnswersEl.querySelectorAll('[data-error-token]')];
     const selected = selectedChips.filter((el) => el.classList.contains('active')).map((el) => Number(el.dataset.errorToken));
-    const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
+    const required = Math.max(1, countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]));
     if (selected.length !== required) return null;
     const rewrite = selectedChips
       .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
