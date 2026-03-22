@@ -1140,11 +1140,9 @@ function renderJoinQuestion(question) {
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
       renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
     } else if (question.type === 'error_hunt') {
-      const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
-      const info = document.createElement('p');
-      info.className = 'small';
-      info.textContent = `Find ${required} wrong token(s).`;
-      joinAnswersEl.appendChild(info);
+      const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected])));
+      const promptEl = document.getElementById('joinPrompt');
+      if (promptEl) promptEl.textContent = `Correct ${required} mistake${required > 1 ? 's' : ''}: ${question.prompt}`;
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'error-token-wrap';
@@ -2592,8 +2590,8 @@ function mergeJoinTokens(tokens) {
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(corrected);
+  const source = mergeJoinTokens(tokenizeWords(prompt));
+  const target = mergeJoinTokens(tokenizeWords(corrected));
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -2616,7 +2614,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  return dp[source.length][target.length];
+  return dp[source.length][target.length] || 1;
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
