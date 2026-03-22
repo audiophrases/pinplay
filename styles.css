@@ -949,7 +949,7 @@ textarea { min-height: 72px; resize: vertical; }
   margin: .2rem 0 .36rem;
   line-height: 1.18;
   text-align: center;
-  color: inherit;
+  color: #111;
   font-weight: 600;
 }
 
@@ -958,8 +958,8 @@ textarea { min-height: 72px; resize: vertical; }
   font-weight: 400;
 }
 .prompt-main {
-  color: inherit;
-  font-weight: 600;
+  color: #111;
+  font-weight: 700;
 }
 
 #joinQuestionWrap {
