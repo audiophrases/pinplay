@@ -1143,14 +1143,16 @@ function renderJoinQuestion(question) {
       const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.corrected)));
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
+      info.textContent = `Find ${required} wrong token(s).`;
       joinAnswersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'error-token-wrap';
       tokenWrap.style.flexWrap = 'wrap';
       tokenWrap.style.justifyContent = 'center';
-      const tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
+      let tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
+      // Merge common pairs like "every day" into a single token
+      tokens = mergeJoinTokens(tokens);
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -1172,15 +1174,8 @@ function renderJoinQuestion(question) {
       });
       joinAnswersEl.appendChild(tokenWrap);
 
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.id = 'joinErrorRewrite';
-      input.maxLength = 160;
-      input.placeholder = 'Rewrite the corrected sentence';
-      input.className = 'top-space';
-      input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
-      joinAnswersEl.appendChild(input);
-      enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', input);
+      // Enable inline edits/merges; rewrite will be built from tokens on submit
+      enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
     } else if (question.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
@@ -1565,11 +1560,16 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'error_hunt') {
-    const rewrite = String(document.getElementById('joinErrorRewrite')?.value || '').trim();
-    if (!rewrite) return null;
-    const selected = [...joinAnswersEl.querySelectorAll('[data-error-token].active')].map((el) => Number(el.dataset.errorToken));
+    const selectedChips = [...joinAnswersEl.querySelectorAll('[data-error-token]')];
+    const selected = selectedChips.filter((el) => el.classList.contains('active')).map((el) => Number(el.dataset.errorToken));
     const required = Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, q.corrected)));
     if (selected.length !== required) return null;
+    const rewrite = selectedChips
+      .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (!rewrite) return null;
     return { rewrite, selectedTokens: selected };
   }
 
@@ -2573,6 +2573,22 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function mergeJoinTokens(tokens) {
+  const merged = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const cur = String(tokens[i] || '').trim();
+    const next = String(tokens[i + 1] || '').trim();
+    const pair = `${cur} ${next}`.toLowerCase();
+    if (cur && next && pair === 'every day') {
+      merged.push(`${cur} ${next}`);
+      i += 1;
+    } else {
+      if (cur) merged.push(cur);
+    }
+  }
+  return merged;
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
