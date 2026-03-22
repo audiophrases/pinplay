@@ -493,6 +493,18 @@ textarea { min-height: 72px; resize: vertical; }
   color: #fff;
 }
 .btn.success:hover { background: #15803d; }
+
+/* Light green emphasis for Create assignment button */
+#createAssignmentBtn {
+  border-color: #34d399;
+  background: #d1fae5;
+  color: #065f46;
+}
+#createAssignmentBtn:hover {
+  background: #b7f0d6;
+  border-color: #22c55e;
+}
+
 .file-label {
   display: inline-flex;
   align-items: center;
