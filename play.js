@@ -603,7 +603,10 @@ async function finalizeAssignmentAttempt() {
     const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
     setJoinStatusHud(submittedText, 'ok');
     setStatus(joinStatusEl, submittedText, 'ok');
-    showAssignmentCompleteMessage(submittedText);
+    showAssignmentCompleteMessage(submittedText, {
+      title: 'Assignment submitted 🎉',
+      submitted: true,
+    });
     renderInstantFeedbackFromState();
     await loadAssignmentState();
   } catch (err) {
@@ -613,21 +616,62 @@ async function finalizeAssignmentAttempt() {
   }
 }
 
-function showAssignmentCompleteMessage(text) {
+function hideAssignmentCompleteMessage() {
+  const existing = document.getElementById('assignmentCompleteMessage');
+  if (existing) existing.remove();
+  if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
+}
+
+function showAssignmentCompleteMessage(text, opts = {}) {
   const wrap = joinQuestionWrap || joinCardEl;
   if (!wrap) return;
-  const existing = document.getElementById('assignmentCompleteMessage');
-  if (existing) {
-    existing.textContent = text || 'Assignment submitted. You have completed this attempt.';
-    existing.classList.remove('hidden');
-    return;
+
+  const {
+    title = '',
+    showFinishButton = false,
+    finishLabel = 'Submit assignment',
+    submitted = false,
+  } = opts || {};
+
+  const submissionWrap = document.getElementById('joinSubmission');
+  if (submissionWrap) submissionWrap.classList.remove('hidden');
+  if (joinSubmitBtn) {
+    joinSubmitBtn.disabled = true;
+    joinSubmitBtn.classList.add('hidden');
   }
-  const msg = document.createElement('div');
-  msg.id = 'assignmentCompleteMessage';
-  msg.className = 'assignment-complete';
-  msg.textContent = text || 'Assignment submitted. You have completed this attempt.';
-  wrap.appendChild(msg);
-  if (joinSubmission) joinSubmission.classList.add('hidden');
+
+  let box = document.getElementById('assignmentCompleteMessage');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'assignmentCompleteMessage';
+    box.className = 'assignment-complete';
+    wrap.appendChild(box);
+  }
+  box.classList.remove('hidden');
+  box.innerHTML = '';
+
+  if (title) {
+    const titleEl = document.createElement('div');
+    titleEl.style.fontSize = '1.08rem';
+    titleEl.style.marginBottom = '0.35rem';
+    titleEl.textContent = title;
+    box.appendChild(titleEl);
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.textContent = text || 'Assignment submitted. You have completed this attempt.';
+  box.appendChild(bodyEl);
+
+  if (showFinishButton && !submitted) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn primary top-space';
+    btn.textContent = finishLabel;
+    btn.addEventListener('click', () => {
+      finalizeAssignmentAttempt().catch(() => {});
+    });
+    box.appendChild(btn);
+  }
 }
 
 function renderInstantFeedbackFromState() {
@@ -809,6 +853,37 @@ function renderPlayerState(state) {
     modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : '';
   }
 
+  const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
+  const assignmentTotal = Number(state.totalQuestions || 0);
+  const answeredSet = new Set(Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.map((x) => Number(x)) : []);
+  const allAssignmentAnswersSaved = live.player.mode === 'assignment' && assignmentTotal > 0 && answeredSet.size >= assignmentTotal;
+
+  if (allAssignmentAnswersSaved && !assignmentSubmitted) {
+    stopJoinTimer();
+    if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
+    if (joinProgressEl) joinProgressEl.textContent = `Completed ${answeredSet.size} / ${assignmentTotal}`;
+    if (joinPromptEl) joinPromptEl.textContent = 'End of quiz 🎉';
+    if (joinAnswersEl) joinAnswersEl.innerHTML = '';
+    if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
+    if (assignmentNextBtn) assignmentNextBtn.classList.add('hidden');
+    if (assignmentNextPendingBtn) assignmentNextPendingBtn.classList.add('hidden');
+    if (assignmentBannerEl) {
+      assignmentBannerEl.classList.remove('hidden');
+      assignmentBannerEl.textContent = 'All answers saved. Submit assignment to finish.';
+    }
+    setJoinStatusHud('All answers saved ✅', 'ok');
+    setStatus(joinStatusEl, 'End of quiz reached. Submit assignment to finish.', 'ok');
+    showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
+      title: 'End of quiz 🎉',
+      showFinishButton: true,
+      finishLabel: 'Submit assignment',
+    });
+    scheduleJoinAdaptiveFit();
+    return;
+  }
+
+  hideAssignmentCompleteMessage();
+
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
 
   // Play answering ambient when entering a new question in assignment mode
@@ -847,8 +922,6 @@ function renderPlayerState(state) {
     playAssignmentSfx('hall');
     lastClosedQuestionIndex = state.currentIndex;
   }
-
-  const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
 
   if (joinSubmitBtn) {
     const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
