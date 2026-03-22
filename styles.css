@@ -966,7 +966,7 @@ textarea { min-height: 72px; resize: vertical; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 70vh;
+  min-height: auto;
 }
 
 #joinCard.question-active #joinAnswers {
@@ -983,13 +983,14 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .3rem .4rem;
 }
 
-/* When no image, center answers vertically */
+/* When no image, avoid large vertical gap; allow flow with slight padding */
 #joinCard.question-active:not(.has-image) #joinAnswers {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 50vh;
+  justify-content: flex-start;
+  min-height: auto;
+  padding-bottom: 2.5rem;
 }
 
 #joinCard.question-active .answer-row {
@@ -1000,25 +1001,26 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
-  position: static;
-  bottom: auto;
-  z-index: 1;
-  padding-top: .34rem;
-  margin-top: .5rem;
-  margin-bottom: 0.25rem;
-  background: transparent;
-}
-#joinCard.question-active.has-image #joinQuestionWrap > .row.gap.top-space {
   position: sticky;
   bottom: 0;
   z-index: 4;
-  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 28%, rgba(247,248,251,1));
+  padding-top: .3rem;
+  margin-top: .4rem;
+  margin-bottom: 0;
+  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 35%, rgba(247,248,251,1));
 }
 
-/* Trim bottom spacing */
-#joinCard.question-active { padding-bottom: 0.4rem; }
-#joinSubmission { margin-bottom: 0; }
-#joinSubmission .btn { padding: 0.35rem 0.9rem; }
+/* Trim bottom spacing and make submission sticky */
+#joinCard.question-active { padding-bottom: 0.2rem; }
+#joinSubmission {
+  position: sticky;
+  bottom: 0;
+  margin-bottom: 0;
+  padding: 0.25rem 0;
+  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,1));
+  z-index: 4;
+}
+#joinSubmission .btn { padding: 0.3rem 0.85rem; }
 
 /* Image hero layout - full width, items below */
 #joinCard.question-active.has-image #joinAnswers.has-question-image {
