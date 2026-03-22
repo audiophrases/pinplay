@@ -2975,11 +2975,15 @@ function evaluate(question, answer) {
   if (question.type === 'error_hunt') {
     const rewrite = normalizeTextAnswer(answer?.rewrite ?? answer);
     const expected = normalizeTextAnswer(question.corrected || '');
+    const variants = Array.isArray(question.correctedVariants) ? question.correctedVariants : [];
+    const normalizedVariants = variants.map((v) => normalizeTextAnswer(v));
     const selected = Array.isArray(answer?.selectedTokens) ? answer.selectedTokens.map((x) => Number(x)).filter(Number.isFinite) : [];
     const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
     const uniqueCount = new Set(selected).size;
     if (uniqueCount !== required) return { correct: false };
-    return { correct: !!rewrite && rewrite === expected };
+    if (!rewrite) return { correct: false };
+    const isCorrect = rewrite === expected || normalizedVariants.includes(rewrite);
+    return { correct: isCorrect };
   }
 
   if (question.type === 'puzzle') {
@@ -3121,8 +3125,11 @@ function normalizeQuiz(quiz) {
     if (q.type === 'error_hunt') {
       const corrected = String(q.corrected || '').slice(0, 160).trim();
       if (!corrected) return;
+      const correctedVariants = Array.isArray(q.correctedVariants)
+        ? q.correctedVariants.map((x) => String(x || '').slice(0, 160).trim()).filter(Boolean).slice(0, 12)
+        : [];
       const requiredErrors = countErrorHuntRequiredTokens(base.prompt, corrected);
-      normalized.questions.push({ ...base, corrected, requiredErrors });
+      normalized.questions.push({ ...base, corrected, correctedVariants, requiredErrors });
       return;
     }
 
