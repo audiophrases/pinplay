@@ -949,6 +949,8 @@ textarea { min-height: 72px; resize: vertical; }
   margin: .2rem 0 .36rem;
   line-height: 1.18;
   text-align: center;
+  color: #8b949e;
+  font-weight: 400;
 }
 
 #joinQuestionWrap {
