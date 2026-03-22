@@ -1486,6 +1486,17 @@ textarea { min-height: 72px; resize: vertical; }
   box-shadow: none;
 }
 
+.assignment-complete {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background: rgba(63,185,80,0.12);
+  border: 1px solid rgba(63,185,80,0.35);
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 700;
+  color: #1f3a1f;
+}
+
 @media (max-width: 860px) {
   #joinPrompt.with-image {
     display: inline-block;

@@ -599,13 +599,33 @@ async function finalizeAssignmentAttempt() {
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
-    setJoinStatusHud( data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅', 'ok');
+    const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
+    setJoinStatusHud(submittedText, 'ok');
+    setStatus(joinStatusEl, submittedText, 'ok');
+    showAssignmentCompleteMessage(submittedText);
     await loadAssignmentState();
   } catch (err) {
-    setJoinStatusHud( String(err?.message || 'Could not submit assignment.'), 'bad');
+    setJoinStatusHud(String(err?.message || 'Could not submit assignment.'), 'bad');
   } finally {
     if (joinFinalizeBtn) joinFinalizeBtn.disabled = false;
   }
+}
+
+function showAssignmentCompleteMessage(text) {
+  const wrap = joinQuestionWrap || joinCardEl;
+  if (!wrap) return;
+  const existing = document.getElementById('assignmentCompleteMessage');
+  if (existing) {
+    existing.textContent = text || 'Assignment submitted. You have completed this attempt.';
+    existing.classList.remove('hidden');
+    return;
+  }
+  const msg = document.createElement('div');
+  msg.id = 'assignmentCompleteMessage';
+  msg.className = 'assignment-complete';
+  msg.textContent = text || 'Assignment submitted. You have completed this attempt.';
+  wrap.appendChild(msg);
+  if (joinSubmission) joinSubmission.classList.add('hidden');
 }
 
 async function pollPlayerState() {
