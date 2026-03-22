@@ -80,6 +80,7 @@ const hostJoinBtn = document.getElementById('hostJoinBtn');
 const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
+const assignmentInstantFeedbackBtn = document.getElementById('assignmentInstantFeedbackBtn');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const assignmentSelfCheckBtn = document.getElementById('assignmentSelfCheckBtn');
@@ -193,7 +194,7 @@ let previewMode = {
   prevPrimaryAudioHost: null,
 };
 let createSessionPassword = '';
-let assignmentResultsCache = null;
+let assignmentResultsCache = null;\nlet assignmentInstantFeedbackEnabled = false;
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -2389,6 +2390,7 @@ function bindLiveEvents() {
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
+  if (assignmentInstantFeedbackBtn) assignmentInstantFeedbackBtn.addEventListener('click', toggleInstantFeedbackMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.addEventListener('click', runAssignmentSelfCheck);
@@ -2668,7 +2670,7 @@ async function runAssignmentSelfCheck() {
 
     const results = await api('/api/assignments/results', {
       method: 'POST',
-      body: { password: createSessionPassword, code },
+      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code },
     });
     const hasAttempt = Array.isArray(results?.attempts) && results.attempts.some((a) => String(a?.id || '') === attemptId);
     if (!hasAttempt) throw new Error('Attempt not found in teacher results.');
@@ -2676,19 +2678,19 @@ async function runAssignmentSelfCheck() {
 
     await api('/api/assignments/reopen-attempt', {
       method: 'POST',
-      body: { password: createSessionPassword, code, attemptId },
+      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, attemptId },
     });
     mark('Reopen attempt', true);
 
     await api('/api/assignments/toggle-active', {
       method: 'POST',
-      body: { password: createSessionPassword, code, active: false },
+      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, active: false },
     });
     mark('Close assignment', true);
 
     await api('/api/assignments/toggle-active', {
       method: 'POST',
-      body: { password: createSessionPassword, code, active: true },
+      body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code, active: true },
     });
     mark('Reopen assignment', true);
 
@@ -2994,7 +2996,7 @@ async function refreshAssignmentsList() {
           deleteBtn.disabled = true;
           await api('/api/assignments/delete', {
             method: 'POST',
-            body: { password: createSessionPassword, code },
+            body: {\n        password: createSessionPassword,\n        instantFeedback: assignmentInstantFeedbackEnabled,\n code },
           });
           if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
           await refreshAssignmentsList();
@@ -3016,7 +3018,7 @@ async function refreshAssignmentsList() {
   }
 }
 
-async function createAssignmentFromCurrentQuiz() {
+async function toggleInstantFeedbackMode() {\n  assignmentInstantFeedbackEnabled = !assignmentInstantFeedbackEnabled;\n  if (assignmentInstantFeedbackBtn) {\n    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentInstantFeedbackEnabled);\n    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentInstantFeedbackEnabled ? 'true' : 'false');\n  }\n}\n\nfunction createAssignmentFromCurrentQuiz() {
   try {
     syncQuizFromUI();
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');

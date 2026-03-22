@@ -447,6 +447,7 @@ async function loadAssignmentState() {
 
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
+  renderInstantFeedbackFromState();
 }
 
 // Load and display previous attempts for a student (disabled: requested removal of history panel)
@@ -603,6 +604,7 @@ async function finalizeAssignmentAttempt() {
     setJoinStatusHud(submittedText, 'ok');
     setStatus(joinStatusEl, submittedText, 'ok');
     showAssignmentCompleteMessage(submittedText);
+    renderInstantFeedbackFromState();
     await loadAssignmentState();
   } catch (err) {
     setJoinStatusHud(String(err?.message || 'Could not submit assignment.'), 'bad');
@@ -626,6 +628,42 @@ function showAssignmentCompleteMessage(text) {
   msg.textContent = text || 'Assignment submitted. You have completed this attempt.';
   wrap.appendChild(msg);
   if (joinSubmission) joinSubmission.classList.add('hidden');
+}
+
+function renderInstantFeedbackFromState() {
+  const state = live.player.assignment.state;
+  const attempt = state?.attempt;
+  const assignment = attempt?.assignment;
+  const answers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
+  const allow = assignment?.instantFeedback && attempt?.submitted && answers.length > 0;
+  if (!allow) return;
+  const wrap = joinQuestionWrap || joinCardEl;
+  if (!wrap) return;
+
+  const existing = document.getElementById('assignmentResultsPanel');
+  if (existing) existing.remove();
+
+  const panel = document.createElement('div');
+  panel.id = 'assignmentResultsPanel';
+  panel.className = 'assignment-results';
+  const title = document.createElement('div');
+  title.className = 'assignment-results-title';
+  title.textContent = 'Results';
+  panel.appendChild(title);
+
+  const list = document.createElement('ul');
+  list.className = 'assignment-results-list';
+
+  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+  answers.forEach((a) => {
+    const q = questions[a.qIndex] || {};
+    const li = document.createElement('li');
+    li.className = a.correct ? 'ok' : 'bad';
+    li.textContent = `${a.correct ? 'Correct' : 'Incorrect'}  ·  ${q.prompt ? String(q.prompt).slice(0, 80) : `Q${a.qIndex + 1}`}`;
+    list.appendChild(li);
+  });
+  panel.appendChild(list);
+  wrap.appendChild(panel);
 }
 
 async function pollPlayerState() {

@@ -541,7 +541,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, instantFeedback: !!body?.instantFeedback, quiz }),
       }));
     }
 
@@ -1344,6 +1344,7 @@ export class QuizRoom {
           attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit ?? 1)), 0, 10),
           dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
           randomNames: !!body?.randomNames,
+          instantFeedback: !!body?.instantFeedback,
           active: true,
           quiz,
         };
@@ -1523,7 +1524,8 @@ export class QuizRoom {
         const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
       }
 
       if (url.pathname === '/assignments/attempt' && request.method === 'GET') {
@@ -1592,12 +1594,13 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
+        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({
           ok: true,
           saved: true,
           qIndex,
           metrics,
-          attempt: publicAssignmentAttempt(assignment, attempt),
+          attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }),
         });
       }
 
@@ -1634,7 +1637,8 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
-        return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt) });
+        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
       }
 
       if (url.pathname === '/assignments/reopen-attempt' && request.method === 'POST') {
@@ -3471,8 +3475,29 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   };
 }
 
-function publicAssignmentAttempt(assignment, attempt) {
+function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false } = {}) {
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
+  const hasTeacherGraded = Array.isArray(assignment?.quiz?.questions)
+    ? assignment.quiz.questions.some((q) => isAssignmentTeacherGradedQuestion(q))
+    : false;
+
+  let answersWithCorrectness = null;
+  if (includeAnswers && !hasTeacherGraded) {
+    const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+    answersWithCorrectness = Object.entries(answers).map(([idxRaw, item]) => {
+      const qIndex = Number(idxRaw);
+      const question = assignment?.quiz?.questions?.[qIndex];
+      if (!question || isAssignmentTeacherGradedQuestion(question)) return null;
+      const verdict = evaluate(question, item?.answer);
+      return {
+        qIndex,
+        correct: verdict?.correct === true,
+        answer: item?.answer ?? null,
+        correctAnswer: hostCorrectSummary(question),
+      };
+    }).filter(Boolean);
+  }
+
   return {
     id: sanitizeAssignmentAttemptId(attempt?.id),
     code: sanitizeAssignmentCode(assignment?.code),
@@ -3485,6 +3510,7 @@ function publicAssignmentAttempt(assignment, attempt) {
     assignment: publicAssignment(assignment, { includeQuiz: true }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
+    answersWithCorrectness,
   };
 }
 
@@ -3572,6 +3598,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10),
     dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
     randomNames: !!assignment.randomNames,
+    instantFeedback: !!assignment.instantFeedback,
     active: !!assignment.active,
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),

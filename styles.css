@@ -1497,6 +1497,28 @@ textarea { min-height: 72px; resize: vertical; }
   color: #1f3a1f;
 }
 
+.assignment-results {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.32);
+  border-radius: 10px;
+}
+.assignment-results-title {
+  font-weight: 700;
+  color: #4338ca;
+  margin-bottom: 0.35rem;
+}
+.assignment-results-list {
+  margin: 0;
+  padding-left: 1rem;
+}
+.assignment-results-list li {
+  margin: 0.15rem 0;
+}
+.assignment-results-list li.ok { color: #15803d; }
+.assignment-results-list li.bad { color: #b91c1c; }
+
 @media (max-width: 860px) {
   #joinPrompt.with-image {
     display: inline-block;
@@ -2369,4 +2391,9 @@ body.no-overlay { overflow: auto !important; }
 #saveCloudBtn:hover {
   background: linear-gradient(135deg, #a7f3d0, #6ee7b7);
   transform: translateY(-1px);
+}
+#assignmentInstantFeedbackBtn.active {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #4338ca;
 }
