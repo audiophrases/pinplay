@@ -743,7 +743,7 @@ export default {
 
             console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
-            const success = vRes.ok && parsed && parsed.ok === true;
+            const success = vRes.ok && (!parsed || parsed.ok !== false);
             if (success) {
               verified = true;
               break;
