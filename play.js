@@ -1647,7 +1647,18 @@ function readJoinAnswer() {
   if (q.type === 'error_hunt') {
     const selectedChips = [...joinAnswersEl.querySelectorAll('[data-error-token]')];
     const selected = selectedChips.filter((el) => el.classList.contains('active')).map((el) => Number(el.dataset.errorToken));
-    const required = Math.max(1, countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]));
+    const required = countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]);
+    if (required === 0) {
+      // No errors expected – accept if the rewritten text (if any) matches the prompt
+      const rewrite = selectedChips
+        .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      const normalizedPrompt = normalizeTextAnswer(q.prompt);
+      const normalizedRewrite = normalizeTextAnswer(rewrite);
+      return normalizedRewrite === normalizedPrompt ? { rewrite, selectedTokens: [] } : null;
+    }
     if (selected.length !== required) return null;
     const rewrite = selectedChips
       .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
@@ -2688,7 +2699,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     for (let i = 0; i < source.length; i++) {
       if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
     }
-    return Math.max(1, diff);
+    return diff;
   }
 
   // Otherwise use edit distance but clamp to avoid over-counting
