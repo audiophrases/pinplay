@@ -988,9 +988,9 @@ textarea { min-height: 72px; resize: vertical; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  min-height: auto;
-  padding-bottom: 2.5rem;
+  justify-content: center;
+  min-height: 60vh;
+  padding-bottom: 1.5rem;
 }
 
 #joinCard.question-active .answer-row {
@@ -998,6 +998,7 @@ textarea { min-height: 72px; resize: vertical; }
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
+  align-items: center;
 }
 
 #joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
