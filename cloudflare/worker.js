@@ -740,8 +740,9 @@ export default {
             let parsed = {};
             try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
 
-            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, statusCode: vRes.ok, response: vTxt.slice(0, 200) });
+            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, statusCode: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
+            // Consider any 2xx response a pass unless parsed.ok === false
             if (vRes.ok && (!parsed || parsed.ok !== false)) {
               verified = true;
               break;
