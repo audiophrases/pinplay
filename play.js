@@ -1142,7 +1142,16 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'error_hunt') {
       const required = Math.max(1, Number(question.requiredErrors || countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected])));
       const promptEl = document.getElementById('joinPrompt');
-      if (promptEl) promptEl.textContent = `Correct ${required} mistake${required > 1 ? 's' : ''}: ${question.prompt}`;
+      if (promptEl) {
+        promptEl.innerHTML = '';
+        const pref = document.createElement('span');
+        pref.className = 'prompt-prefix';
+        pref.textContent = `Correct ${required} mistake${required > 1 ? 's' : ''}: `;
+        const main = document.createElement('span');
+        main.className = 'prompt-main';
+        main.textContent = String(question.prompt || '').trim();
+        promptEl.append(pref, main);
+      }
 
       const tokenWrap = document.createElement('div');
       tokenWrap.className = 'error-token-wrap';
