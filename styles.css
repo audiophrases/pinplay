@@ -1458,22 +1458,47 @@ textarea { min-height: 72px; resize: vertical; }
   margin-top: -.2rem;
 }
 
+/* Keep image and tokens sharing the same central column, no overlap with bottom buttons */
+#joinCard.question-active.has-image #joinAnswers.has-question-image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
+#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview {
+  width: 100%;
+  max-width: 920px;
+  aspect-ratio: 16 / 9;
+  max-height: 60vh;
+  min-height: 240px;
+}
+#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview):not(.pin-preview) {
+  width: 100%;
+  max-width: 920px;
+}
+
 #joinPrompt.with-image {
   position: relative;
   z-index: 3;
+  background: rgba(255,255,255,0.78);
+  color: #0f172a;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+  box-shadow: none;
 }
 
 @media (max-width: 860px) {
   #joinPrompt.with-image {
     display: inline-block;
-    margin: 0 0 -.55rem;
+    margin: 0 0 -.4rem;
     padding: .38rem .6rem;
     border-radius: .62rem;
-    background: linear-gradient(180deg, rgba(15,23,42,.78), rgba(15,23,42,.56));
-    color: #fff;
-    text-shadow: 0 2px 5px rgba(0,0,0,.55), 0 0 1px rgba(0,0,0,.8);
-    -webkit-text-stroke: .25px rgba(0,0,0,.35);
-    box-shadow: 0 6px 18px rgba(15,23,42,.28);
+    background: rgba(255,255,255,0.78);
+    color: #0f172a;
+    text-shadow: none;
+    -webkit-text-stroke: 0;
+    box-shadow: none;
   }
 
   #joinAnswers.has-question-image .question-image-preview {
@@ -1708,7 +1733,7 @@ body.no-overlay { overflow: hidden; }
 
 /* Answers compact */
 #joinAnswers {
-  margin-bottom: 0.5rem;
+  margin-bottom: 1.25rem;
 }
 
 /* Submission row at bottom, no extra padding */
@@ -2043,6 +2068,12 @@ body.no-overlay { overflow: auto !important; }
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+}
+#joinQuestionWrap > #joinAnswers > * {
+  width: 100%;
+  max-width: 920px;
 }
 
 #joinQuestionWrap > #joinFeedback {
@@ -2103,17 +2134,19 @@ body.no-overlay { overflow: auto !important; }
   height: 0;
 }
 
-/* Images - as big as possible, keep aspect ratio */
+/* Images - keep aspect ratio without vertical stretch */
 .question-image-preview, .pin-preview {
   background-size: contain !important;
   background-position: center !important;
   width: 100% !important;
-  min-height: 40vh !important;
-  max-height: 70vh !important;
+  max-width: 920px;
+  aspect-ratio: 16 / 9;
+  min-height: 240px !important;
+  max-height: 60vh !important;
 }
 #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-  min-height: 50vh !important;
-  max-height: 75vh !important;
+  min-height: 240px !important;
+  max-height: 60vh !important;
 }
 
 /* Remove bottom padding below submit button */
@@ -2138,12 +2171,13 @@ body.no-overlay { overflow: auto !important; }
 
 /* Submit button row further down */
 #joinQuestionWrap {
-  min-height: 95vh !important;
-  justify-content: space-between;
+  min-height: auto !important;
+  justify-content: flex-start;
+  padding-bottom: 1rem !important;
 }
 #joinSubmission {
-  margin-top: auto !important;
-  margin-bottom: 2rem !important;
+  margin-top: 1rem !important;
+  margin-bottom: 0.75rem !important;
 }
 
 /* Live screen: title row with HUD inline */
