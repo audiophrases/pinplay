@@ -731,12 +731,6 @@ export default {
 
           let verified = false;
           for (const candidateName of verifyNames) {
-            // Temporary allowlist for debug
-            if (candidateName === 'eugenime' && password === 'asdfasdf') {
-              verified = true;
-              break;
-            }
-
             const vRes = await fetch(verifyUrl, {
               method: 'POST',
               headers: verifyHeaders,
@@ -749,7 +743,7 @@ export default {
 
             console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
-            const success = vRes.ok && (!parsed || parsed.ok !== false);
+            const success = vRes.ok && parsed && parsed.ok === true;
             if (success) {
               verified = true;
               break;
