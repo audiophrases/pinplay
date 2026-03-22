@@ -743,7 +743,7 @@ export default {
 
             console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
-            const success = (vRes.status < 400) && (!parsed || parsed.ok !== false);
+            const success = vRes.ok && parsed && parsed.ok === true;
             if (success) {
               verified = true;
               break;
@@ -751,17 +751,10 @@ export default {
           }
 
           if (!verified) {
-            const bypass = String(env.STUDENT_LOGIN_BYPASS || '').trim().toLowerCase() === '1';
-            if (!bypass) {
-              return withCors(json({ error: 'Invalid username or password.' }, 401));
-            }
-            verified = true;
+            return withCors(json({ error: 'Invalid username or password.' }, 401));
           }
         } catch {
-          const bypass = String(env.STUDENT_LOGIN_BYPASS || '').trim().toLowerCase() === '1';
-          if (!bypass) {
-            return withCors(json({ error: 'Login verification service unavailable.' }, 502));
-          }
+          return withCors(json({ error: 'Login verification service unavailable.' }, 502));
         }
       }
 
