@@ -951,6 +951,13 @@ textarea { min-height: 72px; resize: vertical; }
   text-align: center;
 }
 
+#joinQuestionWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 70vh;
+}
+
 #joinCard.question-active #joinAnswers {
   width: 100%;
   max-width: 760px;
@@ -965,6 +972,15 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .3rem .4rem;
 }
 
+/* When no image, center answers vertically */
+#joinCard.question-active:not(.has-image) #joinAnswers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
 #joinCard.question-active .answer-row {
   gap: .38rem;
   width: 100%;
@@ -973,11 +989,17 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
+  position: static;
+  bottom: auto;
+  z-index: 1;
+  padding-top: .34rem;
+  margin-top: .5rem;
+  background: transparent;
+}
+#joinCard.question-active.has-image #joinQuestionWrap > .row.gap.top-space {
   position: sticky;
   bottom: 0;
   z-index: 4;
-  padding-top: .34rem;
-  margin-top: .5rem;
   background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 28%, rgba(247,248,251,1));
 }
 
