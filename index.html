@@ -19,7 +19,7 @@
 
           <div id="joinStepPin">
             <label>PIN</label>
-            <input id="joinPin" type="text" maxlength="6" placeholder="123456" />
+            <input id="joinPin" type="text" maxlength="6" placeholder="123456" autocomplete="one-time-code" inputmode="numeric" />
             <button id="validatePinBtn" class="btn primary top-space">Play</button>
           </div>
 
@@ -27,11 +27,11 @@
             <p id="joinModeHint" class="small"></p>
             <div id="joinNameWrap">
               <label>Username</label>
-              <input id="joinName" type="text" maxlength="40" placeholder="Username" />
+              <input id="joinName" type="text" maxlength="40" placeholder="Username" autocomplete="off" autocapitalize="none" />
             </div>
             <div id="joinPasswordWrap" class="top-space hidden">
               <label>Password</label>
-              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" />
+              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" autocomplete="new-password" data-lpignore="true" />
             </div>
             <p id="joinSignupHint" class="small top-space hidden">
               No account? <a href="https://docs.google.com/forms/d/e/1FAIpQLSeTNwOWzYnSR6V6fsSghUkyZLvbhnE5vvcxBYxlj0b0FWpY-g/viewform" target="_blank" rel="noopener">Sign up</a>
