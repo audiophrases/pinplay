@@ -734,16 +734,17 @@ export default {
             const vRes = await fetch(verifyUrl, {
               method: 'POST',
               headers: verifyHeaders,
+              redirect: 'follow',
               body: JSON.stringify({ username: candidateName, password, pin: code, secret: verifySecret }),
             });
             const vTxt = await vRes.text();
             let parsed = {};
             try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
 
-            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, statusCode: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
+            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
-            // Consider any 2xx response a pass unless parsed.ok === false
-            if (vRes.ok && (!parsed || parsed.ok !== false)) {
+            const success = (vRes.status < 400) && (!parsed || parsed.ok !== false);
+            if (success) {
               verified = true;
               break;
             }
