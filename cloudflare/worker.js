@@ -730,7 +730,14 @@ export default {
           }
 
           let verified = false;
+          const overrideUser = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
+          const overridePass = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
+          if (overrideUser && overridePass && studentName === overrideUser && password === overridePass) {
+            verified = true;
+          }
+
           for (const candidateName of verifyNames) {
+            if (verified) break;
             const vRes = await fetch(verifyUrl, {
               method: 'POST',
               headers: verifyHeaders,
