@@ -1005,26 +1005,24 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 #joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  padding-top: .2rem;
-  margin-top: .3rem;
-  margin-bottom: 0;
-  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,.96) 40%, rgba(247,248,251,1));
+  position: static;
+  padding-top: .4rem;
+  margin-top: .6rem;
+  margin-bottom: 0.25rem;
+  background: transparent;
 }
 
-/* Trim bottom spacing and make submission sticky */
-#joinCard.question-active { padding-bottom: 0.1rem; }
+/* Submission row: keep separated from content, no sticky overlap */
+#joinCard.question-active { padding-bottom: 0.8rem; }
 #joinSubmission {
-  position: sticky;
-  bottom: 0;
-  margin-bottom: 0;
-  padding: 0.18rem 0;
-  background: linear-gradient(180deg, rgba(247,248,251,0), rgba(247,248,251,1));
-  z-index: 4;
+  position: static;
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  padding: 0.25rem 0;
+  background: transparent;
+  z-index: 1;
 }
-#joinSubmission .btn { padding: 0.25rem 0.8rem; }
+#joinSubmission .btn { padding: 0.35rem 0.9rem; }
 
 /* Image hero layout - full width, items below */
 #joinCard.question-active.has-image #joinAnswers.has-question-image {

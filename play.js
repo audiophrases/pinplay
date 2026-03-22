@@ -2546,8 +2546,21 @@ function mergeJoinTokens(tokens) {
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
+  const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
   const source = mergeJoinTokens(tokenizeWords(prompt));
-  const target = mergeJoinTokens(tokenizeWords(corrected));
+  const target = mergeJoinTokens(tokenizeWords(correctedStr));
+  if (!source.length || !target.length) return 1;
+
+  // If lengths match, count direct mismatches after normalization
+  if (source.length === target.length) {
+    let diff = 0;
+    for (let i = 0; i < source.length; i++) {
+      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
+    }
+    return Math.max(1, diff);
+  }
+
+  // Otherwise use edit distance but clamp to avoid over-counting
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -2570,7 +2583,9 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  return dp[source.length][target.length] || 1;
+  const dist = dp[source.length][target.length] || 1;
+  const maxOps = Math.max(source.length, target.length);
+  return Math.max(1, Math.min(dist, maxOps));
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
