@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'pinplay.quiz.v1';
 const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
-const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
+const DEFAULT_BACKEND_URL = 'https://pinplay.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
