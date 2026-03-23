@@ -541,7 +541,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, instantFeedback: !!body?.instantFeedback, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), quiz }),
       }));
     }
 
@@ -1344,7 +1344,7 @@ export class QuizRoom {
           attemptsLimit: clamp(Math.round(Number(body?.attemptsLimit ?? 1)), 0, 10),
           dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
           randomNames: !!body?.randomNames,
-          instantFeedback: !!body?.instantFeedback,
+          feedbackMode: String(body?.feedbackMode || 'none'),
           active: true,
           quiz,
         };
@@ -1524,7 +1524,7 @@ export class QuizRoom {
         const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
       }
 
@@ -1594,7 +1594,7 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
-        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({
           ok: true,
           saved: true,
@@ -1637,7 +1637,7 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
-        const includeAnswers = !!assignment.instantFeedback && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
       }
 
@@ -3605,7 +3605,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     attemptsLimit: clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10),
     dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
     randomNames: !!assignment.randomNames,
-    instantFeedback: !!assignment.instantFeedback,
+    feedbackMode: assignment.feedbackMode || 'none',
     active: !!assignment.active,
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),

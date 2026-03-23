@@ -195,7 +195,8 @@ let previewMode = {
 };
 let createSessionPassword = '';
 let assignmentResultsCache = null;
-let assignmentInstantFeedbackEnabled = false;
+let assignmentFeedbackMode = 'none'; // 'none', 'instant', 'end'
+
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
 
@@ -2673,7 +2674,7 @@ async function runAssignmentSelfCheck() {
       method: 'POST',
       body: {
         password: createSessionPassword,
-        instantFeedback: assignmentInstantFeedbackEnabled,
+        feedbackMode: assignmentFeedbackMode,
         code,
       },
     });
@@ -2685,7 +2686,7 @@ async function runAssignmentSelfCheck() {
       method: 'POST',
       body: {
         password: createSessionPassword,
-        instantFeedback: assignmentInstantFeedbackEnabled,
+        feedbackMode: assignmentFeedbackMode,
         code,
         attemptId,
       },
@@ -2696,7 +2697,7 @@ async function runAssignmentSelfCheck() {
       method: 'POST',
       body: {
         password: createSessionPassword,
-        instantFeedback: assignmentInstantFeedbackEnabled,
+        feedbackMode: assignmentFeedbackMode,
         code,
         active: false,
       },
@@ -2707,7 +2708,7 @@ async function runAssignmentSelfCheck() {
       method: 'POST',
       body: {
         password: createSessionPassword,
-        instantFeedback: assignmentInstantFeedbackEnabled,
+        feedbackMode: assignmentFeedbackMode,
         code,
         active: true,
       },
@@ -3018,7 +3019,7 @@ async function refreshAssignmentsList() {
             method: 'POST',
             body: {
               password: createSessionPassword,
-              instantFeedback: assignmentInstantFeedbackEnabled,
+              feedbackMode: assignmentFeedbackMode,
               code,
             },
           });
@@ -3043,12 +3044,24 @@ async function refreshAssignmentsList() {
 }
 
 async function toggleInstantFeedbackMode() {
-  assignmentInstantFeedbackEnabled = !assignmentInstantFeedbackEnabled;
+  // Cycle through three modes: none → instant → end → none
+  const modes = ['none', 'instant', 'end'];
+  const currentIndex = modes.indexOf(assignmentFeedbackMode);
+  const nextIndex = (currentIndex + 1) % modes.length;
+  assignmentFeedbackMode = modes[nextIndex];
+
   if (assignmentInstantFeedbackBtn) {
-    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentInstantFeedbackEnabled);
-    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentInstantFeedbackEnabled ? 'true' : 'false');
+    const modeLabels = {
+      'none': 'No feedback',
+      'instant': 'Instant feedback',
+      'end': 'End feedback'
+    };
+    assignmentInstantFeedbackBtn.textContent = modeLabels[assignmentFeedbackMode];
+    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentFeedbackMode !== 'none');
+    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentFeedbackMode !== 'none' ? 'true' : 'false');
   }
 }
+
 
 async function createAssignmentFromCurrentQuiz() {
   try {
