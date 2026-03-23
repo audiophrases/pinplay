@@ -680,20 +680,28 @@ function renderInstantFeedbackFromState() {
   const assignment = attempt?.assignment;
   const answers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
   const feedbackMode = assignment?.feedbackMode || 'none';
+  const currentQIndex = live.player.assignment.currentIndex || 0;
   
-  // Determine if we should show feedback
+  // Determine if we should show feedback and what to show
   let shouldShowFeedback = false;
+  let isEndMode = false;
+  let currentQuestionAnswered = false;
+  
   if (feedbackMode === 'none') {
     // No feedback - don't show results
     shouldShowFeedback = false;
   } else if (feedbackMode === 'instant') {
-    // Show after submission (whenever answers are available)
-    shouldShowFeedback = !!attempt?.submitted && answers.length > 0;
+    // In instant mode: show feedback for the CURRENT question only, right after answer
+    // Check if current question has been answered
+    const currentAnswer = answers.find(a => Number(a.qIndex) === Number(currentQIndex));
+    currentQuestionAnswered = !!currentAnswer;
+    shouldShowFeedback = currentQuestionAnswered;
   } else if (feedbackMode === 'end') {
     // Show only when all questions are answered (at the very end)
     const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
     const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
     shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
+    isEndMode = true;
   }
   
   if (!shouldShowFeedback) return;
@@ -707,25 +715,50 @@ function renderInstantFeedbackFromState() {
   const panel = document.createElement('div');
   panel.id = 'assignmentResultsPanel';
   panel.className = 'assignment-results';
+  
   const title = document.createElement('div');
   title.className = 'assignment-results-title';
-  title.textContent = feedbackMode === 'instant' ? 'Your Results' : 'Final Results';
-  panel.appendChild(title);
-
+  
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
-  answers.forEach((a) => {
-    const q = questions[a.qIndex] || {};
-    const li = document.createElement('li');
-    li.className = a.correct ? 'ok' : 'bad';
-    li.textContent = `${a.correct ? 'Correct' : 'Incorrect'}  ·  ${q.prompt ? String(q.prompt).slice(0, 80) : `Q${a.qIndex + 1}`}`;
-    list.appendChild(li);
-  });
+  
+  if (feedbackMode === 'instant' && !isEndMode) {
+    // Show feedback for current question only in instant mode
+    title.textContent = 'Question Feedback';
+    const currentAnswer = answers.find(a => Number(a.qIndex) === Number(currentQIndex));
+    if (currentAnswer) {
+      const q = questions[currentQIndex] || {};
+      const li = document.createElement('li');
+      li.className = currentAnswer.correct ? 'ok' : 'bad';
+      const result = currentAnswer.correct ? '✅ Correct' : '❌ Incorrect';
+      const points = Number(currentAnswer.points || 0);
+      const pointsText = points > 0 ? ` · +${points} points` : '';
+      li.textContent = `${result}${pointsText}`;
+      list.appendChild(li);
+    }
+  } else {
+    // Show all results in end mode or final summary
+    title.textContent = feedbackMode === 'instant' ? 'Your Results' : 'Final Results';
+    answers.forEach((a) => {
+      const q = questions[a.qIndex] || {};
+      const li = document.createElement('li');
+      li.className = a.correct ? 'ok' : 'bad';
+      const result = a.correct ? '✅ Correct' : '❌ Incorrect';
+      const points = Number(a.points || 0);
+      const pointsText = points > 0 ? ` · +${points} points` : '';
+      const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
+      li.textContent = `${result}${pointsText}  ·  ${prompt}`;
+      list.appendChild(li);
+    });
+  }
+  
+  panel.appendChild(title);
   panel.appendChild(list);
   wrap.appendChild(panel);
 }
+
 
 
 async function pollPlayerState() {
