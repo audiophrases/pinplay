@@ -607,8 +607,8 @@ async function finalizeAssignmentAttempt() {
       title: 'Assignment submitted 🎉',
       submitted: true,
     });
-    renderInstantFeedbackFromState();
     await loadAssignmentState();
+    renderInstantFeedbackFromState();
   } catch (err) {
     setJoinStatusHud(String(err?.message || 'Could not submit assignment.'), 'bad');
   } finally {
@@ -679,8 +679,25 @@ function renderInstantFeedbackFromState() {
   const attempt = state?.attempt;
   const assignment = attempt?.assignment;
   const answers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
-  const allow = assignment?.instantFeedback && attempt?.submitted && answers.length > 0;
-  if (!allow) return;
+  const feedbackMode = assignment?.feedbackMode || 'none';
+  
+  // Determine if we should show feedback
+  let shouldShowFeedback = false;
+  if (feedbackMode === 'none') {
+    // No feedback - don't show results
+    shouldShowFeedback = false;
+  } else if (feedbackMode === 'instant') {
+    // Show after submission (whenever answers are available)
+    shouldShowFeedback = !!attempt?.submitted && answers.length > 0;
+  } else if (feedbackMode === 'end') {
+    // Show only when all questions are answered (at the very end)
+    const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
+    const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
+    shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
+  }
+  
+  if (!shouldShowFeedback) return;
+  
   const wrap = joinQuestionWrap || joinCardEl;
   if (!wrap) return;
 
@@ -692,7 +709,7 @@ function renderInstantFeedbackFromState() {
   panel.className = 'assignment-results';
   const title = document.createElement('div');
   title.className = 'assignment-results-title';
-  title.textContent = 'Results';
+  title.textContent = feedbackMode === 'instant' ? 'Your Results' : 'Final Results';
   panel.appendChild(title);
 
   const list = document.createElement('ul');
@@ -709,6 +726,7 @@ function renderInstantFeedbackFromState() {
   panel.appendChild(list);
   wrap.appendChild(panel);
 }
+
 
 async function pollPlayerState() {
   if (live.player.mode !== 'live') return;
@@ -1568,6 +1586,7 @@ async function submitLiveAnswer() {
       live.player.assignment.forceAutoAdvance = true;
       setJoinStatusHud( 'Answer saved ✅', 'ok');
       await loadAssignmentState();
+      renderInstantFeedbackFromState();
       return;
     }
 
