@@ -3362,7 +3362,7 @@ function makePin() {
 }
 
 async function verifyCreatePassword(env, password) {
-  const raw = String(password || '');
+  const raw = String(password || '').trim().normalize('NFC');
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
   const digest = await sha256Hex(raw);
