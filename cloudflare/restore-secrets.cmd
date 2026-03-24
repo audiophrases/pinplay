@@ -3,7 +3,7 @@ REM Restore secrets for pinplay-api
 REM Format: one "SECRET_NAME=value" per line in restore-secrets.local.cmd
 REM That file is gitignored - fill in your values there
 
-setlocal
+setlocal EnableDelayedExpansion
 set WORKER=pinplay-api
 set LOCAL_FILE=%~dp0restore-secrets.local.cmd
 
