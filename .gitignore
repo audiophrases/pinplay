@@ -13,3 +13,18 @@ uploads/
 *.secrets.json
 .env
 cloudflare/restore-secrets.local.cmd
+
+# Assets Deployment Ignores
+.git/
+.wrangler/
+node_modules/
+cloudflare/
+tests/
+*.cmd
+*.log
+README.md
+TEACHER_GUIDE_BATCHES.md
+QA_CHECKLIST.md
+QA_NOTES_2026-03-07.md
+pinplay-template.json
+quiz-template-all-question-types.json
