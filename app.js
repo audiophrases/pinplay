@@ -1484,12 +1484,14 @@ function renderBuilder() {
 }
 
 const EDGE_TTS_LANGUAGE_DEFAULTS = {
+  NONE: '',
   EN: 'en-US-AriaNeural',
   CA: 'ca-ES-JoanaNeural',
   FR: 'fr-FR-DeniseNeural',
   OTHER: 'en-US-AriaNeural',
 };
 const EDGE_TTS_LANGUAGE_OPTIONS = [
+  { value: 'NONE', label: "Don't hear questions" },
   { value: 'EN', label: 'English' },
   { value: 'CA', label: 'Català' },
   { value: 'FR', label: 'Français' },
@@ -1745,6 +1747,7 @@ const DEFAULT_EDGE_TTS_VOICE = EDGE_TTS_LANGUAGE_DEFAULTS[DEFAULT_EDGE_TTS_LANGU
 
 function normalizeTtsLanguage(value) {
   const key = String(value || '').trim().toUpperCase();
+  if (key === 'NONE') return 'NONE';
   return EDGE_TTS_LANGUAGE_DEFAULTS[key] ? key : DEFAULT_EDGE_TTS_LANGUAGE;
 }
 
@@ -1761,6 +1764,7 @@ function guessTtsLanguageFromVoice(voice) {
 
 function getVoiceForTtsLanguage(language) {
   const lang = normalizeTtsLanguage(language);
+  if (lang === 'NONE') return '';
   return EDGE_TTS_LANGUAGE_DEFAULTS[lang] || DEFAULT_EDGE_TTS_VOICE;
 }
 
@@ -6837,7 +6841,8 @@ function collapseAllQuestions(targetQuiz) {
 }
 
 function makeMcqQuestion(opts = {}) {
-  const defaults = getHearQuestionsMode(quiz);
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'mcq',
@@ -6847,8 +6852,8 @@ function makeMcqQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -6859,6 +6864,8 @@ function makeMcqQuestion(opts = {}) {
 }
 
 function makeMultiQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'multi',
@@ -6868,8 +6875,8 @@ function makeMultiQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -6880,6 +6887,8 @@ function makeMultiQuestion(opts = {}) {
 }
 
 function makeTfQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'tf',
@@ -6889,8 +6898,8 @@ function makeTfQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     answers: [
       { text: 'True', correct: true },
@@ -6900,6 +6909,8 @@ function makeTfQuestion(opts = {}) {
 }
 
 function makeTextQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'text',
@@ -6909,14 +6920,16 @@ function makeTextQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     accepted: ['', '', ''],
   };
 }
 
 function makeOpenQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'open',
@@ -6926,13 +6939,15 @@ function makeOpenQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makeSpeakingQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'speaking',
@@ -6942,13 +6957,15 @@ function makeSpeakingQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makeImageOpenQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'image_open',
@@ -6959,13 +6976,15 @@ function makeImageOpenQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makeContextGapQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'context_gap',
@@ -6976,13 +6995,15 @@ function makeContextGapQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makeMatchPairsQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'match_pairs',
@@ -6997,13 +7018,15 @@ function makeMatchPairsQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makeErrorHuntQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'error_hunt',
@@ -7014,13 +7037,15 @@ function makeErrorHuntQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
   };
 }
 
 function makePuzzleQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'puzzle',
@@ -7030,14 +7055,16 @@ function makePuzzleQuestion(opts = {}) {
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
-    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     items: ['', '', ''],
   };
 }
 
 function makeAudioQuestion() {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
     id: crypto.randomUUID(),
     type: 'audio',
@@ -7045,8 +7072,8 @@ function makeAudioQuestion() {
     audioEnabled: true,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage,
+    language,
     audioData: '',
     points: 1000,
     timeLimit: 0,
