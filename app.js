@@ -1158,15 +1158,35 @@ function renderBuilder() {
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       const isMulti = q.type === 'multi';
       const maxAnswers = q.type === 'tf' ? 2 : 10;
-      const baseMin = q.type === 'tf' ? 2 : 4;
+      const baseMin = q.type === 'tf' ? 2 : 3;
       const source = (Array.isArray(q.answers) ? q.answers : []).slice(0, maxAnswers).map((a) => ({
         text: String(a?.text || ''),
         correct: !!a?.correct,
       }));
-      const answers = source.length ? source : [{ text: '', correct: true }, { text: '', correct: false }];
-      while (answers.length < baseMin) answers.push({ text: '', correct: false });
-      const lastFilled = String(answers[answers.length - 1]?.text || '').trim().length > 0;
-      if (q.type !== 'tf' && lastFilled && answers.length < maxAnswers) answers.push({ text: '', correct: false });
+      let answers = source.length ? source : [{ text: '', correct: true }, { text: '', correct: false }, { text: '', correct: false }];
+      
+      // Ensure at least baseMin
+      while (answers.length < baseMin) {
+        answers.push({ text: '', correct: false });
+      }
+
+      if (q.type !== 'tf') {
+        // Prune multiple trailing blanks if total > 3
+        while (answers.length > baseMin) {
+          const last = answers[answers.length - 1];
+          const prev = answers[answers.length - 2];
+          if (String(last.text || '').trim() === '' && String(prev.text || '').trim() === '') {
+            answers.pop();
+          } else {
+            break;
+          }
+        }
+        // Spawn one new blank if the last one is now filled
+        const lastFilled = String(answers[answers.length - 1]?.text || '').trim().length > 0;
+        if (lastFilled && answers.length < maxAnswers) {
+          answers.push({ text: '', correct: false });
+        }
+      }
 
       specific += `
         <label class="top-space">Answers</label>
@@ -1199,7 +1219,7 @@ function renderBuilder() {
       const acceptedRaw = (Array.isArray(q.accepted) ? q.accepted : []).slice(0, maxAccepted).map((x) => String(x || '').slice(0, 120));
       const acceptedNonEmpty = acceptedRaw.filter((x) => x.trim().length > 0);
       const accepted = acceptedNonEmpty.length ? [...acceptedNonEmpty] : [];
-      while (accepted.length < Math.min(4, maxAccepted)) accepted.push('');
+      while (accepted.length < Math.min(3, maxAccepted)) accepted.push('');
       const acceptedLastFilled = String(accepted[accepted.length - 1] || '').trim().length > 0;
       if (acceptedLastFilled && accepted.length < maxAccepted) accepted.push('');
       specific += `
@@ -1239,8 +1259,8 @@ function renderBuilder() {
       const maxGaps = 10;
       const gapRaw = (Array.isArray(q.gaps) ? q.gaps : []).slice(0, maxGaps).map((x) => String(x || '').slice(0, 120));
       const gapNonEmpty = gapRaw.filter((x) => x.trim().length > 0);
-      const gaps = gapNonEmpty.length ? [...gapNonEmpty] : [''];
-      while (gaps.length < Math.min(2, maxGaps)) gaps.push('');
+      const gaps = gapNonEmpty.length ? [...gapNonEmpty] : [];
+      while (gaps.length < Math.min(3, maxGaps)) gaps.push('');
       const gapLastFilled = String(gaps[gaps.length - 1] || '').trim().length > 0;
       if (gapLastFilled && gaps.length < maxGaps) gaps.push('');
       specific += `
@@ -1265,8 +1285,8 @@ function renderBuilder() {
         right: String(p?.right || '').slice(0, 60),
       }));
       const pairsNonEmpty = pairsRaw.filter((p) => p.left.trim() || p.right.trim());
-      const normalizedPairs = pairsNonEmpty.length ? [...pairsNonEmpty] : [{ left: '', right: '' }];
-      while (normalizedPairs.length < Math.min(2, maxPairs)) normalizedPairs.push({ left: '', right: '' });
+      const normalizedPairs = pairsNonEmpty.length ? [...pairsNonEmpty] : [];
+      while (normalizedPairs.length < Math.min(3, maxPairs)) normalizedPairs.push({ left: '', right: '' });
       const lastPair = normalizedPairs[normalizedPairs.length - 1] || { left: '', right: '' };
       const lastPairFilled = String(lastPair.left || '').trim() || String(lastPair.right || '').trim();
       if (lastPairFilled && normalizedPairs.length < maxPairs) normalizedPairs.push({ left: '', right: '' });
@@ -1299,8 +1319,8 @@ function renderBuilder() {
       const maxItems = 12;
       const itemsRaw = (Array.isArray(q.items) ? q.items : []).slice(0, maxItems).map((x) => String(x || '').slice(0, 75));
       const itemsNonEmpty = itemsRaw.filter((x) => x.trim().length > 0);
-      const items = itemsNonEmpty.length ? [...itemsNonEmpty] : [''];
-      while (items.length < Math.min(4, maxItems)) items.push('');
+      const items = itemsNonEmpty.length ? [...itemsNonEmpty] : [];
+      while (items.length < Math.min(3, maxItems)) items.push('');
       const itemsLastFilled = String(items[items.length - 1] || '').trim().length > 0;
       if (itemsLastFilled && items.length < maxItems) items.push('');
       specific += `
@@ -1423,7 +1443,42 @@ function renderBuilder() {
 
   questionListEl.querySelectorAll('[data-q]').forEach((el) => {
     el.addEventListener('input', syncQuizFromUI);
-    el.addEventListener('change', syncQuizFromUI);
+    el.addEventListener('change', () => {
+      syncQuizFromUI();
+      const active = document.activeElement;
+      let focusData = null;
+      if (active && active.dataset && active.dataset.q !== undefined) {
+        focusData = {
+          q: active.dataset.q,
+          field: active.dataset.field,
+          answerIndex: active.dataset.answerIndex,
+          acceptedIndex: active.dataset.acceptedIndex,
+          gapIndex: active.dataset.gapIndex,
+          pairLeft: active.dataset.pairLeft,
+          pairRight: active.dataset.pairRight,
+          puzzleIndex: active.dataset.puzzleIndex
+        };
+      }
+      renderBuilder();
+      if (focusData) {
+        let selector = `[data-q="${focusData.q}"]`;
+        if (focusData.field) selector += `[data-field="${focusData.field}"]`;
+        if (focusData.answerIndex !== undefined) selector += `[data-answer-index="${focusData.answerIndex}"]`;
+        if (focusData.acceptedIndex !== undefined) selector += `[data-accepted-index="${focusData.acceptedIndex}"]`;
+        if (focusData.gapIndex !== undefined) selector += `[data-gap-index="${focusData.gapIndex}"]`;
+        if (focusData.pairLeft !== undefined) selector += `[data-pair-left="${focusData.pairLeft}"]`;
+        if (focusData.pairRight !== undefined) selector += `[data-pair-right="${focusData.pairRight}"]`;
+        if (focusData.puzzleIndex !== undefined) selector += `[data-puzzle-index="${focusData.puzzleIndex}"]`;
+        const newEl = questionListEl.querySelector(selector);
+        if (newEl) {
+          newEl.focus();
+          if (newEl.setSelectionRange && (newEl.tagName === 'INPUT' || newEl.tagName === 'TEXTAREA')) {
+            const val = newEl.value;
+            newEl.setSelectionRange(val.length, val.length);
+          }
+        }
+      }
+    });
   });
 
   if (collapseAllBtn) {
@@ -6799,7 +6854,6 @@ function makeMcqQuestion(opts = {}) {
       { text: '', correct: true },
       { text: '', correct: false },
       { text: '', correct: false },
-      { text: '', correct: false },
     ],
   };
 }
@@ -6820,7 +6874,6 @@ function makeMultiQuestion(opts = {}) {
     answers: [
       { text: '', correct: true },
       { text: '', correct: true },
-      { text: '', correct: false },
       { text: '', correct: false },
     ],
   };
@@ -6859,7 +6912,7 @@ function makeTextQuestion(opts = {}) {
     ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
-    accepted: ['', '', '', ''],
+    accepted: ['', '', ''],
   };
 }
 
@@ -6919,7 +6972,7 @@ function makeContextGapQuestion() {
     prompt: 'Complete the paragraph: ...',
     points: 1000,
     timeLimit: 0,
-    gaps: ['', '', '', ''],
+    gaps: ['', '', ''],
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
@@ -6937,7 +6990,6 @@ function makeMatchPairsQuestion() {
     points: 1000,
     timeLimit: 0,
     pairs: [
-      { left: '', right: '' },
       { left: '', right: '' },
       { left: '', right: '' },
       { left: '', right: '' },
@@ -6981,7 +7033,7 @@ function makePuzzleQuestion(opts = {}) {
     ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
     language: DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
-    items: Array.from({ length: 9 }, () => ''),
+    items: ['', '', ''],
   };
 }
 
