@@ -129,6 +129,22 @@
               </span>
             </h2>
             <div id="liveScreenCardBody">
+            <div class="hall top-space" id="hallCard">
+              <div class="small">GAME PIN</div>
+              <div class="hall-pin-row">
+                <div class="pin-big" id="livePinBig">—</div>
+                <div class="hall-qr-wrap" aria-label="Join QR">
+                  <img
+                    class="hall-qr"
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Faudiophrases.github.io%2Fpinplay%2F"
+                    alt="QR code to open PinPlay join page"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+              <div class="hall-short-url">iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+              <div class="small" id="hallHint"></div>
+            </div>
             <div id="projectorCorrect"></div>
             <p class="small" id="hostQuestionHint">Question will appear here when game starts.</p>
             <div id="hostQuestionWrap" class="hidden top-space">
@@ -197,22 +213,6 @@
               </div>
             </div>
 
-            <div class="hall top-space" id="hallCard">
-              <div class="small">GAME PIN</div>
-              <div class="hall-pin-row">
-                <div class="pin-big" id="livePinBig">—</div>
-                <div class="hall-qr-wrap" aria-label="Join QR">
-                  <img
-                    class="hall-qr"
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Faudiophrases.github.io%2Fpinplay%2F"
-                    alt="QR code to open PinPlay join page"
-                    loading="lazy"
-                  />
-                </div>
-              </div>
-              <div class="hall-short-url">iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
-              <div class="small" id="hallHint"></div>
-            </div>
 
             <div class="top-space">
               <div class="small">PIN <span id="livePin">—</span></div>
