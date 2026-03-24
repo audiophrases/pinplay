@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinPlay · Teacher Create</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>🎯 PinPlay</h1>
+    </header>
+
+    <main class="container">
+      <section id="create" class="panel active">
+        <div class="card" id="createAuthCard">
+          <h2>Teacher access</h2>
+
+          <label>Password</label>
+          <input id="createPassword" type="password" placeholder="Enter teacher password" />
+          <div class="row gap top-space">
+            <button id="unlockCreateBtn" class="btn primary">Unlock</button>
+            <span id="createAuthStatus" class="small"></span>
+          </div>
+        </div>
+
+        <div id="createWorkspace" class="hidden">
+          <div class="card" id="builderCard">
+            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              Quiz builder <span class="collapse-chevron" aria-hidden="true">▾</span>
+            </h2>
+            <div id="builderCardBody">
+            <div class="row gap top-space quiz-actions" id="builderActionRow">
+              <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
+              <button id="openLocalBtn" class="btn">Open</button>
+              <button id="saveBtn" class="btn">Save</button>
+              <button id="openCloudBtn" class="btn">☁️ Open</button>
+              <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
+              <button id="importBtn" class="btn" type="button">Import</button>
+              <input id="importInput" type="file" accept="application/json" hidden />
+              <button id="exportBtn" class="btn">Export</button>
+              <button id="publishDriveBtn" class="btn" style="display:none">Save Drive</button>
+              <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
+            </div>
+
+            <label>Quiz title</label>
+            <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+
+            <div class="row gap top-space" id="quizAudioDefaultsRow">
+              <div style="min-width:220px;">
+                <label>Hear questions</label>
+                <select id="quizTtsLanguage">
+                  <option value="NONE">Don't hear questions</option>
+                  <option value="EN">English</option>
+                  <option value="CA">Català</option>
+                  <option value="FR">Français</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
+                <label>Language / voice</label>
+                <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
+                <select id="quizTtsOtherVoice">
+                </select>
+              </div>
+            </div>
+
+            <div class="top-space">
+              <p class="small"><strong>Question types</strong></p>
+              <div class="question-type-grid" id="questionTypeGrid">
+                <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
+                </button>
+                <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
+                </button>
+                <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
+                  <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
+                </button>
+                <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
+                  <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
+                </button>
+                <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
+                </button>
+                <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
+                </button>
+                <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
+                  <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
+                </button>
+                <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
+                  <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
+                </button>
+                <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
+                  <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
+                </button>
+                <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
+                </button>
+                <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
+                </button>
+                <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
+                  <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Audio options are now inside each question type card -->
+
+            <div class="row gap top-space">
+              <button id="collapseAllBtn" class="btn">Collapse all</button>
+            </div>
+
+            <div id="questionList" class="question-list"></div>
+            </div>
+          </div>
+
+          <div class="card project-screen" id="hostQuestionCard">
+            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▾</span></span>
+              <span class="live-hud-row">
+                <span id="projectorPin" class="small">📌 <span id="livePinHud">—</span></span>
+                <span id="projectorTimer" class="small">⏱ Time: —</span>
+                <span id="projectorAnswers" class="small">👥 Answers: —</span>
+                <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;">Fullscreen</button>
+              </span>
+            </h2>
+            <div id="liveScreenCardBody">
+            <div class="hall top-space" id="hallCard">
+              <div class="small">GAME PIN</div>
+              <div class="hall-pin-row">
+                <div class="pin-big" id="livePinBig">—</div>
+                <div class="hall-qr-wrap" aria-label="Join QR">
+                  <img
+                    class="hall-qr"
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Faudiophrases.github.io%2Fpinplay%2F"
+                    alt="QR code to open PinPlay join page"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+              <div class="hall-short-url">iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+              <div class="small" id="hallHint"></div>
+            </div>
+            <div id="projectorCorrect"></div>
+            <p class="small" id="hostQuestionHint">Question will appear here when game starts.</p>
+            <div id="hostQuestionWrap" class="hidden top-space">
+              <h2 id="hostQuestionPrompt" class="project-prompt"></h2>
+              <div id="hostQuestionAnswers" class="project-answers"></div>
+            </div>
+            <div id="projectorReactions" class="reactions-pop reactions-pop-projector" aria-live="polite"></div>
+            <div class="top-space projector-scoreboard" id="projectorScoreboardSection">
+              <strong>Scoreboard</strong>
+              <ul id="projectorScores" class="list"></ul>
+            </div>
+            </div>
+          </div>
+
+
+          <div class="card" id="hostCard">
+            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
+              Game controls <span class="collapse-chevron" aria-hidden="true">▾</span>
+            </h2>
+            <div id="gameControlsCardBody">
+            <div class="row gap top-space" id="hostActionRow">
+              <button id="randomNamesToggle" class="btn" type="button">Login</button>
+              <button id="createLiveBtn" class="btn primary">Live Pin</button>
+              <button id="hostRefreshBtn" class="btn">Refresh</button>
+              <button id="hostStartBtn" class="btn success">Start</button>
+              <button id="hostPrevBtn" class="btn">←</button>
+              <button id="hostNextBtn" class="btn">→</button>
+              <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" />
+              <button id="hostJoinBtn" class="btn">Join as host</button>
+            </div>
+            <div class="top-space assignment-section" id="assignmentSection">
+              <button id="assignmentSectionToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span>Assignments</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="assignmentSectionBody" class="section-collapsible-body hidden">
+                <div class="row gap top-space" id="assignmentActionRow">
+                  <input id="assignmentClass" type="text" placeholder="Class (optional)" style="max-width:150px;" />
+                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" />
+                  <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" />
+                  <button id="assignmentInstantFeedbackBtn" class="btn" type="button" aria-pressed="false" title="Cycle: No feedback → Instant feedback → End feedback">No feedback</button>
+                  <button id="createAssignmentBtn" class="btn">Create assignment</button>
+                </div>
+                <p id="assignmentStatus" class="small muted"></p>
+                <div class="top-space">
+                  <div class="row spread gap">
+                    <strong>Assignments list</strong>
+                    <div class="row gap">
+                      <button id="assignmentSelfCheckBtn" class="btn">Run self-check</button>
+                      <button id="refreshAssignmentsBtn" class="btn">Refresh assignments</button>
+                    </div>
+                  </div>
+                  <ul id="assignmentList" class="list"></ul>
+                  <div class="row gap top-space">
+                    <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
+                    <select id="assignmentResultsFilter" style="max-width:180px;">
+                      <option value="all">All attempts</option>
+                      <option value="pending">Pending grading</option>
+                      <option value="submitted">Submitted only</option>
+                    </select>
+                  </div>
+                  <ul id="assignmentResultsList" class="list"></ul>
+                  <p id="assignmentGradingSummary" class="small muted top-space">Open an attempt to grade teacher-graded answers.</p>
+                  <ul id="assignmentGradingList" class="list"></ul>
+                </div>
+              </div>
+            </div>
+
+
+            <div class="host-live-status-grid">
+              <div class="status-card pin-highlight" title="Current session PIN">
+                <span class="status-label">PIN</span>
+                <span id="livePin" class="status-value">—</span>
+              </div>
+              <div class="status-card" title="Game current phase">
+                <span class="status-label">Phase</span>
+                <span id="livePhase" class="status-value">—</span>
+              </div>
+              <div class="status-card" title="Current question progress">
+                <span class="status-label">Progress</span>
+                <span id="liveProgress" class="status-value">—</span>
+              </div>
+              <div class="status-card" title="Answers received this round">
+                <span class="status-label">Answers</span>
+                <span id="liveResponses" class="status-value">—</span>
+              </div>
+            </div>
+
+            <div id="liveReactions" class="reactions-pop" aria-live="polite"></div>
+            <p id="hostStatus" class="feedback"></p>
+
+            <div class="host-section-header">
+              <h3>👥 <span id="hostPlayersTitle">Players</span></h3>
+              <span class="host-section-count" id="hostPlayersCount">0</span>
+            </div>
+            <ul id="hostPlayers" class="list"></ul>
+
+            <div class="host-section-header">
+              <h3>📜 Answer history (teacher only)</h3>
+            </div>
+            <ul id="hostAnswerHistory" class="list"></ul>
+
+            <div class="host-section-header">
+              <h3>📊 Student performance snapshot</h3>
+              <div class="row gap">
+                <button id="hostAttemptsRefreshBtn" class="btn">Refresh</button>
+                <button id="hostAttemptsExportBtn" class="btn">Export CSV</button>
+              </div>
+            </div>
+            <div class="row gap top-space">
+              <select id="hostAttemptsClassFilter" style="max-width:200px;">
+                <option value="">All classes</option>
+              </select>
+              <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
+            </div>
+            <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
+            <ul id="hostAttemptsList" class="list"></ul>
+            </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="../app.js?v=20260324-1615"></script>
+  </body>
+</html>
