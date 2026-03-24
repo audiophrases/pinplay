@@ -1484,10 +1484,10 @@ function renderBuilder() {
 }
 
 const EDGE_TTS_LANGUAGE_DEFAULTS = {
-  EN: 'en-US-AndrewMultilingualNeural',
+  EN: 'en-US-AriaNeural',
   CA: 'ca-ES-JoanaNeural',
   FR: 'fr-FR-DeniseNeural',
-  OTHER: 'en-US-AndrewMultilingualNeural',
+  OTHER: 'en-US-AriaNeural',
 };
 const EDGE_TTS_LANGUAGE_OPTIONS = [
   { value: 'EN', label: 'English' },

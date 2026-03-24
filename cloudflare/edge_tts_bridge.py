@@ -15,7 +15,7 @@ Endpoint:
 
 import os
 import tempfile
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import edge_tts
@@ -37,7 +37,7 @@ async def health():
 
 
 @app.post("/tts")
-async def tts(req: TTSRequest, authorization: str | None = Header(default=None)):
+async def tts(req: TTSRequest, background_tasks: BackgroundTasks, authorization: str | None = Header(default=None)):
     text = (req.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Missing text")
@@ -53,6 +53,28 @@ async def tts(req: TTSRequest, authorization: str | None = Header(default=None))
     try:
         communicate = edge_tts.Communicate(text=text, voice=req.voice, rate=req.rate)
         await communicate.save(out_path)
-        return FileResponse(out_path, media_type="audio/mpeg", filename="tts.mp3")
+        
+        # Define a cleanup function to delete the file after response is sent
+        def cleanup():
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
+
+        background_tasks.add_task(cleanup)
+
+        return FileResponse(
+            out_path, 
+            media_type="audio/mpeg", 
+            filename="tts.mp3",
+            background=background_tasks
+        )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Edge TTS failed: {e}")
+        # Cleanup in case of error too
+        try:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail={"error": f"Edge TTS failed: {e}"})
