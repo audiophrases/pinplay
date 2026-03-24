@@ -105,6 +105,7 @@ const hostAttemptsSearchEl = document.getElementById('hostAttemptsSearch');
 const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
 const hostAttemptsListEl = document.getElementById('hostAttemptsList');
 const hostStatusEl = document.getElementById('hostStatus');
+const hostPlayersCountEl = document.getElementById('hostPlayersCount');
 const mediaProgressEl = document.getElementById('mediaProgressEl') || createMediaProgressEl();
 
 function createMediaProgressEl() {
@@ -4052,9 +4053,9 @@ function renderHostState(state) {
     stopQuestionAudioPlayback();
   }
 
-  if (livePhaseEl) livePhaseEl.textContent = `Phase: ${state.phase}`;
-  if (liveProgressEl) liveProgressEl.textContent = `Progress: ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
-  if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${state.responseCount} / ${state.playerCount}`;
+  if (livePhaseEl) livePhaseEl.textContent = state.phase;
+  if (liveProgressEl) liveProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
+  if (liveResponsesEl) liveResponsesEl.textContent = `${state.responseCount} / ${state.playerCount}`;
   renderReactionPop(state.reactions || []);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
@@ -4069,6 +4070,8 @@ function renderHostState(state) {
   if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
     setRandomNamesToggleState(!!state.settings.randomNames);
   }
+
+  if (hostPlayersCountEl) hostPlayersCountEl.textContent = String(state.playerCount || 0);
 
   if (hostPlayersEl) {
     hostPlayersEl.innerHTML = '';

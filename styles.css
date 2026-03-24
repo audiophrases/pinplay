@@ -206,6 +206,82 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .top-space { margin-top: .75rem; }
 
+.host-live-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.status-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 0.75rem 1rem;
+  border-radius: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.status-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.status-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.status-card.pin-highlight {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, #fff, #f5f4ff);
+}
+.status-card.pin-highlight .status-value {
+  color: var(--primary);
+  letter-spacing: 0.02em;
+}
+
+.host-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.host-section-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.host-section-count {
+  font-size: 0.75rem;
+  background: var(--bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: 1rem;
+  color: var(--muted);
+}
+
 .btn {
   border: 1px solid var(--line);
   background: #fff;

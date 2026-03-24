@@ -214,38 +214,54 @@
             </div>
 
 
-            <div class="top-space">
-              <div class="small">PIN <span id="livePin">—</span></div>
-              <div id="livePhase" class="small">Phase: —</div>
-              <div id="liveProgress" class="small">Progress: —</div>
-              <div id="liveResponses" class="small">Answers this round: —</div>
-              <div id="liveReactions" class="reactions-pop" aria-live="polite"></div>
-              <p id="hostStatus" class="feedback"></p>
-            </div>
-            <div class="top-space">
-              <strong>Players</strong>
-              <ul id="hostPlayers" class="list"></ul>
-            </div>
-            <div class="top-space">
-              <strong>Answer history (teacher only)</strong>
-              <ul id="hostAnswerHistory" class="list"></ul>
-            </div>
-            <div class="top-space">
-              <div class="row spread gap">
-                <strong>Student performance snapshot</strong>
-                <div class="row gap">
-                  <button id="hostAttemptsRefreshBtn" class="btn">Refresh snapshot</button>
-                  <button id="hostAttemptsExportBtn" class="btn">Export CSV</button>
-                </div>
+            <div class="host-live-status-grid">
+              <div class="status-card pin-highlight" title="Current session PIN">
+                <span class="status-label">PIN</span>
+                <span id="livePin" class="status-value">—</span>
               </div>
-              <div class="row gap top-space">
-                <select id="hostAttemptsClassFilter" style="max-width:200px;">
-                  <option value="">All classes</option>
-                </select>
-                <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
+              <div class="status-card" title="Game current phase">
+                <span class="status-label">Phase</span>
+                <span id="livePhase" class="status-value">—</span>
               </div>
-              <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
-              <ul id="hostAttemptsList" class="list"></ul>
+              <div class="status-card" title="Current question progress">
+                <span class="status-label">Progress</span>
+                <span id="liveProgress" class="status-value">—</span>
+              </div>
+              <div class="status-card" title="Answers received this round">
+                <span class="status-label">Answers</span>
+                <span id="liveResponses" class="status-value">—</span>
+              </div>
+            </div>
+
+            <div id="liveReactions" class="reactions-pop" aria-live="polite"></div>
+            <p id="hostStatus" class="feedback"></p>
+
+            <div class="host-section-header">
+              <h3>👥 <span id="hostPlayersTitle">Players</span></h3>
+              <span class="host-section-count" id="hostPlayersCount">0</span>
+            </div>
+            <ul id="hostPlayers" class="list"></ul>
+
+            <div class="host-section-header">
+              <h3>📜 Answer history (teacher only)</h3>
+            </div>
+            <ul id="hostAnswerHistory" class="list"></ul>
+
+            <div class="host-section-header">
+              <h3>📊 Student performance snapshot</h3>
+              <div class="row gap">
+                <button id="hostAttemptsRefreshBtn" class="btn">Refresh</button>
+                <button id="hostAttemptsExportBtn" class="btn">Export CSV</button>
+              </div>
+            </div>
+            <div class="row gap top-space">
+              <select id="hostAttemptsClassFilter" style="max-width:200px;">
+                <option value="">All classes</option>
+              </select>
+              <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
+            </div>
+            <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
+            <ul id="hostAttemptsList" class="list"></ul>
             </div>
             </div>
           </div>
