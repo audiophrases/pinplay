@@ -16,10 +16,15 @@ cloudflare/restore-secrets.local.cmd
 
 # Assets Deployment Ignores
 .git/
+.git/**
 .wrangler/
+.wrangler/**
 node_modules/
+node_modules/**
 cloudflare/
+cloudflare/**
 tests/
+tests/**
 *.cmd
 *.log
 README.md
