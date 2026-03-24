@@ -6,7 +6,18 @@
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "exclude": [
+      ".git",
+      ".wrangler",
+      "node_modules",
+      "cloudflare",
+      "tests",
+      "*.cmd",
+      "*.log"
+    ]
   },
   "compatibility_flags": [
     "nodejs_compat"
