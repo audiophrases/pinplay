@@ -3363,7 +3363,6 @@ function makePin() {
 
 async function verifyCreatePassword(env, password) {
   const raw = String(password || '');
-  if (raw === '') return true; // TEMP DEBUG: Allow empty password to confirm worker access
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
   const digest = await sha256Hex(raw);
