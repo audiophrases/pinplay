@@ -322,10 +322,10 @@ function setupCreateAccess() {
         if (createPasswordEl) createPasswordEl.value = value;
       }
       pendingDeadAcute = false;
-      if (!value) {
-        setStatus(createAuthStatusEl, 'Enter password', 'bad');
-        return;
-      }
+      // if (!value) {
+      //   setStatus(createAuthStatusEl, 'Enter password', 'bad');
+      //   return;
+      // }
 
       if (unlockCreateBtn) unlockCreateBtn.disabled = true;
       setStatus(createAuthStatusEl, 'Checking password…', 'ok');
