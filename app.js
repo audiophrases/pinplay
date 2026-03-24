@@ -305,8 +305,8 @@ function pingEdgeTtsBridgeWarmup() {
   const url = 'https://edge-tts-bridge.onrender.com/health';
   const ping = () => {
     try {
-      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => {});
-    } catch {}
+      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => { });
+    } catch { }
   };
   ping();
   setTimeout(ping, 3500);
@@ -563,13 +563,14 @@ function bindBuilderEvents() {
   const renderOtherVoiceOptions = (filter = '') => {
     if (!quizTtsOtherVoiceEl) return;
     const needle = String(filter || '').trim().toLowerCase();
+    const currentVoice = quiz.language || quizTtsOtherVoiceEl.value;
     const filtered = EDGE_TTS_VOICE_INDEX.filter((v) => {
       if (!needle) return true;
       const haystack = `${v.code} ${v.language} ${v.country} ${v.person}`.toLowerCase();
       return haystack.includes(needle);
     });
     const voiceOptions = filtered
-      .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
+      .map((v) => `<option value="${escapeHtml(v.code)}" ${v.code === currentVoice ? 'selected' : ''}>${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
       .join('');
     quizTtsOtherVoiceEl.innerHTML = voiceOptions;
   };
@@ -577,7 +578,21 @@ function bindBuilderEvents() {
     renderOtherVoiceOptions();
   }
   if (quizTtsOtherSearchEl) {
-    quizTtsOtherSearchEl.addEventListener('input', () => renderOtherVoiceOptions(quizTtsOtherSearchEl.value));
+    quizTtsOtherSearchEl.addEventListener('input', () => {
+      renderOtherVoiceOptions(quizTtsOtherSearchEl.value);
+      // If we are in OTHER mode, search might have changed the effective selection (even if it's the first result)
+      if (quizTtsLanguageEl?.value === 'OTHER' && quizTtsOtherVoiceEl.value && quizTtsOtherVoiceEl.value !== quiz.language) {
+        // Manually trigger the update if the value changed due to search
+        quiz.language = quizTtsOtherVoiceEl.value;
+        quiz.questions.forEach((q) => {
+          if (!q || !supportsQuestionAudio(q.type)) return;
+          q.language = quiz.language;
+          q.ttsLanguage = 'OTHER';
+          if (q.audioMode === 'tts') q.audioEnabled = true;
+        });
+        renderBuilder();
+      }
+    });
   }
 
   if (quizTtsLanguageEl) {
@@ -608,6 +623,7 @@ function bindBuilderEvents() {
 
       if (mode === 'NONE') {
         // Don't hear questions — disable TTS for all questions
+        quiz.language = '';
         quiz.questions.forEach((q) => {
           if (!q) return;
           q.audioEnabled = false;
@@ -618,6 +634,7 @@ function bindBuilderEvents() {
       } else if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) {
         // Apply the selected voice from the search dropdown
         const voice = quizTtsOtherVoiceEl.value;
+        quiz.language = voice;
         quiz.questions.forEach((q) => {
           if (!q || !supportsQuestionAudio(q.type)) return;
           q.language = voice;
@@ -626,11 +643,12 @@ function bindBuilderEvents() {
           q.audioMode = 'tts';
         });
       } else {
-        const next = normalizeTtsLanguage(quiz.ttsLanguage);
+        const next = normalizeTtsLanguage(mode);
+        quiz.language = getVoiceForTtsLanguage(next);
         quiz.questions.forEach((q) => {
           if (!q || !supportsQuestionAudio(q.type)) return;
           q.ttsLanguage = next;
-          q.language = getVoiceForTtsLanguage(next);
+          q.language = quiz.language;
           q.audioEnabled = true;
           q.audioMode = 'tts';
         });
@@ -644,10 +662,12 @@ function bindBuilderEvents() {
     quizTtsOtherVoiceEl.addEventListener('change', () => {
       if (quizTtsLanguageEl?.value !== 'OTHER') return;
       const voice = quizTtsOtherVoiceEl.value;
+      quiz.language = voice;
       quiz.questions.forEach((q) => {
         if (!q || !supportsQuestionAudio(q.type)) return;
         q.language = voice;
         q.ttsLanguage = 'OTHER';
+        if (q.audioMode === 'tts') q.audioEnabled = true;
       });
       renderBuilder();
     });
@@ -1108,7 +1128,12 @@ function renderBuilder() {
   if (quizTtsLanguageEl) quizTtsLanguageEl.value = getHearQuestionsMode(quiz);
   // Show/hide "Other" voice selector based on saved mode
   if (quizTtsOtherWrap) {
-    quizTtsOtherWrap.style.display = getHearQuestionsMode(quiz) === 'OTHER' ? '' : 'none';
+    const isOther = getHearQuestionsMode(quiz) === 'OTHER';
+    quizTtsOtherWrap.style.display = isOther ? '' : 'none';
+    if (isOther && quiz.language) {
+      const otherVoiceEl = document.getElementById('quizTtsOtherVoice');
+      if (otherVoiceEl) otherVoiceEl.value = quiz.language;
+    }
   }
   questionListEl.innerHTML = '';
 
@@ -1164,7 +1189,7 @@ function renderBuilder() {
         correct: !!a?.correct,
       }));
       let answers = source.length ? source : [{ text: '', correct: true }, { text: '', correct: false }, { text: '', correct: false }];
-      
+
       // Ensure at least baseMin
       while (answers.length < baseMin) {
         answers.push({ text: '', correct: false });
@@ -1192,16 +1217,16 @@ function renderBuilder() {
         <label class="top-space">Answers</label>
         <div class="answers-grid">
           ${answers
-            .map(
-              (a, aIdx) => `
+          .map(
+            (a, aIdx) => `
             <div class="answer-row">
               <input type="${isMulti ? 'checkbox' : 'radio'}" ${isMulti ? '' : `name="correct-${idx}"`} ${a.correct ? 'checked' : ''} data-q="${idx}" data-correct-index="${aIdx}" />
               <input data-q="${idx}" data-answer-index="${aIdx}" maxlength="90" value="${escapeHtml(a.text || '')}" ${q.type === 'tf' ? 'disabled' : ''}/>
               <span class="small">${q.type === 'tf' ? '' : 'max 90'}</span>
             </div>
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       `;
 
@@ -1226,13 +1251,13 @@ function renderBuilder() {
         <label class="top-space">Accepted answers (dynamic, max 20)</label>
         <div class="answers-grid">
           ${accepted
-            .slice(0, maxAccepted)
-            .map(
-              (ans, aIdx) => `
+          .slice(0, maxAccepted)
+          .map(
+            (ans, aIdx) => `
             <input data-q="${idx}" data-accepted-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Accepted answer ${aIdx + 1}" />
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       `;
     }
@@ -1269,11 +1294,11 @@ function renderBuilder() {
         <label class="top-space">Expected words for blanks</label>
         <div class="answers-grid">
           ${gaps
-            .slice(0, maxGaps)
-            .map((ans, aIdx) => `
+          .slice(0, maxGaps)
+          .map((ans, aIdx) => `
             <input data-q="${idx}" data-gap-index="${aIdx}" maxlength="120" value="${escapeHtml(ans || '')}" placeholder="Blank ${aIdx + 1}" />
           `)
-            .join('')}
+          .join('')}
         </div>
       `;
     }
@@ -1294,14 +1319,14 @@ function renderBuilder() {
         <p class="small top-space">Set matching pairs (left → right). Dynamic rows, max 10.</p>
         <div class="answers-grid">
           ${normalizedPairs
-            .slice(0, maxPairs)
-            .map(
-              (p, i) => `
+          .slice(0, maxPairs)
+          .map(
+            (p, i) => `
               <input data-q="${idx}" data-pair-left="${i}" maxlength="60" value="${escapeHtml(p?.left || '')}" placeholder="Left ${i + 1}" />
               <input data-q="${idx}" data-pair-right="${i}" maxlength="60" value="${escapeHtml(p?.right || '')}" placeholder="Right ${i + 1}" />
             `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       `;
     }
@@ -1327,13 +1352,13 @@ function renderBuilder() {
         <label class="top-space">Correct order items (dynamic, max 12)</label>
         <div class="answers-grid">
           ${items
-            .slice(0, maxItems)
-            .map(
-              (item, i) => `
+          .slice(0, maxItems)
+          .map(
+            (item, i) => `
             <input data-q="${idx}" data-puzzle-index="${i}" maxlength="75" value="${escapeHtml(item || '')}" placeholder="Position ${i + 1}" />
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
         <p class="small">Students will drag pieces into order on their screen.</p>
       `;
@@ -1358,8 +1383,8 @@ function renderBuilder() {
             <label>Margin</label>
             <select data-q="${idx}" data-field="sliderMargin">
               ${['none', 'low', 'medium', 'high', 'maximum']
-                .map((m) => `<option value="${m}" ${q.margin === m ? 'selected' : ''}>${m}</option>`)
-                .join('')}
+          .map((m) => `<option value="${m}" ${q.margin === m ? 'selected' : ''}>${m}</option>`)
+          .join('')}
             </select>
           </div>
         </div>
@@ -1405,11 +1430,11 @@ function renderBuilder() {
           <div class="pin-preview" data-pin-preview="${idx}">
             <img src="${q.imageData}" alt="Pin question image" />
             ${zones.map((z) => {
-              const left = clamp(z.x, 0, 100);
-              const top = clamp(z.y, 0, 100);
-              const size = clamp(z.r * 2, 2, 100);
-              return `<div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div><div class="pin-dot" style="left:${left}%; top:${top}%;"></div>`;
-            }).join('')}
+          const left = clamp(z.x, 0, 100);
+          const top = clamp(z.y, 0, 100);
+          const size = clamp(z.r * 2, 2, 100);
+          return `<div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div><div class="pin-dot" style="left:${left}%; top:${top}%;"></div>`;
+        }).join('')}
           </div>
         `;
       }
@@ -1443,42 +1468,7 @@ function renderBuilder() {
 
   questionListEl.querySelectorAll('[data-q]').forEach((el) => {
     el.addEventListener('input', syncQuizFromUI);
-    el.addEventListener('change', () => {
-      syncQuizFromUI();
-      const active = document.activeElement;
-      let focusData = null;
-      if (active && active.dataset && active.dataset.q !== undefined) {
-        focusData = {
-          q: active.dataset.q,
-          field: active.dataset.field,
-          answerIndex: active.dataset.answerIndex,
-          acceptedIndex: active.dataset.acceptedIndex,
-          gapIndex: active.dataset.gapIndex,
-          pairLeft: active.dataset.pairLeft,
-          pairRight: active.dataset.pairRight,
-          puzzleIndex: active.dataset.puzzleIndex
-        };
-      }
-      renderBuilder();
-      if (focusData) {
-        let selector = `[data-q="${focusData.q}"]`;
-        if (focusData.field) selector += `[data-field="${focusData.field}"]`;
-        if (focusData.answerIndex !== undefined) selector += `[data-answer-index="${focusData.answerIndex}"]`;
-        if (focusData.acceptedIndex !== undefined) selector += `[data-accepted-index="${focusData.acceptedIndex}"]`;
-        if (focusData.gapIndex !== undefined) selector += `[data-gap-index="${focusData.gapIndex}"]`;
-        if (focusData.pairLeft !== undefined) selector += `[data-pair-left="${focusData.pairLeft}"]`;
-        if (focusData.pairRight !== undefined) selector += `[data-pair-right="${focusData.pairRight}"]`;
-        if (focusData.puzzleIndex !== undefined) selector += `[data-puzzle-index="${focusData.puzzleIndex}"]`;
-        const newEl = questionListEl.querySelector(selector);
-        if (newEl) {
-          newEl.focus();
-          if (newEl.setSelectionRange && (newEl.tagName === 'INPUT' || newEl.tagName === 'TEXTAREA')) {
-            const val = newEl.value;
-            newEl.setSelectionRange(val.length, val.length);
-          }
-        }
-      }
-    });
+    el.addEventListener('change', syncQuizFromUI);
   });
 
   if (collapseAllBtn) {
@@ -1810,6 +1800,14 @@ function normalizeQuizAudioDefaults(targetQuiz) {
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
   targetQuiz.readAllQuestionsAloud = targetQuiz.ttsLanguage !== 'NONE' && targetQuiz.readAllQuestionsAloud !== false;
+
+  if (targetQuiz.ttsLanguage === 'NONE') {
+    targetQuiz.language = '';
+  } else if (targetQuiz.ttsLanguage === 'OTHER') {
+    if (!targetQuiz.language) targetQuiz.language = EDGE_TTS_LANGUAGE_DEFAULTS['OTHER'];
+  } else {
+    targetQuiz.language = getVoiceForTtsLanguage(targetQuiz.ttsLanguage);
+  }
 }
 
 function buildAudioSettingsMarkup(idx, q) {
@@ -2361,10 +2359,10 @@ async function openQuizFromCloud() {
   try {
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
-    
+
     const data = await api('/api/quizzes', { method: 'GET' });
     const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
-    
+
     if (!cloudQuizzes.length) {
       setStatus(hostStatusEl, 'No quizzes in cloud yet. Import a quiz first!', 'ok');
       return;
@@ -2372,9 +2370,9 @@ async function openQuizFromCloud() {
 
     showQuizManagerDialog({
       title: '☁️ Cloud quizzes (R2)',
-      items: cloudQuizzes.map((q, i) => ({ 
-        id: q.key, 
-        raw: q, 
+      items: cloudQuizzes.map((q, i) => ({
+        id: q.key,
+        raw: q,
         label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`
       })),
       onOpen: async (item) => {
@@ -2414,21 +2412,21 @@ async function saveQuizToCloud() {
     await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
-    
+
     const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
     quiz._r2QuizId = quizId;
     quiz.title = quiz.title || 'Untitled Quiz';
-    
+
     // Upload quiz JSON to R2 (with title and questions for listing)
     const res = await fetch(`${base}/api/quizzes/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ quiz, quizId })
     });
-    
+
     if (!res.ok) throw new Error('Upload failed');
     const data = await res.json();
-    
+
     setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
@@ -3782,7 +3780,7 @@ function renderHostAnswerHistory(state) {
     const li = document.createElement('li');
     const title = document.createElement('div');
     title.className = 'small';
-    title.innerHTML = `<strong>Q${Number(block.qIndex) + 1}</strong> - ${escapeHtml(String(block.prompt || '').slice(0, 90) || '(no prompt)' )}`;
+    title.innerHTML = `<strong>Q${Number(block.qIndex) + 1}</strong> - ${escapeHtml(String(block.prompt || '').slice(0, 90) || '(no prompt)')}`;
     li.appendChild(title);
 
     const entries = Array.isArray(block.entries) ? block.entries : [];
@@ -4930,7 +4928,7 @@ function renderProjectorScores(players, opts = {}) {
   }
 
   viewPlayers.slice(0, 10).forEach((p, i) => {
-    const medals = ['🥇','🥈','🥉'];
+    const medals = ['🥇', '🥈', '🥉'];
     const prefix = medals[i] || '🏅';
     projectorScoresEl.appendChild(buildProjectorScoreItem(i + 1, p.name, p.score, prefix));
   });
@@ -5079,7 +5077,7 @@ function toggleProjectorFullscreen() {
   if (document.fullscreenElement) {
     document.exitFullscreen?.();
   } else {
-    target.requestFullscreen?.().catch(() => {});
+    target.requestFullscreen?.().catch(() => { });
   }
 }
 
@@ -5115,7 +5113,7 @@ function playHallMusic() {
   if (!audioFx.hall) return;
   if (!audioFx.hall.paused) return;
   audioFx.hall.currentTime = 0;
-  audioFx.hall.play().catch(() => {});
+  audioFx.hall.play().catch(() => { });
 }
 
 function stopHallMusic() {
@@ -5131,7 +5129,7 @@ function playFxWithVolume(name, volume = 1) {
     a.pause();
     a.currentTime = 0;
     a.volume = Math.max(0, Math.min(1, Number(volume || 0)));
-    a.play().catch(() => {});
+    a.play().catch(() => { });
   } catch {
     // ignore missing files/autoplay errors
   }
@@ -5151,7 +5149,7 @@ function playFx(name) {
     live.host.currentAnsweringFx = a;
     try {
       a.currentTime = 0;
-      a.play().catch(() => {});
+      a.play().catch(() => { });
     } catch {
       // ignore missing files or autoplay errors
     }
@@ -5162,7 +5160,7 @@ function playFx(name) {
   if (!a) return;
   try {
     a.currentTime = 0;
-    a.play().catch(() => {});
+    a.play().catch(() => { });
   } catch {
     // ignore missing files or autoplay errors
   }
@@ -5222,7 +5220,7 @@ function resumeFx(name) {
     const a = live.host.currentAnsweringFx;
     if (!a) return;
     try {
-      a.play().catch(() => {});
+      a.play().catch(() => { });
     } catch {
       // ignore
     }
@@ -5232,7 +5230,7 @@ function resumeFx(name) {
   const a = audioFx[name];
   if (!a) return;
   try {
-    a.play().catch(() => {});
+    a.play().catch(() => { });
   } catch {
     // ignore
   }
@@ -5505,7 +5503,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(preview);
     }
 
-      if (question.type === 'context_gap') {
+    if (question.type === 'context_gap') {
       const count = Math.max(1, Math.min(10, Number(question.gapCount || 1)));
       renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
     } else if (question.type === 'error_hunt') {
@@ -6068,13 +6066,13 @@ function applyPreviewEdgeCase(players, edgeCase = 'none') {
 }
 
 function randomPreviewNames(count = 14) {
-  const first = ['Nova','Leo','Mia','Kai','Iris','Nora','Adam','Luna','Eric','Sara','Dani','Pol','Aina','Hugo','Noa','Jan','Laia','Marc','Clara','Pau'];
-  const last = ['Orion','Vega','Cosmo','Stellar','Comet','Nebula','Meteor','Pulse','Quantum','Drift','Ray','Orbit'];
+  const first = ['Nova', 'Leo', 'Mia', 'Kai', 'Iris', 'Nora', 'Adam', 'Luna', 'Eric', 'Sara', 'Dani', 'Pol', 'Aina', 'Hugo', 'Noa', 'Jan', 'Laia', 'Marc', 'Clara', 'Pau'];
+  const last = ['Orion', 'Vega', 'Cosmo', 'Stellar', 'Comet', 'Nebula', 'Meteor', 'Pulse', 'Quantum', 'Drift', 'Ray', 'Orbit'];
   const out = [];
   const used = new Set();
   const target = Math.max(1, Math.min(60, Number(count || 14)));
   while (out.length < target) {
-    const name = `${first[Math.floor(Math.random()*first.length)]} ${last[Math.floor(Math.random()*last.length)]}`;
+    const name = `${first[Math.floor(Math.random() * first.length)]} ${last[Math.floor(Math.random() * last.length)]}`;
     if (used.has(name)) continue;
     used.add(name);
     out.push(name);
@@ -6824,6 +6822,7 @@ function createEmptyQuiz() {
     version: 1,
     title: '',
     ttsLanguage: 'NONE',
+    language: '',
     readAllQuestionsAloud: false,
     questions: [],
   };
@@ -6838,17 +6837,18 @@ function collapseAllQuestions(targetQuiz) {
 }
 
 function makeMcqQuestion(opts = {}) {
+  const defaults = getHearQuestionsMode(quiz);
   return {
     id: crypto.randomUUID(),
     type: 'mcq',
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -6865,11 +6865,11 @@ function makeMultiQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: '', correct: true },
@@ -6886,11 +6886,11 @@ function makeTfQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     answers: [
       { text: 'True', correct: true },
@@ -6906,11 +6906,11 @@ function makeTextQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     accepted: ['', '', ''],
   };
@@ -6923,11 +6923,11 @@ function makeOpenQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -6942,8 +6942,8 @@ function makeSpeakingQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -6959,8 +6959,8 @@ function makeImageOpenQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -6976,8 +6976,8 @@ function makeContextGapQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -6997,8 +6997,8 @@ function makeMatchPairsQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -7014,8 +7014,8 @@ function makeErrorHuntQuestion() {
     audioEnabled: false,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
   };
 }
@@ -7027,11 +7027,11 @@ function makePuzzleQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: !!opts.withAudio,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
-    ttsLanguage: DEFAULT_EDGE_TTS_LANGUAGE,
-    language: DEFAULT_EDGE_TTS_VOICE,
+    ttsLanguage: quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE,
+    language: quiz.language || DEFAULT_EDGE_TTS_VOICE,
     audioData: '',
     items: ['', '', ''],
   };
@@ -7295,7 +7295,7 @@ async function validateAudioDataUrl(dataUrl, timeoutMs = 8000) {
       audio.onloadedmetadata = null;
       audio.onerror = null;
       audio.removeAttribute('src');
-      try { audio.load(); } catch {}
+      try { audio.load(); } catch { }
     };
     const timer = setTimeout(() => {
       cleanup();
@@ -7481,17 +7481,17 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
 async function uploadMediaToR2(dataUrl, key) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error('Invalid data URL');
-  
+
   const mime = match[1];
   const binaryStr = atob(match[2]);
   const bytes = new Uint8Array(binaryStr.length);
   for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
   const blob = new Blob([bytes], { type: mime });
-  
+
   const form = new FormData();
   form.append('file', blob, key.split('/').pop());
   form.append('path', key);
-  
+
   const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
   const res = await fetch(`${base}/api/media/upload`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
@@ -8125,13 +8125,13 @@ function stopQuestionAudioPlayback() {
       activeQuestionAudioEl.currentTime = 0;
       activeQuestionAudioEl = null;
     }
-  } catch {}
+  } catch { }
 
   try {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-  } catch {}
+  } catch { }
 }
 
 async function playQuestionAudio(question, opts = {}) {
@@ -8159,7 +8159,7 @@ async function playQuestionAudio(question, opts = {}) {
 
   const playAudioEl = (a) => {
     activeQuestionAudioEl = a;
-    try { a.playbackRate = safeSpeed; } catch {}
+    try { a.playbackRate = safeSpeed; } catch { }
 
     const onFinish = () => {
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
