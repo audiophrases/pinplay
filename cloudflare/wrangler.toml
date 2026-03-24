@@ -3,9 +3,6 @@ account_id = "b7cc0719d9ecb3485646785035f87ca1"
 main = "worker.js"
 compatibility_date = "2026-03-04"
 
-[assets]
-directory = "./assets"
-
 [[r2_buckets]]
 binding = "QUIZ_MEDIA"
 bucket_name = "pinplay-quiz-media"

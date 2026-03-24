@@ -1,1 +1,3 @@
-npx wrangler deploy
+@echo off
+echo Deploying API (pinplay-api)...
+npx wrangler deploy --config wrangler.toml
