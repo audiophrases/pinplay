@@ -6987,7 +6987,7 @@ function makeOpenQuestion(opts = {}) {
   };
 }
 
-function makeSpeakingQuestion() {
+function makeSpeakingQuestion(opts = {}) {
   const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
   const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
@@ -6996,7 +6996,7 @@ function makeSpeakingQuestion() {
     prompt: 'Speak your answer when called by the teacher.',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: false,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -8177,7 +8177,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {
