@@ -732,7 +732,7 @@ function renderInstantFeedbackFromState() {
     isEndMode = true;
   }
   
-  if (!shouldShowFeedback) { existing?.remove(); return; }
+  if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
   
   const wrap = joinQuestionWrap || joinCardEl;
   if (!wrap) return;
