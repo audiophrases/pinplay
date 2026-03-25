@@ -1611,7 +1611,7 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
-        const includeAnswers = assignment.feedbackMode === 'instant' && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = assignment.feedbackMode === 'instant';
         return json({
           ok: true,
           saved: true,
@@ -3506,7 +3506,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     : false;
 
   let answersWithCorrectness = null;
-  if (includeAnswers && !hasTeacherGraded) {
+  if (includeAnswers) {
     const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
     answersWithCorrectness = Object.entries(answers).map(([idxRaw, item]) => {
       const qIndex = Number(idxRaw);
