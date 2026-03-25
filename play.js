@@ -724,8 +724,7 @@ function renderInstantFeedbackFromState() {
   let isEndMode = false;
   let currentQuestionAnswered = false;
   
-  if (feedbackMode === 'end') {
-    // Show only when all questions are answered (at the very end)
+  if (feedbackMode !== 'none') {
     const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
     const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
     shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
@@ -2446,7 +2445,10 @@ function showSliderFeedback(question, state) {
   const out = document.getElementById('joinSliderValue');
   if (!slider) return;
   slider.disabled = true;
-  const correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
+  let correctVal = parseFloat(state.correctAnswer);
+  if (isNaN(correctVal)) {
+    correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
+  }
   const studentVal = Number(slider.value);
   if (!isNaN(correctVal)) {
     slider.value = correctVal;
