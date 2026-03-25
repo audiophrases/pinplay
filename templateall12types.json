@@ -1,0 +1,433 @@
+{
+  "version": 1,
+  "title": "All Question Types w/ Images",
+  "ttsLanguage": "NONE",
+  "readAllQuestionsAloud": false,
+  "questions": [
+    {
+      "id": "q1-mcq",
+      "type": "mcq",
+      "prompt": "What animal is this?",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q0.mp3",
+      "imageData": "https://picsum.photos/seed/mcq/640/360",
+      "answers": [
+        {
+          "text": "Cat",
+          "correct": true
+        },
+        {
+          "text": "Dog",
+          "correct": false
+        },
+        {
+          "text": "Bird",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        }
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "What animal is this?",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q2-multi",
+      "type": "multi",
+      "prompt": "Select all fruits shown.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q1.mp3",
+      "imageData": "https://picsum.photos/seed/multi/640/360",
+      "answers": [
+        {
+          "text": "Apple",
+          "correct": true
+        },
+        {
+          "text": "Carrot",
+          "correct": false
+        },
+        {
+          "text": "Banana",
+          "correct": true
+        },
+        {
+          "text": "Broccoli",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        },
+        {
+          "text": "",
+          "correct": false
+        }
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Select all fruits shown.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q3-tf",
+      "type": "tf",
+      "prompt": "True or False: This is a mountain.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q2.mp3",
+      "imageData": "https://picsum.photos/seed/tf/640/360",
+      "answers": [
+        {
+          "text": "True",
+          "correct": true
+        },
+        {
+          "text": "False",
+          "correct": false
+        }
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "True or False: This is a mountain.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q4-text",
+      "type": "text",
+      "prompt": "Name the color of the car.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q3.mp3",
+      "imageData": "https://picsum.photos/seed/text/640/360",
+      "accepted": [
+        "red",
+        "crimson",
+        "scarlet",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "collapsed": false,
+      "imageKeyword": "",
+      "_lastPrompt": "Name the color of the car.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q5-context",
+      "type": "context_gap",
+      "prompt": "I went to the ____ and bought some ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q4.mp3",
+      "imageData": "https://picsum.photos/seed/context/640/360",
+      "gaps": [
+        "market",
+        "apples",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "I went to the ____ and bought some ____.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q6-match",
+      "type": "match_pairs",
+      "prompt": "Match the animals to their sounds.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q5.mp3",
+      "imageData": "https://picsum.photos/seed/match/640/360",
+      "pairs": [
+        {
+          "left": "Dog",
+          "right": "Bark"
+        },
+        {
+          "left": "Cat",
+          "right": "Meow"
+        },
+        {
+          "left": "Cow",
+          "right": "Moo"
+        }
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Match the animals to their sounds.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q7-error",
+      "type": "error_hunt",
+      "prompt": "He go to school every days.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q6.mp3",
+      "imageData": "https://picsum.photos/seed/error/640/360",
+      "corrected": "He goes to school every day.",
+      "collapsed": true,
+      "imageKeyword": "",
+      "correctedVariants": [
+        "He goes to school every day."
+      ],
+      "_lastPrompt": "He go to school every days.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q8-open",
+      "type": "open",
+      "prompt": "Describe the weather in one sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q7.mp3",
+      "imageData": "https://picsum.photos/seed/open/640/360",
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Describe the weather in one sentence.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q9-speaking",
+      "type": "speaking",
+      "prompt": "Say a sentence about this picture.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "",
+      "imageData": "https://picsum.photos/seed/speaking/640/360",
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Say a sentence about this picture.",
+      "_ttsGenerated": false,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q10-puzzle",
+      "type": "puzzle",
+      "prompt": "Reorder the words to form a sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q9.mp3",
+      "imageData": "https://picsum.photos/seed/puzzle/640/360",
+      "items": [
+        "The",
+        "cat",
+        "sat",
+        "on",
+        "the",
+        "mat",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Reorder the words to form a sentence.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q11-slider",
+      "type": "slider",
+      "prompt": "How many books do you read per year?",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q10.mp3",
+      "imageData": "https://picsum.photos/seed/slider/640/360",
+      "min": 0,
+      "max": 50,
+      "target": 50,
+      "margin": "none",
+      "unit": "books",
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "How many books do you read per year?",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    },
+    {
+      "id": "q12-pin",
+      "type": "pin",
+      "prompt": "Tap both joysticks.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "language": "",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q11.mp3",
+      "imageData": "https://picsum.photos/seed/pin/640/360",
+      "zones": [
+        {
+          "x": 57.2,
+          "y": 25.1,
+          "r": 6
+        },
+        {
+          "x": 43.4,
+          "y": 24.8,
+          "r": 6
+        }
+      ],
+      "zone": {
+        "x": 57.2,
+        "y": 25.1,
+        "r": 6
+      },
+      "pinMode": "all",
+      "collapsed": true,
+      "imageKeyword": "",
+      "_lastPrompt": "Tap both joysticks.",
+      "_ttsGenerated": true,
+      "_userAudioUploaded": false
+    }
+  ],
+  "_r2QuizId": "361521",
+  "language": ""
+}
