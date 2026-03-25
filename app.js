@@ -3163,6 +3163,7 @@ async function createAssignmentFromCurrentQuiz() {
         attemptsLimit,
         dueAt,
         randomNames: randomNamesEnabled,
+        feedbackMode: assignmentFeedbackMode,
         quiz: normalizeQuizForLive(quiz),
       },
     });
