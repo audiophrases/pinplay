@@ -393,6 +393,7 @@ textarea { min-height: 72px; resize: vertical; }
   flex-wrap: wrap;
   gap: .4rem;
   align-items: center;
+  justify-content: center;
 }
 
 .context-gap-word {
@@ -409,7 +410,8 @@ textarea { min-height: 72px; resize: vertical; }
 
 .match-pairs-wrap {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: auto auto;
+  justify-content: center;
   gap: .7rem;
   margin-top: .4rem;
   align-items: start;
@@ -445,8 +447,8 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .45rem;
 }
 
-.match-pairs-col-left { justify-items: start; }
-.match-pairs-col-right { justify-items: start; }
+.match-pairs-col-left { justify-items: center; }
+.match-pairs-col-right { justify-items: center; }
 
 .match-pair-left {
   width: fit-content;
@@ -456,7 +458,7 @@ textarea { min-height: 72px; resize: vertical; }
   background: #fff;
   padding: .5rem .75rem;
   display: block;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   font-size: 1rem;
   line-height: 1.25;
@@ -489,8 +491,8 @@ textarea { min-height: 72px; resize: vertical; }
   width: fit-content;
   max-width: 100%;
   white-space: normal;
-  text-align: left;
-  justify-content: flex-start;
+  text-align: center;
+  justify-content: center;
   height: auto;
 }
 .puzzle-dragging {
@@ -599,6 +601,13 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .btn.puzzle-reset {
   align-self: center;
+}
+
+#joinCard.question-active[data-qtype="speaking"] #joinAnswers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .poll-word-cloud {
