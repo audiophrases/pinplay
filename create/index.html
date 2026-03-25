@@ -31,6 +31,75 @@
               Quiz builder <span class="collapse-chevron" aria-hidden="true">▾</span>
             </h2>
             <div id="builderCardBody">
+            <!-- Creation Prompt Section -->
+            <div class="creation-prompt-section">
+              <button id="creationPromptToggle" class="section-toggle-btn" type="button" aria-expanded="false" style="border:none; border-bottom:1px solid var(--line); border-radius:0;">
+                <span>✨ AI Creation Prompt</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="creationPromptBody" class="section-collapsible-body hidden" style="padding:1.25rem;">
+                <div class="creation-prompt-grid">
+                  <div class="prompt-field">
+                    <label>Theme</label>
+                    <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Language</label>
+                    <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Level</label>
+                    <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Feel</label>
+                    <input id="promptFeel" type="text" placeholder="e.g. Fun, Academic, Intense" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Time limit (sec)</label>
+                    <input id="promptTimeLimit" type="number" value="30" min="0" max="300" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Questions</label>
+                    <input id="promptQuestionCount" type="number" value="10" min="1" max="50" />
+                  </div>
+                  <div class="prompt-field">
+                    <label>Images</label>
+                    <select id="promptImages">
+                      <option value="yes">Include images</option>
+                      <option value="no">No images</option>
+                    </select>
+                  </div>
+                  <div class="prompt-field">
+                    <label>Audio/TTS</label>
+                    <select id="promptAudio">
+                      <option value="yes">Include TTS audio</option>
+                      <option value="no">No audio</option>
+                    </select>
+                  </div>
+                  <div class="prompt-field">
+                    <label>Answers</label>
+                    <select id="promptAnswerType">
+                      <option value="balanced">Balanced mix</option>
+                      <option value="closed">Closed only (MCQ/TF)</option>
+                      <option value="open">Include open/voice answers</option>
+                    </select>
+                  </div>
+                  <div class="prompt-field">
+                    <label>Goal</label>
+                    <select id="promptGoal">
+                      <option value="learning">More learning (scaffolded)</option>
+                      <option value="practising">More practising (retrieval)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row gap top-space">
+                  <button id="exportPromptBtn" class="btn success">Export prompt to clipboard + JSON</button>
+                  <span id="promptStatus" class="small"></span>
+                </div>
+              </div>
+            </div>
+
             <div class="row gap top-space quiz-actions" id="builderActionRow">
               <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
               <button id="openLocalBtn" class="btn">Open</button>

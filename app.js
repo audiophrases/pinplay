@@ -43,6 +43,10 @@ const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
+const creationPromptToggleEl = document.getElementById('creationPromptToggle');
+const creationPromptBodyEl = document.getElementById('creationPromptBody');
+const exportPromptBtn = document.getElementById('exportPromptBtn');
+const promptStatusEl = document.getElementById('promptStatus');
 const liveScreenSectionToggleEl = document.getElementById('liveScreenSectionToggle');
 const liveScreenCardBodyEl = document.getElementById('liveScreenCardBody');
 const gameControlsSectionToggleEl = document.getElementById('gameControlsSectionToggle');
@@ -418,6 +422,7 @@ function toggleTeacherSectionCollapseAll() {
 
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(creationPromptToggleEl, creationPromptBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
@@ -467,6 +472,9 @@ function addQuestionToBuilder(question) {
 }
 
 function bindBuilderEvents() {
+  if (exportPromptBtn) {
+    exportPromptBtn.addEventListener('click', exportCreationPrompt);
+  }
   addMcqBtn.addEventListener('click', () => {
     addQuestionToBuilder(makeMcqQuestion());
   });
@@ -2436,6 +2444,97 @@ async function saveQuizToCloud() {
   } catch (err) {
     setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
   }
+}
+
+async function exportCreationPrompt() {
+  const theme = document.getElementById('promptTheme')?.value.trim();
+  const lang = document.getElementById('promptLanguage')?.value.trim();
+  const level = document.getElementById('promptLevel')?.value.trim();
+  const feel = document.getElementById('promptFeel')?.value.trim();
+  const timeLimit = document.getElementById('promptTimeLimit')?.value;
+  const count = document.getElementById('promptQuestionCount')?.value;
+  const images = document.getElementById('promptImages')?.value;
+  const audio = document.getElementById('promptAudio')?.value;
+  const answers = document.getElementById('promptAnswerType')?.value;
+  const goal = document.getElementById('promptGoal')?.value;
+
+  if (!theme) {
+    alert('Please enter a theme for the quiz!');
+    return;
+  }
+
+  const textualRequest = `Theme: ${theme}${lang ? `\nLanguage: ${lang}` : ''}${level ? `\nLevel: ${level}` : ''}${feel ? `\nFeel: ${feel}` : ''}\nTime Limit: ${timeLimit}s per question\nQuestion Count: ${count}\nInclude Images: ${images === 'yes' ? 'Yes' : 'No'}\nInclude Audio: ${audio === 'yes' ? 'Yes' : 'No'}\nAnswer Types: ${answers}\nGoal: ${goal === 'learning' ? 'More learning (scaffolded)' : 'More practising (retrieval)'}`;
+
+  const promptText = `
+I want to create a PinPlay quiz in JSON format with the following requirements:
+${textualRequest}
+
+Please provide the output as a valid PinPlay JSON version 3.
+The structure must follow the version 3 spec:
+{
+  "version": 3,
+  "title": "${theme}",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq",
+      "prompt": "...",
+      "points": 1000,
+      "timeLimit": ${timeLimit},
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "answers": [
+        { "text": "...", "correct": true },
+        { "text": "...", "correct": false }
+      ]
+    }
+  ]
+}
+
+Supported question types for your response: mcq (multiple choice), multi (multiselect), tf (true/false), text (typed answer), context_gap (fill in the blanks), match_pairs, error_hunt, puzzle (reorder), slider (numeric range), pin (coordinate), audio (tts-first), speaking (voice answer).
+`.trim();
+
+  const exportData = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      type: "PinPlay Creation Prompt"
+    },
+    request: {
+      theme,
+      language: lang,
+      level,
+      feel,
+      timeLimit: Number(timeLimit),
+      count: Number(count),
+      includeImages: images === 'yes',
+      includeAudio: audio === 'yes',
+      answerTypes: answers,
+      goal
+    },
+    aiPrompt: promptText,
+    exampleFormat: {
+      version: 3,
+      title: theme,
+      questions: []
+    }
+  };
+
+  try {
+    await navigator.clipboard.writeText(promptText);
+    if (promptStatusEl) {
+      promptStatusEl.textContent = 'Prompt copied! 📋';
+      promptStatusEl.className = 'small ok';
+      setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
+    }
+  } catch (err) {
+    if (promptStatusEl) {
+      promptStatusEl.textContent = 'Copied failed, but JSON exported.';
+      promptStatusEl.className = 'small bad';
+    }
+  }
+
+  const filename = `prompt-${toSafeFilename(theme)}.json`;
+  downloadJson(exportData, filename);
 }
 
 // ---------- Live mode ----------

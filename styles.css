@@ -206,6 +206,68 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .top-space { margin-top: .75rem; }
 
+/* Creation Prompt Section Styles */
+.creation-prompt-section {
+  border: 1px solid var(--primary);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, #ffffff, #f9f9ff);
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(96, 93, 255, 0.1);
+  margin-bottom: 1.25rem;
+}
+
+.creation-prompt-section .section-toggle-btn {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.85rem 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.creation-prompt-section .section-toggle-btn:hover {
+  background: rgba(96, 93, 255, 0.05);
+}
+
+.creation-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+.prompt-field label {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+
+.prompt-field input, .prompt-field select {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.6rem;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.prompt-field input:focus, .prompt-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(96, 93, 255, 0.15);
+  outline: none;
+}
+
 .host-live-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
