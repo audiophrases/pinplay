@@ -31,6 +31,7 @@ const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
 const assignmentBannerEl = document.getElementById('assignmentBanner');
 const joinStatusHudEl = document.getElementById('joinStatusHud');
+const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
