@@ -227,6 +227,16 @@ async function validatePin() {
           const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
           joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
         }
+        // Fetch and display a random name immediately so the student sees it
+        if (!live.player.displayName) {
+          try {
+            const res = await api('/api/player/random-name', { method: 'GET' });
+            live.player.displayName = String(res?.name || '').trim() || `Player${Math.floor(Math.random() * 999)}`;
+          } catch {
+            live.player.displayName = `Player${Math.floor(Math.random() * 999)}`;
+          }
+        }
+        setJoinTitle(live.player.displayName);
       } else {
         if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
         if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
