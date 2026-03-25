@@ -1172,7 +1172,11 @@ function renderJoinQuestion(question) {
   // Store current question for keyboard shortcut
   live.player.currentQuestion = question;
 
-  if (joinAnswersEl) joinAnswersEl.innerHTML = '';
+  if (joinAnswersEl) {
+    joinAnswersEl.innerHTML = '';
+    joinAnswersEl.style.pointerEvents = 'auto';
+    joinAnswersEl.classList.remove('two-col', 'answers-locked');
+  }
   if (!joinAnswersEl) return;
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
