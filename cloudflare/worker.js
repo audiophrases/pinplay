@@ -1541,7 +1541,7 @@ export class QuizRoom {
         const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = (assignment.feedbackMode === 'instant' || (assignment.feedbackMode !== 'none' && !!attempt.submitted)) && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
       }
 
@@ -1611,7 +1611,7 @@ export class QuizRoom {
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
 
-        const includeAnswers = assignment.feedbackMode !== 'none' && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
+        const includeAnswers = assignment.feedbackMode === 'instant' && !assignment.quiz?.questions?.some((q) => isAssignmentTeacherGradedQuestion(q));
         return json({
           ok: true,
           saved: true,
