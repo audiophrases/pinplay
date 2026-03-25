@@ -5,6 +5,178 @@ const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
+const TEMPLATE_ALL_12_TYPES = {
+  "version": 1,
+  "title": "All Question Types Template",
+  "questions": [
+    {
+      "id": "q1-mcq",
+      "type": "mcq",
+      "prompt": "What animal is this?",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q0.mp3",
+      "imageData": "https://picsum.photos/seed/mcq/640/360",
+      "answers": [
+        { "text": "Cat", "correct": true },
+        { "text": "Dog", "correct": false },
+        { "text": "Bird", "correct": false }
+      ]
+    },
+    {
+      "id": "q2-multi",
+      "type": "multi",
+      "prompt": "Select all fruits shown.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q1.mp3",
+      "imageData": "https://picsum.photos/seed/multi/640/360",
+      "answers": [
+        { "text": "Apple", "correct": true },
+        { "text": "Carrot", "correct": false },
+        { "text": "Banana", "correct": true },
+        { "text": "Broccoli", "correct": false }
+      ]
+    },
+    {
+      "id": "q3-tf",
+      "type": "tf",
+      "prompt": "True or False: This is a mountain.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q2.mp3",
+      "imageData": "https://picsum.photos/seed/tf/640/360",
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "q4-text",
+      "type": "text",
+      "prompt": "Name the color of the car.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q3.mp3",
+      "imageData": "https://picsum.photos/seed/text/640/360",
+      "accepted": ["red", "crimson", "scarlet"]
+    },
+    {
+      "id": "q5-context",
+      "type": "context_gap",
+      "prompt": "I went to the ____ and bought some ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q4.mp3",
+      "imageData": "https://picsum.photos/seed/context/640/360",
+      "gaps": ["market", "apples"]
+    },
+    {
+      "id": "q6-match",
+      "type": "match_pairs",
+      "prompt": "Match the animals to their sounds.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q5.mp3",
+      "imageData": "https://picsum.photos/seed/match/640/360",
+      "pairs": [
+        { "left": "Dog", "right": "Bark" },
+        { "left": "Cat", "right": "Meow" },
+        { "left": "Cow", "right": "Moo" }
+      ]
+    },
+    {
+      "id": "q7-error",
+      "type": "error_hunt",
+      "prompt": "He go to school every days.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q6.mp3",
+      "imageData": "https://picsum.photos/seed/error/640/360",
+      "corrected": "He goes to school every day.",
+      "correctedVariants": ["He goes to school every day."]
+    },
+    {
+      "id": "q8-open",
+      "type": "open",
+      "prompt": "Describe the weather in one sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q7.mp3",
+      "imageData": "https://picsum.photos/seed/open/640/360"
+    },
+    {
+      "id": "q9-speaking",
+      "type": "speaking",
+      "prompt": "Say a sentence about this picture.",
+      "points": 1000,
+      "timeLimit": 0,
+      "imageData": "https://picsum.photos/seed/speaking/640/360"
+    },
+    {
+      "id": "q10-puzzle",
+      "type": "puzzle",
+      "prompt": "Reorder the words to form a sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q9.mp3",
+      "imageData": "https://picsum.photos/seed/puzzle/640/360",
+      "items": ["The", "cat", "sat", "on", "the", "mat"]
+    },
+    {
+      "id": "q11-slider",
+      "type": "slider",
+      "prompt": "How many books do you read per year?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q10.mp3",
+      "imageData": "https://picsum.photos/seed/slider/640/360",
+      "min": 0,
+      "max": 50,
+      "target": 12,
+      "margin": "low",
+      "unit": "books"
+    },
+    {
+      "id": "q12-pin",
+      "type": "pin",
+      "prompt": "Tap both joysticks.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "file",
+      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q11.mp3",
+      "imageData": "https://picsum.photos/seed/pin/640/360",
+      "zones": [
+        { "x": 57.2, "y": 25.1, "r": 6 },
+        { "x": 43.4, "y": 24.8, "r": 6 }
+      ],
+      "pinMode": "all"
+    }
+  ]
+};
+
 // Tabs
 const tabs = document.querySelectorAll('.tab');
 const panels = document.querySelectorAll('.panel');
@@ -2456,41 +2628,37 @@ async function exportCreationPrompt() {
   const images = document.getElementById('promptImages')?.value;
   const audio = document.getElementById('promptAudio')?.value;
   const answers = document.getElementById('promptAnswerType')?.value;
-  const goal = document.getElementById('promptGoal')?.value;
+  const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
+  const goal = goalEl?.value;
+  const goalText = goalEl?.options[goalEl.selectedIndex]?.text;
 
   if (!theme) {
     alert('Please enter a theme for the quiz!');
     return;
   }
 
-  const textualRequest = `Theme: ${theme}${lang ? `\nLanguage: ${lang}` : ''}${level ? `\nLevel: ${level}` : ''}${feel ? `\nFeel: ${feel}` : ''}\nTime Limit: ${timeLimit}s per question\nQuestion Count: ${count}\nInclude Images: ${images === 'yes' ? 'Yes' : 'No'}\nInclude Audio: ${audio === 'yes' ? 'Yes' : 'No'}\nAnswer Types: ${answers}\nGoal: ${goal === 'learning' ? 'More learning (scaffolded)' : 'More practising (retrieval)'}`;
+  // Create clean request object (no blank fields)
+  const cleanRequest = { theme };
+  if (lang) cleanRequest.language = lang;
+  if (level) cleanRequest.level = level;
+  if (feel) cleanRequest.feel = feel;
+  if (timeLimit) cleanRequest.timeLimit = Number(timeLimit);
+  if (count) cleanRequest.questionCount = Number(count);
+  cleanRequest.includeImages = images === 'yes';
+  cleanRequest.includeAudio = audio === 'yes';
+  cleanRequest.answerTypes = answers;
+  if (goalText) cleanRequest.goal = goalText;
+
+  const textualSummary = Object.entries(cleanRequest)
+    .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+    .join('\n');
 
   const promptText = `
 I want to create a PinPlay quiz in JSON format with the following requirements:
-${textualRequest}
+${textualSummary}
 
 Please provide the output as a valid PinPlay JSON version 3.
-The structure must follow the version 3 spec:
-{
-  "version": 3,
-  "title": "${theme}",
-  "questions": [
-    {
-      "id": "q1",
-      "type": "mcq",
-      "prompt": "...",
-      "points": 1000,
-      "timeLimit": ${timeLimit},
-      "audioEnabled": false,
-      "audioMode": "tts",
-      "answers": [
-        { "text": "...", "correct": true },
-        { "text": "...", "correct": false }
-      ]
-    }
-  ]
-}
-
+Ensure the structure follows the version 3 spec and patterns seen in the provided template.
 Supported question types for your response: mcq (multiple choice), multi (multiselect), tf (true/false), text (typed answer), context_gap (fill in the blanks), match_pairs, error_hunt, puzzle (reorder), slider (numeric range), pin (coordinate), audio (tts-first), speaking (voice answer).
 `.trim();
 
@@ -2499,24 +2667,9 @@ Supported question types for your response: mcq (multiple choice), multi (multis
       generatedAt: new Date().toISOString(),
       type: "PinPlay Creation Prompt"
     },
-    request: {
-      theme,
-      language: lang,
-      level,
-      feel,
-      timeLimit: Number(timeLimit),
-      count: Number(count),
-      includeImages: images === 'yes',
-      includeAudio: audio === 'yes',
-      answerTypes: answers,
-      goal
-    },
+    request: cleanRequest,
     aiPrompt: promptText,
-    exampleFormat: {
-      version: 3,
-      title: theme,
-      questions: []
-    }
+    exampleTemplate: typeof TEMPLATE_ALL_12_TYPES !== 'undefined' ? TEMPLATE_ALL_12_TYPES : null
   };
 
   try {
