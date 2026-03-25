@@ -31,6 +31,7 @@ const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
 const assignmentBannerEl = document.getElementById('assignmentBanner');
 const joinStatusHudEl = document.getElementById('joinStatusHud');
+const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
@@ -227,6 +228,16 @@ async function validatePin() {
           const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
           joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
         }
+        // Fetch and display a random name immediately so the student sees it
+        if (!live.player.displayName) {
+          try {
+            const res = await api('/api/player/random-name', { method: 'GET' });
+            live.player.displayName = String(res?.name || '').trim() || `Player${Math.floor(Math.random() * 999)}`;
+          } catch {
+            live.player.displayName = `Player${Math.floor(Math.random() * 999)}`;
+          }
+        }
+        setJoinTitle(live.player.displayName);
       } else {
         if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
         if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
@@ -407,6 +418,30 @@ function mapAssignmentStateToPlayerState() {
   const idx = Math.max(0, Math.min(live.player.assignment.currentIndex, Math.max(0, questions.length - 1)));
   const question = questions[idx] || null;
 
+  const answeredCurrent = (attempt.answeredQIndexes || []).includes(idx);
+  const isInstantFeedback = assignment.feedbackMode === 'instant';
+
+  let questionClosed = false;
+  let revealedResult = null;
+  let correctAnswer = null;
+
+  if (isInstantFeedback && answeredCurrent) {
+    questionClosed = true;
+    const answers = Array.isArray(attempt.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
+    const currentAnswer = answers.find(a => Number(a.qIndex) === idx);
+    if (currentAnswer) {
+      revealedResult = {
+        correct: currentAnswer.correct,
+        pointsAwarded: currentAnswer.points || 0,
+        correction: '',
+        graded: true,
+      };
+      correctAnswer = currentAnswer.correctAnswer;
+    } else {
+      questionClosed = false;
+    }
+  }
+
   return {
     phase: question ? 'question' : 'results',
     pin: assignment.code,
@@ -416,13 +451,15 @@ function mapAssignmentStateToPlayerState() {
     score: Number(attempt?.metrics?.totalScore ?? attempt?.metrics?.autoScore ?? 0),
     questionStartedAt: attempt.startedAt || assignment.startedAt || 0,
     questionDeadlineAt: assignment.dueAt || null,
-    questionClosed: false,
-    questionCloseReason: null,
-    answeredCurrent: (attempt.answeredQIndexes || []).includes(idx),
+    questionClosed,
+    questionCloseReason: questionClosed ? 'manual_reveal' : null,
+    answeredCurrent,
     assignmentSubmitted: !!attempt?.submitted,
     answeredQIndexes: Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : [],
     question,
     correction: '',
+    revealedResult,
+    correctAnswer,
   };
 }
 
@@ -687,24 +724,14 @@ function renderInstantFeedbackFromState() {
   let isEndMode = false;
   let currentQuestionAnswered = false;
   
-  if (feedbackMode === 'none') {
-    // No feedback - don't show results
-    shouldShowFeedback = false;
-  } else if (feedbackMode === 'instant') {
-    // In instant mode: show feedback for the CURRENT question only, right after answer
-    // Check if current question has been answered
-    const currentAnswer = answers.find(a => Number(a.qIndex) === Number(currentQIndex));
-    currentQuestionAnswered = !!currentAnswer;
-    shouldShowFeedback = currentQuestionAnswered;
-  } else if (feedbackMode === 'end') {
-    // Show only when all questions are answered (at the very end)
+  if (feedbackMode !== 'none') {
     const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
     const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
     shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
     isEndMode = true;
   }
   
-  if (!shouldShowFeedback) return;
+  if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
   
   const wrap = joinQuestionWrap || joinCardEl;
   if (!wrap) return;
@@ -724,35 +751,19 @@ function renderInstantFeedbackFromState() {
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
   
-  if (feedbackMode === 'instant' && !isEndMode) {
-    // Show feedback for current question only in instant mode
-    title.textContent = 'Question Feedback';
-    const currentAnswer = answers.find(a => Number(a.qIndex) === Number(currentQIndex));
-    if (currentAnswer) {
-      const q = questions[currentQIndex] || {};
-      const li = document.createElement('li');
-      li.className = currentAnswer.correct ? 'ok' : 'bad';
-      const result = currentAnswer.correct ? '✅ Correct' : '❌ Incorrect';
-      const points = Number(currentAnswer.points || 0);
-      const pointsText = points > 0 ? ` · +${points} points` : '';
-      li.textContent = `${result}${pointsText}`;
-      list.appendChild(li);
-    }
-  } else {
-    // Show all results in end mode or final summary
-    title.textContent = feedbackMode === 'instant' ? 'Your Results' : 'Final Results';
-    answers.forEach((a) => {
-      const q = questions[a.qIndex] || {};
-      const li = document.createElement('li');
-      li.className = a.correct ? 'ok' : 'bad';
-      const result = a.correct ? '✅ Correct' : '❌ Incorrect';
-      const points = Number(a.points || 0);
-      const pointsText = points > 0 ? ` · +${points} points` : '';
-      const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
-      li.textContent = `${result}${pointsText}  ·  ${prompt}`;
-      list.appendChild(li);
-    });
-  }
+  // Show all results in end mode or final summary
+  title.textContent = 'Final Results';
+  answers.forEach((a) => {
+    const q = questions[a.qIndex] || {};
+    const li = document.createElement('li');
+    li.className = a.correct ? 'ok' : 'bad';
+    const result = a.correct ? '✅ Correct' : '❌ Incorrect';
+    const points = Number(a.points || 0);
+    const pointsText = points > 0 ? ` · +${points} points` : '';
+    const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
+    li.textContent = `${result}${pointsText}  ·  ${prompt}`;
+    list.appendChild(li);
+  });
   
   panel.appendChild(title);
   panel.appendChild(list);
@@ -1048,8 +1059,19 @@ function renderPlayerState(state) {
           setJoinStatusHud( '📝 Waiting for teacher grading.', 'ok');
         } else {
           // Highlight items: green for correct, red for student's wrong answer
-          setJoinStatusHud( '', '');
+          const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
+          const pts = Number(rr.pointsAwarded || 0);
+          const pointsText = pts > 0 ? ` · +${pts} points` : '';
+          setJoinStatusHud( `${resultText}${pointsText}`, rr.correct ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
+
+          // Disable all choice inputs and interactivity
+          if (joinAnswersEl) {
+            joinAnswersEl.querySelectorAll('input, select, button, textarea').forEach((el) => {
+              el.disabled = true;
+            });
+            joinAnswersEl.style.pointerEvents = 'none'; // Prevent any further clicks
+          }
         }
       } else {
         setJoinStatusHud( closedMsg, 'ok');
@@ -1606,7 +1628,7 @@ async function submitLiveAnswer() {
       if (!code || !attemptId) throw new Error('Start assignment first.');
 
       const qIndex = Number(live.player.assignment.currentIndex || 0);
-      await api('/api/assignment/answer', {
+      const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
           code,
@@ -1616,7 +1638,11 @@ async function submitLiveAnswer() {
         },
       });
 
-      live.player.assignment.forceAutoAdvance = true;
+      const mode = data?.attempt?.assignment?.feedbackMode || 'none';
+      if (mode !== 'instant') {
+        live.player.assignment.forceAutoAdvance = true;
+      }
+      
       setJoinStatusHud( 'Answer saved ✅', 'ok');
       await loadAssignmentState();
       renderInstantFeedbackFromState();
@@ -2419,7 +2445,10 @@ function showSliderFeedback(question, state) {
   const out = document.getElementById('joinSliderValue');
   if (!slider) return;
   slider.disabled = true;
-  const correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
+  let correctVal = parseFloat(state.correctAnswer);
+  if (isNaN(correctVal)) {
+    correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
+  }
   const studentVal = Number(slider.value);
   if (!isNaN(correctVal)) {
     slider.value = correctVal;

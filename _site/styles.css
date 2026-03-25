@@ -679,12 +679,14 @@ textarea { min-height: 72px; resize: vertical; }
   margin: .4rem 0;
 }
 .hall {
+  display: none;
   border: 1px dashed var(--line);
   border-radius: .9rem;
   padding: .85rem;
   background: linear-gradient(145deg, #fbfbff, #f4f6ff);
 }
 .hall.hall-live {
+  display: block;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(96,93,255,.12);
 }
