@@ -6,8 +6,9 @@ const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
 const TEMPLATE_ALL_12_TYPES = {
-  "version": 1,
-  "title": "All Question Types Template",
+  "version": 3,
+  "title": "AI Quiz Reference",
+  "readAllQuestionsAloud": true,
   "questions": [
     {
       "id": "q1-mcq",
@@ -15,11 +16,11 @@ const TEMPLATE_ALL_12_TYPES = {
       "prompt": "What animal is this?",
       "points": 1000,
       "timeLimit": 0,
-      "isPoll": false,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q0.mp3",
-      "imageData": "https://picsum.photos/seed/mcq/640/360",
+      "audioMode": "tts",
+      "audioText": "What animal is this?",
+      "imageKeyword": "cat face",
+      "imageData": "",
       "answers": [
         { "text": "Cat", "correct": true },
         { "text": "Dog", "correct": false },
@@ -33,9 +34,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q1.mp3",
-      "imageData": "https://picsum.photos/seed/multi/640/360",
+      "audioMode": "tts",
+      "audioText": "Select all fruits shown.",
+      "imageKeyword": "basket of fruit",
+      "imageData": "",
       "answers": [
         { "text": "Apple", "correct": true },
         { "text": "Carrot", "correct": false },
@@ -50,9 +52,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q2.mp3",
-      "imageData": "https://picsum.photos/seed/tf/640/360",
+      "audioMode": "tts",
+      "audioText": "Is this a mountain?",
+      "imageKeyword": "snowy mountain peak",
+      "imageData": "",
       "answers": [
         { "text": "True", "correct": true },
         { "text": "False", "correct": false }
@@ -65,9 +68,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q3.mp3",
-      "imageData": "https://picsum.photos/seed/text/640/360",
+      "audioMode": "tts",
+      "audioText": "What color is this car?",
+      "imageKeyword": "red sports car",
+      "imageData": "",
       "accepted": ["red", "crimson", "scarlet"]
     },
     {
@@ -77,9 +81,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q4.mp3",
-      "imageData": "https://picsum.photos/seed/context/640/360",
+      "audioMode": "tts",
+      "audioText": "I went to the blank and bought some blank.",
+      "imageKeyword": "supermarket aisle",
+      "imageData": "",
       "gaps": ["market", "apples"]
     },
     {
@@ -89,9 +94,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q5.mp3",
-      "imageData": "https://picsum.photos/seed/match/640/360",
+      "audioMode": "tts",
+      "audioText": "Match these animals with their sounds.",
+      "imageKeyword": "farm animals group",
+      "imageData": "",
       "pairs": [
         { "left": "Dog", "right": "Bark" },
         { "left": "Cat", "right": "Meow" },
@@ -105,9 +111,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q6.mp3",
-      "imageData": "https://picsum.photos/seed/error/640/360",
+      "audioMode": "tts",
+      "audioText": "He go to school every days.",
+      "imageKeyword": "boy going to school",
+      "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": ["He goes to school every day."]
     },
@@ -118,9 +125,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q7.mp3",
-      "imageData": "https://picsum.photos/seed/open/640/360"
+      "audioMode": "tts",
+      "audioText": "Please describe the weather you see.",
+      "imageKeyword": "sunny blue sky",
+      "imageData": ""
     },
     {
       "id": "q9-speaking",
@@ -128,7 +136,11 @@ const TEMPLATE_ALL_12_TYPES = {
       "prompt": "Say a sentence about this picture.",
       "points": 1000,
       "timeLimit": 0,
-      "imageData": "https://picsum.photos/seed/speaking/640/360"
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Tell me something about this image.",
+      "imageKeyword": "robot waving",
+      "imageData": ""
     },
     {
       "id": "q10-puzzle",
@@ -137,9 +149,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q9.mp3",
-      "imageData": "https://picsum.photos/seed/puzzle/640/360",
+      "audioMode": "tts",
+      "audioText": "Reorder these words.",
+      "imageKeyword": "cat on a mat",
+      "imageData": "",
       "items": ["The", "cat", "sat", "on", "the", "mat"]
     },
     {
@@ -149,9 +162,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q10.mp3",
-      "imageData": "https://picsum.photos/seed/slider/640/360",
+      "audioMode": "tts",
+      "audioText": "How many books?",
+      "imageKeyword": "stack of books",
+      "imageData": "",
       "min": 0,
       "max": 50,
       "target": 12,
@@ -165,9 +179,10 @@ const TEMPLATE_ALL_12_TYPES = {
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
-      "audioMode": "file",
-      "audioData": "https://pinplay-api.eugenime.workers.dev/api/media/361521/audio/q11.mp3",
-      "imageData": "https://picsum.photos/seed/pin/640/360",
+      "audioMode": "tts",
+      "audioText": "Where are the joysticks on this controller?",
+      "imageKeyword": "game controller top view",
+      "imageData": "",
       "zones": [
         { "x": 57.2, "y": 25.1, "r": 6 },
         { "x": 43.4, "y": 24.8, "r": 6 }
@@ -2654,12 +2669,17 @@ async function exportCreationPrompt() {
     .join('\n');
 
   const promptText = `
-I want to create a PinPlay quiz in JSON format with the following requirements:
+I want to create a PinPlay quiz in JSON format with these requirements:
 ${textualSummary}
 
-Please provide the output as a valid PinPlay JSON version 3.
-Ensure the structure follows the version 3 spec and patterns seen in the provided template.
-Supported question types for your response: mcq (multiple choice), multi (multiselect), tf (true/false), text (typed answer), context_gap (fill in the blanks), match_pairs, error_hunt, puzzle (reorder), slider (numeric range), pin (coordinate), audio (tts-first), speaking (voice answer).
+CRITICAL RULES FOR ASSETS:
+1. IMAGES: Set "imageData" to "" and instead provide a descriptive "imageKeyword" (1-2 words). The app will auto-search for the image.
+2. AUDIO: Use "audioMode": "tts" and provide the "audioText" to be spoken. Set "audioData" to "". 
+3. GLOBAL AUDIO: You can set "readAllQuestionsAloud": true at the top level to enable quiz-wide TTS.
+
+OUTPUT FORMAT:
+Provide a valid PinPlay JSON version 3. Follow the structure and patterns in the example template provided.
+Supported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.
 `.trim();
 
   const exportData = {
