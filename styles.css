@@ -731,6 +731,55 @@ textarea { min-height: 72px; resize: vertical; }
   vertical-align: baseline;
 }
 
+.hall-logo {
+  font-size: 1.6rem;
+  vertical-align: middle;
+}
+
+.hall-lobby-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .55rem;
+  justify-content: center;
+  margin-top: .7rem;
+  min-height: 0;
+}
+
+.hall-lobby-players:empty {
+  display: none;
+}
+
+.hall-player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .3rem .6rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  font-size: .92rem;
+  font-weight: 600;
+  color: #3730a3;
+  animation: hall-chip-pop .35s ease-out;
+}
+
+.hall-player-chip .hall-dice-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  font-size: 1em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+@keyframes hall-chip-pop {
+  0% { transform: scale(.7); opacity: 0; }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .project-screen {
   text-align: center;
 }

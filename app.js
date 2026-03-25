@@ -129,6 +129,7 @@ const hostQuestionCardEl = document.getElementById('hostQuestionCard');
 const livePinBigEl = document.getElementById('livePinBig');
 const livePinHudEl = document.getElementById('livePinHud');
 const hallHintEl = document.getElementById('hallHint');
+const hallLobbyPlayersEl = document.getElementById('hallLobbyPlayers');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
 const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
@@ -5093,15 +5094,55 @@ function syncFullscreenButtonLabel() {
 function updateHallScene(state) {
   if (!hallCardEl || !hallHintEl) return;
 
+  const scoreboardSection = document.getElementById('projectorScoreboardSection');
+
   if (state.phase === 'lobby') {
     hallCardEl.classList.add('hall-live');
     hallHintEl.textContent = '';
+    // Hide hint text and scoreboard during lobby
+    if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
+    if (scoreboardSection) scoreboardSection.style.display = 'none';
+
+    // Render lobby player chips inside the hall card
+    if (hallLobbyPlayersEl) {
+      const players = Array.isArray(state.players) ? state.players : [];
+      const isRandomNames = !!(state.settings && state.settings.randomNames);
+      // Build a key to avoid unnecessary DOM rebuilds
+      const chipKey = players.map(p => `${p.id}:${p.name}`).join('|') + ':' + (isRandomNames ? '1' : '0');
+      if (hallLobbyPlayersEl.dataset.chipKey !== chipKey) {
+        hallLobbyPlayersEl.dataset.chipKey = chipKey;
+        hallLobbyPlayersEl.innerHTML = '';
+        players.forEach(p => {
+          const chip = document.createElement('span');
+          chip.className = 'hall-player-chip';
+          if (isRandomNames) {
+            const dice = document.createElement('span');
+            dice.className = 'hall-dice-btn';
+            dice.textContent = '🎲';
+            chip.appendChild(dice);
+          }
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = p.name || 'Player';
+          chip.appendChild(nameSpan);
+          hallLobbyPlayersEl.appendChild(chip);
+        });
+      }
+    }
+
     playHallMusic();
     return;
   }
 
   hallCardEl.classList.remove('hall-live');
   stopHallMusic();
+  // Restore hint text and scoreboard when quiz is active
+  if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
+  if (scoreboardSection) scoreboardSection.style.display = '';
+  // Clear lobby player chips
+  if (hallLobbyPlayersEl) {
+    hallLobbyPlayersEl.innerHTML = '';
+    hallLobbyPlayersEl.dataset.chipKey = '';
+  }
 
   if (state.phase === 'question') {
     hallHintEl.textContent = 'Question in progress.';
