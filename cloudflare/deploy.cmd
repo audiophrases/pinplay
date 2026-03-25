@@ -1,3 +1,3 @@
 @echo off
 echo Deploying API (pinplay-api)...
-npx wrangler deploy --config wrangler.toml
+call npx wrangler deploy --config wrangler.toml %*

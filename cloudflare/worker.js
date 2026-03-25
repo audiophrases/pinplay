@@ -1058,10 +1058,18 @@ export default {
         cacheUrl.pathname = `/__edge_tts_cache/${hash}.mp3`;
         cacheUrl.search = '';
 
-        const cache = caches.default;
+        let cache = null;
+        try { cache = caches.default; } catch {}
+        
         const cacheReq = new Request(cacheUrl.toString(), { method: 'GET' });
-        const hit = await cache.match(cacheReq);
-        if (hit) return withCors(hit);
+        if (cache) {
+          try {
+            const hit = await cache.match(cacheReq);
+            if (hit) return withCors(hit);
+          } catch (e) {
+            console.warn('Edge TTS cache match error:', e);
+          }
+        }
 
         const headers = { 'Content-Type': 'application/json' };
         const secret = String(env.EDGE_TTS_SECRET || '').trim();
@@ -1088,7 +1096,10 @@ export default {
         if (!ttsRes.ok) {
           const txt = await ttsRes.text();
           let err = txt;
-          try { err = JSON.parse(txt)?.error || txt; } catch {}
+          try {
+            const parsed = JSON.parse(txt);
+            err = parsed?.error || parsed?.detail || parsed?.message || txt;
+          } catch {}
           return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
         }
 
@@ -1100,7 +1111,13 @@ export default {
             'Cache-Control': 'public, max-age=86400',
           },
         });
-        await cache.put(cacheReq, out.clone());
+        if (cache) {
+          try {
+            await cache.put(cacheReq, out.clone());
+          } catch (e) {
+            console.warn('Edge TTS cache put error:', e);
+          }
+        }
         return withCors(out);
       } catch (err) {
         return json({ error: `Edge TTS request failed: ${err.message}` }, 502);

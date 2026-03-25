@@ -27,7 +27,9 @@ for /f "tokens=1,* delims==" %%a in ('type "%LOCAL_FILE%" ^| findstr /v "^#"') d
     set "value=%%b"
     if not "!value!"=="" (
         echo Setting %%a...
-        echo !value! | npx wrangler secret put %%a --name %WORKER%
+        >secret.tmp echo !value!
+        call npx wrangler secret put %%a --name %WORKER% < secret.tmp
+        del secret.tmp
     )
 )
 

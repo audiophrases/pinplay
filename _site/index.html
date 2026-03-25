@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinPlay · Student</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>🎯 PinPlay</h1>
+    </header>
+
+    <main class="container">
+      <section class="panel active">
+        <div class="card" id="joinCard">
+          <h2 class="join-title-row"><button id="rerollNameBtn" class="dice-icon-btn hidden" type="button" title="Try another name" aria-label="Try another name">🎲</button><span id="joinTitle"></span></h2>
+
+          <div id="joinStepPin">
+            <label>PIN</label>
+            <input id="joinPin" type="text" maxlength="6" placeholder="123456" autocomplete="one-time-code" inputmode="numeric" />
+            <button id="validatePinBtn" class="btn primary top-space">Play</button>
+          </div>
+
+          <div id="joinStepIdentity" class="hidden top-space">
+            <p id="joinModeHint" class="small"></p>
+            <div id="joinNameWrap">
+              <label>Username</label>
+              <input id="joinName" type="text" maxlength="40" placeholder="Username" autocomplete="off" autocapitalize="none" />
+            </div>
+            <div id="joinPasswordWrap" class="top-space hidden">
+              <label>Password</label>
+              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" autocomplete="new-password" data-lpignore="true" />
+            </div>
+            <p id="joinSignupHint" class="small top-space hidden">
+              No account? <a href="https://docs.google.com/forms/d/e/1FAIpQLSeTNwOWzYnSR6V6fsSghUkyZLvbhnE5vvcxBYxlj0b0FWpY-g/viewform" target="_blank" rel="noopener">Sign up</a>
+            </p>
+            <button id="joinBtn" class="btn primary top-space">Join live game</button>
+          </div>
+
+          <p id="joinStatus" class="feedback"></p>
+          <div id="loginErrorPanel" class="hidden" style="background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);border-radius:8px;padding:12px 16px;margin-top:8px;">
+            <p id="loginErrorText" style="color:#f85149;font-weight:600;font-size:14px;"></p>
+          </div>
+
+          <div id="joinQuestionWrap" class="hidden">
+            <div id="joinHeaderRow">
+              <span id="joinPlayerName"></span>
+              <span id="joinModeLabel"></span>
+              <span id="joinProgress">Question 1 / 1</span>
+              <span id="joinTimer">Time: —</span>
+              <span id="joinScore">Score: 0</span>
+              <span id="joinStatusHud"></span>
+            </div>
+            <h3 id="joinPrompt"></h3>
+            <div id="joinAnswers"></div>
+            <div id="joinSubmission">
+              <button id="joinSubmitBtn" class="btn primary">Submit</button>
+              <button id="betIndicator" class="bet-indicator" style="display:none">
+                <span class="bet-btn">+40%</span>
+              </button>
+              <span id="reactionRow"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="play.js"></script>
+  </body>
+</html>
