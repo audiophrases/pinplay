@@ -2350,7 +2350,7 @@ function highlightAnswerItems(isCorrect, state) {
   // Context gap
   if (question.type === 'context_gap') {
     highlightContextGap(question);
-    return;
+    // FALL THROUGH
   }
 
   // Slider: show correct value
@@ -2365,8 +2365,8 @@ function highlightAnswerItems(isCorrect, state) {
     return;
   }
 
-  // Open/Speaking/Image_open: show correct answer text
-  if (['open', 'speaking', 'image_open', 'text'].includes(question.type)) {
+  // Open/Speaking/Image_open/Text/Context gap: show correct answer text
+  if (['open', 'speaking', 'image_open', 'text', 'context_gap'].includes(question.type)) {
     showTextAnswerFeedback(question, state);
     return;
   }
@@ -2502,11 +2502,24 @@ function showPinFeedback(question, state) {
   });
 }
 
-// Open/Speaking/Image_open/Text: show correct answer text
+// Open/Speaking/Image_open/Text/Context gap: show correct answer text
 function showTextAnswerFeedback(question, state) {
   const el = joinFeedbackEl;
   if (!el) return;
-  const correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
+  let correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
+
+  if (!correct && question.type === 'context_gap') {
+    const prompt = String(question.prompt || '').trim();
+    const gaps = question.gaps || [];
+    let gapIdx = 0;
+    const markerRe = /(\_{2,}|\[\s*\])/g;
+    correct = prompt.replace(markerRe, (match) => {
+      const raw = gaps[gapIdx++] || '';
+      const first = raw.split(',')[0].trim();
+      return first || match;
+    });
+  }
+
   if (correct) {
     el.innerHTML = `<span style="color:var(--ok)">✓</span> <strong>${escapeHtml(correct)}</strong>`;
   }
@@ -2518,11 +2531,21 @@ function highlightContextGap(question) {
   const gaps = question.gaps || [];
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim().toLowerCase();
-    if (!val) return;
     const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
-    if (accepted.includes(val)) {
+
+    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
+    const first = variants[0];
+    if (first) {
+      const reveal = document.createElement('span');
+      reveal.dataset.joinCorrectReveal = "1";
+      reveal.style.cssText = 'color:var(--ok); font-weight:bold; margin-left:6px; font-size:0.9em;';
+      reveal.textContent = `(${first})`;
+      field.after(reveal);
+    }
+
+    if (val && accepted.includes(val)) {
       row.classList.add('correct-highlight');
     } else {
       row.classList.add('incorrect-highlight');
