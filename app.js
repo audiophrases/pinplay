@@ -2269,6 +2269,8 @@ function syncQuizFromUI() {
       const variants = correctedRaw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
       q.correctedVariants = variants;
       q.corrected = variants[0] || '';
+      // Recalculate required errors based on prompt and corrected variants
+      q.requiredErrors = countErrorHuntRequiredTokens(q.prompt, variants);
     }
 
     if (q.type === 'puzzle') {
@@ -8316,11 +8318,22 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
   return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
 }
 
-function countErrorHuntRequiredTokens(prompt, correctedSource) {
-  const variants = getCorrectedVariantsList(correctedSource, Array.isArray(correctedSource) ? correctedSource : null);
-  const corrected = variants[0] || '';
+function countErrorHuntRequiredTokens(prompt, corrected) {
+  const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
   const source = tokenizeWords(prompt);
-  const target = tokenizeWords(corrected);
+  const target = tokenizeWords(correctedStr);
+  if (!source.length || !target.length) return 1;
+
+  // If lengths match, count direct mismatches after normalization
+  if (source.length === target.length) {
+    let diff = 0;
+    for (let i = 0; i < source.length; i++) {
+      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
+    }
+    return diff || 1;
+  }
+
+  // Otherwise use edit distance but clamp to avoid over-counting
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -8343,7 +8356,9 @@ function countErrorHuntRequiredTokens(prompt, correctedSource) {
     }
   }
 
-  return dp[source.length][target.length] || 1;
+  const dist = dp[source.length][target.length] || 1;
+  const maxOps = Math.max(source.length, target.length);
+  return Math.max(1, Math.min(dist, maxOps));
 }
 
 function getErrorHuntRequired(q) {

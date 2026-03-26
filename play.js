@@ -1073,7 +1073,11 @@ function renderPlayerState(state) {
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
           const pointsText = pts > 0 ? ` · +${pts} points` : '';
-          setJoinStatusHud( `${resultText}${pointsText}`, rr.correct ? 'ok' : 'bad');
+          let feedback = `${resultText}${pointsText}`;
+          if (state.question.type === 'error_hunt' && state.correctAnswer) {
+            feedback += ` · Correct: ${state.correctAnswer}`;
+          }
+          setJoinStatusHud(feedback, rr.correct ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
 
           // Disable all choice inputs and interactivity
@@ -1555,6 +1559,12 @@ function appendRiskBetBar() {
 function getStudentAnswerTextFromUI() {
   const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
   if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
+  
+  const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
+  if (errorHuntChips && errorHuntChips.length > 0) {
+    return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
+  }
+
   const selected = [...(joinAnswersEl?.querySelectorAll('[data-puzzle-piece], input:checked + span') || [])]
     .map((el) => String(el.textContent || '').trim())
     .filter(Boolean)
@@ -2785,7 +2795,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     for (let i = 0; i < source.length; i++) {
       if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
     }
-    return diff;
+    return diff || 1;
   }
 
   // Otherwise use edit distance but clamp to avoid over-counting
