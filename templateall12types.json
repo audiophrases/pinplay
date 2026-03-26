@@ -17,9 +17,18 @@
       "imageKeyword": "cat face",
       "imageData": "",
       "answers": [
-        { "text": "Cat", "correct": true },
-        { "text": "Dog", "correct": false },
-        { "text": "Bird", "correct": false }
+        {
+          "text": "Cat",
+          "correct": true
+        },
+        {
+          "text": "Dog",
+          "correct": false
+        },
+        {
+          "text": "Bird",
+          "correct": false
+        }
       ]
     },
     {
@@ -34,10 +43,22 @@
       "imageKeyword": "basket of fruit",
       "imageData": "",
       "answers": [
-        { "text": "Apple", "correct": true },
-        { "text": "Carrot", "correct": false },
-        { "text": "Banana", "correct": true },
-        { "text": "Broccoli", "correct": false }
+        {
+          "text": "Apple",
+          "correct": true
+        },
+        {
+          "text": "Carrot",
+          "correct": false
+        },
+        {
+          "text": "Banana",
+          "correct": true
+        },
+        {
+          "text": "Broccoli",
+          "correct": false
+        }
       ]
     },
     {
@@ -52,8 +73,14 @@
       "imageKeyword": "snowy mountain peak",
       "imageData": "",
       "answers": [
-        { "text": "True", "correct": true },
-        { "text": "False", "correct": false }
+        {
+          "text": "True",
+          "correct": true
+        },
+        {
+          "text": "False",
+          "correct": false
+        }
       ]
     },
     {
@@ -67,7 +94,11 @@
       "audioText": "What color is this car?",
       "imageKeyword": "red sports car",
       "imageData": "",
-      "accepted": ["red", "crimson", "scarlet"]
+      "accepted": [
+        "red",
+        "crimson",
+        "scarlet"
+      ]
     },
     {
       "id": "q5-context",
@@ -80,7 +111,10 @@
       "audioText": "I went to the blank and bought some blank.",
       "imageKeyword": "supermarket aisle",
       "imageData": "",
-      "gaps": ["market", "apples"]
+      "gaps": [
+        "market",
+        "apples"
+      ]
     },
     {
       "id": "q6-match",
@@ -94,9 +128,18 @@
       "imageKeyword": "farm animals group",
       "imageData": "",
       "pairs": [
-        { "left": "Dog", "right": "Bark" },
-        { "left": "Cat", "right": "Meow" },
-        { "left": "Cow", "right": "Moo" }
+        {
+          "left": "Dog",
+          "right": "Bark"
+        },
+        {
+          "left": "Cat",
+          "right": "Meow"
+        },
+        {
+          "left": "Cow",
+          "right": "Moo"
+        }
       ]
     },
     {
@@ -107,11 +150,13 @@
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "He go to school every days.",
+      "audioText": "Find the error in this sentence.",
       "imageKeyword": "boy going to school",
       "imageData": "",
       "corrected": "He goes to school every day.",
-      "correctedVariants": ["He goes to school every day."]
+      "correctedVariants": [
+        "He goes to school every day."
+      ]
     },
     {
       "id": "q8-open",
@@ -148,7 +193,14 @@
       "audioText": "Reorder these words.",
       "imageKeyword": "cat on a mat",
       "imageData": "",
-      "items": ["The", "cat", "sat", "on", "the", "mat"]
+      "items": [
+        "The",
+        "cat",
+        "sat",
+        "on",
+        "the",
+        "mat"
+      ]
     },
     {
       "id": "q11-slider",
@@ -179,8 +231,16 @@
       "imageKeyword": "game controller top view",
       "imageData": "",
       "zones": [
-        { "x": 57.2, "y": 25.1, "r": 6 },
-        { "x": 43.4, "y": 24.8, "r": 6 }
+        {
+          "x": 57.2,
+          "y": 25.1,
+          "r": 6
+        },
+        {
+          "x": 43.4,
+          "y": 24.8,
+          "r": 6
+        }
       ],
       "pinMode": "all"
     }
