@@ -1172,7 +1172,9 @@ function applyAdaptiveFitJoin() {
 
 function applyJoinLayoutMode(active, question = null) {
   if (!joinCardEl) return;
-  joinCardEl.classList.toggle('question-active', !!active);
+  const isActive = !!active;
+  joinCardEl.classList.toggle('question-active', isActive);
+  document.body.classList.toggle('question-active', isActive);
   const qType = String(question?.type || '').trim();
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
