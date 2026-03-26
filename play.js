@@ -1364,10 +1364,7 @@ function renderJoinQuestion(question) {
       // Enable inline edits/merges; rewrite will be built from tokens on submit
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
     } else if (question.type === 'speaking') {
-      const note = document.createElement('p');
-      note.className = 'small';
-      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
-      joinAnswersEl.appendChild(note);
+      // No instruction text as requested
     } else {
       const input = document.createElement('input');
       input.type = 'text';
