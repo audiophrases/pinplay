@@ -27,10 +27,10 @@
 
         <div id="createWorkspace" class="hidden">
           <div class="card" id="builderCard">
-            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              Quiz builder <span class="collapse-chevron" aria-hidden="true">▾</span>
+            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              Quiz builder <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
-            <div id="builderCardBody">
+            <div id="builderCardBody" class="hidden">
             <!-- Creation Prompt Section -->
             <div class="creation-prompt-section">
               <button id="creationPromptToggle" class="section-toggle-btn" type="button" aria-expanded="false" style="border:none; border-bottom:1px solid var(--line); border-radius:0;">
@@ -148,96 +148,114 @@
               </div>
             </div>
 
-            <div class="row gap top-space quiz-actions" id="builderActionRow">
-              <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
-              <button id="openLocalBtn" class="btn">Open</button>
-              <button id="saveBtn" class="btn">Save</button>
-              <button id="openCloudBtn" class="btn">☁️ Open</button>
-              <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
-              <button id="importBtn" class="btn" type="button">Import</button>
-              <input id="importInput" type="file" accept="application/json" hidden />
-              <button id="exportBtn" class="btn">Export</button>
-              <button id="publishDriveBtn" class="btn" style="display:none">Save Drive</button>
-              <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
-            </div>
+            <div class="builder-section top-space">
+              <button id="builderSettingsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span>⚙️ Settings & Actions</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="builderSettingsBody" class="section-collapsible-body hidden" style="padding:1rem; border:1px solid var(--line); border-top:none; border-radius:0 0 .6rem .6rem;">
+                <div class="row gap quiz-actions" id="builderActionRow">
+                  <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
+                  <button id="openLocalBtn" class="btn">Open</button>
+                  <button id="saveBtn" class="btn">Save</button>
+                  <button id="openCloudBtn" class="btn">☁️ Open</button>
+                  <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
+                  <button id="importBtn" class="btn" type="button">Import</button>
+                  <input id="importInput" type="file" accept="application/json" hidden />
+                  <button id="exportBtn" class="btn">Export</button>
+                  <button id="publishDriveBtn" class="btn" style="display:none">Save Drive</button>
+                  <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
+                </div>
 
-            <label>Quiz title</label>
-            <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+                <label>Quiz title</label>
+                <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
 
-            <div class="row gap top-space" id="quizAudioDefaultsRow">
-              <div style="min-width:220px;">
-                <label>Hear questions</label>
-                <select id="quizTtsLanguage">
-                  <option value="NONE">Don't hear questions</option>
-                  <option value="EN">English</option>
-                  <option value="CA">Català</option>
-                  <option value="FR">Français</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-              <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
-                <label>Language / voice</label>
-                <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
-                <select id="quizTtsOtherVoice">
-                </select>
-              </div>
-            </div>
-
-            <div class="top-space">
-              <p class="small"><strong>Question types</strong></p>
-              <div class="question-type-grid" id="questionTypeGrid">
-                <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
-                </button>
-                <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
-                </button>
-                <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
-                </button>
-                <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
-                  <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
-                </button>
-                <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
-                </button>
-                <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
-                </button>
-                <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
-                </button>
-                <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
-                  <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
-                </button>
-                <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
-                  <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
-                </button>
-                <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
-                </button>
-                <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
-                </button>
-                <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
-                </button>
+                <div class="row gap top-space" id="quizAudioDefaultsRow">
+                  <div style="min-width:220px;">
+                    <label>Hear questions</label>
+                    <select id="quizTtsLanguage">
+                      <option value="NONE">Don't hear questions</option>
+                      <option value="EN">English</option>
+                      <option value="CA">Català</option>
+                      <option value="FR">Français</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
+                    <label>Language / voice</label>
+                    <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
+                    <select id="quizTtsOtherVoice">
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Audio options are now inside each question type card -->
-
-            <div class="row gap top-space">
-              <button id="collapseAllBtn" class="btn">Collapse all</button>
+            <div class="builder-section top-space">
+              <button id="builderTypesToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span>➕ Question types</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="builderTypesBody" class="section-collapsible-body hidden" style="padding:1rem; border:1px solid var(--line); border-top:none; border-radius:0 0 .6rem .6rem;">
+                <div class="question-type-grid" id="questionTypeGrid">
+                  <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
+                    <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
+                  </button>
+                  <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
+                    <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
+                  </button>
+                  <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
+                    <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
+                  </button>
+                  <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
+                    <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
+                  </button>
+                  <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
+                    <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
+                  </button>
+                  <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
+                    <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
+                  </button>
+                  <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
+                    <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
+                  </button>
+                  <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
+                    <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
+                  </button>
+                  <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
+                    <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
+                  </button>
+                  <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
+                    <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
+                  </button>
+                  <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
+                    <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
+                  </button>
+                  <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
+                    <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div id="questionList" class="question-list"></div>
+            <div class="builder-section top-space">
+              <button id="builderQuestionsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span>📝 Questions</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="builderQuestionsBody" class="section-collapsible-body hidden" style="padding:1rem; border:1px solid var(--line); border-top:none; border-radius:0 0 .6rem .6rem;">
+                <div class="row gap">
+                  <button id="collapseAllBtn" class="btn">Collapse all</button>
+                </div>
+                <div id="questionList" class="question-list"></div>
+              </div>
+            </div>
             </div>
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
-            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▾</span></span>
+            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▸</span></span>
               <span class="live-hud-row">
                 <span id="projectorPin" class="small">📌 <span id="livePinHud">—</span></span>
                 <span id="projectorTimer" class="small">⏱ Time: —</span>
@@ -245,7 +263,7 @@
                 <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;">Fullscreen</button>
               </span>
             </h2>
-            <div id="liveScreenCardBody">
+            <div id="liveScreenCardBody" class="hidden">
             <div class="hall top-space" id="hallCard">
               <div class="small">GAME PIN</div>
               <div class="hall-pin-row">
@@ -279,10 +297,10 @@
 
 
           <div class="card" id="hostCard">
-            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              Game controls <span class="collapse-chevron" aria-hidden="true">▾</span>
+            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              Game controls <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
-            <div id="gameControlsCardBody">
+            <div id="gameControlsCardBody" class="hidden">
             <div class="row gap top-space" id="hostActionRow">
               <button id="randomNamesToggle" class="btn" type="button">Login</button>
               <button id="createLiveBtn" class="btn primary">Live Pin</button>
