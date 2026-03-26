@@ -986,12 +986,22 @@ function renderPlayerState(state) {
   }
 
   if (joinSubmitBtn) {
-    const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
-    joinSubmitBtn.disabled = shouldDisable;
+    const isAssignment = live.player.mode === 'assignment';
+    const isContinueMode = isAssignment && questionClosed && !assignmentSubmitted;
+
+    if (isContinueMode) {
+      joinSubmitBtn.textContent = 'Continue';
+      joinSubmitBtn.disabled = false;
+    } else {
+      joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
+      const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
+      joinSubmitBtn.disabled = shouldDisable;
+    }
+
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
-    if (!questionClosed && shouldDisable && live.player.mode === 'live') {
-      setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
+    if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
+      setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
   }
 
@@ -1623,6 +1633,11 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer() {
   try {
+    if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
+      moveAssignmentIndex(1);
+      return;
+    }
+
     const answer = readJoinAnswer();
     if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
 
