@@ -192,6 +192,74 @@ const TEMPLATE_ALL_12_TYPES = {
   ]
 };
 
+const QUESTION_TYPE_EXPLANATIONS = {
+  "mcq": {
+    "name": "Multiple Choice (Single)",
+    "rules": "Standard question with up to 10 options. Only one correct answer.",
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+  },
+  "multi": {
+    "name": "Multiple Choice (Select All)",
+    "rules": "Up to 10 options. Multiple correct answers possible.",
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+  },
+  "tf": {
+    "name": "True / False",
+    "rules": "Exactly 2 options: True and False.",
+    "constraints": { "maxAnswers": 2 }
+  },
+  "text": {
+    "name": "Typed Answer",
+    "rules": "Students type the answer. Case-insensitive matching.",
+    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 }
+  },
+  "context_gap": {
+    "name": "Gap Fill (Fill in Blank)",
+    "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order.",
+    "constraints": { "maxGaps": 10, "maxTextLength": 120 }
+  },
+  "match_pairs": {
+    "name": "Match Pairs",
+    "rules": "Students match items from the left col to the right col. Define as pairs.",
+    "constraints": { "maxPairs": 10, "maxTextLength": 120 }
+  },
+  "error_hunt": {
+    "name": "Error Hunting",
+    "rules": "The prompt is a sentence with errors. Students tap words (tokens) they think are wrong. 'corrected' must be the full fixed sentence.",
+    "constraints": { "maxTokens": 40 }
+  },
+  "puzzle": {
+    "name": "Puzzle (Reorder)",
+    "rules": "Unordered list of words or items that students must drag into the correct order.",
+    "constraints": { "maxItems": 12 }
+  },
+  "slider": {
+    "name": "Numeric Slider",
+    "rules": "Numeric target value on a range with a margin of error ('none', 'low', 'medium', 'high', 'maximum').",
+    "constraints": { "minValue": -1000000, "maxValue": 1000000 }
+  },
+  "pin": {
+    "name": "Pin the Spot",
+    "rules": "Click on specific areas (zones) of an image. Zones use x, y percentages (0-100) and r (radius).",
+    "constraints": { "maxZones": 12 }
+  },
+  "open": {
+    "name": "Open Answer",
+    "rules": "Critical thinking or research task. No auto-grading. Teacher grades manually later.",
+    "constraints": { "maxTextLength": 500 }
+  },
+  "image_open": {
+    "name": "Visual Open Question",
+    "rules": "Like Open Answer but focuses on interpreting the primary image.",
+    "constraints": { "maxTextLength": 500 }
+  },
+  "speaking": {
+    "name": "Speaking Task",
+    "rules": "Voice-enabled answer. Students record/speak their answer in class. Teacher grades manually.",
+    "constraints": { "maxSpeakTime": 60 }
+  }
+};
+
 // Tabs
 const tabs = document.querySelectorAll('.tab');
 const panels = document.querySelectorAll('.panel');
@@ -662,6 +730,21 @@ function bindBuilderEvents() {
   if (exportPromptBtn) {
     exportPromptBtn.addEventListener('click', exportCreationPrompt);
   }
+  const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
+  const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
+  const typesListEl = document.getElementById('promptTypesList');
+
+  if (selectAllTypesBtn && typesListEl) {
+    selectAllTypesBtn.addEventListener('click', () => {
+      typesListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+  }
+  if (clearAllTypesBtn && typesListEl) {
+    clearAllTypesBtn.addEventListener('click', () => {
+      typesListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+  }
+
   addMcqBtn.addEventListener('click', () => {
     addQuestionToBuilder(makeMcqQuestion());
   });
@@ -2664,9 +2747,37 @@ async function exportCreationPrompt() {
   cleanRequest.answerTypes = answers;
   if (goalText) cleanRequest.goal = goalText;
 
+  const typesMode = document.getElementById('promptTypesMode')?.value;
+  const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked')).map(cb => cb.value);
+
+  if (typesMode === 'include' && selectedTypes.length > 0) {
+    cleanRequest.includeQuestionTypes = selectedTypes;
+  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
+    cleanRequest.excludeQuestionTypes = selectedTypes;
+  }
+
   const textualSummary = Object.entries(cleanRequest)
-    .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+    .map(([k, v]) => Array.isArray(v) ? `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v.join(', ')}` : `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
     .join('\n');
+
+  let typesInstructions = 'Supported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.';
+  let filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions;
+  let relevantExplanations = {};
+
+  if (typesMode === 'include' && selectedTypes.length > 0) {
+    typesInstructions = `CRITICAL: ONLY use these question types: ${selectedTypes.join(', ')}.`;
+    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => selectedTypes.includes(q.type));
+    selectedTypes.forEach(t => relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t] || {});
+  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
+    typesInstructions = `CRITICAL: DO NOT use these question types: ${selectedTypes.join(', ')}. Use any other supported types (mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking).`;
+    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => !selectedTypes.includes(q.type));
+    Object.keys(QUESTION_TYPE_EXPLANATIONS).forEach(t => {
+      if (!selectedTypes.includes(t)) relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t];
+    });
+  } else {
+    // Mode 'all' or no selection
+    relevantExplanations = QUESTION_TYPE_EXPLANATIONS;
+  }
 
   const promptText = `
 I want to create a PinPlay quiz in JSON format with these requirements:
@@ -2679,17 +2790,23 @@ CRITICAL RULES FOR ASSETS:
 
 OUTPUT FORMAT:
 Provide a valid PinPlay JSON version 3. Follow the structure and patterns in the example template provided.
-Supported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.
+Refer to the #Explanations# section in the attached JSON for technical constraints and app possibilities for each question type.
+${typesInstructions}
 `.trim();
 
   const exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
-      type: "PinPlay Creation Prompt"
+      type: "PinPlay Creation Prompt",
+      version: "3.2"
     },
     request: cleanRequest,
     aiPrompt: promptText,
-    exampleTemplate: typeof TEMPLATE_ALL_12_TYPES !== 'undefined' ? TEMPLATE_ALL_12_TYPES : null
+    "#Explanations#": relevantExplanations,
+    exampleTemplate: {
+      ...TEMPLATE_ALL_12_TYPES,
+      questions: filteredTemplateQuestions
+    }
   };
 
   try {

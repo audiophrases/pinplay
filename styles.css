@@ -268,6 +268,60 @@ textarea { min-height: 72px; resize: vertical; }
   outline: none;
 }
 
+.creation-prompt-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.prompt-types-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background: #f1f3f9;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+}
+
+.type-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.type-pill:hover {
+  border-color: var(--primary);
+  background: rgba(96, 93, 255, 0.05);
+}
+
+.type-pill input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.type-pill:has(input:checked) {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 2px 8px rgba(96, 93, 255, 0.3);
+}
+
+.type-pill:has(input:checked) span {
+  color: #fff;
+}
+.type-pill:has(input:checked) input {
+  accent-color: #fff;
+}
+
 .host-live-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
