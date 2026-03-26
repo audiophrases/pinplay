@@ -58,6 +58,7 @@ body {
 
 .panel { display: none; }
 .panel.active { display: block; }
+.hidden { display: none !important; }
 
 .card {
   background: var(--card);
@@ -234,6 +235,13 @@ textarea { min-height: 72px; resize: vertical; }
 
 .creation-prompt-section .section-toggle-btn:hover {
   background: rgba(96, 93, 255, 0.05);
+}
+
+.section-collapsible-body {
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+}
+.section-collapsible-body.hidden {
+  display: none !important;
 }
 
 .creation-prompt-grid {
