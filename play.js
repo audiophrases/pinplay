@@ -1048,7 +1048,8 @@ function renderPlayerState(state) {
   }
 
   const rrNow = state.revealedResult;
-  renderInlineCorrection(String(rrNow?.correction || ''));
+  const correctionText = rrNow?.correction || (rrNow ? state.correctAnswer : '');
+  renderInlineCorrection(String(correctionText || ''));
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
   if (questionClosed) {
@@ -1322,9 +1323,7 @@ function renderJoinQuestion(question) {
       tokenWrap.className = 'error-token-wrap';
       tokenWrap.style.flexWrap = 'wrap';
       tokenWrap.style.justifyContent = 'center';
-      let tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
-      // Merge common pairs like "every day" into a single token
-      tokens = mergeJoinTokens(tokens);
+      let tokens = tokenizeWords(question.prompt);
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -2771,26 +2770,13 @@ function normalizeTextAnswer(text) {
     .trim();
 }
 
-function mergeJoinTokens(tokens) {
-  const merged = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const cur = String(tokens[i] || '').trim();
-    const next = String(tokens[i + 1] || '').trim();
-    const pair = `${cur} ${next}`.toLowerCase();
-    if (cur && next && pair === 'every day') {
-      merged.push(`${cur} ${next}`);
-      i += 1;
-    } else {
-      if (cur) merged.push(cur);
-    }
-  }
-  return merged;
-}
+// Removed mergeJoinTokens as it caused inconsistent error counting and behavior.
+
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
   const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = mergeJoinTokens(tokenizeWords(prompt));
-  const target = mergeJoinTokens(tokenizeWords(correctedStr));
+  const source = tokenizeWords(prompt);
+  const target = tokenizeWords(correctedStr);
   if (!source.length || !target.length) return 1;
 
   // If lengths match, count direct mismatches after normalization
