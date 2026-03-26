@@ -986,12 +986,22 @@ function renderPlayerState(state) {
   }
 
   if (joinSubmitBtn) {
-    const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
-    joinSubmitBtn.disabled = shouldDisable;
+    const isAssignment = live.player.mode === 'assignment';
+    const isContinueMode = isAssignment && questionClosed && !assignmentSubmitted;
+
+    if (isContinueMode) {
+      joinSubmitBtn.textContent = 'Continue';
+      joinSubmitBtn.disabled = false;
+    } else {
+      joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
+      const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
+      joinSubmitBtn.disabled = shouldDisable;
+    }
+
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
-    if (!questionClosed && shouldDisable && live.player.mode === 'live') {
-      setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
+    if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
+      setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
   }
 
@@ -1038,7 +1048,8 @@ function renderPlayerState(state) {
   }
 
   const rrNow = state.revealedResult;
-  renderInlineCorrection(String(rrNow?.correction || ''));
+  const correctionText = rrNow?.correction || (rrNow ? state.correctAnswer : '');
+  renderInlineCorrection(String(correctionText || ''));
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
   if (questionClosed) {
@@ -1062,7 +1073,11 @@ function renderPlayerState(state) {
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
           const pointsText = pts > 0 ? ` · +${pts} points` : '';
-          setJoinStatusHud( `${resultText}${pointsText}`, rr.correct ? 'ok' : 'bad');
+          let feedback = `${resultText}${pointsText}`;
+          if (state.question.type === 'error_hunt' && state.correctAnswer) {
+            feedback += ` · Correct: ${state.correctAnswer}`;
+          }
+          setJoinStatusHud(feedback, rr.correct ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
 
           // Disable all choice inputs and interactivity
@@ -1172,13 +1187,38 @@ function renderJoinQuestion(question) {
   // Store current question for keyboard shortcut
   live.player.currentQuestion = question;
 
-  if (joinAnswersEl) joinAnswersEl.innerHTML = '';
+  if (joinAnswersEl) {
+    joinAnswersEl.innerHTML = '';
+    joinAnswersEl.style.pointerEvents = 'auto';
+    joinAnswersEl.classList.remove('two-col', 'answers-locked');
+  }
   if (!joinAnswersEl) return;
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
+  const hasAnyImage = !!question.imageData;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
   if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+
+  // Clear background first
+  if (joinQuestionWrap) {
+    joinQuestionWrap.style.backgroundImage = '';
+    joinQuestionWrap.style.backgroundSize = 'contain';
+    joinQuestionWrap.style.backgroundPosition = 'center';
+    joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
+  }
+  const interactiveOverlay = document.getElementById('joinQuestionInteractive');
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
+
+  if (hasAnyImage) {
+    let imgSrc = question.imageData;
+    if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
+      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+      imgSrc = `${base}/api/media/${imgSrc}`;
+    }
+    if (joinQuestionWrap) {
+      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+    }
+  }
 
   if (question.isPoll) {
     const note = document.createElement('p');
@@ -1187,18 +1227,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
-    const preview = document.createElement('div');
-    preview.className = 'question-image-preview';
-    const img = document.createElement('img');
-    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
-    img.alt = 'Question image';
-    img.dataset.zoomable = '1';
-    preview.appendChild(img);
-    preview.dataset.zoomable = '1';
-    preview.dataset.bgImageSrc = imgSrc;
-    joinAnswersEl.appendChild(preview);
-  }
+  // Remove the old inline image preview logic for generic questions
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
@@ -1308,9 +1337,7 @@ function renderJoinQuestion(question) {
       tokenWrap.className = 'error-token-wrap';
       tokenWrap.style.flexWrap = 'wrap';
       tokenWrap.style.justifyContent = 'center';
-      let tokens = String(question.prompt || '').split(/\s+/).filter(Boolean);
-      // Merge common pairs like "every day" into a single token
-      tokens = mergeJoinTokens(tokens);
+      let tokens = tokenizeWords(question.prompt);
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -1542,6 +1569,12 @@ function appendRiskBetBar() {
 function getStudentAnswerTextFromUI() {
   const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
   if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
+  
+  const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
+  if (errorHuntChips && errorHuntChips.length > 0) {
+    return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
+  }
+
   const selected = [...(joinAnswersEl?.querySelectorAll('[data-puzzle-piece], input:checked + span') || [])]
     .map((el) => String(el.textContent || '').trim())
     .filter(Boolean)
@@ -1619,6 +1652,11 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer() {
   try {
+    if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
+      moveAssignmentIndex(1);
+      return;
+    }
+
     const answer = readJoinAnswer();
     if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
 
@@ -2322,7 +2360,7 @@ function highlightAnswerItems(isCorrect, state) {
   // Context gap
   if (question.type === 'context_gap') {
     highlightContextGap(question);
-    return;
+    // FALL THROUGH
   }
 
   // Slider: show correct value
@@ -2337,8 +2375,8 @@ function highlightAnswerItems(isCorrect, state) {
     return;
   }
 
-  // Open/Speaking/Image_open: show correct answer text
-  if (['open', 'speaking', 'image_open', 'text'].includes(question.type)) {
+  // Open/Speaking/Image_open/Text/Context gap: show correct answer text
+  if (['open', 'speaking', 'image_open', 'text', 'context_gap'].includes(question.type)) {
     showTextAnswerFeedback(question, state);
     return;
   }
@@ -2474,11 +2512,24 @@ function showPinFeedback(question, state) {
   });
 }
 
-// Open/Speaking/Image_open/Text: show correct answer text
+// Open/Speaking/Image_open/Text/Context gap: show correct answer text
 function showTextAnswerFeedback(question, state) {
   const el = joinFeedbackEl;
   if (!el) return;
-  const correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
+  let correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
+
+  if (!correct && question.type === 'context_gap') {
+    const prompt = String(question.prompt || '').trim();
+    const gaps = question.gaps || [];
+    let gapIdx = 0;
+    const markerRe = /(\_{2,}|\[\s*\])/g;
+    correct = prompt.replace(markerRe, (match) => {
+      const raw = gaps[gapIdx++] || '';
+      const first = raw.split(',')[0].trim();
+      return first || match;
+    });
+  }
+
   if (correct) {
     el.innerHTML = `<span style="color:var(--ok)">✓</span> <strong>${escapeHtml(correct)}</strong>`;
   }
@@ -2490,11 +2541,21 @@ function highlightContextGap(question) {
   const gaps = question.gaps || [];
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim().toLowerCase();
-    if (!val) return;
     const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
-    if (accepted.includes(val)) {
+
+    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
+    const first = variants[0];
+    if (first) {
+      const reveal = document.createElement('span');
+      reveal.dataset.joinCorrectReveal = "1";
+      reveal.style.cssText = 'color:var(--ok); font-weight:bold; margin-left:6px; font-size:0.9em;';
+      reveal.textContent = `(${first})`;
+      field.after(reveal);
+    }
+
+    if (val && accepted.includes(val)) {
       row.classList.add('correct-highlight');
     } else {
       row.classList.add('incorrect-highlight');
@@ -2752,26 +2813,13 @@ function normalizeTextAnswer(text) {
     .trim();
 }
 
-function mergeJoinTokens(tokens) {
-  const merged = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const cur = String(tokens[i] || '').trim();
-    const next = String(tokens[i + 1] || '').trim();
-    const pair = `${cur} ${next}`.toLowerCase();
-    if (cur && next && pair === 'every day') {
-      merged.push(`${cur} ${next}`);
-      i += 1;
-    } else {
-      if (cur) merged.push(cur);
-    }
-  }
-  return merged;
-}
+// Removed mergeJoinTokens as it caused inconsistent error counting and behavior.
+
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
   const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = mergeJoinTokens(tokenizeWords(prompt));
-  const target = mergeJoinTokens(tokenizeWords(correctedStr));
+  const source = tokenizeWords(prompt);
+  const target = tokenizeWords(correctedStr);
   if (!source.length || !target.length) return 1;
 
   // If lengths match, count direct mismatches after normalization
@@ -2780,7 +2828,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     for (let i = 0; i < source.length; i++) {
       if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
     }
-    return diff;
+    return diff || 1;
   }
 
   // Otherwise use edit distance but clamp to avoid over-counting

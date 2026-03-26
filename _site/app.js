@@ -5,6 +5,261 @@ const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
+const TEMPLATE_ALL_12_TYPES = {
+  "version": 3,
+  "title": "AI Quiz Reference",
+  "readAllQuestionsAloud": true,
+  "questions": [
+    {
+      "id": "q1-mcq",
+      "type": "mcq",
+      "prompt": "What animal is this?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "What animal is this?",
+      "imageKeyword": "cat face",
+      "imageData": "",
+      "answers": [
+        { "text": "Cat", "correct": true },
+        { "text": "Dog", "correct": false },
+        { "text": "Bird", "correct": false }
+      ]
+    },
+    {
+      "id": "q2-multi",
+      "type": "multi",
+      "prompt": "Select all fruits shown.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Select all fruits shown.",
+      "imageKeyword": "basket of fruit",
+      "imageData": "",
+      "answers": [
+        { "text": "Apple", "correct": true },
+        { "text": "Carrot", "correct": false },
+        { "text": "Banana", "correct": true },
+        { "text": "Broccoli", "correct": false }
+      ]
+    },
+    {
+      "id": "q3-tf",
+      "type": "tf",
+      "prompt": "True or False: This is a mountain.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Is this a mountain?",
+      "imageKeyword": "snowy mountain peak",
+      "imageData": "",
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "q4-text",
+      "type": "text",
+      "prompt": "Name the color of the car.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "What color is this car?",
+      "imageKeyword": "red sports car",
+      "imageData": "",
+      "accepted": ["red", "crimson", "scarlet"]
+    },
+    {
+      "id": "q5-context",
+      "type": "context_gap",
+      "prompt": "I went to the ____ and bought some ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "I went to the blank and bought some blank.",
+      "imageKeyword": "supermarket aisle",
+      "imageData": "",
+      "gaps": ["market", "apples"]
+    },
+    {
+      "id": "q6-match",
+      "type": "match_pairs",
+      "prompt": "Match the animals to their sounds.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Match these animals with their sounds.",
+      "imageKeyword": "farm animals group",
+      "imageData": "",
+      "pairs": [
+        { "left": "Dog", "right": "Bark" },
+        { "left": "Cat", "right": "Meow" },
+        { "left": "Cow", "right": "Moo" }
+      ]
+    },
+    {
+      "id": "q7-error",
+      "type": "error_hunt",
+      "prompt": "He go to school every days.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "He go to school every days.",
+      "imageKeyword": "boy going to school",
+      "imageData": "",
+      "corrected": "He goes to school every day.",
+      "correctedVariants": ["He goes to school every day."]
+    },
+    {
+      "id": "q8-open",
+      "type": "open",
+      "prompt": "Describe the weather in one sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Please describe the weather you see.",
+      "imageKeyword": "sunny blue sky",
+      "imageData": ""
+    },
+    {
+      "id": "q9-speaking",
+      "type": "speaking",
+      "prompt": "Say a sentence about this picture.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Tell me something about this image.",
+      "imageKeyword": "robot waving",
+      "imageData": ""
+    },
+    {
+      "id": "q10-puzzle",
+      "type": "puzzle",
+      "prompt": "Reorder the words to form a sentence.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Reorder these words.",
+      "imageKeyword": "cat on a mat",
+      "imageData": "",
+      "items": ["The", "cat", "sat", "on", "the", "mat"]
+    },
+    {
+      "id": "q11-slider",
+      "type": "slider",
+      "prompt": "How many books do you read per year?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "How many books?",
+      "imageKeyword": "stack of books",
+      "imageData": "",
+      "min": 0,
+      "max": 50,
+      "target": 12,
+      "margin": "low",
+      "unit": "books"
+    },
+    {
+      "id": "q12-pin",
+      "type": "pin",
+      "prompt": "Tap both joysticks.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Where are the joysticks on this controller?",
+      "imageKeyword": "game controller top view",
+      "imageData": "",
+      "zones": [
+        { "x": 57.2, "y": 25.1, "r": 6 },
+        { "x": 43.4, "y": 24.8, "r": 6 }
+      ],
+      "pinMode": "all"
+    }
+  ]
+};
+
+const QUESTION_TYPE_EXPLANATIONS = {
+  "mcq": {
+    "name": "Multiple Choice (Single)",
+    "rules": "Standard question with up to 10 options. Only one correct answer.",
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+  },
+  "multi": {
+    "name": "Multiple Choice (Select All)",
+    "rules": "Up to 10 options. Multiple correct answers possible.",
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+  },
+  "tf": {
+    "name": "True / False",
+    "rules": "Exactly 2 options: True and False.",
+    "constraints": { "maxAnswers": 2 }
+  },
+  "text": {
+    "name": "Typed Answer",
+    "rules": "Students type the answer. Case-insensitive matching.",
+    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 }
+  },
+  "context_gap": {
+    "name": "Gap Fill (Fill in Blank)",
+    "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order.",
+    "constraints": { "maxGaps": 10, "maxTextLength": 120 }
+  },
+  "match_pairs": {
+    "name": "Match Pairs",
+    "rules": "Students match items from the left col to the right col. Define as pairs.",
+    "constraints": { "maxPairs": 10, "maxTextLength": 120 }
+  },
+  "error_hunt": {
+    "name": "Error Hunting",
+    "rules": "The prompt is a sentence with errors. Students tap words (tokens) they think are wrong. 'corrected' must be the full fixed sentence.",
+    "constraints": { "maxTokens": 40 }
+  },
+  "puzzle": {
+    "name": "Puzzle (Reorder)",
+    "rules": "Unordered list of words or items that students must drag into the correct order.",
+    "constraints": { "maxItems": 12 }
+  },
+  "slider": {
+    "name": "Numeric Slider",
+    "rules": "Numeric target value on a range with a margin of error ('none', 'low', 'medium', 'high', 'maximum').",
+    "constraints": { "minValue": -1000000, "maxValue": 1000000 }
+  },
+  "pin": {
+    "name": "Pin the Spot",
+    "rules": "Click on specific areas (zones) of an image. Zones use x, y percentages (0-100) and r (radius).",
+    "constraints": { "maxZones": 12 }
+  },
+  "open": {
+    "name": "Open Answer",
+    "rules": "Critical thinking or research task. No auto-grading. Teacher grades manually later.",
+    "constraints": { "maxTextLength": 500 }
+  },
+  "image_open": {
+    "name": "Visual Open Question",
+    "rules": "Like Open Answer but focuses on interpreting the primary image.",
+    "constraints": { "maxTextLength": 500 }
+  },
+  "speaking": {
+    "name": "Speaking Task",
+    "rules": "Voice-enabled answer. Students record/speak their answer in class. Teacher grades manually.",
+    "constraints": { "maxSpeakTime": 60 }
+  }
+};
+
 // Tabs
 const tabs = document.querySelectorAll('.tab');
 const panels = document.querySelectorAll('.panel');
@@ -43,6 +298,10 @@ const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
+const creationPromptToggleEl = document.getElementById('creationPromptToggle');
+const creationPromptBodyEl = document.getElementById('creationPromptBody');
+const exportPromptBtn = document.getElementById('exportPromptBtn');
+const promptStatusEl = document.getElementById('promptStatus');
 const liveScreenSectionToggleEl = document.getElementById('liveScreenSectionToggle');
 const liveScreenCardBodyEl = document.getElementById('liveScreenCardBody');
 const gameControlsSectionToggleEl = document.getElementById('gameControlsSectionToggle');
@@ -129,6 +388,7 @@ const hostQuestionCardEl = document.getElementById('hostQuestionCard');
 const livePinBigEl = document.getElementById('livePinBig');
 const livePinHudEl = document.getElementById('livePinHud');
 const hallHintEl = document.getElementById('hallHint');
+const hallLobbyPlayersEl = document.getElementById('hallLobbyPlayers');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
 const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
@@ -417,6 +677,7 @@ function toggleTeacherSectionCollapseAll() {
 
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(creationPromptToggleEl, creationPromptBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
@@ -466,6 +727,24 @@ function addQuestionToBuilder(question) {
 }
 
 function bindBuilderEvents() {
+  if (exportPromptBtn) {
+    exportPromptBtn.addEventListener('click', exportCreationPrompt);
+  }
+  const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
+  const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
+  const typesListEl = document.getElementById('promptTypesList');
+
+  if (selectAllTypesBtn && typesListEl) {
+    selectAllTypesBtn.addEventListener('click', () => {
+      typesListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+  }
+  if (clearAllTypesBtn && typesListEl) {
+    clearAllTypesBtn.addEventListener('click', () => {
+      typesListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+  }
+
   addMcqBtn.addEventListener('click', () => {
     addQuestionToBuilder(makeMcqQuestion());
   });
@@ -1990,6 +2269,8 @@ function syncQuizFromUI() {
       const variants = correctedRaw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
       q.correctedVariants = variants;
       q.corrected = variants[0] || '';
+      // Recalculate required errors based on prompt and corrected variants
+      q.requiredErrors = countErrorHuntRequiredTokens(q.prompt, variants);
     }
 
     if (q.type === 'puzzle') {
@@ -2435,6 +2716,117 @@ async function saveQuizToCloud() {
   } catch (err) {
     setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
   }
+}
+
+async function exportCreationPrompt() {
+  const theme = document.getElementById('promptTheme')?.value.trim();
+  const lang = document.getElementById('promptLanguage')?.value.trim();
+  const level = document.getElementById('promptLevel')?.value.trim();
+  const feel = document.getElementById('promptFeel')?.value.trim();
+  const timeLimit = document.getElementById('promptTimeLimit')?.value;
+  const count = document.getElementById('promptQuestionCount')?.value;
+  const images = document.getElementById('promptImages')?.value;
+  const audio = document.getElementById('promptAudio')?.value;
+  const answers = document.getElementById('promptAnswerType')?.value;
+  const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
+  const goal = goalEl?.value;
+  const goalText = goalEl?.options[goalEl.selectedIndex]?.text;
+
+  if (!theme) {
+    alert('Please enter a theme for the quiz!');
+    return;
+  }
+
+  // Create clean request object (no blank fields)
+  const cleanRequest = { theme };
+  if (lang) cleanRequest.language = lang;
+  if (level) cleanRequest.level = level;
+  if (feel) cleanRequest.feel = feel;
+  if (timeLimit) cleanRequest.timeLimit = Number(timeLimit);
+  if (count) cleanRequest.questionCount = Number(count);
+  cleanRequest.includeImages = images === 'yes';
+  cleanRequest.includeAudio = audio === 'yes';
+  cleanRequest.answerTypes = answers;
+  if (goalText) cleanRequest.goal = goalText;
+
+  const typesMode = document.getElementById('promptTypesMode')?.value;
+  const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked')).map(cb => cb.value);
+
+  if (typesMode === 'include' && selectedTypes.length > 0) {
+    cleanRequest.includeQuestionTypes = selectedTypes;
+  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
+    cleanRequest.excludeQuestionTypes = selectedTypes;
+  }
+
+  const textualSummary = Object.entries(cleanRequest)
+    .map(([k, v]) => Array.isArray(v) ? `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v.join(', ')}` : `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+    .join('\n');
+
+  let typesInstructions = 'Supported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.';
+  let filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions;
+  let relevantExplanations = {};
+
+  if (typesMode === 'include' && selectedTypes.length > 0) {
+    typesInstructions = `CRITICAL: ONLY use these question types: ${selectedTypes.join(', ')}.`;
+    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => selectedTypes.includes(q.type));
+    selectedTypes.forEach(t => relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t] || {});
+  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
+    typesInstructions = `CRITICAL: DO NOT use these question types: ${selectedTypes.join(', ')}. Use any other supported types (mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking).`;
+    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => !selectedTypes.includes(q.type));
+    Object.keys(QUESTION_TYPE_EXPLANATIONS).forEach(t => {
+      if (!selectedTypes.includes(t)) relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t];
+    });
+  } else {
+    // Mode 'all' or no selection
+    relevantExplanations = QUESTION_TYPE_EXPLANATIONS;
+  }
+
+  const promptText = `
+I want to create a PinPlay quiz in JSON format with these requirements:
+${textualSummary}
+
+CRITICAL RULES FOR ASSETS:
+1. IMAGES: Set "imageData" to "" and instead provide a descriptive "imageKeyword" (1-2 words). The app will auto-search for the image.
+2. AUDIO: Use "audioMode": "tts" and provide the "audioText" to be spoken. Set "audioData" to "". 
+3. GLOBAL AUDIO: You can set "readAllQuestionsAloud": true at the top level to enable quiz-wide TTS.
+
+OUTPUT FORMAT:
+Provide a valid PinPlay JSON version 3. Follow the structure and patterns in the example template provided.
+Refer to the #Explanations# section in the attached JSON for technical constraints and app possibilities for each question type.
+${typesInstructions}
+`.trim();
+
+  const exportData = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      type: "PinPlay Creation Prompt",
+      version: "3.2"
+    },
+    request: cleanRequest,
+    aiPrompt: promptText,
+    "#Explanations#": relevantExplanations,
+    exampleTemplate: {
+      ...TEMPLATE_ALL_12_TYPES,
+      questions: filteredTemplateQuestions
+    }
+  };
+
+  try {
+    await navigator.clipboard.writeText(promptText);
+    if (promptStatusEl) {
+      promptStatusEl.textContent = 'Prompt copied! 📋';
+      promptStatusEl.className = 'small ok';
+      setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
+    }
+  } catch (err) {
+    if (promptStatusEl) {
+      promptStatusEl.textContent = 'Copied failed, but JSON exported.';
+      promptStatusEl.className = 'small bad';
+    }
+  }
+
+  const filename = `prompt-${toSafeFilename(theme)}.json`;
+  downloadJson(exportData, filename);
 }
 
 // ---------- Live mode ----------
@@ -3162,6 +3554,7 @@ async function createAssignmentFromCurrentQuiz() {
         attemptsLimit,
         dueAt,
         randomNames: randomNamesEnabled,
+        feedbackMode: assignmentFeedbackMode,
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -4697,7 +5090,21 @@ function renderHostQuestion(state) {
 
   if (question.type === 'context_gap') {
     hostQuestionHintEl.textContent = '';
-    if (showReveal) appendBigReveal(state.correctAnswer);
+    if (showReveal) {
+      let correct = String(state.correctAnswer || question.correctAnswer || '').trim();
+      if (!correct) {
+        const prompt = String(question.prompt || '').trim();
+        const gaps = question.gaps || [];
+        let gapIdx = 0;
+        const markerRe = /(\_{2,}|\[\s*\])/g;
+        correct = prompt.replace(markerRe, (match) => {
+          const raw = gaps[gapIdx++] || '';
+          const first = raw.split(',')[0].trim();
+          return first || match;
+        });
+      }
+      appendBigReveal(correct);
+    }
     return;
   }
 
@@ -5093,15 +5500,55 @@ function syncFullscreenButtonLabel() {
 function updateHallScene(state) {
   if (!hallCardEl || !hallHintEl) return;
 
+  const scoreboardSection = document.getElementById('projectorScoreboardSection');
+
   if (state.phase === 'lobby') {
     hallCardEl.classList.add('hall-live');
     hallHintEl.textContent = '';
+    // Hide hint text and scoreboard during lobby
+    if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
+    if (scoreboardSection) scoreboardSection.style.display = 'none';
+
+    // Render lobby player chips inside the hall card
+    if (hallLobbyPlayersEl) {
+      const players = Array.isArray(state.players) ? state.players : [];
+      const isRandomNames = !!(state.settings && state.settings.randomNames);
+      // Build a key to avoid unnecessary DOM rebuilds
+      const chipKey = players.map(p => `${p.id}:${p.name}`).join('|') + ':' + (isRandomNames ? '1' : '0');
+      if (hallLobbyPlayersEl.dataset.chipKey !== chipKey) {
+        hallLobbyPlayersEl.dataset.chipKey = chipKey;
+        hallLobbyPlayersEl.innerHTML = '';
+        players.forEach(p => {
+          const chip = document.createElement('span');
+          chip.className = 'hall-player-chip';
+          if (isRandomNames) {
+            const dice = document.createElement('span');
+            dice.className = 'hall-dice-btn';
+            dice.textContent = '🎲';
+            chip.appendChild(dice);
+          }
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = p.name || 'Player';
+          chip.appendChild(nameSpan);
+          hallLobbyPlayersEl.appendChild(chip);
+        });
+      }
+    }
+
     playHallMusic();
     return;
   }
 
   hallCardEl.classList.remove('hall-live');
   stopHallMusic();
+  // Restore hint text and scoreboard when quiz is active
+  if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
+  if (scoreboardSection) scoreboardSection.style.display = '';
+  // Clear lobby player chips
+  if (hallLobbyPlayersEl) {
+    hallLobbyPlayersEl.innerHTML = '';
+    hallLobbyPlayersEl.dataset.chipKey = '';
+  }
 
   if (state.phase === 'question') {
     hallHintEl.textContent = 'Question in progress.';
@@ -6945,7 +7392,7 @@ function makeOpenQuestion(opts = {}) {
   };
 }
 
-function makeSpeakingQuestion() {
+function makeSpeakingQuestion(opts = {}) {
   const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
   const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
   return {
@@ -6954,7 +7401,7 @@ function makeSpeakingQuestion() {
     prompt: 'Speak your answer when called by the teacher.',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: false,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -7885,11 +8332,22 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
   return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
 }
 
-function countErrorHuntRequiredTokens(prompt, correctedSource) {
-  const variants = getCorrectedVariantsList(correctedSource, Array.isArray(correctedSource) ? correctedSource : null);
-  const corrected = variants[0] || '';
+function countErrorHuntRequiredTokens(prompt, corrected) {
+  const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
   const source = tokenizeWords(prompt);
-  const target = tokenizeWords(corrected);
+  const target = tokenizeWords(correctedStr);
+  if (!source.length || !target.length) return 1;
+
+  // If lengths match, count direct mismatches after normalization
+  if (source.length === target.length) {
+    let diff = 0;
+    for (let i = 0; i < source.length; i++) {
+      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
+    }
+    return diff || 1;
+  }
+
+  // Otherwise use edit distance but clamp to avoid over-counting
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -7912,7 +8370,9 @@ function countErrorHuntRequiredTokens(prompt, correctedSource) {
     }
   }
 
-  return dp[source.length][target.length] || 1;
+  const dist = dp[source.length][target.length] || 1;
+  const maxOps = Math.max(source.length, target.length);
+  return Math.max(1, Math.min(dist, maxOps));
 }
 
 function getErrorHuntRequired(q) {
@@ -8135,7 +8595,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {

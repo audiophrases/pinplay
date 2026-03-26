@@ -1690,6 +1690,7 @@ function renderBuilder() {
             <select data-q="${idx}" data-field="pinMode">
               <option value="all" ${String(q.pinMode || 'all') === 'all' ? 'selected' : ''}>All spots must be pinned</option>
               <option value="any" ${String(q.pinMode || 'all') === 'any' ? 'selected' : ''}>Any one spot is enough</option>
+              ${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => `<option value="${n}" ${String(q.pinMode) === String(n) ? 'selected' : ''}>Exactly ${n} spots</option>`).join('')}
             </select>
           </div>
         </div>
@@ -2317,7 +2318,8 @@ function syncQuizFromUI() {
       }).slice(0, 12);
       q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
       q.zone = q.zones[0];
-      q.pinMode = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all') === 'any' ? 'any' : 'all';
+      q.pinMode = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all';
+      if (q.pinMode !== 'any' && q.pinMode !== 'all') q.pinMode = String(q.pinMode);
     }
   });
 }
@@ -5090,7 +5092,21 @@ function renderHostQuestion(state) {
 
   if (question.type === 'context_gap') {
     hostQuestionHintEl.textContent = '';
-    if (showReveal) appendBigReveal(state.correctAnswer);
+    if (showReveal) {
+      let correct = String(state.correctAnswer || question.correctAnswer || '').trim();
+      if (!correct) {
+        const prompt = String(question.prompt || '').trim();
+        const gaps = question.gaps || [];
+        let gapIdx = 0;
+        const markerRe = /(\_{2,}|\[\s*\])/g;
+        correct = prompt.replace(markerRe, (match) => {
+          const raw = gaps[gapIdx++] || '';
+          const first = raw.split(',')[0].trim();
+          return first || match;
+        });
+      }
+      appendBigReveal(correct);
+    }
     return;
   }
 
@@ -6116,12 +6132,15 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
+    const pinMode = String(question.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
     const countLabel = document.createElement('p');
     countLabel.className = 'small';
-    countLabel.textContent = `Pin all correct spots: 0 / ${required}`;
+    countLabel.textContent = pinMode === 'any' ? 'Pin any one spot: 0 / 1' : `Pin correct spots: 0 / ${required}`;
 
     wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
@@ -6130,9 +6149,11 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = pinMode === 'all'
-        ? `Pin all correct spots: ${picks.length} / ${required}`
-        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      if (pinMode === 'any') {
+        countLabel.textContent = `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      } else {
+        countLabel.textContent = `Pin correct spots: ${picks.length} / ${required}`;
+      }
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -7710,7 +7731,7 @@ function normalizeQuizForLive(raw) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: String(q.pinMode || 'all') === 'any' ? 'any' : 'all',
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all'),
       });
       return;
     }
