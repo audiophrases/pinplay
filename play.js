@@ -1195,9 +1195,30 @@ function renderJoinQuestion(question) {
   if (!joinAnswersEl) return;
 
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
+  const hasAnyImage = !!question.imageData;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
   if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+
+  // Clear background first
+  if (joinQuestionWrap) {
+    joinQuestionWrap.style.backgroundImage = '';
+    joinQuestionWrap.style.backgroundSize = 'contain';
+    joinQuestionWrap.style.backgroundPosition = 'center';
+    joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
+  }
+  const interactiveOverlay = document.getElementById('joinQuestionInteractive');
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
+
+  if (hasAnyImage) {
+    let imgSrc = question.imageData;
+    if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
+      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+      imgSrc = `${base}/api/media/${imgSrc}`;
+    }
+    if (joinQuestionWrap) {
+      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+    }
+  }
 
   if (question.isPoll) {
     const note = document.createElement('p');
@@ -1206,18 +1227,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
-    const preview = document.createElement('div');
-    preview.className = 'question-image-preview';
-    const img = document.createElement('img');
-    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
-    img.alt = 'Question image';
-    img.dataset.zoomable = '1';
-    preview.appendChild(img);
-    preview.dataset.zoomable = '1';
-    preview.dataset.bgImageSrc = imgSrc;
-    joinAnswersEl.appendChild(preview);
-  }
+  // Remove the old inline image preview logic for generic questions
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';

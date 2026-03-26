@@ -1228,21 +1228,48 @@ textarea { min-height: 72px; resize: vertical; }
   min-height: auto;
   width: 100%;
   flex: 1 1 auto;
+  position: relative;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#joinCard.question-active.has-image #joinQuestionWrap {
+  min-height: 380px;
+}
+
+#joinQuestionInteractive {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto 0;
+  z-index: 2;
+}
+
+#joinQuestionInteractive.interactive-overlay {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 1.25rem;
+  padding: 1.25rem 1rem;
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  width: 96%;
 }
 
 #joinCard.question-active #joinAnswers {
   width: 100%;
-  max-width: 760px;
   display: grid;
   grid-template-columns: 1fr;
-  gap: .3rem;
+  gap: .4rem;
   justify-items: center;
   margin: 0 auto;
-  flex: 1 1 auto;
 }
 #joinCard.question-active #joinAnswers.two-col {
   grid-template-columns: 1fr 1fr;
-  gap: .3rem .4rem;
+  gap: .4rem .5rem;
 }
 
 /* When no image, center content but keep footer sticky */
@@ -1251,7 +1278,7 @@ textarea { min-height: 72px; resize: vertical; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
+  min-height: 40vh;
   padding-bottom: 0.5rem;
 }
 
