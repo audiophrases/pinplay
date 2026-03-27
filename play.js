@@ -1148,7 +1148,16 @@ function applyJoinLayoutMode(active, question = null) {
   const qType = String(question?.type || '').trim();
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
-  joinCardEl.classList.toggle('has-image', !!question?.imageData);
+
+  // Set background image on body via CSS variable for the fixed overlay pattern
+  if (isActive && question?.image) {
+    const imgUrl = question.image.startsWith('http') ? question.image : `https://pinplay-api.eugene-87a.workers.dev/api/media/${question.image}`;
+    document.body.style.setProperty('--quiz-bg-image', `url("${imgUrl}")`);
+    joinCardEl.classList.add('has-image');
+  } else {
+    document.body.style.removeProperty('--quiz-bg-image');
+    joinCardEl.classList.remove('has-image');
+  }
 }
 
 function renderJoinQuestion(question) {
@@ -1166,31 +1175,11 @@ function renderJoinQuestion(question) {
   }
   if (!joinAnswersEl) return;
 
-  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = !!question.imageData;
+  const hasSharedImage = question.type !== 'pin' && !!question.image;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
-  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', !!question.image);
 
-  // Clear background first
-  if (joinQuestionWrap) {
-    joinQuestionWrap.style.backgroundImage = '';
-    joinQuestionWrap.style.backgroundSize = 'contain';
-    joinQuestionWrap.style.backgroundPosition = 'center';
-    joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
-  }
-  const interactiveOverlay = document.getElementById('joinQuestionInteractive');
-  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
-
-  if (hasAnyImage) {
-    let imgSrc = question.imageData;
-    if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
-      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
-      imgSrc = `${base}/api/media/${imgSrc}`;
-    }
-    if (joinQuestionWrap) {
-      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
-    }
-  }
+  // Background is now handled by CSS ::before on body using --quiz-bg-image
 
   if (question.isPoll) {
     const note = document.createElement('p');
