@@ -2983,6 +2983,20 @@ async function createLiveGame() {
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
     if (livePinHudEl) livePinHudEl.textContent = data.pin;
+
+    // --- NEW: Update QR Code ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && data.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+    }
+
+    // --- NEW: Auto-expand and scroll to the Live Screen section ---
+    if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+      setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+      liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     setStatus(hostStatusEl, 'Live game created. Share the PIN with students.', 'ok');
 
     startHostPolling();
@@ -3646,6 +3660,20 @@ async function joinLiveGameAsHostByPin() {
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
     if (livePinHudEl) livePinHudEl.textContent = data.pin;
+
+    // --- NEW: Update QR Code ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && data.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+    }
+
+    // --- NEW: Auto-expand and scroll to the Live Screen section ---
+    if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+      setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+      liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     setStatus(hostStatusEl, 'Joined as host by PIN. Controls are live.', 'ok');
 
     startHostPolling();
@@ -4519,7 +4547,16 @@ function renderHostState(state) {
   if (liveResponsesEl) liveResponsesEl.textContent = `${state.responseCount} / ${state.playerCount}`;
   renderReactionPop(state.reactions || []);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
-  if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
+  if (livePinBigEl) {
+    livePinBigEl.textContent = state.pin || '-';
+    // --- NEW: Keep QR in sync with any PIN changes natively ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && state.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${state.pin}`;
+      const expectedSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+      if (qrEl.src !== expectedSrc) qrEl.src = expectedSrc;
+    }
+  }
   if (livePinHudEl) livePinHudEl.textContent = state.pin || '-';
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
@@ -6367,6 +6404,11 @@ function startPreviewMode() {
     previewJumpInputEl.value = String(Number(previewMode.index || 0) + 1);
   }
   if (previewJumpBtn) previewJumpBtn.classList.remove('hidden');
+
+  // --- NEW: Auto-expand the Live Screen section so Preview is visible ---
+  if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+    setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+  }
 
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');

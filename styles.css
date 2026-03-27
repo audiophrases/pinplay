@@ -1256,3 +1256,36 @@ body.question-active .join-title-row {
   margin-top: 1.5rem;
   min-height: 0;
 }
+
+/* ==========================================================================
+   REMOVE FRAMES FROM EMOJI BUTTONS (Dice & Reactions)
+   ========================================================================== */
+.dice-icon-btn,
+.reaction-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0.25rem 0.4rem !important;
+  font-size: 1.7rem !important; /* Nice, readable emoji size */
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+  height: auto;
+  outline: none;
+}
+
+/* Add a playful pop effect on hover/click instead of a background */
+.dice-icon-btn:hover,
+.reaction-btn:hover {
+  background: transparent !important;
+  transform: scale(1.15);
+}
+
+.dice-icon-btn:active,
+.reaction-btn:active {
+  transform: scale(0.9);
+}
