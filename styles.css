@@ -207,41 +207,41 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .top-space { margin-top: .75rem; }
 
-/* Creation Prompt Section Styles */
-.creation-prompt-section {
-  border: 1px solid var(--primary);
-  border-radius: 0.9rem;
-  background: linear-gradient(145deg, #ffffff, #f9f9ff);
-  overflow: hidden;
-  box-shadow: 0 4px 15px rgba(96, 93, 255, 0.1);
-  margin-bottom: 1.25rem;
+.builder-section {
+  margin-top: 0.75rem;
 }
 
-.creation-prompt-section .section-toggle-btn {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0.85rem 1.25rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  cursor: pointer;
-  transition: background 0.2s;
+.builder-section .section-toggle-btn {
+  border-radius: 0.6rem;
 }
 
-.creation-prompt-section .section-toggle-btn:hover {
-  background: rgba(96, 93, 255, 0.05);
+.builder-section .section-collapsible-body {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 0.6rem 0.6rem;
+  background: #fff;
 }
 
-.section-collapsible-body {
-  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+.builder-section .section-toggle-btn.collapsed {
+  border-radius: 0.6rem;
 }
-.section-collapsible-body.hidden {
-  display: none !important;
+
+.builder-section .section-toggle-btn:not(.collapsed) {
+  border-radius: 0.6rem 0.6rem 0 0;
+}
+
+/* Creation Prompt Section refined integration */
+.creation-prompt-section .section-toggle-btn.prompt-toggle {
+  border-bottom: 1px solid var(--line);
+}
+
+.creation-prompt-section .section-toggle-btn.prompt-toggle.collapsed {
+  border-bottom: none;
+}
+
+.creation-prompt-section .section-collapsible-body {
+  padding: 1.25rem;
 }
 
 .creation-prompt-grid {
