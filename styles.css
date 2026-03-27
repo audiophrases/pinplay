@@ -731,8 +731,9 @@ body.question-active .join-title-row {
 }
 
 #joinSubmitBtn {
-  width: 100%;
-  max-width: 600px;
+  width: fit-content; /* Hugs the text instead of forcing 100% width */
+  min-width: 200px;   /* Keeps a nice minimum size so it doesn't look too tiny */
+  padding: 0 40px;    /* Adds horizontal breathing room around the text */
   height: 54px;
   background: #605dff;
   color: white;
@@ -1258,16 +1259,21 @@ body.question-active .join-title-row {
 }
 
 /* ==========================================================================
-   REMOVE FRAMES FROM EMOJI BUTTONS (Dice & Reactions)
+   REMOVE FRAMES FROM EMOJI & ICON BUTTONS (Dice & Reactions, Audio Speed)
    ========================================================================== */
 .dice-icon-btn,
-.reaction-btn {
+.reaction-btn,
+.speed-btn,
+.audio-speed-btn,
+.rate-btn {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0.25rem 0.4rem !important;
-  font-size: 1.7rem !important; /* Nice, readable emoji size */
+  font-size: 1.7rem !important;
+  font-weight: 800; /* Makes text like +40% bold and clean */
   line-height: 1;
+  color: var(--primary) !important; /* Applies a nice accent color to +40% */
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1278,14 +1284,20 @@ body.question-active .join-title-row {
   outline: none;
 }
 
-/* Add a playful pop effect on hover/click instead of a background */
+/* Playful pop effect on hover/click instead of a background frame */
 .dice-icon-btn:hover,
-.reaction-btn:hover {
+.reaction-btn:hover,
+.speed-btn:hover,
+.audio-speed-btn:hover,
+.rate-btn:hover {
   background: transparent !important;
   transform: scale(1.15);
 }
 
 .dice-icon-btn:active,
-.reaction-btn:active {
+.reaction-btn:active,
+.speed-btn:active,
+.audio-speed-btn:active,
+.rate-btn:active {
   transform: scale(0.9);
 }
