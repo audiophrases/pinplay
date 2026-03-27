@@ -1187,28 +1187,27 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .28rem;
 }
 
-/* Student UI: Sandwich Layout (Sticky Top & Bottom) */
+/* Student UI full-screen question phase improvements */
 body.question-active {
-  overflow: hidden !important;
+  overflow: hidden !important; /* Prevent body scroll, card scroller will handle it */
   height: 100vh !important;
   display: block !important;
   position: relative;
-  background: #fdfdfd !important;
 }
 
-/* 1. Fixed Background Layer with large margins to avoid collision */
+/* 1. Fixed Background Layer with 25% larger margins */
 body.question-active::before {
   content: "";
   position: fixed;
-  top: 13.5rem;   /* Large top margin for HUD + Prompt */
-  bottom: 11.5rem; /* Large bottom margin for Answers + Submission */
-  left: 6.25rem;
+  top: calc(3.5rem + 10rem); /* HUD + 10rem (8rem * 1.25) */
+  bottom: 10rem;
+  left: 6.25rem; /* 5rem * 1.25 */
   right: 6.25rem;
   background-image: var(--quiz-bg-image);
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
-  z-index: 1; /* Above base but below sticky sections */
+  z-index: -1;
   pointer-events: none;
 }
 
@@ -1218,12 +1217,12 @@ body.question-active .join-title-row {
 }
 
 #joinCard.question-active {
-  position: fixed !important;
-  top: 0 !important;
+  position: fixed !important; /* Force out of container flow */
+  top: 3.5rem !important; /* Below fixed HUD */
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  height: 100vh !important;
+  height: calc(100vh - 3.5rem) !important;
   width: 100vw !important;
   max-width: none !important;
   margin: 0 !important;
@@ -1236,161 +1235,86 @@ body.question-active .join-title-row {
   display: block !important;
 }
 
+/* Ensure sticky children work correctly */
 #joinQuestionWrap {
-  display: flex !important;
-  flex-direction: column;
-  min-height: 100.1%; /* Force scroller */
+  display: block !important;
   width: 100%;
-}
-
-/* 2. Top Sticky Section: HUD + Prompt */
-#joinStickyTop {
-  position: sticky;
-  top: 0;
-  z-index: 1100;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 0.85rem 1.5rem;
-  width: 100%;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-}
-
-#joinHeaderRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  font-size: 0.9rem;
-  margin-bottom: 0.65rem;
-  padding: 0.4rem 0.8rem;
-  background: rgba(240, 244, 248, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-#joinPlayerName { color: #0969da; font-weight: 700; }
-#joinModeLabel { 
-  background: #0969da; 
-  color: white; 
-  padding: 0.15rem 0.5rem; 
-  border-radius: 4px; 
-  font-size: 0.75rem; 
-  text-transform: uppercase;
-  font-weight: 800;
-}
-#joinProgress { color: #57606a; font-weight: 600; }
-#joinTimer { color: #9a6700; font-weight: 600; }
-#joinScore { color: #8250df; font-weight: 700; }
-#joinStatusHud { color: #cf222e; font-weight: 700; margin-left: auto; }
-
-#joinPrompt {
+  min-height: 100.1%; /* Force slight overflow to ensure scroller active */
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 800;
-  line-height: 1.35;
-  color: #1f2328;
-  text-align: center;
+  padding: 0;
+}
+
+#joinQuestionInteractive {
+  display: block !important;
   width: 100%;
+  min-height: 100%;
 }
 
-/* 3. Middle Visual Spacer: Ensures background image is visible */
-#joinVisualSpacer {
-  flex-grow: 1;
-  min-height: 25vh;
-  pointer-events: none;
-}
-
-/* 4. Bottom Sticky Section: Answers + Submission */
-#joinStickyBottom {
-  position: sticky;
-  bottom: 0;
-  z-index: 1100;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 1.25rem 1.5rem;
-  width: 100%;
-  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-#joinAnswers {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  justify-content: center;
-  align-items: center;
-}
-
-/* Answer Tokens (Horizontal Hugging) */
-#joinAnswers .answer-row {
-  width: auto !important;
-  min-width: 120px;
-  flex: 0 1 auto;
-  padding: 0.6rem 1rem !important;
+/* 4) Sticky Question Row - full width anchored below top HUD */
+#joinPrompt {
+  position: sticky !important;
+  top: 0 !important; /* Relative to #joinCard scroller */
+  left: 0;
+  right: 0;
+  width: 100% !important;
+  max-width: none !important;
   margin: 0 !important;
-  border-radius: 12px !important;
-  font-size: 1.05rem !important;
-  font-weight: 600 !important;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: white;
-  border: 1.5px solid #d0d7de !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 1.25rem 2rem !important;
+  border-bottom: 1.5px solid var(--line) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+  z-index: 1100;
+  text-align: center;
+  font-size: 1.5rem !important;
+  font-weight: 800 !important;
+  color: var(--text);
+  line-height: 1.3;
 }
 
-#joinAnswers .answer-row:hover {
-  border-color: #0969da !important;
-  background: #f6f8fa;
-}
-
-#joinAnswers .answer-row:has(input:checked) {
-  background: #ddf4ff !important;
-  border-color: #0969da !important;
-  box-shadow: 0 0 0 1px #0969da;
-}
-
-#joinSubmission {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
+/* 5) Answer elements stay flexible in middle */
+#joinAnswers {
   width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.75rem !important;
+  padding: 4rem 1.25rem !important; /* Vertical space for image visibility */
+  z-index: 90;
+  margin: 0 auto !important;
 }
 
-#joinSubmitBtn {
-  flex-grow: 1;
-  padding: 0.85rem 2rem;
-  font-size: 1.15rem;
-  font-weight: 800;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.25);
+/* 6) Sticky Save/Submit button Bar Element bottom row no margin */
+#joinSubmission {
+  position: sticky !important;
+  bottom: 0 !important; /* Relative to #joinCard scroller */
+  width: 100% !important;
+  max-width: none !important;
+  display: flex !important;
+  gap: 1.25rem !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0.85rem 1rem !important;
+  margin: 0 !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(15px) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
+  border-top: 1.5px solid var(--line) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.05) !important;
+  z-index: 1100;
 }
 
-/* Feedback/Reveal Styles */
-#joinAnswers .answer-row.correct-highlight {
-  background-color: #dafbe1 !important;
-  border-color: #1a7f37 !important;
-  color: #1a7f37 !important;
-}
-
-#joinAnswers .answer-row.incorrect-highlight {
-  background-color: #ffebe9 !important;
-  border-color: #cf222e !important;
-  color: #cf222e !important;
-}
-
-/* Adaptive fit disable for student UI */
-#joinCard.question-active .adaptive-scaled {
-  transform: none !important;
+/* Multi-select badge adaptation */
+.multi-select-badge {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 2rem;
+  padding: 0.4rem 1rem;
+  margin: 0.5rem auto;
+  font-size: 0.9rem;
 }
 
