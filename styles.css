@@ -1187,13 +1187,33 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .28rem;
 }
 
-/* Student UI full-screen question phase */
-body.question-active .container {
-  max-width: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  width: 100vw !important;
+/* Student UI full-screen question phase improvements */
+body.question-active {
+  overflow: hidden !important; /* Prevent body scroll, card scroller will handle it */
   height: 100vh !important;
+  display: block !important;
+  position: relative;
+}
+
+/* 1. Fixed Background Layer with 25% larger margins */
+body.question-active::before {
+  content: "";
+  position: fixed;
+  top: calc(3.5rem + 10rem); /* HUD + 10rem (8rem * 1.25) */
+  bottom: 10rem;
+  left: 6.25rem; /* 5rem * 1.25 */
+  right: 6.25rem;
+  background-image: var(--quiz-bg-image);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body.question-active .topbar,
+body.question-active .join-title-row {
+  display: none !important;
 }
 
 #joinCard.question-active {
