@@ -1187,229 +1187,212 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .28rem;
 }
 
-/* Student UI question phase improvements */
+/* --- 1. CORE LAYOUT RESET --- */
 body.question-active {
-  overflow: hidden; /* Prevent body scroll, use container scroll if needed */
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden; /* Prevent body scrolling */
+    background-color: #111; /* Darker floor for better image contrast */
+    display: flex;
+    flex-direction: column;
 }
 
+/* The Background Image Layer */
+#joinQuestionWrap {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    /* Create big margins so the 'contained' image never touches the sticky bars */
+    padding: 160px 5vw 220px 5vw; 
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* --- 2. TOP STICKY SECTION (Stats + Question) --- */
+#joinHeaderRow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column; /* Stack Stats Row and Question Row */
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+/* Row 1: The Stats (Color Coded) */
+.header-stats-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    white-space: nowrap;
+}
+
+/* Color codes for the first row */
+#joinPlayerName { color: #2da44e; } /* Green */
+#joinModeLabel  { color: #0969da; text-transform: uppercase; } /* Blue PIN */
+#joinProgress   { color: #6e7681; } /* Gray */
+#joinTimer      { color: #d29922; } /* Amber */
+#joinScore      { color: #8250df; } /* Purple */
+
+/* Row 2: The Question */
+#joinPrompt {
+    padding: 15px 25px;
+    margin: 0 !important;
+    font-size: 1.6rem !important;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+    color: #1c2430;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 1000px;
+    align-self: center;
+}
+
+/* --- 3. BOTTOM STICKY SECTION (Answers + Save) --- */
+#joinQuestionInteractive {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column; /* Row 1: Answers, Row 2: Save Button */
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)); /* Mobile notch support */
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05);
+}
+
+/* Row 1 of Bottom Section: Answer Elements */
+#joinAnswers {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto 15px auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr; /* Default to 2 columns */
+    gap: 12px;
+    background: transparent !important;
+}
+
+/* Answer items styled as clean, selectable buttons */
+#joinAnswers .answer-row {
+    background: #ffffff !important;
+    border: 2px solid #dfe3ea !important;
+    border-radius: 12px !important;
+    padding: 12px 18px !important;
+    margin: 0 !important;
+    font-size: 1.15rem !important;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03) !important;
+}
+
+#joinAnswers .answer-row:hover {
+    border-color: #605dff !important;
+    background: #f8f9ff !important;
+}
+
+/* Row 2 of Bottom Section: Save Button */
+#joinSubmission {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+#joinSubmitBtn {
+    width: 100%;
+    max-width: 400px;
+    height: 54px;
+    border-radius: 14px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: #605dff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #4f4ce0;
+    transition: all 0.1s;
+}
+
+#joinSubmitBtn:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #4f4ce0;
+}
+
+#joinSubmitBtn:disabled {
+    background: #cbd5e1;
+    box-shadow: 0 4px 0 #94a3b8;
+    cursor: not-allowed;
+}
+
+/* --- 4. RESPONSIVE ADAPTATIONS --- */
+
+@media (max-width: 768px) {
+    #joinAnswers {
+        grid-template-columns: 1fr; /* Single column on mobile */
+        max-height: 35vh; /* Don't let answers cover the image */
+        overflow-y: auto;
+    }
+
+    #joinPrompt {
+        font-size: 1.2rem !important;
+    }
+
+    .header-stats-row {
+        gap: 0.75rem;
+        font-size: 0.75rem;
+        padding: 8px 10px;
+    }
+
+    /* Adjust margins for smaller screens */
+    #joinQuestionWrap {
+        padding: 130px 10px 240px 10px;
+    }
+}
+
+/* Special treatment for the "Pin the spot" interaction layer */
+#joinCard.question-active[data-qtype="pin"] .pin-preview {
+    position: absolute;
+    inset: 0;
+    z-index: 50; /* Between image and UI */
+    background: transparent !important;
+    cursor: crosshair;
+}
+
+/* Hide interaction overlay background to ensure image visibility */
+.interactive-overlay {
+    background: transparent !important;
+}
 body.question-active .topbar,
 body.question-active .join-title-row {
   display: none !important;
-}
-
-/* 1. Sticky/Fixed Top Stats Row */
-#joinHeaderRow {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 0 1rem;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
-  z-index: 1000;
-  font-size: 0.85rem;
-}
-
-#joinPlayerName { color: #2da44e; font-weight: 700; }
-#joinModeLabel { color: #0969da; font-weight: 700; }
-#joinProgress { color: #6e7681; font-weight: 600; }
-#joinTimer { color: #9a6700; font-weight: 600; }
-#joinScore { color: #8250df; font-weight: 700; }
-#joinStatusHud { color: #cf6a87; font-weight: 600; }
-
-/* Main container for the question phase */
-#joinCard.question-active {
-  margin-top: 3rem; /* Height of header row */
-  height: calc(100vh - 3rem);
-  width: 100%;
-  max-width: none;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow: hidden;
-}
-
-/* Container for background image and interactive elements */
-#joinQuestionWrap {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 1200px; /* Use more space */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  padding: 1.5rem;
-  box-sizing: border-box;
-}
-
-/* Distribution layer: Question -> Image (gap) -> Answers/Buttons */
-#joinQuestionInteractive {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between; /* Push question to top, buttons to bottom */
-  align-items: center;
-  z-index: 2;
-  background: transparent !important;
-}
-
-/* Element Styling - Text hugging backgrounds */
-#joinPrompt,
-#joinAnswers .answer-row,
-#joinSubmission,
-.multi-select-badge {
-  background: rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-radius: 1rem;
-  padding: 0.75rem 1.25rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  width: fit-content;
-  max-width: 90%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-#joinPrompt {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  font-size: 1.4rem !important;
-  text-align: center;
-  flex: 0 0 auto;
-}
-
-/* Bottom elements container */
-#joinAnswers, 
-#joinSubmission {
-  flex: 0 0 auto;
-}
-
-#joinAnswers {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-#joinAnswers .answer-row {
-  margin: 0;
-  width: auto;
-  min-width: min(320px, 100%);
-  font-size: 1.2rem;
-}
-
-#joinSubmission {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0.6rem 1.2rem;
-  margin-bottom: 0.5rem;
-}
-
-/* Responsive adjustment for two-column answers when space allows */
-@media (min-width: 760px) {
-  #joinCard.question-active #joinAnswers.two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    width: auto;
-    max-width: 90%;
-  }
-  #joinCard.question-active #joinAnswers.two-col .answer-row {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-/* Pin question type: Keep absolute overlay for interaction */
-#joinCard.question-active[data-qtype="pin"] .pin-preview {
-  position: absolute;
-  inset: 0;
-  background: transparent !important;
-  border: none !important;
-  z-index: 1;
-}
-#joinCard.question-active[data-qtype="pin"] .pin-preview img {
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* Center content when no image is present */
-#joinCard.question-active:not(.has-image) #joinQuestionInteractive {
-  justify-content: center;
-  gap: 2rem;
-}
-
-#joinCard.question-active .answer-row {
-  gap: .38rem;
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-  align-items: center;
-}
-
-#joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
-  position: static;
-  padding-top: .4rem;
-  margin-top: .6rem;
-  margin-bottom: 0.25rem;
-  background: transparent;
-}
-
-/* Submission row: keep separated from content, no sticky overlap */
-#joinCard.question-active { padding-bottom: 0.8rem; }
-#joinSubmission {
-  position: static;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
-  padding: 0.25rem 0;
-  background: transparent;
-  z-index: 1;
-}
-#joinSubmission .btn { padding: 0.35rem 0.9rem; }
-
-/* Pin question type: transparent overlay for background image */
-#joinCard.question-active[data-qtype="pin"] .pin-preview {
-  background: transparent !important;
-  border: none !important;
-  cursor: crosshair;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  margin: 0;
-  z-index: 1; /* Below interactive but covers background */
-}
-
-#joinCard.question-active[data-qtype="pin"] .pin-preview img {
-  opacity: 0; /* Invisible but preserves aspect ratio if needed, though we use background-size: contain on parent */
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
 }
 
 /* Student answer items */
