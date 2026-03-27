@@ -963,7 +963,15 @@ function renderPlayerState(state) {
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
     live.player.pinSelections = [];
+    
+    // --- NEW: Reset Bet UI state for the new question ---
     live.player.selectedBet = 0;
+    betSelected = false;
+    const betBtn = document.getElementById('betIndicator');
+    if (betBtn) {
+      betBtn.classList.remove('selected');
+    }
+
     renderJoinQuestion(state.question);
     setJoinStatusHud( '', '');
     animatePulse(joinQuestionWrap);
@@ -985,6 +993,8 @@ function renderPlayerState(state) {
     lastClosedQuestionIndex = state.currentIndex;
   }
 
+  const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
+
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
     const isContinueMode = isAssignment && questionClosed && !assignmentSubmitted;
@@ -994,7 +1004,6 @@ function renderPlayerState(state) {
       joinSubmitBtn.disabled = false;
     } else {
       joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
-      const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
       joinSubmitBtn.disabled = shouldDisable;
     }
 
@@ -1003,6 +1012,12 @@ function renderPlayerState(state) {
     if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
       setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
+  }
+
+  // --- NEW: Lock the bet button if the question is closed or answered ---
+  const betBtn = document.getElementById('betIndicator');
+  if (betBtn) {
+    betBtn.disabled = shouldDisable;
   }
 
   if (joinFinalizeBtn) {
@@ -2636,6 +2651,7 @@ function initBetControl() {
   const betBtn = document.getElementById('betIndicator');
   if (!betBtn) return;
   betBtn.addEventListener('click', () => {
+    if (betBtn.disabled) return; // Prevent toggling if already answered
     betSelected = !betSelected;
     betBtn.classList.toggle('selected', betSelected);
     live.player.selectedBet = betSelected ? 3 : 0; // 3 = +40%
