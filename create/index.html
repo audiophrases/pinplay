@@ -263,10 +263,12 @@
               </span>
             </h2>
             <div id="liveScreenCardBody" class="hidden">
-            <div class="hall top-space" id="hallCard">
-              <div class="small">GAME PIN</div>
-              <div class="hall-pin-row">
-                <div class="pin-big" id="livePinBig">—</div>
+           <div class="hall top-space hidden" id="hallCard">
+              <div class="hall-join-hero">
+                <!-- 1. Website Address -->
+                <div class="hall-short-url"><span class="hall-logo">🎯</span> iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+                
+                <!-- 2. QR Code -->
                 <div class="hall-qr-wrap" aria-label="Join QR">
                   <img
                     class="hall-qr"
@@ -275,8 +277,11 @@
                     loading="lazy"
                   />
                 </div>
+
+                <!-- 3. PIN Number -->
+                <div class="pin-big" id="livePinBig">—</div>
               </div>
-              <div class="hall-short-url"><span class="hall-logo">🎯</span> iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+              
               <div class="small" id="hallHint"></div>
               <div id="hallLobbyPlayers" class="hall-lobby-players"></div>
             </div>
