@@ -1189,3 +1189,70 @@ body.question-active .join-title-row {
 .dialog-delete:hover {
   background: #fee2e2;
 }
+
+.hall {
+  display: none;
+  border: 1px dashed var(--line);
+  border-radius: .9rem;
+  padding: .85rem;
+  background: linear-gradient(145deg, #fbfbff, #f4f6ff);
+}
+.hall.hall-live {
+  display: block;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(96,93,255,.12);
+}
+
+/* New Hero Container for URL - QR - PIN */
+.hall-join-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5rem; /* Space between the three elements */
+  padding: 2.5rem 1rem;
+  flex-wrap: wrap;
+}
+
+/* 1. Address Styling (Much Bigger) */
+.hall-short-url {
+  margin: 0;
+  text-align: left;
+  font-weight: 800;
+  font-size: clamp(3rem, 6vw, 4.5rem);
+  letter-spacing: .02em;
+  line-height: 1;
+  color: var(--primary);
+}
+.hall-short-url-dot { font-size: 1.2em; line-height: inherit; vertical-align: baseline; color: var(--text); }
+.hall-short-url-slash { font-size: 1.1em; vertical-align: baseline; color: var(--muted); }
+.hall-logo { font-size: 1em; vertical-align: middle; }
+
+/* 2. QR Code Styling */
+.hall-qr-wrap {
+  flex: 0 0 auto;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.6rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+.hall-qr { display: block; width: 150px; height: 150px; }
+
+/* 3. PIN Number Styling (Much Bigger) */
+.pin-big {
+  font-size: clamp(4rem, 8vw, 6.5rem);
+  font-weight: 900;
+  letter-spacing: .25rem;
+  line-height: 1;
+  margin: 0;
+  color: var(--text);
+}
+
+.hall-lobby-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .55rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  min-height: 0;
+}
