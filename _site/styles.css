@@ -58,6 +58,7 @@ body {
 
 .panel { display: none; }
 .panel.active { display: block; }
+.hidden { display: none !important; }
 
 .card {
   background: var(--card);
@@ -206,6 +207,129 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .top-space { margin-top: .75rem; }
 
+.builder-section {
+  margin-top: 0.75rem;
+}
+
+.builder-section .section-toggle-btn {
+  border-radius: 0.6rem;
+}
+
+.builder-section .section-collapsible-body {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 0.6rem 0.6rem;
+  background: #fff;
+}
+
+.builder-section .section-toggle-btn.collapsed {
+  border-radius: 0.6rem;
+}
+
+.builder-section .section-toggle-btn:not(.collapsed) {
+  border-radius: 0.6rem 0.6rem 0 0;
+}
+
+/* Creation Prompt Section refined integration */
+.creation-prompt-section .section-toggle-btn.prompt-toggle {
+  border-bottom: 1px solid var(--line);
+}
+
+.creation-prompt-section .section-toggle-btn.prompt-toggle.collapsed {
+  border-bottom: none;
+}
+
+.creation-prompt-section .section-collapsible-body {
+  padding: 1.25rem;
+}
+
+.creation-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+.prompt-field label {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+
+.prompt-field input, .prompt-field select {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.6rem;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.prompt-field input:focus, .prompt-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(96, 93, 255, 0.15);
+  outline: none;
+}
+
+.creation-prompt-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.prompt-types-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background: #f1f3f9;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+}
+
+.type-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.type-pill:hover {
+  border-color: var(--primary);
+  background: rgba(96, 93, 255, 0.05);
+}
+
+.type-pill input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.type-pill:has(input:checked) {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 2px 8px rgba(96, 93, 255, 0.3);
+}
+
+.type-pill:has(input:checked) span {
+  color: #fff;
+}
+.type-pill:has(input:checked) input {
+  accent-color: #fff;
+}
+
 .host-live-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -331,6 +455,7 @@ textarea { min-height: 72px; resize: vertical; }
   flex-wrap: wrap;
   gap: .4rem;
   align-items: center;
+  justify-content: center;
 }
 
 .context-gap-word {
@@ -347,7 +472,8 @@ textarea { min-height: 72px; resize: vertical; }
 
 .match-pairs-wrap {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: auto auto;
+  justify-content: center;
   gap: .7rem;
   margin-top: .4rem;
   align-items: start;
@@ -383,8 +509,8 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .45rem;
 }
 
-.match-pairs-col-left { justify-items: start; }
-.match-pairs-col-right { justify-items: start; }
+.match-pairs-col-left { justify-items: center; }
+.match-pairs-col-right { justify-items: center; }
 
 .match-pair-left {
   width: fit-content;
@@ -394,7 +520,7 @@ textarea { min-height: 72px; resize: vertical; }
   background: #fff;
   padding: .5rem .75rem;
   display: block;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   font-size: 1rem;
   line-height: 1.25;
@@ -427,8 +553,8 @@ textarea { min-height: 72px; resize: vertical; }
   width: fit-content;
   max-width: 100%;
   white-space: normal;
-  text-align: left;
-  justify-content: flex-start;
+  text-align: center;
+  justify-content: center;
   height: auto;
 }
 .puzzle-dragging {
@@ -537,6 +663,13 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .btn.puzzle-reset {
   align-self: center;
+}
+
+#joinCard.question-active[data-qtype="speaking"] #joinAnswers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .poll-word-cloud {
@@ -729,6 +862,55 @@ textarea { min-height: 72px; resize: vertical; }
 .hall-short-url-slash {
   font-size: calc(1.9rem + 5pt);
   vertical-align: baseline;
+}
+
+.hall-logo {
+  font-size: 1.6rem;
+  vertical-align: middle;
+}
+
+.hall-lobby-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .55rem;
+  justify-content: center;
+  margin-top: .7rem;
+  min-height: 0;
+}
+
+.hall-lobby-players:empty {
+  display: none;
+}
+
+.hall-player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .3rem .6rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  font-size: .92rem;
+  font-weight: 600;
+  color: #3730a3;
+  animation: hall-chip-pop .35s ease-out;
+}
+
+.hall-player-chip .hall-dice-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  font-size: 1em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+@keyframes hall-chip-pop {
+  0% { transform: scale(.7); opacity: 0; }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .project-screen {
@@ -1005,1472 +1187,210 @@ textarea { min-height: 72px; resize: vertical; }
   gap: .28rem;
 }
 
-/* Batch 3: student layout compaction by question type */
+/* Student UI: Sandwich Layout (Sticky Top & Bottom) */
+body.question-active {
+  overflow: hidden !important;
+  height: 100vh !important;
+  display: block !important;
+  position: relative;
+  background: #fdfdfd !important;
+}
+
+/* 1. Fixed Background Layer with large margins to avoid collision */
+body.question-active::before {
+  content: "";
+  position: fixed;
+  top: 13.5rem;   /* Large top margin for HUD + Prompt */
+  bottom: 11.5rem; /* Large bottom margin for Answers + Submission */
+  left: 6.25rem;
+  right: 6.25rem;
+  background-image: var(--quiz-bg-image);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 1; /* Above base but below sticky sections */
+  pointer-events: none;
+}
+
+body.question-active .topbar,
+body.question-active .join-title-row {
+  display: none !important;
+}
+
 #joinCard.question-active {
-  padding: .72rem .8rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-#joinCard.question-active #joinQuestionWrap {
-  width: 100%;
-  max-width: 760px;
-}
-
-#joinCard.question-active #joinQuestionWrap .row.spread {
-  font-size: .92rem;
-}
-
-#joinCard.question-active #joinPrompt {
-  margin: .2rem 0 .36rem;
-  line-height: 1.18;
-  text-align: center;
-  color: #111;
-  font-weight: 600;
-}
-
-.prompt-prefix {
-  color: #8b949e;
-  font-weight: 400;
-}
-.prompt-main {
-  color: #111;
-  font-weight: 700;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  overflow-y: auto !important; /* THE SCROLLER */
+  z-index: 1000;
+  display: block !important;
 }
 
 #joinQuestionWrap {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
-  align-items: center;
-  min-height: auto;
-  width: 100%;
-  flex: 1 1 auto;
-}
-
-#joinCard.question-active #joinAnswers {
-  width: 100%;
-  max-width: 760px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: .3rem;
-  justify-items: center;
-  margin: 0 auto;
-  flex: 1 1 auto;
-}
-#joinCard.question-active #joinAnswers.two-col {
-  grid-template-columns: 1fr 1fr;
-  gap: .3rem .4rem;
-}
-
-/* When no image, center content but keep footer sticky */
-#joinCard.question-active:not(.has-image) #joinAnswers {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 50vh;
-  padding-bottom: 0.5rem;
-}
-
-#joinCard.question-active .answer-row {
-  gap: .38rem;
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-  align-items: center;
-}
-
-#joinCard.question-active #joinQuestionWrap > .row.gap.top-space {
-  position: static;
-  padding-top: .4rem;
-  margin-top: .6rem;
-  margin-bottom: 0.25rem;
-  background: transparent;
-}
-
-/* Submission row: keep separated from content, no sticky overlap */
-#joinCard.question-active { padding-bottom: 0.8rem; }
-#joinSubmission {
-  position: static;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
-  padding: 0.25rem 0;
-  background: transparent;
-  z-index: 1;
-}
-#joinSubmission .btn { padding: 0.35rem 0.9rem; }
-
-/* Image hero layout - full width, items below */
-#joinCard.question-active.has-image #joinAnswers.has-question-image {
-  display: grid;
-  grid-template-columns: 1fr;
-  position: relative;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image.two-col {
-  grid-template-columns: 1fr 1fr;
-}
-
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview {
-  max-width: 100% !important;
-  width: 100%;
-  max-height: 45vh;
-  margin: 0 0 0.75rem 0;
-  border: none !important;
-  border-radius: 8px;
-  overflow: visible;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  cursor: default;
-  grid-column: 1 / -1;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview img,
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview img {
-  max-width: 100%;
-  max-height: 45vh;
-  object-fit: contain;
-  border-radius: 8px;
-}
-
-#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview):not(.pin-preview) {
-  position: relative;
-  z-index: 1;
-}
-
-/* Student answer items */
-#joinAnswers .answer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.55rem 0.85rem;
-  margin: 0.12rem 0;
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
-  background: var(--card);
-  font-size: 1.35rem;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-  text-align: left;
-}
-#joinAnswers .answer-row input[type="radio"],
-#joinAnswers .answer-row input[type="checkbox"] {
-  width: 1.2rem;
-  height: 1.2rem;
-  accent-color: var(--primary);
-  margin: 0;
-}
-#joinAnswers .answer-row:hover {
-  border-color: var(--primary);
-  background: rgba(96,93,255,0.05);
-}
-#joinAnswers .answer-row.selected-locked {
-  border-color: #d29922;
-  background: rgba(210,153,34,0.1);
-  border-width: 2px;
-}
-
-/* Correct/incorrect feedback highlight on items */
-#joinAnswers .answer-row.correct-highlight {
-  border-color: var(--ok) !important;
-  background: rgba(19,138,54,0.12) !important;
-}
-#joinAnswers .answer-row.incorrect-highlight {
-  border-color: var(--bad) !important;
-  background: rgba(193,18,31,0.12) !important;
-}
-
-/* Assignment answer locking */
-#joinAnswers.answers-locked .answer-row.locked {
-  opacity: 0.7;
-  pointer-events: none;
-}
-#joinAnswers .answer-row.locked.selected-locked {
-  background: rgba(210, 153, 34, 0.15);
-  border-color: #d29922;
-  border-width: 2px;
-}
-#joinAnswers .answer-row.locked input:disabled + span {
-  color: #d29922;
-}
-#joinAnswers .lock-message {
-  font-style: italic;
-  text-align: center;
-}
-
-/* Multi-select badge: prominent visual indicator */
-.multi-select-badge {
-  font-size: .95rem;
-  font-weight: 600;
-  color: #605dff;
-  background: #eef0ff;
-  border: 1.5px solid #c5c9ff;
-  border-radius: .5rem;
-  padding: .3rem .6rem;
-  margin-top: .35rem;
-  text-align: center;
-}
-
-#joinCard.question-active[data-qtype="error_hunt"] .error-token-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .35rem;
-  justify-content: center;
+  min-height: 100.1%; /* Force scroller */
   width: 100%;
 }
-#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: .28rem .5rem;
-  font-size: .92rem;
-  border: 2px solid var(--line);
-  border-radius: .45rem;
-  background: #fff;
-  transition: border-color .15s, background .15s, transform .1s;
-  width: auto;
-}
-#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip:hover {
-  border-color: var(--primary);
-  transform: translateY(-1px);
-}
-#joinCard.question-active[data-qtype="error_hunt"] .error-token-chip.active {
-  border-color: var(--bad);
-  background: #ffe8ea;
-  color: var(--bad);
-  font-weight: 600;
-}
 
-#joinCard.question-active[data-qtype="error_hunt"] .join-answer-inline-row textarea,
-#joinCard.question-active[data-qtype="error_hunt"] .join-answer-inline-row input {
-  min-height: 2rem;
-  padding: .35rem .45rem;
-}
-
-#joinCard.question-active[data-qtype="context_gap"] .context-gap-inline {
-  gap: .26rem;
-}
-
-#joinCard.question-active[data-qtype="context_gap"] .context-gap-inline-input {
-  width: 66px;
-  min-width: 66px;
-  padding: .22rem .36rem;
-  font-size: .84rem;
-}
-
-#joinCard.question-active[data-qtype="match_pairs"] .match-pairs-wrap {
-  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr);
-  gap: .6rem;
-}
-
-#joinCard.question-active[data-qtype="match_pairs"] .match-pairs-col .answer-row {
-  padding: .28rem .4rem;
-  font-size: .95rem;
-}
-
-/* Match pairs: make the shared image full-width (skip small portrait) */
-#joinCard.question-active[data-qtype="match_pairs"].has-image #joinAnswers.has-question-image > .question-image-preview {
-  max-height: 22vh;
-  min-height: 14vh;
-}
-
-/* Order puzzle: same full-width image treatment */
-#joinCard.question-active[data-qtype="puzzle"].has-image #joinAnswers.has-question-image > .question-image-preview {
-  max-height: 22vh;
-  min-height: 14vh;
-}
-
-#joinCard.question-active[data-qtype="pin"] .pin-preview {
-  max-width: 100%;
-}
-
-/* Pin on image: make student map much bigger for tap accuracy */
-#joinCard.question-active[data-qtype="pin"] .pin-preview img {
-  max-height: 55vh;
-  min-height: 200px;
-}
-
-@media (max-width: 780px) {
-  /* Image hero layout is already responsive - no grid to override */
-  #joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-    max-height: 35vh;
-    min-height: 20vh;
-  }
-}
-
-/* Adaptive fit (batch 1): keep host/student question UI visible without scrolling */
-#hostQuestionCard.adaptive-active,
-#hostQuestionCard:fullscreen.adaptive-active,
-#joinCard.adaptive-active {
-  overflow: hidden;
-}
-
-#hostQuestionCard.overflow-risk,
-#joinCard.overflow-risk {
-  box-shadow: inset 0 0 0 2px rgba(220,38,38,.35);
-}
-
-#hostQuestionWrap.adaptive-scaled,
-#joinQuestionWrap.adaptive-scaled {
-  transform: scale(var(--adaptive-scale, 1));
-  transform-origin: top center;
-  width: calc(100% / var(--adaptive-scale, 1));
-  margin-left: auto;
-  margin-right: auto;
-}
-
-#hostQuestionCard .question-image-preview img,
-#hostQuestionCard .pin-preview img {
-  max-height: min(40vh, 440px);
-  object-fit: contain;
-}
-
-#joinCard .question-image-preview img,
-#joinCard .pin-preview img {
-  max-height: min(34vh, 320px);
-  object-fit: contain;
-}
-
-#hostQuestionCard.fit-l1 .project-prompt { font-size: clamp(1.45rem, 3.1vw, 2.3rem); }
-#hostQuestionCard.fit-l2 .project-prompt { font-size: clamp(1.3rem, 2.8vw, 2.05rem); }
-#hostQuestionCard.fit-l3 .project-prompt { font-size: clamp(1.15rem, 2.4vw, 1.8rem); }
-#hostQuestionCard.fit-l1 .project-answers .answer-row { font-size: clamp(.95rem, 1.9vw, 1.18rem); padding: .45rem .58rem; }
-#hostQuestionCard.fit-l2 .project-answers .answer-row { font-size: clamp(.9rem, 1.75vw, 1.08rem); padding: .4rem .5rem; }
-#hostQuestionCard.fit-l3 .project-answers .answer-row { font-size: clamp(.85rem, 1.6vw, 1rem); padding: .34rem .44rem; }
-#hostQuestionCard.fit-l4 .project-prompt { font-size: clamp(1rem, 2vw, 1.55rem); line-height: 1.06; }
-#hostQuestionCard.fit-l4 .project-answers .answer-row { font-size: clamp(.8rem, 1.45vw, .94rem); padding: .28rem .36rem; }
-#hostQuestionCard.fit-l1 .question-image-preview img,
-#hostQuestionCard.fit-l1 .pin-preview img { max-height: min(34vh, 360px); }
-#hostQuestionCard.fit-l2 .question-image-preview img,
-#hostQuestionCard.fit-l2 .pin-preview img { max-height: min(30vh, 300px); }
-#hostQuestionCard.fit-l3 .question-image-preview img,
-#hostQuestionCard.fit-l3 .pin-preview img { max-height: min(26vh, 250px); }
-#hostQuestionCard.fit-l4 .question-image-preview img,
-#hostQuestionCard.fit-l4 .pin-preview img { max-height: min(22vh, 200px); }
-
-#joinCard.fit-l1 #joinPrompt { font-size: 1.02rem; }
-#joinCard.fit-l2 #joinPrompt { font-size: .96rem; }
-#joinCard.fit-l3 #joinPrompt { font-size: .9rem; }
-#joinCard.fit-l4 #joinPrompt { font-size: .84rem; line-height: 1.12; }
-#joinCard.fit-l1 .answer-row { padding: .45rem .55rem; font-size: 1.15rem; }
-#joinCard.fit-l2 .answer-row { padding: .4rem .5rem; font-size: 1.08rem; }
-#joinCard.fit-l3 .answer-row { padding: .34rem .44rem; font-size: .98rem; }
-#joinCard.fit-l4 .answer-row { padding: .28rem .38rem; font-size: .92rem; }
-#joinCard.fit-l1 .question-image-preview img,
-#joinCard.fit-l1 .pin-preview img { max-height: min(30vh, 270px); }
-#joinCard.fit-l2 .question-image-preview img,
-#joinCard.fit-l2 .pin-preview img { max-height: min(26vh, 230px); }
-#joinCard.fit-l3 .question-image-preview img,
-#joinCard.fit-l3 .pin-preview img { max-height: min(22vh, 190px); }
-#joinCard.fit-l4 .question-image-preview img,
-#joinCard.fit-l4 .pin-preview img { max-height: min(18vh, 150px); }
-
-.muted { color: var(--muted); }
-.feedback { font-weight: 600; min-height: 0; }
-.feedback:not(:empty) { margin-top: 0.5rem; margin-bottom: 0.5rem; }
-
-#joinFeedback {
-  font-size: 0.88em;
-}
-
-#joinSliderValue,
-#soloSliderValue {
-  font-size: clamp(1.1rem, 2.2vw, 1.45rem);
-  font-weight: 800;
-  letter-spacing: .01em;
-  margin-top: .45rem;
-}
-.hidden { display: none !important; }
-
-.risk-bet-wrap {
-  position: relative;
-  display: inline-flex;
-  width: fit-content;
-  max-width: fit-content;
-  align-self: flex-start;
-  border-radius: .7rem;
-  border: 1px solid #b98b54;
-  padding: .55rem .6rem .5rem;
-  background: linear-gradient(90deg, rgba(18,112,64,.36) 0%, rgba(161,98,7,.4) 50%, rgba(153,27,27,.38) 100%);
-  overflow: hidden;
-}
-
-.risk-danger-bg {
-  position: absolute;
-  right: .55rem;
-  top: .32rem;
-  font-size: .72rem;
-  font-weight: 800;
-  color: rgba(183,28,28,.55);
-  letter-spacing: .03em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.risk-bet-controls {
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: .35rem;
-  padding-top: .4rem;
-}
-
-.risk-bet-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .3rem;
-  margin-left: 0;
-}
-
-.risk-submit-btn {
-  margin-right: .1rem;
-}
-
-.risk-bet-row .risk-bet-btn {
-  min-width: 3rem;
-  width: 3rem;
-  height: 1.9rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0;
-}
-
-.risk-bet-row .risk-bet-btn.is-emoji {
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.risk-bet-row .risk-bet-btn.active {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239,68,68,.25) inset;
-}
-
-.list {
-  margin: .45rem 0 0;
-  padding-left: 0;
-  list-style: none;
-}
-.list:empty { margin: 0; }
-.list li { margin: .2rem 0; }
-
-.join-correction-inline {
-  font-size: 1.12rem;
-  color: var(--ok);
-}
-
-.join-correction-diff {
-  font-weight: 800;
-  color: var(--ok);
-}
-
-.join-answer-inline-row {
-  display: flex;
-  align-items: center;
-  gap: .45rem;
-}
-
-.join-answer-inline-row input,
-.join-answer-inline-row textarea {
-  flex: 1 1 auto;
-}
-
-.join-points-inline {
-  display: inline-block;
-  margin-left: .2rem;
-  font-size: .92rem;
-  font-weight: 700;
-  color: var(--ok);
-  white-space: nowrap;
-}
-
-.join-reaction-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-top: 0;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.pin-preview {
-  position: relative;
-  margin-top: .5rem;
-  border: 1px solid var(--line);
-  border-radius: .6rem;
-  overflow: hidden;
-  max-width: 480px;
-  cursor: crosshair;
-}
-.pin-preview img {
-  display: block;
+/* 2. Top Sticky Section: HUD + Prompt */
+#joinStickyTop {
+  position: sticky;
+  top: 0;
+  z-index: 1100;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.85rem 1.5rem;
   width: 100%;
-  height: auto;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
 }
 
-.pin-picks-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.question-image-preview {
-  margin-top: .18rem;
-}
-
-.question-image-preview img {
-  cursor: zoom-in;
-}
-
-#hostQuestionPrompt + #hostQuestionAnswers.has-question-image,
-#joinPrompt + #joinAnswers.has-question-image {
-  margin-top: -.2rem;
-}
-
-/* Keep image and tokens sharing the same central column, no overlap with bottom buttons */
-#joinCard.question-active.has-image #joinAnswers.has-question-image {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview,
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .pin-preview {
-  width: 100%;
-  max-width: 920px;
-  aspect-ratio: 16 / 9;
-  max-height: 60vh;
-  min-height: 240px;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image > :not(.question-image-preview):not(.pin-preview) {
-  width: 100%;
-  max-width: 920px;
-}
-
-#joinPrompt.with-image {
-  position: relative;
-  z-index: 3;
-  background: rgba(255,255,255,0.78);
-  color: #0f172a;
-  text-shadow: none;
-  -webkit-text-stroke: 0;
-  box-shadow: none;
-}
-
-.assignment-complete {
-  margin-top: 1rem;
-  padding: 0.85rem 1rem;
-  background: rgba(63,185,80,0.12);
-  border: 1px solid rgba(63,185,80,0.35);
-  border-radius: 10px;
-  text-align: center;
-  font-weight: 700;
-  color: #1f3a1f;
-}
-
-.assignment-results {
-  margin-top: 0.75rem;
-  padding: 0.75rem 0.9rem;
-  background: rgba(99,102,241,0.12);
-  border: 1px solid rgba(99,102,241,0.32);
-  border-radius: 10px;
-}
-.assignment-results-title {
-  font-weight: 700;
-  color: #4338ca;
-  margin-bottom: 0.35rem;
-}
-.assignment-results-list {
-  margin: 0;
-  padding-left: 1rem;
-}
-.assignment-results-list li {
-  margin: 0.15rem 0;
-}
-.assignment-results-list li.ok { color: #15803d; }
-.assignment-results-list li.bad { color: #b91c1c; }
-
-@media (max-width: 860px) {
-  #joinPrompt.with-image {
-    display: inline-block;
-    margin: 0 0 -.4rem;
-    padding: .38rem .6rem;
-    border-radius: .62rem;
-    background: rgba(255,255,255,0.78);
-    color: #0f172a;
-    text-shadow: none;
-    -webkit-text-stroke: 0;
-    box-shadow: none;
-  }
-
-  #joinAnswers.has-question-image .question-image-preview {
-    margin-top: 0;
-  }
-}
-
-@media (min-width: 980px) {
-  .project-answers.has-question-image {
-    display: grid;
-    grid-template-columns: minmax(260px, 42%) minmax(0, 1fr);
-    gap: .45rem .85rem;
-    align-items: start;
-  }
-
-  .project-answers.has-question-image > .question-image-preview {
-    grid-column: 1;
-    grid-row: 1 / span 20;
-    margin-top: -.15rem;
-    position: sticky;
-    top: .35rem;
-    z-index: 1;
-  }
-
-  .project-answers.has-question-image > :not(.question-image-preview) {
-    grid-column: 2;
-    margin-top: -.08rem;
-  }
-}
-
-.image-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  background: rgba(15, 23, 42, .86);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.image-lightbox img {
-  max-width: min(96vw, 1200px);
-  max-height: 92vh;
-  border-radius: .75rem;
-  box-shadow: 0 24px 80px rgba(0,0,0,.45);
-}
-.pin-dot {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: #ff3b30;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.pin-zone {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  border: 2px dashed rgba(96,93,255,.85);
-  border-radius: 999px;
-  background: rgba(96,93,255,.12);
-  pointer-events: none;
-}
-
-.pin-arrow {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  font-size: 2rem;
-  font-weight: 900;
-  color: #1e1b4b;
-  text-shadow: 0 2px 0 #fff, 0 0 8px rgba(255,255,255,.65);
-  pointer-events: none;
-}
-
-.fx-pop {
-  animation: fx-pop .28s ease-out;
-}
-
-@keyframes fx-pop {
-  0% { transform: scale(.985); opacity: .88; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-@media (max-width: 900px) {
-  #hostActionRow {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .45rem;
-  }
-
-  #hostActionRow .btn {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  #hostJoinRow {
-    display: grid;
-    grid-template-columns: 110px 1fr;
-    gap: .45rem;
-  }
-
-  #hostJoinRow #hostJoinPin,
-  #hostJoinRow #hostJoinBtn {
-    width: 100%;
-    max-width: none !important;
-    min-height: 44px;
-  }
-
-  #hostQuestionCard .row.spread {
-    align-items: stretch;
-  }
-
-  #hostQuestionCard .row.spread .btn {
-    min-height: 44px;
-  }
-}
-
-@media (max-width: 640px) {
-  .container { padding: .75rem; }
-  .row.gap .btn, .file-label { width: 100%; text-align: center; }
-
-  #hostActionRow {
-    grid-template-columns: 1fr;
-  }
-
-  #hostJoinRow {
-    grid-template-columns: 1fr;
-  }
-}
-/* Background image containers for controlled fit */
-.question-image-preview, .pin-preview {
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  width: 100%;
-  min-height: 100px;
-}
-#joinCard.fit-l1 .question-image-preview, #joinCard.fit-l1 .pin-preview,
-#hostQuestionCard.fit-l1 .question-image-preview, #hostQuestionCard.fit-l1 .pin-preview {
-  max-height: min(30vh, 270px);
-}
-#joinCard.fit-l2 .question-image-preview, #joinCard.fit-l2 .pin-preview,
-#hostQuestionCard.fit-l2 .question-image-preview, #hostQuestionCard.fit-l2 .pin-preview {
-  max-height: min(26vh, 230px);
-}
-#joinCard.fit-l3 .question-image-preview, #joinCard.fit-l3 .pin-preview,
-#hostQuestionCard.fit-l3 .question-image-preview, #hostQuestionCard.fit-l3 .pin-preview {
-  max-height: min(22vh, 190px);
-}
-#joinCard.fit-l4 .question-image-preview, #joinCard.fit-l4 .pin-preview,
-#hostQuestionCard.fit-l4 .question-image-preview, #hostQuestionCard.fit-l4 .pin-preview {
-  max-height: min(18vh, 150px);
-}
-
-/* --- UI simplifications --- */
-
-/* Compact single-line header */
-.join-header-lg {
+#joinHeaderRow {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-.join-header-lg .join-title { font-weight: 600; font-size: 1rem; flex-shrink: 0; }
-.join-header-lg .join-progress, .join-header-lg .join-timer, .join-header-lg .join-score {
-  color: #8b949e;
   font-size: 0.9rem;
-  flex-shrink: 0;
+  margin-bottom: 0.65rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(240, 244, 248, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-/* Bottom row compact */
-#joinSubmission { margin-top: 0.25rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap; }
-.bet-indicator .bet-label {
-  font-weight: 700; color: #3fb950; background: rgba(63,185,80,0.15);
-  padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.9rem; white-space: nowrap;
+#joinPlayerName { color: #0969da; font-weight: 700; }
+#joinModeLabel { 
+  background: #0969da; 
+  color: white; 
+  padding: 0.15rem 0.5rem; 
+  border-radius: 4px; 
+  font-size: 0.75rem; 
+  text-transform: uppercase;
+  font-weight: 800;
 }
-#joinEmoji { font-size: 1.4rem; margin-left: auto; }
+#joinProgress { color: #57606a; font-weight: 600; }
+#joinTimer { color: #9a6700; font-weight: 600; }
+#joinScore { color: #8250df; font-weight: 700; }
+#joinStatusHud { color: #cf222e; font-weight: 700; margin-left: auto; }
 
-/* Answer feedback overlay */
-#joinFeedback {
-  position: fixed; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2rem; color: #e6edf3; background: rgba(0,0,0,0.85);
-  z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s;
-}
-#joinFeedback.visible { opacity: 1; pointer-events: auto; }
-body.no-overlay { overflow: hidden; }
-
-/* Assignment mode: hide navigation buttons */
-.assignment-mode #assignmentPrevBtn, .assignment-mode #assignmentNextBtn { display: none !important; }
-
-/* --- Student UI compact redesign --- */
-
-/* Use full viewport, no card padding */
-#joinCard {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  max-width: 100vw;
-  margin: 0;
-}
-
-/* Single-line header row */
-#joinHeaderRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.5rem;
-  align-items: center;
-  margin-bottom: 0.3rem;
-  font-size: 0.85rem;
-}
-#joinPlayerName { color: #3fb950; font-weight: 600; }
-#joinModeLabel { color: #58a6ff; font-weight: 600; }
-#joinProgress { color: #8b949e; }
-#joinTimer { color: #d29922; }
-#joinScore { color: #8957e5; font-weight: 600; }
-#joinStatusHud { color: #cf6a87; }
-
-/* Question prompt inline with play button */
 #joinPrompt {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.1rem;
-}
-#joinPlayQuestionBtn {
-  margin-left: 8px;
-  vertical-align: middle;
-}
-
-/* Answers compact */
-#joinAnswers {
-  margin-bottom: 1.25rem;
-}
-
-/* Submission row at bottom, no extra padding */
-#joinSubmission {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0;
-  margin-top: auto;
-}
-#joinSubmission .btn {
-  padding: 0.4rem 1rem;
-}
-
-/* Bet indicator next to submit */
-.bet-indicator {
-  display: inline-flex;
-}
-.bet-indicator .bet-label {
-  font-weight: 700;
-  color: #3fb950;
-  background: rgba(63,185,80,0.15);
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-
-/* Emoji next to bet, only thumbs visible */
-.join-emoji {
-  font-size: 1.3rem;
-  margin-left: 0.5rem;
-  cursor: pointer;
-  position: relative;
-}
-.join-emoji:not(:hover)::after {
-  content: '👍';
-}
-.join-emoji:hover::after {
-  content: attr(title);
-}
-
-/* Overlay feedback - fullscreen */
-.feedback-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: #e6edf3;
-  background: rgba(0,0,0,0.85);
-  z-index: 1000;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  cursor: pointer;
   margin: 0;
-}
-.feedback-overlay.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Hide risk bet elements */
-.risk-bet-wrap,
-.risk-danger-bg,
-.risk-bet-controls {
-  display: none !important;
-}
-
-/* Remove card and container padding */
-.container {
-  padding: 0.5rem;
-  max-width: 100vw;
-}
-.card {
-  padding: 0;
-  margin: 0;
-}
-
-/* --- Student UI v2 improvements --- */
-
-/* Hide topbar when game is active */
-body.question-active .topbar { display: none; }
-body.question-active { padding-top: 0; }
-
-/* Larger image display with minimal padding */
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-  margin: 0;
-  padding: 0;
-  min-height: 30vh;
-  max-height: 50vh;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image {
-  gap: 0.25rem;
-}
-
-/* Bet button - selectable */
-#betIndicator {
-  display: inline-flex;
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-  border: none;
-}
-#betIndicator .bet-btn {
-  font-weight: 700;
-  color: #8b949e;
-  background: rgba(139,148,158,0.15);
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  border: 2px solid transparent;
-  transition: all 0.15s;
-}
-#betIndicator.selected .bet-btn {
-  color: #3fb950;
-  background: rgba(63,185,80,0.2);
-  border-color: #3fb950;
-}
-#betIndicator:active .bet-btn {
-  transform: scale(0.95);
-}
-
-/* Remove default emoji at bottom right */
-#joinEmoji.default-emoji { display: none !important; }
-
-/* Reaction emojis row */
-#reactionRow {
-  display: flex;
-  gap: 0.25rem;
-  margin-left: 0.5rem;
-  flex-wrap: wrap;
-}
-.reaction-btn {
-  background: transparent;
-  border: none;
-  font-size: 1.1rem;
-  cursor: pointer;
-  padding: 0.15rem;
-  opacity: 0.7;
-  transition: transform 0.1s, opacity 0.1s;
-}
-.reaction-btn:hover { transform: scale(1.2); opacity: 1; }
-.reaction-btn:active { transform: scale(0.9); }
-
-/* Compact header line */
-#joinHeaderRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.8rem;
-  align-items: center;
-  font-size: 0.85rem;
-  margin-bottom: 0.3rem;
-}
-#joinPlayerName { color: #2da44e; font-weight: 600; }
-#joinModeLabel { color: #58a6ff; font-weight: 600; }
-#joinProgress { color: #6e7681; }
-#joinTimer { color: #d29922; }
-#joinScore { color: #8957e5; font-weight: 600; }
-#joinStatusHud { color: #cf6a87; }
-
-/* Create/Teacher UI padding */
-#builderCardBody, #createAuthCard, #liveScreenCardBody, #gameControlsCardBody {
-  padding: 0.75rem 1rem;
-}
-.card {
-  margin-bottom: 0.5rem;
-}
-
-/* Hide old title row when game active */
-body.question-active .join-title-row { display: none !important; }
-
-/* Images - larger with minimal margins */
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-  margin: 0;
-  padding: 0;
-  min-height: 40vh;
-  max-height: 60vh;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image {
-  gap: 0.15rem;
-}
-.question-image-preview, .pin-preview {
-  background-size: contain;
-  background-position: center;
-}
-
-/* Question prompt inline with play button */
-#joinPrompt {
-  display: inline;
-  margin: 0 0.5rem 0 0;
-  vertical-align: middle;
-}
-#joinPlayQuestionBtn {
-  display: inline-block !important;
-  vertical-align: middle;
-  margin: 0;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.85rem;
-}
-
-/* Card titles - move slightly right */
-.section-toggle-title, #hostQuestionPrompt {
-  padding-left: 0.5rem;
-}
-
-/* Answer feedback overlay - smaller, more aesthetic */
-.feedback-overlay {
-  font-size: 1.2rem !important;
-  line-height: 1.4;
-  padding: 1rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #1f2328;
   text-align: center;
-  word-break: break-word;
-}
-.feedback-overlay .correct-answer {
-  display: block;
-  margin-top: 0.5rem;
-  font-size: 1rem;
-  color: #8b949e;
-  font-weight: normal;
-}
-
-/* Hide the big title row when game is active */
-body.question-active .join-title-row { display: none !important; }
-
-/* Username bigger and green */
-#joinPlayerName {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #2da44e;
-}
-
-/* Mode label */
-#joinModeLabel {
-  font-weight: 600;
-  color: #58a6ff;
-}
-
-/* Make question text bigger */
-#joinPrompt {
-  font-size: 1.25rem !important;
-}
-
-/* Make answer options bigger */
-#joinAnswers {
-  font-size: 1.05rem;
-}
-#joinAnswers .answer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   width: 100%;
-  font-size: 1.35rem;
-  padding: 0.55rem 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
-  background: var(--card);
-  cursor: pointer;
-  text-align: left;
-}
-/* Visual indicator when answer is selected */
-#joinAnswers .answer-row:has(input:checked) {
-  border-color: var(--primary);
-  background: rgba(96,93,255,0.12);
-  border-width: 2px;
-  padding: calc(0.55rem - 1px) calc(0.75rem - 1px);
 }
 
-/* Feedback overlay - permanent dismiss on click */
-.feedback-overlay.dismissed {
-  display: none !important;
-}
-
-/* Remove empty status space */
-#joinStatus:empty, #joinStatus.hidden {
-  display: none;
-  margin: 0;
-  padding: 0;
-  min-height: 0;
-}
-
-/* Remove empty status space */
-#joinStatus {
-  display: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-body.question-active #joinStatus {
-  display: none !important;
-}
-
-/* Remove feedback overlay - use inline text instead */
-.feedback-overlay {
-  display: block !important;
-  position: static !important;
-  inset: auto !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  background: transparent !important;
-  color: inherit !important;
-  font-size: inherit !important;
-  z-index: auto !important;
-  margin: 0.5rem 0;
-  padding: 0;
-  text-align: left;
-}
-.feedback-overlay.visible { display: block !important; }
-.feedback-overlay.dismissed { display: none !important; }
-body.no-overlay { overflow: auto !important; }
-
-/* Student UI: header top, content middle, submit bottom */
-#joinQuestionWrap {
-  display: flex;
-  flex-direction: column;
-  min-height: 80vh;
-}
-
-#joinQuestionWrap > #joinHeaderRow {
-  flex-shrink: 0;
-}
-
-#joinQuestionWrap > #joinPrompt {
-  flex-shrink: 0;
-  margin-top: 0.5rem;
-}
-
-#joinQuestionWrap > #joinAnswers {
+/* 3. Middle Visual Spacer: Ensures background image is visible */
+#joinVisualSpacer {
   flex-grow: 1;
+  min-height: 25vh;
+  pointer-events: none;
+}
+
+/* 4. Bottom Sticky Section: Answers + Submission */
+#joinStickyBottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 1100;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-}
-#joinQuestionWrap > #joinAnswers > * {
-  width: 100%;
-  max-width: 920px;
-}
-
-#joinQuestionWrap > #joinFeedback {
-  flex-shrink: 0;
-}
-
-#joinSubmission {
-  flex-shrink: 0;
-  margin-top: auto;
-  padding-top: 0.5rem;
-}
-
-/* Play button inline with question, hug text */
-#joinPrompt {
-  display: inline;
-  vertical-align: middle;
-}
-#joinPlayQuestionBtn {
-  display: inline-block !important;
-  vertical-align: middle;
-  margin-left: 0.5rem;
-  padding: 0.2rem 0.5rem !important;
-  font-size: 0.85rem !important;
-  width: auto !important;
-}
-
-/* Question text 15% bigger */
-#joinPrompt {
-  font-size: 1.4rem !important;
-}
-
-/* Answer feedback smaller with emojis */
-.feedback {
-  font-size: 0.9rem !important;
-}
-.feedback.ok { color: #3fb950; }
-.feedback.bad { color: #f85149; }
-
-/* Question options/elements bigger */
-#joinAnswers .answer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  font-size: 1.35rem;
-  padding: 0.55rem 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
-  background: var(--card);
-  cursor: pointer;
-  text-align: left;
-}
-#joinAnswers .answer-row input[type="radio"],
-#joinAnswers .answer-row input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-/* Images - keep aspect ratio without vertical stretch */
-.question-image-preview, .pin-preview {
-  background-size: contain !important;
-  background-position: center !important;
-  width: 100% !important;
-  max-width: 920px;
-  aspect-ratio: 16 / 9;
-  min-height: 240px !important;
-  max-height: 60vh !important;
-}
-#joinCard.question-active.has-image #joinAnswers.has-question-image > .question-image-preview {
-  min-height: 240px !important;
-  max-height: 60vh !important;
-}
-
-/* Remove bottom padding below submit button */
-#joinSubmission {
-  margin-bottom: 0 !important;
-  padding-bottom: 0 !important;
-}
-#joinQuestionWrap {
-  padding-bottom: 0 !important;
-}
-
-/* Remove image background frame/border */
-.question-image-preview, .pin-preview {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-.question-image-preview img, .pin-preview img {
-  max-width: 100%;
-  max-height: 100%;
-}
-
-/* Submit button row further down */
-#joinQuestionWrap {
-  min-height: auto !important;
-  justify-content: flex-start;
-  padding-bottom: 1rem !important;
-}
-#joinSubmission {
-  margin-top: 1rem !important;
-  margin-bottom: 0.75rem !important;
-}
-
-/* Live screen: title row with HUD inline */
-.live-hud-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-left: auto;
-  font-weight: normal;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-/* Question items hug text (not full width) */
-.project-answers .answer-row {
-  display: inline-block;
-  width: auto;
-  margin-right: 0.5rem;
-  margin-bottom: 0.35rem;
-}
-
-/* Space between question and items */
-#hostQuestionWrap {
-  margin-top: 0.75rem;
-}
-
-/* Image layout: items left, image center/right */
-.project-answers.has-question-image {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 1rem;
 }
-.project-answers.has-question-image .question-image-preview {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+
+#joinAnswers {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Answer Tokens (Horizontal Hugging) */
+#joinAnswers .answer-row {
+  width: auto !important;
+  min-width: 120px;
+  flex: 0 1 auto;
+  padding: 0.6rem 1rem !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
   display: flex;
   align-items: center;
-  justify-content: center;
-}
-.project-answers.has-question-image > :not(.question-image-preview) {
-  grid-column: 1;
-}
-
-/* Answer feedback - card style */
-#joinFeedback {
-  display: block !important;
-  position: static !important;
-  inset: auto !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  background: var(--card) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin: 0.5rem 0;
-  font-size: 1rem !important;
-  text-align: left;
-  z-index: auto !important;
-}
-#joinFeedback.ok {
-  border-left: 4px solid var(--ok);
-  color: var(--ok);
-}
-#joinFeedback.bad {
-  border-left: 4px solid var(--bad);
-  color: var(--bad);
-}
-#joinFeedback.visible { display: block !important; }
-#joinFeedback.dismissed { display: none !important; }
-body.no-overlay { overflow: auto !important; }
-
-/* Correct but missed (multi-select) - dim green outline */
-#joinAnswers .answer-row.correct-missed {
-  border-color: rgba(19,138,54,0.4) !important;
-  background: rgba(19,138,54,0.06) !important;
-  opacity: 0.7;
-}
-#joinAnswers .answer-row.correct-missed::after {
-  content: ' ○';
-  color: rgba(19,138,54,0.5);
-  font-weight: bold;
+  gap: 0.5rem;
+  background: white;
+  border: 1.5px solid #d0d7de !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
 }
 
-/* Highlight support for match pairs, error hunt, context gap */
-.match-pairs-wrap .answer-row.correct-highlight,
-.context-gap-inline.correct-highlight {
-  border-color: var(--ok) !important;
-  background: rgba(19,138,54,0.12) !important;
-}
-.match-pairs-wrap .answer-row.incorrect-highlight,
-.context-gap-inline.incorrect-highlight {
-  border-color: var(--bad) !important;
-  background: rgba(193,18,31,0.12) !important;
+#joinAnswers .answer-row:hover {
+  border-color: #0969da !important;
+  background: #f6f8fa;
 }
 
-/* Error hunt tokens */
-.error-token-chip.correct-highlight {
-  background: rgba(19,138,54,0.2) !important;
-  border-color: var(--ok) !important;
-  color: var(--ok) !important;
-}
-.error-token-chip.incorrect-highlight {
-  background: rgba(193,18,31,0.2) !important;
-  border-color: var(--bad) !important;
-  color: var(--bad) !important;
-}
-.error-token-chip.correct-missed {
-  background: rgba(19,138,54,0.08) !important;
-  border: 2px dashed rgba(19,138,54,0.4) !important;
-  opacity: 0.7;
+#joinAnswers .answer-row:has(input:checked) {
+  background: #ddf4ff !important;
+  border-color: #0969da !important;
+  box-shadow: 0 0 0 1px #0969da;
 }
 
-/* Live HUD pin badge */
-#projectorPin {
-  font-weight: 700;
-  border: 1.5px solid var(--primary);
-  border-radius: 6px;
-  padding: 0.15rem 0.5rem;
-  background: rgba(96,93,255,0.06);
-  white-space: nowrap;
+#joinSubmission {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-/* Student HUD status (top row) */
-.join-hud-status {
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.join-hud-status.ok { color: var(--ok); }
-.join-hud-status.bad { color: var(--bad); }
-
-
-/* Media progress indicator */
-.media-progress {
-  padding: 8px 12px;
-  margin: 8px 0;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-.media-progress.checking {
-  background: rgba(88,166,255,0.15);
-  color: #58a6ff;
-}
-.media-progress.ok {
-  background: rgba(63,185,80,0.15);
-  color: #3fb950;
-}
-.media-progress.warning {
-  background: rgba(210,153,34,0.15);
-  color: #d29922;
-}
-.media-progress.error {
-  background: rgba(248,81,73,0.15);
-  color: #f85149;
+#joinSubmitBtn {
+  flex-grow: 1;
+  padding: 0.85rem 2rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.25);
 }
 
-
-/* Cloud button */
-#openCloudBtn {
-  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
-  border-color: #93c5fd;
-  color: #1e40af;
-  font-weight: 600;
-}
-#openCloudBtn:hover {
-  background: linear-gradient(135deg, #dbeafe, #c7d2fe);
-  transform: translateY(-1px);
+/* Feedback/Reveal Styles */
+#joinAnswers .answer-row.correct-highlight {
+  background-color: #dafbe1 !important;
+  border-color: #1a7f37 !important;
+  color: #1a7f37 !important;
 }
 
+#joinAnswers .answer-row.incorrect-highlight {
+  background-color: #ffebe9 !important;
+  border-color: #cf222e !important;
+  color: #cf222e !important;
+}
 
-/* Save Cloud button */
-#saveCloudBtn {
-  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
-  border-color: #6ee7b7;
-  color: #065f46;
-  font-weight: 600;
+/* Adaptive fit disable for student UI */
+#joinCard.question-active .adaptive-scaled {
+  transform: none !important;
 }
-#saveCloudBtn:hover {
-  background: linear-gradient(135deg, #a7f3d0, #6ee7b7);
-  transform: translateY(-1px);
-}
-#assignmentInstantFeedbackBtn.active {
-  background: #ede9fe;
-  border-color: #c4b5fd;
-  color: #4338ca;
-}
+

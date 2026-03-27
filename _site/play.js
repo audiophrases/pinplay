@@ -1121,6 +1121,8 @@ function scheduleJoinAdaptiveFit() {
 function applyAdaptiveFitJoin() {
   if (!joinCardEl || !joinQuestionWrap) return;
 
+  // Adaptive scaling is disabled for the student question phase
+  // to ensure position: sticky for the sandwich layout works reliably.
   const active = !joinQuestionWrap.classList.contains('hidden');
   joinCardEl.classList.toggle('adaptive-active', active);
   joinCardEl.classList.remove('fit-l1', 'fit-l2', 'fit-l3', 'fit-l4', 'overflow-risk');
@@ -1136,47 +1138,26 @@ function applyAdaptiveFitJoin() {
   const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;
   const available = Math.max(220, Math.floor(viewportH - rect.top - 8));
   joinCardEl.style.maxHeight = `${available}px`;
-
-  const isOverflowing = () => (
-    joinCardEl.scrollHeight > joinCardEl.clientHeight + 2
-    || joinCardEl.scrollWidth > joinCardEl.clientWidth + 2
-  );
-
-  if (!isOverflowing()) return;
-  joinCardEl.classList.add('fit-l1');
-  if (!isOverflowing()) return;
-  joinCardEl.classList.add('fit-l2');
-  if (!isOverflowing()) return;
-  joinCardEl.classList.add('fit-l3');
-  if (!isOverflowing()) return;
-  joinCardEl.classList.add('fit-l4');
-  if (!isOverflowing()) return;
-
-  const contentH = Math.max(1, joinQuestionWrap.scrollHeight);
-  const scale = Math.max(0.68, Math.min(1, (available - 6) / contentH));
-  if (scale < 0.995) {
-    joinQuestionWrap.classList.add('adaptive-scaled');
-    joinQuestionWrap.style.setProperty('--adaptive-scale', scale.toFixed(3));
-  }
-
-  if (isOverflowing()) {
-    joinCardEl.classList.add('overflow-risk');
-    console.warn('[PinPlay][fit][student] Overflow risk remains', {
-      qType: live.player.currentQuestion?.type || null,
-      qPromptLen: String(live.player.currentQuestion?.prompt || '').length,
-      scrollH: joinCardEl.scrollHeight,
-      clientH: joinCardEl.clientHeight,
-    });
-  }
 }
 
 function applyJoinLayoutMode(active, question = null) {
   if (!joinCardEl) return;
-  joinCardEl.classList.toggle('question-active', !!active);
+  const isActive = !!active;
+  joinCardEl.classList.toggle('question-active', isActive);
+  document.body.classList.toggle('question-active', isActive);
   const qType = String(question?.type || '').trim();
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
-  joinCardEl.classList.toggle('has-image', !!question?.imageData);
+
+  // Set background image on body via CSS variable for the fixed overlay pattern
+  if (isActive && question?.image) {
+    const imgUrl = question.image.startsWith('http') ? question.image : `https://pinplay-api.eugene-87a.workers.dev/api/media/${question.image}`;
+    document.body.style.setProperty('--quiz-bg-image', `url("${imgUrl}")`);
+    joinCardEl.classList.add('has-image');
+  } else {
+    document.body.style.removeProperty('--quiz-bg-image');
+    joinCardEl.classList.remove('has-image');
+  }
 }
 
 function renderJoinQuestion(question) {
@@ -1194,31 +1175,11 @@ function renderJoinQuestion(question) {
   }
   if (!joinAnswersEl) return;
 
-  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = !!question.imageData;
+  const hasSharedImage = question.type !== 'pin' && !!question.image;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
-  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', !!question.image);
 
-  // Clear background first
-  if (joinQuestionWrap) {
-    joinQuestionWrap.style.backgroundImage = '';
-    joinQuestionWrap.style.backgroundSize = 'contain';
-    joinQuestionWrap.style.backgroundPosition = 'center';
-    joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
-  }
-  const interactiveOverlay = document.getElementById('joinQuestionInteractive');
-  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
-
-  if (hasAnyImage) {
-    let imgSrc = question.imageData;
-    if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
-      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
-      imgSrc = `${base}/api/media/${imgSrc}`;
-    }
-    if (joinQuestionWrap) {
-      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
-    }
-  }
+  // Background is now handled by CSS ::before on body using --quiz-bg-image
 
   if (question.isPoll) {
     const note = document.createElement('p');
@@ -1362,10 +1323,7 @@ function renderJoinQuestion(question) {
       // Enable inline edits/merges; rewrite will be built from tokens on submit
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
     } else if (question.type === 'speaking') {
-      const note = document.createElement('p');
-      note.className = 'small';
-      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
-      joinAnswersEl.appendChild(note);
+      // No instruction text as requested
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -1441,12 +1399,15 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
+    const pinMode = String(question.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
     const countLabel = document.createElement('p');
     countLabel.className = 'small';
-    countLabel.textContent = pinMode === 'all' ? `Pin all correct spots: 0 / ${required}` : 'Pin one correct spot: 0 / 1';
+    countLabel.textContent = pinMode === 'any' ? 'Pin any one spot: 0 / 1' : `Pin correct spots: 0 / ${required}`;
 
     wrap.append(img, picksLayer);
     container.append(countLabel, wrap);
@@ -1455,9 +1416,11 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = pinMode === 'all'
-        ? `Pin all correct spots: ${picks.length} / ${required}`
-        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      if (pinMode === 'any') {
+        countLabel.textContent = `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      } else {
+        countLabel.textContent = `Pin correct spots: ${picks.length} / ${required}`;
+      }
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -2420,6 +2383,13 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
     const isCorrect = correctIndexes.has(origIdx);
     const isSelected = selectedIndexes.has(origIdx);
+
+    // Clean up answer text: remove "1. ", "2. ", etc. prefixes if present
+    const textSpan = row.querySelector('span');
+    if (textSpan) {
+      textSpan.textContent = textSpan.textContent.replace(/^\d+\.\s*/, '');
+    }
+
     if (isCorrect && isSelected) {
       row.classList.add('correct-highlight');
     } else if (isCorrect && !isSelected) {
