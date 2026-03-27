@@ -5514,8 +5514,11 @@ function updateHallScene(state) {
   const scoreboardSection = document.getElementById('projectorScoreboardSection');
 
   if (state.phase === 'lobby') {
+    // 1. FIX: Force the lobby to become visible!
+    hallCardEl.classList.remove('hidden'); 
     hallCardEl.classList.add('hall-live');
     hallHintEl.textContent = '';
+    
     // Hide hint text and scoreboard during lobby
     if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
     if (scoreboardSection) scoreboardSection.style.display = 'none';
@@ -5550,11 +5553,15 @@ function updateHallScene(state) {
     return;
   }
 
+  // 2. FIX: Force the lobby to hide when the quiz actually starts!
+  hallCardEl.classList.add('hidden'); 
   hallCardEl.classList.remove('hall-live');
   stopHallMusic();
+  
   // Restore hint text and scoreboard when quiz is active
   if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
   if (scoreboardSection) scoreboardSection.style.display = '';
+  
   // Clear lobby player chips
   if (hallLobbyPlayersEl) {
     hallLobbyPlayersEl.innerHTML = '';
