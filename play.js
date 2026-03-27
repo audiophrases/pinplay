@@ -1148,16 +1148,7 @@ function applyJoinLayoutMode(active, question = null) {
   const qType = String(question?.type || '').trim();
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
-
-  // Set background image on body via CSS variable for the fixed overlay pattern
-  if (isActive && question?.image) {
-    const imgUrl = question.image.startsWith('http') ? question.image : `https://pinplay-api.eugene-87a.workers.dev/api/media/${question.image}`;
-    document.body.style.setProperty('--quiz-bg-image', `url("${imgUrl}")`);
-    joinCardEl.classList.add('has-image');
-  } else {
-    document.body.style.removeProperty('--quiz-bg-image');
-    joinCardEl.classList.remove('has-image');
-  }
+  joinCardEl.classList.toggle('has-image', !!question?.imageData);
 }
 
 function renderJoinQuestion(question) {
@@ -1175,11 +1166,31 @@ function renderJoinQuestion(question) {
   }
   if (!joinAnswersEl) return;
 
-  const hasSharedImage = question.type !== 'pin' && !!question.image;
+  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
+  const hasAnyImage = !!question.imageData;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
-  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', !!question.image);
+  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
 
-  // Background is now handled by CSS ::before on body using --quiz-bg-image
+  // Clear background first
+  if (joinQuestionWrap) {
+    joinQuestionWrap.style.backgroundImage = '';
+    joinQuestionWrap.style.backgroundSize = 'contain';
+    joinQuestionWrap.style.backgroundPosition = 'center';
+    joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
+  }
+  const interactiveOverlay = document.getElementById('joinQuestionInteractive');
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
+
+  if (hasAnyImage) {
+    let imgSrc = question.imageData;
+    if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
+      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+      imgSrc = `${base}/api/media/${imgSrc}`;
+    }
+    if (joinQuestionWrap) {
+      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+    }
+  }
 
   if (question.isPoll) {
     const note = document.createElement('p');
