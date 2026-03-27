@@ -1,3 +1,5 @@
+--- START OF FILE styles.css ---
+
 :root {
   color-scheme: light;
   --bg: #f7f8fb;
@@ -1265,15 +1267,25 @@ body.question-active .join-title-row {
     z-index: 100;
     display: flex;
     flex-direction: column; /* Stack Answers on top, Button on bottom */
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     padding: 15px 20px;
     /* env() pushes the button above the iOS/Android home bar */
     padding-bottom: calc(15px + env(safe-area-inset-bottom)); 
     pointer-events: auto !important; 
     border-top: 1px solid rgba(0, 0, 0, 0.1);
     box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+}
+
+/* Move the background and backdrop-filter to a pseudo-element 
+   so it doesn't establish a containing block that traps #joinPrompt */
+#joinQuestionInteractive::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
 }
 
 /* Answers Grid (Hugs text, wraps horizontally) */
@@ -2025,3 +2037,4 @@ body.no-overlay { overflow: hidden; }
   border-color: #c4b5fd;
   color: #4338ca;
 }
+--- END OF FILE styles.css ---
