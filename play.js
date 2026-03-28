@@ -1291,12 +1291,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.classList.add('two-col');
     }
 
-    if (question.type === 'multi') {
-      const badge = document.createElement('p');
-      badge.className = 'multi-select-badge';
-      badge.textContent = '☑️ Select ALL correct answers';
-      joinAnswersEl.appendChild(badge);
-    }
+
 
     if (question.type === 'audio') {
       const btn = document.createElement('button');
@@ -1417,18 +1412,18 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'slider') {
     const wrap = document.createElement('div');
+    wrap.className = 'slider-inline-wrap';
     const value = Number(question.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${question.min} to ${question.max}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
       <input id="joinSlider" type="range" min="${question.min}" max="${question.max}" step="1" value="${value}" />
-      <p id="joinSliderValue" class="small">Selected: ${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+      <div id="joinSliderValue" class="slider-big-val">${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</div>
     `;
     joinAnswersEl.appendChild(wrap);
 
     const slider = document.getElementById('joinSlider');
     const out = document.getElementById('joinSliderValue');
     slider?.addEventListener('input', () => {
-      out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
+      out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
     });
     appendRiskBetBar();
     appendReactionBar();
@@ -1470,9 +1465,9 @@ function renderJoinQuestion(question) {
     else if (pinMode === 'any') required = 1;
     else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
-    const countLabel = document.createElement('p');
-    countLabel.className = 'small';
-    countLabel.textContent = pinMode === 'any' ? 'Pin any one spot: 0 / 1' : `Pin correct spots: 0 / ${required}`;
+    const countLabel = document.createElement('div');
+    countLabel.className = 'pin-count-big';
+    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
 
     wrap.append(img, picksLayer);
     container.append(countLabel, wrap);
@@ -1482,9 +1477,9 @@ function renderJoinQuestion(question) {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
       if (pinMode === 'any') {
-        countLabel.textContent = `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
       } else {
-        countLabel.textContent = `Pin correct spots: ${picks.length} / ${required}`;
+        countLabel.textContent = `${picks.length} / ${required}`;
       }
       picks.forEach((p) => {
         const dot = document.createElement('div');
@@ -2520,7 +2515,7 @@ function showSliderFeedback(question, state) {
   if (!isNaN(correctVal)) {
     slider.value = correctVal;
     const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
-    if (out) out.innerHTML = `Your answer: ${studentVal}${unit} · Correct: <strong>${correctVal}${unit}</strong>`;
+    if (out) out.innerHTML = `<span style="color:var(--muted);font-size:1.4rem;text-decoration:line-through;margin-right:12px;">${studentVal}</span> <strong>${correctVal}${unit}</strong>`;
   }
 }
 

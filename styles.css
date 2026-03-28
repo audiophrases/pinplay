@@ -1464,3 +1464,41 @@ body.question-active .join-title-row {
 #hostCard .reaction-pop-item {
   font-size: 1.8rem;
 }
+
+/* ==========================================================================
+   SLIDER & PIN CUSTOM UI UPDATES
+   ========================================================================== */
+.slider-inline-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 600px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+
+.slider-inline-wrap input[type="range"] {
+  flex: 1;
+  cursor: pointer;
+  height: 10px;
+  accent-color: var(--primary);
+}
+
+.slider-big-val {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--primary);
+  min-width: 140px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pin-count-big {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: var(--primary);
+  margin: 0.5rem 0;
+  text-align: center;
+}

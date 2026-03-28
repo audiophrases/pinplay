@@ -6019,12 +6019,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(row);
     });
 
-    if (question.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Select all correct answers.';
-      joinAnswersEl.appendChild(hint);
-    }
+
 
     if (hasQuestionAudio(question)) {
       const btn = document.createElement('button');
@@ -6187,12 +6182,11 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'slider') {
     const wrap = document.createElement('div');
-
+    wrap.className = 'slider-inline-wrap';
     const value = Number(question.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${question.min} to ${question.max}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
       <input id="joinSlider" type="range" min="${question.min}" max="${question.max}" step="1" value="${value}" />
-      <p id="joinSliderValue" class="small">Selected: ${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+      <div id="joinSliderValue" class="slider-big-val">${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</div>
     `;
     joinAnswersEl.appendChild(wrap);
 
@@ -6231,9 +6225,9 @@ function renderJoinQuestion(question) {
     else if (pinMode === 'any') required = 1;
     else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
-    const countLabel = document.createElement('p');
-    countLabel.className = 'small';
-    countLabel.textContent = pinMode === 'any' ? 'Pin any one spot: 0 / 1' : `Pin correct spots: 0 / ${required}`;
+    const countLabel = document.createElement('div');
+    countLabel.className = 'pin-count-big';
+    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
 
     wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
@@ -6243,9 +6237,9 @@ function renderJoinQuestion(question) {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
       if (pinMode === 'any') {
-        countLabel.textContent = `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
       } else {
-        countLabel.textContent = `Pin correct spots: ${picks.length} / ${required}`;
+        countLabel.textContent = `${picks.length} / ${required}`;
       }
       picks.forEach((p) => {
         const dot = document.createElement('div');
@@ -7042,12 +7036,7 @@ function renderSoloQuestion() {
       answersEl.appendChild(row);
     });
 
-    if (q.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Select all correct answers.';
-      answersEl.appendChild(hint);
-    }
+
 
     if (hasQuestionAudio(q)) {
       const btn = document.createElement('button');
@@ -7208,18 +7197,18 @@ function renderSoloQuestion() {
 
   if (q.type === 'slider') {
     const wrap = document.createElement('div');
+    wrap.className = 'slider-inline-wrap';
     const value = Number(q.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${q.min} to ${q.max}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
       <input id="soloSlider" type="range" min="${q.min}" max="${q.max}" step="1" value="${value}" />
-      <p id="soloSliderValue" class="small">Selected: ${value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
+      <div id="soloSliderValue" class="slider-big-val">${value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</div>
     `;
     answersEl.appendChild(wrap);
 
     const slider = document.getElementById('soloSlider');
     const out = document.getElementById('soloSliderValue');
     slider.addEventListener('input', () => {
-      out.textContent = `Selected: ${slider.value}${q.unit ? ` ${q.unit}` : ''}`;
+      out.textContent = `${slider.value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}`;
     });
     return;
   }
