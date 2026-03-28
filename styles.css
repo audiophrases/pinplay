@@ -490,10 +490,27 @@ textarea {
   margin-right: auto;
 }
 
+/* 1. Remove white background/border and center the container */
+#hostQuestionCard .pin-preview,
+#hostQuestionCard .question-image-preview {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  margin: 0 auto !important;
+  width: fit-content !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 2. Center the image itself and keep rounded corners */
 #hostQuestionCard .question-image-preview img,
 #hostQuestionCard .pin-preview img {
-  max-height: min(40vh, 440px);
+  max-height: min(40vh, 480px);
   object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: 0.6rem;
 }
 
 /* ==========================================================================
