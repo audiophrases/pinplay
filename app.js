@@ -2957,6 +2957,14 @@ function bindLiveEvents() {
   }
 
   document.addEventListener('keydown', handleHostHotkeys);
+
+  // Click anywhere to close the scoreboard
+  document.addEventListener('click', (e) => {
+    const modal = document.getElementById('projectorScoreboardSection');
+    if (modal && modal.classList.contains('visible')) {
+      stopRankingAnimationMode();
+    }
+  });
 }
 
 async function createLiveGame() {
@@ -3726,8 +3734,6 @@ function startRankingAnimationMode() {
   state.players.forEach((p) => {
     const prev = Number(live.host.lastScoresByPlayer?.[p.id]);
     const end = Number(toMap[p.id] || 0);
-    // If we don't have a reliable previous score (or it equals current),
-    // fall back to 0 so R always produces a visible count-up effect.
     if (!Number.isFinite(prev) || prev === end) {
       fromMap[p.id] = 0;
     } else {
@@ -3740,14 +3746,23 @@ function startRankingAnimationMode() {
   live.host.rankingAnimStartAt = Date.now();
   live.host.rankingMode = true;
   playFx('counter');
+
+  // ✅ SHOW MODAL
+  const modal = document.getElementById('projectorScoreboardSection');
+  if (modal) modal.classList.add('visible');
+
   renderHostState(state);
 }
 
 function stopRankingAnimationMode() {
-  if (!live.host.rankingMode) return;
   live.host.rankingMode = false;
   cancelRankingAnimationFrame();
   stopFx('counter');
+
+  // ✅ HIDE MODAL
+  const modal = document.getElementById('projectorScoreboardSection');
+  if (modal) modal.classList.remove('visible');
+
   if (live.host.state) renderHostState(live.host.state);
 }
 
@@ -3906,9 +3921,20 @@ function handleHostHotkeys(e) {
     return;
   }
 
+  const modal = document.getElementById('projectorScoreboardSection');
+
+  // If modal is visible and ANY key is pressed (except 'r'), close it.
+  if (modal && modal.classList.contains('visible') && e.key !== 'r' && e.key !== 'R') {
+    stopRankingAnimationMode();
+  }
+
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
-    startRankingAnimationMode();
+    if (modal && modal.classList.contains('visible')) {
+      stopRankingAnimationMode();
+    } else {
+      startRankingAnimationMode();
+    }
     return;
   }
 
@@ -4743,8 +4769,12 @@ function renderHostState(state) {
   if (state.phase === 'results' && live.host.lastPhase !== 'results') {
     stopFx('answering');
     stopFx('answered');
-    // final.mp3 is now triggered by the staged final reveal sequence (after drumroll + winner reveal)
     stopFx('final');
+    stopFx('drumrollwinner');
+    
+    // ✅ AUTO-SHOW MODAL FOR FINAL RESULTS
+    const modal = document.getElementById('projectorScoreboardSection');
+    if (modal) modal.classList.add('visible');
   }
 
   if (state.phase !== 'results') {
@@ -5570,7 +5600,6 @@ function updateHallScene(state) {
     
     // Hide hint text and scoreboard during lobby
     if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
-    if (scoreboardSection) scoreboardSection.style.display = 'none';
 
     // Render lobby player chips inside the hall card
     if (hallLobbyPlayersEl) {
@@ -5609,7 +5638,6 @@ function updateHallScene(state) {
   
   // Restore hint text and scoreboard when quiz is active
   if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
-  if (scoreboardSection) scoreboardSection.style.display = '';
   
   // Clear lobby player chips
   if (hallLobbyPlayersEl) {
