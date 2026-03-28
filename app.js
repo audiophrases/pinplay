@@ -527,6 +527,7 @@ const live = {
     currentQuestion: null,
     pinSelection: null,
     pinSelections: [],
+    selectedBet: 0, // <-- FIXED: Add missing variable
   },
 };
 
@@ -543,6 +544,18 @@ const audioFx = {
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
 
+let betSelected = false;
+function initBetControl() {
+  const betBtn = document.getElementById('betIndicator');
+  if (!betBtn) return;
+  betBtn.addEventListener('click', () => {
+    if (betBtn.disabled) return;
+    betSelected = !betSelected;
+    betBtn.classList.toggle('selected', betSelected);
+    live.player.selectedBet = betSelected ? 3 : 0;
+  });
+}
+
 function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
@@ -551,6 +564,7 @@ function init() {
   bindLiveEvents();
   bindCollapsibleSections();
   bindSoloEvents();
+  initBetControl(); // <-- FIXED: Initialize event bindings for bets!
   window.addEventListener('resize', scheduleHostAdaptiveFit);
 
   renderBuilder();
@@ -6613,10 +6627,23 @@ function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
     const hasBet = answeredCurrent && seededUnit(`${previewMode.simQuestionSeed}:${rank}:bet`) < 0.4;
     const betPool = [1, 2, 3];
     const bet = hasBet ? betPool[Math.floor(seededUnit(`${previewMode.simQuestionSeed}:${rank}:betv`) * betPool.length)] : 0;
+    // Simulate score and incorporate their mathematical bet consequence
+    let score = 1000;
+    if (answeredCurrent) {
+      if (correct) {
+        const baseAwarded = Math.max(0, points - (rank * 20));
+        const bonusRate = bet === 1 ? 0.15 : (bet === 2 ? 0.25 : (bet === 3 ? 0.4 : 0));
+        score += Math.round(baseAwarded * (1 + bonusRate));
+      } else {
+        const penaltyRate = bet === 1 ? 0.05 : (bet === 2 ? 0.15 : (bet === 3 ? 0.4 : 0));
+        score -= Math.round(points * penaltyRate);
+      }
+    }
+
     players.push({
       id: `p${rank}`,
       name: previewMode.simNames?.[i] || `Student ${rank}`,
-      score: correct ? Math.max(0, points - (rank * 20)) : Math.max(0, Math.round(points * 0.1)),
+      score: Math.max(0, score),
       answeredCurrent,
       previewResult: answeredCurrent ? (correct ? 'correct' : 'wrong') : 'none',
       previewBet: bet,
@@ -6911,7 +6938,7 @@ function bindSoloEvents() {
       soloGame.score += pts;
       setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
     } else {
-      pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.3) : 0;
+      pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
       soloGame.score += pts;
       const ptsText = pts < 0 ? ` (${pts} pts)` : '';
       setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}${ptsText}`.trim(), 'bad');

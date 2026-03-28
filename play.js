@@ -1552,7 +1552,7 @@ function appendRiskBetBar() {
   const bets = [
     { value: 1, emoji: '🤔', bonus: '+15%', penalty: '-5%' },
     { value: 2, emoji: '😬', bonus: '+25%', penalty: '-15%' },
-    { value: 3, emoji: '🔥', bonus: '+40%', penalty: '-30%' },
+    { value: 3, emoji: '🔥', bonus: '+40%', penalty: '-40%' }, // <-- FIXED: Displays -40% accurately now instead of 30%
   ];
 
   bets.forEach((b) => {

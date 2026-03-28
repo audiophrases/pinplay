@@ -808,7 +808,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/answer', {
         method: 'POST',
-        body: JSON.stringify({ code, attemptId, qIndex: Math.round(qIndex), answer: body?.answer }),
+        body: JSON.stringify({ code, attemptId, qIndex: Math.round(qIndex), answer: body?.answer, bet: body?.bet }),
       }));
     }
 
@@ -1599,6 +1599,7 @@ export class QuizRoom {
         attempt.answersByQ[String(qIndex)] = {
           ...(attempt.answersByQ[String(qIndex)] || {}),
           answer: safeAnswer,
+          bet: sanitizeBet(body?.bet), // <-- FIXED: Save the bet state
           teacherGrade: isAssignmentTeacherGradedQuestion(question) ? null : (attempt.answersByQ[String(qIndex)]?.teacherGrade || null),
           updatedAt: now,
         };
@@ -3477,9 +3478,13 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 
     const verdict = evaluate(question, item?.answer);
     autoGradedCount += 1;
+    const basePoints = Math.round(Number(question.points || 1000));
+    
     if (verdict?.correct) {
       correctCount += 1;
-      autoScore += Math.round(Number(question.points || 1000));
+      autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
+    } else {
+      autoScore += applyBetScore(basePoints, 0, false, item?.bet); // <-- FIXED: Uses bet penalty
     }
   });
 
@@ -3492,9 +3497,9 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     pendingTeacherGradeCount,
     autoGradedCount,
     teacherGradedCount,
-    autoScore: Math.round(autoScore),
-    teacherScore: Math.round(teacherScore),
-    totalScore: Math.round(autoScore + teacherScore),
+    autoScore: Math.max(0, Math.round(autoScore)), // <-- Clamped at 0 gracefully
+    teacherScore: Math.max(0, Math.round(teacherScore)),
+    totalScore: Math.max(0, Math.round(autoScore + teacherScore)),
     accuracy,
     totalQuestions: Number(quizQuestions.length || 0),
   };
@@ -3708,7 +3713,7 @@ function applyBetScore(questionPoints, baseAwarded, isCorrect, bet) {
     return Math.round(base * (1 + bonusRate));
   }
 
-  const penaltyRate = b === 1 ? 0.05 : (b === 2 ? 0.15 : 0.3);
+  const penaltyRate = b === 1 ? 0.05 : (b === 2 ? 0.15 : 0.4); // <-- FIXED: 0.4 penalty
   return -Math.round(qPoints * penaltyRate);
 }
 
