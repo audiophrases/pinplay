@@ -5072,9 +5072,12 @@ function renderHostQuestion(state) {
 
       const tag = document.createElement('strong');
       tag.textContent = `${displayNum + 1}.`;
+      tag.style.display = 'none'; // <--- FIX: Safely hides the number
+
       const txt = document.createElement('span');
       txt.textContent = a.text;
-      row.append(tag, txt);
+      
+      row.append(tag, txt); // Keeps the DOM structure perfectly intact
       hostQuestionAnswersEl.appendChild(row);
     });
 
