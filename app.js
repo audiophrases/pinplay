@@ -6899,17 +6899,28 @@ function bindSoloEvents() {
     const q = quiz.questions[soloGame.index];
     const result = evaluateSoloQuestion(q);
 
+    const basePoints = Number(q.points || 1000);
+    let pts = 0;
+
+    // FIX: Apply Solo Mode Bet Math
     if (result.correct) {
-      soloGame.score += Number(q.points || 1000);
-      setStatus(feedbackEl, 'Correct ✅', 'ok');
+      pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
+      soloGame.score += pts;
+      setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
     } else {
-      setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}`.trim(), 'bad');
+      pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.3) : 0;
+      soloGame.score += pts;
+      const ptsText = pts < 0 ? ` (${pts} pts)` : '';
+      setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}${ptsText}`.trim(), 'bad');
     }
 
     soloGame.answered = true;
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
     scoreEl.textContent = `Score: ${soloGame.score}`;
+
+    const betBtn = document.getElementById('betIndicator');
+    if (betBtn) betBtn.disabled = true;
   });
 
   nextBtn.addEventListener('click', () => {
@@ -6942,6 +6953,15 @@ function renderSoloQuestion() {
 
   soloGame.pinSelection = null;
   soloGame.puzzleOptions = null;
+
+  // FIX: Reset bet button cleanly
+  live.player.selectedBet = 0;
+  betSelected = false;
+  const betBtn = document.getElementById('betIndicator');
+  if (betBtn) {
+    betBtn.classList.remove('selected');
+    betBtn.disabled = false;
+  }
 
   setStatus(feedbackEl, '', '');
   submitBtn.classList.remove('hidden');

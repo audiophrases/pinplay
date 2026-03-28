@@ -1092,10 +1092,10 @@ function renderPlayerState(state) {
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
           
-          // FIX: Handle negative points from risk bets
+          // FIX: Show negative deductions properly
           let pointsText = '';
           if (pts > 0) pointsText = ` · +${pts} points`;
-          else if (pts < 0) pointsText = ` · ${pts} points`; // Includes the minus sign automatically
+          else if (pts < 0) pointsText = ` · ${pts} points`; 
           
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
@@ -1701,6 +1701,7 @@ async function submitLiveAnswer() {
           attemptId,
           qIndex,
           answer,
+          bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
         },
       });
 
@@ -1724,7 +1725,7 @@ async function submitLiveAnswer() {
         pin: live.player.pin,
         playerId: live.player.id,
         answer,
-        bet: Number(live.player.selectedBet || 0),
+        bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
       },
     });
 
