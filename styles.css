@@ -398,8 +398,33 @@ textarea {
 /* ==========================================================================
    4. HOST & PROJECTOR UI
    ========================================================================== */
+/* Host Live Screen Prompt - Top Sticky Section */
 #hostQuestionCard {
   position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#hostQuestionPrompt {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--card, #ffffff);
+  padding: 1.25rem 2rem;
+  margin: 0 auto 1.5rem auto;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  max-width: 980px;
+  width: 100%;
+}
+
+/* Adjustments for when the teacher makes the Live Screen Fullscreen */
+#hostQuestionCard:fullscreen #hostQuestionPrompt {
+  top: -1rem; /* Offsets the card's 1rem padding so it stays perfectly flush at the top */
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  margin-top: -0.5rem;
 }
 
 .project-screen {
