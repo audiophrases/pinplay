@@ -5095,12 +5095,7 @@ function renderHostQuestion(state) {
       hostQuestionAnswersEl.appendChild(row);
     });
 
-    if (question.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Students must select all correct answers.';
-      hostQuestionAnswersEl.appendChild(hint);
-    }
+
 
     hostQuestionHintEl.textContent = question.type === 'audio' ? 'Audio question.' : '';
     return;
@@ -5174,7 +5169,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'match_pairs') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Match pairs question.';
+    hostQuestionHintEl.textContent = '';
     if (!showReveal) {
       renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
     } else {
@@ -5184,13 +5179,13 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'error_hunt') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Error hunt: click wrong token(s), rewrite sentence.';
+    hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'puzzle') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Puzzle question.';
+    hostQuestionHintEl.textContent = '';
     if (question.options?.length) {
       const p = document.createElement('p');
       p.className = 'small';
@@ -5212,13 +5207,13 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'slider') {
-    hostQuestionHintEl.textContent = showReveal ? '' : `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'pin') {
-    hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : 'Pin answer question.';
+    hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : '';
     if (question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview';
