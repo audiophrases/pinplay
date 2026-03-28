@@ -2425,7 +2425,8 @@ export class QuizRoom {
             lock.awardedAt = Date.now();
             room.scoreLocksByQuestion[qIndex][playerId] = lock;
           } else {
-            pointsAwarded = 0;
+            // FIX: Actually apply the penalty math for incorrect answers!
+            pointsAwarded = applyBetScore(basePoints, 0, false, bet);
           }
 
           room.responsesByQuestion[qIndex][playerId] = {
