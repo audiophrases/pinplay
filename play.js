@@ -759,7 +759,11 @@ function renderInstantFeedbackFromState() {
     li.className = a.correct ? 'ok' : 'bad';
     const result = a.correct ? '✅ Correct' : '❌ Incorrect';
     const points = Number(a.points || 0);
-    const pointsText = points > 0 ? ` · +${points} points` : '';
+    
+    // FIX: Show negative deductions in the assignment recap list
+    let pointsText = '';
+    if (points > 0) pointsText = ` · +${points} points`;
+    else if (points < 0) pointsText = ` · ${points} points`;
     const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
     li.textContent = `${result}${pointsText}  ·  ${prompt}`;
     list.appendChild(li);
@@ -1087,7 +1091,12 @@ function renderPlayerState(state) {
           // Highlight items: green for correct, red for student's wrong answer
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
-          const pointsText = pts > 0 ? ` · +${pts} points` : '';
+          
+          // FIX: Handle negative points from risk bets
+          let pointsText = '';
+          if (pts > 0) pointsText = ` · +${pts} points`;
+          else if (pts < 0) pointsText = ` · ${pts} points`; // Includes the minus sign automatically
+          
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
             feedback += ` · Correct: ${state.correctAnswer}`;
