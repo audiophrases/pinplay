@@ -980,7 +980,7 @@ body.question-active .join-title-row {
   display: grid;
   grid-template-columns: auto auto;
   justify-content: center;
-  gap: .7rem;
+  gap: clamp(.5rem, 5vw, 6rem);
   margin-top: .4rem;
   align-items: start;
   position: relative;

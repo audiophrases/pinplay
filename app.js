@@ -9081,7 +9081,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     lineLayer.setAttribute('width', String(wrapRect.width));
     lineLayer.setAttribute('height', String(wrapRect.height));
 
-    rows.forEach((row) => {
+    rows.forEach((row, idx) => {
       const value = String(row.hidden.value || '').trim();
       if (!value) return;
       const target = rightButtonsByValue.get(value);
@@ -9095,11 +9095,15 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       const x2 = rightRect.left - wrapRect.left;
       const y2 = rightRect.top + (rightRect.height / 2) - wrapRect.top;
 
+      const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+      const lineColor = colorList[idx % colorList.length];
+
       const line = document.createElementNS(svgNs, 'line');
       line.setAttribute('x1', String(Math.max(0, x1)));
       line.setAttribute('y1', String(Math.max(0, y1)));
       line.setAttribute('x2', String(Math.max(0, x2)));
       line.setAttribute('y2', String(Math.max(0, y2)));
+      line.setAttribute('stroke', lineColor);
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });
