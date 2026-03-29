@@ -1602,7 +1602,7 @@ function renderJoinQuestion(question) {
 
     attachPinPicker(wrap, (point) => {
       const picks = live.player.pinSelections || [];
-      const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
+      const nearIdx = picks.findIndex((p) => Math.hypot(p.x - point.x, p.y - point.y) <= 4);
       if (nearIdx >= 0) {
         picks.splice(nearIdx, 1);
       } else if (picks.length < required) {
