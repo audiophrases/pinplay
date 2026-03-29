@@ -1077,6 +1077,16 @@ function bindBuilderEvents() {
   }
 
   questionListEl.addEventListener('click', async (e) => {
+    const togglePinModeBtn = e.target.closest('[data-toggle-pin-mode]');
+    if (togglePinModeBtn) {
+      const idx = Number(togglePinModeBtn.dataset.togglePinMode);
+      const q = quiz.questions[idx];
+      if (!q || q.type !== 'pin') return;
+      q.pinMode = q.pinMode === 'any' ? 'all' : 'any';
+      renderBuilder();
+      return;
+    }
+
     const moveUpBtn = e.target.closest('[data-move-up-question]');
     if (moveUpBtn) {
       const idx = Number(moveUpBtn.dataset.moveUpQuestion);
@@ -1415,11 +1425,11 @@ function findQuestionIndexFromBuilderEventTarget(target) {
   const withQ = el.closest('[data-q]');
   if (withQ && Number.isInteger(Number(withQ.dataset.q))) return Number(withQ.dataset.q);
 
-  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview]');
+  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview],[data-toggle-pin-mode]');
   if (!withBody) return null;
 
   const ds = withBody.dataset || {};
-  const raw = ds.q ?? ds.imageUpload ?? ds.pinUpload ?? ds.audioUpload ?? ds.imageSearch ?? ds.removeQuestion ?? ds.toggleQuestion ?? ds.toggleQuestionHeader ?? ds.moveUpQuestion ?? ds.moveDownQuestion ?? ds.addPinZone ?? ds.removePinZone ?? ds.pinPreview;
+  const raw = ds.q ?? ds.imageUpload ?? ds.pinUpload ?? ds.audioUpload ?? ds.imageSearch ?? ds.removeQuestion ?? ds.toggleQuestion ?? ds.toggleQuestionHeader ?? ds.moveUpQuestion ?? ds.moveDownQuestion ?? ds.addPinZone ?? ds.removePinZone ?? ds.pinPreview ?? ds.togglePinMode;
   const idx = Number(raw);
   return Number.isInteger(idx) ? idx : null;
 }
@@ -1708,15 +1718,7 @@ function renderBuilder() {
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. map of Spain, human heart" />
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
-          <div style="min-width:220px;">
-            <label>Correct rule</label>
-            <select data-q="${idx}" data-field="pinMode">
-              <option value="all" ${String(q.pinMode || 'all') === 'all' ? 'selected' : ''}>All spots must be pinned</option>
-              <option value="any" ${String(q.pinMode || 'all') === 'any' ? 'selected' : ''}>Any one spot is enough</option>
-              ${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => `<option value="${n}" ${String(q.pinMode) === String(n) ? 'selected' : ''}>Exactly ${n} spots</option>`).join('')}
-            </select>
-          </div>
-        </div>
+          <button type="button" class="btn" data-toggle-pin-mode="${idx}">${q.pinMode === 'any' ? 'Any pin (1 spot is enough)' : 'All pins (must pin all spots)'}</button>        </div>
         <p class="small">Up to 12 correct points. Click preview to add a point at clicked location.</p>
         <div class="answers-grid">
           ${zones.map((z, zi) => `
@@ -6382,16 +6384,15 @@ function renderJoinQuestion(question) {
     const picksLayer = document.createElement('div');
     picksLayer.className = 'pin-picks-layer';
 
-    const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
+    const zonesCount = question.zoneCount || (Array.isArray(question.zones) && question.zones.length ? question.zones.length : 1);
     const pinMode = String(question.pinMode || 'all');
     let required = 1;
-    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
     else if (pinMode === 'any') required = 1;
-    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
     const countLabel = document.createElement('div');
     countLabel.className = 'pin-count-big';
-    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
+    countLabel.textContent = `0 / ${required}`;
 
     wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
@@ -6400,11 +6401,7 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      if (pinMode === 'any') {
-        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
-      } else {
-        countLabel.textContent = `${picks.length} / ${required}`;
-      }
+      countLabel.textContent = `${Math.min(picks.length, required)} / ${required}`;
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -6641,9 +6638,8 @@ function buildPreviewHostQuestion(q) {
     timeLimit: q.timeLimit,
     isPoll: !!q.isPoll,
     imageData: String(q.imageData || '') || undefined,
-    zones: q.type === 'pin' ? normalizePinZones(q) : undefined,
-    zone: q.type === 'pin' ? normalizePinZones(q)[0] : undefined,
-    pinMode: q.type === 'pin' ? (['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all')) : undefined,
+    pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
+    zoneCount: Array.isArray(q.zones) ? q.zones.length : (q.zone ? 1 : 1),
   };
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
@@ -6717,7 +6713,6 @@ function evaluatePreviewAnswer(q, answer) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
-    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
     const ok = coveredCount >= required;
     return { correct: ok };
@@ -7414,17 +7409,29 @@ function renderSoloQuestion() {
     img.src = q.imageData;
     img.alt = 'Pin question image';
 
-    const dot = document.createElement('div');
-    dot.className = 'pin-dot hidden';
+    const picksLayer = document.createElement('div');
+    picksLayer.className = 'pin-picks-layer';
+
+    const zonesCount = q.zoneCount || (Array.isArray(q.zones) && q.zones.length ? q.zones.length : 1);
+    const pinMode = String(q.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
+    else if (pinMode === 'any') required = 1;
+
+    const countLabel = document.createElement('div');
+    countLabel.className = 'pin-count-big';
+    countLabel.textContent = `0 / ${required}`;
 
     wrap.append(img, dot);
     answersEl.appendChild(wrap);
+    answersEl.appendChild(countLabel);
 
     attachPinPicker(wrap, (point) => {
       soloGame.pinSelection = point;
       dot.classList.remove('hidden');
       dot.style.left = `${point.x}%`;
       dot.style.top = `${point.y}%`;
+      countLabel.textContent = `1 / ${required}`;
     });
   }
 }
@@ -7531,7 +7538,6 @@ function evaluateSoloQuestion(q) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
-    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
     const ok = hits >= required;
     return { correct: ok, hint: ok ? '' : (required > 1 ? `Try closer to all ${required} target areas.` : 'Try closer to a target area.') };
   }
@@ -8040,7 +8046,8 @@ function normalizeQuizForLive(raw) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all'),
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
+        zoneCount: zones.length,
       });
       return;
     }
