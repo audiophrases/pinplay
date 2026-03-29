@@ -831,9 +831,43 @@ async function rerollRandomName() {
 
 function renderPlayerState(state) {
   const renderJoinReveal = () => {
-    // Removed - item highlighting replaces text reveal
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+
+    const question = state.question;
+    const isPoll = !!question?.isPoll;
+    const show = !!state.questionClosed && !isPoll;
+    if (!show || !question) return;
+
+    // Only show text blocks for types that cannot be fully conveyed via highlighting
+    const needsReveal =['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    if (!needsReveal) return;
+
+    let correctText = String(state.correctAnswer || '').trim();
+
+    // Fallback for assignment mode where it might not be passed down natively if not fully graded
+    if (!correctText) {
+         if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
+         if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
+         if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+         if (question.type === 'error_hunt') correctText = question.corrected || '';
+    }
+
+    if (!correctText) return;
+
+    const reveal = document.createElement('div');
+    reveal.className = 'student-answer-reveal';
+    reveal.dataset.joinCorrectReveal = '1';
+
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.textContent = 'Correct Answer';
+
+    const content = document.createElement('div');
+    content.textContent = correctText;
+
+    reveal.append(title, content);
+    joinAnswersEl.appendChild(reveal);
   };
 
   const latestName = String(state?.name || '').trim();
@@ -2382,9 +2416,10 @@ function highlightAnswerItems(isCorrect, state) {
   }
 
   // Context gap
+  // Context gap
   if (question.type === 'context_gap') {
     highlightContextGap(question);
-    // FALL THROUGH
+    return; // Text reveal handled inline
   }
 
   // Slider: show correct value
@@ -2396,12 +2431,6 @@ function highlightAnswerItems(isCorrect, state) {
   // Pin: show correct zone on image
   if (question.type === 'pin') {
     showPinFeedback(question, state);
-    return;
-  }
-
-  // Open/Speaking/Image_open/Text/Context gap: show correct answer text
-  if (['open', 'speaking', 'image_open', 'text', 'context_gap'].includes(question.type)) {
-    showTextAnswerFeedback(question, state);
     return;
   }
 }
@@ -2569,28 +2598,7 @@ function showPinFeedback(question, state) {
   });
 }
 
-// Open/Speaking/Image_open/Text/Context gap: show correct answer text
-function showTextAnswerFeedback(question, state) {
-  const el = joinFeedbackEl;
-  if (!el) return;
-  let correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
 
-  if (!correct && question.type === 'context_gap') {
-    const prompt = String(question.prompt || '').trim();
-    const gaps = question.gaps || [];
-    let gapIdx = 0;
-    const markerRe = /(\_{2,}|\[\s*\])/g;
-    correct = prompt.replace(markerRe, (match) => {
-      const raw = gaps[gapIdx++] || '';
-      const first = raw.split(',')[0].trim();
-      return first || match;
-    });
-  }
-
-  if (correct) {
-    el.innerHTML = `<span style="color:var(--ok)">✓</span> <strong>${escapeHtml(correct)}</strong>`;
-  }
-}
 
 // Context gap: highlight each input
 function highlightContextGap(question) {

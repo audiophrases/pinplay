@@ -1672,3 +1672,33 @@ body.question-active .join-title-row {
   color: var(--primary);
   font-variant-numeric: tabular-nums;
 }
+/* ==========================================================================
+   STUDENT ANSWER REVEAL (Context-Aware)
+   ========================================================================== */
+.student-answer-reveal {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.9rem 1.2rem;
+  background: #e8f8ee;
+  border-left: 4px solid var(--ok);
+  border-radius: 0 0.6rem 0.6rem 0;
+  color: #0f5e26;
+  font-size: 1.05rem;
+  box-shadow: 0 2px 8px rgba(19, 138, 54, 0.08);
+  animation: slideInReveal 0.25s ease-out;
+  text-align: left;
+}
+
+.student-answer-reveal-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  margin-bottom: 0.35rem;
+  font-weight: 800;
+}
+
+@keyframes slideInReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
