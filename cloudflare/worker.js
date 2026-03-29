@@ -3332,58 +3332,83 @@ function isMatchPairsCorrect(answer, pairsRaw) {
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
-  const source = tokenizeWords(prompt).map(normalizeTextAnswer);
-  const target = tokenizeWords(corrected).map(normalizeTextAnswer);
-  if (!source.length || !target.length) return 1;
+  // 1. Support both single strings and arrays of multiple acceptable variants
+  const variants = Array.isArray(corrected) ? corrected : [corrected];
+  const validVariants = variants.map(v => String(v || '').trim()).filter(Boolean);
+  if (!validVariants.length) return 1;
 
-  if (source.join(' ') === target.join(' ')) return 1;
+  let maxErrors = 1;
 
-  const rows = source.length + 1;
-  const cols = target.length + 1;
-  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  // 2. Calculate the required errors for each variant and take the maximum
+  for (const correctedStr of validVariants) {
+    const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+    const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
+    
+    if (!source.length || !target.length) continue;
+    if (source.join(' ') === target.join(' ')) continue;
 
-  for (let i = 0; i < rows; i++) dp[i][0] = i;
-  for (let j = 0; j < cols; j++) dp[0][j] = j;
+    const rows = source.length + 1;
+    const cols = target.length + 1;
+    const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
 
-  for (let i = 1; i < rows; i++) {
-    for (let j = 1; j < cols; j++) {
-      if (source[i - 1] === target[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1];
-      } else {
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1,
-          dp[i][j - 1] + 1,
-          dp[i - 1][j - 1] + 1,
-        );
+    // Initialize DP table
+    for (let i = 0; i < rows; i++) dp[i][0] = i;
+    for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+    // Fill DP table
+    for (let i = 1; i < rows; i++) {
+      for (let j = 1; j < cols; j++) {
+        if (source[i - 1] === target[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(
+            dp[i - 1][j],       // Deletion
+            dp[i][j - 1],       // Insertion
+            dp[i - 1][j - 1]    // Substitution
+          );
+        }
       }
     }
-  }
 
-  let i = source.length;
-  let j = target.length;
-  let isEditing = false;
-  let errorBlocks = 0;
+    // Backtrack to count contiguous blocks of edits
+    let i = source.length;
+    let j = target.length;
+    let inError = false;
+    let errorBlocks = 0;
 
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && source[i - 1] === target[j - 1]) {
-      isEditing = false;
-      i--; j--;
-    } else {
-      if (!isEditing) {
-        errorBlocks++;
-        isEditing = true;
-      }
-      if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+    while (i > 0 || j > 0) {
+      // If characters match and we didn't add an edit cost
+      if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+        inError = false;
         i--; j--;
-      } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
-        i--;
       } else {
-        j--;
+        // If we hit an error and weren't already tracking an error block
+        if (!inError) {
+          errorBlocks++;
+          inError = true;
+        }
+        
+        // Move in the direction of the minimum cost
+        if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+          i--; j--;
+        } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+          i--;
+        } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+          j--;
+        } else {
+          if (i > 0) i--;
+          else j--;
+        }
       }
+    }
+
+    // Track the highest number of mistakes found across all valid sentence variations
+    if (errorBlocks > maxErrors) {
+      maxErrors = errorBlocks;
     }
   }
 
-  return Math.max(1, errorBlocks);
+  return Math.max(1, maxErrors);
 }
 
 function distance2D(x1, y1, x2, y2) {
