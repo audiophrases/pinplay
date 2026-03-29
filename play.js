@@ -1487,8 +1487,6 @@ function renderJoinQuestion(question) {
             b.classList.remove('active');
             return;
           }
-          const activeCount = tokenWrap.querySelectorAll('[data-error-token].active').length;
-          if (activeCount >= required) return;
           b.classList.add('active');
         });
         tokenWrap.appendChild(b);
@@ -1910,7 +1908,7 @@ function readJoinAnswer() {
       const normalizedRewrite = normalizeTextAnswer(rewrite);
       return normalizedRewrite === normalizedPrompt ? { rewrite, selectedTokens: [] } : null;
     }
-    if (selected.length !== required) return null;
+    if (selected.length === 0) return null;
     const rewrite = selectedChips
       .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
       .filter(Boolean)
