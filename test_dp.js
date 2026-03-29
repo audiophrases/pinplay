@@ -76,3 +76,5 @@ function testDP(prompt, correctedStr) {
 
 testDP("I go store.", "I go to the store.");
 testDP("A very bad mistake.", "A mistake.");
+testDP("Correct1 correct2 incorrect1 incorrect2.", "Correct1 correct2 correct3 correct4.");
+

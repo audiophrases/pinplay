@@ -1,0 +1,12 @@
+Prompt: I go store.
+Error Blocks Count: 1
+Error Indexes to highlight: [ 1 ]
+Required Tokens count = Set magnitude: 1
+Prompt: A very bad mistake.
+Error Blocks Count: 1
+Error Indexes to highlight: [ 2, 1 ]
+Required Tokens count = Set magnitude: 2
+Prompt: Correct1 correct2 incorrect1 incorrect2.
+Error Blocks Count: 1
+Error Indexes to highlight: [ 3, 2 ]
+Required Tokens count = Set magnitude: 2
