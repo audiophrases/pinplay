@@ -1577,6 +1577,7 @@ function renderJoinQuestion(question) {
     let required = 1;
     if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zonesCount, n)); }
 
     const countLabel = document.createElement('div');
     countLabel.className = 'pin-count-big';

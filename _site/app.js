@@ -6389,6 +6389,7 @@ function renderJoinQuestion(question) {
     let required = 1;
     if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zonesCount, n)); }
 
     const countLabel = document.createElement('div');
     countLabel.className = 'pin-count-big';
@@ -6638,7 +6639,7 @@ function buildPreviewHostQuestion(q) {
     timeLimit: q.timeLimit,
     isPoll: !!q.isPoll,
     imageData: String(q.imageData || '') || undefined,
-    pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
+    pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (parseInt(String(q.pinMode), 10) >= 1 ? String(q.pinMode) : 'all'),
     zoneCount: Array.isArray(q.zones) ? q.zones.length : (q.zone ? 1 : 1),
   };
 
@@ -6713,6 +6714,7 @@ function evaluatePreviewAnswer(q, answer) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zones.length, n)); }
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
     const ok = coveredCount >= required;
     return { correct: ok };
@@ -7417,6 +7419,7 @@ function renderSoloQuestion() {
     let required = 1;
     if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zonesCount, n)); }
 
     const countLabel = document.createElement('div');
     countLabel.className = 'pin-count-big';
@@ -7538,6 +7541,7 @@ function evaluateSoloQuestion(q) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zones.length, n)); }
     const ok = hits >= required;
     return { correct: ok, hint: ok ? '' : (required > 1 ? `Try closer to all ${required} target areas.` : 'Try closer to a target area.') };
   }
