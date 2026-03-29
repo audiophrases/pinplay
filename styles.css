@@ -341,6 +341,11 @@ textarea {
   cursor: crosshair;
 }
 
+.pin-preview img {
+  width: 100%;
+  display: block;
+}
+
 .pin-picks-layer {
   position: absolute;
   inset: 0;
