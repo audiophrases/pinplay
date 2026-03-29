@@ -8050,7 +8050,7 @@ function normalizeQuizForLive(raw) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (parseInt(String(q.pinMode), 10) >= 1 ? String(q.pinMode) : 'all'),
         zoneCount: zones.length,
       });
       return;
