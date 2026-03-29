@@ -6525,7 +6525,7 @@ function buildPreviewHostQuestion(q) {
     imageData: String(q.imageData || '') || undefined,
     zones: q.type === 'pin' ? normalizePinZones(q) : undefined,
     zone: q.type === 'pin' ? normalizePinZones(q)[0] : undefined,
-    pinMode: q.type === 'pin' ? (String(q.pinMode || 'all') === 'any' ? 'any' : 'all') : undefined,
+    pinMode: q.type === 'pin' ? (['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all')) : undefined,
   };
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
@@ -6595,9 +6595,13 @@ function evaluatePreviewAnswer(q, answer) {
       .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
-    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const pinMode = String(q.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = zones.length;
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
-    const ok = pinMode === 'any' ? coveredCount >= 1 : coveredCount >= zones.length;
+    const ok = coveredCount >= required;
     return { correct: ok };
   }
   return { correct: false };
@@ -7405,9 +7409,13 @@ function evaluateSoloQuestion(q) {
       const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, Number(z.x || 50), Number(z.y || 50));
       return d <= Number(z.r || 15);
     }).length;
-    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const ok = pinMode === 'any' ? hits >= 1 : hits >= zones.length;
-    return { correct: ok, hint: ok ? '' : (pinMode === 'all' ? 'Try closer to all target areas.' : 'Try closer to a target area.') };
+    const pinMode = String(q.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = zones.length;
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
+    const ok = hits >= required;
+    return { correct: ok, hint: ok ? '' : (required > 1 ? `Try closer to all ${required} target areas.` : 'Try closer to a target area.') };
   }
 
   return { correct: false };

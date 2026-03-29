@@ -2929,7 +2929,7 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: question.imageData || '',
-      pinMode: String(question.pinMode || 'all') === 'any' ? 'any' : 'all',
+      pinMode: ['any', 'all'].includes(String(question.pinMode)) ? String(question.pinMode) : (Number.isFinite(Number(question.pinMode)) ? String(question.pinMode) : 'all'),
       ...publicAudioPayload(question),
     };
   }
@@ -3029,8 +3029,12 @@ function evaluate(question, answer) {
     if (!picks.length) return { correct: false };
 
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z?.x ?? 50), Number(z?.y ?? 50)) <= Number(z?.r ?? 15))).length;
-    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const ok = pinMode === 'any' ? coveredCount >= 1 : coveredCount >= zones.length;
+    const pinMode = String(question.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = zones.length;
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
+    const ok = coveredCount >= required;
     return { correct: ok };
   }
 
@@ -3191,7 +3195,7 @@ function normalizeQuiz(quiz) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: String(q.pinMode || 'all') === 'any' ? 'any' : 'all',
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all'),
       });
     }
   });
