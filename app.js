@@ -8822,6 +8822,9 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
       event?.stopPropagation?.();
       if (chip.dataset.editing === '1') return;
 
+      // Ensure chip is marked active when editing begins
+      chip.classList.add('active');
+
       const original = String(chip.dataset.tokenText || chip.textContent || '').trim();
       chip.dataset.editing = '1';
       chip.classList.add('editing');
@@ -8843,6 +8846,13 @@ function enableInlineErrorTokenEditing(tokenWrap, tokenSelector, rewriteInput) {
         chip.textContent = text;
         chip.dataset.editing = '0';
         chip.classList.remove('editing');
+        // Auto-set active state: active if text differs from original prompt token
+        const origToken = String(chip.dataset.originalText || '').trim();
+        if (origToken && text !== origToken) {
+          chip.classList.add('active');
+        } else if (origToken && text === origToken) {
+          chip.classList.remove('active');
+        }
         if (save) syncRewriteFromTokens();
       };
 
