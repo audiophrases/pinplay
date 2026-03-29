@@ -8697,27 +8697,20 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     // Backtrack to count contiguous blocks of edits
     let i = source.length;
     let j = target.length;
-    let inError = false;
-    let errorBlocks = 0;
+    const errorIndexes = new Set();
 
     while (i > 0 || j > 0) {
-      // If characters match and we didn't add an edit cost
       if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
-        inError = false;
         i--; j--;
       } else {
-        // If we hit an error and weren't already tracking an error block
-        if (!inError) {
-          errorBlocks++;
-          inError = true;
-        }
-        
-        // Move in the direction of the minimum cost
         if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+          errorIndexes.add(i - 1);
           i--; j--;
         } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+          errorIndexes.add(i - 1);
           i--;
         } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+          errorIndexes.add(Math.max(0, i - 1));
           j--;
         } else {
           if (i > 0) i--;
@@ -8727,8 +8720,8 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
 
     // Track the highest number of mistakes found across all valid sentence variations
-    if (errorBlocks > maxErrors) {
-      maxErrors = errorBlocks;
+    if (errorIndexes.size > maxErrors) {
+      maxErrors = errorIndexes.size;
     }
   }
 
