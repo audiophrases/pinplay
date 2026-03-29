@@ -574,8 +574,8 @@ body.question-active .join-title-row {
   position: fixed;
   inset: 0;
   z-index: 1;
-  /* Keeps image safely between the top and bottom bars */
-  padding: 130px 20px 240px 20px !important;
+  /* Keeps image safely between the top and bottom bars (reduced bottom by 20%) */
+  padding: 130px 20px 192px 20px !important;
   background-origin: content-box !important;
   background-clip: content-box !important;
   background-size: contain !important;
@@ -805,7 +805,7 @@ body.question-active .join-title-row {
 /* Pin interaction specific fixes (strictly scoped to Student UI) */
 #joinCard.question-active[data-qtype="pin"] .pin-preview {
   position: fixed;
-  inset: 130px 20px 240px 20px;
+  inset: 130px 20px 192px 20px;
   background: transparent !important;
   border: none !important;
   z-index: 10;
@@ -889,11 +889,11 @@ body.question-active .join-title-row {
   }
 
   #joinQuestionWrap {
-    padding: 120px 10px 260px 10px !important;
+    padding: 120px 10px 208px 10px !important;
   }
 
   #joinCard.question-active[data-qtype="pin"] .pin-preview {
-    inset: 120px 10px 260px 10px;
+    inset: 120px 10px 208px 10px;
   }
 }
 
@@ -1041,7 +1041,7 @@ body.question-active .join-title-row {
 .match-pairs-center-overlay {
   position: absolute;
   top: 110px;
-  bottom: 160px;
+  bottom: 128px;
   left: 20px;
   right: 20px;
   display: flex;
@@ -1092,7 +1092,7 @@ body.question-active .join-title-row {
   .match-pairs-center-overlay {
     flex-direction: column;
     top: 90px;
-    bottom: 120px;
+    bottom: 96px;
     gap: 1rem;
   }
   .match-pairs-img-wrap {
