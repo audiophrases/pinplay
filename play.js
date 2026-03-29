@@ -1572,16 +1572,15 @@ function renderJoinQuestion(question) {
     const picksLayer = document.createElement('div');
     picksLayer.className = 'pin-picks-layer';
 
-    const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
+    const zonesCount = question.zoneCount || (Array.isArray(question.zones) && question.zones.length ? question.zones.length : 1);
     const pinMode = String(question.pinMode || 'all');
     let required = 1;
-    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zonesCount));
     else if (pinMode === 'any') required = 1;
-    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
     const countLabel = document.createElement('div');
     countLabel.className = 'pin-count-big';
-    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
+    countLabel.textContent = `0 / ${required}`;
 
     wrap.append(img, picksLayer);
     container.append(countLabel, wrap);
@@ -1590,11 +1589,7 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      if (pinMode === 'any') {
-        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
-      } else {
-        countLabel.textContent = `${picks.length} / ${required}`;
-      }
+      countLabel.textContent = `${Math.min(picks.length, required)} / ${required}`;
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';

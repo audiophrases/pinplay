@@ -2929,7 +2929,8 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: question.imageData || '',
-      pinMode: ['any', 'all'].includes(String(question.pinMode)) ? String(question.pinMode) : (Number.isFinite(Number(question.pinMode)) ? String(question.pinMode) : 'all'),
+      pinMode: ['any', 'all'].includes(String(question.pinMode)) ? String(question.pinMode) : 'all',
+      zoneCount: Array.isArray(question.zones) ? question.zones.length : (question.zone ? 1 : 1),
       ...publicAudioPayload(question),
     };
   }
