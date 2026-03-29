@@ -5920,15 +5920,30 @@ function renderPlayerState(state) {
     if (!joinAnswersEl) return;
     joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
 
-    const isPoll = !!state.question?.isPoll;
+    const question = state.question;
+    const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
+    if (!show || !question) return;
+
+    // Only show text blocks for types that cannot be fully conveyed via highlighting
+    const needsReveal =['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    if (!needsReveal) return;
+
     const text = String(state.correctAnswer || '').trim();
-    if (!show || !text) return;
+    if (!text) return;
 
     const reveal = document.createElement('div');
-    reveal.className = 'project-text-reveal';
+    reveal.className = 'student-answer-reveal';
     reveal.dataset.joinCorrectReveal = '1';
-    reveal.textContent = text;
+
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.textContent = 'Correct Answer';
+
+    const content = document.createElement('div');
+    content.textContent = text;
+
+    reveal.append(title, content);
     joinAnswersEl.appendChild(reveal);
   };
 
@@ -9530,3 +9545,34 @@ function setupImageLightbox() {
 
 init();
 
+
+/* ==========================================================================
+   STUDENT ANSWER REVEAL (Context-Aware)
+   ========================================================================== */
+.student-answer-reveal {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.9rem 1.2rem;
+  background: #e8f8ee;
+  border-left: 4px solid var(--ok);
+  border-radius: 0 0.6rem 0.6rem 0;
+  color: #0f5e26;
+  font-size: 1.05rem;
+  box-shadow: 0 2px 8px rgba(19, 138, 54, 0.08);
+  animation: slideInReveal 0.25s ease-out;
+  text-align: left;
+}
+
+.student-answer-reveal-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  margin-bottom: 0.35rem;
+  font-weight: 800;
+}
+
+@keyframes slideInReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
