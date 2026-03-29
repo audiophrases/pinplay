@@ -5912,39 +5912,142 @@ async function pollPlayerState() {
   }
 }
 
+function getStudentAnswerTextFromUI() {
+  const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
+  if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
+  
+  const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
+  if (errorHuntChips && errorHuntChips.length > 0) {
+    return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
+  }
+
+  const selected = [...(joinAnswersEl?.querySelectorAll('[data-puzzle-piece], input:checked + span') || [])]
+    .map((el) => String(el.textContent || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  return selected;
+}
+
+function escapeHtmlText(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildCorrectionDiffHtml(correction, original) {
+  const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
+  const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
+  return tokens.map((tok) => {
+    const safe = escapeHtmlText(tok);
+    const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
+    const word = core ? String(core).toLowerCase() : null;
+    if (!word || origWords.has(word)) return safe;
+    return `<span class="join-correction-diff">${safe}</span>`;
+  }).join('');
+}
+
 function renderPlayerState(state) {
   joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   joinScoreEl.textContent = `Score: ${state.score}`;
 
   const renderJoinReveal = () => {
-    if (!joinAnswersEl) return;
-    joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+    // Target the broader container to avoid flex-wrap collisions
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
 
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    if (!show || !question) return;
+    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
-    // Only show text blocks for types that cannot be fully conveyed via highlighting
-    const needsReveal =['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
-    if (!needsReveal) return;
+    if (!show || !needsReveal) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
 
-    const text = String(state.correctAnswer || '').trim();
-    if (!text) return;
+    let correctText = String(state.correctAnswer || '').trim();
 
-    const reveal = document.createElement('div');
-    reveal.className = 'student-answer-reveal';
-    reveal.dataset.joinCorrectReveal = '1';
+    if (!correctText) {
+      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'error_hunt') correctText = question.corrected || '';
+    }
+
+    if (!correctText) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
+    // If it doesn't exist, create it once
+    if (!revealEl) {
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
+
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+
+      const content = document.createElement('div');
+      content.className = 'student-answer-reveal-content';
+
+      revealEl.append(title, content);
+
+      // Better placement: drop it right above the submit button section
+      const submissionWrap = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+        wrap.insertBefore(revealEl, submissionWrap);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+
+    // Only update DOM if text actually changed
+    const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+    if (contentEl && contentEl.textContent !== correctText) {
+      contentEl.textContent = correctText;
+    }
+  };
+
+
+  const renderInlineCorrection = (text = '') => {
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    const corr = String(text || '').trim();
+    if (!corr) return;
+
+    const studentText = getStudentAnswerTextFromUI();
+    const p = document.createElement('div');
+    p.dataset.joinCorrectionInline = '1';
+    
+    // Reuse the modern block, but color it for a teacher correction (red)
+    p.className = 'student-answer-reveal';
+    p.style.background = '#fef2f2';
+    p.style.borderColor = '#fca5a5';
+    p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
 
     const title = document.createElement('div');
     title.className = 'student-answer-reveal-title';
-    title.textContent = 'Correct Answer';
+    title.style.color = '#dc2626';
+    title.textContent = 'Teacher Feedback';
 
     const content = document.createElement('div');
-    content.textContent = text;
+    content.className = 'student-answer-reveal-content';
+    content.style.color = '#7f1d1d';
+    content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
 
-    reveal.append(title, content);
-    joinAnswersEl.appendChild(reveal);
+    p.append(title, content);
+
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+      wrap.insertBefore(p, submissionWrap);
+    } else {
+      wrap.appendChild(p);
+    }
   };
 
   if (state.phase !== 'question' || !state.question) {
@@ -5987,9 +6090,7 @@ function renderPlayerState(state) {
       : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Time is up. Waiting for next question…');
 
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && String(rr.correction || '').trim()) {
-      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
-    } else if (!isPoll && rr && rr.graded === true) {
+    if (rr?.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
     } else {
       setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : closedMsg, 'ok');
@@ -5997,9 +6098,7 @@ function renderPlayerState(state) {
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && String(rr.correction || '').trim()) {
-      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
-    } else if (!isPoll && rr && rr.graded === true) {
+    if (rr?.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
     } else {
       setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
@@ -6008,6 +6107,10 @@ function renderPlayerState(state) {
   } else {
     setStatus(joinStatusEl, 'Question live!', 'ok');
   }
+
+  const rrNow = state.revealedResult;
+  const correctionText = rrNow?.correction || '';
+  renderInlineCorrection(String(correctionText || ''));
 
   renderJoinReveal();
 }
@@ -9544,35 +9647,3 @@ function setupImageLightbox() {
 
 
 init();
-
-
-/* ==========================================================================
-   STUDENT ANSWER REVEAL (Context-Aware)
-   ========================================================================== */
-.student-answer-reveal {
-  width: 100%;
-  margin-top: 1rem;
-  padding: 0.9rem 1.2rem;
-  background: #e8f8ee;
-  border-left: 4px solid var(--ok);
-  border-radius: 0 0.6rem 0.6rem 0;
-  color: #0f5e26;
-  font-size: 1.05rem;
-  box-shadow: 0 2px 8px rgba(19, 138, 54, 0.08);
-  animation: slideInReveal 0.25s ease-out;
-  text-align: left;
-}
-
-.student-answer-reveal-title {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0.85;
-  margin-bottom: 0.35rem;
-  font-weight: 800;
-}
-
-@keyframes slideInReveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}

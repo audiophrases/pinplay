@@ -831,43 +831,64 @@ async function rerollRandomName() {
 
 function renderPlayerState(state) {
   const renderJoinReveal = () => {
-    if (!joinAnswersEl) return;
-    joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+    // Target the broader container to avoid flex-wrap collisions
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
 
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    if (!show || !question) return;
+    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
-    // Only show text blocks for types that cannot be fully conveyed via highlighting
-    const needsReveal =['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
-    if (!needsReveal) return;
+    if (!show || !needsReveal) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
 
     let correctText = String(state.correctAnswer || '').trim();
 
-    // Fallback for assignment mode where it might not be passed down natively if not fully graded
     if (!correctText) {
-         if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
-         if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
-         if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
-         if (question.type === 'error_hunt') correctText = question.corrected || '';
+      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'error_hunt') correctText = question.corrected || '';
     }
 
-    if (!correctText) return;
+    if (!correctText) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
 
-    const reveal = document.createElement('div');
-    reveal.className = 'student-answer-reveal';
-    reveal.dataset.joinCorrectReveal = '1';
+    // If it doesn't exist, create it once
+    if (!revealEl) {
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
 
-    const title = document.createElement('div');
-    title.className = 'student-answer-reveal-title';
-    title.textContent = 'Correct Answer';
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
 
-    const content = document.createElement('div');
-    content.textContent = correctText;
+      const content = document.createElement('div');
+      content.className = 'student-answer-reveal-content';
 
-    reveal.append(title, content);
-    joinAnswersEl.appendChild(reveal);
+      revealEl.append(title, content);
+
+      // Better placement: drop it right above the submit button section
+      const submissionWrap = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+        wrap.insertBefore(revealEl, submissionWrap);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+
+    // Only update DOM if text actually changed
+    const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+    if (contentEl && contentEl.textContent !== correctText) {
+      contentEl.textContent = correctText;
+    }
   };
 
   const latestName = String(state?.name || '').trim();
@@ -889,22 +910,39 @@ function renderPlayerState(state) {
   };
 
   const renderInlineCorrection = (text = '') => {
-    const host = joinQuestionWrap || joinAnswersEl;
-    if (!host) return;
-    host.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
     const corr = String(text || '').trim();
     if (!corr) return;
 
     const studentText = getStudentAnswerTextFromUI();
-    const p = document.createElement('p');
+    const p = document.createElement('div');
     p.dataset.joinCorrectionInline = '1';
-    p.className = 'join-correction-inline top-space';
-    p.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+    
+    // Reuse the modern block, but color it for a teacher correction (red)
+    p.className = 'student-answer-reveal';
+    p.style.background = '#fef2f2';
+    p.style.borderColor = '#fca5a5';
+    p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
 
-    if (joinAnswersEl) {
-      joinAnswersEl.appendChild(p);
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.style.color = '#dc2626';
+    title.textContent = 'Teacher Feedback';
+
+    const content = document.createElement('div');
+    content.className = 'student-answer-reveal-content';
+    content.style.color = '#7f1d1d';
+    content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+
+    p.append(title, content);
+
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+      wrap.insertBefore(p, submissionWrap);
     } else {
-      host.appendChild(p);
+      wrap.appendChild(p);
     }
   };
 
@@ -1101,7 +1139,7 @@ function renderPlayerState(state) {
   }
 
   const rrNow = state.revealedResult;
-  const correctionText = rrNow?.correction || (rrNow ? state.correctAnswer : '');
+  const correctionText = rrNow?.correction || '';
   renderInlineCorrection(String(correctionText || ''));
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
