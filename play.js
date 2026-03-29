@@ -1455,7 +1455,7 @@ function renderJoinQuestion(question) {
         renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
       }
     } else if (question.type === 'error_hunt') {
-      const required = Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
+      const required = Number(question.requiredErrors) || Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
       const promptEl = document.getElementById('joinPrompt');
       if (promptEl) {
         promptEl.innerHTML = '';
@@ -1897,7 +1897,7 @@ function readJoinAnswer() {
   if (q.type === 'error_hunt') {
     const selectedChips = [...joinAnswersEl.querySelectorAll('[data-error-token]')];
     const selected = selectedChips.filter((el) => el.classList.contains('active')).map((el) => Number(el.dataset.errorToken));
-    const required = countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]);
+    const required = Number(q.requiredErrors) || countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]);
     if (required === 0) {
       // No errors expected – accept if the rewritten text (if any) matches the prompt
       const rewrite = selectedChips
