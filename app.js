@@ -6946,7 +6946,7 @@ function buildPreviewSimulationState(question) {
     questionDeadlineAt: deadlineAt,
     questionClosedAt: previewMode.showReveal ? now : null,
     questionCloseReason: closeReason,
-    correctAnswer: '',
+    correctAnswer: previewMode.showReveal ? hostCorrectSummary(question) : '', // <--- FIX: Ensure the correct text is actually forwarded
     revealedResult: previewMode.revealedResult,
     leaderboard: simPlayers.slice(0, 10).map((p) => ({ name: p.name, score: p.score })),
   };
