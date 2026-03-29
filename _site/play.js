@@ -1,7 +1,7 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-const REACTION_EMOJIS = ['👍','🔥','😂','🤯','🙌','☕','🤔','👀','🧠','❤️','😅','😎','6️⃣','7️⃣'];
+const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
@@ -759,7 +759,11 @@ function renderInstantFeedbackFromState() {
     li.className = a.correct ? 'ok' : 'bad';
     const result = a.correct ? '✅ Correct' : '❌ Incorrect';
     const points = Number(a.points || 0);
-    const pointsText = points > 0 ? ` · +${points} points` : '';
+    
+    // FIX: Show negative deductions in the assignment recap list
+    let pointsText = '';
+    if (points > 0) pointsText = ` · +${points} points`;
+    else if (points < 0) pointsText = ` · ${points} points`;
     const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
     li.textContent = `${result}${pointsText}  ·  ${prompt}`;
     list.appendChild(li);
@@ -827,9 +831,64 @@ async function rerollRandomName() {
 
 function renderPlayerState(state) {
   const renderJoinReveal = () => {
-    // Removed - item highlighting replaces text reveal
-    if (!joinAnswersEl) return;
-    joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+    // Target the broader container to avoid flex-wrap collisions
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
+
+    const question = state.question;
+    const isPoll = !!question?.isPoll;
+    const show = !!state.questionClosed && !isPoll;
+    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+
+    if (!show || !needsReveal) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
+    let correctText = String(state.correctAnswer || '').trim();
+
+    if (!correctText) {
+      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'error_hunt') correctText = question.corrected || '';
+    }
+
+    if (!correctText) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
+    // If it doesn't exist, create it once
+    if (!revealEl) {
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
+
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+
+      const content = document.createElement('div');
+      content.className = 'student-answer-reveal-content';
+
+      revealEl.append(title, content);
+
+      // Better placement: drop it right above the submit button section
+      const submissionWrap = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+        wrap.insertBefore(revealEl, submissionWrap);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+
+    // Only update DOM if text actually changed
+    const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+    if (contentEl && contentEl.textContent !== correctText) {
+      contentEl.textContent = correctText;
+    }
   };
 
   const latestName = String(state?.name || '').trim();
@@ -851,26 +910,46 @@ function renderPlayerState(state) {
   };
 
   const renderInlineCorrection = (text = '') => {
-    const host = joinQuestionWrap || joinAnswersEl;
-    if (!host) return;
-    host.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
     const corr = String(text || '').trim();
     if (!corr) return;
 
     const studentText = getStudentAnswerTextFromUI();
-    const p = document.createElement('p');
+    const p = document.createElement('div');
     p.dataset.joinCorrectionInline = '1';
-    p.className = 'join-correction-inline top-space';
-    p.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+    
+    // Reuse the modern block, but color it for a teacher correction (red)
+    p.className = 'student-answer-reveal';
+    p.style.background = '#fef2f2';
+    p.style.borderColor = '#fca5a5';
+    p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
 
-    if (joinAnswersEl) {
-      joinAnswersEl.appendChild(p);
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.style.color = '#dc2626';
+    title.textContent = 'Teacher Feedback';
+
+    const content = document.createElement('div');
+    content.className = 'student-answer-reveal-content';
+    content.style.color = '#7f1d1d';
+    content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+
+    p.append(title, content);
+
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+      wrap.insertBefore(p, submissionWrap);
     } else {
-      host.appendChild(p);
+      wrap.appendChild(p);
     }
   };
 
   if (state.phase !== 'question' || !state.question) {
+    const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+    if (oldOverlay) oldOverlay.remove();
+
     applyJoinLayoutMode(false, null);
     stopJoinTimer();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: -';
@@ -963,7 +1042,15 @@ function renderPlayerState(state) {
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
     live.player.pinSelections = [];
+    
+    // --- NEW: Reset Bet UI state for the new question ---
     live.player.selectedBet = 0;
+    betSelected = false;
+    const betBtn = document.getElementById('betIndicator');
+    if (betBtn) {
+      betBtn.classList.remove('selected');
+    }
+
     renderJoinQuestion(state.question);
     setJoinStatusHud( '', '');
     animatePulse(joinQuestionWrap);
@@ -985,16 +1072,19 @@ function renderPlayerState(state) {
     lastClosedQuestionIndex = state.currentIndex;
   }
 
+  // Update shouldDisable to include answeredCurrent for both modes
+  const shouldDisable = questionClosed || assignmentSubmitted || !!state.answeredCurrent;
+
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
-    const isContinueMode = isAssignment && questionClosed && !assignmentSubmitted;
+    // Change to Continue if the question is closed OR if the student has already answered
+    const isContinueMode = isAssignment && (questionClosed || state.answeredCurrent) && !assignmentSubmitted;
 
     if (isContinueMode) {
       joinSubmitBtn.textContent = 'Continue';
       joinSubmitBtn.disabled = false;
     } else {
       joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
-      const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
       joinSubmitBtn.disabled = shouldDisable;
     }
 
@@ -1003,6 +1093,12 @@ function renderPlayerState(state) {
     if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
       setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
+  }
+
+  // --- NEW: Lock the bet button if the question is closed or answered ---
+  const betBtn = document.getElementById('betIndicator');
+  if (betBtn) {
+    betBtn.disabled = shouldDisable;
   }
 
   if (joinFinalizeBtn) {
@@ -1048,7 +1144,7 @@ function renderPlayerState(state) {
   }
 
   const rrNow = state.revealedResult;
-  const correctionText = rrNow?.correction || (rrNow ? state.correctAnswer : '');
+  const correctionText = rrNow?.correction || '';
   renderInlineCorrection(String(correctionText || ''));
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
@@ -1072,7 +1168,12 @@ function renderPlayerState(state) {
           // Highlight items: green for correct, red for student's wrong answer
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
-          const pointsText = pts > 0 ? ` · +${pts} points` : '';
+          
+          // FIX: Show negative deductions properly
+          let pointsText = '';
+          if (pts > 0) pointsText = ` · +${pts} points`;
+          else if (pts < 0) pointsText = ` · ${pts} points`; 
+          
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
             feedback += ` · Correct: ${state.correctAnswer}`;
@@ -1172,7 +1273,9 @@ function applyAdaptiveFitJoin() {
 
 function applyJoinLayoutMode(active, question = null) {
   if (!joinCardEl) return;
-  joinCardEl.classList.toggle('question-active', !!active);
+  const isActive = !!active;
+  joinCardEl.classList.toggle('question-active', isActive);
+  document.body.classList.toggle('question-active', isActive);
   const qType = String(question?.type || '').trim();
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
@@ -1180,6 +1283,9 @@ function applyJoinLayoutMode(active, question = null) {
 }
 
 function renderJoinQuestion(question) {
+  const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+  if (oldOverlay) oldOverlay.remove();
+
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
@@ -1216,7 +1322,9 @@ function renderJoinQuestion(question) {
       imgSrc = `${base}/api/media/${imgSrc}`;
     }
     if (joinQuestionWrap) {
-      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+      if (question.type !== 'match_pairs') {
+        joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+      }
     }
   }
 
@@ -1265,12 +1373,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.classList.add('two-col');
     }
 
-    if (question.type === 'multi') {
-      const badge = document.createElement('p');
-      badge.className = 'multi-select-badge';
-      badge.textContent = '☑️ Select ALL correct answers';
-      joinAnswersEl.appendChild(badge);
-    }
+
 
     if (question.type === 'audio') {
       const btn = document.createElement('button');
@@ -1318,7 +1421,39 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      if (question.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay'; // Removed host-mode to allow full-screen overlay
+        
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        let imgSrc = question.imageData;
+        if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
+          const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+          imgSrc = `${base}/api/media/${imgSrc}`;
+        }
+        img.src = imgSrc;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
+        
+        overlay.append(imgWrap, pairsWrap);
+        
+        // Insert into the background wrap behind the interactive sticky bar
+        const interactiveSection = document.getElementById('joinQuestionInteractive');
+        if (joinQuestionWrap && interactiveSection) {
+          joinQuestionWrap.insertBefore(overlay, interactiveSection);
+        } else {
+          joinAnswersEl.appendChild(overlay);
+        }
+      } else {
+        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      }
     } else if (question.type === 'error_hunt') {
       const required = Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
       const promptEl = document.getElementById('joinPrompt');
@@ -1362,10 +1497,7 @@ function renderJoinQuestion(question) {
       // Enable inline edits/merges; rewrite will be built from tokens on submit
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
     } else if (question.type === 'speaking') {
-      const note = document.createElement('p');
-      note.className = 'small';
-      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
-      joinAnswersEl.appendChild(note);
+      // No instruction text as requested
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -1394,18 +1526,18 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'slider') {
     const wrap = document.createElement('div');
+    wrap.className = 'slider-inline-wrap';
     const value = Number(question.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${question.min} to ${question.max}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
       <input id="joinSlider" type="range" min="${question.min}" max="${question.max}" step="1" value="${value}" />
-      <p id="joinSliderValue" class="small">Selected: ${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+      <div id="joinSliderValue" class="slider-big-val">${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</div>
     `;
     joinAnswersEl.appendChild(wrap);
 
     const slider = document.getElementById('joinSlider');
     const out = document.getElementById('joinSliderValue');
     slider?.addEventListener('input', () => {
-      out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
+      out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
     });
     appendRiskBetBar();
     appendReactionBar();
@@ -1441,12 +1573,15 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
+    const pinMode = String(question.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
-    const countLabel = document.createElement('p');
-    countLabel.className = 'small';
-    countLabel.textContent = pinMode === 'all' ? `Pin all correct spots: 0 / ${required}` : 'Pin one correct spot: 0 / 1';
+    const countLabel = document.createElement('div');
+    countLabel.className = 'pin-count-big';
+    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
 
     wrap.append(img, picksLayer);
     container.append(countLabel, wrap);
@@ -1455,9 +1590,11 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = pinMode === 'all'
-        ? `Pin all correct spots: ${picks.length} / ${required}`
-        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      if (pinMode === 'any') {
+        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
+      } else {
+        countLabel.textContent = `${picks.length} / ${required}`;
+      }
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -1524,7 +1661,7 @@ function appendRiskBetBar() {
   const bets = [
     { value: 1, emoji: '🤔', bonus: '+15%', penalty: '-5%' },
     { value: 2, emoji: '😬', bonus: '+25%', penalty: '-15%' },
-    { value: 3, emoji: '🔥', bonus: '+40%', penalty: '-30%' },
+    { value: 3, emoji: '🔥', bonus: '+40%', penalty: '-40%' }, // <-- FIXED: Displays -40% accurately now instead of 30%
   ];
 
   bets.forEach((b) => {
@@ -1673,6 +1810,7 @@ async function submitLiveAnswer() {
           attemptId,
           qIndex,
           answer,
+          bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
         },
       });
 
@@ -1696,7 +1834,7 @@ async function submitLiveAnswer() {
         pin: live.player.pin,
         playerId: live.player.id,
         answer,
-        bet: Number(live.player.selectedBet || 0),
+        bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
       },
     });
 
@@ -1755,7 +1893,7 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'match_pairs') {
-    const fields = [...joinAnswersEl.querySelectorAll('[data-join-pair]')];
+    const fields = [...document.querySelectorAll('[data-join-pair]')]; // Scope broadened to catch elements in the overlay
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
   }
@@ -1972,7 +2110,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     lineLayer.setAttribute('width', String(wrapRect.width));
     lineLayer.setAttribute('height', String(wrapRect.height));
 
-    rows.forEach((row) => {
+    rows.forEach((row, idx) => {
       const value = String(row.hidden.value || '').trim();
       if (!value) return;
       const target = rightButtonsByValue.get(value);
@@ -1986,11 +2124,15 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       const x2 = rightRect.left - wrapRect.left;
       const y2 = rightRect.top + (rightRect.height / 2) - wrapRect.top;
 
+      const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+      const lineColor = colorList[idx % colorList.length];
+
       const line = document.createElementNS(svgNs, 'line');
       line.setAttribute('x1', String(Math.max(0, x1)));
       line.setAttribute('y1', String(Math.max(0, y1)));
       line.setAttribute('x2', String(Math.max(0, x2)));
       line.setAttribute('y2', String(Math.max(0, y2)));
+      line.setAttribute('stroke', lineColor);
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });
@@ -2114,9 +2256,8 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'btn top-space puzzle-reset';
+  resetBtn.className = 'btn puzzle-reset';
   resetBtn.textContent = 'Reset order';
-  resetBtn.style.alignSelf = 'center';
 
   let draggedRow = null;
 
@@ -2270,9 +2411,10 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   options.forEach((text, i) => {
     bank.appendChild(buildBankButton(String(text || ''), i));
   });
+  bank.appendChild(resetBtn);
   refreshBankButtons();
 
-  wrap.append(bank, selected, resetBtn);
+  wrap.append(bank, selected);
   container.appendChild(wrap);
 }
 
@@ -2358,9 +2500,10 @@ function highlightAnswerItems(isCorrect, state) {
   }
 
   // Context gap
+  // Context gap
   if (question.type === 'context_gap') {
     highlightContextGap(question);
-    // FALL THROUGH
+    return; // Text reveal handled inline
   }
 
   // Slider: show correct value
@@ -2374,12 +2517,6 @@ function highlightAnswerItems(isCorrect, state) {
     showPinFeedback(question, state);
     return;
   }
-
-  // Open/Speaking/Image_open/Text/Context gap: show correct answer text
-  if (['open', 'speaking', 'image_open', 'text', 'context_gap'].includes(question.type)) {
-    showTextAnswerFeedback(question, state);
-    return;
-  }
 }
 
 // MCQ/TF/Multi highlighting
@@ -2389,9 +2526,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
 
-
-
-  // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
+  // Parse correct answer index from server's correctAnswer string
   if (correctAnswerStr && typeof correctAnswerStr === 'string') {
     if (isMulti) {
       correctAnswerStr.split('|').forEach(part => {
@@ -2404,12 +2539,10 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     }
   }
 
-  // Fallback: use question.answers[].correct if available (teacher/host side)
+  // Fallback: use question.answers[].correct if available
   if (correctIndexes.size === 0) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
-
-
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
@@ -2420,12 +2553,19 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
     const isCorrect = correctIndexes.has(origIdx);
     const isSelected = selectedIndexes.has(origIdx);
+    
+    // Reset any previous states
+    row.classList.remove('correct-highlight', 'incorrect-highlight', 'correct-missed', 'ignored-option');
+
     if (isCorrect && isSelected) {
-      row.classList.add('correct-highlight');
-    } else if (isCorrect && !isSelected) {
-      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight');
+      row.classList.add('correct-highlight');         // Option 2 (True Positive)
     } else if (!isCorrect && isSelected) {
-      row.classList.add('incorrect-highlight');
+      row.classList.add('incorrect-highlight');       // Option 1 (False Positive)
+    } else if (isCorrect && !isSelected) {
+      // Single choice: solid green. Multi-select: dashed green.
+      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight'); // Option 4 (Missed)
+    } else {
+      row.classList.add('ignored-option');            // Option 3 (True Negative)
     }
   });
 }
@@ -2433,7 +2573,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
 // Match pairs: highlight each pair row
 function highlightMatchPairs(question) {
   const pairs = question.pairs || [];
-  const fields = joinAnswersEl.querySelectorAll('[data-join-pair]');
+  const fields = document.querySelectorAll('[data-join-pair]'); // Scope broadened to catch elements in the overlay
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim();
     if (!val) return;
@@ -2451,27 +2591,74 @@ function highlightMatchPairs(question) {
 // Error hunt: highlight selected tokens
 function highlightErrorHunt(question) {
   const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
-  const promptWords = (question.prompt || '').split(/\s+/);
-  const correctedWords = (question.corrected || '').split(/\s+/);
-  // Build set of error token indexes (words that differ between prompt and corrected)
-  const errorIndexes = new Set();
-  let pi = 0, ci = 0;
-  const pWords = tokenizeWords(question.prompt || '');
-  const cWords = tokenizeWords(question.corrected || '');
-  // Simple diff: mark positions where prompt word != corrected word
-  for (let i = 0; i < pWords.length; i++) {
-    if (!cWords[i] || pWords[i].toLowerCase() !== cWords[i].toLowerCase()) {
-      errorIndexes.add(i);
+  const variants = getCorrectedVariantsList(question.corrected, question.correctedVariants);
+  if (!variants.length) return;
+
+  const source = tokenizeWords(question.prompt).map(normalizeTextAnswer);
+  let bestErrorIndexes = new Set();
+  let minDiff = Infinity;
+
+  // Find the variant that results in the fewest errors (best match)
+  for (const v of variants) {
+    const target = tokenizeWords(v).map(normalizeTextAnswer);
+    const errorIndexes = new Set();
+
+    if (source.length && target.length) {
+      const rows = source.length + 1;
+      const cols = target.length + 1;
+      const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+      for (let i = 0; i < rows; i++) dp[i][0] = i;
+      for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+      for (let i = 1; i < rows; i++) {
+        for (let j = 1; j < cols; j++) {
+          if (source[i - 1] === target[j - 1]) {
+            dp[i][j] = dp[i - 1][j - 1];
+          } else {
+            dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+          }
+        }
+      }
+
+      let i = source.length;
+      let j = target.length;
+
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+          i--; j--;
+        } else {
+          // Use the Levenshtein backtrack logic to identify exactly which token positions are changed
+          if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+            errorIndexes.add(i - 1);
+            i--; j--;
+          } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+            errorIndexes.add(i - 1);
+            i--;
+          } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+            errorIndexes.add(Math.max(0, i - 1));
+            j--;
+          } else {
+            if (i > 0) i--;
+            else j--;
+          }
+        }
+      }
+    }
+
+    if (errorIndexes.size < minDiff) {
+      minDiff = errorIndexes.size;
+      bestErrorIndexes = errorIndexes;
     }
   }
 
   tokens.forEach((token, idx) => {
     const isActive = token.classList.contains('active');
-    if (errorIndexes.has(idx) && isActive) {
+    if (bestErrorIndexes.has(idx) && isActive) {
       token.classList.add('correct-highlight');
-    } else if (errorIndexes.has(idx) && !isActive) {
+    } else if (bestErrorIndexes.has(idx) && !isActive) {
       token.classList.add('correct-missed');
-    } else if (!errorIndexes.has(idx) && isActive) {
+    } else if (!bestErrorIndexes.has(idx) && isActive) {
       token.classList.add('incorrect-highlight');
     }
   });
@@ -2491,7 +2678,7 @@ function showSliderFeedback(question, state) {
   if (!isNaN(correctVal)) {
     slider.value = correctVal;
     const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
-    if (out) out.innerHTML = `Your answer: ${studentVal}${unit} · Correct: <strong>${correctVal}${unit}</strong>`;
+    if (out) out.innerHTML = `<span style="color:var(--muted);font-size:1.4rem;text-decoration:line-through;margin-right:12px;">${studentVal}</span> <strong>${correctVal}${unit}</strong>`;
   }
 }
 
@@ -2512,28 +2699,7 @@ function showPinFeedback(question, state) {
   });
 }
 
-// Open/Speaking/Image_open/Text/Context gap: show correct answer text
-function showTextAnswerFeedback(question, state) {
-  const el = joinFeedbackEl;
-  if (!el) return;
-  let correct = String(state.correctAnswer || question.correctAnswer || question.corrected || '').trim();
 
-  if (!correct && question.type === 'context_gap') {
-    const prompt = String(question.prompt || '').trim();
-    const gaps = question.gaps || [];
-    let gapIdx = 0;
-    const markerRe = /(\_{2,}|\[\s*\])/g;
-    correct = prompt.replace(markerRe, (match) => {
-      const raw = gaps[gapIdx++] || '';
-      const first = raw.split(',')[0].trim();
-      return first || match;
-    });
-  }
-
-  if (correct) {
-    el.innerHTML = `<span style="color:var(--ok)">✓</span> <strong>${escapeHtml(correct)}</strong>`;
-  }
-}
 
 // Context gap: highlight each input
 function highlightContextGap(question) {
@@ -2632,6 +2798,7 @@ function initBetControl() {
   const betBtn = document.getElementById('betIndicator');
   if (!betBtn) return;
   betBtn.addEventListener('click', () => {
+    if (betBtn.disabled) return; // Prevent toggling if already answered
     betSelected = !betSelected;
     betBtn.classList.toggle('selected', betSelected);
     live.player.selectedBet = betSelected ? 3 : 0; // 3 = +40%
@@ -2817,46 +2984,83 @@ function normalizeTextAnswer(text) {
 
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
-  const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(correctedStr);
-  if (!source.length || !target.length) return 1;
+  // 1. Support both single strings and arrays of multiple acceptable variants
+  const variants = Array.isArray(corrected) ? corrected : [corrected];
+  const validVariants = variants.map(v => String(v || '').trim()).filter(Boolean);
+  if (!validVariants.length) return 1;
 
-  // If lengths match, count direct mismatches after normalization
-  if (source.length === target.length) {
-    let diff = 0;
-    for (let i = 0; i < source.length; i++) {
-      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
-    }
-    return diff || 1;
-  }
+  let maxErrors = 1;
 
-  // Otherwise use edit distance but clamp to avoid over-counting
-  const rows = source.length + 1;
-  const cols = target.length + 1;
-  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  // 2. Calculate the required errors for each variant and take the maximum
+  for (const correctedStr of validVariants) {
+    const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+    const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
+    
+    if (!source.length || !target.length) continue;
+    if (source.join(' ') === target.join(' ')) continue;
 
-  for (let i = 0; i < rows; i++) dp[i][0] = i;
-  for (let j = 0; j < cols; j++) dp[0][j] = j;
+    const rows = source.length + 1;
+    const cols = target.length + 1;
+    const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
 
-  for (let i = 1; i < rows; i++) {
-    for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
-      if (same) {
-        dp[i][j] = dp[i - 1][j - 1];
-      } else {
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1,
-          dp[i][j - 1] + 1,
-          dp[i - 1][j - 1] + 1,
-        );
+    // Initialize DP table
+    for (let i = 0; i < rows; i++) dp[i][0] = i;
+    for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+    // Fill DP table
+    for (let i = 1; i < rows; i++) {
+      for (let j = 1; j < cols; j++) {
+        if (source[i - 1] === target[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(
+            dp[i - 1][j],       // Deletion
+            dp[i][j - 1],       // Insertion
+            dp[i - 1][j - 1]    // Substitution
+          );
+        }
       }
     }
+
+    // Backtrack to count contiguous blocks of edits
+    let i = source.length;
+    let j = target.length;
+    let inError = false;
+    let errorBlocks = 0;
+
+    while (i > 0 || j > 0) {
+      // If characters match and we didn't add an edit cost
+      if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+        inError = false;
+        i--; j--;
+      } else {
+        // If we hit an error and weren't already tracking an error block
+        if (!inError) {
+          errorBlocks++;
+          inError = true;
+        }
+        
+        // Move in the direction of the minimum cost
+        if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+          i--; j--;
+        } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+          i--;
+        } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+          j--;
+        } else {
+          if (i > 0) i--;
+          else j--;
+        }
+      }
+    }
+
+    // Track the highest number of mistakes found across all valid sentence variations
+    if (errorBlocks > maxErrors) {
+      maxErrors = errorBlocks;
+    }
   }
 
-  const dist = dp[source.length][target.length] || 1;
-  const maxOps = Math.max(source.length, target.length);
-  return Math.max(1, Math.min(dist, maxOps));
+  return Math.max(1, maxErrors);
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {

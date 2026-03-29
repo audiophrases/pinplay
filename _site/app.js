@@ -300,6 +300,12 @@ const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
 const creationPromptToggleEl = document.getElementById('creationPromptToggle');
 const creationPromptBodyEl = document.getElementById('creationPromptBody');
+const builderSettingsToggleEl = document.getElementById('builderSettingsToggle');
+const builderSettingsBodyEl = document.getElementById('builderSettingsBody');
+const builderTypesToggleEl = document.getElementById('builderTypesToggle');
+const builderTypesBodyEl = document.getElementById('builderTypesBody');
+const builderQuestionsToggleEl = document.getElementById('builderQuestionsToggle');
+const builderQuestionsBodyEl = document.getElementById('builderQuestionsBody');
 const exportPromptBtn = document.getElementById('exportPromptBtn');
 const promptStatusEl = document.getElementById('promptStatus');
 const liveScreenSectionToggleEl = document.getElementById('liveScreenSectionToggle');
@@ -521,6 +527,7 @@ const live = {
     currentQuestion: null,
     pinSelection: null,
     pinSelections: [],
+    selectedBet: 0, // <-- FIXED: Add missing variable
   },
 };
 
@@ -537,6 +544,18 @@ const audioFx = {
   final: createAudio('../music/final.mp3', { loop: false, volume: 1 }),
 };
 
+let betSelected = false;
+function initBetControl() {
+  const betBtn = document.getElementById('betIndicator');
+  if (!betBtn) return;
+  betBtn.addEventListener('click', () => {
+    if (betBtn.disabled) return;
+    betSelected = !betSelected;
+    betBtn.classList.toggle('selected', betSelected);
+    live.player.selectedBet = betSelected ? 3 : 0;
+  });
+}
+
 function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
@@ -545,6 +564,7 @@ function init() {
   bindLiveEvents();
   bindCollapsibleSections();
   bindSoloEvents();
+  initBetControl(); // <-- FIXED: Initialize event bindings for bets!
   window.addEventListener('resize', scheduleHostAdaptiveFit);
 
   renderBuilder();
@@ -678,6 +698,9 @@ function toggleTeacherSectionCollapseAll() {
 function bindCollapsibleSections() {
   bindSectionToggle(builderSectionToggleEl, builderCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(creationPromptToggleEl, creationPromptBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(builderSettingsToggleEl, builderSettingsBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(builderTypesToggleEl, builderTypesBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(builderQuestionsToggleEl, builderQuestionsBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
@@ -1690,6 +1713,7 @@ function renderBuilder() {
             <select data-q="${idx}" data-field="pinMode">
               <option value="all" ${String(q.pinMode || 'all') === 'all' ? 'selected' : ''}>All spots must be pinned</option>
               <option value="any" ${String(q.pinMode || 'all') === 'any' ? 'selected' : ''}>Any one spot is enough</option>
+              ${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => `<option value="${n}" ${String(q.pinMode) === String(n) ? 'selected' : ''}>Exactly ${n} spots</option>`).join('')}
             </select>
           </div>
         </div>
@@ -2317,7 +2341,8 @@ function syncQuizFromUI() {
       }).slice(0, 12);
       q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
       q.zone = q.zones[0];
-      q.pinMode = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all') === 'any' ? 'any' : 'all';
+      q.pinMode = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all';
+      if (q.pinMode !== 'any' && q.pinMode !== 'all') q.pinMode = String(q.pinMode);
     }
   });
 }
@@ -2932,6 +2957,14 @@ function bindLiveEvents() {
   }
 
   document.addEventListener('keydown', handleHostHotkeys);
+
+  // Click anywhere to close the scoreboard
+  document.addEventListener('click', (e) => {
+    const modal = document.getElementById('projectorScoreboardSection');
+    if (modal && modal.classList.contains('visible')) {
+      stopRankingAnimationMode();
+    }
+  });
 }
 
 async function createLiveGame() {
@@ -2972,6 +3005,20 @@ async function createLiveGame() {
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
     if (livePinHudEl) livePinHudEl.textContent = data.pin;
+
+    // --- NEW: Update QR Code ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && data.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+    }
+
+    // --- NEW: Auto-expand and scroll to the Live Screen section ---
+    if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+      setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+      liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     setStatus(hostStatusEl, 'Live game created. Share the PIN with students.', 'ok');
 
     startHostPolling();
@@ -3635,6 +3682,20 @@ async function joinLiveGameAsHostByPin() {
     if (livePinEl) livePinEl.textContent = data.pin;
     if (livePinBigEl) livePinBigEl.textContent = data.pin;
     if (livePinHudEl) livePinHudEl.textContent = data.pin;
+
+    // --- NEW: Update QR Code ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && data.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+    }
+
+    // --- NEW: Auto-expand and scroll to the Live Screen section ---
+    if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+      setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+      liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     setStatus(hostStatusEl, 'Joined as host by PIN. Controls are live.', 'ok');
 
     startHostPolling();
@@ -3673,8 +3734,6 @@ function startRankingAnimationMode() {
   state.players.forEach((p) => {
     const prev = Number(live.host.lastScoresByPlayer?.[p.id]);
     const end = Number(toMap[p.id] || 0);
-    // If we don't have a reliable previous score (or it equals current),
-    // fall back to 0 so R always produces a visible count-up effect.
     if (!Number.isFinite(prev) || prev === end) {
       fromMap[p.id] = 0;
     } else {
@@ -3687,14 +3746,23 @@ function startRankingAnimationMode() {
   live.host.rankingAnimStartAt = Date.now();
   live.host.rankingMode = true;
   playFx('counter');
+
+  // ✅ SHOW MODAL
+  const modal = document.getElementById('projectorScoreboardSection');
+  if (modal) modal.classList.add('visible');
+
   renderHostState(state);
 }
 
 function stopRankingAnimationMode() {
-  if (!live.host.rankingMode) return;
   live.host.rankingMode = false;
   cancelRankingAnimationFrame();
   stopFx('counter');
+
+  // ✅ HIDE MODAL
+  const modal = document.getElementById('projectorScoreboardSection');
+  if (modal) modal.classList.remove('visible');
+
   if (live.host.state) renderHostState(live.host.state);
 }
 
@@ -3853,9 +3921,20 @@ function handleHostHotkeys(e) {
     return;
   }
 
+  const modal = document.getElementById('projectorScoreboardSection');
+
+  // If modal is visible and ANY key is pressed (except 'r'), close it.
+  if (modal && modal.classList.contains('visible') && e.key !== 'r' && e.key !== 'R') {
+    stopRankingAnimationMode();
+  }
+
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
-    startRankingAnimationMode();
+    if (modal && modal.classList.contains('visible')) {
+      stopRankingAnimationMode();
+    } else {
+      startRankingAnimationMode();
+    }
     return;
   }
 
@@ -4508,7 +4587,16 @@ function renderHostState(state) {
   if (liveResponsesEl) liveResponsesEl.textContent = `${state.responseCount} / ${state.playerCount}`;
   renderReactionPop(state.reactions || []);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
-  if (livePinBigEl) livePinBigEl.textContent = state.pin || '-';
+  if (livePinBigEl) {
+    livePinBigEl.textContent = state.pin || '-';
+    // --- NEW: Keep QR in sync with any PIN changes natively ---
+    const qrEl = document.querySelector('.hall-qr');
+    if (qrEl && state.pin) {
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${state.pin}`;
+      const expectedSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
+      if (qrEl.src !== expectedSrc) qrEl.src = expectedSrc;
+    }
+  }
   if (livePinHudEl) livePinHudEl.textContent = state.pin || '-';
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
@@ -4681,8 +4769,12 @@ function renderHostState(state) {
   if (state.phase === 'results' && live.host.lastPhase !== 'results') {
     stopFx('answering');
     stopFx('answered');
-    // final.mp3 is now triggered by the staged final reveal sequence (after drumroll + winner reveal)
     stopFx('final');
+    stopFx('drumrollwinner');
+    
+    // ✅ AUTO-SHOW MODAL FOR FINAL RESULTS
+    const modal = document.getElementById('projectorScoreboardSection');
+    if (modal) modal.classList.add('visible');
   }
 
   if (state.phase !== 'results') {
@@ -4986,7 +5078,7 @@ function renderHostQuestion(state) {
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -5024,18 +5116,16 @@ function renderHostQuestion(state) {
 
       const tag = document.createElement('strong');
       tag.textContent = `${displayNum + 1}.`;
+      tag.style.display = 'none'; // <--- FIX: Safely hides the number
+
       const txt = document.createElement('span');
       txt.textContent = a.text;
-      row.append(tag, txt);
+      
+      row.append(tag, txt); // Keeps the DOM structure perfectly intact
       hostQuestionAnswersEl.appendChild(row);
     });
 
-    if (question.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Students must select all correct answers.';
-      hostQuestionAnswersEl.appendChild(hint);
-    }
+
 
     hostQuestionHintEl.textContent = question.type === 'audio' ? 'Audio question.' : '';
     return;
@@ -5109,23 +5199,47 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'match_pairs') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Match pairs question.';
-    if (!showReveal) {
-      renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+    hostQuestionHintEl.textContent = '';
+    if (question.imageData) {
+      const overlay = document.createElement('div');
+      overlay.id = 'matchPairsCenterOverlay';
+      overlay.className = 'match-pairs-center-overlay host-mode';
+      
+      const imgWrap = document.createElement('div');
+      imgWrap.className = 'match-pairs-img-wrap';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.dataset.zoomable = '1';
+      imgWrap.appendChild(img);
+      
+      const pairsWrap = document.createElement('div');
+      pairsWrap.className = 'match-pairs-content-wrap';
+      if (!showReveal) {
+        renderMatchPairsPreview(pairsWrap, question.leftItems || [], question.rightOptions || []);
+      } else {
+        renderMatchPairsReveal(pairsWrap, question.pairs || []);
+      }
+      
+      overlay.append(imgWrap, pairsWrap);
+      hostQuestionAnswersEl.appendChild(overlay);
     } else {
-      renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
+      if (!showReveal) {
+        renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+      } else {
+        renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
+      }
     }
     return;
   }
 
   if (question.type === 'error_hunt') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Error hunt: click wrong token(s), rewrite sentence.';
+    hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'puzzle') {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Puzzle question.';
+    hostQuestionHintEl.textContent = '';
     if (question.options?.length) {
       const p = document.createElement('p');
       p.className = 'small';
@@ -5147,13 +5261,13 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'slider') {
-    hostQuestionHintEl.textContent = showReveal ? '' : `Slider range: ${question.min} to ${question.max}${question.unit ? ` ${question.unit}` : ''}`;
+    hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
 
   if (question.type === 'pin') {
-    hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : 'Pin answer question.';
+    hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : '';
     if (question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview';
@@ -5503,11 +5617,13 @@ function updateHallScene(state) {
   const scoreboardSection = document.getElementById('projectorScoreboardSection');
 
   if (state.phase === 'lobby') {
+    // 1. FIX: Force the lobby to become visible!
+    hallCardEl.classList.remove('hidden'); 
     hallCardEl.classList.add('hall-live');
     hallHintEl.textContent = '';
+    
     // Hide hint text and scoreboard during lobby
     if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
-    if (scoreboardSection) scoreboardSection.style.display = 'none';
 
     // Render lobby player chips inside the hall card
     if (hallLobbyPlayersEl) {
@@ -5539,11 +5655,14 @@ function updateHallScene(state) {
     return;
   }
 
+  // 2. FIX: Force the lobby to hide when the quiz actually starts!
+  hallCardEl.classList.add('hidden'); 
   hallCardEl.classList.remove('hall-live');
   stopHallMusic();
+  
   // Restore hint text and scoreboard when quiz is active
   if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
-  if (scoreboardSection) scoreboardSection.style.display = '';
+  
   // Clear lobby player chips
   if (hallLobbyPlayersEl) {
     hallLobbyPlayersEl.innerHTML = '';
@@ -5793,27 +5912,147 @@ async function pollPlayerState() {
   }
 }
 
+function getStudentAnswerTextFromUI() {
+  const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
+  if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
+  
+  const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
+  if (errorHuntChips && errorHuntChips.length > 0) {
+    return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
+  }
+
+  const selected = [...(joinAnswersEl?.querySelectorAll('[data-puzzle-piece], input:checked + span') || [])]
+    .map((el) => String(el.textContent || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  return selected;
+}
+
+function escapeHtmlText(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildCorrectionDiffHtml(correction, original) {
+  const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
+  const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
+  return tokens.map((tok) => {
+    const safe = escapeHtmlText(tok);
+    const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
+    const word = core ? String(core).toLowerCase() : null;
+    if (!word || origWords.has(word)) return safe;
+    return `<span class="join-correction-diff">${safe}</span>`;
+  }).join('');
+}
+
 function renderPlayerState(state) {
   joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   joinScoreEl.textContent = `Score: ${state.score}`;
 
   const renderJoinReveal = () => {
-    if (!joinAnswersEl) return;
-    joinAnswersEl.querySelectorAll('[data-join-correct-reveal="1"]').forEach((el) => el.remove());
+    // Target the broader container to avoid flex-wrap collisions
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
 
-    const isPoll = !!state.question?.isPoll;
+    const question = state.question;
+    const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const text = String(state.correctAnswer || '').trim();
-    if (!show || !text) return;
+    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
-    const reveal = document.createElement('div');
-    reveal.className = 'project-text-reveal';
-    reveal.dataset.joinCorrectReveal = '1';
-    reveal.textContent = text;
-    joinAnswersEl.appendChild(reveal);
+    if (!show || !needsReveal) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
+    let correctText = String(state.correctAnswer || '').trim();
+
+    if (!correctText) {
+      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'error_hunt') correctText = question.corrected || '';
+    }
+
+    if (!correctText) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
+    // If it doesn't exist, create it once
+    if (!revealEl) {
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
+
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+
+      const content = document.createElement('div');
+      content.className = 'student-answer-reveal-content';
+
+      revealEl.append(title, content);
+
+      // Better placement: drop it right above the submit button section
+      const submissionWrap = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+        wrap.insertBefore(revealEl, submissionWrap);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+
+    // Only update DOM if text actually changed
+    const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+    if (contentEl && contentEl.textContent !== correctText) {
+      contentEl.textContent = correctText;
+    }
+  };
+
+
+  const renderInlineCorrection = (text = '') => {
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    const corr = String(text || '').trim();
+    if (!corr) return;
+
+    const studentText = getStudentAnswerTextFromUI();
+    const p = document.createElement('div');
+    p.dataset.joinCorrectionInline = '1';
+    
+    // Reuse the modern block, but color it for a teacher correction (red)
+    p.className = 'student-answer-reveal';
+    p.style.background = '#fef2f2';
+    p.style.borderColor = '#fca5a5';
+    p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
+
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.style.color = '#dc2626';
+    title.textContent = 'Teacher Feedback';
+
+    const content = document.createElement('div');
+    content.className = 'student-answer-reveal-content';
+    content.style.color = '#7f1d1d';
+    content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+
+    p.append(title, content);
+
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+      wrap.insertBefore(p, submissionWrap);
+    } else {
+      wrap.appendChild(p);
+    }
   };
 
   if (state.phase !== 'question' || !state.question) {
+    const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+    if (oldOverlay) oldOverlay.remove();
     joinQuestionWrap.classList.add('hidden');
 
     if (state.phase === 'lobby') {
@@ -5851,9 +6090,7 @@ function renderPlayerState(state) {
       : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Time is up. Waiting for next question…');
 
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && String(rr.correction || '').trim()) {
-      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
-    } else if (!isPoll && rr && rr.graded === true) {
+    if (rr?.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
     } else {
       setStatus(joinFeedbackEl, isPoll ? '🗳️ Poll closed. Results on projector.' : closedMsg, 'ok');
@@ -5861,9 +6098,7 @@ function renderPlayerState(state) {
     setStatus(joinStatusEl, isPoll ? 'Poll closed.' : 'Question closed.', 'ok');
   } else if (joinSubmitBtn.disabled) {
     const rr = state.revealedResult || null;
-    if (!isPoll && rr && String(rr.correction || '').trim()) {
-      setStatus(joinFeedbackEl, `Teacher correction: ${String(rr.correction).trim()}`, rr.correct ? 'ok' : 'bad');
-    } else if (!isPoll && rr && rr.graded === true) {
+    if (rr?.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
     } else {
       setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
@@ -5873,10 +6108,17 @@ function renderPlayerState(state) {
     setStatus(joinStatusEl, 'Question live!', 'ok');
   }
 
+  const rrNow = state.revealedResult;
+  const correctionText = rrNow?.correction || '';
+  renderInlineCorrection(String(correctionText || ''));
+
   renderJoinReveal();
 }
 
 function renderJoinQuestion(question) {
+  const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+  if (oldOverlay) oldOverlay.remove();
+
   // context_gap renders the sentence inline with blanks, so avoid duplicating the same text above.
   joinPromptEl.textContent = question.type === 'context_gap' ? '' : (question.prompt || '(No question text)');
   joinAnswersEl.innerHTML = '';
@@ -5893,7 +6135,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -5924,12 +6166,7 @@ function renderJoinQuestion(question) {
       joinAnswersEl.appendChild(row);
     });
 
-    if (question.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Select all correct answers.';
-      joinAnswersEl.appendChild(hint);
-    }
+
 
     if (hasQuestionAudio(question)) {
       const btn = document.createElement('button');
@@ -6043,7 +6280,24 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      if (question.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay host-mode';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        img.src = question.imageData;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
+        overlay.append(imgWrap, pairsWrap);
+        joinAnswersEl.appendChild(overlay);
+      } else {
+        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      }
     } else if (question.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
@@ -6092,12 +6346,11 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'slider') {
     const wrap = document.createElement('div');
-
+    wrap.className = 'slider-inline-wrap';
     const value = Number(question.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${question.min} to ${question.max}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
       <input id="joinSlider" type="range" min="${question.min}" max="${question.max}" step="1" value="${value}" />
-      <p id="joinSliderValue" class="small">Selected: ${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</p>
+      <div id="joinSliderValue" class="slider-big-val">${value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}</div>
     `;
     joinAnswersEl.appendChild(wrap);
 
@@ -6130,12 +6383,15 @@ function renderJoinQuestion(question) {
     picksLayer.className = 'pin-picks-layer';
 
     const zones = Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }];
-    const pinMode = String(question.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const required = pinMode === 'all' ? Math.max(1, Math.min(12, zones.length)) : 1;
+    const pinMode = String(question.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = Math.max(1, Math.min(12, zones.length));
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
 
-    const countLabel = document.createElement('p');
-    countLabel.className = 'small';
-    countLabel.textContent = `Pin all correct spots: 0 / ${required}`;
+    const countLabel = document.createElement('div');
+    countLabel.className = 'pin-count-big';
+    countLabel.textContent = `0 / ${pinMode === 'any' ? 1 : required}`;
 
     wrap.append(img, picksLayer);
     joinAnswersEl.appendChild(wrap);
@@ -6144,9 +6400,11 @@ function renderJoinQuestion(question) {
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
-      countLabel.textContent = pinMode === 'all'
-        ? `Pin all correct spots: ${picks.length} / ${required}`
-        : `Pin one correct spot: ${Math.min(1, picks.length)} / 1`;
+      if (pinMode === 'any') {
+        countLabel.textContent = `${Math.min(1, picks.length)} / 1`;
+      } else {
+        countLabel.textContent = `${picks.length} / ${required}`;
+      }
       picks.forEach((p) => {
         const dot = document.createElement('div');
         dot.className = 'pin-dot';
@@ -6345,6 +6603,11 @@ function startPreviewMode() {
   }
   if (previewJumpBtn) previewJumpBtn.classList.remove('hidden');
 
+  // --- NEW: Auto-expand the Live Screen section so Preview is visible ---
+  if (liveScreenSectionToggleEl && liveScreenCardBodyEl) {
+    setSectionCollapsed(liveScreenSectionToggleEl, liveScreenCardBodyEl, false);
+  }
+
   renderPreviewFrame();
   setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
   hostQuestionCardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -6380,7 +6643,7 @@ function buildPreviewHostQuestion(q) {
     imageData: String(q.imageData || '') || undefined,
     zones: q.type === 'pin' ? normalizePinZones(q) : undefined,
     zone: q.type === 'pin' ? normalizePinZones(q)[0] : undefined,
-    pinMode: q.type === 'pin' ? (String(q.pinMode || 'all') === 'any' ? 'any' : 'all') : undefined,
+    pinMode: q.type === 'pin' ? (['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all')) : undefined,
   };
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
@@ -6450,9 +6713,13 @@ function evaluatePreviewAnswer(q, answer) {
       .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
-    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
+    const pinMode = String(q.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = zones.length;
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
-    const ok = pinMode === 'any' ? coveredCount >= 1 : coveredCount >= zones.length;
+    const ok = coveredCount >= required;
     return { correct: ok };
   }
   return { correct: false };
@@ -6545,10 +6812,23 @@ function buildPreviewPlayersSim(count, profile, timingProfile, points = 1000) {
     const hasBet = answeredCurrent && seededUnit(`${previewMode.simQuestionSeed}:${rank}:bet`) < 0.4;
     const betPool = [1, 2, 3];
     const bet = hasBet ? betPool[Math.floor(seededUnit(`${previewMode.simQuestionSeed}:${rank}:betv`) * betPool.length)] : 0;
+    // Simulate score and incorporate their mathematical bet consequence
+    let score = 1000;
+    if (answeredCurrent) {
+      if (correct) {
+        const baseAwarded = Math.max(0, points - (rank * 20));
+        const bonusRate = bet === 1 ? 0.15 : (bet === 2 ? 0.25 : (bet === 3 ? 0.4 : 0));
+        score += Math.round(baseAwarded * (1 + bonusRate));
+      } else {
+        const penaltyRate = bet === 1 ? 0.05 : (bet === 2 ? 0.15 : (bet === 3 ? 0.4 : 0));
+        score -= Math.round(points * penaltyRate);
+      }
+    }
+
     players.push({
       id: `p${rank}`,
       name: previewMode.simNames?.[i] || `Student ${rank}`,
-      score: correct ? Math.max(0, points - (rank * 20)) : Math.max(0, Math.round(points * 0.1)),
+      score: Math.max(0, score),
       answeredCurrent,
       previewResult: answeredCurrent ? (correct ? 'correct' : 'wrong') : 'none',
       previewBet: bet,
@@ -6769,7 +7049,7 @@ function buildPreviewSimulationState(question) {
     questionDeadlineAt: deadlineAt,
     questionClosedAt: previewMode.showReveal ? now : null,
     questionCloseReason: closeReason,
-    correctAnswer: '',
+    correctAnswer: previewMode.showReveal ? hostCorrectSummary(question) : '', // <--- FIX: Ensure the correct text is actually forwarded
     revealedResult: previewMode.revealedResult,
     leaderboard: simPlayers.slice(0, 10).map((p) => ({ name: p.name, score: p.score })),
   };
@@ -6834,17 +7114,28 @@ function bindSoloEvents() {
     const q = quiz.questions[soloGame.index];
     const result = evaluateSoloQuestion(q);
 
+    const basePoints = Number(q.points || 1000);
+    let pts = 0;
+
+    // FIX: Apply Solo Mode Bet Math
     if (result.correct) {
-      soloGame.score += Number(q.points || 1000);
-      setStatus(feedbackEl, 'Correct ✅', 'ok');
+      pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
+      soloGame.score += pts;
+      setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
     } else {
-      setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}`.trim(), 'bad');
+      pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
+      soloGame.score += pts;
+      const ptsText = pts < 0 ? ` (${pts} pts)` : '';
+      setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}${ptsText}`.trim(), 'bad');
     }
 
     soloGame.answered = true;
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
     scoreEl.textContent = `Score: ${soloGame.score}`;
+
+    const betBtn = document.getElementById('betIndicator');
+    if (betBtn) betBtn.disabled = true;
   });
 
   nextBtn.addEventListener('click', () => {
@@ -6878,6 +7169,15 @@ function renderSoloQuestion() {
   soloGame.pinSelection = null;
   soloGame.puzzleOptions = null;
 
+  // FIX: Reset bet button cleanly
+  live.player.selectedBet = 0;
+  betSelected = false;
+  const betBtn = document.getElementById('betIndicator');
+  if (betBtn) {
+    betBtn.classList.remove('selected');
+    betBtn.disabled = false;
+  }
+
   setStatus(feedbackEl, '', '');
   submitBtn.classList.remove('hidden');
   nextBtn.classList.add('hidden');
@@ -6904,12 +7204,7 @@ function renderSoloQuestion() {
       answersEl.appendChild(row);
     });
 
-    if (q.type === 'multi') {
-      const hint = document.createElement('p');
-      hint.className = 'small';
-      hint.textContent = 'Select all correct answers.';
-      answersEl.appendChild(hint);
-    }
+
 
     if (hasQuestionAudio(q)) {
       const btn = document.createElement('button');
@@ -7024,7 +7319,24 @@ function renderSoloQuestion() {
     } else if (q.type === 'match_pairs') {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
-      renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
+      if (q.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay host-mode';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        img.src = q.imageData;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'soloPair');
+        overlay.append(imgWrap, pairsWrap);
+        answersEl.appendChild(overlay);
+      } else {
+        renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
+      }
     } else if (q.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
@@ -7070,18 +7382,18 @@ function renderSoloQuestion() {
 
   if (q.type === 'slider') {
     const wrap = document.createElement('div');
+    wrap.className = 'slider-inline-wrap';
     const value = Number(q.min || 0);
     wrap.innerHTML = `
-      <p class="small">Range: ${q.min} to ${q.max}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
       <input id="soloSlider" type="range" min="${q.min}" max="${q.max}" step="1" value="${value}" />
-      <p id="soloSliderValue" class="small">Selected: ${value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</p>
+      <div id="soloSliderValue" class="slider-big-val">${value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}</div>
     `;
     answersEl.appendChild(wrap);
 
     const slider = document.getElementById('soloSlider');
     const out = document.getElementById('soloSliderValue');
     slider.addEventListener('input', () => {
-      out.textContent = `Selected: ${slider.value}${q.unit ? ` ${q.unit}` : ''}`;
+      out.textContent = `${slider.value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}`;
     });
     return;
   }
@@ -7215,9 +7527,13 @@ function evaluateSoloQuestion(q) {
       const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, Number(z.x || 50), Number(z.y || 50));
       return d <= Number(z.r || 15);
     }).length;
-    const pinMode = String(q.pinMode || 'all') === 'any' ? 'any' : 'all';
-    const ok = pinMode === 'any' ? hits >= 1 : hits >= zones.length;
-    return { correct: ok, hint: ok ? '' : (pinMode === 'all' ? 'Try closer to all target areas.' : 'Try closer to a target area.') };
+    const pinMode = String(q.pinMode || 'all');
+    let required = 1;
+    if (pinMode === 'all') required = zones.length;
+    else if (pinMode === 'any') required = 1;
+    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
+    const ok = hits >= required;
+    return { correct: ok, hint: ok ? '' : (required > 1 ? `Try closer to all ${required} target areas.` : 'Try closer to a target area.') };
   }
 
   return { correct: false };
@@ -7724,7 +8040,7 @@ function normalizeQuizForLive(raw) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: String(q.pinMode || 'all') === 'any' ? 'any' : 'all',
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all'),
       });
       return;
     }
@@ -8333,46 +8649,83 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
-  const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(correctedStr);
-  if (!source.length || !target.length) return 1;
+  // 1. Support both single strings and arrays of multiple acceptable variants
+  const variants = Array.isArray(corrected) ? corrected : [corrected];
+  const validVariants = variants.map(v => String(v || '').trim()).filter(Boolean);
+  if (!validVariants.length) return 1;
 
-  // If lengths match, count direct mismatches after normalization
-  if (source.length === target.length) {
-    let diff = 0;
-    for (let i = 0; i < source.length; i++) {
-      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
-    }
-    return diff || 1;
-  }
+  let maxErrors = 1;
 
-  // Otherwise use edit distance but clamp to avoid over-counting
-  const rows = source.length + 1;
-  const cols = target.length + 1;
-  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  // 2. Calculate the required errors for each variant and take the maximum
+  for (const correctedStr of validVariants) {
+    const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+    const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
+    
+    if (!source.length || !target.length) continue;
+    if (source.join(' ') === target.join(' ')) continue;
 
-  for (let i = 0; i < rows; i++) dp[i][0] = i;
-  for (let j = 0; j < cols; j++) dp[0][j] = j;
+    const rows = source.length + 1;
+    const cols = target.length + 1;
+    const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
 
-  for (let i = 1; i < rows; i++) {
-    for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
-      if (same) {
-        dp[i][j] = dp[i - 1][j - 1];
-      } else {
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1,
-          dp[i][j - 1] + 1,
-          dp[i - 1][j - 1] + 1,
-        );
+    // Initialize DP table
+    for (let i = 0; i < rows; i++) dp[i][0] = i;
+    for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+    // Fill DP table
+    for (let i = 1; i < rows; i++) {
+      for (let j = 1; j < cols; j++) {
+        if (source[i - 1] === target[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(
+            dp[i - 1][j],       // Deletion
+            dp[i][j - 1],       // Insertion
+            dp[i - 1][j - 1]    // Substitution
+          );
+        }
       }
     }
+
+    // Backtrack to count contiguous blocks of edits
+    let i = source.length;
+    let j = target.length;
+    let inError = false;
+    let errorBlocks = 0;
+
+    while (i > 0 || j > 0) {
+      // If characters match and we didn't add an edit cost
+      if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+        inError = false;
+        i--; j--;
+      } else {
+        // If we hit an error and weren't already tracking an error block
+        if (!inError) {
+          errorBlocks++;
+          inError = true;
+        }
+        
+        // Move in the direction of the minimum cost
+        if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+          i--; j--;
+        } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+          i--;
+        } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+          j--;
+        } else {
+          if (i > 0) i--;
+          else j--;
+        }
+      }
+    }
+
+    // Track the highest number of mistakes found across all valid sentence variations
+    if (errorBlocks > maxErrors) {
+      maxErrors = errorBlocks;
+    }
   }
 
-  const dist = dp[source.length][target.length] || 1;
-  const maxOps = Math.max(source.length, target.length);
-  return Math.max(1, Math.min(dist, maxOps));
+  return Math.max(1, maxErrors);
 }
 
 function getErrorHuntRequired(q) {
@@ -8752,7 +9105,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     lineLayer.setAttribute('width', String(wrapRect.width));
     lineLayer.setAttribute('height', String(wrapRect.height));
 
-    rows.forEach((row) => {
+    rows.forEach((row, idx) => {
       const value = String(row.hidden.value || '').trim();
       if (!value) return;
       const target = rightButtonsByValue.get(value);
@@ -8766,11 +9119,15 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
       const x2 = rightRect.left - wrapRect.left;
       const y2 = rightRect.top + (rightRect.height / 2) - wrapRect.top;
 
+      const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+      const lineColor = colorList[idx % colorList.length];
+
       const line = document.createElementNS(svgNs, 'line');
       line.setAttribute('x1', String(Math.max(0, x1)));
       line.setAttribute('y1', String(Math.max(0, y1)));
       line.setAttribute('x2', String(Math.max(0, x2)));
       line.setAttribute('y2', String(Math.max(0, y2)));
+      line.setAttribute('stroke', lineColor);
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });
@@ -8974,6 +9331,10 @@ function renderMatchPairsReveal(container, pairs) {
       line.setAttribute('y1', String(Math.max(0, l.top + (l.height / 2) - wrapRect.top)));
       line.setAttribute('x2', String(Math.max(0, r.left - wrapRect.left)));
       line.setAttribute('y2', String(Math.max(0, r.top + (r.height / 2) - wrapRect.top)));
+      
+      const colorList =['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+      line.setAttribute('stroke', colorList[i % colorList.length]);
+
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });
@@ -9011,7 +9372,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'btn top-space';
+  resetBtn.className = 'btn puzzle-reset';
   resetBtn.textContent = 'Reset order';
 
   let draggedRow = null;
@@ -9166,9 +9527,10 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   [...options].forEach((text, i) => {
     bank.appendChild(buildBankButton(String(text || ''), i));
   });
+  bank.appendChild(resetBtn);
   refreshBankButtons();
 
-  container.append(bank, resetBtn, selected);
+  container.append(bank, selected);
 }
 function speakText(text, lang = 'en-US', onEnd = null) {
   const value = String(text || '').trim();
@@ -9317,4 +9679,3 @@ function setupImageLightbox() {
 
 
 init();
-

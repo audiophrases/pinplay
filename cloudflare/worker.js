@@ -2993,15 +2993,27 @@ function evaluate(question, answer) {
 
   if (question.type === 'error_hunt') {
     const rewrite = normalizeTextAnswer(answer?.rewrite ?? answer);
-    const expected = normalizeTextAnswer(question.corrected || '');
-    const variants = Array.isArray(question.correctedVariants) ? question.correctedVariants : [];
-    const normalizedVariants = variants.map((v) => normalizeTextAnswer(v));
+    const variants = getCorrectedVariantsList(question.corrected, question.correctedVariants);
     const selected = Array.isArray(answer?.selectedTokens) ? answer.selectedTokens.map((x) => Number(x)).filter(Number.isFinite) : [];
-    const required = countErrorHuntRequiredTokens(question.prompt, question.corrected);
+    const required = countErrorHuntRequiredTokens(question.prompt, getCorrectedVariantsList(question.corrected, question.correctedVariants));
     const uniqueCount = new Set(selected).size;
     if (uniqueCount !== required) return { correct: false };
     if (!rewrite) return { correct: false };
-    const isCorrect = rewrite === expected || normalizedVariants.includes(rewrite);
+
+    let isCorrect = false;
+    const rewriteTokens = tokenizeWords(rewrite);
+    for (const v of variants) {
+      const vNorm = normalizeTextAnswer(v);
+      if (rewrite === vNorm) {
+        isCorrect = true;
+        break;
+      }
+      const dist = tokenEditDistance(rewriteTokens, tokenizeWords(vNorm));
+      if (dist <= 1) {
+        isCorrect = true;
+        break;
+      }
+    }
     return { correct: isCorrect };
   }
 
@@ -3329,6 +3341,34 @@ function isMatchPairsCorrect(answer, pairsRaw) {
     if (JSON.stringify(expected) !== JSON.stringify(got)) return false;
   }
   return true;
+}
+
+function tokenEditDistance(aTokens, bTokens) {
+  const a = aTokens || [];
+  const b = bTokens || [];
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const same = normalizeTextAnswer(a[i - 1]) === normalizeTextAnswer(b[j - 1]);
+      dp[i][j] = same
+        ? dp[i - 1][j - 1]
+        : Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + 1);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function getCorrectedVariantsList(corrected, correctedVariants) {
+  if (Array.isArray(correctedVariants) && correctedVariants.length) {
+    return correctedVariants.map((v) => String(v || '').trim()).filter(Boolean);
+  }
+  const raw = String(corrected || '').trim();
+  if (!raw) return [];
+  return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
