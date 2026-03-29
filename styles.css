@@ -1502,3 +1502,94 @@ body.question-active .join-title-row {
   margin: 0.5rem 0;
   text-align: center;
 }
+
+/* ==========================================================================
+   8. SCOREBOARD MODAL (Pop-up via 'R' key)
+   ========================================================================== */
+
+.scoreboard-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.scoreboard-modal.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scoreboard-modal-content {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  padding: 2.5rem;
+  width: min(90vw, 700px);
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  transform: scale(0.95) translateY(10px);
+  transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.scoreboard-modal.visible .scoreboard-modal-content {
+  transform: scale(1) translateY(0);
+}
+
+.projector-scores-large {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0 0;
+}
+
+.projector-scores-large li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.5rem;
+  background: #f8f9ff;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.projector-scores-large li.rank-1 {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  font-size: 1.8rem;
+}
+
+.projector-scores-large li.rank-2 {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  font-size: 1.65rem;
+}
+
+.projector-scores-large li.rank-3 {
+  background: #fff7ed;
+  border-color: #fdba74;
+  font-size: 1.6rem;
+}
+
+.projector-score-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.projector-score-value {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}

@@ -253,6 +253,16 @@
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
+            
+            <!-- Pop-up Scoreboard Modal -->
+            <div id="projectorScoreboardSection" class="scoreboard-modal">
+              <div class="scoreboard-modal-content">
+                <h2 style="margin-top:0; color:var(--primary); font-size:2.5rem; text-align:center;">🏆 Scoreboard 🏆</h2>
+                <ul id="projectorScores" class="list projector-scores-large"></ul>
+                <p class="small muted" style="text-align:center; margin-top:1.5rem;">Click anywhere or press any key to close</p>
+              </div>
+            </div>
+
             <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
               <span>Live screen <span class="collapse-chevron" aria-hidden="true">▸</span></span>
               <span class="live-hud-row">
@@ -404,14 +414,7 @@
           </div>
         </div>
       </section>
-      <!-- Pop-up Scoreboard Modal -->
-      <div id="projectorScoreboardSection" class="scoreboard-modal">
-        <div class="scoreboard-modal-content">
-          <h2 style="margin-top:0; color:var(--primary); font-size:2.5rem; text-align:center;">🏆 Scoreboard 🏆</h2>
-          <ul id="projectorScores" class="list projector-scores-large"></ul>
-          <p class="small muted" style="text-align:center; margin-top:1.5rem;">Click anywhere or press any key to close</p>
-        </div>
-      </div>
+
     </main>
 
     <script src="../app.js?v=20260324-1615"></script>
