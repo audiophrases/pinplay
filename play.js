@@ -1276,7 +1276,9 @@ function renderJoinQuestion(question) {
       imgSrc = `${base}/api/media/${imgSrc}`;
     }
     if (joinQuestionWrap) {
-      joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+      if (question.type !== 'match_pairs') {
+        joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+      }
     }
   }
 
@@ -1373,7 +1375,39 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      if (question.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay'; // Removed host-mode to allow full-screen overlay
+        
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        let imgSrc = question.imageData;
+        if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
+          const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+          imgSrc = `${base}/api/media/${imgSrc}`;
+        }
+        img.src = imgSrc;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
+        
+        overlay.append(imgWrap, pairsWrap);
+        
+        // Insert into the background wrap behind the interactive sticky bar
+        const interactiveSection = document.getElementById('joinQuestionInteractive');
+        if (joinQuestionWrap && interactiveSection) {
+          joinQuestionWrap.insertBefore(overlay, interactiveSection);
+        } else {
+          joinAnswersEl.appendChild(overlay);
+        }
+      } else {
+        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      }
     } else if (question.type === 'error_hunt') {
       const required = Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
       const promptEl = document.getElementById('joinPrompt');
@@ -1813,7 +1847,7 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'match_pairs') {
-    const fields = [...joinAnswersEl.querySelectorAll('[data-join-pair]')];
+    const fields = [...document.querySelectorAll('[data-join-pair]')]; // Scope broadened to catch elements in the overlay
     const values = fields.map((el) => String(el.value || '').trim());
     return values.every(Boolean) ? values : null;
   }
@@ -2486,7 +2520,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
 // Match pairs: highlight each pair row
 function highlightMatchPairs(question) {
   const pairs = question.pairs || [];
-  const fields = joinAnswersEl.querySelectorAll('[data-join-pair]');
+  const fields = document.querySelectorAll('[data-join-pair]'); // Scope broadened to catch elements in the overlay
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim();
     if (!val) return;
