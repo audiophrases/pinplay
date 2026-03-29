@@ -8047,6 +8047,7 @@ function normalizeQuizForLive(raw) {
         zones,
         zone: zones[0],
         pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
+        zoneCount: zones.length,
       });
       return;
     }
