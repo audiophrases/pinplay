@@ -1036,6 +1036,74 @@ body.question-active .join-title-row {
   opacity: .95;
 }
 
+
+/* Match Pairs Centered Overlay */
+.match-pairs-center-overlay {
+  position: absolute;
+  top: 110px;
+  bottom: 160px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3rem;
+  z-index: 10;
+}
+
+.match-pairs-center-overlay.host-mode {
+  position: relative;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  margin: 1rem 0;
+  width: 100%;
+}
+
+.match-pairs-img-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.match-pairs-img-wrap img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+.match-pairs-content-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  height: 100%;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .match-pairs-center-overlay {
+    flex-direction: column;
+    top: 90px;
+    bottom: 120px;
+    gap: 1rem;
+  }
+  .match-pairs-img-wrap {
+    justify-content: center;
+    max-height: 25vh;
+  }
+  .match-pairs-content-wrap {
+    justify-content: center;
+  }
+}
+
 /* Puzzle */
 .puzzle-wrap {
   display: flex;
@@ -1075,6 +1143,17 @@ body.question-active .join-title-row {
   max-width: 820px;
   padding: 0;
   margin: 0 auto;
+}
+
+.puzzle-reset {
+  background: #f8f9fa !important;
+  border: 2px dashed #cbd5e1 !important;
+  color: var(--muted) !important;
+}
+
+.puzzle-reset:hover {
+  background: #f1f5f9 !important;
+  color: var(--text) !important;
 }
 
 .puzzle-selected .answer-row {

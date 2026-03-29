@@ -3328,8 +3328,12 @@ function isMatchPairsCorrect(answer, pairsRaw) {
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(corrected);
+  const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+  const target = tokenizeWords(corrected).map(normalizeTextAnswer);
+  if (!source.length || !target.length) return 1;
+
+  if (source.join(' ') === target.join(' ')) return 1;
+
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -3339,8 +3343,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
 
   for (let i = 1; i < rows; i++) {
     for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
-      if (same) {
+      if (source[i - 1] === target[j - 1]) {
         dp[i][j] = dp[i - 1][j - 1];
       } else {
         dp[i][j] = Math.min(
@@ -3352,7 +3355,31 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  return dp[source.length][target.length];
+  let i = source.length;
+  let j = target.length;
+  let isEditing = false;
+  let errorBlocks = 0;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && source[i - 1] === target[j - 1]) {
+      isEditing = false;
+      i--; j--;
+    } else {
+      if (!isEditing) {
+        errorBlocks++;
+        isEditing = true;
+      }
+      if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+        i--; j--;
+      } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+  }
+
+  return Math.max(1, errorBlocks);
 }
 
 function distance2D(x1, y1, x2, y2) {

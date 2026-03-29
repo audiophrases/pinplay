@@ -5078,7 +5078,7 @@ function renderHostQuestion(state) {
   const hasSharedImage = question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -5200,10 +5200,34 @@ function renderHostQuestion(state) {
 
   if (question.type === 'match_pairs') {
     hostQuestionHintEl.textContent = '';
-    if (!showReveal) {
-      renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+    if (question.imageData) {
+      const overlay = document.createElement('div');
+      overlay.id = 'matchPairsCenterOverlay';
+      overlay.className = 'match-pairs-center-overlay host-mode';
+      
+      const imgWrap = document.createElement('div');
+      imgWrap.className = 'match-pairs-img-wrap';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.dataset.zoomable = '1';
+      imgWrap.appendChild(img);
+      
+      const pairsWrap = document.createElement('div');
+      pairsWrap.className = 'match-pairs-content-wrap';
+      if (!showReveal) {
+        renderMatchPairsPreview(pairsWrap, question.leftItems || [], question.rightOptions || []);
+      } else {
+        renderMatchPairsReveal(pairsWrap, question.pairs || []);
+      }
+      
+      overlay.append(imgWrap, pairsWrap);
+      hostQuestionAnswersEl.appendChild(overlay);
     } else {
-      renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
+      if (!showReveal) {
+        renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
+      } else {
+        renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
+      }
     }
     return;
   }
@@ -5909,6 +5933,8 @@ function renderPlayerState(state) {
   };
 
   if (state.phase !== 'question' || !state.question) {
+    const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+    if (oldOverlay) oldOverlay.remove();
     joinQuestionWrap.classList.add('hidden');
 
     if (state.phase === 'lobby') {
@@ -5972,6 +5998,9 @@ function renderPlayerState(state) {
 }
 
 function renderJoinQuestion(question) {
+  const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+  if (oldOverlay) oldOverlay.remove();
+
   // context_gap renders the sentence inline with blanks, so avoid duplicating the same text above.
   joinPromptEl.textContent = question.type === 'context_gap' ? '' : (question.prompt || '(No question text)');
   joinAnswersEl.innerHTML = '';
@@ -5988,7 +6017,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -6133,7 +6162,24 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      if (question.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay host-mode';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        img.src = question.imageData;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
+        overlay.append(imgWrap, pairsWrap);
+        joinAnswersEl.appendChild(overlay);
+      } else {
+        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+      }
     } else if (question.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
@@ -7151,7 +7197,24 @@ function renderSoloQuestion() {
     } else if (q.type === 'match_pairs') {
       const leftItems = (q.pairs || []).map((p) => String(p.left || '').trim()).filter(Boolean);
       const rightOptions = shuffle((q.pairs || []).map((p) => String(p.right || '').trim()).filter(Boolean));
-      renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
+      if (q.imageData) {
+        const overlay = document.createElement('div');
+        overlay.id = 'matchPairsCenterOverlay';
+        overlay.className = 'match-pairs-center-overlay host-mode';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'match-pairs-img-wrap';
+        const img = document.createElement('img');
+        img.src = q.imageData;
+        img.dataset.zoomable = '1';
+        imgWrap.appendChild(img);
+        const pairsWrap = document.createElement('div');
+        pairsWrap.className = 'match-pairs-content-wrap';
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'soloPair');
+        overlay.append(imgWrap, pairsWrap);
+        answersEl.appendChild(overlay);
+      } else {
+        renderMatchPairsColumns(answersEl, leftItems, rightOptions, 'soloPair');
+      }
     } else if (q.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
@@ -8461,20 +8524,12 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
   const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(correctedStr);
+  const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+  const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
   if (!source.length || !target.length) return 1;
 
-  // If lengths match, count direct mismatches after normalization
-  if (source.length === target.length) {
-    let diff = 0;
-    for (let i = 0; i < source.length; i++) {
-      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
-    }
-    return diff || 1;
-  }
+  if (source.join(' ') === target.join(' ')) return 1;
 
-  // Otherwise use edit distance but clamp to avoid over-counting
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -8484,8 +8539,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
 
   for (let i = 1; i < rows; i++) {
     for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
-      if (same) {
+      if (source[i - 1] === target[j - 1]) {
         dp[i][j] = dp[i - 1][j - 1];
       } else {
         dp[i][j] = Math.min(
@@ -8497,9 +8551,31 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  const dist = dp[source.length][target.length] || 1;
-  const maxOps = Math.max(source.length, target.length);
-  return Math.max(1, Math.min(dist, maxOps));
+  let i = source.length;
+  let j = target.length;
+  let isEditing = false;
+  let errorBlocks = 0;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && source[i - 1] === target[j - 1]) {
+      isEditing = false;
+      i--; j--;
+    } else {
+      if (!isEditing) {
+        errorBlocks++;
+        isEditing = true;
+      }
+      if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+        i--; j--;
+      } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+  }
+
+  return Math.max(1, errorBlocks);
 }
 
 function getErrorHuntRequired(q) {
@@ -9138,7 +9214,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'btn top-space';
+  resetBtn.className = 'btn puzzle-reset';
   resetBtn.textContent = 'Reset order';
 
   let draggedRow = null;
@@ -9293,9 +9369,10 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   [...options].forEach((text, i) => {
     bank.appendChild(buildBankButton(String(text || ''), i));
   });
+  bank.appendChild(resetBtn);
   refreshBankButtons();
 
-  container.append(bank, resetBtn, selected);
+  container.append(bank, selected);
 }
 function speakText(text, lang = 'en-US', onEnd = null) {
   const value = String(text || '').trim();

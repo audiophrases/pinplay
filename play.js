@@ -2138,9 +2138,8 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'btn top-space puzzle-reset';
+  resetBtn.className = 'btn puzzle-reset';
   resetBtn.textContent = 'Reset order';
-  resetBtn.style.alignSelf = 'center';
 
   let draggedRow = null;
 
@@ -2294,9 +2293,10 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   options.forEach((text, i) => {
     bank.appendChild(buildBankButton(String(text || ''), i));
   });
+  bank.appendChild(resetBtn);
   refreshBankButtons();
 
-  wrap.append(bank, selected, resetBtn);
+  wrap.append(bank, selected);
   container.appendChild(wrap);
 }
 
@@ -2475,17 +2475,50 @@ function highlightMatchPairs(question) {
 // Error hunt: highlight selected tokens
 function highlightErrorHunt(question) {
   const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
-  const promptWords = (question.prompt || '').split(/\s+/);
-  const correctedWords = (question.corrected || '').split(/\s+/);
-  // Build set of error token indexes (words that differ between prompt and corrected)
+  const correctedStr = Array.isArray(question.correctedVariants) && question.correctedVariants.length 
+      ? question.correctedVariants[0] 
+      : question.corrected;
+      
+  const source = tokenizeWords(question.prompt).map(normalizeTextAnswer);
+  const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
   const errorIndexes = new Set();
-  let pi = 0, ci = 0;
-  const pWords = tokenizeWords(question.prompt || '');
-  const cWords = tokenizeWords(question.corrected || '');
-  // Simple diff: mark positions where prompt word != corrected word
-  for (let i = 0; i < pWords.length; i++) {
-    if (!cWords[i] || pWords[i].toLowerCase() !== cWords[i].toLowerCase()) {
-      errorIndexes.add(i);
+
+  if (source.length && target.length) {
+    const rows = source.length + 1;
+    const cols = target.length + 1;
+    const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+    for (let i = 0; i < rows; i++) dp[i][0] = i;
+    for (let j = 0; j < cols; j++) dp[0][j] = j;
+
+    for (let i = 1; i < rows; i++) {
+      for (let j = 1; j < cols; j++) {
+        if (source[i - 1] === target[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + 1);
+        }
+      }
+    }
+
+    let i = source.length;
+    let j = target.length;
+
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && source[i - 1] === target[j - 1]) {
+        i--; j--;
+      } else {
+        if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+          errorIndexes.add(i - 1);
+          i--; j--;
+        } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+          errorIndexes.add(i - 1);
+          i--;
+        } else {
+          errorIndexes.add(Math.max(0, i - 1));
+          j--;
+        }
+      }
     }
   }
 
@@ -2843,20 +2876,12 @@ function normalizeTextAnswer(text) {
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
   const correctedStr = Array.isArray(corrected) ? corrected.find((c) => !!c) : corrected;
-  const source = tokenizeWords(prompt);
-  const target = tokenizeWords(correctedStr);
+  const source = tokenizeWords(prompt).map(normalizeTextAnswer);
+  const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
   if (!source.length || !target.length) return 1;
 
-  // If lengths match, count direct mismatches after normalization
-  if (source.length === target.length) {
-    let diff = 0;
-    for (let i = 0; i < source.length; i++) {
-      if (normalizeTextAnswer(source[i]) !== normalizeTextAnswer(target[i])) diff += 1;
-    }
-    return diff || 1;
-  }
+  if (source.join(' ') === target.join(' ')) return 1;
 
-  // Otherwise use edit distance but clamp to avoid over-counting
   const rows = source.length + 1;
   const cols = target.length + 1;
   const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -2866,8 +2891,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
 
   for (let i = 1; i < rows; i++) {
     for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(source[i - 1]) === normalizeTextAnswer(target[j - 1]);
-      if (same) {
+      if (source[i - 1] === target[j - 1]) {
         dp[i][j] = dp[i - 1][j - 1];
       } else {
         dp[i][j] = Math.min(
@@ -2879,9 +2903,31 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
     }
   }
 
-  const dist = dp[source.length][target.length] || 1;
-  const maxOps = Math.max(source.length, target.length);
-  return Math.max(1, Math.min(dist, maxOps));
+  let i = source.length;
+  let j = target.length;
+  let isEditing = false;
+  let errorBlocks = 0;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && source[i - 1] === target[j - 1]) {
+      isEditing = false;
+      i--; j--;
+    } else {
+      if (!isEditing) {
+        errorBlocks++;
+        isEditing = true;
+      }
+      if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+        i--; j--;
+      } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+  }
+
+  return Math.max(1, errorBlocks);
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
