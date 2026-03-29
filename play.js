@@ -1069,11 +1069,13 @@ function renderPlayerState(state) {
     lastClosedQuestionIndex = state.currentIndex;
   }
 
-  const shouldDisable = questionClosed || assignmentSubmitted || (live.player.mode === 'live' ? !!state.answeredCurrent : false);
+  // Update shouldDisable to include answeredCurrent for both modes
+  const shouldDisable = questionClosed || assignmentSubmitted || !!state.answeredCurrent;
 
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
-    const isContinueMode = isAssignment && questionClosed && !assignmentSubmitted;
+    // Change to Continue if the question is closed OR if the student has already answered
+    const isContinueMode = isAssignment && (questionClosed || state.answeredCurrent) && !assignmentSubmitted;
 
     if (isContinueMode) {
       joinSubmitBtn.textContent = 'Continue';
