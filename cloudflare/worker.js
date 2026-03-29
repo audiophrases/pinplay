@@ -3046,7 +3046,6 @@ function evaluate(question, answer) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
-    else if (Number.isFinite(Number(pinMode))) required = Math.max(1, Math.min(12, Number(pinMode)));
     const ok = coveredCount >= required;
     return { correct: ok };
   }
@@ -3208,7 +3207,7 @@ function normalizeQuiz(quiz) {
         imageData: String(q.imageData || ''),
         zones,
         zone: zones[0],
-        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (Number.isFinite(Number(q.pinMode)) ? String(q.pinMode) : 'all'),
+        pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : 'all',
       });
     }
   });
