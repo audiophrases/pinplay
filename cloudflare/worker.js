@@ -2998,7 +2998,7 @@ function evaluate(question, answer) {
     const selected = Array.isArray(answer?.selectedTokens) ? answer.selectedTokens.map((x) => Number(x)).filter(Number.isFinite) : [];
     const required = countErrorHuntRequiredTokens(question.prompt, getCorrectedVariantsList(question.corrected, question.correctedVariants));
     const uniqueCount = new Set(selected).size;
-    if (uniqueCount !== required) return { correct: false };
+    if (uniqueCount === 0 && required > 0) return { correct: false };
     if (!rewrite) return { correct: false };
 
     let isCorrect = false;

@@ -337,12 +337,18 @@ textarea {
   border: 1px solid var(--line);
   border-radius: .6rem;
   overflow: hidden;
-  max-width: 480px;
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
   cursor: crosshair;
 }
 
 .pin-preview img {
-  width: 100%;
+  max-width: 100%;
+  max-height: 80vh; /* Prevents extremely tall images from taking over the screen in the builder */
+  width: auto;
+  height: auto;
   display: block;
 }
 
@@ -536,7 +542,10 @@ textarea {
 /* 2. Center the image itself and keep rounded corners */
 #hostQuestionCard .question-image-preview img,
 #hostQuestionCard .pin-preview img {
+  max-width: 100%;
   max-height: min(40vh, 480px);
+  width: auto !important;
+  height: auto !important;
   object-fit: contain;
   display: block;
   margin: 0 auto;

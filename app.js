@@ -6213,6 +6213,7 @@ function renderJoinQuestion(question) {
         b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
         b.dataset.tokenText = tok;
+        b.dataset.originalText = tok;
         b.textContent = tok;
 
         const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
@@ -7247,6 +7248,7 @@ function renderSoloQuestion() {
         b.className = 'btn error-token-chip';
         b.dataset.soloErrorToken = String(i);
         b.dataset.tokenText = tok;
+        b.dataset.originalText = tok;
         b.textContent = tok;
 
         const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
