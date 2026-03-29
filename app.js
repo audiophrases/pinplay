@@ -9307,6 +9307,10 @@ function renderMatchPairsReveal(container, pairs) {
       line.setAttribute('y1', String(Math.max(0, l.top + (l.height / 2) - wrapRect.top)));
       line.setAttribute('x2', String(Math.max(0, r.left - wrapRect.left)));
       line.setAttribute('y2', String(Math.max(0, r.top + (r.height / 2) - wrapRect.top)));
+      
+      const colorList =['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+      line.setAttribute('stroke', colorList[i % colorList.length]);
+
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });

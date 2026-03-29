@@ -1030,7 +1030,6 @@ body.question-active .join-title-row {
 }
 
 .match-connection-line {
-  stroke: #605dff;
   stroke-width: 5;
   stroke-linecap: round;
   opacity: .95;

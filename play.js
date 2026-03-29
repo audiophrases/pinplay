@@ -947,6 +947,9 @@ function renderPlayerState(state) {
   };
 
   if (state.phase !== 'question' || !state.question) {
+    const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+    if (oldOverlay) oldOverlay.remove();
+
     applyJoinLayoutMode(false, null);
     stopJoinTimer();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: -';
@@ -1280,6 +1283,9 @@ function applyJoinLayoutMode(active, question = null) {
 }
 
 function renderJoinQuestion(question) {
+  const oldOverlay = document.getElementById('matchPairsCenterOverlay');
+  if (oldOverlay) oldOverlay.remove();
+
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
