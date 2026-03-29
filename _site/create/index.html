@@ -27,100 +27,244 @@
 
         <div id="createWorkspace" class="hidden">
           <div class="card" id="builderCard">
-            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              Quiz builder <span class="collapse-chevron" aria-hidden="true">▾</span>
+            <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              Quiz builder <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
-            <div id="builderCardBody">
-            <div class="row gap top-space quiz-actions" id="builderActionRow">
-              <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
-              <button id="openLocalBtn" class="btn">Open</button>
-              <button id="saveBtn" class="btn">Save</button>
-              <button id="openCloudBtn" class="btn">☁️ Open</button>
-              <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
-              <button id="importBtn" class="btn" type="button">Import</button>
-              <input id="importInput" type="file" accept="application/json" hidden />
-              <button id="exportBtn" class="btn">Export</button>
-              <button id="publishDriveBtn" class="btn" style="display:none">Save Drive</button>
-              <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
-            </div>
-
-            <label>Quiz title</label>
-            <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
-
-            <div class="row gap top-space" id="quizAudioDefaultsRow">
-              <div style="min-width:220px;">
-                <label>Hear questions</label>
-                <select id="quizTtsLanguage">
-                  <option value="NONE">Don't hear questions</option>
-                  <option value="EN">English</option>
-                  <option value="CA">Català</option>
-                  <option value="FR">Français</option>
-                  <option value="OTHER">Other</option>
-                </select>
+            <div id="builderCardBody" class="hidden">
+              <!-- Creation Prompt Section -->
+              <div class="creation-prompt-section">
+                <button id="creationPromptToggle" class="section-toggle-btn prompt-toggle" type="button" aria-expanded="false">
+                  <span>✨ AI Creation Prompt</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="creationPromptBody" class="section-collapsible-body hidden">
+                  <div class="creation-prompt-grid">
+                    <div class="prompt-field">
+                      <label>Theme</label>
+                      <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Language</label>
+                      <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Level</label>
+                      <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Feel</label>
+                      <input id="promptFeel" type="text" placeholder="e.g. Fun, Academic, Intense" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Time limit (sec)</label>
+                      <input id="promptTimeLimit" type="number" value="30" min="0" max="300" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Questions</label>
+                      <input id="promptQuestionCount" type="number" value="10" min="1" max="50" />
+                    </div>
+                    <div class="prompt-field">
+                      <label>Images</label>
+                      <select id="promptImages">
+                        <option value="yes">Include images</option>
+                        <option value="no">No images</option>
+                      </select>
+                    </div>
+                    <div class="prompt-field">
+                      <label>Audio/TTS</label>
+                      <select id="promptAudio">
+                        <option value="yes">Include TTS audio</option>
+                        <option value="no">No audio</option>
+                      </select>
+                    </div>
+                    <div class="prompt-field">
+                      <label>Answers</label>
+                      <select id="promptAnswerType">
+                        <option value="balanced">Balanced mix</option>
+                        <option value="closed">Closed only (MCQ/TF)</option>
+                        <option value="open">Include open/voice answers</option>
+                      </select>
+                    </div>
+                    <div class="prompt-field">
+                      <label>Goal</label>
+                      <select id="promptGoal">
+                        <option value="learning">More learning (scaffolded)</option>
+                        <option value="practising">More practising (retrieval)</option>
+                        <option value="balanced">Balanced mix (S-R-S-R)</option>
+                        <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
+                        <option value="fading_scaffolding">Fading: SSSS → RR</option>
+                        <option value="intensive_retrieval">Intensive: R → S → RRR</option>
+                        <option value="diagnostic_start">Diagnostic: RRR → SSS</option>
+                        <option value="sandwich_mode">Sandwich: S → RRR → S</option>
+                        <option value="ratio_10_90">10% Scaffolded / 90% Retrieval</option>
+                        <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
+                        <option value="ratio_50_50">50% Scaffolded / 50% Retrieval</option>
+                        <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
+                        <option value="ratio_90_10">90% Scaffolded / 10% Retrieval</option>
+                        <option value="mixed_alternation">Mixed: S-R alternation</option>
+                        <option value="block_progression">Blocks: SSS then RRR</option>
+                        <option value="spiral_review">Spiral: S-R → complex S-R</option>
+                        <option value="deep_retrieval">Deep Retrieval (R only)</option>
+                        <option value="guided_discovery">Guided Discovery (S only)</option>
+                        <option value="challenge_lifelines">Challenge: R with S feedback</option>
+                        <option value="mastery_path">Mastery: S concepts then R test</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="prompt-field full-width top-space">
+                    <label>Question Types</label>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
+                      <select id="promptTypesMode" style="width: auto; min-width: 200px;">
+                        <option value="include">Include ONLY selected</option>
+                        <option value="exclude">Exclude selected</option>
+                        <option value="all" selected>Use all available types</option>
+                      </select>
+                      <button type="button" class="btn small" id="promptSelectAllTypes">Select all</button>
+                      <button type="button" class="btn small" id="promptClearAllTypes">Clear</button>
+                    </div>
+                    <div class="prompt-types-grid" id="promptTypesList">
+                      <label class="type-pill"><input type="checkbox" value="mcq" checked> <span>MCQ</span></label>
+                      <label class="type-pill"><input type="checkbox" value="multi" checked> <span>Multi</span></label>
+                      <label class="type-pill"><input type="checkbox" value="tf" checked> <span>T/F</span></label>
+                      <label class="type-pill"><input type="checkbox" value="text" checked> <span>Text</span></label>
+                      <label class="type-pill"><input type="checkbox" value="context_gap" checked> <span>Gap fill</span></label>
+                      <label class="type-pill"><input type="checkbox" value="match_pairs" checked> <span>Match</span></label>
+                      <label class="type-pill"><input type="checkbox" value="error_hunt" checked> <span>Error Hunt</span></label>
+                      <label class="type-pill"><input type="checkbox" value="puzzle" checked> <span>Puzzle</span></label>
+                      <label class="type-pill"><input type="checkbox" value="slider" checked> <span>Slider</span></label>
+                      <label class="type-pill"><input type="checkbox" value="pin" checked> <span>Pin spot</span></label>
+                      <label class="type-pill"><input type="checkbox" value="open" checked> <span>Open</span></label>
+                      <label class="type-pill"><input type="checkbox" value="image_open" checked> <span>Image Open</span></label>
+                      <label class="type-pill"><input type="checkbox" value="speaking" checked> <span>Speaking</span></label>
+                    </div>
+                  </div>
+                  <div class="prompt-field top-space">
+                    <button type="button" class="btn primary" id="exportPromptBtn" style="width: 100%; height: 100%; font-size: 1.1rem;">
+                      ✨ Generate AI Prompt
+                    </button>
+                  </div>
+                  <div id="promptStatus" class="small top-space"></div>
+                </div>
               </div>
-              <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
-                <label>Language / voice</label>
-                <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
-                <select id="quizTtsOtherVoice">
-                </select>
+
+              <div class="builder-section">
+                <button id="builderSettingsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span>⚙️ Settings & Actions</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="builderSettingsBody" class="section-collapsible-body hidden">
+                  <div class="row gap quiz-actions" id="builderActionRow">
+                    <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
+                    <button id="openLocalBtn" class="btn">Open</button>
+                    <button id="saveBtn" class="btn">Save</button>
+                    <button id="openCloudBtn" class="btn">☁️ Open</button>
+                    <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
+                    <button id="importBtn" class="btn" type="button">Import</button>
+                    <input id="importInput" type="file" accept="application/json" hidden />
+                    <button id="exportBtn" class="btn">Export</button>
+                    <button id="publishDriveBtn" class="btn" style="display:none">Save Drive</button>
+                    <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
+                  </div>
+
+                  <label>Quiz title</label>
+                  <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+
+                  <div class="row gap top-space" id="quizAudioDefaultsRow">
+                    <div style="min-width:220px;">
+                      <label>Hear questions</label>
+                      <select id="quizTtsLanguage">
+                        <option value="NONE">Don't hear questions</option>
+                        <option value="EN">English</option>
+                        <option value="CA">Català</option>
+                        <option value="FR">Français</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
+                      <label>Language / voice</label>
+                      <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
+                      <select id="quizTtsOtherVoice">
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div class="top-space">
-              <p class="small"><strong>Question types</strong></p>
-              <div class="question-type-grid" id="questionTypeGrid">
-                <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
+              <div class="builder-section">
+                <button id="builderTypesToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span>➕ Question types</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
-                <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
-                </button>
-                <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
-                  <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
-                </button>
-                <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
-                  <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
-                </button>
-                <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
-                </button>
-                <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
-                </button>
-                <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
-                  <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
-                </button>
-                <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
-                  <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
-                </button>
-                <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
-                  <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
-                </button>
-                <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
-                </button>
-                <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
-                </button>
-                <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
-                  <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
-                </button>
+                <div id="builderTypesBody" class="section-collapsible-body hidden">
+                  <div class="question-type-grid" id="questionTypeGrid">
+                    <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
+                      <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
+                    </button>
+                    <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
+                      <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
+                    </button>
+                    <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
+                      <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
+                    </button>
+                    <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
+                      <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
+                    </button>
+                    <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
+                      <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
+                    </button>
+                    <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
+                      <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
+                    </button>
+                    <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
+                      <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
+                    </button>
+                    <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
+                      <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
+                    </button>
+                    <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
+                      <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
+                    </button>
+                    <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
+                      <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
+                    </button>
+                    <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
+                      <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
+                    </button>
+                    <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
+                      <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <!-- Audio options are now inside each question type card -->
-
-            <div class="row gap top-space">
-              <button id="collapseAllBtn" class="btn">Collapse all</button>
-            </div>
-
-            <div id="questionList" class="question-list"></div>
+              <div class="builder-section">
+                <button id="builderQuestionsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span>📝 Questions</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="builderQuestionsBody" class="section-collapsible-body hidden">
+                  <div class="row gap">
+                    <button id="collapseAllBtn" class="btn">Collapse all</button>
+                  </div>
+                  <div id="questionList" class="question-list"></div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="card project-screen" id="hostQuestionCard">
-            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▾</span></span>
+            
+            <!-- Pop-up Scoreboard Modal -->
+            <div id="projectorScoreboardSection" class="scoreboard-modal">
+              <div class="scoreboard-modal-content">
+                <h2 style="margin-top:0; color:var(--primary); font-size:2.5rem; text-align:center;">🏆 Scoreboard 🏆</h2>
+                <ul id="projectorScores" class="list projector-scores-large"></ul>
+                <p class="small muted" style="text-align:center; margin-top:1.5rem;">Click anywhere or press any key to close</p>
+              </div>
+            </div>
+
+            <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              <span>Live screen <span class="collapse-chevron" aria-hidden="true">▸</span></span>
               <span class="live-hud-row">
                 <span id="projectorPin" class="small">📌 <span id="livePinHud">—</span></span>
                 <span id="projectorTimer" class="small">⏱ Time: —</span>
@@ -128,11 +272,13 @@
                 <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;">Fullscreen</button>
               </span>
             </h2>
-            <div id="liveScreenCardBody">
-            <div class="hall top-space" id="hallCard">
-              <div class="small">GAME PIN</div>
-              <div class="hall-pin-row">
-                <div class="pin-big" id="livePinBig">—</div>
+            <div id="liveScreenCardBody" class="hidden">
+           <div class="hall top-space hidden" id="hallCard">
+              <div class="hall-join-hero">
+                <!-- 1. Website Address -->
+                <div class="hall-short-url"><span class="hall-logo">🎯</span> iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+                
+                <!-- 2. QR Code -->
                 <div class="hall-qr-wrap" aria-label="Join QR">
                   <img
                     class="hall-qr"
@@ -141,30 +287,31 @@
                     loading="lazy"
                   />
                 </div>
+
+                <!-- 3. PIN Number -->
+                <div class="pin-big" id="livePinBig">—</div>
               </div>
-              <div class="hall-short-url">iS<span class="hall-short-url-dot">.</span>GD<span class="hall-short-url-slash">/</span>PinPlay</div>
+              
               <div class="small" id="hallHint"></div>
+              <div id="hallLobbyPlayers" class="hall-lobby-players"></div>
             </div>
             <div id="projectorCorrect"></div>
-            <p class="small" id="hostQuestionHint">Question will appear here when game starts.</p>
+            <p class="small" id="hostQuestionHint"></p>
             <div id="hostQuestionWrap" class="hidden top-space">
               <h2 id="hostQuestionPrompt" class="project-prompt"></h2>
               <div id="hostQuestionAnswers" class="project-answers"></div>
             </div>
             <div id="projectorReactions" class="reactions-pop reactions-pop-projector" aria-live="polite"></div>
-            <div class="top-space projector-scoreboard" id="projectorScoreboardSection">
-              <strong>Scoreboard</strong>
-              <ul id="projectorScores" class="list"></ul>
-            </div>
+
             </div>
           </div>
 
 
           <div class="card" id="hostCard">
-            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="true">
-              Game controls <span class="collapse-chevron" aria-hidden="true">▾</span>
+            <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              Game controls <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
-            <div id="gameControlsCardBody">
+            <div id="gameControlsCardBody" class="hidden">
             <div class="row gap top-space" id="hostActionRow">
               <button id="randomNamesToggle" class="btn" type="button">Login</button>
               <button id="createLiveBtn" class="btn primary">Live Pin</button>
@@ -267,6 +414,7 @@
           </div>
         </div>
       </section>
+
     </main>
 
     <script src="../app.js?v=20260324-1615"></script>
