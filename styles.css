@@ -737,27 +737,59 @@ body.question-active .join-title-row {
   background: #f8f9ff !important;
 }
 
-/* Correct/Incorrect Highlights */
+/* ==========================================================================
+   STUDENT ANSWER REVEAL HIGHLIGHTS (Four States)
+   ========================================================================== */
+
+/* 1. True Positive (Picked & Correct) */
 #joinAnswers .answer-row.correct-highlight {
   border-color: var(--ok) !important;
   background: rgba(19, 138, 54, 0.12) !important;
+  color: #0f5e26 !important;
+  box-shadow: 0 0 0 2px rgba(19, 138, 54, 0.15) !important;
+  opacity: 1 !important;
+}
+#joinAnswers .answer-row.correct-highlight input {
+  accent-color: var(--ok); /* Checkbox turns green */
 }
 
+/* 2. False Positive (Picked & Wrong) */
 #joinAnswers .answer-row.incorrect-highlight {
   border-color: var(--bad) !important;
   background: rgba(193, 18, 31, 0.12) !important;
+  color: #8b1e1e !important;
+  box-shadow: 0 0 0 2px rgba(193, 18, 31, 0.15) !important;
+  opacity: 1 !important;
+}
+#joinAnswers .answer-row.incorrect-highlight input {
+  accent-color: var(--bad); /* Checkbox turns red */
 }
 
+/* 3. False Negative (Missed & Correct) */
 #joinAnswers .answer-row.correct-missed {
-  border-color: rgba(19, 138, 54, 0.4) !important;
-  background: rgba(19, 138, 54, 0.06) !important;
+  border-color: var(--ok) !important;
+  border-style: dashed !important;
+  border-width: 2px !important;
+  background: rgba(19, 138, 54, 0.04) !important;
+  color: #0f5e26 !important;
+  opacity: 0.9 !important;
+}
+#joinAnswers .answer-row.correct-missed::after {
+  content: 'Missed';
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ok);
   opacity: 0.7;
 }
 
-#joinAnswers .answer-row.correct-missed::after {
-  content: ' ○';
-  color: rgba(19, 138, 54, 0.5);
-  font-weight: bold;
+/* 4. True Negative (Unpicked & Wrong) */
+#joinAnswers .answer-row.ignored-option {
+  opacity: 0.45 !important;
+  filter: grayscale(100%);
+  background: #f8f9fa !important;
+  border-color: #e2e8f0 !important;
 }
 
 /* The Action Button (Absolute Bottom) */

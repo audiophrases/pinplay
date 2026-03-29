@@ -2526,9 +2526,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   const isMulti = question.type === 'multi';
   const correctIndexes = new Set();
 
-
-
-  // Parse correct answer index from server's correctAnswer string (e.g. "1. Dog" → index 0)
+  // Parse correct answer index from server's correctAnswer string
   if (correctAnswerStr && typeof correctAnswerStr === 'string') {
     if (isMulti) {
       correctAnswerStr.split('|').forEach(part => {
@@ -2541,12 +2539,10 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     }
   }
 
-  // Fallback: use question.answers[].correct if available (teacher/host side)
+  // Fallback: use question.answers[].correct if available
   if (correctIndexes.size === 0) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
-
-
 
   const selectedIndexes = new Set();
   joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
@@ -2557,12 +2553,19 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
     const isCorrect = correctIndexes.has(origIdx);
     const isSelected = selectedIndexes.has(origIdx);
+    
+    // Reset any previous states
+    row.classList.remove('correct-highlight', 'incorrect-highlight', 'correct-missed', 'ignored-option');
+
     if (isCorrect && isSelected) {
-      row.classList.add('correct-highlight');
-    } else if (isCorrect && !isSelected) {
-      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight');
+      row.classList.add('correct-highlight');         // Option 2 (True Positive)
     } else if (!isCorrect && isSelected) {
-      row.classList.add('incorrect-highlight');
+      row.classList.add('incorrect-highlight');       // Option 1 (False Positive)
+    } else if (isCorrect && !isSelected) {
+      // Single choice: solid green. Multi-select: dashed green.
+      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight'); // Option 4 (Missed)
+    } else {
+      row.classList.add('ignored-option');            // Option 3 (True Negative)
     }
   });
 }
