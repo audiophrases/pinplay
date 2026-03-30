@@ -344,7 +344,6 @@ textarea {
   cursor: crosshair;
 }
 
-<<<<<<< HEAD
 .pin-preview img {
   max-width: 100%;
   max-height: 80vh; /* Prevents extremely tall images from taking over the screen in the builder */
@@ -353,8 +352,6 @@ textarea {
   display: block;
 }
 
-=======
->>>>>>> parent of f87ffab (style: add responsive image styling to pin-preview container)
 .pin-picks-layer {
   position: absolute;
   inset: 0;
