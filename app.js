@@ -377,11 +377,7 @@ function createMediaProgressEl() {
   const el = document.createElement('div');
   el.id = 'mediaProgressEl';
   el.className = 'media-progress';
-  el.style.cssText = 'display:none; padding:8px 12px; margin:8px 0; border-radius:6px; font-size:0.9rem; font-weight:600;';
-  const hostStatus = document.getElementById('hostStatus');
-  if (hostStatus && hostStatus.parentNode) {
-    hostStatus.parentNode.insertBefore(el, hostStatus.nextSibling);
-  }
+  document.body.appendChild(el);
   return el;
 }
 const hostQuestionWrap = document.getElementById('hostQuestionWrap');
@@ -8201,9 +8197,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   const progressEl = document.getElementById('mediaProgressEl');
   const setProgress = (msg, status = 'checking') => {
     if (progressEl) {
-      progressEl.style.display = 'block';
       progressEl.textContent = msg;
-      progressEl.className = `media-progress ${status}`;
+      progressEl.className = `media-progress show-popup ${status}`;
     }
   };
 
@@ -8319,11 +8314,11 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   } else if (strictMediaCheck) {
     setProgress('✅ Media ready', 'ok');
   } else {
-    if (progressEl) progressEl.style.display = 'none';
+    if (progressEl) progressEl.classList.remove('show-popup');
   }
 
-  // Auto-hide progress after 3s
-  setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 3000);
+  // Auto-hide progress after 3s (Replace the old style.display code at the bottom)
+  setTimeout(() => { if (progressEl) progressEl.classList.remove('show-popup'); }, 3000);
 }
 
 // Upload base64 data to R2 via Worker API
@@ -8524,6 +8519,21 @@ function setStatus(el, text, mode = '') {
   el.className = 'feedback';
   if (mode === 'ok') el.classList.add('ok');
   if (mode === 'bad') el.classList.add('bad');
+
+  // Turn hostStatus into a timed pop-up dialog
+  if (el.id === 'hostStatus') {
+    // Ignore spammy live-game phase updates so they don't pop up randomly
+    const ignorePop = /running|Lobby open|Everyone answered|Question closed|Game finished|Time is up|Reveal shown/i.test(text);
+    if (!ignorePop) {
+      el.classList.add('show-popup');
+      clearTimeout(el.dataset.popTimeout);
+      el.dataset.popTimeout = setTimeout(() => {
+        el.classList.remove('show-popup');
+      }, 3500);
+    } else {
+      el.classList.remove('show-popup');
+    }
+  }
 }
 
 function setBackendStatus(text, mode = '') {

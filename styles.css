@@ -1802,3 +1802,51 @@ body.question-active .join-title-row {
     transform: translateY(0);
   }
 }
+/* ==========================================================================
+   9. POPUP DIALOGS (Status & Media Progress)
+   ========================================================================== */
+#hostStatus.show-popup,
+#mediaProgressEl.show-popup {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 10000 !important;
+  background: var(--card, #ffffff) !important;
+  color: var(--text, #1c2430) !important;
+  border: 1px solid var(--line, #dfe3ea) !important;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.2), 0 0 0 100vmax rgba(15, 23, 42, 0.45) !important;
+  padding: 1.5rem 2.5rem !important;
+  border-radius: 1rem !important;
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  min-width: 320px !important;
+  max-width: 90vw !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  animation: dialog-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+/* Hide them completely when not popping up to declutter the UI */
+#hostStatus:not(.show-popup),
+#mediaProgressEl:not(.show-popup) {
+  display: none !important;
+}
+
+#hostStatus.show-popup.ok,
+#mediaProgressEl.show-popup.ok {
+  border-top: 6px solid var(--ok) !important;
+}
+
+#hostStatus.show-popup.bad,
+#mediaProgressEl.show-popup.bad {
+  border-top: 6px solid var(--bad) !important;
+}
+
+@keyframes dialog-pop {
+  from { transform: translate(-50%, -40%) scale(0.9); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
