@@ -1602,13 +1602,22 @@ function renderJoinQuestion(question) {
     };
 
     attachPinPicker(wrap, (point) => {
-      const picks = live.player.pinSelections || [];
+      // Ensure pinSelections is an array before using it
+      const picks = Array.isArray(live.player.pinSelections) ? [...live.player.pinSelections] : [];
+      console.debug('pin click', point, 'existing picks', picks, 'required', required);
+
       const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
       if (nearIdx >= 0) {
+        // Toggle-remove existing nearby pick
         picks.splice(nearIdx, 1);
       } else if (picks.length < required) {
+        // Add a new pick if under the required limit
         picks.push(point);
+      } else {
+        // Reached allowed number of picks; log for diagnostics
+        console.info('pin limit reached', { current: picks.length, required });
       }
+
       live.player.pinSelections = picks;
       live.player.pinSelection = picks[0] || null;
       renderPicks();
@@ -3284,6 +3293,13 @@ function attachPinPicker(container, onPick) {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : min));
+}
+
+// Computes Euclidean distance between two 2D points (x/y are percent coordinates)
+function distance2D(x1, y1, x2, y2) {
+  const dx = Number(x1) - Number(x2);
+  const dy = Number(y1) - Number(y2);
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function setupImageLightbox() {
