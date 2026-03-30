@@ -4773,7 +4773,7 @@ function renderHostState(state) {
     stopFx('answered');
     stopFx('final');
     stopFx('drumrollwinner');
-    
+
     // ✅ AUTO-SHOW MODAL FOR FINAL RESULTS
     const modal = document.getElementById('projectorScoreboardSection');
     if (modal) modal.classList.add('visible');
@@ -5122,7 +5122,7 @@ function renderHostQuestion(state) {
 
       const txt = document.createElement('span');
       txt.textContent = a.text;
-      
+
       row.append(tag, txt); // Keeps the DOM structure perfectly intact
       hostQuestionAnswersEl.appendChild(row);
     });
@@ -5206,14 +5206,14 @@ function renderHostQuestion(state) {
       const overlay = document.createElement('div');
       overlay.id = 'matchPairsCenterOverlay';
       overlay.className = 'match-pairs-center-overlay host-mode';
-      
+
       const imgWrap = document.createElement('div');
       imgWrap.className = 'match-pairs-img-wrap';
       const img = document.createElement('img');
       img.src = question.imageData;
       img.dataset.zoomable = '1';
       imgWrap.appendChild(img);
-      
+
       const pairsWrap = document.createElement('div');
       pairsWrap.className = 'match-pairs-content-wrap';
       if (!showReveal) {
@@ -5221,7 +5221,7 @@ function renderHostQuestion(state) {
       } else {
         renderMatchPairsReveal(pairsWrap, question.pairs || []);
       }
-      
+
       overlay.append(imgWrap, pairsWrap);
       hostQuestionAnswersEl.appendChild(overlay);
     } else {
@@ -5283,6 +5283,11 @@ function renderHostQuestion(state) {
       wrap.appendChild(img);
 
       if (showReveal) {
+        const picksLayer = document.createElement('div');
+        picksLayer.className = 'pin-picks-layer';
+
+        syncPicksLayerBounds(wrap, picksLayer, img);
+
         const zones = Array.isArray(question.zones) && question.zones.length
           ? question.zones
           : (question.zone ? [question.zone] : []);
@@ -5293,15 +5298,17 @@ function renderHostQuestion(state) {
           zone.style.top = `${Number(z.y || 50)}%`;
           zone.style.width = `${Math.max(2, Number(z.r || 15) * 2)}%`;
           zone.style.height = `${Math.max(2, Number(z.r || 15) * 2)}%`;
-          wrap.appendChild(zone);
+          picksLayer.appendChild(zone);
 
           const arrow = document.createElement('div');
           arrow.className = 'pin-arrow';
           arrow.style.left = `${Number(z.x || 50)}%`;
           arrow.style.top = `${Math.max(0, Number(z.y || 50) - Number(z.r || 15) - 6)}%`;
           arrow.textContent = '↓';
-          wrap.appendChild(arrow);
+          picksLayer.appendChild(arrow);
         });
+
+        wrap.appendChild(picksLayer);
       }
 
       hostQuestionAnswersEl.appendChild(wrap);
@@ -5620,10 +5627,10 @@ function updateHallScene(state) {
 
   if (state.phase === 'lobby') {
     // 1. FIX: Force the lobby to become visible!
-    hallCardEl.classList.remove('hidden'); 
+    hallCardEl.classList.remove('hidden');
     hallCardEl.classList.add('hall-live');
     hallHintEl.textContent = '';
-    
+
     // Hide hint text and scoreboard during lobby
     if (hostQuestionHintEl) hostQuestionHintEl.style.display = 'none';
 
@@ -5658,13 +5665,13 @@ function updateHallScene(state) {
   }
 
   // 2. FIX: Force the lobby to hide when the quiz actually starts!
-  hallCardEl.classList.add('hidden'); 
+  hallCardEl.classList.add('hidden');
   hallCardEl.classList.remove('hall-live');
   stopHallMusic();
-  
+
   // Restore hint text and scoreboard when quiz is active
   if (hostQuestionHintEl) hostQuestionHintEl.style.display = '';
-  
+
   // Clear lobby player chips
   if (hallLobbyPlayersEl) {
     hallLobbyPlayersEl.innerHTML = '';
@@ -5917,7 +5924,7 @@ async function pollPlayerState() {
 function getStudentAnswerTextFromUI() {
   const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
   if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
-  
+
   const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
   if (errorHuntChips && errorHuntChips.length > 0) {
     return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
@@ -5962,7 +5969,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
     if (!show || !needsReveal) {
       if (revealEl) revealEl.remove();
@@ -5972,9 +5979,9 @@ function renderPlayerState(state) {
     let correctText = String(state.correctAnswer || '').trim();
 
     if (!correctText) {
-      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
-      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
-      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'text') correctText = (question.accepted || []).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
     }
 
@@ -6025,7 +6032,7 @@ function renderPlayerState(state) {
     const studentText = getStudentAnswerTextFromUI();
     const p = document.createElement('div');
     p.dataset.joinCorrectionInline = '1';
-    
+
     // Reuse the modern block, but color it for a teacher correction (red)
     p.className = 'student-answer-reveal';
     p.style.background = '#fef2f2';
@@ -6213,6 +6220,7 @@ function renderJoinQuestion(question) {
         b.className = 'btn error-token-chip';
         b.dataset.errorToken = String(i);
         b.dataset.tokenText = tok;
+        b.dataset.originalText = tok;
         b.textContent = tok;
 
         const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
@@ -6237,6 +6245,14 @@ function renderJoinQuestion(question) {
               }
               b.dataset.tokenText = newText;
               b.textContent = newText;
+
+              // Auto-set active state if edited
+              const origToken = String(b.dataset.originalText || '').trim();
+              if (origToken && newText !== origToken) {
+                b.classList.add('active');
+              } else if (origToken && newText === origToken) {
+                b.classList.remove('active');
+              }
             }
             b.classList.remove('editing');
             if (b.contains(input)) b.removeChild(input);
@@ -6383,6 +6399,8 @@ function renderJoinQuestion(question) {
 
     const picksLayer = document.createElement('div');
     picksLayer.className = 'pin-picks-layer';
+
+    syncPicksLayerBounds(wrap, picksLayer, img);
 
     const zonesCount = question.zoneCount || (Array.isArray(question.zones) && question.zones.length ? question.zones.length : 1);
     const pinMode = String(question.pinMode || 'all');
@@ -7247,6 +7265,7 @@ function renderSoloQuestion() {
         b.className = 'btn error-token-chip';
         b.dataset.soloErrorToken = String(i);
         b.dataset.tokenText = tok;
+        b.dataset.originalText = tok;
         b.textContent = tok;
 
         const normalizeToken = (txt) => String(txt || '').replace(/\s+/g, '').toLowerCase();
@@ -7271,6 +7290,14 @@ function renderSoloQuestion() {
               }
               b.dataset.tokenText = newText;
               b.textContent = newText;
+
+              // Auto-set active state if edited
+              const origToken = String(b.dataset.originalText || '').trim();
+              if (origToken && newText !== origToken) {
+                b.classList.add('active');
+              } else if (origToken && newText === origToken) {
+                b.classList.remove('active');
+              }
             }
             b.classList.remove('editing');
             if (b.contains(input)) b.removeChild(input);
@@ -7414,6 +7441,8 @@ function renderSoloQuestion() {
     const picksLayer = document.createElement('div');
     picksLayer.className = 'pin-picks-layer';
 
+    syncPicksLayerBounds(wrap, picksLayer, img);
+
     const zonesCount = q.zoneCount || (Array.isArray(q.zones) && q.zones.length ? q.zones.length : 1);
     const pinMode = String(q.pinMode || 'all');
     let required = 1;
@@ -7425,17 +7454,36 @@ function renderSoloQuestion() {
     countLabel.className = 'pin-count-big';
     countLabel.textContent = `0 / ${required}`;
 
-    wrap.append(img, dot);
+    wrap.append(img, picksLayer);
     answersEl.appendChild(wrap);
     answersEl.appendChild(countLabel);
 
+    const renderPicks = () => {
+      picksLayer.innerHTML = '';
+      const picks = soloGame.pinSelections || [];
+      countLabel.textContent = `${Math.min(picks.length, required)} / ${required}`;
+      picks.forEach((p) => {
+        const dot = document.createElement('div');
+        dot.className = 'pin-dot';
+        dot.style.left = `${p.x}%`;
+        dot.style.top = `${p.y}%`;
+        picksLayer.appendChild(dot);
+      });
+    };
+
+    soloGame.pinSelections = [];
+
     attachPinPicker(wrap, (point) => {
-      soloGame.pinSelection = point;
-      dot.classList.remove('hidden');
-      dot.style.left = `${point.x}%`;
-      dot.style.top = `${point.y}%`;
-      countLabel.textContent = `1 / ${required}`;
+      const picks = soloGame.pinSelections || [];
+      const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
+      if (nearIdx >= 0) picks.splice(nearIdx, 1);
+      else if (picks.length < required) picks.push(point);
+      soloGame.pinSelections = picks;
+      soloGame.pinSelection = picks[0] || null;
+      renderPicks();
     });
+
+    renderPicks();
   }
 }
 function evaluateSoloQuestion(q) {
@@ -7531,11 +7579,11 @@ function evaluateSoloQuestion(q) {
   }
 
   if (q.type === 'pin') {
-    if (!soloGame.pinSelection) return { correct: false, hint: 'Tap/click the image first.' };
+    if (!soloGame.pinSelection && (!soloGame.pinSelections || !soloGame.pinSelections.length)) return { correct: false, hint: 'Tap/click the image first.' };
     const zones = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || { x: 50, y: 50, r: 15 }];
+    const picks = soloGame.pinSelections || (soloGame.pinSelection ? [soloGame.pinSelection] : []);
     const hits = zones.filter((z) => {
-      const d = distance2D(soloGame.pinSelection.x, soloGame.pinSelection.y, Number(z.x || 50), Number(z.y || 50));
-      return d <= Number(z.r || 15);
+      return picks.some((p) => distance2D(p.x, p.y, Number(z.x || 50), Number(z.y || 50)) <= Number(z.r || 15));
     }).length;
     const pinMode = String(q.pinMode || 'all');
     let required = 1;
@@ -8671,7 +8719,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   for (const correctedStr of validVariants) {
     const source = tokenizeWords(prompt).map(normalizeTextAnswer);
     const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
-    
+
     if (!source.length || !target.length) continue;
     if (source.join(' ') === target.join(' ')) continue;
 
@@ -9345,8 +9393,8 @@ function renderMatchPairsReveal(container, pairs) {
       line.setAttribute('y1', String(Math.max(0, l.top + (l.height / 2) - wrapRect.top)));
       line.setAttribute('x2', String(Math.max(0, r.left - wrapRect.left)));
       line.setAttribute('y2', String(Math.max(0, r.top + (r.height / 2) - wrapRect.top)));
-      
-      const colorList =['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+
+      const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
       line.setAttribute('stroke', colorList[i % colorList.length]);
 
       line.classList.add('match-connection-line');
@@ -9563,11 +9611,88 @@ function speakText(text, lang = 'en-US', onEnd = null) {
   }
 }
 
+function syncPicksLayerBounds(container, picksLayer, img) {
+  const update = () => {
+    const rect = container.getBoundingClientRect();
+    if (!rect.width || !img.naturalWidth) return;
+
+    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const rectRatio = rect.width / rect.height;
+
+    let actualW = rect.width;
+    let actualH = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (Math.abs(imgRatio - rectRatio) > 0.01) {
+      if (imgRatio > rectRatio) {
+        actualW = rect.width;
+        actualH = rect.width / imgRatio;
+        offsetY = (rect.height - actualH) / 2;
+      } else {
+        actualH = rect.height;
+        actualW = rect.height * imgRatio;
+        offsetX = (rect.width - actualW) / 2;
+      }
+    }
+
+    picksLayer.style.width = `${actualW}px`;
+    picksLayer.style.height = `${actualH}px`;
+    picksLayer.style.left = `${offsetX}px`;
+    picksLayer.style.top = `${offsetY}px`;
+    picksLayer.style.right = 'auto';
+    picksLayer.style.bottom = 'auto';
+  };
+
+  update();
+  img.addEventListener('load', update);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(update);
+    ro.observe(container);
+  }
+}
+
 function attachPinPicker(container, onPick) {
   container.addEventListener('click', (e) => {
     const rect = container.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    let clickX = e.clientX - rect.left;
+    let clickY = e.clientY - rect.top;
+    let renderW = rect.width;
+    let renderH = rect.height;
+
+    const img = container.querySelector('img');
+    if (img && img.naturalWidth && img.naturalHeight) {
+      const imgRatio = img.naturalWidth / img.naturalHeight;
+      const rectRatio = rect.width / rect.height;
+
+      let actualW = rect.width;
+      let actualH = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (Math.abs(imgRatio - rectRatio) > 0.01) {
+        if (imgRatio > rectRatio) {
+          actualW = rect.width;
+          actualH = rect.width / imgRatio;
+          offsetY = (rect.height - actualH) / 2;
+        } else {
+          actualH = rect.height;
+          actualW = rect.height * imgRatio;
+          offsetX = (rect.width - actualW) / 2;
+        }
+      }
+
+      clickX -= offsetX;
+      clickY -= offsetY;
+      renderW = actualW;
+      renderH = actualH;
+    }
+
+    const x = (clickX / renderW) * 100;
+    const y = (clickY / renderH) * 100;
+
+    // Ignore clicks outside the actual image
+    if (x < 0 || x > 100 || y < 0 || y > 100) return;
 
     onPick({
       x: round(clamp(x, 0, 100), 1),

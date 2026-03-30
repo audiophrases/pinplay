@@ -168,8 +168,8 @@ function pingEdgeTtsBridgeWarmup() {
   const url = 'https://edge-tts-bridge.onrender.com/health';
   const ping = () => {
     try {
-      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => {});
-    } catch {}
+      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => { });
+    } catch { }
   };
   ping();
   setTimeout(ping, 3500);
@@ -191,7 +191,7 @@ function initAssignmentFromUrl() {
   // open the assignment immediately and reveal the correct identity mode
   // instead of leaving the generic PIN/login screen visible.
   setTimeout(() => {
-    validatePin().catch(() => {});
+    validatePin().catch(() => { });
   }, 0);
 }
 
@@ -610,7 +610,7 @@ async function startAssignmentAttempt() {
   }
 
   // Load attempt history and teacher feedback
-  loadAttemptHistory(code, studentKey).catch(() => {});
+  loadAttemptHistory(code, studentKey).catch(() => { });
 
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = setInterval(() => {
@@ -705,7 +705,7 @@ function showAssignmentCompleteMessage(text, opts = {}) {
     btn.className = 'btn primary top-space';
     btn.textContent = finishLabel;
     btn.addEventListener('click', () => {
-      finalizeAssignmentAttempt().catch(() => {});
+      finalizeAssignmentAttempt().catch(() => { });
     });
     box.appendChild(btn);
   }
@@ -718,21 +718,21 @@ function renderInstantFeedbackFromState() {
   const answers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
   const feedbackMode = assignment?.feedbackMode || 'none';
   const currentQIndex = live.player.assignment.currentIndex || 0;
-  
+
   // Determine if we should show feedback and what to show
   let shouldShowFeedback = false;
   let isEndMode = false;
   let currentQuestionAnswered = false;
-  
+
   if (feedbackMode !== 'none') {
     const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
     const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
     shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
     isEndMode = true;
   }
-  
+
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
-  
+
   const wrap = joinQuestionWrap || joinCardEl;
   if (!wrap) return;
 
@@ -742,15 +742,15 @@ function renderInstantFeedbackFromState() {
   const panel = document.createElement('div');
   panel.id = 'assignmentResultsPanel';
   panel.className = 'assignment-results';
-  
+
   const title = document.createElement('div');
   title.className = 'assignment-results-title';
-  
+
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
-  
+
   // Show all results in end mode or final summary
   title.textContent = 'Final Results';
   answers.forEach((a) => {
@@ -759,7 +759,7 @@ function renderInstantFeedbackFromState() {
     li.className = a.correct ? 'ok' : 'bad';
     const result = a.correct ? '✅ Correct' : '❌ Incorrect';
     const points = Number(a.points || 0);
-    
+
     // FIX: Show negative deductions in the assignment recap list
     let pointsText = '';
     if (points > 0) pointsText = ` · +${points} points`;
@@ -768,7 +768,7 @@ function renderInstantFeedbackFromState() {
     li.textContent = `${result}${pointsText}  ·  ${prompt}`;
     list.appendChild(li);
   });
-  
+
   panel.appendChild(title);
   panel.appendChild(list);
   wrap.appendChild(panel);
@@ -839,7 +839,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question &&['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
     if (!show || !needsReveal) {
       if (revealEl) revealEl.remove();
@@ -849,9 +849,9 @@ function renderPlayerState(state) {
     let correctText = String(state.correctAnswer || '').trim();
 
     if (!correctText) {
-      if (question.type === 'text') correctText = (question.accepted ||[]).join(' | ');
-      if (question.type === 'puzzle') correctText = (question.items ||[]).join(' ➔ ');
-      if (question.type === 'match_pairs') correctText = (question.pairs ||[]).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
+      if (question.type === 'text') correctText = (question.accepted || []).join(' | ');
+      if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
+      if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
     }
 
@@ -901,7 +901,7 @@ function renderPlayerState(state) {
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   // Clear previous feedback to avoid carryover between questions
-  setJoinStatusHud( '', '');
+  setJoinStatusHud('', '');
 
   const renderInlinePoints = (_points) => {
     // Removed by request: do not show separate inline "+X pts" row.
@@ -919,7 +919,7 @@ function renderPlayerState(state) {
     const studentText = getStudentAnswerTextFromUI();
     const p = document.createElement('div');
     p.dataset.joinCorrectionInline = '1';
-    
+
     // Reuse the modern block, but color it for a teacher correction (red)
     p.className = 'student-answer-reveal';
     p.style.background = '#fef2f2';
@@ -1042,7 +1042,7 @@ function renderPlayerState(state) {
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
     live.player.pinSelections = [];
-    
+
     // --- NEW: Reset Bet UI state for the new question ---
     live.player.selectedBet = 0;
     betSelected = false;
@@ -1052,7 +1052,7 @@ function renderPlayerState(state) {
     }
 
     renderJoinQuestion(state.question);
-    setJoinStatusHud( '', '');
+    setJoinStatusHud('', '');
     animatePulse(joinQuestionWrap);
   }
 
@@ -1150,7 +1150,7 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     if (isPoll) {
-      setJoinStatusHud( '🗳️ Poll closed. Results on projector.', 'ok');
+      setJoinStatusHud('🗳️ Poll closed. Results on projector.', 'ok');
       setStatus(joinStatusEl, 'Poll closed.', 'ok');
     } else {
       const rr = state.revealedResult;
@@ -1161,19 +1161,19 @@ function renderPlayerState(state) {
       if (rr) {
         const corr = String(rr.correction || '').trim();
         if (corr) {
-          setJoinStatusHud( '', '');
+          setJoinStatusHud('', '');
         } else if (rr.graded === false) {
-          setJoinStatusHud( '📝 Waiting for teacher grading.', 'ok');
+          setJoinStatusHud('📝 Waiting for teacher grading.', 'ok');
         } else {
           // Highlight items: green for correct, red for student's wrong answer
           const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
           const pts = Number(rr.pointsAwarded || 0);
-          
+
           // FIX: Show negative deductions properly
           let pointsText = '';
           if (pts > 0) pointsText = ` · +${pts} points`;
-          else if (pts < 0) pointsText = ` · ${pts} points`; 
-          
+          else if (pts < 0) pointsText = ` · ${pts} points`;
+
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
             feedback += ` · Correct: ${state.correctAnswer}`;
@@ -1190,7 +1190,7 @@ function renderPlayerState(state) {
           }
         }
       } else {
-        setJoinStatusHud( closedMsg, 'ok');
+        setJoinStatusHud(closedMsg, 'ok');
       }
     }
   } else if (assignmentSubmitted) {
@@ -1199,7 +1199,7 @@ function renderPlayerState(state) {
     const rr = state.revealedResult;
     const corr = String(rr?.correction || '').trim();
     if (corr) {
-      setJoinStatusHud( '', '');
+      setJoinStatusHud('', '');
     }
     setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
   } else {
@@ -1425,7 +1425,7 @@ function renderJoinQuestion(question) {
         const overlay = document.createElement('div');
         overlay.id = 'matchPairsCenterOverlay';
         overlay.className = 'match-pairs-center-overlay'; // Removed host-mode to allow full-screen overlay
-        
+
         const imgWrap = document.createElement('div');
         imgWrap.className = 'match-pairs-img-wrap';
         const img = document.createElement('img');
@@ -1437,13 +1437,13 @@ function renderJoinQuestion(question) {
         img.src = imgSrc;
         img.dataset.zoomable = '1';
         imgWrap.appendChild(img);
-        
+
         const pairsWrap = document.createElement('div');
         pairsWrap.className = 'match-pairs-content-wrap';
         renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
-        
+
         overlay.append(imgWrap, pairsWrap);
-        
+
         // Insert into the background wrap behind the interactive sticky bar
         const interactiveSection = document.getElementById('joinQuestionInteractive');
         if (joinQuestionWrap && interactiveSection) {
@@ -1550,7 +1550,7 @@ function renderJoinQuestion(question) {
       p.textContent = 'No image set for this question.';
       joinAnswersEl.appendChild(p);
       appendRiskBetBar();
-    appendReactionBar();
+      appendReactionBar();
       return;
     }
 
@@ -1570,6 +1570,8 @@ function renderJoinQuestion(question) {
 
     const picksLayer = document.createElement('div');
     picksLayer.className = 'pin-picks-layer';
+
+    syncPicksLayerBounds(wrap, picksLayer, img);
 
     const zonesCount = question.zoneCount || (Array.isArray(question.zones) && question.zones.length ? question.zones.length : 1);
     const pinMode = String(question.pinMode || 'all');
@@ -1601,7 +1603,7 @@ function renderJoinQuestion(question) {
 
     attachPinPicker(wrap, (point) => {
       const picks = live.player.pinSelections || [];
-      const nearIdx = picks.findIndex((p) => Math.hypot(p.x - point.x, p.y - point.y) <= 4);
+      const nearIdx = picks.findIndex((p) => distance2D(p.x, p.y, point.x, point.y) <= 4);
       if (nearIdx >= 0) {
         picks.splice(nearIdx, 1);
       } else if (picks.length < required) {
@@ -1701,7 +1703,7 @@ function appendRiskBetBar() {
 function getStudentAnswerTextFromUI() {
   const textInput = joinAnswersEl?.querySelector('input[type="text"], textarea');
   if (textInput && typeof textInput.value === 'string') return String(textInput.value || '').trim();
-  
+
   const errorHuntChips = joinAnswersEl?.querySelectorAll('[data-error-token]');
   if (errorHuntChips && errorHuntChips.length > 0) {
     return [...errorHuntChips].map(el => el.dataset.tokenText || el.textContent || '').join(' ').trim();
@@ -1813,8 +1815,8 @@ async function submitLiveAnswer() {
       if (mode !== 'instant') {
         live.player.assignment.forceAutoAdvance = true;
       }
-      
-      setJoinStatusHud( 'Answer saved ✅', 'ok');
+
+      setJoinStatusHud('Answer saved ✅', 'ok');
       await loadAssignmentState();
       renderInstantFeedbackFromState();
       return;
@@ -1844,17 +1846,17 @@ async function submitLiveAnswer() {
     live.player.lastAnswerText = (question?.answers?.[answerIdx]?.text || '');
     live.player.lastAnswerCorrect = !!data.correct;
 
-    setJoinStatusHud( 'Answer submitted. Waiting for reveal…', 'ok');
+    setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
 
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
     const msg = String(err?.message || 'Could not submit answer.');
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
-      setJoinStatusHud( 'Question is closed. Waiting for next one…', 'ok');
+      setJoinStatusHud('Question is closed. Waiting for next one…', 'ok');
       return;
     }
-    setJoinStatusHud( msg, 'bad');
+    setJoinStatusHud(msg, 'bad');
   }
 }
 
@@ -2548,7 +2550,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
     const isCorrect = correctIndexes.has(origIdx);
     const isSelected = selectedIndexes.has(origIdx);
-    
+
     // Reset any previous states
     row.classList.remove('correct-highlight', 'incorrect-highlight', 'correct-missed', 'ignored-option');
 
@@ -2683,14 +2685,18 @@ function showPinFeedback(question, state) {
   if (!preview) return;
   // Disable further picks
   preview.style.pointerEvents = 'none';
+
+  const picksLayer = preview.querySelector('.pin-picks-layer');
+  const targetContainer = picksLayer || preview;
+
   // Show correct zone(s) as green circles
   const zones = Array.isArray(question.zones) ? question.zones : [];
   zones.forEach(zone => {
     const marker = document.createElement('div');
     marker.className = 'pin-correct-marker';
-    const r = (zone.r || 15) / 100;
-    marker.style.cssText = `position:absolute;left:${zone.x}%;top:${zone.y}%;width:${r * 200}%;height:${r * 200}%;border:3px solid var(--ok);background:rgba(19,138,54,0.15);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:50;`;
-    preview.appendChild(marker);
+    const r = (zone.r || 15);
+    marker.style.cssText = `position:absolute;left:${zone.x}%;top:${zone.y}%;width:${r * 2}%;height:${r * 2}%;border:3px solid var(--ok);background:rgba(19,138,54,0.15);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:50;`;
+    targetContainer.appendChild(marker);
   });
 }
 
@@ -2850,7 +2856,7 @@ function initAssignmentSfx() {
       new Audio('music/answering11.mp3'),
     ];
     Object.values(assignmentAmbient).flat().forEach(a => { if (a) a.volume = 0.7; });
-  } catch {}
+  } catch { }
 }
 
 function stopAllAssignmentAmbient() {
@@ -2858,7 +2864,7 @@ function stopAllAssignmentAmbient() {
     if (assignmentAmbient.hall) { assignmentAmbient.hall.pause(); assignmentAmbient.hall.currentTime = 0; }
     if (assignmentAmbient.final) { assignmentAmbient.final.pause(); assignmentAmbient.final.currentTime = 0; }
     assignmentAmbient.answering.forEach(a => { a.pause(); a.currentTime = 0; });
-  } catch {}
+  } catch { }
 }
 
 function playAssignmentSfx(name) {
@@ -2869,12 +2875,12 @@ function playAssignmentSfx(name) {
       // Use pre-selected track for current question
       if (currentAnsweringIdx < 0) pickNewAnsweringTrack();
       const a = assignmentAmbient.answering[currentAnsweringIdx];
-      if (a) { a.currentTime = 0; a.play().catch(() => {}); }
+      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
     } else {
       const a = assignmentAmbient[name];
-      if (a) { a.currentTime = 0; a.play().catch(() => {}); }
+      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
     }
-  } catch {}
+  } catch { }
 }
 
 function pickNewAnsweringTrack() {
@@ -2990,7 +2996,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   for (const correctedStr of validVariants) {
     const source = tokenizeWords(prompt).map(normalizeTextAnswer);
     const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
-    
+
     if (!source.length || !target.length) continue;
     if (source.join(' ') === target.join(' ')) continue;
 
@@ -3186,13 +3192,93 @@ function escapeHtml(str) {
     .replaceAll("'", '&#39;');
 }
 
+function syncPicksLayerBounds(container, picksLayer, img) {
+  const update = () => {
+    const rect = container.getBoundingClientRect();
+    if (!rect.width || !img.naturalWidth) return;
+
+    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const rectRatio = rect.width / rect.height;
+
+    let actualW = rect.width;
+    let actualH = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (Math.abs(imgRatio - rectRatio) > 0.01) {
+      if (imgRatio > rectRatio) {
+        actualW = rect.width;
+        actualH = rect.width / imgRatio;
+        offsetY = (rect.height - actualH) / 2;
+      } else {
+        actualH = rect.height;
+        actualW = rect.height * imgRatio;
+        offsetX = (rect.width - actualW) / 2;
+      }
+    }
+
+    picksLayer.style.width = `${actualW}px`;
+    picksLayer.style.height = `${actualH}px`;
+    picksLayer.style.left = `${offsetX}px`;
+    picksLayer.style.top = `${offsetY}px`;
+    picksLayer.style.right = 'auto';
+    picksLayer.style.bottom = 'auto';
+  };
+
+  update();
+  img.addEventListener('load', update);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(update);
+    ro.observe(container);
+  }
+}
+
 function attachPinPicker(container, onPick) {
   container.addEventListener('click', (e) => {
     const rect = container.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    let clickX = e.clientX - rect.left;
+    let clickY = e.clientY - rect.top;
+    let renderW = rect.width;
+    let renderH = rect.height;
 
-    onPick({ x: round(clamp(x, 0, 100), 1), y: round(clamp(y, 0, 100), 1) });
+    const img = container.querySelector('img');
+    if (img && img.naturalWidth && img.naturalHeight) {
+      const imgRatio = img.naturalWidth / img.naturalHeight;
+      const rectRatio = rect.width / rect.height;
+
+      let actualW = rect.width;
+      let actualH = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (Math.abs(imgRatio - rectRatio) > 0.01) {
+        if (imgRatio > rectRatio) {
+          actualW = rect.width;
+          actualH = rect.width / imgRatio;
+          offsetY = (rect.height - actualH) / 2;
+        } else {
+          actualH = rect.height;
+          actualW = rect.height * imgRatio;
+          offsetX = (rect.width - actualW) / 2;
+        }
+      }
+
+      clickX -= offsetX;
+      clickY -= offsetY;
+      renderW = actualW;
+      renderH = actualH;
+    }
+
+    const x = (clickX / renderW) * 100;
+    const y = (clickY / renderH) * 100;
+
+    // Ignore clicks outside the actual image
+    if (x < 0 || x > 100 || y < 0 || y > 100) return;
+
+    onPick({
+      x: round(clamp(x, 0, 100), 1),
+      y: round(clamp(y, 0, 100), 1),
+    });
   });
 }
 
