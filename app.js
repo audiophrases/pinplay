@@ -6238,6 +6238,14 @@ function renderJoinQuestion(question) {
               }
               b.dataset.tokenText = newText;
               b.textContent = newText;
+
+              // Auto-set active state if edited
+              const origToken = String(b.dataset.originalText || '').trim();
+              if (origToken && newText !== origToken) {
+                b.classList.add('active');
+              } else if (origToken && newText === origToken) {
+                b.classList.remove('active');
+              }
             }
             b.classList.remove('editing');
             if (b.contains(input)) b.removeChild(input);
@@ -7273,6 +7281,14 @@ function renderSoloQuestion() {
               }
               b.dataset.tokenText = newText;
               b.textContent = newText;
+
+              // Auto-set active state if edited
+              const origToken = String(b.dataset.originalText || '').trim();
+              if (origToken && newText !== origToken) {
+                b.classList.add('active');
+              } else if (origToken && newText === origToken) {
+                b.classList.remove('active');
+              }
             }
             b.classList.remove('editing');
             if (b.contains(input)) b.removeChild(input);
