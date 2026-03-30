@@ -7,91 +7,91 @@ const CORS_HEADERS = {
 };
 
 const RANDOM_NAME_ADJECTIVES = [
-  'Happy','Joyful','Cheerful','Delighted','Excited','Calm','Relaxed','Peaceful','Focused','Driven','Patient','Brave','Fearless','Bold','Daring','Valiant',
-  'Curious','Clever','Sharp','Witty','Wise','Brilliant','Creative','Imaginative','Playful','Friendly','Kind','Gentle','Honest','Loyal','Noble','Humble',
-  'Confident','Proud','Radiant','Glorious','Heroic','Legendary','Epic','Magnetic','Charming','Elegant','Graceful','Agile','Swift','Mighty','Resilient','Steady',
-  'Dynamic','Energetic','Electric','Fiery','Icy','Cool','Sunny','Stormy','Dreamy','Cosmic','Golden','Silver','Crimson','Azure','Emerald','Ivory',
-  'Amber','Vivid','Classic','Modern','Royal','Sincere','Thoughtful','Helpful','Polite','Honorable','Passionate','Careful','Eager','Smiling','Hopeful','Optimistic',
-  'Moody','Serious','Silent','Noisy','Wild','Gritty','Savage','Tough','Restless','Nervous','Shy','Awkward','Clumsy','Lazy','Sleepy','Hungry',
-  'Sassy','Funny','Goofy','Chaotic','Dramatic','Mysterious','Reckless','Stubborn','Messy','Tiny','Tall','Short','Strong','Slim','Flashy','Stylish',
-  'Grumpy','Angry','Irritable','Bitter','Jealous','Envious','Gloomy','Pessimistic','Cynical','Sarcastic','Bossy','Rude','Mean','Cruel','Harsh','Cold',
-  'Arrogant','Egotistic','Impulsive','Impatient','Anxious','Panicky','Paranoid','Suspicious','Defensive','Spiteful','Grudging','Guilty','Ashamed','Toxic','Troubled','Unstable',
-  'Annoyed','Cranky','Snappy','MoodyAF','Doubtful','Petty','Salty','Nasty','Hostile','Bored','Melancholic','Doomy','Skeptical','Snobbish','Whiny','Glum',
-  'Goofy','Clownish','MemeLord','BananaMode','Wacky','Nutty','Zany','Silly','Cheeky','Derpy','Giggly','Snorty','Jokey','Pranky','FunkyChicken','Disco',
-  'Tall','Short','Tiny','Giant','Strong','Slim','Chubby','Skinny','Muscular','Lean','Wide','Narrow','BroadShouldered','LongLegged','FastFooted','SlowPaced',
-  'Freckled','Pale','Tanned','Curly','StraightHaired','Braided','Bearded','Bald','SharpEyed','SleepyEyed','LoudVoiced','SoftSpoken','LeftHanded','RightHanded','Fit','Wobbly',
-  'Vintage','Sporty','Urban','Casual','Formal','Funky','Quirky','Lucky','Unlucky','Balanced','Neutral','Zen','Hyper','Chill','Prime','Ultra'
+  'Happy', 'Joyful', 'Cheerful', 'Delighted', 'Excited', 'Calm', 'Relaxed', 'Peaceful', 'Focused', 'Driven', 'Patient', 'Brave', 'Fearless', 'Bold', 'Daring', 'Valiant',
+  'Curious', 'Clever', 'Sharp', 'Witty', 'Wise', 'Brilliant', 'Creative', 'Imaginative', 'Playful', 'Friendly', 'Kind', 'Gentle', 'Honest', 'Loyal', 'Noble', 'Humble',
+  'Confident', 'Proud', 'Radiant', 'Glorious', 'Heroic', 'Legendary', 'Epic', 'Magnetic', 'Charming', 'Elegant', 'Graceful', 'Agile', 'Swift', 'Mighty', 'Resilient', 'Steady',
+  'Dynamic', 'Energetic', 'Electric', 'Fiery', 'Icy', 'Cool', 'Sunny', 'Stormy', 'Dreamy', 'Cosmic', 'Golden', 'Silver', 'Crimson', 'Azure', 'Emerald', 'Ivory',
+  'Amber', 'Vivid', 'Classic', 'Modern', 'Royal', 'Sincere', 'Thoughtful', 'Helpful', 'Polite', 'Honorable', 'Passionate', 'Careful', 'Eager', 'Smiling', 'Hopeful', 'Optimistic',
+  'Moody', 'Serious', 'Silent', 'Noisy', 'Wild', 'Gritty', 'Savage', 'Tough', 'Restless', 'Nervous', 'Shy', 'Awkward', 'Clumsy', 'Lazy', 'Sleepy', 'Hungry',
+  'Sassy', 'Funny', 'Goofy', 'Chaotic', 'Dramatic', 'Mysterious', 'Reckless', 'Stubborn', 'Messy', 'Tiny', 'Tall', 'Short', 'Strong', 'Slim', 'Flashy', 'Stylish',
+  'Grumpy', 'Angry', 'Irritable', 'Bitter', 'Jealous', 'Envious', 'Gloomy', 'Pessimistic', 'Cynical', 'Sarcastic', 'Bossy', 'Rude', 'Mean', 'Cruel', 'Harsh', 'Cold',
+  'Arrogant', 'Egotistic', 'Impulsive', 'Impatient', 'Anxious', 'Panicky', 'Paranoid', 'Suspicious', 'Defensive', 'Spiteful', 'Grudging', 'Guilty', 'Ashamed', 'Toxic', 'Troubled', 'Unstable',
+  'Annoyed', 'Cranky', 'Snappy', 'MoodyAF', 'Doubtful', 'Petty', 'Salty', 'Nasty', 'Hostile', 'Bored', 'Melancholic', 'Doomy', 'Skeptical', 'Snobbish', 'Whiny', 'Glum',
+  'Goofy', 'Clownish', 'MemeLord', 'BananaMode', 'Wacky', 'Nutty', 'Zany', 'Silly', 'Cheeky', 'Derpy', 'Giggly', 'Snorty', 'Jokey', 'Pranky', 'FunkyChicken', 'Disco',
+  'Tall', 'Short', 'Tiny', 'Giant', 'Strong', 'Slim', 'Chubby', 'Skinny', 'Muscular', 'Lean', 'Wide', 'Narrow', 'BroadShouldered', 'LongLegged', 'FastFooted', 'SlowPaced',
+  'Freckled', 'Pale', 'Tanned', 'Curly', 'StraightHaired', 'Braided', 'Bearded', 'Bald', 'SharpEyed', 'SleepyEyed', 'LoudVoiced', 'SoftSpoken', 'LeftHanded', 'RightHanded', 'Fit', 'Wobbly',
+  'Vintage', 'Sporty', 'Urban', 'Casual', 'Formal', 'Funky', 'Quirky', 'Lucky', 'Unlucky', 'Balanced', 'Neutral', 'Zen', 'Hyper', 'Chill', 'Prime', 'Ultra'
 ];
 
 const RANDOM_NAME_PEOPLE = [
   // Moroccan / Maghrebi
-  'Amir','Yasmine','Karim','Nadia','Samir','Leila','Rachid','Salma','Amina','Youssef','Hakim','Imane','Zineb','Omar','Anas','Soufiane','Hamza','Khadija','Nabil','Meriem','Tarik','Ayoub','Ibtissam','Naima',
+  'Amir', 'Yasmine', 'Karim', 'Nadia', 'Samir', 'Leila', 'Rachid', 'Salma', 'Amina', 'Youssef', 'Hakim', 'Imane', 'Zineb', 'Omar', 'Anas', 'Soufiane', 'Hamza', 'Khadija', 'Nabil', 'Meriem', 'Tarik', 'Ayoub', 'Ibtissam', 'Naima',
   // Catalan / Iberian (expanded, with many female + athlete/soccer names)
-  'Jordi','Nuria','Pol','Laia','Marc','Jana','Pau','Berta','Sergi','Joan','Martina','Arnau','Aina','Ona','Mariona','Biel','Jan','Pere','Aleix','Roser','Oriol','Mireia','Carles','Marti','Montserrat','Gemma','Neus','Adria','Xavi','Ferran','Gerard','Nil','Roc','Blai','Judit','Txell',
-  'Ariadna','Noelia','Naiara','Clara','Nora','Helena','Ivet','Bruna','Queralt','Celia','Mar','Carlota','Paula','Irene','Anna','Joana','Marta','Nerea','Laura','Alba',
-  'PauGasol','MarcGasol','RickyRubio','AlexAbrines','RaulEntrerrios','AlexCorretja','CarlosAlcaraz','Garbiñe','RafaNadal','JorgeMartin',
-  'Puyol','Busquets','Alba','Pique','Valdes','XaviHernandez','Iniesta','Pedro','CescFabregas','SergiRoberto','ThiagoAlcantara','Bojan','Muniesa','Bartra','Deulofeu','JoanGarcia','DaniOlmo','AleixGarcia','EricGarcia','Cubarsi',
+  'Jordi', 'Nuria', 'Pol', 'Laia', 'Marc', 'Jana', 'Pau', 'Berta', 'Sergi', 'Joan', 'Martina', 'Arnau', 'Aina', 'Ona', 'Mariona', 'Biel', 'Jan', 'Pere', 'Aleix', 'Roser', 'Oriol', 'Mireia', 'Carles', 'Marti', 'Montserrat', 'Gemma', 'Neus', 'Adria', 'Xavi', 'Ferran', 'Gerard', 'Nil', 'Roc', 'Blai', 'Judit', 'Txell',
+  'Ariadna', 'Noelia', 'Naiara', 'Clara', 'Nora', 'Helena', 'Ivet', 'Bruna', 'Queralt', 'Celia', 'Mar', 'Carlota', 'Paula', 'Irene', 'Anna', 'Joana', 'Marta', 'Nerea', 'Laura', 'Alba',
+  'PauGasol', 'MarcGasol', 'RickyRubio', 'AlexAbrines', 'RaulEntrerrios', 'AlexCorretja', 'CarlosAlcaraz', 'Garbiñe', 'RafaNadal', 'JorgeMartin',
+  'Puyol', 'Busquets', 'Alba', 'Pique', 'Valdes', 'XaviHernandez', 'Iniesta', 'Pedro', 'CescFabregas', 'SergiRoberto', 'ThiagoAlcantara', 'Bojan', 'Muniesa', 'Bartra', 'Deulofeu', 'JoanGarcia', 'DaniOlmo', 'AleixGarcia', 'EricGarcia', 'Cubarsi',
   // Italian names
-  'Luca','Giulia','Francesca','Marco','Alessandro','Giovanni','Matteo','Chiara','Elisa','Sofia','Giorgia','Riccardo','Davide','Federico','Paolo','Marta','Gabriele','Simone','Alessia','Franco',
+  'Luca', 'Giulia', 'Francesca', 'Marco', 'Alessandro', 'Giovanni', 'Matteo', 'Chiara', 'Elisa', 'Sofia', 'Giorgia', 'Riccardo', 'Davide', 'Federico', 'Paolo', 'Marta', 'Gabriele', 'Simone', 'Alessia', 'Franco',
   // FC Barcelona current/previous + football-inspired
-  'Messi','Ronaldo','Neymar','Mbappe','Modric','Iniesta','Xavi','Salah','Benzema','Lewandowski','Pedri','Gavi','Lamine','Aitana','Putellas','Bonmati','Haaland','Bellingham','Vinicius','Yamal',
-  'TerStegen','Cubarsi','Araujo','Kounde','Balde','Raphinha','Fermin','Olmo','DeJong','Ansu','Pique','Busquets','Alba','Suarez','Rakitic','Puyol','Valdes','Rivaldo','Ronaldinho','EtoO',
+  'Messi', 'Ronaldo', 'Neymar', 'Mbappe', 'Modric', 'Iniesta', 'Xavi', 'Salah', 'Benzema', 'Lewandowski', 'Pedri', 'Gavi', 'Lamine', 'Aitana', 'Putellas', 'Bonmati', 'Haaland', 'Bellingham', 'Vinicius', 'Yamal',
+  'TerStegen', 'Cubarsi', 'Araujo', 'Kounde', 'Balde', 'Raphinha', 'Fermin', 'Olmo', 'DeJong', 'Ansu', 'Pique', 'Busquets', 'Alba', 'Suarez', 'Rakitic', 'Puyol', 'Valdes', 'Rivaldo', 'Ronaldinho', 'EtoO',
   // Philosophers / thinkers (expanded)
-  'Socrates','Plato','Aristotle','Hypatia','Averroes','Avicenna','Descartes','Spinoza','Nietzsche','Kant','Voltaire','Rousseau','Confucius','Laozi','HannahArendt','SimoneDeBeauvoir','Diogenes','Epicurus','Zeno','Heraclitus',
-  'Parmenides','Anaxagoras','Anaximander','Thales','Plotinus','Boethius','Aquinas','Ockham','Machiavelli','Hobbes','Locke','Hume','Berkeley','Leibniz','Schopenhauer','Kierkegaard','Heidegger','Sartre','Camus','Foucault',
-  'Derrida','Deleuze','MerleauPonty','Wittgenstein','Russell','Popper','Rawls','Nozick','Nussbaum','Butler','Spivak','Arendt','Buber','Jaspers','Comte','Durkheim','Weber','Gramsci','Benjamin','Adorno',
+  'Socrates', 'Plato', 'Aristotle', 'Hypatia', 'Averroes', 'Avicenna', 'Descartes', 'Spinoza', 'Nietzsche', 'Kant', 'Voltaire', 'Rousseau', 'Confucius', 'Laozi', 'HannahArendt', 'SimoneDeBeauvoir', 'Diogenes', 'Epicurus', 'Zeno', 'Heraclitus',
+  'Parmenides', 'Anaxagoras', 'Anaximander', 'Thales', 'Plotinus', 'Boethius', 'Aquinas', 'Ockham', 'Machiavelli', 'Hobbes', 'Locke', 'Hume', 'Berkeley', 'Leibniz', 'Schopenhauer', 'Kierkegaard', 'Heidegger', 'Sartre', 'Camus', 'Foucault',
+  'Derrida', 'Deleuze', 'MerleauPonty', 'Wittgenstein', 'Russell', 'Popper', 'Rawls', 'Nozick', 'Nussbaum', 'Butler', 'Spivak', 'Arendt', 'Buber', 'Jaspers', 'Comte', 'Durkheim', 'Weber', 'Gramsci', 'Benjamin', 'Adorno',
   // Writers / poets / playwrights
-  'Shakespeare','Cervantes','Dante','Homer','Virgil','Goethe','Tolstoy','Dostoevsky','Proust','Kafka','Borges','Neruda','Lorca','Woolf','Austen','Hemingway','Orwell','Camus','Moliere','Balzac',
-  'GarciaMarquez','IsabelAllende','UmbertoEco','Calvino','Pessoa','Saramago','Murasaki','Tagore','Byron','Keats','Shelley','Whitman','Dickens','Joyce','Nabokov','Rimbaud','Baudelaire','Poe','Twain','Hugo',
+  'Shakespeare', 'Cervantes', 'Dante', 'Homer', 'Virgil', 'Goethe', 'Tolstoy', 'Dostoevsky', 'Proust', 'Kafka', 'Borges', 'Neruda', 'Lorca', 'Woolf', 'Austen', 'Hemingway', 'Orwell', 'Camus', 'Moliere', 'Balzac',
+  'GarciaMarquez', 'IsabelAllende', 'UmbertoEco', 'Calvino', 'Pessoa', 'Saramago', 'Murasaki', 'Tagore', 'Byron', 'Keats', 'Shelley', 'Whitman', 'Dickens', 'Joyce', 'Nabokov', 'Rimbaud', 'Baudelaire', 'Poe', 'Twain', 'Hugo',
   // Guitarists / rock stars / musicians / composers
-  'Mozart','Beethoven','Bach','Vivaldi','Chopin','Tchaikovsky','Ravel','Debussy','Bizet','Verdi','Paganini','Liszt','Mahler','Puccini','Stravinsky','Handel','Haydn','SaintSaens','Sibelius','Grieg',
-  'Hendrix','Clapton','Page','Gilmour','Iommi','Slash','Santana','VanHalen','Frusciante','Knopfler','BrianMay','Petrucci','Vai','Satriani','Malmsteen','Dimebag','Hetfield','Cobain','Lennon','McCartney',
-  'FreddieMercury','Bowie','Jagger','Plant','AxlRose','Ozzy','Bono','ThomYorke','ChrisCornell','EddieVedder','Shakira','Rihanna','Adele','Beyonce','DuaLipa','Rosalia','Stromae','KarolG','EdSheeran','Sia',
+  'Mozart', 'Beethoven', 'Bach', 'Vivaldi', 'Chopin', 'Tchaikovsky', 'Ravel', 'Debussy', 'Bizet', 'Verdi', 'Paganini', 'Liszt', 'Mahler', 'Puccini', 'Stravinsky', 'Handel', 'Haydn', 'SaintSaens', 'Sibelius', 'Grieg',
+  'Hendrix', 'Clapton', 'Page', 'Gilmour', 'Iommi', 'Slash', 'Santana', 'VanHalen', 'Frusciante', 'Knopfler', 'BrianMay', 'Petrucci', 'Vai', 'Satriani', 'Malmsteen', 'Dimebag', 'Hetfield', 'Cobain', 'Lennon', 'McCartney',
+  'FreddieMercury', 'Bowie', 'Jagger', 'Plant', 'AxlRose', 'Ozzy', 'Bono', 'ThomYorke', 'ChrisCornell', 'EddieVedder', 'Shakira', 'Rihanna', 'Adele', 'Beyonce', 'DuaLipa', 'Rosalia', 'Stromae', 'KarolG', 'EdSheeran', 'Sia',
   // Athletes (multi-sport)
-  'Jordan','Kobe','LeBron','Curry','Nadal','Federer','Djokovic','Alcaraz','Bolt','Phelps','Biles','Serena','Ali','Tyson','Hamilton','Verstappen','Senna','Rafaela','Ingebrigtsen','Kipchoge',
-  'Marquez','Rossi','Contador','Pogacar','Evenepoel','Ledecky','Shiffrin','Ohtani','Brady','Mahomes','CaitlinClark','Donovan','Haaland','Yulimar','Duplantis','NoahLyles','SimoneBiles','Marta','Riner','NaimSuleymanoglu',
+  'Jordan', 'Kobe', 'LeBron', 'Curry', 'Nadal', 'Federer', 'Djokovic', 'Alcaraz', 'Bolt', 'Phelps', 'Biles', 'Serena', 'Ali', 'Tyson', 'Hamilton', 'Verstappen', 'Senna', 'Rafaela', 'Ingebrigtsen', 'Kipchoge',
+  'Marquez', 'Rossi', 'Contador', 'Pogacar', 'Evenepoel', 'Ledecky', 'Shiffrin', 'Ohtani', 'Brady', 'Mahomes', 'CaitlinClark', 'Donovan', 'Haaland', 'Yulimar', 'Duplantis', 'NoahLyles', 'SimoneBiles', 'Marta', 'Riner', 'NaimSuleymanoglu',
   // Historical leaders / emperors / queens
-  'Augustus','Hadrian','MarcusAurelius','Cleopatra','Akbar','Saladin','Catherine','Elizabeth','Victoria','Napoleon','Charlemagne','WuZetian','Hatshepsut','Cyrus','Pericles','Leonidas','Tutankhamun','Nefertiti','Isabella','Ferdinand',
-  'Justinian','Constantine','Trajan','Aurelian','Genghis','Kublai','Ashoka','Darius','Xerxes','JuliusCaesar','Octavian','Theodora','Boudica','Sejong','MansaMusa','Meiji','PeterTheGreat','Ivan','Suleiman','MariaTheresa',
+  'Augustus', 'Hadrian', 'MarcusAurelius', 'Cleopatra', 'Akbar', 'Saladin', 'Catherine', 'Elizabeth', 'Victoria', 'Napoleon', 'Charlemagne', 'WuZetian', 'Hatshepsut', 'Cyrus', 'Pericles', 'Leonidas', 'Tutankhamun', 'Nefertiti', 'Isabella', 'Ferdinand',
+  'Justinian', 'Constantine', 'Trajan', 'Aurelian', 'Genghis', 'Kublai', 'Ashoka', 'Darius', 'Xerxes', 'JuliusCaesar', 'Octavian', 'Theodora', 'Boudica', 'Sejong', 'MansaMusa', 'Meiji', 'PeterTheGreat', 'Ivan', 'Suleiman', 'MariaTheresa',
   // Fictional characters
-  'Sherlock','Athena','Hermione','Frodo','Aragorn','Legolas','Leia','Anakin','Neo','Trinity','Katniss','Arya','Geralt','Yennefer','Zelda','Mario','LaraCroft','Spock','Picard','Wednesday',
-  'Gandalf','DarthVader','LukeSkywalker','HanSolo','TonyStark','NatashaRomanoff','Batman','Joker','HarleyQuinn','Spiderman','Wolverine','Deadpool','Kratos','MasterChief','Ezio','GeronimoStilton','Tintin','Asterix','Obelix','Moana',
-  'Superman','WonderWoman','Flash','Aquaman','GreenLantern','DoctorStrange','ScarletWitch','BlackPanther','CaptainMarvel','Thor','Loki','Hulk','IronMan','BlackWidow','Hawkeye','AntMan','Venom','Magneto','Storm','ProfessorX',
-  'Sonic','Tails','Knuckles','Pikachu','Charizard','Mewtwo','Link','Ganondorf','Samus','Kirby','DonkeyKong','Yoshi','Bowser','Luigi','Peach','Cloud','Sephiroth','Tifa','Aerith','Sora',
-  'Dumbledore','Snape','Voldemort','Hagrid','RonWeasley','LunaLovegood','DracoMalfoy','SiriusBlack','RemusLupin','Bellatrix','Eleven','JonSnow','Daenerys','Tyrion','Sansa','BranStark','Cersei','JaimeLannister','TheHound','TheMandalorian',
+  'Sherlock', 'Athena', 'Hermione', 'Frodo', 'Aragorn', 'Legolas', 'Leia', 'Anakin', 'Neo', 'Trinity', 'Katniss', 'Arya', 'Geralt', 'Yennefer', 'Zelda', 'Mario', 'LaraCroft', 'Spock', 'Picard', 'Wednesday',
+  'Gandalf', 'DarthVader', 'LukeSkywalker', 'HanSolo', 'TonyStark', 'NatashaRomanoff', 'Batman', 'Joker', 'HarleyQuinn', 'Spiderman', 'Wolverine', 'Deadpool', 'Kratos', 'MasterChief', 'Ezio', 'GeronimoStilton', 'Tintin', 'Asterix', 'Obelix', 'Moana',
+  'Superman', 'WonderWoman', 'Flash', 'Aquaman', 'GreenLantern', 'DoctorStrange', 'ScarletWitch', 'BlackPanther', 'CaptainMarvel', 'Thor', 'Loki', 'Hulk', 'IronMan', 'BlackWidow', 'Hawkeye', 'AntMan', 'Venom', 'Magneto', 'Storm', 'ProfessorX',
+  'Sonic', 'Tails', 'Knuckles', 'Pikachu', 'Charizard', 'Mewtwo', 'Link', 'Ganondorf', 'Samus', 'Kirby', 'DonkeyKong', 'Yoshi', 'Bowser', 'Luigi', 'Peach', 'Cloud', 'Sephiroth', 'Tifa', 'Aerith', 'Sora',
+  'Dumbledore', 'Snape', 'Voldemort', 'Hagrid', 'RonWeasley', 'LunaLovegood', 'DracoMalfoy', 'SiriusBlack', 'RemusLupin', 'Bellatrix', 'Eleven', 'JonSnow', 'Daenerys', 'Tyrion', 'Sansa', 'BranStark', 'Cersei', 'JaimeLannister', 'TheHound', 'TheMandalorian',
   // Stranger Things
-  'Will','Mike','Dustin','Lucas','Max','Billy','Hopper','Joyce','Steve','Robin','Nancy','Jonathan','Erica','Bob','Alexei','Murray','Argyle','Eddie','Vickie','Suzie',
+  'Will', 'Mike', 'Dustin', 'Lucas', 'Max', 'Billy', 'Hopper', 'Joyce', 'Steve', 'Robin', 'Nancy', 'Jonathan', 'Erica', 'Bob', 'Alexei', 'Murray', 'Argyle', 'Eddie', 'Vickie', 'Suzie',
   // More fictional
-  'Grogu','Ahsoka','Padme','Kenobi','Rey','Finn','PoeDameron','KyloRen','BoKatan','CaptainPicard','Data','SevenOfNine','Ripley','SarahConnor','Ellen','MaxRockatansky','IndianaJones','JackSparrow','ElizabethSwann','OptimusPrime',
+  'Grogu', 'Ahsoka', 'Padme', 'Kenobi', 'Rey', 'Finn', 'PoeDameron', 'KyloRen', 'BoKatan', 'CaptainPicard', 'Data', 'SevenOfNine', 'Ripley', 'SarahConnor', 'Ellen', 'MaxRockatansky', 'IndianaJones', 'JackSparrow', 'ElizabethSwann', 'OptimusPrime',
   // Russian / Slavic sounding
-  'Dmitri','Anastasia','Svetlana','Mikhail','Nikolai','Irina','Viktor','Tatiana','Yelena','Sergei','Olga','Boris','Ekaterina','Alexei','Marina','Roman','Natasha','Ilya','Yuri','Vera','Mila','Ludmila','Stanislav','Galina',
+  'Dmitri', 'Anastasia', 'Svetlana', 'Mikhail', 'Nikolai', 'Irina', 'Viktor', 'Tatiana', 'Yelena', 'Sergei', 'Olga', 'Boris', 'Ekaterina', 'Alexei', 'Marina', 'Roman', 'Natasha', 'Ilya', 'Yuri', 'Vera', 'Mila', 'Ludmila', 'Stanislav', 'Galina',
   // South American sounding
-  'Mateo','Sofia','Valentina','Santiago','Camila','Thiago','Lucia','Valeria','Diego','Emilia','Lautaro','Antonella','Agustin','Renata','Bruno','Gael','Julieta','Franco','Bianca','Enzo','Milagros','Facundo','Thiaguito','Benicio',
+  'Mateo', 'Sofia', 'Valentina', 'Santiago', 'Camila', 'Thiago', 'Lucia', 'Valeria', 'Diego', 'Emilia', 'Lautaro', 'Antonella', 'Agustin', 'Renata', 'Bruno', 'Gael', 'Julieta', 'Franco', 'Bianca', 'Enzo', 'Milagros', 'Facundo', 'Thiaguito', 'Benicio',
   // Global mixed
-  'Aarav','Maya','Priya','Arjun','Noah','Liam','Emma','Olivia','Lucas','Mia','Elena','Nora','Leo','Hugo','Chloe','Zoe','Aiko','Kenji','Fatima','Yara','Ines','Samira','Noura','Kai',
+  'Aarav', 'Maya', 'Priya', 'Arjun', 'Noah', 'Liam', 'Emma', 'Olivia', 'Lucas', 'Mia', 'Elena', 'Nora', 'Leo', 'Hugo', 'Chloe', 'Zoe', 'Aiko', 'Kenji', 'Fatima', 'Yara', 'Ines', 'Samira', 'Noura', 'Kai',
   // Extra women-focused expansion (target ~50% women)
-  'Maria','Laura','Sara','Julia','Claudia','Andrea','Patricia','Cristina','Silvia','Raquel','Beatriz','Teresa','Mónica','Veronica','Eva','Miriam','Noelia','Carla','Sonia','Lucia',
-  'Daniela','Valeria','Camila','Juliana','Mariana','Gabriela','Isabela','Antonella','Renata','Bianca','Milagros','Catalina','Florencia','Agustina','Pilar','Lourdes','Alicia','Elisa','Ingrid','Natalia',
-  'Frida','Rosalind','Ada','MarieCurie','Hypatia','MaryWollstonecraft','VirginiaWoolf','Simone','Hannah','JudithButler','AngelaDavis','Emmeline','RosaParks','Malala','Rigoberta','Greta','Amelia','ValentinaTereshkova','SallyRide','MaeJemison',
-  'AlexMorgan','MeganRapinoe','LucyBronze','AdaHegerberg','CarolineGrahamHansen','MartaVieira','SamKerr','WendieRenard'
+  'Maria', 'Laura', 'Sara', 'Julia', 'Claudia', 'Andrea', 'Patricia', 'Cristina', 'Silvia', 'Raquel', 'Beatriz', 'Teresa', 'Mónica', 'Veronica', 'Eva', 'Miriam', 'Noelia', 'Carla', 'Sonia', 'Lucia',
+  'Daniela', 'Valeria', 'Camila', 'Juliana', 'Mariana', 'Gabriela', 'Isabela', 'Antonella', 'Renata', 'Bianca', 'Milagros', 'Catalina', 'Florencia', 'Agustina', 'Pilar', 'Lourdes', 'Alicia', 'Elisa', 'Ingrid', 'Natalia',
+  'Frida', 'Rosalind', 'Ada', 'MarieCurie', 'Hypatia', 'MaryWollstonecraft', 'VirginiaWoolf', 'Simone', 'Hannah', 'JudithButler', 'AngelaDavis', 'Emmeline', 'RosaParks', 'Malala', 'Rigoberta', 'Greta', 'Amelia', 'ValentinaTereshkova', 'SallyRide', 'MaeJemison',
+  'AlexMorgan', 'MeganRapinoe', 'LucyBronze', 'AdaHegerberg', 'CarolineGrahamHansen', 'MartaVieira', 'SamKerr', 'WendieRenard'
 ];
 
 const FEMALE_NAME_HINTS = new Set([
-  'yasmine','nadia','leila','salma','amina','imane','zineb','khadija','meriem','ibtissam','naima',
-  'nuria','laia','jana','berta','martina','aina','ona','mariona','roser','mireia','montserrat','gemma','neus','judit','txell','ariadna','clara','nora','helena','ivet','bruna','queralt','celia','mar','carlota','paula','irene','anna','joana','marta','nerea','laura','alba',
-  'alexiaputellas','aitanabonmati','mapileon','patriguijarro','claudiapina','marionacaldentey','vickylopez','sandrapaños','laiacodina','onabatlle','ireneparedes','jennihermoso','salmaparalluelo','martatorrejon','leilaouahabi','arisánchez','gemmatriay','mireiabelmonte',
-  'giulia','francesca','chiara','elisa','sofia','giorgia','marta','alessia',
-  'hypatia','hannaharendt','simonedebeauvoir','woolf','austen','isabelallende','murasaki',
-  'rihanna','adele','beyonce','dualipa','rosalia','karolg','sia','shakira',
-  'cleopatra','catherine','elizabeth','victoria','wuzetian','hatshepsut','nefertiti','isabella','theodora','boudica','mariatheresa',
-  'athena','hermione','leia','trinity','katniss','arya','yennefer','zelda','laracroft','wednesday','wonderwoman','scarletwitch','captainmarvel','blackwidow','harleyquinn','peach','tifa','aerith','lunalovegood','bellatrix','daenerys','sansa','cersei','ahsoka','padme','rey','bokatan','ripley','sarahconnor','ellen','elizabethswann',
-  'anastasia','svetlana','irina','tatiana','yelena','olga','ekaterina','marina','natasha','vera','mila','ludmila','galina',
-  'sofia','valentina','camila','lucia','valeria','emilia','antonella','renata','julieta','bianca','milagros',
-  'maya','priya','emma','olivia','mia','elena','nora','chloe','zoe','aiko','fatima','yara','ines','samira','noura',
-  'maria','sara','julia','claudia','andrea','patricia','cristina','silvia','raquel','beatriz','teresa','mónica','veronica','eva','miriam','noelia','carla','sonia','daniela','juliana','mariana','gabriela','isabela','florencia','agustina','pilar','lourdes','alicia','ingrid','natalia',
-  'frida','rosalind','ada','mariecurie','marywollstonecraft','simone','judithbutler','angeladavis','emmeline','rosaparks','malala','rigoberta','greta','amelia','valentinatereshkova','sallyride','maejemison',
-  'alexmorgan','meganrapinoe','lucybronze','adahegerberg','carolinegrahamhansen','martavieira','samkerr','wendierenard',
-  'max','joyce','nancy','robin','erica','vickie','suzie','eleven'
+  'yasmine', 'nadia', 'leila', 'salma', 'amina', 'imane', 'zineb', 'khadija', 'meriem', 'ibtissam', 'naima',
+  'nuria', 'laia', 'jana', 'berta', 'martina', 'aina', 'ona', 'mariona', 'roser', 'mireia', 'montserrat', 'gemma', 'neus', 'judit', 'txell', 'ariadna', 'clara', 'nora', 'helena', 'ivet', 'bruna', 'queralt', 'celia', 'mar', 'carlota', 'paula', 'irene', 'anna', 'joana', 'marta', 'nerea', 'laura', 'alba',
+  'alexiaputellas', 'aitanabonmati', 'mapileon', 'patriguijarro', 'claudiapina', 'marionacaldentey', 'vickylopez', 'sandrapaños', 'laiacodina', 'onabatlle', 'ireneparedes', 'jennihermoso', 'salmaparalluelo', 'martatorrejon', 'leilaouahabi', 'arisánchez', 'gemmatriay', 'mireiabelmonte',
+  'giulia', 'francesca', 'chiara', 'elisa', 'sofia', 'giorgia', 'marta', 'alessia',
+  'hypatia', 'hannaharendt', 'simonedebeauvoir', 'woolf', 'austen', 'isabelallende', 'murasaki',
+  'rihanna', 'adele', 'beyonce', 'dualipa', 'rosalia', 'karolg', 'sia', 'shakira',
+  'cleopatra', 'catherine', 'elizabeth', 'victoria', 'wuzetian', 'hatshepsut', 'nefertiti', 'isabella', 'theodora', 'boudica', 'mariatheresa',
+  'athena', 'hermione', 'leia', 'trinity', 'katniss', 'arya', 'yennefer', 'zelda', 'laracroft', 'wednesday', 'wonderwoman', 'scarletwitch', 'captainmarvel', 'blackwidow', 'harleyquinn', 'peach', 'tifa', 'aerith', 'lunalovegood', 'bellatrix', 'daenerys', 'sansa', 'cersei', 'ahsoka', 'padme', 'rey', 'bokatan', 'ripley', 'sarahconnor', 'ellen', 'elizabethswann',
+  'anastasia', 'svetlana', 'irina', 'tatiana', 'yelena', 'olga', 'ekaterina', 'marina', 'natasha', 'vera', 'mila', 'ludmila', 'galina',
+  'sofia', 'valentina', 'camila', 'lucia', 'valeria', 'emilia', 'antonella', 'renata', 'julieta', 'bianca', 'milagros',
+  'maya', 'priya', 'emma', 'olivia', 'mia', 'elena', 'nora', 'chloe', 'zoe', 'aiko', 'fatima', 'yara', 'ines', 'samira', 'noura',
+  'maria', 'sara', 'julia', 'claudia', 'andrea', 'patricia', 'cristina', 'silvia', 'raquel', 'beatriz', 'teresa', 'mónica', 'veronica', 'eva', 'miriam', 'noelia', 'carla', 'sonia', 'daniela', 'juliana', 'mariana', 'gabriela', 'isabela', 'florencia', 'agustina', 'pilar', 'lourdes', 'alicia', 'ingrid', 'natalia',
+  'frida', 'rosalind', 'ada', 'mariecurie', 'marywollstonecraft', 'simone', 'judithbutler', 'angeladavis', 'emmeline', 'rosaparks', 'malala', 'rigoberta', 'greta', 'amelia', 'valentinatereshkova', 'sallyride', 'maejemison',
+  'alexmorgan', 'meganrapinoe', 'lucybronze', 'adahegerberg', 'carolinegrahamhansen', 'martavieira', 'samkerr', 'wendierenard',
+  'max', 'joyce', 'nancy', 'robin', 'erica', 'vickie', 'suzie', 'eleven'
 ]);
 
 const BLOCKED_NICK_PATTERNS = [
@@ -103,7 +103,7 @@ const BLOCKED_NICK_PATTERNS = [
 ];
 
 const ALLOWED_REACTIONS = new Set([
-  '👍','👏','🔥','😂','🤯','🙌','☕','😮','🤔','👀','🧠','❤️','😅','😎','🫶','6️⃣','7️⃣'
+  '👍', '👏', '🔥', '😂', '🤯', '🙌', '☕', '😮', '🤔', '👀', '🧠', '❤️', '😅', '😎', '🫶', '6️⃣', '7️⃣'
 ]);
 const MAX_ROOM_EVENTS = 4000;
 const ASSIGNMENTS_DO_NAME = '__assignments_registry__';
@@ -250,7 +250,7 @@ export default {
       if (env.QUIZ_MEDIA) {
         const quizId = `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         quiz = JSON.parse(JSON.stringify(quiz)); // deep clone
-        
+
         for (const q of quiz.questions || []) {
           for (const field of ['audioData', 'imageData']) {
             const val = q[field];
@@ -261,9 +261,9 @@ export default {
                 const binaryStr = atob(match[2]);
                 const bytes = new Uint8Array(binaryStr.length);
                 for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3' 
-                          : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
-                          : mime.includes('png') ? '.png' : '.bin';
+                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
+                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
+                    : mime.includes('png') ? '.png' : '.bin';
                 const key = `${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
                 await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
                 q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
@@ -746,7 +746,7 @@ export default {
             });
             const vTxt = await vRes.text();
             let parsed = {};
-            try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+            try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
 
             console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
 
@@ -1059,8 +1059,8 @@ export default {
         cacheUrl.search = '';
 
         let cache = null;
-        try { cache = caches.default; } catch {}
-        
+        try { cache = caches.default; } catch { }
+
         const cacheReq = new Request(cacheUrl.toString(), { method: 'GET' });
         if (cache) {
           try {
@@ -1099,7 +1099,7 @@ export default {
           try {
             const parsed = JSON.parse(txt);
             err = parsed?.error || parsed?.detail || parsed?.message || txt;
-          } catch {}
+          } catch { }
           return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
         }
 
@@ -1460,12 +1460,12 @@ export class QuizRoom {
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         let attempts = Object.values(assignment.attempts || {});
-        
+
         // Filter by studentKey if provided (student-facing request)
         if (studentKey) {
           attempts = attempts.filter((a) => String(a?.studentKey || '') === studentKey);
         }
-        
+
         attempts = attempts
           .map((a) => publicAssignmentAttemptSummary(assignment, a))
           .sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
@@ -1788,10 +1788,10 @@ export class QuizRoom {
           alreadyJoined: !!existing,
           joinedPlayer: existing
             ? {
-                id: existing.id,
-                name: existing.name,
-                identity: existing.identity || null,
-              }
+              id: existing.id,
+              name: existing.name,
+              identity: existing.identity || null,
+            }
             : null,
         });
       }
@@ -1856,7 +1856,7 @@ export class QuizRoom {
               });
               const vTxt = await vRes.text();
               let parsed = {};
-              try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch {}
+              try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
 
               if (!vRes.ok) continue;
               if (parsed && parsed.ok === false) continue;
@@ -2584,11 +2584,11 @@ function hostState(room) {
   const pollVisible = room.phase === 'question' && !!room.questionClosed && !!roomQuestion?.isPoll;
   const pollResponses = pollVisible
     ? Object.entries(responses).map(([pid, r]) => ({
-        playerId: pid,
-        name: room.players?.[pid]?.name || 'Student',
-        answer: r?.answer,
-        hidden: !!r?.hidden,
-      }))
+      playerId: pid,
+      name: room.players?.[pid]?.name || 'Student',
+      answer: r?.answer,
+      hidden: !!r?.hidden,
+    }))
     : [];
 
   const totalQs = Number(room.quiz?.questions?.length || 0);
@@ -2668,8 +2668,8 @@ function hostState(room) {
     answerHistory,
     correctAnswer:
       (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !roomQuestion?.isPoll
-      && !['open', 'image_open', 'speaking'].includes(roomQuestion?.type)
-      && !isTeacherGradedTextQuestion(roomQuestion)
+        && !['open', 'image_open', 'speaking'].includes(roomQuestion?.type)
+        && !isTeacherGradedTextQuestion(roomQuestion)
         ? hostCorrectSummary(roomQuestion)
         : '',
     settings: {
@@ -2705,18 +2705,18 @@ function playerState(room, playerId) {
     answeredCurrent: !!myResponse,
     revealedResult: canRevealNow
       ? {
-          correct: !!myResponse.correct,
-          pointsAwarded: Number(myResponse.pointsAwarded || 0),
-          graded: !!myResponse.graded,
-          correction: String(myResponse.correction || ''),
-          bet: sanitizeBet(myResponse.bet),
-        }
+        correct: !!myResponse.correct,
+        pointsAwarded: Number(myResponse.pointsAwarded || 0),
+        graded: !!myResponse.graded,
+        correction: String(myResponse.correction || ''),
+        bet: sanitizeBet(myResponse.bet),
+      }
       : null,
     question: (room.phase === 'question' || room.phase === 'results') ? publicQuestion(room.quiz.questions[qIndex]) : null,
     correctAnswer:
       (room.phase === 'question' || room.phase === 'results') && room.questionClosed && !room.quiz.questions[qIndex]?.isPoll
-      && !['open', 'image_open', 'speaking'].includes(room.quiz.questions[qIndex]?.type)
-      && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
+        && !['open', 'image_open', 'speaking'].includes(room.quiz.questions[qIndex]?.type)
+        && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
         ? hostCorrectSummary(room.quiz.questions[qIndex])
         : '',
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
@@ -3046,6 +3046,7 @@ function evaluate(question, answer) {
     let required = 1;
     if (pinMode === 'all') required = zones.length;
     else if (pinMode === 'any') required = 1;
+    else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zones.length, n)); }
     const ok = coveredCount >= required;
     return { correct: ok };
   }
@@ -3383,7 +3384,7 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   for (const correctedStr of validVariants) {
     const source = tokenizeWords(prompt).map(normalizeTextAnswer);
     const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
-    
+
     if (!source.length || !target.length) continue;
     if (source.join(' ') === target.join(' ')) continue;
 
@@ -3568,7 +3569,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     const verdict = evaluate(question, item?.answer);
     autoGradedCount += 1;
     const basePoints = Math.round(Number(question.points || 1000));
-    
+
     if (verdict?.correct) {
       correctCount += 1;
       autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
@@ -3673,11 +3674,11 @@ function buildTeacherGradingItems(assignment, attempt) {
         maxPoints,
         grade: grade && typeof grade === 'object'
           ? {
-              graded: !!grade.graded,
-              pointsAwarded: Number(grade.pointsAwarded || 0),
-              correction: String(grade.correction || ''),
-              gradedAt: Number(grade.gradedAt || 0) || null,
-            }
+            graded: !!grade.graded,
+            pointsAwarded: Number(grade.pointsAwarded || 0),
+            correction: String(grade.correction || ''),
+            gradedAt: Number(grade.gradedAt || 0) || null,
+          }
           : null,
       };
     })
