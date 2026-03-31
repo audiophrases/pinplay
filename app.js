@@ -1143,7 +1143,7 @@ function bindBuilderEvents() {
       const idx = Number(clearImageBtn.dataset.clearImage);
       const q = quiz.questions[idx];
       if (!q) return;
-      q.imageData = '';
+      replaceQuestionImageData(q, '');
       renderBuilder();
       setStatus(hostStatusEl, `Image cleared from Q${idx + 1}.`, 'ok');
       return;
@@ -1260,7 +1260,8 @@ function bindBuilderEvents() {
     const q = quiz.questions[idx];
 
     try {
-      q.imageData = await imageFileToOptimizedDataUrl(file);
+      const nextImageData = await imageFileToOptimizedDataUrl(file);
+      replaceQuestionImageData(q, nextImageData);
       renderBuilder();
       setStatus(hostStatusEl, `Image pasted into Q${idx + 1} (optimized).`, 'ok');
     } catch (err) {
@@ -1354,7 +1355,8 @@ function bindBuilderEvents() {
       }
 
       try {
-        q.imageData = await imageFileToOptimizedDataUrl(file);
+        const nextImageData = await imageFileToOptimizedDataUrl(file);
+        replaceQuestionImageData(q, nextImageData);
         renderBuilder();
       } catch (err) {
         alert(`Image load failed: ${err.message}`);
@@ -1377,7 +1379,8 @@ function bindBuilderEvents() {
       }
 
       try {
-        q.imageData = await imageFileToOptimizedDataUrl(file);
+        const nextImageData = await imageFileToOptimizedDataUrl(file);
+        replaceQuestionImageData(q, nextImageData);
         renderBuilder();
       } catch (err) {
         alert(`Image load failed: ${err.message}`);
@@ -2500,7 +2503,7 @@ async function openImageSearchDialog(questionIdx) {
             // Resize web image before storing
             const blob = dataUrlToBlob(imported.dataUrl);
             const resized = await imageFileToOptimizedDataUrl(blob);
-            q.imageData = resized;
+            replaceQuestionImageData(q, resized);
             renderBuilder();
             setStatus(hostStatusEl, 'Image added from web search.', 'ok');
             overlay.remove();
@@ -8224,9 +8227,10 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     if (q.imageData && q.imageData.startsWith('data:') && uploadToR2) {
       setProgress(`🔄 Uploading Q${i + 1} image to cloud...`);
       try {
-        const key = `${quizId}/images/q${i}${mimeToExt(q.imageData)}`;
+        const token = ensureQuestionImageVersion(q);
+        const key = `${quizId}/images/q${i}-${token}${mimeToExt(q.imageData)}`;
         await uploadMediaToR2(q.imageData, key);
-        q.imageData = `${r2Base}/${key}`;
+        q.imageData = `${r2Base}/${key}?v=${encodeURIComponent(token)}`;
         uploaded += 1;
       } catch (err) {
         console.warn(`Q${i + 1} image upload failed:`, err);
@@ -8354,6 +8358,29 @@ function mimeToExt(dataUrl) {
   return '.bin';
 }
 
+function makeImageRevisionToken() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function ensureQuestionImageVersion(question, fallbackToken = '') {
+  if (!question || typeof question !== 'object') return '';
+  const existing = String(question._imageVersion || '').trim();
+  if (existing) return existing;
+  const next = String(fallbackToken || makeImageRevisionToken());
+  question._imageVersion = next;
+  return next;
+}
+
+function replaceQuestionImageData(question, nextImageData) {
+  if (!question || typeof question !== 'object') return;
+  question.imageData = String(nextImageData || '');
+  if (question.imageData) {
+    question._imageVersion = makeImageRevisionToken();
+    return;
+  }
+  question._imageVersion = '';
+}
+
 function loadQuiz() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -8441,7 +8468,7 @@ async function autoFillImages(quizData, onProgress) {
 
       const blob = dataUrlToBlob(data.dataUrl);
       const resized = await imageFileToOptimizedDataUrl(blob);
-      q.imageData = resized;
+      replaceQuestionImageData(q, resized);
       filled++;
     } catch {
       skipped++;
