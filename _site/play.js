@@ -2534,7 +2534,7 @@ function highlightAnswerItems(isCorrect, state) {
   if (!question) return;
 
   // MCQ / TF / Multi-select
-  if (['mcq', 'tf', 'multi', 'audio'].includes(question.type)) {
+  if (['mcq', 'tf', 'multi'].includes(question.type)) {
     const selectedIndexes = resolveChoiceSelectedIndexes(question);
     highlightChoiceAnswers(question, state.correctAnswer, Array.from(selectedIndexes));
     return;
