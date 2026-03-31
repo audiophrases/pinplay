@@ -796,25 +796,34 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-highlight,
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
   border-color: var(--ok) !important;
-  background: var(--ok) !important;
-  color: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(15, 111, 44, 0.25) !important;
+  background: #e6ffed !important;
+  color: #1a7f37 !important;
+  box-shadow: 0 0 0 2px #e6ffed !important;
   opacity: 1 !important;
 }
 
+#joinAnswers .answer-row.correct-highlight:has(input:checked) {
+  box-shadow: 0 0 0 4px #605dff !important;
+  z-index: 2;
+}
+
 #joinAnswers .answer-row.correct-highlight input {
-  accent-color: #ffffff !important;
-  /* Checkbox turns white for contrast */
+  accent-color: var(--ok) !important;
 }
 
 /* 2. False Positive (Picked & Wrong) */
 #joinAnswers .answer-row.incorrect-highlight,
 #joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
   border-color: var(--bad) !important;
-  background: var(--bad) !important;
-  color: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(163, 15, 26, 0.25) !important;
+  background: #fff8f8 !important;
+  color: #cf222e !important;
+  box-shadow: 0 0 0 2px #fff8f8 !important;
   opacity: 1 !important;
+}
+
+#joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
+  box-shadow: 0 0 0 4px #605dff !important;
+  z-index: 2;
 }
 
 #joinAnswers .answer-row.incorrect-highlight span {
@@ -822,8 +831,7 @@ body.question-active .join-title-row {
 }
 
 #joinAnswers .answer-row.incorrect-highlight input {
-  accent-color: #ffffff !important;
-  /* Checkbox turns white for contrast */
+  accent-color: var(--bad) !important;
 }
 
 /* 3. False Negative (Missed & Correct) */
