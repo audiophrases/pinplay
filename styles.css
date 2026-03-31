@@ -793,7 +793,8 @@ body.question-active .join-title-row {
    ========================================================================== */
 
 /* 1. True Positive (Picked & Correct) */
-#joinAnswers .answer-row.correct-highlight {
+#joinAnswers .answer-row.correct-highlight,
+#joinAnswers .answer-row.correct-highlight:has(input:checked) {
   border-color: var(--ok) !important;
   background: var(--ok) !important;
   color: #ffffff !important;
@@ -807,7 +808,8 @@ body.question-active .join-title-row {
 }
 
 /* 2. False Positive (Picked & Wrong) */
-#joinAnswers .answer-row.incorrect-highlight {
+#joinAnswers .answer-row.incorrect-highlight,
+#joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
   border-color: var(--bad) !important;
   background: var(--bad) !important;
   color: #ffffff !important;
