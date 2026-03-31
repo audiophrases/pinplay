@@ -2603,8 +2603,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     } else if (!isCorrect && isSelected) {
       row.classList.add('incorrect-highlight');       // Option 1 (False Positive)
     } else if (isCorrect && !isSelected) {
-      // Single choice: solid green. Multi-select: dashed green.
-      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight'); // Option 4 (Missed)
+      row.classList.add('correct-missed'); // Option 4 (Missed)
     } else {
       row.classList.add('ignored-option');            // Option 3 (True Negative)
     }
