@@ -10,8 +10,8 @@
   --muted: #5f6b7a;
   --primary: #605dff;
   --primary-2: #4f4ce0;
-  --ok: #138a36;
-  --bad: #c1121f;
+  --ok: #0f6f2c;
+  --bad: #a30f1a;
 }
 
 * {
@@ -795,9 +795,10 @@ body.question-active .join-title-row {
 /* 1. True Positive (Picked & Correct) */
 #joinAnswers .answer-row.correct-highlight {
   border-color: var(--ok) !important;
-  background: rgba(19, 138, 54, 0.12) !important;
+  border-width: 2px !important;
+  background: rgba(15, 111, 44, 0.22) !important;
   color: #0f5e26 !important;
-  box-shadow: 0 0 0 2px rgba(19, 138, 54, 0.15) !important;
+  box-shadow: 0 0 0 4px rgba(15, 111, 44, 0.3) !important;
   opacity: 1 !important;
 }
 
@@ -809,9 +810,10 @@ body.question-active .join-title-row {
 /* 2. False Positive (Picked & Wrong) */
 #joinAnswers .answer-row.incorrect-highlight {
   border-color: var(--bad) !important;
-  background: rgba(193, 18, 31, 0.12) !important;
+  border-width: 2px !important;
+  background: rgba(163, 15, 26, 0.22) !important;
   color: #8b1e1e !important;
-  box-shadow: 0 0 0 2px rgba(193, 18, 31, 0.15) !important;
+  box-shadow: 0 0 0 4px rgba(163, 15, 26, 0.3) !important;
   opacity: 1 !important;
 }
 
@@ -824,8 +826,8 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-missed {
   border-color: var(--ok) !important;
   border-style: dashed !important;
-  border-width: 2px !important;
-  background: rgba(19, 138, 54, 0.04) !important;
+  border-width: 3px !important;
+  background: rgba(15, 111, 44, 0.09) !important;
   color: #0f5e26 !important;
   opacity: 0.9 !important;
 }
@@ -842,8 +844,8 @@ body.question-active .join-title-row {
 
 /* 4. True Negative (Unpicked & Wrong) */
 #joinAnswers .answer-row.ignored-option {
-  opacity: 0.45 !important;
-  filter: grayscale(100%);
+  opacity: 0.62 !important;
+  filter: grayscale(45%);
   background: #f8f9fa !important;
   border-color: #e2e8f0 !important;
 }
