@@ -192,71 +192,153 @@ const TEMPLATE_ALL_12_TYPES = {
   ]
 };
 
+const QUESTION_TYPE_CATALOG = [
+  { type: 'mcq', label: 'MCQ', inTemplate: true, supportsAudio: true },
+  { type: 'multi', label: 'Multi', inTemplate: true, supportsAudio: true },
+  { type: 'tf', label: 'T/F', inTemplate: true, supportsAudio: true },
+  { type: 'text', label: 'Text', inTemplate: true, supportsAudio: true },
+  { type: 'context_gap', label: 'Gap fill', inTemplate: true, supportsAudio: true },
+  { type: 'match_pairs', label: 'Match', inTemplate: true, supportsAudio: true },
+  { type: 'error_hunt', label: 'Error Hunt', inTemplate: true, supportsAudio: true },
+  { type: 'puzzle', label: 'Puzzle', inTemplate: true, supportsAudio: true },
+  { type: 'slider', label: 'Slider', inTemplate: true, supportsAudio: true },
+  { type: 'pin', label: 'Pin spot', inTemplate: true, supportsAudio: true },
+  { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
+  { type: 'image_open', label: 'Image Open', inTemplate: false, supportsAudio: true },
+  { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
+  { type: 'audio', label: 'Audio prompt', inTemplate: false, supportsAudio: true }
+];
+
+const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
+const TEMPLATE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.inTemplate).map((item) => item.type);
+const AUDIO_CAPABLE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.supportsAudio).map((item) => item.type);
+
 const QUESTION_TYPE_EXPLANATIONS = {
   "mcq": {
     "name": "Multiple Choice (Single)",
     "rules": "Standard question with up to 10 options. Only one correct answer.",
-    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 },
+    "pedagogicalUses": ["Fast checks of core concepts.", "Introduce retrieval with clear distractors."],
+    "ttsStrategy": "Use audioText to highlight key words or read a simplified stem.",
+    "differentiationTips": ["Offer one obvious distractor for lower confidence learners.", "Use paired near-miss distractors for advanced learners."],
+    "commonPitfalls": ["Too many trivial distractors.", "Answer length gives away the correct option."]
   },
   "multi": {
     "name": "Multiple Choice (Select All)",
     "rules": "Up to 10 options. Multiple correct answers possible.",
-    "constraints": { "maxAnswers": 10, "maxTextLength": 120 }
+    "constraints": { "maxAnswers": 10, "maxTextLength": 120 },
+    "pedagogicalUses": ["Check nuanced understanding with partial truth options.", "Promote justification and comparison."],
+    "ttsStrategy": "audioText can chunk long prompts into shorter listening cues.",
+    "differentiationTips": ["Keep 2 correct answers for access; increase to 3+ for challenge."],
+    "commonPitfalls": ["Single obvious answer turns this into MCQ.", "Too many options overloads working memory."]
   },
   "tf": {
     "name": "True / False",
     "rules": "Exactly 2 options: True and False.",
-    "constraints": { "maxAnswers": 2 }
+    "constraints": { "maxAnswers": 2 },
+    "pedagogicalUses": ["Quick confidence check.", "Warm-up before deeper item types."],
+    "ttsStrategy": "Use audioText to stress qualifiers like always/never/sometimes.",
+    "differentiationTips": ["Start with concrete facts, then move to interpretation statements."],
+    "commonPitfalls": ["Overusing absolutes makes answers too easy.", "Binary format can inflate guessing."]
   },
   "text": {
     "name": "Typed Answer",
     "rules": "Students type the answer. Case-insensitive matching.",
-    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 }
+    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 },
+    "pedagogicalUses": ["Spelling and recall checks.", "Short constructed response without options."],
+    "ttsStrategy": "audioText may intentionally differ from prompt for dictation/listening contrast.",
+    "differentiationTips": ["Include common variant spellings in accepted.", "Use shorter expected targets for novice learners."],
+    "commonPitfalls": ["Too few accepted variants.", "Prompt expects long open-ended writing."]
   },
   "context_gap": {
     "name": "Gap Fill (Fill in Blank)",
     "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order.",
-    "constraints": { "maxGaps": 10, "maxTextLength": 120 }
+    "constraints": { "maxGaps": 10, "maxTextLength": 120 },
+    "pedagogicalUses": ["Grammar and syntax practice in context.", "Focused vocabulary retrieval in sentences."],
+    "ttsStrategy": "audioText can read sentence with pauses where blanks appear.",
+    "differentiationTips": ["Use one gap for support; add multi-gap chains for challenge."],
+    "commonPitfalls": ["Prompt missing ____ markers.", "Gaps array not matching blank order."]
   },
   "match_pairs": {
     "name": "Match Pairs",
     "rules": "Students match items from the left col to the right col. Define as pairs.",
-    "constraints": { "maxPairs": 10, "maxTextLength": 120 }
+    "constraints": { "maxPairs": 10, "maxTextLength": 120 },
+    "pedagogicalUses": ["Terminology linking (term-definition, symbol-meaning).", "Reinforce associations before transfer tasks."],
+    "ttsStrategy": "audioText can announce matching objective, not every pair.",
+    "differentiationTips": ["Keep semantic categories distinct for novices.", "Increase similarity between distractor pairs for experts."],
+    "commonPitfalls": ["Ambiguous pair mapping.", "Pairs too long for fast scanning."]
   },
   "error_hunt": {
     "name": "Error Hunting",
     "rules": "The prompt is a sentence with errors. Students tap words (tokens) they think are wrong. 'corrected' must be the full fixed sentence.",
-    "constraints": { "maxTokens": 40 }
+    "constraints": { "maxTokens": 40 },
+    "pedagogicalUses": ["Editing and proofreading routines.", "Metalinguistic awareness tasks."],
+    "ttsStrategy": "audioText can read the incorrect sentence to trigger listening-for-errors.",
+    "differentiationTips": ["Start with one error; increase to multi-error sentences."],
+    "commonPitfalls": ["corrected sentence missing.", "Too many errors at once obscures learning goal."]
   },
   "puzzle": {
     "name": "Puzzle (Reorder)",
     "rules": "Unordered list of words or items that students must drag into the correct order.",
-    "constraints": { "maxItems": 12 }
+    "constraints": { "maxItems": 12 },
+    "pedagogicalUses": ["Sentence structure and sequencing.", "Process/order understanding."],
+    "ttsStrategy": "audioText may preview intended final sentence before reconstruction.",
+    "differentiationTips": ["Use fewer chunks with punctuation scaffolds first.", "Remove punctuation cues for advanced challenge."],
+    "commonPitfalls": ["Items can form multiple valid sequences unintentionally.", "Too many tiny tokens create noise."]
   },
   "slider": {
     "name": "Numeric Slider",
     "rules": "Numeric target value on a range with a margin of error ('none', 'low', 'medium', 'high', 'maximum').",
-    "constraints": { "minValue": -1000000, "maxValue": 1000000 }
+    "constraints": { "minValue": -1000000, "maxValue": 1000000 },
+    "pedagogicalUses": ["Estimation and number sense.", "Check approximate reasoning quickly."],
+    "ttsStrategy": "audioText should include unit and estimate expectation.",
+    "differentiationTips": ["Widen margin for emerging learners.", "Tighten margin for mastery checks."],
+    "commonPitfalls": ["Target outside min/max.", "Missing or unclear unit context."]
   },
   "pin": {
     "name": "Pin the Spot",
     "rules": "Click on specific areas (zones) of an image. Zones use x, y percentages (0-100) and r (radius).",
-    "constraints": { "maxZones": 12 }
+    "constraints": { "maxZones": 12 },
+    "pedagogicalUses": ["Spatial identification (maps, diagrams, anatomy).", "Visual discrimination practice."],
+    "ttsStrategy": "audioText can cue region hints without giving exact coordinates.",
+    "differentiationTips": ["Use larger radius and single zone for support.", "Use multi-zone all-mode for challenge."],
+    "commonPitfalls": ["Zones off-image bounds.", "imageKeyword too vague for reliable visual target."]
   },
   "open": {
     "name": "Open Answer",
     "rules": "Critical thinking or research task. No auto-grading. Teacher grades manually later.",
-    "constraints": { "maxTextLength": 500 }
+    "constraints": { "maxTextLength": 500 },
+    "pedagogicalUses": ["Explain reasoning in full sentences.", "Collect evidence of conceptual transfer."],
+    "ttsStrategy": "audioText can rephrase prompt in simpler language for accessibility.",
+    "differentiationTips": ["Add sentence starters for support.", "Require evidence/citation for advanced responses."],
+    "commonPitfalls": ["Prompt too broad for available time.", "No clear grading target."]
   },
   "image_open": {
     "name": "Visual Open Question",
     "rules": "Like Open Answer but focuses on interpreting the primary image.",
-    "constraints": { "maxTextLength": 500 }
+    "constraints": { "maxTextLength": 500 },
+    "pedagogicalUses": ["Claim-evidence reasoning from visuals.", "Observation to inference practice."],
+    "ttsStrategy": "audioText can direct attention to key visual details.",
+    "differentiationTips": ["Guide novice learners with one focused sub-question.", "Ask multi-step interpretation for advanced groups."],
+    "commonPitfalls": ["Question answerable without using the image.", "Image prompt lacks observable clues."]
   },
   "speaking": {
     "name": "Speaking Task",
     "rules": "Voice-enabled answer. Students record/speak their answer in class. Teacher grades manually.",
-    "constraints": { "maxSpeakTime": 60 }
+    "constraints": { "maxSpeakTime": 60 },
+    "pedagogicalUses": ["Oral fluency practice.", "Pronunciation and speaking confidence checks."],
+    "ttsStrategy": "audioText can model tone/register expected in student response.",
+    "differentiationTips": ["Use short sentence frames for support.", "Add argument or explanation requirements for challenge."],
+    "commonPitfalls": ["Task too long for time limit.", "Prompt unclear about expected speaking length."]
+  },
+  "audio": {
+    "name": "Audio Prompt",
+    "rules": "Listening-focused question that relies on audio instructions/content before answering.",
+    "constraints": { "maxTextLength": 120 },
+    "pedagogicalUses": ["Listening comprehension checks.", "Dictation and sound-to-text transfer."],
+    "ttsStrategy": "audioText can intentionally differ from written prompt for retrieval contrast.",
+    "differentiationTips": ["Short, clear clips for support.", "Longer inferential clips for advanced listeners."],
+    "commonPitfalls": ["Written prompt duplicates full transcript.", "No clear listening target (detail, gist, inference)."]
   }
 };
 
@@ -745,7 +827,20 @@ function addQuestionToBuilder(question) {
   renderBuilder();
 }
 
+function renderPromptTypesList() {
+  const typesListEl = document.getElementById('promptTypesList');
+  if (!typesListEl) return;
+  const previousSelected = new Set(Array.from(typesListEl.querySelectorAll('input:checked')).map((cb) => cb.value));
+  typesListEl.innerHTML = QUESTION_TYPE_CATALOG
+    .map((item) => {
+      const checked = previousSelected.size ? previousSelected.has(item.type) : true;
+      return `<label class="type-pill"><input type="checkbox" value="${item.type}" ${checked ? 'checked' : ''}> <span>${item.label}</span></label>`;
+    })
+    .join('');
+}
+
 function bindBuilderEvents() {
+  renderPromptTypesList();
   if (exportPromptBtn) {
     exportPromptBtn.addEventListener('click', exportCreationPrompt);
   }
@@ -2776,7 +2871,14 @@ async function exportCreationPrompt() {
   if (goalText) cleanRequest.goal = goalText;
 
   const typesMode = document.getElementById('promptTypesMode')?.value;
-  const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked')).map(cb => cb.value);
+  const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked'))
+    .map(cb => cb.value)
+    .filter((type) => CANONICAL_QUESTION_TYPES.includes(type));
+  const allowedTypes = CANONICAL_QUESTION_TYPES.filter((type) => {
+    if (typesMode === 'include' && selectedTypes.length) return selectedTypes.includes(type);
+    if (typesMode === 'exclude' && selectedTypes.length) return !selectedTypes.includes(type);
+    return true;
+  });
 
   if (typesMode === 'include' && selectedTypes.length > 0) {
     cleanRequest.includeQuestionTypes = selectedTypes;
@@ -2788,54 +2890,109 @@ async function exportCreationPrompt() {
     .map(([k, v]) => Array.isArray(v) ? `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v.join(', ')}` : `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
     .join('\n');
 
-  let typesInstructions = 'Supported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.';
-  let filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions;
-  let relevantExplanations = {};
+  const templateAllowedTypes = allowedTypes.filter((type) => TEMPLATE_QUESTION_TYPES.includes(type));
+  const filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter((q) => templateAllowedTypes.includes(q.type));
+  const relevantTypeExplanations = Object.fromEntries(
+    allowedTypes
+      .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
+      .map((type) => [type, JSON.parse(JSON.stringify(QUESTION_TYPE_EXPLANATIONS[type]))])
+  );
+  const typeUseCases = Object.fromEntries(
+    allowedTypes
+      .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
+      .map((type) => [type, (QUESTION_TYPE_EXPLANATIONS[type].pedagogicalUses || []).slice(0, 2)])
+  );
+  const featureGuides = {
+    imageKeyword: cleanRequest.includeImages
+      ? "Use a specific 2-5 word visual target. Keep imageData empty."
+      : undefined,
+    audioMode: cleanRequest.includeAudio
+      ? "Use audioMode 'tts', keep audioData empty, and set audioText intentionally (can differ from prompt for dictation/listening retrieval)."
+      : undefined,
+    readAllQuestionsAloud: cleanRequest.includeAudio
+      ? "Set true only when broad accessibility/listening repetition is desired."
+      : undefined
+  };
 
-  if (typesMode === 'include' && selectedTypes.length > 0) {
-    typesInstructions = `CRITICAL: ONLY use these question types: ${selectedTypes.join(', ')}.`;
-    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => selectedTypes.includes(q.type));
-    selectedTypes.forEach(t => relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t] || {});
-  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
-    typesInstructions = `CRITICAL: DO NOT use these question types: ${selectedTypes.join(', ')}. Use any other supported types (mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking).`;
-    filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter(q => !selectedTypes.includes(q.type));
-    Object.keys(QUESTION_TYPE_EXPLANATIONS).forEach(t => {
-      if (!selectedTypes.includes(t)) relevantExplanations[t] = QUESTION_TYPE_EXPLANATIONS[t];
-    });
-  } else {
-    // Mode 'all' or no selection
-    relevantExplanations = QUESTION_TYPE_EXPLANATIONS;
+  const allowedTypesText = allowedTypes.join(', ');
+  const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
+  const mustFollowRules = [
+    'Return valid PinPlay JSON version 3.',
+    `Use only allowed question types: ${allowedTypesText}.`,
+    'Use imageData as "" (never base64 in generated output).',
+    cleanRequest.includeAudio
+      ? 'For generated audio use audioMode:"tts", audioData:"", and meaningful audioText.'
+      : 'Do not add question audio fields unless required by request.',
+    'Do not repeat request fields verbatim inside the output JSON.'
+  ];
+  if (blockedTypesText) {
+    mustFollowRules.push(`Do NOT use blocked types: ${blockedTypesText}.`);
   }
+  const outputContract = [
+    'Output only one JSON object.',
+    'Follow exampleTemplate key shapes.',
+    'Keep ids stable and unique.',
+    'Prefer short, clear prompt text and concise answer choices.'
+  ];
+  const qualityGoals = [
+    `Prioritize: ${goalText || 'balanced scaffold + retrieval practice'}.`,
+    'Use pedagogically meaningful distractors and progression.',
+    'Keep language level aligned to request.',
+    'Avoid redundant narration and filler text.'
+  ];
 
-  const promptText = `
-I want to create a PinPlay quiz in JSON format with these requirements:
-${textualSummary}
-
-CRITICAL RULES FOR ASSETS:
-1. IMAGES: Set "imageData" to "" and instead provide a descriptive "imageKeyword" (1-2 words). The app will auto-search for the image.
-2. AUDIO: Use "audioMode": "tts" and provide the "audioText" to be spoken. Set "audioData" to "". 
-3. GLOBAL AUDIO: You can set "readAllQuestionsAloud": true at the top level to enable quiz-wide TTS.
-
-OUTPUT FORMAT:
-Provide a valid PinPlay JSON version 3. Follow the structure and patterns in the example template provided.
-Refer to the #Explanations# section in the attached JSON for technical constraints and app possibilities for each question type.
-${typesInstructions}
-`.trim();
+  const promptText = [
+    'Task',
+    textualSummary,
+    '',
+    'Must-follow rules',
+    mustFollowRules.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    '',
+    'Output contract',
+    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    '',
+    'Quality goals',
+    qualityGoals.map((r, i) => `${i + 1}. ${r}`).join('\n')
+  ].join('\n').trim();
 
   const exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
       type: "PinPlay Creation Prompt",
-      version: "3.2"
+      version: "3.3"
     },
     request: cleanRequest,
-    aiPrompt: promptText,
-    "#Explanations#": relevantExplanations,
+    promptIntent: "Generate one valid PinPlay v3 quiz JSON from request constraints only.",
+    context: {
+      allowedQuestionTypes: allowedTypes,
+      typeExplanations: relevantTypeExplanations,
+      typeUseCases,
+      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value))
+    },
     exampleTemplate: {
       ...TEMPLATE_ALL_12_TYPES,
       questions: filteredTemplateQuestions
     }
   };
+
+  const CONTEXT_BUDGET = 22000;
+  if (JSON.stringify(exportData).length > CONTEXT_BUDGET && exportData.context?.typeExplanations) {
+    Object.keys(exportData.context.typeExplanations).forEach((type) => {
+      const info = exportData.context.typeExplanations[type];
+      if (!info) return;
+      info.pedagogicalUses = (info.pedagogicalUses || []).slice(0, 1);
+      info.differentiationTips = (info.differentiationTips || []).slice(0, 1);
+      info.commonPitfalls = (info.commonPitfalls || []).slice(0, 1);
+      if (typeof info.ttsStrategy === 'string') info.ttsStrategy = info.ttsStrategy.slice(0, 120);
+      if (typeof info.rules === 'string') info.rules = info.rules.slice(0, 180);
+    });
+  }
+  if (JSON.stringify(exportData).length > CONTEXT_BUDGET) {
+    delete exportData.context.typeExplanations;
+  }
+  if (JSON.stringify(exportData).length > CONTEXT_BUDGET) {
+    delete exportData.context.typeUseCases;
+  }
 
   try {
     await navigator.clipboard.writeText(promptText);
@@ -9047,7 +9204,7 @@ function shuffle(arr) {
 }
 
 function supportsQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
+  return AUDIO_CAPABLE_QUESTION_TYPES.includes(String(type || ''));
 }
 
 function hasQuestionAudio(question) {

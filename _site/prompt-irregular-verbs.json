@@ -1,0 +1,365 @@
+{
+  "metadata": {
+    "generatedAt": "2026-03-31T18:11:13.780Z",
+    "type": "PinPlay Creation Prompt",
+    "version": "3.2"
+  },
+  "request": {
+    "theme": "Irregular Verbs",
+    "language": "English",
+    "level": "4th of ESO",
+    "feel": "Fun",
+    "timeLimit": 30,
+    "questionCount": 20,
+    "includeImages": true,
+    "includeAudio": true,
+    "answerTypes": "balanced",
+    "goal": "More learning (scaffolded)"
+  },
+  "aiPrompt": "I want to create a PinPlay quiz in JSON format with these requirements:\nTheme: Irregular Verbs\nLanguage: English\nLevel: 4th of ESO\nFeel: Fun\nTimeLimit: 30\nQuestionCount: 20\nIncludeImages: true\nIncludeAudio: true\nAnswerTypes: balanced\nGoal: More learning (scaffolded)\n\nCRITICAL RULES FOR ASSETS:\n1. IMAGES: Set \"imageData\" to \"\" and instead provide a descriptive \"imageKeyword\" (1-2 words). The app will auto-search for the image.\n2. AUDIO: Use \"audioMode\": \"tts\" and provide the \"audioText\" to be spoken. Set \"audioData\" to \"\". \n3. GLOBAL AUDIO: You can set \"readAllQuestionsAloud\": true at the top level to enable quiz-wide TTS.\n\nOUTPUT FORMAT:\nProvide a valid PinPlay JSON version 3. Follow the structure and patterns in the example template provided.\nRefer to the #Explanations# section in the attached JSON for technical constraints and app possibilities for each question type.\nSupported types: mcq, multi, tf, text, context_gap, match_pairs, error_hunt, puzzle, slider, pin, audio, speaking.",
+  "#Explanations#": {
+    "mcq": {
+      "name": "Multiple Choice (Single)",
+      "rules": "Standard question with up to 10 options. Only one correct answer.",
+      "constraints": {
+        "maxAnswers": 10,
+        "maxTextLength": 120
+      }
+    },
+    "multi": {
+      "name": "Multiple Choice (Select All)",
+      "rules": "Up to 10 options. Multiple correct answers possible.",
+      "constraints": {
+        "maxAnswers": 10,
+        "maxTextLength": 120
+      }
+    },
+    "tf": {
+      "name": "True / False",
+      "rules": "Exactly 2 options: True and False.",
+      "constraints": {
+        "maxAnswers": 2
+      }
+    },
+    "text": {
+      "name": "Typed Answer",
+      "rules": "Students type the answer. Case-insensitive matching.",
+      "constraints": {
+        "maxAcceptedVariants": 20,
+        "maxTextLength": 120
+      }
+    },
+    "context_gap": {
+      "name": "Gap Fill (Fill in Blank)",
+      "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order.",
+      "constraints": {
+        "maxGaps": 10,
+        "maxTextLength": 120
+      }
+    },
+    "match_pairs": {
+      "name": "Match Pairs",
+      "rules": "Students match items from the left col to the right col. Define as pairs.",
+      "constraints": {
+        "maxPairs": 10,
+        "maxTextLength": 120
+      }
+    },
+    "error_hunt": {
+      "name": "Error Hunting",
+      "rules": "The prompt is a sentence with errors. Students tap words (tokens) they think are wrong. 'corrected' must be the full fixed sentence.",
+      "constraints": {
+        "maxTokens": 40
+      }
+    },
+    "puzzle": {
+      "name": "Puzzle (Reorder)",
+      "rules": "Unordered list of words or items that students must drag into the correct order.",
+      "constraints": {
+        "maxItems": 12
+      }
+    },
+    "slider": {
+      "name": "Numeric Slider",
+      "rules": "Numeric target value on a range with a margin of error ('none', 'low', 'medium', 'high', 'maximum').",
+      "constraints": {
+        "minValue": -1000000,
+        "maxValue": 1000000
+      }
+    },
+    "pin": {
+      "name": "Pin the Spot",
+      "rules": "Click on specific areas (zones) of an image. Zones use x, y percentages (0-100) and r (radius).",
+      "constraints": {
+        "maxZones": 12
+      }
+    },
+    "open": {
+      "name": "Open Answer",
+      "rules": "Critical thinking or research task. No auto-grading. Teacher grades manually later.",
+      "constraints": {
+        "maxTextLength": 500
+      }
+    },
+    "image_open": {
+      "name": "Visual Open Question",
+      "rules": "Like Open Answer but focuses on interpreting the primary image.",
+      "constraints": {
+        "maxTextLength": 500
+      }
+    },
+    "speaking": {
+      "name": "Speaking Task",
+      "rules": "Voice-enabled answer. Students record/speak their answer in class. Teacher grades manually.",
+      "constraints": {
+        "maxSpeakTime": 60
+      }
+    }
+  },
+  "exampleTemplate": {
+    "version": 3,
+    "title": "AI Quiz Reference",
+    "readAllQuestionsAloud": true,
+    "questions": [
+      {
+        "id": "q1-mcq",
+        "type": "mcq",
+        "prompt": "What animal is this?",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "What animal is this?",
+        "imageKeyword": "cat face",
+        "imageData": "",
+        "answers": [
+          {
+            "text": "Cat",
+            "correct": true
+          },
+          {
+            "text": "Dog",
+            "correct": false
+          },
+          {
+            "text": "Bird",
+            "correct": false
+          }
+        ]
+      },
+      {
+        "id": "q2-multi",
+        "type": "multi",
+        "prompt": "Select all fruits shown.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Select all fruits shown.",
+        "imageKeyword": "basket of fruit",
+        "imageData": "",
+        "answers": [
+          {
+            "text": "Apple",
+            "correct": true
+          },
+          {
+            "text": "Carrot",
+            "correct": false
+          },
+          {
+            "text": "Banana",
+            "correct": true
+          },
+          {
+            "text": "Broccoli",
+            "correct": false
+          }
+        ]
+      },
+      {
+        "id": "q3-tf",
+        "type": "tf",
+        "prompt": "True or False: This is a mountain.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Is this a mountain?",
+        "imageKeyword": "snowy mountain peak",
+        "imageData": "",
+        "answers": [
+          {
+            "text": "True",
+            "correct": true
+          },
+          {
+            "text": "False",
+            "correct": false
+          }
+        ]
+      },
+      {
+        "id": "q4-text",
+        "type": "text",
+        "prompt": "Name the color of the car.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "What color is this car?",
+        "imageKeyword": "red sports car",
+        "imageData": "",
+        "accepted": [
+          "red",
+          "crimson",
+          "scarlet"
+        ]
+      },
+      {
+        "id": "q5-context",
+        "type": "context_gap",
+        "prompt": "I went to the ____ and bought some ____.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "I went to the blank and bought some blank.",
+        "imageKeyword": "supermarket aisle",
+        "imageData": "",
+        "gaps": [
+          "market",
+          "apples"
+        ]
+      },
+      {
+        "id": "q6-match",
+        "type": "match_pairs",
+        "prompt": "Match the animals to their sounds.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Match these animals with their sounds.",
+        "imageKeyword": "farm animals group",
+        "imageData": "",
+        "pairs": [
+          {
+            "left": "Dog",
+            "right": "Bark"
+          },
+          {
+            "left": "Cat",
+            "right": "Meow"
+          },
+          {
+            "left": "Cow",
+            "right": "Moo"
+          }
+        ]
+      },
+      {
+        "id": "q7-error",
+        "type": "error_hunt",
+        "prompt": "He go to school every days.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "He go to school every days.",
+        "imageKeyword": "boy going to school",
+        "imageData": "",
+        "corrected": "He goes to school every day.",
+        "correctedVariants": [
+          "He goes to school every day."
+        ]
+      },
+      {
+        "id": "q8-open",
+        "type": "open",
+        "prompt": "Describe the weather in one sentence.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Please describe the weather you see.",
+        "imageKeyword": "sunny blue sky",
+        "imageData": ""
+      },
+      {
+        "id": "q9-speaking",
+        "type": "speaking",
+        "prompt": "Say a sentence about this picture.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Tell me something about this image.",
+        "imageKeyword": "robot waving",
+        "imageData": ""
+      },
+      {
+        "id": "q10-puzzle",
+        "type": "puzzle",
+        "prompt": "Reorder the words to form a sentence.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Reorder these words.",
+        "imageKeyword": "cat on a mat",
+        "imageData": "",
+        "items": [
+          "The",
+          "cat",
+          "sat",
+          "on",
+          "the",
+          "mat"
+        ]
+      },
+      {
+        "id": "q11-slider",
+        "type": "slider",
+        "prompt": "How many books do you read per year?",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "How many books?",
+        "imageKeyword": "stack of books",
+        "imageData": "",
+        "min": 0,
+        "max": 50,
+        "target": 12,
+        "margin": "low",
+        "unit": "books"
+      },
+      {
+        "id": "q12-pin",
+        "type": "pin",
+        "prompt": "Tap both joysticks.",
+        "points": 1000,
+        "timeLimit": 0,
+        "audioEnabled": true,
+        "audioMode": "tts",
+        "audioText": "Where are the joysticks on this controller?",
+        "imageKeyword": "game controller top view",
+        "imageData": "",
+        "zones": [
+          {
+            "x": 57.2,
+            "y": 25.1,
+            "r": 6
+          },
+          {
+            "x": 43.4,
+            "y": 24.8,
+            "r": 6
+          }
+        ],
+        "pinMode": "all"
+      }
+    ]
+  }
+}
