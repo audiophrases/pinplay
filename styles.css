@@ -1027,15 +1027,15 @@ body.question-active .join-title-row {
 }
 
 .error-token-chip.correct-highlight {
-  background: var(--ok) !important;
+  background: #e6ffed !important;
   border-color: var(--ok) !important;
-  color: #ffffff !important;
+  color: #1a7f37 !important;
 }
 
 .error-token-chip.incorrect-highlight {
-  background: var(--bad) !important;
+  background: #fff8f8 !important;
   border-color: var(--bad) !important;
-  color: #ffffff !important;
+  color: #cf222e !important;
 }
 
 .error-token-chip.correct-missed {
@@ -1063,14 +1063,14 @@ body.question-active .join-title-row {
 
 .context-gap-inline.correct-highlight {
   border-color: var(--ok) !important;
-  background: var(--ok) !important;
-  color: #ffffff !important;
+  background: #e6ffed !important;
+  color: #1a7f37 !important;
 }
 
 .context-gap-inline.incorrect-highlight {
   border-color: var(--bad) !important;
-  background: var(--bad) !important;
-  color: #ffffff !important;
+  background: #fff8f8 !important;
+  color: #cf222e !important;
 }
 
 /* Match Pairs */
