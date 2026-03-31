@@ -51,6 +51,7 @@ const live = {
     clientId: getOrCreateClientId(),
     selectedBet: 0,
     lastSubmittedAnswer: null,
+    submittedSelectionsByQIndex: {},
     timerTicker: null,
     timerStartedAt: null,
     timerLimitSec: null,
@@ -336,6 +337,7 @@ async function joinLiveGame() {
     live.player.currentQuestion = null;
     live.player.pinSelection = null;
     live.player.pinSelections = [];
+    live.player.submittedSelectionsByQIndex = {};
 
     const shownName = data.name || username || 'Student';
     live.player.displayName = shownName;
@@ -574,6 +576,7 @@ async function startAssignmentAttempt() {
   const studentKey = makeAssignmentStudentKey(username);
   if (!studentKey) throw new Error('Invalid username.');
 
+  const previousAttemptId = String(live.player.assignment.attemptId || '').trim();
   const data = await api('/api/assignment/start', {
     method: 'POST',
     body: {
@@ -585,6 +588,9 @@ async function startAssignmentAttempt() {
   });
 
   live.player.assignment.attemptId = data?.attempt?.id || null;
+  if (String(live.player.assignment.attemptId || '').trim() !== previousAttemptId) {
+    live.player.submittedSelectionsByQIndex = {};
+  }
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
   // Reset ambient state for new assignment
@@ -1369,7 +1375,11 @@ function renderJoinQuestion(question) {
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
-    const selectedIndexes = resolveChoiceSelectedIndexes(question);
+    const currentQIndex = Number(live.player.mode === 'assignment'
+      ? live.player.assignment.currentIndex
+      : live.player.submittedForIndex);
+    const persistedSelections = live.player.submittedSelectionsByQIndex?.[currentQIndex];
+    const selectedIndexes = new Set(Array.isArray(persistedSelections) ? persistedSelections : []);
 
     // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
     const seed = Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
@@ -1841,6 +1851,7 @@ async function submitLiveAnswer() {
       if (!code || !attemptId) throw new Error('Start assignment first.');
 
       const qIndex = Number(live.player.assignment.currentIndex || 0);
+      saveSubmittedSelectionsByQIndex(qIndex, live.player.currentQuestion, answer);
       const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
@@ -1878,6 +1889,7 @@ async function submitLiveAnswer() {
     });
 
     live.player.submittedForIndex = data.currentIndex;
+    saveSubmittedSelectionsByQIndex(data.currentIndex, live.player.currentQuestion, answer);
     saveLastSubmittedChoiceAnswer(data.currentIndex, live.player.currentQuestion, answer);
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
 
@@ -2523,7 +2535,8 @@ function highlightAnswerItems(isCorrect, state) {
 
   // MCQ / TF / Multi-select
   if (['mcq', 'tf', 'multi'].includes(question.type)) {
-    highlightChoiceAnswers(question, state.correctAnswer);
+    const selectedIndexes = resolveChoiceSelectedIndexes(question);
+    highlightChoiceAnswers(question, state.correctAnswer, selectedIndexes);
     return;
   }
 
@@ -2560,7 +2573,7 @@ function highlightAnswerItems(isCorrect, state) {
 }
 
 // MCQ/TF/Multi highlighting
-function highlightChoiceAnswers(question, correctAnswerStr) {
+function highlightChoiceAnswers(question, correctAnswerStr, selectedIndexesOverride = null) {
   const rows = joinAnswersEl.querySelectorAll('.answer-row');
   if (!rows.length) return;
   const isMulti = question.type === 'multi';
@@ -2584,7 +2597,7 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
 
-  const selectedIndexes = resolveChoiceSelectedIndexes(question);
+  const selectedIndexes = resolveChoiceSelectedIndexes(question, selectedIndexesOverride);
 
   rows.forEach((row) => {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
@@ -2618,37 +2631,36 @@ function saveLastSubmittedChoiceAnswer(qIndex, question, answer) {
   };
 }
 
-function resolveChoiceSelectedIndexes(question) {
-  const selectedIndexes = new Set();
+function saveSubmittedSelectionsByQIndex(qIndex, question, answer) {
   const type = String(question?.type || '').trim();
-  const isMulti = type === 'multi';
+  if (!['mcq', 'tf', 'multi', 'audio'].includes(type)) return;
+  live.player.submittedSelectionsByQIndex[Number(qIndex)] = normalizeChoiceAnswerValue(answer);
+}
+
+function resolveChoiceSelectedIndexes(question, selectedIndexesOverride = null) {
+  const selectedIndexes = new Set();
   const currentQIndex = Number(live.player.mode === 'assignment'
     ? live.player.assignment.currentIndex
     : live.player.submittedForIndex);
 
-  // 1) Most recent submitted payload kept in local player state.
-  const lastSubmitted = live.player.lastSubmittedAnswer;
-  if (lastSubmitted && Number(lastSubmitted.qIndex) === currentQIndex) {
-    normalizeChoiceAnswerValue(lastSubmitted.value).forEach((idx) => selectedIndexes.add(idx));
+  // 1) Explicit override from caller.
+  if (Array.isArray(selectedIndexesOverride)) {
+    normalizeChoiceAnswerValue(selectedIndexesOverride).forEach((idx) => selectedIndexes.add(idx));
+    return selectedIndexes;
   }
 
-  // 2) Assignment revisit: hydrate from saved attempt answers.
-  if (!selectedIndexes.size && live.player.mode === 'assignment') {
-    const answers = Array.isArray(live.player.assignment.state?.attempt?.answersWithCorrectness)
-      ? live.player.assignment.state.attempt.answersWithCorrectness
-      : [];
-    const answerEntry = answers.find((it) => Number(it?.qIndex) === currentQIndex);
-    const persisted = extractChoiceAnswerFromAttempt(answerEntry);
-    persisted.forEach((idx) => selectedIndexes.add(idx));
+  // 2) Persisted per-question selections.
+  const persistedForQuestion = live.player.submittedSelectionsByQIndex?.[currentQIndex];
+  if (Array.isArray(persistedForQuestion)) {
+    normalizeChoiceAnswerValue(persistedForQuestion).forEach((idx) => selectedIndexes.add(idx));
+    return selectedIndexes;
   }
 
   // 3) Last fallback: unreconciled UI checkboxes/radios currently checked in DOM.
-  if (!selectedIndexes.size) {
-    joinAnswersEl.querySelectorAll('input:checked').forEach((input) => {
-      const idx = Number(input.value);
-      if (Number.isFinite(idx)) selectedIndexes.add(idx);
-    });
-  }
+  joinAnswersEl.querySelectorAll('input:checked').forEach((input) => {
+    const idx = Number(input.value);
+    if (Number.isFinite(idx)) selectedIndexes.add(idx);
+  });
   return selectedIndexes;
 }
 
