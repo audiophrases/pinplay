@@ -2780,10 +2780,31 @@ function setStatus(el, text, mode = '') {
 function setJoinStatusHud(text, mode = '') {
   if (!joinStatusHudEl) return;
   const condensed = condenseStatusText(text);
+  const prevText = joinStatusHudEl.dataset.prevText ?? '';
+  const prevMode = joinStatusHudEl.dataset.prevMode ?? '';
+  const changed = prevText !== condensed || prevMode !== mode;
+
   joinStatusHudEl.textContent = condensed;
   joinStatusHudEl.className = 'join-hud-status';
   if (mode === 'ok') joinStatusHudEl.classList.add('ok');
   if (mode === 'bad') joinStatusHudEl.classList.add('bad');
+
+  joinStatusHudEl.dataset.prevText = condensed;
+  joinStatusHudEl.dataset.prevMode = mode;
+
+  if (!changed) return;
+
+  joinStatusHudEl.classList.remove('status-pop');
+  void joinStatusHudEl.offsetWidth;
+  joinStatusHudEl.classList.add('status-pop');
+
+  if (joinStatusHudEl._statusPopTimeout) {
+    clearTimeout(joinStatusHudEl._statusPopTimeout);
+  }
+  joinStatusHudEl._statusPopTimeout = setTimeout(() => {
+    joinStatusHudEl.classList.remove('status-pop');
+    joinStatusHudEl._statusPopTimeout = null;
+  }, 900);
 }
 
 function condenseStatusText(text) {
