@@ -2536,7 +2536,7 @@ function highlightAnswerItems(isCorrect, state) {
   // MCQ / TF / Multi-select
   if (['mcq', 'tf', 'multi'].includes(question.type)) {
     const selectedIndexes = resolveChoiceSelectedIndexes(question);
-    highlightChoiceAnswers(question, state.correctAnswer, selectedIndexes);
+    highlightChoiceAnswers(question, state.correctAnswer, Array.from(selectedIndexes));
     return;
   }
 
@@ -2642,10 +2642,13 @@ function resolveChoiceSelectedIndexes(question, selectedIndexesOverride = null) 
   const currentQIndex = Number(live.player.mode === 'assignment'
     ? live.player.assignment.currentIndex
     : live.player.submittedForIndex);
+  const isIterableOverride = selectedIndexesOverride != null
+    && typeof selectedIndexesOverride !== 'string'
+    && typeof selectedIndexesOverride[Symbol.iterator] === 'function';
 
   // 1) Explicit override from caller.
-  if (Array.isArray(selectedIndexesOverride)) {
-    normalizeChoiceAnswerValue(selectedIndexesOverride).forEach((idx) => selectedIndexes.add(idx));
+  if (isIterableOverride) {
+    normalizeChoiceAnswerValue([...selectedIndexesOverride]).forEach((idx) => selectedIndexes.add(idx));
     return selectedIndexes;
   }
 
