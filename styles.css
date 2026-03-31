@@ -638,10 +638,55 @@ body.question-active .join-title-row {
   border-radius: 4px;
   font-weight: 800;
   color: var(--bad);
+  transition: color 180ms ease, background-color 180ms ease, transform 180ms ease,
+    box-shadow 180ms ease, opacity 180ms ease;
 }
 
 #joinStatusHud.ok {
   color: var(--ok);
+}
+
+#joinStatusHud.status-pop {
+  animation: joinStatusPop 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#joinStatusHud.ok.status-pop {
+  box-shadow: 0 0 0 0 rgba(42, 163, 75, 0.3);
+}
+
+#joinStatusHud.bad.status-pop {
+  box-shadow: 0 0 0 0 rgba(207, 34, 46, 0.28);
+}
+
+@keyframes joinStatusPop {
+  0% {
+    transform: translateY(1px) scale(0.96);
+    opacity: 0.7;
+    box-shadow: 0 0 0 0 rgba(36, 41, 47, 0);
+  }
+  35% {
+    transform: translateY(-1px) scale(1.06);
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(36, 41, 47, 0.08);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(36, 41, 47, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #joinStatusHud {
+    transition: none;
+  }
+
+  #joinStatusHud.status-pop {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    box-shadow: none;
+  }
 }
 
 /* TOP STICKY SECTION: Question Prompt */
