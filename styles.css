@@ -796,14 +796,14 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-highlight,
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
   border-color: var(--ok) !important;
-  background: #e6ffed !important;
-  color: #1a7f37 !important;
-  box-shadow: 0 0 0 2px #e6ffed !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+  box-shadow: 0 0 0 2px #d1fae5 !important;
   opacity: 1 !important;
 }
 
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
-  box-shadow: 0 0 0 4px #605dff !important;
+  box-shadow: 0 0 0 3px #605dff !important;
   z-index: 2;
 }
 
@@ -815,14 +815,14 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.incorrect-highlight,
 #joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
   border-color: var(--bad) !important;
-  background: #fff8f8 !important;
-  color: #cf222e !important;
-  box-shadow: 0 0 0 2px #fff8f8 !important;
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  box-shadow: 0 0 0 2px #fee2e2 !important;
   opacity: 1 !important;
 }
 
 #joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
-  box-shadow: 0 0 0 4px #605dff !important;
+  box-shadow: 0 0 0 3px #605dff !important;
   z-index: 2;
 }
 
@@ -1027,15 +1027,15 @@ body.question-active .join-title-row {
 }
 
 .error-token-chip.correct-highlight {
-  background: #e6ffed !important;
+  background: #d1fae5 !important;
   border-color: var(--ok) !important;
-  color: #1a7f37 !important;
+  color: #065f46 !important;
 }
 
 .error-token-chip.incorrect-highlight {
-  background: #fff8f8 !important;
+  background: #fee2e2 !important;
   border-color: var(--bad) !important;
-  color: #cf222e !important;
+  color: #991b1b !important;
 }
 
 .error-token-chip.correct-missed {
@@ -1063,14 +1063,14 @@ body.question-active .join-title-row {
 
 .context-gap-inline.correct-highlight {
   border-color: var(--ok) !important;
-  background: #e6ffed !important;
-  color: #1a7f37 !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
 }
 
 .context-gap-inline.incorrect-highlight {
   border-color: var(--bad) !important;
-  background: #fff8f8 !important;
-  color: #cf222e !important;
+  background: #fee2e2 !important;
+  color: #991b1b !important;
 }
 
 /* Match Pairs */
