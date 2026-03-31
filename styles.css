@@ -664,11 +664,13 @@ body.question-active .join-title-row {
     opacity: 0.7;
     box-shadow: 0 0 0 0 rgba(36, 41, 47, 0);
   }
+
   35% {
     transform: translateY(-1px) scale(1.06);
     opacity: 1;
     box-shadow: 0 0 0 8px rgba(36, 41, 47, 0.08);
   }
+
   100% {
     transform: translateY(0) scale(1);
     opacity: 1;
@@ -796,10 +798,10 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-highlight,
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
   border-color: var(--ok) !important;
-  background: #d1fae5 !important;
-  color: #065f46 !important;
+  background: #60ff6587 !important;
+  color: #0a9500f8 !important;
   box-shadow: 0 0 0 2px #d1fae5 !important;
-  opacity: 1 !important;
+  opacity: 0.8 !important;
 }
 
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
@@ -815,8 +817,8 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.incorrect-highlight,
 #joinAnswers .answer-row.incorrect-highlight:has(input:checked) {
   border-color: var(--bad) !important;
-  background: #fee2e2 !important;
-  color: #991b1b !important;
+  background: #ff8686e2 !important;
+  color: #d60000b9 !important;
   box-shadow: 0 0 0 2px #fee2e2 !important;
   opacity: 1 !important;
 }
@@ -838,19 +840,19 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-missed {
   border-color: var(--ok) !important;
   border-style: dashed !important;
-  border-width: 3px !important;
-  background: rgba(15, 111, 44, 0.09) !important;
-  color: #0f5e26 !important;
-  opacity: 0.9 !important;
+  border-width: 2.5px !important;
+  background: rgba(65, 170, 0, 0.32) !important;
+  color: #1eca00c1 !important;
+  opacity: 0.8 !important;
 }
 
 
 /* 4. True Negative (Unpicked & Wrong) */
 #joinAnswers .answer-row.ignored-option {
-  opacity: 0.62 !important;
-  filter: grayscale(45%);
+  opacity: 0.66 !important;
+  filter: grayscale(33%);
   background: #f8f9fa !important;
-  border-color: #e2e8f0 !important;
+  border-color: #c8cdd2 !important;
 }
 
 /* The Action Button (Absolute Bottom) */
@@ -1854,6 +1856,7 @@ body.question-active .join-title-row {
     transform: translateY(0);
   }
 }
+
 /* ==========================================================================
    9. POPUP DIALOGS (Status & Media Progress)
    ========================================================================== */
@@ -1867,7 +1870,7 @@ body.question-active .join-title-row {
   background: var(--card, #ffffff) !important;
   color: var(--text, #1c2430) !important;
   border: 1px solid var(--line, #dfe3ea) !important;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.2), 0 0 0 100vmax rgba(15, 23, 42, 0.45) !important;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2), 0 0 0 100vmax rgba(15, 23, 42, 0.45) !important;
   padding: 1.5rem 2.5rem !important;
   border-radius: 1rem !important;
   font-size: 1.15rem !important;
@@ -1899,6 +1902,13 @@ body.question-active .join-title-row {
 }
 
 @keyframes dialog-pop {
-  from { transform: translate(-50%, -40%) scale(0.9); opacity: 0; }
-  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  from {
+    transform: translate(-50%, -40%) scale(0.9);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 }
