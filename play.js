@@ -587,9 +587,12 @@ async function startAssignmentAttempt() {
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
   // Reset ambient state for new assignment
+  cancelPendingAssignmentQuestionAutoplay();
+  stopAssignmentQuestionAudioPlayback();
   lastRenderedQuestionIndex = -1;
   lastClosedQuestionIndex = -1;
   assignmentFinalPlayed = false;
+  lastAssignmentAudioKey = '';
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -629,6 +632,8 @@ async function finalizeAssignmentAttempt() {
     const code = String(live.player.assignment.code || '').trim();
     const attemptId = String(live.player.assignment.attemptId || '').trim();
     if (!code || !attemptId) throw new Error('Start assignment first.');
+    cancelPendingAssignmentQuestionAutoplay();
+    stopAssignmentQuestionAudioPlayback();
 
     if (joinFinalizeBtn) joinFinalizeBtn.disabled = true;
     const data = await api('/api/assignment/submit', {
@@ -947,6 +952,8 @@ function renderPlayerState(state) {
   };
 
   if (state.phase !== 'question' || !state.question) {
+    cancelPendingAssignmentQuestionAutoplay();
+    stopAssignmentQuestionAudioPlayback();
     const oldOverlay = document.getElementById('matchPairsCenterOverlay');
     if (oldOverlay) oldOverlay.remove();
 
@@ -1000,6 +1007,8 @@ function renderPlayerState(state) {
   const allAssignmentAnswersSaved = live.player.mode === 'assignment' && assignmentTotal > 0 && answeredSet.size >= assignmentTotal;
 
   if (allAssignmentAnswersSaved && !assignmentSubmitted) {
+    cancelPendingAssignmentQuestionAutoplay();
+    stopAssignmentQuestionAudioPlayback();
     stopJoinTimer();
     if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
     if (joinProgressEl) joinProgressEl.textContent = `Completed ${answeredSet.size} / ${assignmentTotal}`;
@@ -1026,14 +1035,18 @@ function renderPlayerState(state) {
   hideAssignmentCompleteMessage();
 
   const key = `${state.phase}:${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
+  const isAssignmentQuestionPhase = live.player.mode === 'assignment' && state.phase === 'question' && !state.assignmentSubmitted;
+  const assignmentQuestionChanged = isAssignmentQuestionPhase
+    && (state.currentIndex !== lastRenderedQuestionIndex || live.player.renderKey !== key);
 
   // Play answering ambient when entering a new question in assignment mode
-  if (live.player.mode === 'assignment' && state.phase === 'question') {
-    if (state.currentIndex !== lastRenderedQuestionIndex) {
-      lastRenderedQuestionIndex = state.currentIndex;
-      pickNewAnsweringTrack();
-      playAssignmentSfx('answering');
-    }
+  if (assignmentQuestionChanged) {
+    cancelPendingAssignmentQuestionAutoplay();
+    lastRenderedQuestionIndex = state.currentIndex;
+    pickNewAnsweringTrack();
+    playAssignmentSfx('answering');
+  } else if (!isAssignmentQuestionPhase) {
+    cancelPendingAssignmentQuestionAutoplay();
   }
   const shouldRenderQuestion = live.player.renderKey !== key;
   if (shouldRenderQuestion) {
@@ -1058,6 +1071,22 @@ function renderPlayerState(state) {
 
   const questionClosed = !!state.questionClosed;
   const isPoll = !!state.question?.isPoll;
+
+  if (!isAssignmentQuestionPhase || questionClosed) {
+    cancelPendingAssignmentQuestionAutoplay();
+  }
+
+  if (assignmentQuestionChanged && !questionClosed && hasAssignmentQuestionAudio(state.question)) {
+    const assignmentAudioKey = `${state.currentIndex}:${Number(state.questionStartedAt || 0)}`;
+    if (lastAssignmentAudioKey !== assignmentAudioKey) {
+      lastAssignmentAudioKey = assignmentAudioKey;
+      cancelPendingAssignmentQuestionAutoplay();
+      assignmentPromptAutoplayTimer = setTimeout(() => {
+        assignmentPromptAutoplayTimer = null;
+        playAssignmentQuestionAudio(state.question, { audioKey: assignmentAudioKey }).catch(() => { });
+      }, 350);
+    }
+  }
 
   if (questionClosed) {
     stopJoinTimer();
@@ -2845,6 +2874,9 @@ let currentAnsweringIdx = -1; // Track current answering track per question
 let lastRenderedQuestionIndex = -1; // Track last rendered question to play ambient on change
 let lastClosedQuestionIndex = -1; // Track last question where hall sound was played
 let assignmentFinalPlayed = false; // Track final sound for completed assignment
+let assignmentPromptAutoplayTimer = null;
+let lastAssignmentAudioKey = '';
+let activeAssignmentQuestionAudioEl = null;
 
 function initAssignmentSfx() {
   try {
@@ -2874,6 +2906,122 @@ function stopAllAssignmentAmbient() {
     if (assignmentAmbient.final) { assignmentAmbient.final.pause(); assignmentAmbient.final.currentTime = 0; }
     assignmentAmbient.answering.forEach(a => { a.pause(); a.currentTime = 0; });
   } catch { }
+}
+
+function cancelPendingAssignmentQuestionAutoplay() {
+  if (assignmentPromptAutoplayTimer) {
+    clearTimeout(assignmentPromptAutoplayTimer);
+    assignmentPromptAutoplayTimer = null;
+  }
+}
+
+function supportsAssignmentQuestionAudio(type) {
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
+}
+
+function hasAssignmentQuestionAudio(question) {
+  if (!question) return false;
+  if (question.type === 'audio') return true;
+  if (!supportsAssignmentQuestionAudio(question.type)) return false;
+  return !!question.audioEnabled;
+}
+
+function stopAssignmentQuestionAudioPlayback() {
+  try {
+    if (activeAssignmentQuestionAudioEl) {
+      activeAssignmentQuestionAudioEl.pause();
+      activeAssignmentQuestionAudioEl.currentTime = 0;
+      activeAssignmentQuestionAudioEl = null;
+    }
+  } catch { }
+
+  try {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  } catch { }
+}
+
+async function playAssignmentQuestionAudio(question, opts = {}) {
+  if (!hasAssignmentQuestionAudio(question)) return;
+
+  const audioKey = String(opts?.audioKey || '');
+  stopAllAssignmentAmbient();
+  stopAssignmentQuestionAudioPlayback();
+
+  const maybeResumeAnsweringAmbient = () => {
+    const s = live.player.assignment.state;
+    const attempt = s?.attempt;
+    if (live.player.mode !== 'assignment') return;
+    if (!attempt || attempt.submitted) return;
+    if (audioKey && audioKey !== lastAssignmentAudioKey) return;
+    playAssignmentSfx('answering');
+  };
+
+  const playAudioEl = (audioEl) => {
+    activeAssignmentQuestionAudioEl = audioEl;
+    const onFinish = () => {
+      if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
+      maybeResumeAnsweringAmbient();
+    };
+    audioEl.addEventListener('ended', onFinish, { once: true });
+    audioEl.addEventListener('error', onFinish, { once: true });
+    audioEl.play().catch(() => onFinish());
+  };
+
+  if (question.audioMode === 'file' && question.audioData) {
+    try {
+      let audioUrl = question.audioData;
+      if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
+        const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+        audioUrl = `${base}/api/media/${audioUrl}`;
+      }
+      playAudioEl(new Audio(audioUrl));
+    } catch {
+      maybeResumeAnsweringAmbient();
+    }
+    return;
+  }
+
+  const text = String(question.audioText || question.prompt || '').trim();
+  if (!text) {
+    maybeResumeAnsweringAmbient();
+    return;
+  }
+
+  try {
+    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    const voice = question.language?.includes('Neural')
+      ? question.language
+      : ((question.language || 'en-US').replace('-Wave', '') + '-JennyNeural');
+    const key = `${voice}::${text}`;
+    let audioUrl = studentEdgeTtsCache.get(key);
+    if (!audioUrl) {
+      const res = await fetch(`${base}/api/tts/edge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!res.ok) throw new Error(`Edge TTS failed (${res.status})`);
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      studentEdgeTtsCache.set(key, audioUrl);
+    }
+    playAudioEl(new Audio(audioUrl));
+  } catch {
+    if (!('speechSynthesis' in window)) {
+      maybeResumeAnsweringAmbient();
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = question.language || 'en-US';
+      utterance.addEventListener('end', maybeResumeAnsweringAmbient, { once: true });
+      utterance.addEventListener('error', maybeResumeAnsweringAmbient, { once: true });
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      maybeResumeAnsweringAmbient();
+    }
+  }
 }
 
 function playAssignmentSfx(name) {
@@ -3337,8 +3485,3 @@ function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
 }
-
-
-
-
-
