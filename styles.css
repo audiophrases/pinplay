@@ -840,7 +840,7 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-missed {
   border-color: var(--ok) !important;
   border-style: dashed !important;
-  border-width: 1.5px !important;
+  border-width: 1px !important;
   background: #c9ffc2 !important;
   color: #238015eb !important;
   opacity: 1 !important;
