@@ -2871,7 +2871,6 @@ function publicQuestion(question) {
       isPoll: !!question.isPoll,
       answers: (question.answers || []).map((a) => ({ text: a.text })),
       imageData: String(question.imageData || '') || undefined,
-      media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
   }
@@ -2884,7 +2883,6 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: String(question.imageData || '') || undefined,
-      media: publicQuestionMediaPayload(question),
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
@@ -2903,7 +2901,6 @@ function publicQuestion(question) {
       length: (question.items || []).length,
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
       imageData: String(question.imageData || '') || undefined,
-      media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
   }
@@ -2920,7 +2917,6 @@ function publicQuestion(question) {
       margin: question.margin,
       unit: question.unit || '',
       imageData: String(question.imageData || '') || undefined,
-      media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
   }
@@ -2933,7 +2929,6 @@ function publicQuestion(question) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: question.imageData || '',
-      media: publicQuestionMediaPayload(question),
       pinMode: ['any', 'all'].includes(String(question.pinMode)) ? String(question.pinMode) : 'all',
       zoneCount: Array.isArray(question.zones) ? question.zones.length : (question.zone ? 1 : 1),
       ...publicAudioPayload(question),
@@ -2945,35 +2940,8 @@ function publicQuestion(question) {
     prompt: question.prompt,
     points: question.points,
     timeLimit: question.timeLimit,
-    media: publicQuestionMediaPayload(question),
     ...publicAudioPayload(question),
   };
-}
-
-function detectQuestionMediaProvider(url) {
-  const raw = String(url || '').toLowerCase();
-  if (raw.includes('youtube.com') || raw.includes('youtu.be')) return 'youtube';
-  if (raw.includes('vimeo.com')) return 'vimeo';
-  return 'direct';
-}
-
-function normalizeQuestionMedia(question) {
-  const raw = question?.media && typeof question.media === 'object' ? question.media : {};
-  const url = String(raw.url || '').trim().slice(0, 2000);
-  const embedUrl = String(raw.embedUrl || '').trim().slice(0, 2000);
-  const kind = raw.kind === 'video' && (url || embedUrl) ? 'video' : 'none';
-  const provider = ['youtube', 'vimeo', 'direct'].includes(String(raw.provider || ''))
-    ? String(raw.provider)
-    : detectQuestionMediaProvider(url || embedUrl);
-  const startAt = Math.max(0, Number(raw.startAt || 0) || 0);
-  let endAt = raw.endAt == null || raw.endAt === '' ? null : Number(raw.endAt);
-  if (!Number.isFinite(endAt) || endAt <= startAt) endAt = null;
-  return { kind, provider, url, embedUrl, startAt, endAt };
-}
-
-function publicQuestionMediaPayload(question) {
-  const media = normalizeQuestionMedia(question);
-  return media.kind === 'video' ? media : undefined;
 }
 
 function publicAudioPayload(question) {
@@ -3107,7 +3075,6 @@ function normalizeQuiz(quiz) {
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
-      media: normalizeQuestionMedia(q),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
@@ -4193,4 +4160,5 @@ function json(data, status = 200) {
     },
   });
 }
+
 
