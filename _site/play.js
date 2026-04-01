@@ -50,7 +50,6 @@ const live = {
     displayName: null,
     clientId: getOrCreateClientId(),
     selectedBet: 0,
-    lastSubmittedAnswer: null,
     timerTicker: null,
     timerStartedAt: null,
     timerLimitSec: null,
@@ -1369,7 +1368,6 @@ function renderJoinQuestion(question) {
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
-    const selectedIndexes = resolveChoiceSelectedIndexes(question);
 
     // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
     const seed = Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
@@ -1391,7 +1389,6 @@ function renderJoinQuestion(question) {
       if (!isMulti) input.name = 'join-answer';
       input.value = String(origIdx);
       input.dataset.joinAnswer = '1';
-      input.checked = selectedIndexes.has(origIdx);
 
       const text = document.createElement('span');
       text.textContent = a.text;
@@ -1851,7 +1848,6 @@ async function submitLiveAnswer() {
           bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
         },
       });
-      saveLastSubmittedChoiceAnswer(qIndex, live.player.currentQuestion, answer);
 
       const mode = data?.attempt?.assignment?.feedbackMode || 'none';
       if (mode !== 'instant') {
@@ -1878,7 +1874,6 @@ async function submitLiveAnswer() {
     });
 
     live.player.submittedForIndex = data.currentIndex;
-    saveLastSubmittedChoiceAnswer(data.currentIndex, live.player.currentQuestion, answer);
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
 
     // Store answer info for leaderboard feedback
@@ -2557,6 +2552,12 @@ function highlightAnswerItems(isCorrect, state) {
     showPinFeedback(question, state);
     return;
   }
+
+  // Puzzle: highlight items in correct/incorrect positions
+  if (question.type === 'puzzle') {
+    highlightPuzzle(question);
+    return;
+  }
 }
 
 // MCQ/TF/Multi highlighting
@@ -2584,7 +2585,10 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     question.answers.forEach((a, idx) => { if (a.correct) correctIndexes.add(idx); });
   }
 
-  const selectedIndexes = resolveChoiceSelectedIndexes(question);
+  const selectedIndexes = new Set();
+  joinAnswersEl.querySelectorAll('input:checked').forEach(input => {
+    selectedIndexes.add(Number(input.value));
+  });
 
   rows.forEach((row) => {
     const origIdx = Number(row.querySelector('input')?.value ?? -1);
@@ -2599,109 +2603,11 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
     } else if (!isCorrect && isSelected) {
       row.classList.add('incorrect-highlight');       // Option 1 (False Positive)
     } else if (isCorrect && !isSelected) {
-      // Single choice: solid green. Multi-select: dashed green.
-      row.classList.add(isMulti ? 'correct-missed' : 'correct-highlight'); // Option 4 (Missed)
+      row.classList.add('correct-missed'); // Option 4 (Missed)
     } else {
       row.classList.add('ignored-option');            // Option 3 (True Negative)
     }
   });
-}
-
-function saveLastSubmittedChoiceAnswer(qIndex, question, answer) {
-  const type = String(question?.type || '').trim();
-  if (!['mcq', 'tf', 'multi', 'audio'].includes(type)) return;
-  const isMulti = type === 'multi';
-  const normalized = normalizeChoiceAnswerValue(answer);
-  live.player.lastSubmittedAnswer = {
-    qIndex: Number(qIndex),
-    value: isMulti ? normalized : (normalized[0] ?? null),
-  };
-}
-
-function resolveChoiceSelectedIndexes(question) {
-  const selectedIndexes = new Set();
-  const type = String(question?.type || '').trim();
-  const isMulti = type === 'multi';
-  const currentQIndex = Number(live.player.mode === 'assignment'
-    ? live.player.assignment.currentIndex
-    : live.player.submittedForIndex);
-
-  // 1) Most recent submitted payload kept in local player state.
-  const lastSubmitted = live.player.lastSubmittedAnswer;
-  if (lastSubmitted && Number(lastSubmitted.qIndex) === currentQIndex) {
-    normalizeChoiceAnswerValue(lastSubmitted.value).forEach((idx) => selectedIndexes.add(idx));
-  }
-
-  // 2) Assignment revisit: hydrate from saved attempt answers.
-  if (!selectedIndexes.size && live.player.mode === 'assignment') {
-    const answers = Array.isArray(live.player.assignment.state?.attempt?.answersWithCorrectness)
-      ? live.player.assignment.state.attempt.answersWithCorrectness
-      : [];
-    const answerEntry = answers.find((it) => Number(it?.qIndex) === currentQIndex);
-    const persisted = extractChoiceAnswerFromAttempt(answerEntry);
-    persisted.forEach((idx) => selectedIndexes.add(idx));
-  }
-
-  // 3) Last fallback: unreconciled UI checkboxes/radios currently checked in DOM.
-  if (!selectedIndexes.size) {
-    joinAnswersEl.querySelectorAll('input:checked').forEach((input) => {
-      const idx = Number(input.value);
-      if (Number.isFinite(idx)) selectedIndexes.add(idx);
-    });
-  }
-  return selectedIndexes;
-}
-
-function extractChoiceAnswerFromAttempt(answerEntry) {
-  if (!answerEntry || typeof answerEntry !== 'object') return [];
-  const candidate = answerEntry.answer
-    ?? answerEntry.submittedAnswer
-    ?? answerEntry.studentAnswer
-    ?? answerEntry.selectedIndexes
-    ?? answerEntry.selection
-    ?? answerEntry.choice
-    ?? answerEntry.answerIndex
-    ?? answerEntry.selectedIndex;
-  return normalizeChoiceAnswerValue(candidate);
-}
-
-function normalizeChoiceAnswerValue(value) {
-  const toNum = (raw) => {
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  };
-  if (Array.isArray(value)) {
-    return value.map(toNum).filter((n) => n !== null);
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? [value] : [];
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return [];
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed.map(toNum).filter((n) => n !== null);
-      } catch { }
-    }
-    if (trimmed.includes('|')) {
-      return trimmed.split('|').map((part) => toNum(part)).filter((n) => n !== null);
-    }
-    const numberedMatch = trimmed.match(/^(\d+)\./);
-    if (numberedMatch) {
-      const parsed = Number(numberedMatch[1]) - 1;
-      return Number.isFinite(parsed) ? [parsed] : [];
-    }
-    const n = toNum(trimmed);
-    return n === null ? [] : [n];
-  }
-  if (value && typeof value === 'object') {
-    return normalizeChoiceAnswerValue(
-      value.selectedIndexes ?? value.answer ?? value.indexes ?? value.index ?? value.value,
-    );
-  }
-  return [];
 }
 
 // Match pairs: highlight each pair row
@@ -2860,6 +2766,20 @@ function highlightContextGap(question) {
     }
 
     if (val && accepted.includes(val)) {
+      row.classList.add('correct-highlight');
+    } else {
+      row.classList.add('incorrect-highlight');
+    }
+  });
+}
+
+function highlightPuzzle(question) {
+  const correctItems = Array.isArray(question.items) ? question.items : [];
+  const rows = joinAnswersEl.querySelectorAll('.puzzle-selected .answer-row');
+  rows.forEach((row, idx) => {
+    const val = String(row.dataset.puzzlePiece || '').trim();
+    const correct = String(correctItems[idx] || '').trim();
+    if (val.toLowerCase() === correct.toLowerCase()) {
       row.classList.add('correct-highlight');
     } else {
       row.classList.add('incorrect-highlight');
