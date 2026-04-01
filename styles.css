@@ -331,22 +331,6 @@ textarea {
   cursor: zoom-in;
 }
 
-.question-video-wrap {
-  margin-top: .6rem;
-  width: 100%;
-  max-width: 760px;
-}
-
-.question-video-el {
-  width: 100%;
-  min-height: 220px;
-  max-height: 420px;
-  border: 1px solid var(--line);
-  border-radius: .6rem;
-  background: #000;
-  display: block;
-}
-
 .pin-preview {
   position: relative;
   margin-top: .5rem;
@@ -558,14 +542,6 @@ textarea {
   display: block;
   margin: 0 auto;
   border-radius: 0.6rem;
-}
-
-#hostQuestionCard .question-video-wrap {
-  margin: .5rem auto 0;
-}
-
-#hostQuestionCard .question-video-el {
-  max-height: min(46vh, 520px);
 }
 
 /* ==========================================================================
@@ -934,18 +910,6 @@ body.question-active .join-title-row {
   cursor: crosshair;
   max-width: none !important;
   margin: 0 !important;
-}
-
-#joinCard.question-active .question-video-wrap {
-  width: min(100%, 980px);
-  margin: .4rem auto;
-  z-index: 2;
-}
-
-#joinCard.question-active .question-video-el {
-  width: 100%;
-  min-height: 200px;
-  max-height: 45vh;
 }
 
 #joinCard.question-active[data-qtype="pin"] .pin-preview img {
