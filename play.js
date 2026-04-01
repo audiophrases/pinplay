@@ -78,6 +78,13 @@ function init() {
   initBetControl();
   initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
+  document.addEventListener('fullscreenchange', () => {
+    if (!joinSubmitBtn) return;
+    if (isAnswerFullscreenLocked()) {
+      joinSubmitBtn.disabled = true;
+      setJoinStatusHud('Exit fullscreen to answer.', 'bad');
+    }
+  });
   initAssignmentFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
@@ -1083,7 +1090,7 @@ function renderPlayerState(state) {
       cancelPendingAssignmentQuestionAutoplay();
       assignmentPromptAutoplayTimer = setTimeout(() => {
         assignmentPromptAutoplayTimer = null;
-        playAssignmentQuestionAudio(state.question, { audioKey: assignmentAudioKey }).catch(() => { });
+        runAssignmentQuestionMediaSequence(state.question, assignmentAudioKey).catch(() => { });
       }, 350);
     }
   }
@@ -1102,7 +1109,7 @@ function renderPlayerState(state) {
   }
 
   // Update shouldDisable to include answeredCurrent for both modes
-  const shouldDisable = questionClosed || assignmentSubmitted || !!state.answeredCurrent;
+  const shouldDisable = questionClosed || assignmentSubmitted || !!state.answeredCurrent || isAnswerFullscreenLocked();
 
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
@@ -1119,7 +1126,9 @@ function renderPlayerState(state) {
 
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
-    if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
+    if (isAnswerFullscreenLocked()) {
+      setJoinStatusHud('Exit fullscreen to answer.', 'bad');
+    } else if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
       setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
   }
@@ -1362,6 +1371,40 @@ function renderJoinQuestion(question) {
     note.className = 'small';
     note.textContent = 'Poll mode: anonymous results, no points.';
     joinAnswersEl.appendChild(note);
+  }
+
+  const videoCfg = assignmentVideoEmbedConfig(question.media);
+  if (videoCfg.kind === 'video' && videoCfg.src) {
+    const wrap = document.createElement('div');
+    wrap.className = 'top-space';
+    if (videoCfg.provider === 'direct') {
+      const v = document.createElement('video');
+      v.src = videoCfg.src;
+      v.controls = true;
+      v.preload = 'metadata';
+      v.style.width = '100%';
+      v.addEventListener('loadedmetadata', () => { v.currentTime = videoCfg.startAt || 0; }, { once: true });
+      v.addEventListener('timeupdate', () => {
+        if (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt) v.pause();
+      });
+      wrap.appendChild(v);
+    } else {
+      const iframe = document.createElement('iframe');
+      iframe.src = videoCfg.src;
+      iframe.allowFullscreen = true;
+      iframe.style.width = '100%';
+      iframe.style.minHeight = '240px';
+      iframe.style.border = '0';
+      wrap.appendChild(iframe);
+    }
+    const open = document.createElement('a');
+    open.href = question.media?.url || question.media?.embedUrl || '#';
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    open.className = 'small';
+    open.textContent = 'Open in new tab';
+    wrap.appendChild(open);
+    joinAnswersEl.appendChild(wrap);
   }
 
   // Remove the old inline image preview logic for generic questions
@@ -1656,6 +1699,12 @@ function renderJoinQuestion(question) {
     appendRiskBetBar();
     appendReactionBar();
   }
+}
+
+function isAnswerFullscreenLocked() {
+  const fsEl = document.fullscreenElement;
+  if (!fsEl) return false;
+  return fsEl.tagName === 'IFRAME' || fsEl.tagName === 'VIDEO' || !!fsEl.closest?.('#joinAnswers');
 }
 
 function appendRiskBetBar() {
@@ -2959,6 +3008,35 @@ function supportsAssignmentQuestionAudio(type) {
   return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
 }
 
+function normalizeAssignmentQuestionMedia(rawMedia) {
+  const raw = rawMedia && typeof rawMedia === 'object' ? rawMedia : {};
+  const kind = raw.kind === 'video' ? 'video' : 'none';
+  const provider = ['youtube', 'vimeo', 'direct'].includes(String(raw.provider || '')) ? String(raw.provider) : 'direct';
+  const startAt = Math.max(0, Number(raw.startAt || 0) || 0);
+  let endAt = raw.endAt == null || raw.endAt === '' ? null : Number(raw.endAt);
+  if (!Number.isFinite(endAt) || endAt <= startAt) endAt = null;
+  return { kind, provider, url: String(raw.url || ''), embedUrl: String(raw.embedUrl || ''), startAt, endAt };
+}
+
+function assignmentVideoEmbedConfig(media) {
+  const m = normalizeAssignmentQuestionMedia(media);
+  let src = m.url || m.embedUrl || '';
+  if (!src) return { ...m, src: '' };
+  try {
+    const u = new URL(src);
+    if (m.provider === 'youtube' && u.hostname.includes('youtu')) {
+      let id = u.searchParams.get('v') || '';
+      if (!id && u.hostname.includes('youtu.be')) id = u.pathname.slice(1);
+      if (!id) return { ...m, src: '' };
+      const e = new URL(`https://www.youtube.com/embed/${id}`);
+      if (m.startAt > 0) e.searchParams.set('start', String(Math.floor(m.startAt)));
+      if (m.endAt != null) e.searchParams.set('end', String(Math.floor(m.endAt)));
+      src = e.toString();
+    }
+    return { ...m, src };
+  } catch { return { ...m, src: '' }; }
+}
+
 function hasAssignmentQuestionAudio(question) {
   if (!question) return false;
   if (question.type === 'audio') return true;
@@ -2981,31 +3059,22 @@ function stopAssignmentQuestionAudioPlayback() {
 }
 
 async function playAssignmentQuestionAudio(question, opts = {}) {
-  if (!hasAssignmentQuestionAudio(question)) return;
+  if (!hasAssignmentQuestionAudio(question)) return false;
 
   const audioKey = String(opts?.audioKey || '');
   stopAllAssignmentAmbient();
   stopAssignmentQuestionAudioPlayback();
 
-  const maybeResumeAnsweringAmbient = () => {
-    const s = live.player.assignment.state;
-    const attempt = s?.attempt;
-    if (live.player.mode !== 'assignment') return;
-    if (!attempt || attempt.submitted) return;
-    if (audioKey && audioKey !== lastAssignmentAudioKey) return;
-    playAssignmentSfx('answering');
-  };
-
-  const playAudioEl = (audioEl) => {
+  const playAudioEl = (audioEl) => new Promise((resolve) => {
     activeAssignmentQuestionAudioEl = audioEl;
     const onFinish = () => {
       if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
-      maybeResumeAnsweringAmbient();
+      resolve(true);
     };
     audioEl.addEventListener('ended', onFinish, { once: true });
     audioEl.addEventListener('error', onFinish, { once: true });
     audioEl.play().catch(() => onFinish());
-  };
+  });
 
   if (question.audioMode === 'file' && question.audioData) {
     try {
@@ -3014,17 +3083,16 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
         const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
         audioUrl = `${base}/api/media/${audioUrl}`;
       }
-      playAudioEl(new Audio(audioUrl));
+      await playAudioEl(new Audio(audioUrl));
     } catch {
-      maybeResumeAnsweringAmbient();
+      return false;
     }
-    return;
+    return true;
   }
 
   const text = String(question.audioText || question.prompt || '').trim();
   if (!text) {
-    maybeResumeAnsweringAmbient();
-    return;
+    return false;
   }
 
   try {
@@ -3045,23 +3113,55 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       audioUrl = URL.createObjectURL(blob);
       studentEdgeTtsCache.set(key, audioUrl);
     }
-    playAudioEl(new Audio(audioUrl));
+    await playAudioEl(new Audio(audioUrl));
+    return true;
   } catch {
     if (!('speechSynthesis' in window)) {
-      maybeResumeAnsweringAmbient();
-      return;
+      return false;
     }
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = question.language || 'en-US';
-      utterance.addEventListener('end', maybeResumeAnsweringAmbient, { once: true });
-      utterance.addEventListener('error', maybeResumeAnsweringAmbient, { once: true });
+      utterance.addEventListener('end', () => { }, { once: true });
+      utterance.addEventListener('error', () => { }, { once: true });
       window.speechSynthesis.speak(utterance);
+      return true;
     } catch {
-      maybeResumeAnsweringAmbient();
+      return false;
     }
   }
+}
+
+async function playAssignmentQuestionVideo(question) {
+  const media = normalizeAssignmentQuestionMedia(question?.media);
+  if (media.kind !== 'video' || media.provider !== 'direct' || !media.url) return true;
+  return await new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.src = media.url;
+    v.onloadedmetadata = () => {
+      v.currentTime = media.startAt || 0;
+      v.play().catch(() => resolve(false));
+    };
+    v.ontimeupdate = () => {
+      if (media.endAt != null && v.currentTime >= media.endAt) {
+        v.pause(); resolve(true);
+      }
+    };
+    v.onended = () => resolve(true);
+    v.onerror = () => resolve(false);
+  });
+}
+
+async function runAssignmentQuestionMediaSequence(question, audioKey) {
+  await playAssignmentQuestionAudio(question, { audioKey });
+  await playAssignmentQuestionVideo(question);
+  const s = live.player.assignment.state;
+  const attempt = s?.attempt;
+  if (live.player.mode !== 'assignment') return;
+  if (!attempt || attempt.submitted) return;
+  if (audioKey && audioKey !== lastAssignmentAudioKey) return;
+  playAssignmentSfx('answering');
 }
 
 function playAssignmentSfx(name) {
