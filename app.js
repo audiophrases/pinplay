@@ -1296,6 +1296,75 @@ function bindBuilderEvents() {
       if (!q || !hasQuestionAudio(q)) return;
       playQuestionAudio(q);
     }
+
+    const videoPreviewBtn = e.target.closest('[data-video-preview-clip]');
+    if (videoPreviewBtn) {
+      const idx = Number(videoPreviewBtn.dataset.videoPreviewClip);
+      const q = quiz.questions[idx];
+      if (!q) return;
+      syncQuizFromUI();
+      const media = normalizeQuestionMedia(q.media);
+      const el = questionListEl.querySelector(`[data-video-preview-el="${idx}"]`);
+      if (el && el.tagName === 'VIDEO') {
+        el.currentTime = Number(media.startAt || 0);
+        const endAt = media.endAt;
+        const stopAt = () => {
+          if (endAt != null && el.currentTime >= endAt) {
+            el.pause();
+            el.removeEventListener('timeupdate', stopAt);
+          }
+        };
+        el.addEventListener('timeupdate', stopAt);
+        el.play().catch(() => { });
+      } else {
+        const config = toVideoEmbedConfig({ ...media, kind: 'video' });
+        if (config.src) window.open(config.src, '_blank', 'noopener');
+      }
+      return;
+    }
+
+    const videoSetStartBtn = e.target.closest('[data-video-set-start]');
+    if (videoSetStartBtn) {
+      const idx = Number(videoSetStartBtn.dataset.videoSetStart);
+      const q = quiz.questions[idx];
+      const el = questionListEl.querySelector(`[data-video-preview-el="${idx}"]`);
+      if (q && el && el.tagName === 'VIDEO') {
+        q.media = normalizeQuestionMedia({ ...(q.media || {}), kind: 'video', startAt: el.currentTime, endAt: q.media?.endAt });
+        renderBuilder();
+      }
+      return;
+    }
+
+    const videoSetEndBtn = e.target.closest('[data-video-set-end]');
+    if (videoSetEndBtn) {
+      const idx = Number(videoSetEndBtn.dataset.videoSetEnd);
+      const q = quiz.questions[idx];
+      const el = questionListEl.querySelector(`[data-video-preview-el="${idx}"]`);
+      if (q && el && el.tagName === 'VIDEO') {
+        q.media = normalizeQuestionMedia({ ...(q.media || {}), kind: 'video', endAt: el.currentTime });
+        renderBuilder();
+      }
+      return;
+    }
+
+    const videoResetBtn = e.target.closest('[data-video-reset-clip]');
+    if (videoResetBtn) {
+      const idx = Number(videoResetBtn.dataset.videoResetClip);
+      const q = quiz.questions[idx];
+      if (!q) return;
+      q.media = normalizeQuestionMedia({ ...(q.media || {}), kind: q.media?.url ? 'video' : 'none', startAt: 0, endAt: null });
+      renderBuilder();
+      return;
+    }
+
+    const videoClearBtn = e.target.closest('[data-video-clear]');
+    if (videoClearBtn) {
+      const idx = Number(videoClearBtn.dataset.videoClear);
+      if (!quiz.questions[idx]) return;
+      quiz.questions[idx].media = makeDefaultQuestionMedia();
+      renderBuilder();
+      return;
+    }
   });
 
   questionListEl.addEventListener('dragstart', (e) => {
@@ -1860,6 +1929,8 @@ function renderBuilder() {
       specific += buildAudioSettingsMarkup(idx, q);
     }
 
+    specific += buildVideoSettingsMarkup(idx, q);
+
     wrap.innerHTML = common + specific + '</div>';
     wrap.dataset.questionIndex = String(idx);
     questionListEl.appendChild(wrap);
@@ -2213,6 +2284,50 @@ function normalizeQuizAudioDefaults(targetQuiz) {
   }
 }
 
+function detectVideoProvider(url) {
+  const raw = String(url || '').toLowerCase();
+  if (raw.includes('youtu.be') || raw.includes('youtube.com')) return 'youtube';
+  if (raw.includes('vimeo.com')) return 'vimeo';
+  return 'direct';
+}
+
+function toVideoEmbedConfig(media) {
+  const normalized = normalizeQuestionMedia(media);
+  const provider = normalized.provider || detectVideoProvider(normalized.url || normalized.embedUrl);
+  const srcRaw = normalized.url || normalized.embedUrl;
+  const start = Math.max(0, Number(normalized.startAt || 0) || 0);
+  const end = normalized.endAt == null ? null : Number(normalized.endAt);
+  if (!srcRaw) return { provider, src: '', start, end };
+
+  try {
+    const parsed = new URL(srcRaw);
+    if (provider === 'youtube') {
+      let id = '';
+      if (parsed.hostname.includes('youtu.be')) id = parsed.pathname.slice(1);
+      if (!id && parsed.searchParams.get('v')) id = parsed.searchParams.get('v');
+      if (!id && parsed.pathname.includes('/embed/')) id = parsed.pathname.split('/embed/')[1];
+      if (!id) return { provider, src: '', start, end };
+      const embed = new URL(`https://www.youtube.com/embed/${id}`);
+      if (start > 0) embed.searchParams.set('start', String(Math.floor(start)));
+      if (end != null) embed.searchParams.set('end', String(Math.floor(end)));
+      embed.searchParams.set('rel', '0');
+      embed.searchParams.set('enablejsapi', '1');
+      return { provider, src: embed.toString(), start, end };
+    }
+    if (provider === 'vimeo') {
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const id = parts.find((x) => /^\d+$/.test(x));
+      if (!id) return { provider, src: '', start, end };
+      const embed = new URL(`https://player.vimeo.com/video/${id}`);
+      if (start > 0) embed.searchParams.set('#t', `${Math.floor(start)}s`);
+      return { provider, src: embed.toString(), start, end };
+    }
+    return { provider: 'direct', src: parsed.toString(), start, end };
+  } catch {
+    return { provider, src: '', start, end };
+  }
+}
+
 function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
   const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
@@ -2261,6 +2376,56 @@ function buildAudioSettingsMarkup(idx, q) {
   `;
 }
 
+function formatClipSummary(media) {
+  const start = Number(media?.startAt || 0) || 0;
+  const end = media?.endAt == null ? null : Number(media.endAt);
+  const fmt = (s) => {
+    const sec = Math.max(0, Math.floor(Number(s || 0)));
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const r = String(sec % 60).padStart(2, '0');
+    return `${m}:${r}`;
+  };
+  if (end == null) return `${fmt(start)} → end`;
+  return `${fmt(start)} → ${fmt(end)} (${Math.max(0, Math.floor(end - start))}s)`;
+}
+
+function buildVideoSettingsMarkup(idx, q) {
+  const media = normalizeQuestionMedia(q.media);
+  const config = toVideoEmbedConfig(media);
+  const invalidBounds = media.endAt != null && Number(media.endAt) <= Number(media.startAt || 0);
+  return `
+    <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+      <label><strong>Question video (optional)</strong></label>
+      <div class="row gap top-space">
+        <input data-q="${idx}" data-field="mediaUrl" value="${escapeHtml(media.url)}" maxlength="2000" placeholder="Paste YouTube, Vimeo, or direct video URL" />
+        <select data-q="${idx}" data-field="mediaProvider">
+          <option value="youtube" ${config.provider === 'youtube' ? 'selected' : ''}>YouTube</option>
+          <option value="vimeo" ${config.provider === 'vimeo' ? 'selected' : ''}>Vimeo</option>
+          <option value="direct" ${config.provider === 'direct' ? 'selected' : ''}>Direct URL</option>
+        </select>
+      </div>
+      <div class="row gap top-space">
+        <div><label>Start (sec)</label><input type="number" min="0" step="0.1" data-q="${idx}" data-field="mediaStartAt" value="${Number(media.startAt || 0)}"></div>
+        <div><label>End (sec)</label><input type="number" min="0" step="0.1" data-q="${idx}" data-field="mediaEndAt" value="${media.endAt == null ? '' : Number(media.endAt)}" placeholder="optional"></div>
+      </div>
+      <div class="small top-space">Clip: ${formatClipSummary(media)}</div>
+      ${invalidBounds ? '<div class="small" style="color:#dc2626;">End must be greater than start. End was reset to video end.</div>' : ''}
+      <div class="row gap top-space">
+        <button type="button" class="btn" data-video-preview-clip="${idx}">Preview clip</button>
+        <button type="button" class="btn" data-video-set-start="${idx}">Set Start = Current Time</button>
+        <button type="button" class="btn" data-video-set-end="${idx}">Set End = Current Time</button>
+        <button type="button" class="btn" data-video-reset-clip="${idx}">Reset clip</button>
+        <button type="button" class="btn" data-video-clear="${idx}">Remove video</button>
+      </div>
+      <div class="top-space question-video-wrap" data-video-preview-wrap="${idx}">
+        ${config.src ? (config.provider === 'direct'
+      ? `<video data-video-preview-el="${idx}" controls preload="metadata" src="${escapeHtml(config.src)}" class="question-video-el"></video>`
+      : `<iframe data-video-preview-el="${idx}" src="${escapeHtml(config.src)}" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" class="question-video-el"></iframe>`) : '<div class="small">No valid video URL yet.</div>'}
+      </div>
+    </div>
+  `;
+}
+
 function syncQuizFromUI() {
   quiz.title = quizTitleEl.value.trim();
   applyHearQuestionsMode(quiz, quizTtsLanguageEl?.value || getHearQuestionsMode(quiz));
@@ -2275,6 +2440,25 @@ function syncQuizFromUI() {
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
+    const mediaUrlEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
+    const mediaProviderEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
+    const mediaStartEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaStartAt"]`);
+    const mediaEndEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaEndAt"]`);
+    const nextMedia = normalizeQuestionMedia({
+      ...(q.media || makeDefaultQuestionMedia()),
+      url: String(mediaUrlEl?.value || '').trim(),
+      provider: String(mediaProviderEl?.value || detectVideoProvider(mediaUrlEl?.value || '')),
+      startAt: Number(mediaStartEl?.value || 0),
+      endAt: String(mediaEndEl?.value || '').trim() === '' ? null : Number(mediaEndEl?.value),
+      kind: String(mediaUrlEl?.value || '').trim() ? 'video' : 'none',
+    });
+    q.media = nextMedia;
+    if (q.type === 'pin' && q.media.kind === 'video') {
+      q.media = makeDefaultQuestionMedia();
+    }
+    if (q.media.kind === 'video' && q.type !== 'pin' && q.imageData) {
+      replaceQuestionImageData(q, '');
+    }
 
     if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
       q.answers = q.answers || [];
@@ -3065,6 +3249,13 @@ function bindLiveEvents() {
     document.addEventListener('fullscreenchange', syncFullscreenButtonLabel);
     syncFullscreenButtonLabel();
   }
+  document.addEventListener('fullscreenchange', () => {
+    if (!joinSubmitBtn) return;
+    if (isQuestionMediaFullscreenActive()) {
+      joinSubmitBtn.disabled = true;
+      setStatus(joinStatusEl, 'Exit fullscreen to answer.', 'bad');
+    }
+  });
 
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -4046,6 +4237,15 @@ function shouldIgnoreHostHotkey(e) {
 }
 
 function handleHostHotkeys(e) {
+  const hotkeyTarget = e.target;
+  const hotkeyTag = String(hotkeyTarget?.tagName || '').toLowerCase();
+  const isEditableHotkeyTarget = !!hotkeyTarget?.isContentEditable || ['input', 'textarea', 'select'].includes(hotkeyTag);
+  if (!isEditableHotkeyTarget && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
+    e.preventDefault();
+    runManualMediaCheck();
+    return;
+  }
+
   if (shouldIgnoreHostHotkey(e)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
@@ -4902,7 +5102,7 @@ function renderHostState(state) {
   if (phaseChanged && state.phase === 'question' && !state.questionClosed) {
     stopFx('answering');
     // If question has audio, prime the ambient but don't play it yet - it will resume after audio ends
-    if (hasQuestionAudio(state.question)) {
+    if (hasQuestionAudio(state.question) || normalizeQuestionMedia(state.question?.media).kind === 'video') {
       const qIndex = state.currentIndex;
       const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
       primeAnsweringFx(answeringKey);
@@ -4945,7 +5145,8 @@ function renderHostState(state) {
     live.host.lastRevealKey = revealKey;
   }
 
-  if (state.phase === 'question' && !state.questionClosed && hasQuestionAudio(state.question)) {
+  const hasQuestionVideo = normalizeQuestionMedia(state.question?.media).kind === 'video';
+  if (state.phase === 'question' && !state.questionClosed && (hasQuestionAudio(state.question) || hasQuestionVideo)) {
     const hostAudioKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
     if (live.host.lastHostAudioKey !== hostAudioKey) {
       if (live.host.pendingAutoAudioTimer) {
@@ -4955,7 +5156,8 @@ function renderHostState(state) {
       live.host.pendingAutoAudioTimer = setTimeout(() => {
         const s = live.host.state;
         if (!s || s.phase !== 'question' || s.questionClosed) return;
-        playQuestionAudio(s.question);
+        const answeringKey = `answering_q${Number.isFinite(s.currentIndex) ? s.currentIndex : 'preview'}`;
+        runHostQuestionMediaSequence(s.question, answeringKey).catch(() => resumeFx('answering'));
       }, 3000);
       live.host.lastHostAudioKey = hostAudioKey;
     }
@@ -5233,10 +5435,12 @@ function renderHostQuestion(state) {
 
   // Audio controls removed - use 'p' key to play instead
 
-  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
+  const hostMediaCfg = toVideoEmbedConfig(question.media || {});
+  const hasHostVideo = normalizeQuestionMedia(question.media).kind === 'video' && !!hostMediaCfg.src;
+  const hasSharedImage = !hasHostVideo && question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
+  if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -5245,6 +5449,37 @@ function renderHostQuestion(state) {
     img.dataset.zoomable = '1';
     preview.appendChild(img);
     hostQuestionAnswersEl.appendChild(preview);
+  }
+
+  const hostMedia = normalizeQuestionMedia(question.media);
+  if (hostMedia.kind === 'video' && (hostMedia.url || hostMedia.embedUrl)) {
+    const config = toVideoEmbedConfig(hostMedia);
+    const wrap = document.createElement('div');
+    wrap.className = 'top-space question-video-wrap';
+    if (config.src) {
+      if (config.provider === 'direct') {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.preload = 'metadata';
+        video.src = config.src;
+        video.className = 'question-video-el';
+        wrap.appendChild(video);
+      } else {
+        const iframe = document.createElement('iframe');
+        iframe.src = config.src;
+        iframe.allowFullscreen = true;
+        iframe.className = 'question-video-el';
+        wrap.appendChild(iframe);
+      }
+    }
+    const link = document.createElement('a');
+    link.href = hostMedia.url || hostMedia.embedUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'small';
+    link.textContent = 'Open in new tab';
+    wrap.appendChild(link);
+    hostQuestionAnswersEl.appendChild(wrap);
   }
 
   if (question.isPoll) {
@@ -6246,7 +6481,8 @@ function renderPlayerState(state) {
 
   const questionClosed = !!state.questionClosed;
   const isPoll = !!state.question?.isPoll;
-  joinSubmitBtn.disabled = questionClosed || state.answeredCurrent;
+  const fullscreenLocked = isQuestionMediaFullscreenActive();
+  joinSubmitBtn.disabled = questionClosed || state.answeredCurrent || fullscreenLocked;
 
   if (questionClosed) {
     const closeReason = String(state.questionCloseReason || '').trim();
@@ -6272,6 +6508,9 @@ function renderPlayerState(state) {
   } else {
     setStatus(joinStatusEl, 'Question live!', 'ok');
   }
+  if (fullscreenLocked) {
+    setStatus(joinStatusEl, 'Exit fullscreen to answer.', 'bad');
+  }
 
   const rrNow = state.revealedResult;
   const correctionText = rrNow?.correction || '';
@@ -6288,8 +6527,10 @@ function renderJoinQuestion(question) {
   joinPromptEl.textContent = question.type === 'context_gap' ? '' : (question.prompt || '(No question text)');
   joinAnswersEl.innerHTML = '';
 
-  const hasSharedImage = question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData);
+  const mediaCfgForImage = toVideoEmbedConfig(question.media || {});
+  const hasQuestionVideo = normalizeQuestionMedia(question.media).kind === 'video' && !!mediaCfgForImage.src;
+  const hasSharedImage = !hasQuestionVideo && question.type !== 'pin' && !!question.imageData;
+  const hasAnyImage = !hasQuestionVideo && (hasSharedImage || ((question.type === 'image_open' || question.type === 'pin') && !!question.imageData));
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
   if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
 
@@ -6300,7 +6541,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(note);
   }
 
-  if (question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
+  if (!hasQuestionVideo && question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -6309,6 +6550,46 @@ function renderJoinQuestion(question) {
     img.dataset.zoomable = '1';
     preview.appendChild(img);
     joinAnswersEl.appendChild(preview);
+  }
+
+  const videoMedia = normalizeQuestionMedia(question.media);
+  if (videoMedia.kind === 'video' && (videoMedia.url || videoMedia.embedUrl)) {
+    const config = toVideoEmbedConfig(videoMedia);
+    const mediaWrap = document.createElement('div');
+    mediaWrap.className = 'top-space question-video-wrap';
+    if (config.provider === 'direct' && config.src) {
+      const v = document.createElement('video');
+      v.controls = true;
+      v.preload = 'metadata';
+      v.src = config.src;
+      v.className = 'question-video-el';
+      v.addEventListener('loadedmetadata', () => {
+        v.currentTime = config.start || 0;
+      }, { once: true });
+      v.addEventListener('timeupdate', () => {
+        if (config.end != null && v.currentTime >= config.end) v.pause();
+      });
+      mediaWrap.appendChild(v);
+    } else if (config.src) {
+      const iframe = document.createElement('iframe');
+      iframe.src = config.src;
+      iframe.allowFullscreen = true;
+      iframe.className = 'question-video-el';
+      mediaWrap.appendChild(iframe);
+    } else {
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.textContent = 'Video could not be embedded.';
+      mediaWrap.appendChild(p);
+    }
+    const open = document.createElement('a');
+    open.href = videoMedia.url || videoMedia.embedUrl || '#';
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    open.className = 'small';
+    open.textContent = 'Open in new tab';
+    mediaWrap.appendChild(open);
+    joinAnswersEl.appendChild(mediaWrap);
   }
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
@@ -6598,6 +6879,24 @@ function renderJoinQuestion(question) {
 
     renderPicks();
     return;
+  }
+}
+
+function isQuestionMediaFullscreenActive() {
+  const fsEl = document.fullscreenElement;
+  if (!fsEl) return false;
+  if (fsEl.tagName === 'IFRAME' || fsEl.tagName === 'VIDEO') return true;
+  return !!fsEl.closest?.('#joinAnswers');
+}
+
+async function runManualMediaCheck() {
+  try {
+    syncQuizFromUI();
+    await ensureQuizMediaReady({ contextLabel: 'manual media check', convertTtsToMp3: true, strictMediaCheck: true });
+    renderBuilder();
+    setStatus(hostStatusEl, 'Media check complete ✅', 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, err?.message || 'Media check failed.', 'bad');
   }
 }
 
@@ -7832,6 +8131,7 @@ function makeMcqQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
     answers: [
       { text: '', correct: true },
       { text: '', correct: false },
@@ -7855,6 +8155,7 @@ function makeMultiQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
     answers: [
       { text: '', correct: true },
       { text: '', correct: true },
@@ -7878,6 +8179,7 @@ function makeTfQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
     answers: [
       { text: 'True', correct: true },
       { text: 'False', correct: false },
@@ -7900,6 +8202,7 @@ function makeTextQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
     accepted: ['', '', ''],
   };
 }
@@ -7919,6 +8222,7 @@ function makeOpenQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -7937,6 +8241,7 @@ function makeSpeakingQuestion(opts = {}) {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -7956,6 +8261,7 @@ function makeImageOpenQuestion() {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -7975,6 +8281,7 @@ function makeContextGapQuestion() {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -7987,6 +8294,7 @@ function makeMatchPairsQuestion() {
     prompt: 'Match each item with the correct pair.',
     points: 1000,
     timeLimit: 0,
+    media: makeDefaultQuestionMedia(),
     pairs: [
       { left: '', right: '' },
       { left: '', right: '' },
@@ -7998,6 +8306,7 @@ function makeMatchPairsQuestion() {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -8036,6 +8345,7 @@ function makePuzzleQuestion(opts = {}) {
     language,
     audioData: '',
     items: ['', '', ''],
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -8052,6 +8362,7 @@ function makeAudioQuestion() {
     ttsLanguage,
     language,
     audioData: '',
+    media: makeDefaultQuestionMedia(),
     points: 1000,
     timeLimit: 0,
     answers: [
@@ -8075,6 +8386,7 @@ function makeSliderQuestion() {
     target: 50,
     margin: 'medium',
     unit: '',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -8088,6 +8400,7 @@ function makePinQuestion() {
     imageData: '',
     zones: [],
     pinMode: 'all',
+    media: makeDefaultQuestionMedia(),
   };
 }
 
@@ -8132,6 +8445,7 @@ function normalizeQuizForLive(raw) {
       language: normalizeTtsVoice(q.language, q.ttsLanguage || guessTtsLanguageFromVoice(q.language)),
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
+      media: normalizeQuestionMedia(q.media),
     };
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
@@ -8515,6 +8829,36 @@ function mimeToExt(dataUrl) {
   return '.bin';
 }
 
+function makeDefaultQuestionMedia() {
+  return {
+    kind: 'none',
+    provider: 'youtube',
+    url: '',
+    embedUrl: '',
+    startAt: 0,
+    endAt: null,
+  };
+}
+
+function normalizeQuestionMedia(rawMedia) {
+  const raw = rawMedia && typeof rawMedia === 'object' ? rawMedia : {};
+  const kind = raw.kind === 'video' ? 'video' : 'none';
+  const provider = ['youtube', 'vimeo', 'direct'].includes(String(raw.provider || '')) ? String(raw.provider) : detectVideoProvider(raw.url || raw.embedUrl || '');
+  const url = String(raw.url || '').trim().slice(0, 2000);
+  const embedUrl = String(raw.embedUrl || '').trim().slice(0, 2000);
+  const startAt = Math.max(0, Number(raw.startAt || 0) || 0);
+  let endAt = raw.endAt == null || raw.endAt === '' ? null : Number(raw.endAt);
+  if (!Number.isFinite(endAt) || endAt <= startAt) endAt = null;
+  return {
+    kind,
+    provider,
+    url,
+    embedUrl,
+    startAt: round(startAt, 3),
+    endAt: endAt == null ? null : round(endAt, 3),
+  };
+}
+
 function makeImageRevisionToken() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -8532,6 +8876,9 @@ function replaceQuestionImageData(question, nextImageData) {
   if (!question || typeof question !== 'object') return;
   question.imageData = String(nextImageData || '');
   if (question.imageData) {
+    if (question.type !== 'pin') {
+      question.media = makeDefaultQuestionMedia();
+    }
     question._imageVersion = makeImageRevisionToken();
     return;
   }
@@ -9231,7 +9578,7 @@ function stopQuestionAudioPlayback() {
 }
 
 async function playQuestionAudio(question, opts = {}) {
-  if (!hasQuestionAudio(question)) return;
+  if (!hasQuestionAudio(question)) return false;
 
   const qIndex = Number(live.host.state?.question?.index);
   const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
@@ -9253,13 +9600,13 @@ async function playQuestionAudio(question, opts = {}) {
   const speed = Number(opts?.speed || 1);
   const safeSpeed = Number.isFinite(speed) ? Math.max(0.6, Math.min(1.4, speed)) : 1;
 
-  const playAudioEl = (a) => {
+  const playAudioEl = (a) => new Promise((resolve) => {
     activeQuestionAudioEl = a;
     try { a.playbackRate = safeSpeed; } catch { }
 
     const onFinish = () => {
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
-      maybeResumeQuestionMusic();
+      resolve(true);
     };
 
     a.addEventListener('ended', onFinish, { once: true });
@@ -9267,23 +9614,22 @@ async function playQuestionAudio(question, opts = {}) {
     a.play().catch(() => {
       onFinish();
     });
-  };
+  });
 
   if (question.audioMode === 'file' && question.audioData) {
     try {
       const a = new Audio(question.audioData);
-      playAudioEl(a);
+      await playAudioEl(a);
     } catch {
-      maybeResumeQuestionMusic();
+      return false;
     }
-    return;
+    return true;
   }
 
   // TTS mode: Edge TTS only (no fallback).
   const text = String(question.audioText || question.prompt || '').trim();
   if (!text) {
-    maybeResumeQuestionMusic();
-    return;
+    return false;
   }
   try {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
@@ -9310,11 +9656,49 @@ async function playQuestionAudio(question, opts = {}) {
     }
 
     const a = new Audio(audioUrl);
-    playAudioEl(a);
+    await playAudioEl(a);
+    return true;
   } catch (err) {
-    maybeResumeQuestionMusic();
     setStatus(hostStatusEl, `Edge TTS error: ${err?.message || 'failed'}`, 'bad');
+    return false;
   }
+}
+
+async function playQuestionVideoClip(question) {
+  const media = normalizeQuestionMedia(question?.media);
+  if (media.kind !== 'video' || !(media.url || media.embedUrl)) return false;
+  const config = toVideoEmbedConfig(media);
+  if (config.provider !== 'direct' || !config.src) return true;
+  return await new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'auto';
+    v.src = config.src;
+    v.onloadedmetadata = () => {
+      try { v.currentTime = config.start || 0; } catch { }
+      v.play().catch(() => resolve(false));
+    };
+    v.ontimeupdate = () => {
+      if (config.end != null && v.currentTime >= config.end) {
+        v.pause();
+        resolve(true);
+      }
+    };
+    v.onended = () => resolve(true);
+    v.onerror = () => resolve(false);
+  });
+}
+
+async function runHostQuestionMediaSequence(question, answeringKey) {
+  stopFx('answering');
+  const audioOk = await playQuestionAudio(question);
+  if (!audioOk && hasQuestionAudio(question)) {
+    // continue to video as fallback
+  }
+  await playQuestionVideoClip(question);
+  const s = live.host.state;
+  if (!s || s.phase !== 'question' || s.questionClosed) return;
+  if (live.host.currentAnsweringFxKey !== answeringKey) return;
+  resumeFx('answering');
 }
 
 function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
