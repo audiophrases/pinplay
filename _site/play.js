@@ -1339,7 +1339,7 @@ function renderJoinQuestion(question) {
   if (!joinAnswersEl) return;
 
   const preVideoCfg = assignmentVideoEmbedConfig(question.media);
-  const hasQuestionVideo = preVideoCfg.kind === 'video' && !!preVideoCfg.src;
+  const hasQuestionVideo = live.player.mode === 'assignment' && preVideoCfg.kind === 'video' && !!preVideoCfg.src;
   const hasSharedImage = !hasQuestionVideo && question.type !== 'pin' && !!question.imageData;
   const hasAnyImage = !hasQuestionVideo && !!question.imageData;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
@@ -1377,11 +1377,12 @@ function renderJoinQuestion(question) {
 
   const videoCfg = assignmentVideoEmbedConfig(question.media);
   const hasVideo = videoCfg.kind === 'video' && !!videoCfg.src;
-  const shouldRenderImage = !hasVideo;
+  const allowVideoForStudent = live.player.mode === 'assignment';
+  const shouldRenderImage = !allowVideoForStudent || !hasVideo;
   if (!shouldRenderImage && joinQuestionWrap) {
     joinQuestionWrap.style.backgroundImage = '';
   }
-  if (hasVideo) {
+  if (allowVideoForStudent && hasVideo) {
     const wrap = document.createElement('div');
     wrap.className = 'top-space question-video-wrap';
     if (videoCfg.provider === 'direct') {

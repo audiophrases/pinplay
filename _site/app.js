@@ -6552,8 +6552,9 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(preview);
   }
 
+  const allowStudentVideo = false; // Live mode: video should stay on host/projector only.
   const videoMedia = normalizeQuestionMedia(question.media);
-  if (videoMedia.kind === 'video' && (videoMedia.url || videoMedia.embedUrl)) {
+  if (allowStudentVideo && videoMedia.kind === 'video' && (videoMedia.url || videoMedia.embedUrl)) {
     const config = toVideoEmbedConfig(videoMedia);
     const mediaWrap = document.createElement('div');
     mediaWrap.className = 'top-space question-video-wrap';
