@@ -799,7 +799,7 @@ body.question-active .join-title-row {
 #joinAnswers .answer-row.correct-highlight:has(input:checked) {
   border-color: var(--ok) !important;
   background: #60ff6587 !important;
-  color: #098300 !important;
+  color: #087b00 !important;
   box-shadow: 0 0 0 2px #d1fae5 !important;
   opacity: 1 !important;
 }
@@ -841,8 +841,8 @@ body.question-active .join-title-row {
   border-color: var(--ok) !important;
   border-style: dashed !important;
   border-width: 1px !important;
-  background: #c9ffc2 !important;
-  color: #238015eb !important;
+  background: #beffac !important;
+  color: #238015db !important;
   opacity: 1 !important;
 }
 
