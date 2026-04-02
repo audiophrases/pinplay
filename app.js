@@ -4680,8 +4680,23 @@ function renderHostAnswerHistory(state) {
         line.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}${entry.graded ? ` (${Number(entry.pointsAwarded || 0)} pts)` : ''}`;
         row.appendChild(line);
 
-        const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
         const currentQ = state?.question || null;
+        if (currentQ?.type === 'voice_record' && entry.answer && entry.answer.audioUrl) {
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.preload = 'metadata';
+          audio.style.display = 'block';
+          audio.style.marginTop = '.4rem';
+          audio.style.marginBottom = '.4rem';
+          audio.style.width = '100%';
+          audio.style.maxWidth = '400px';
+          let audioSrc = entry.answer.audioUrl;
+          if (!audioSrc.startsWith('http')) audioSrc = (loadBackendUrl() || '') + '/' + audioSrc;
+          audio.src = audioSrc;
+          row.appendChild(audio);
+        }
+
+        const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
         const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || currentQ.type === 'speaking' || currentQ.type === 'voice_record' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
 
         if (teacherGradedCurrent) {

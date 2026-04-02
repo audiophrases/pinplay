@@ -2647,7 +2647,7 @@ function hostState(room) {
         .map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
-          answer: String(r?.answer || ''),
+          answer: roomQuestion?.type === 'voice_record' ? r?.answer : String(r?.answer || ''),
           graded: !!r?.graded,
           pointsAwarded: Number(r?.pointsAwarded || 0),
           correction: String(r?.correction || ''),
@@ -2660,7 +2660,7 @@ function hostState(room) {
         .map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
-          answer: String(r?.answer || ''),
+          answer: roomQuestion?.type === 'voice_record' ? r?.answer : String(r?.answer || ''),
           correction: String(r?.correction || ''),
         }))
       : [],
