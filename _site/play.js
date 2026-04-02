@@ -3470,6 +3470,7 @@ function renderVoiceRecorder(container, question) {
       const fileName = `voice_${Date.now()}${ext}`;
       const formData = new FormData();
       formData.append('file', blob, fileName);
+      formData.append('path', `voice_records/${fileName}`);
 
       const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
       const resp = await fetch(`${base}/api/media/upload`, {
