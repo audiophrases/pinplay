@@ -3479,7 +3479,7 @@ function renderVoiceRecorder(container, question) {
       });
       if (!resp.ok) throw new Error(`Upload failed (${resp.status})`);
       const data = await resp.json();
-      const mediaKey = data?.key || data?.url || '';
+      const mediaKey = data?.path || data?.key || data?.url || '';
       if (!mediaKey) throw new Error('No media key returned');
 
       _voiceRecordUpload = { url: mediaKey, durationMs, mimeType, uploading: false, error: null };
