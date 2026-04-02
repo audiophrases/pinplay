@@ -204,7 +204,6 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'slider', label: 'Slider', inTemplate: true, supportsAudio: true },
   { type: 'pin', label: 'Pin spot', inTemplate: true, supportsAudio: true },
   { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
-  { type: 'image_open', label: 'Image Open', inTemplate: false, supportsAudio: true },
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
   { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
   { type: 'audio', label: 'Audio prompt', inTemplate: false, supportsAudio: true }
@@ -313,15 +312,6 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "audioText can rephrase prompt in simpler language for accessibility.",
     "differentiationTips": ["Add sentence starters for support.", "Require evidence/citation for advanced responses."],
     "commonPitfalls": ["Prompt too broad for available time.", "No clear grading target."]
-  },
-  "image_open": {
-    "name": "Visual Open Question",
-    "rules": "Like Open Answer but focuses on interpreting the primary image.",
-    "constraints": { "maxTextLength": 500 },
-    "pedagogicalUses": ["Claim-evidence reasoning from visuals.", "Observation to inference practice."],
-    "ttsStrategy": "audioText can direct attention to key visual details.",
-    "differentiationTips": ["Guide novice learners with one focused sub-question.", "Ask multi-step interpretation for advanced groups."],
-    "commonPitfalls": ["Question answerable without using the image.", "Image prompt lacks observable clues."]
   },
   "speaking": {
     "name": "Speaking Task",
