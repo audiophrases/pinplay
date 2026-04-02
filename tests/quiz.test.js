@@ -80,7 +80,7 @@ function evaluate(question, answer) {
 
 function isAssignmentTeacherGradedQuestion(question) {
   if (!question) return false;
-  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking') return true;
+  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record') return true;
   if (question.type === 'text') {
     return (question.accepted || []).map(x => String(x || '').trim()).filter(Boolean).length === 0;
   }
@@ -1025,6 +1025,7 @@ describe('isAssignmentTeacherGradedQuestion', () => {
   it('open is teacher-graded', () => { assert.ok(isAssignmentTeacherGradedQuestion({ type: 'open' })); });
   it('image_open is teacher-graded', () => { assert.ok(isAssignmentTeacherGradedQuestion({ type: 'image_open' })); });
   it('speaking is teacher-graded', () => { assert.ok(isAssignmentTeacherGradedQuestion({ type: 'speaking' })); });
+  it('voice_record is teacher-graded', () => { assert.ok(isAssignmentTeacherGradedQuestion({ type: 'voice_record' })); });
   it('text with empty accepted is teacher-graded', () => { assert.ok(isAssignmentTeacherGradedQuestion({ type: 'text', accepted: [] })); });
   it('text with accepted answers is auto-graded', () => { assert.ok(!isAssignmentTeacherGradedQuestion({ type: 'text', accepted: ['Paris', 'London'] })); });
   it('mcq is auto-graded', () => { assert.ok(!isAssignmentTeacherGradedQuestion({ type: 'mcq' })); });

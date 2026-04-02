@@ -1473,7 +1473,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
@@ -1569,6 +1569,8 @@ function renderJoinQuestion(question) {
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
     } else if (question.type === 'speaking') {
       // No instruction text as requested
+    } else if (question.type === 'voice_record') {
+      renderVoiceRecorder(joinAnswersEl, question);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
@@ -1968,6 +1970,11 @@ function readJoinAnswer() {
 
   if (q.type === 'speaking') {
     return '__spoken__';
+  }
+
+  if (q.type === 'voice_record') {
+    if (!_voiceRecordUpload || _voiceRecordUpload.uploading || _voiceRecordUpload.error) return null;
+    return { audioUrl: _voiceRecordUpload.url, durationMs: _voiceRecordUpload.durationMs, mimeType: _voiceRecordUpload.mimeType };
   }
 
   if (q.type === 'context_gap') {
@@ -3005,7 +3012,7 @@ function cancelPendingAssignmentQuestionAutoplay() {
 }
 
 function supportsAssignmentQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking', 'voice_record'].includes(String(type || ''));
 }
 
 function normalizeAssignmentQuestionMedia(rawMedia) {
@@ -3369,6 +3376,197 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   }
 
   return Math.max(1, maxErrors);
+}
+
+// ===== Voice Record =====
+let _voiceRecordUpload = null; // { url, durationMs, mimeType, uploading, error }
+let _voiceRecordStream = null;
+let _voiceRecordRecorder = null;
+let _voiceRecordTimerId = null;
+
+function _cleanupVoiceRecordStream() {
+  if (_voiceRecordTimerId) { clearInterval(_voiceRecordTimerId); _voiceRecordTimerId = null; }
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state !== 'inactive') {
+    try { _voiceRecordRecorder.stop(); } catch (_) {}
+  }
+  _voiceRecordRecorder = null;
+  if (_voiceRecordStream) {
+    _voiceRecordStream.getTracks().forEach((t) => t.stop());
+    _voiceRecordStream = null;
+  }
+}
+
+function renderVoiceRecorder(container, question) {
+  _cleanupVoiceRecordStream();
+  _voiceRecordUpload = null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'voice-recorder';
+
+  const recordBtn = document.createElement('button');
+  recordBtn.type = 'button';
+  recordBtn.className = 'btn voice-record-btn';
+  recordBtn.textContent = '🎙️ Record';
+
+  const stopBtn = document.createElement('button');
+  stopBtn.type = 'button';
+  stopBtn.className = 'btn voice-record-stop-btn hidden';
+  stopBtn.textContent = '⏹ Stop';
+
+  const timerEl = document.createElement('div');
+  timerEl.className = 'voice-record-status hidden';
+  timerEl.textContent = '0:00';
+
+  const previewWrap = document.createElement('div');
+  previewWrap.className = 'voice-record-preview hidden';
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'voice-record-upload-status';
+
+  wrap.append(recordBtn, stopBtn, timerEl, previewWrap, statusEl);
+  container.appendChild(wrap);
+
+  const MAX_DURATION_SEC = 120;
+  const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+
+  function showPreview(blob, durationMs) {
+    previewWrap.innerHTML = '';
+    previewWrap.classList.remove('hidden');
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = URL.createObjectURL(blob);
+
+    const rerecordBtn = document.createElement('button');
+    rerecordBtn.type = 'button';
+    rerecordBtn.className = 'btn';
+    rerecordBtn.textContent = '🔄 Re-record';
+    rerecordBtn.addEventListener('click', () => {
+      _cleanupVoiceRecordStream();
+      _voiceRecordUpload = null;
+      previewWrap.classList.add('hidden');
+      previewWrap.innerHTML = '';
+      statusEl.textContent = '';
+      statusEl.className = 'voice-record-upload-status';
+      recordBtn.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+      timerEl.classList.add('hidden');
+    });
+
+    const durLabel = document.createElement('span');
+    durLabel.className = 'small muted';
+    durLabel.textContent = ` ${Math.round(durationMs / 1000)}s`;
+
+    previewWrap.append(audio, durLabel, rerecordBtn);
+  }
+
+  async function uploadBlob(blob, durationMs) {
+    const mimeType = blob.type || 'audio/webm';
+    _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null };
+    statusEl.textContent = 'Uploading…';
+    statusEl.className = 'voice-record-upload-status uploading';
+
+    try {
+      const ext = mimeType.includes('mp4') ? '.mp4' : mimeType.includes('ogg') ? '.ogg' : '.webm';
+      const fileName = `voice_${Date.now()}${ext}`;
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      const resp = await fetch(`${base}/api/media/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!resp.ok) throw new Error(`Upload failed (${resp.status})`);
+      const data = await resp.json();
+      const mediaKey = data?.key || data?.url || '';
+      if (!mediaKey) throw new Error('No media key returned');
+
+      _voiceRecordUpload = { url: mediaKey, durationMs, mimeType, uploading: false, error: null };
+      statusEl.textContent = '✓ Uploaded';
+      statusEl.className = 'voice-record-upload-status uploaded';
+    } catch (err) {
+      _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: false, error: err.message };
+      statusEl.textContent = `⚠ ${err.message}. Tap to retry.`;
+      statusEl.className = 'voice-record-upload-status error';
+      statusEl.style.cursor = 'pointer';
+      statusEl.onclick = () => { statusEl.onclick = null; uploadBlob(blob, durationMs); };
+    }
+  }
+
+  recordBtn.addEventListener('click', async () => {
+    try {
+      _voiceRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      statusEl.textContent = 'Mic access denied. Check browser settings.';
+      statusEl.className = 'voice-record-upload-status error';
+      return;
+    }
+
+    const chunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+    _voiceRecordRecorder = mimeType
+      ? new MediaRecorder(_voiceRecordStream, { mimeType })
+      : new MediaRecorder(_voiceRecordStream);
+
+    const startTime = Date.now();
+
+    _voiceRecordRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    _voiceRecordRecorder.onstop = () => {
+      const durationMs = Date.now() - startTime;
+      const blob = new Blob(chunks, { type: _voiceRecordRecorder.mimeType || 'audio/webm' });
+
+      if (_voiceRecordTimerId) { clearInterval(_voiceRecordTimerId); _voiceRecordTimerId = null; }
+      timerEl.classList.add('hidden');
+      recordBtn.classList.remove('hidden');
+      recordBtn.classList.add('hidden'); // keep hidden — show re-record in preview
+      stopBtn.classList.add('hidden');
+
+      if (blob.size > MAX_SIZE_BYTES) {
+        statusEl.textContent = `Recording too large (${(blob.size / 1024 / 1024).toFixed(1)} MB, max ${MAX_SIZE_BYTES / 1024 / 1024} MB). Try again.`;
+        statusEl.className = 'voice-record-upload-status error';
+        recordBtn.classList.remove('hidden');
+        _voiceRecordStream?.getTracks().forEach((t) => t.stop());
+        _voiceRecordStream = null;
+        return;
+      }
+
+      showPreview(blob, durationMs);
+      uploadBlob(blob, durationMs);
+      _voiceRecordStream?.getTracks().forEach((t) => t.stop());
+      _voiceRecordStream = null;
+    };
+
+    _voiceRecordRecorder.start(1000); // collect chunks every 1s
+
+    recordBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+    timerEl.classList.remove('hidden');
+    timerEl.textContent = '0:00';
+    statusEl.textContent = '';
+    statusEl.className = 'voice-record-upload-status';
+
+    let elapsed = 0;
+    _voiceRecordTimerId = setInterval(() => {
+      elapsed++;
+      const m = Math.floor(elapsed / 60);
+      const s = elapsed % 60;
+      timerEl.textContent = `${m}:${String(s).padStart(2, '0')} / ${Math.floor(MAX_DURATION_SEC / 60)}:${String(MAX_DURATION_SEC % 60).padStart(2, '0')}`;
+      if (elapsed >= MAX_DURATION_SEC) {
+        if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') {
+          _voiceRecordRecorder.stop();
+        }
+      }
+    }, 1000);
+  });
+
+  stopBtn.addEventListener('click', () => {
+    if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') {
+      _voiceRecordRecorder.stop();
+    }
+  });
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
