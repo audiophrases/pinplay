@@ -3642,23 +3642,23 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       answer.className = 'small';
 
       // Voice record: show audio player instead of text
-      if (String(it?.qType || '') === 'voice_record' && it?.answerText && typeof it.answerText === 'object' && it.answerText.audioUrl) {
+      if (String(it?.qType || '') === 'voice_record' && it?.answer && typeof it.answer === 'object' && it.answer.audioUrl) {
         const audioWrap = document.createElement('div');
         audioWrap.className = 'top-space';
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.preload = 'metadata';
-        let audioSrc = it.answerText.audioUrl;
+        let audioSrc = it.answer.audioUrl;
         if (!audioSrc.startsWith('http') && !audioSrc.startsWith('data:')) {
           const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
           audioSrc = `${base}/api/media/${audioSrc}`;
         }
         audio.src = audioSrc;
         audioWrap.appendChild(audio);
-        if (it.answerText.durationMs) {
+        if (it.answer.durationMs) {
           const dur = document.createElement('span');
           dur.className = 'small muted';
-          dur.textContent = ` (${Math.round(it.answerText.durationMs / 1000)}s)`;
+          dur.textContent = ` (${Math.round(it.answer.durationMs / 1000)}s)`;
           audioWrap.appendChild(dur);
         }
         answer.textContent = 'Answer: 🎙️ Voice recording';
