@@ -206,6 +206,7 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
   { type: 'image_open', label: 'Image Open', inTemplate: false, supportsAudio: true },
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
+  { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
   { type: 'audio', label: 'Audio prompt', inTemplate: false, supportsAudio: true }
 ];
 
@@ -331,6 +332,15 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "differentiationTips": ["Use short sentence frames for support.", "Add argument or explanation requirements for challenge."],
     "commonPitfalls": ["Task too long for time limit.", "Prompt unclear about expected speaking length."]
   },
+  "voice_record": {
+    "name": "Voice Recording",
+    "rules": "Students record a spoken answer. Teacher grades manually by listening to the playback.",
+    "constraints": { "maxDurationSec": 120, "maxSizeMB": 10 },
+    "pedagogicalUses": ["Oral fluency and pronunciation practice.", "Extended spoken response for deeper assessment."],
+    "ttsStrategy": "audioText can model the expected response register.",
+    "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners."],
+    "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading."]
+  },
   "audio": {
     "name": "Audio Prompt",
     "rules": "Listening-focused question that relies on audio instructions/content before answering.",
@@ -360,6 +370,7 @@ const addTextBtn = document.getElementById('addTextBtn');
 const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
 const addSpeakingBtn = document.getElementById('addSpeakingBtn');
+const addVoiceRecordBtn = document.getElementById('addVoiceRecordBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addContextGapBtn = document.getElementById('addContextGapBtn');
 const addMatchPairsBtn = document.getElementById('addMatchPairsBtn');
@@ -904,6 +915,12 @@ function bindBuilderEvents() {
   if (addSpeakingBtn) {
     addSpeakingBtn.addEventListener('click', () => {
       addQuestionToBuilder(makeSpeakingQuestion());
+    });
+  }
+
+  if (addVoiceRecordBtn) {
+    addVoiceRecordBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeVoiceRecordQuestion());
     });
   }
 
@@ -1752,6 +1769,12 @@ function renderBuilder() {
     if (q.type === 'speaking') {
       specific += `
         <p class="small top-space">In-class speaking round: students tap submit when they have answered orally. Teacher grades participation/performance live.</p>
+      `;
+    }
+
+    if (q.type === 'voice_record') {
+      specific += `
+        <p class="small top-space">Students record audio (max 2 min). You grade by listening to playback.</p>
       `;
     }
 
@@ -3617,9 +3640,33 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
 
       const answer = document.createElement('div');
       answer.className = 'small';
-      answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
 
-      li.append(head, prompt, answer);
+      // Voice record: show audio player instead of text
+      if (String(it?.qType || '') === 'voice_record' && it?.answerText && typeof it.answerText === 'object' && it.answerText.audioUrl) {
+        const audioWrap = document.createElement('div');
+        audioWrap.className = 'top-space';
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'metadata';
+        let audioSrc = it.answerText.audioUrl;
+        if (!audioSrc.startsWith('http') && !audioSrc.startsWith('data:')) {
+          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+          audioSrc = `${base}/api/media/${audioSrc}`;
+        }
+        audio.src = audioSrc;
+        audioWrap.appendChild(audio);
+        if (it.answerText.durationMs) {
+          const dur = document.createElement('span');
+          dur.className = 'small muted';
+          dur.textContent = ` (${Math.round(it.answerText.durationMs / 1000)}s)`;
+          audioWrap.appendChild(dur);
+        }
+        answer.textContent = 'Answer: 🎙️ Voice recording';
+        li.append(head, prompt, answer, audioWrap);
+      } else {
+        answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
+        li.append(head, prompt, answer);
+      }
 
       if (it?.teacherGraded) {
         const row = document.createElement('div');
@@ -4635,7 +4682,7 @@ function renderHostAnswerHistory(state) {
 
         const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
         const currentQ = state?.question || null;
-        const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || currentQ.type === 'speaking' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
+        const teacherGradedCurrent = isCurrent && currentQ && (currentQ.type === 'open' || currentQ.type === 'image_open' || currentQ.type === 'speaking' || currentQ.type === 'voice_record' || (currentQ.type === 'text' && !(currentQ.accepted || []).filter((x) => String(x || '').trim()).length));
 
         if (teacherGradedCurrent) {
           const actions = document.createElement('div');
@@ -5525,7 +5572,7 @@ function renderHostQuestion(state) {
     return;
   }
 
-  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || isTeacherGradedText) {
+  if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || isTeacherGradedText) {
     hostQuestionHintEl.textContent = '';
 
     if (question.type === 'image_open' && question.imageData) {
@@ -6612,7 +6659,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -6744,6 +6791,11 @@ function renderJoinQuestion(question) {
       const note = document.createElement('p');
       note.className = 'small';
       note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
+      joinAnswersEl.appendChild(note);
+    } else if (question.type === 'voice_record') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Voice recording is available in assignment mode.';
       joinAnswersEl.appendChild(note);
     } else {
       const input = document.createElement('input');
@@ -6953,6 +7005,10 @@ function readJoinAnswer() {
     return '__spoken__';
   }
 
+  if (q.type === 'voice_record') {
+    return '__voice_record__';
+  }
+
   if (q.type === 'context_gap') {
     const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
     const values = fields.map((el) => String(el.value || '').trim());
@@ -7141,7 +7197,7 @@ function evaluatePreviewAnswer(q, answer) {
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     return { correct: accepted.length ? accepted.includes(guess) : false };
   }
-  if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking') return { correct: false, graded: false };
+  if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
     return { correct: isContextGapCorrect(answer, q.gaps || []) };
   }
@@ -7319,7 +7375,7 @@ function setPreviewTeacherPatch(qIndex, playerId, patch) {
 }
 
 function buildPreviewOpenResponses(question, simPlayers, quality) {
-  const teacherGraded = question && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || (question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length));
+  const teacherGraded = question && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || (question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length));
   if (!teacherGraded) return [];
 
   return simPlayers
@@ -7328,6 +7384,8 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
       const q = quality === 'acceptable' && idx % 4 === 0 ? 'excellent' : quality;
       const answer = question.type === 'speaking'
         ? '__spoken__'
+        : question.type === 'voice_record'
+        ? '__voice_record__'
         : buildPreviewTextAnswer(p.name, q, question.prompt || '');
       const base = {
         playerId: p.id,
@@ -7347,7 +7405,7 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
 function summarizePreviewStudentAnswer(question, player, openResponseMap = null) {
   if (!question || !player?.answeredCurrent) return '(no submission)';
 
-  if (openResponseMap && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'text')) {
+  if (openResponseMap && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'text')) {
     const txt = String(openResponseMap.get(player.id) || '').trim();
     if (txt) return txt;
   }
@@ -7366,6 +7424,7 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   if (question.type === 'error_hunt') return ok ? 'rewrite: corrected sentence' : 'rewrite: needs fixes';
   if (question.type === 'open' || question.type === 'image_open') return ok ? 'open: strong response' : 'open: basic response';
   if (question.type === 'speaking') return ok ? 'speaking: clear oral response' : 'speaking: oral response needs improvement';
+  if (question.type === 'voice_record') return ok ? 'voice: clear recording' : 'voice: recording needs review';
   if (question.type === 'slider') {
     const min = Number(question.min || 0);
     const max = Number(question.max || 100);
@@ -7675,7 +7734,7 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'context_gap' || q.type === 'error_hunt') {
+  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record' || q.type === 'context_gap' || q.type === 'error_hunt') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -7807,6 +7866,11 @@ function renderSoloQuestion() {
       const note = document.createElement('p');
       note.className = 'small';
       note.textContent = 'Speaking question: answer orally and get graded by teacher in live mode.';
+      answersEl.appendChild(note);
+    } else if (q.type === 'voice_record') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Voice recording: available in assignment mode.';
       answersEl.appendChild(note);
     } else {
       const input = document.createElement('input');
@@ -7968,6 +8032,10 @@ function evaluateSoloQuestion(q) {
 
   if (q.type === 'speaking') {
     return { correct: false, hint: 'Speaking answer is teacher-graded in live mode.' };
+  }
+
+  if (q.type === 'voice_record') {
+    return { correct: false, hint: 'Voice recording is teacher-graded.' };
   }
 
   if (q.type === 'context_gap') {
@@ -8220,6 +8288,25 @@ function makeSpeakingQuestion(opts = {}) {
     id: crypto.randomUUID(),
     type: 'speaking',
     prompt: 'Speak your answer when called by the teacher.',
+    points: 1000,
+    timeLimit: 0,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioMode: 'tts',
+    audioText: '',
+    ttsLanguage,
+    language,
+    audioData: '',
+    media: makeDefaultQuestionMedia(),
+  };
+}
+
+function makeVoiceRecordQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
+  return {
+    id: crypto.randomUUID(),
+    type: 'voice_record',
+    prompt: 'Record your spoken answer.',
     points: 1000,
     timeLimit: 0,
     audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
@@ -8487,6 +8574,11 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'speaking') {
+      normalized.questions.push({ ...base });
+      return;
+    }
+
+    if (q.type === 'voice_record') {
       normalized.questions.push({ ...base });
       return;
     }

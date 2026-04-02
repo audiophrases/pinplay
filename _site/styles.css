@@ -824,6 +824,89 @@ body.question-active .join-title-row {
 }
 
 /* ==========================================================================
+   VOICE RECORDER UI
+   ========================================================================== */
+.voice-recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.5rem 0;
+}
+
+.voice-record-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 1.25rem;
+  padding: 0.75rem 2rem;
+  border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(96, 93, 255, 0.3);
+  transition: transform 0.2s;
+}
+.voice-record-btn:hover {
+  transform: scale(1.05);
+  background: var(--primary);
+}
+
+.voice-record-stop-btn {
+  background: #ff3b30;
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 1.25rem;
+  padding: 0.75rem 2rem;
+  border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+  animation: pulseStop 1.5s infinite;
+}
+@keyframes pulseStop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.voice-record-status {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ff3b30;
+}
+
+.voice-record-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.voice-record-upload-status {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  text-align: center;
+}
+.voice-record-upload-status.uploading {
+  color: #d97706;
+  background: #fef3c7;
+}
+.voice-record-upload-status.uploaded {
+  color: var(--ok);
+  background: #dcfce7;
+}
+.voice-record-upload-status.error {
+  color: var(--bad);
+  background: #fee2e2;
+}
+
+/* ==========================================================================
    STUDENT ANSWER REVEAL HIGHLIGHTS (Four States)
    ========================================================================== */
 
@@ -946,15 +1029,23 @@ body.question-active .join-title-row {
 }
 
 #joinCard.question-active .question-video-wrap {
-  width: 100%;
-  margin: 0 auto .5rem;
-  z-index: 1;
+  position: fixed;
+  inset: 130px 20px 192px 20px;
+  margin: 0 !important;
+  width: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 #joinCard.question-active .question-video-el {
   width: min(100%, 760px);
-  min-height: 220px;
+  height: 100%;
   max-height: min(40vh, 480px);
+  object-fit: contain;
+  margin: 0 auto;
 }
 
 #joinCard.question-active[data-qtype="pin"] .pin-preview img {
