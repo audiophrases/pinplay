@@ -1323,6 +1323,7 @@ function applyJoinLayoutMode(active, question = null) {
 function renderJoinQuestion(question) {
   const oldOverlay = document.getElementById('matchPairsCenterOverlay');
   if (oldOverlay) oldOverlay.remove();
+  joinQuestionWrap?.querySelectorAll('.question-video-wrap').forEach((el) => el.remove());
 
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
@@ -1382,7 +1383,7 @@ function renderJoinQuestion(question) {
   if (!shouldRenderImage && joinQuestionWrap) {
     joinQuestionWrap.style.backgroundImage = '';
   }
-  if (allowVideoForStudent && hasVideo) {
+  if (allowVideoForStudent && hasVideo && joinQuestionWrap) {
     const wrap = document.createElement('div');
     wrap.className = 'top-space question-video-wrap';
     if (videoCfg.provider === 'direct') {
@@ -1403,7 +1404,7 @@ function renderJoinQuestion(question) {
       iframe.className = 'question-video-el';
       wrap.appendChild(iframe);
     }
-    joinAnswersEl.appendChild(wrap);
+    joinQuestionWrap.insertBefore(wrap, document.getElementById('joinQuestionInteractive') || null);
   }
 
   // Remove the old inline image preview logic for generic questions

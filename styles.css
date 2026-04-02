@@ -946,15 +946,23 @@ body.question-active .join-title-row {
 }
 
 #joinCard.question-active .question-video-wrap {
-  width: 100%;
-  margin: 0 auto .5rem;
-  z-index: 1;
+  position: fixed;
+  inset: 130px 20px 192px 20px;
+  margin: 0 !important;
+  width: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 #joinCard.question-active .question-video-el {
   width: min(100%, 760px);
-  min-height: 220px;
+  height: 100%;
   max-height: min(40vh, 480px);
+  object-fit: contain;
+  margin: 0 auto;
 }
 
 #joinCard.question-active[data-qtype="pin"] .pin-preview img {
