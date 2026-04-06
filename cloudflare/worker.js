@@ -3745,6 +3745,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     assignment: publicAssignment(assignment, { includeQuiz: true }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
+    answersByQ: attempt?.answersByQ || {},
     answersWithCorrectness,
   };
 }
