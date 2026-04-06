@@ -2805,28 +2805,55 @@ function showPinFeedback(question, state) {
 function highlightContextGap(question) {
   const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
   const gaps = question.gaps || [];
+  let isIncorrect = false;
+  const correctContents = [];
+
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim().toLowerCase();
     const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
 
-    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
-    const first = variants[0];
-    if (first) {
-      const reveal = document.createElement('span');
-      reveal.dataset.joinCorrectReveal = "1";
-      reveal.style.cssText = 'color:var(--ok); font-weight:bold; margin-left:6px; font-size:0.9em;';
-      reveal.textContent = `(${first})`;
-      field.after(reveal);
+    if (!(val && accepted.includes(val))) {
+      isIncorrect = true;
     }
 
-    if (val && accepted.includes(val)) {
-      row.classList.add('correct-highlight');
-    } else {
-      row.classList.add('incorrect-highlight');
-    }
+    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
+    if (variants.length > 0) correctContents.push(variants.join(' | '));
+
+    row.classList.remove('correct-highlight', 'incorrect-highlight');
   });
+
+  if (isIncorrect && correctContents.length > 0) {
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (wrap) {
+      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
+      if (revealEl) revealEl.remove();
+
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
+
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+      revealEl.appendChild(title);
+
+      correctContents.forEach(content => {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'student-answer-reveal-content';
+        contentDiv.textContent = content;
+        revealEl.appendChild(contentDiv);
+      });
+
+      const submissionBox = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
+        wrap.insertBefore(revealEl, submissionBox);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+  }
 }
 
 function highlightPuzzle(question) {
