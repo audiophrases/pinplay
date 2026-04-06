@@ -2586,7 +2586,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Error hunt
   if (question.type === 'error_hunt') {
-    highlightErrorHunt(question);
+    highlightErrorHunt(question, isCorrect);
     return;
   }
 
@@ -2685,79 +2685,43 @@ function highlightMatchPairs(question) {
 }
 
 // Error hunt: highlight selected tokens
-function highlightErrorHunt(question) {
+function highlightErrorHunt(question, isCorrect) {
   const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
-  const variants = getCorrectedVariantsList(question.corrected, question.correctedVariants);
-  if (!variants.length) return;
+  tokens.forEach(token => {
+    token.classList.remove('correct-highlight', 'correct-missed', 'incorrect-highlight');
+  });
 
-  const source = tokenizeWords(question.prompt).map(normalizeTextAnswer);
-  let bestErrorIndexes = new Set();
-  let minDiff = Infinity;
+  if (isCorrect === false) {
+    const correctText = question.corrected || '';
+    if (!correctText) return;
 
-  // Find the variant that results in the fewest errors (best match)
-  for (const v of variants) {
-    const target = tokenizeWords(v).map(normalizeTextAnswer);
-    const errorIndexes = new Set();
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (wrap) {
+      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
+      if (revealEl) revealEl.remove();
 
-    if (source.length && target.length) {
-      const rows = source.length + 1;
-      const cols = target.length + 1;
-      const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
 
-      for (let i = 0; i < rows; i++) dp[i][0] = i;
-      for (let j = 0; j < cols; j++) dp[0][j] = j;
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+      revealEl.appendChild(title);
 
-      for (let i = 1; i < rows; i++) {
-        for (let j = 1; j < cols; j++) {
-          if (source[i - 1] === target[j - 1]) {
-            dp[i][j] = dp[i - 1][j - 1];
-          } else {
-            dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-          }
-        }
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'student-answer-reveal-content';
+      contentDiv.textContent = correctText;
+      revealEl.appendChild(contentDiv);
+
+      const submissionBox = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
+        wrap.insertBefore(revealEl, submissionBox);
+      } else {
+        wrap.appendChild(revealEl);
       }
-
-      let i = source.length;
-      let j = target.length;
-
-      while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
-          i--; j--;
-        } else {
-          // Use the Levenshtein backtrack logic to identify exactly which token positions are changed
-          if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
-            errorIndexes.add(i - 1);
-            i--; j--;
-          } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
-            errorIndexes.add(i - 1);
-            i--;
-          } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
-            errorIndexes.add(Math.max(0, i - 1));
-            j--;
-          } else {
-            if (i > 0) i--;
-            else j--;
-          }
-        }
-      }
-    }
-
-    if (errorIndexes.size < minDiff) {
-      minDiff = errorIndexes.size;
-      bestErrorIndexes = errorIndexes;
     }
   }
-
-  tokens.forEach((token, idx) => {
-    const isActive = token.classList.contains('active');
-    if (bestErrorIndexes.has(idx) && isActive) {
-      token.classList.add('correct-highlight');
-    } else if (bestErrorIndexes.has(idx) && !isActive) {
-      token.classList.add('correct-missed');
-    } else if (!bestErrorIndexes.has(idx) && isActive) {
-      token.classList.add('incorrect-highlight');
-    }
-  });
 }
 
 // Slider: show correct value with visual indicator
