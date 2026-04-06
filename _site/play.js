@@ -2830,17 +2830,8 @@ function highlightContextGap(question) {
 }
 
 function highlightPuzzle(question) {
-  const correctItems = Array.isArray(question.items) ? question.items : [];
-  const rows = joinAnswersEl.querySelectorAll('.puzzle-selected .answer-row');
-  rows.forEach((row, idx) => {
-    const val = String(row.dataset.puzzlePiece || '').trim();
-    const correct = String(correctItems[idx] || '').trim();
-    if (val.toLowerCase() === correct.toLowerCase()) {
-      row.classList.add('correct-highlight');
-    } else {
-      row.classList.add('incorrect-highlight');
-    }
-  });
+  // Puzzle answer buttons are intentionally not highlighted per request.
+  // The correct/incorrect status is shown via HUD and correct answer reveal.
 }
 
 function setStatus(el, text, mode = '') {
