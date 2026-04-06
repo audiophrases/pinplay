@@ -736,8 +736,16 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
     list.className = 'review-retake-attempts';
 
     attempts.slice(0, 5).forEach((a) => {
-      const row = document.createElement('li');
-      row.className = 'review-retake-attempt-row';
+      // Changed to button to make it explicitly interactive
+      const row = document.createElement('button');
+      row.className = 'review-retake-attempt-row rr-btn-review-inline';
+      row.type = 'button';
+      row.title = 'Click to review this attempt';
+      
+      row.addEventListener('click', () => {
+        dismissReviewRetakeModal();
+        enterAssignmentReviewMode(code, a.id, username, checkData);
+      });
 
       const label = document.createElement('span');
       label.className = 'rr-attempt-label';
@@ -763,22 +771,26 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   actions.className = 'review-retake-actions';
   if (!checkData.canRetake) actions.classList.add('single-action');
 
-  // Review button — always available
-  const reviewBtn = document.createElement('button');
-  reviewBtn.className = 'rr-btn rr-btn-review';
-  reviewBtn.type = 'button';
-  reviewBtn.innerHTML = `
-    <span class="rr-btn-icon">📖</span>
-    <span class="rr-btn-label">Review</span>
-    <span class="rr-btn-hint">View your answers</span>
-  `;
-  reviewBtn.addEventListener('click', () => {
-    const latestAttempt = attempts[0];
-    if (!latestAttempt?.id) return;
-    dismissReviewRetakeModal();
-    enterAssignmentReviewMode(code, latestAttempt.id, username, checkData);
-  });
-  actions.appendChild(reviewBtn);
+  // Review button — only available if the list implies we need a generic fallback
+  if (attempts.length === 0) {
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'rr-btn rr-btn-review';
+    reviewBtn.type = 'button';
+    reviewBtn.innerHTML = `
+      <span class="rr-btn-icon">📖</span>
+      <span class="rr-btn-label">Review</span>
+      <span class="rr-btn-hint">View your answers</span>
+    `;
+    reviewBtn.addEventListener('click', () => {
+      const latestAttempt = checkData.pastAttempts?.[0]; // Fallback to raw array
+      if (!latestAttempt?.id) return;
+      dismissReviewRetakeModal();
+      enterAssignmentReviewMode(code, latestAttempt.id, username, checkData);
+    });
+    actions.appendChild(reviewBtn);
+  } else {
+    actions.classList.add('single-action'); // Retake/Continue takes full width
+  }
 
   // Retake or Continue button
   if (checkData.canRetake || checkData.hasOpenAttempt) {

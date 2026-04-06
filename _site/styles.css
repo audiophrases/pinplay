@@ -1565,6 +1565,24 @@ body.question-active .join-title-row {
   font-size: 0.88rem;
 }
 
+button.review-retake-attempt-row {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+button.review-retake-attempt-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
+}
+
+button.review-retake-attempt-row:active {
+  transform: translateY(0);
+}
+
 .review-retake-attempt-row .rr-attempt-label {
   font-weight: 700;
   color: var(--text);
