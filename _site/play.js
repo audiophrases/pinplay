@@ -425,6 +425,7 @@ function mapAssignmentStateToPlayerState() {
   const idx = Math.max(0, Math.min(live.player.assignment.currentIndex, Math.max(0, questions.length - 1)));
   const question = questions[idx] || null;
 
+  const answeredCurrent = (attempt.answeredQIndexes || []).includes(idx);
   const isInstantFeedback = assignment.feedbackMode === 'instant';
   const isReviewMode = !!live.player.assignment.reviewMode;
   const isShowResults = isInstantFeedback || isReviewMode || (assignment.feedbackMode === 'end' && attempt.submitted);
