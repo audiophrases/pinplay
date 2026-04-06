@@ -470,6 +470,22 @@ textarea {
   gap: .55rem;
 }
 
+.project-answers:has(label.answer-row) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.project-answers label.answer-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: auto;
+  flex: 0 1 auto;
+  cursor: default;
+}
+
 .project-answers .answer-row {
   grid-template-columns: auto 1fr;
   text-align: left;

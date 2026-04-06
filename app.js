@@ -5548,18 +5548,18 @@ function renderHostQuestion(state) {
 
     indices.forEach((origIdx, displayNum) => {
       const a = question.answers[origIdx];
-      const row = document.createElement('div');
+      const row = document.createElement('label');
       row.className = 'answer-row';
       if (showReveal && correctSet.has(origIdx)) row.classList.add('answer-row-correct');
-
-      const tag = document.createElement('strong');
-      tag.textContent = `${displayNum + 1}.`;
-      tag.style.display = 'none'; // <--- FIX: Safely hides the number
 
       const txt = document.createElement('span');
       txt.textContent = a.text;
 
-      row.append(tag, txt); // Keeps the DOM structure perfectly intact
+      const input = document.createElement('input');
+      input.type = question.type === 'multi' ? 'checkbox' : 'radio';
+      input.disabled = true;
+
+      row.append(txt, input);
       hostQuestionAnswersEl.appendChild(row);
     });
 
@@ -5679,10 +5679,22 @@ function renderHostQuestion(state) {
   if (question.type === 'puzzle') {
     hostQuestionHintEl.textContent = '';
     if (question.options?.length) {
-      const p = document.createElement('p');
-      p.className = 'small';
-      p.textContent = `Items: ${question.options.join(' • ')}`;
-      hostQuestionAnswersEl.appendChild(p);
+      const bank = document.createElement('div');
+      bank.className = 'row gap';
+      bank.style.flexWrap = 'wrap';
+      bank.style.justifyContent = 'center';
+
+      question.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn puzzle-bank-btn';
+        btn.dataset.puzzleBankPiece = opt;
+        btn.dataset.puzzleBankId = String(idx);
+        btn.textContent = opt;
+        bank.appendChild(btn);
+      });
+
+      hostQuestionAnswersEl.appendChild(bank);
     }
     if (showReveal) {
       const items = Array.isArray(question.items)
