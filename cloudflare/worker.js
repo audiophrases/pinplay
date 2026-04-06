@@ -828,6 +828,20 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignment/mark-reviewed' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/mark-reviewed', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/submit' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -1634,6 +1648,26 @@ export class QuizRoom {
           attempt: publicAssignmentAttemptSummary(assignment, attempt),
           gradingItems: buildTeacherGradingItems(assignment, attempt),
         });
+      }
+
+      if (url.pathname === '/assignments/mark-reviewed' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        if (!code || !attemptId) return json({ error: 'Missing required fields.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        attempt.reviewedAt = Date.now();
+        await saveAssignmentsMap(this.state.storage, assignments);
+        this.broadcastTeacherUpdate(code);
+        return json({ ok: true });
       }
 
       if (url.pathname === '/assignments/answer' && request.method === 'POST') {
@@ -3742,6 +3776,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     updatedAt: Number(attempt?.updatedAt || 0) || null,
     submitted: !!attempt?.submitted,
     submittedAt: Number(attempt?.submittedAt || 0) || null,
+    reviewedAt: Number(attempt?.reviewedAt || 0) || null,
     assignment: publicAssignment(assignment, { includeQuiz: true }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
@@ -3760,6 +3795,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     updatedAt: full.updatedAt,
     submitted: full.submitted,
     submittedAt: full.submittedAt,
+    reviewedAt: full.reviewedAt,
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
   };

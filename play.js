@@ -841,6 +841,12 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     // Load the attempt state
     await loadAssignmentState();
 
+    // Notify backend that attempt was reviewed (fire and forget)
+    api('/api/assignment/mark-reviewed', {
+      method: 'POST',
+      body: { code, attemptId }
+    }).catch(err => console.warn('Failed to mark reviewed:', err));
+
     // Force show all questions as closed (read-only)
     const state = live.player.assignment.state;
     if (state?.attempt) state.attempt.submitted = true;
