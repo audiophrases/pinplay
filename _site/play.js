@@ -2586,7 +2586,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Error hunt
   if (question.type === 'error_hunt') {
-    highlightErrorHunt(question);
+    highlightErrorHunt(question, isCorrect);
     return;
   }
 
@@ -2685,79 +2685,43 @@ function highlightMatchPairs(question) {
 }
 
 // Error hunt: highlight selected tokens
-function highlightErrorHunt(question) {
+function highlightErrorHunt(question, isCorrect) {
   const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
-  const variants = getCorrectedVariantsList(question.corrected, question.correctedVariants);
-  if (!variants.length) return;
+  tokens.forEach(token => {
+    token.classList.remove('correct-highlight', 'correct-missed', 'incorrect-highlight');
+  });
 
-  const source = tokenizeWords(question.prompt).map(normalizeTextAnswer);
-  let bestErrorIndexes = new Set();
-  let minDiff = Infinity;
+  if (isCorrect === false) {
+    const correctText = question.corrected || '';
+    if (!correctText) return;
 
-  // Find the variant that results in the fewest errors (best match)
-  for (const v of variants) {
-    const target = tokenizeWords(v).map(normalizeTextAnswer);
-    const errorIndexes = new Set();
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (wrap) {
+      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
+      if (revealEl) revealEl.remove();
 
-    if (source.length && target.length) {
-      const rows = source.length + 1;
-      const cols = target.length + 1;
-      const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
 
-      for (let i = 0; i < rows; i++) dp[i][0] = i;
-      for (let j = 0; j < cols; j++) dp[0][j] = j;
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+      revealEl.appendChild(title);
 
-      for (let i = 1; i < rows; i++) {
-        for (let j = 1; j < cols; j++) {
-          if (source[i - 1] === target[j - 1]) {
-            dp[i][j] = dp[i - 1][j - 1];
-          } else {
-            dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-          }
-        }
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'student-answer-reveal-content';
+      contentDiv.textContent = correctText;
+      revealEl.appendChild(contentDiv);
+
+      const submissionBox = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
+        wrap.insertBefore(revealEl, submissionBox);
+      } else {
+        wrap.appendChild(revealEl);
       }
-
-      let i = source.length;
-      let j = target.length;
-
-      while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && source[i - 1] === target[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
-          i--; j--;
-        } else {
-          // Use the Levenshtein backtrack logic to identify exactly which token positions are changed
-          if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
-            errorIndexes.add(i - 1);
-            i--; j--;
-          } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
-            errorIndexes.add(i - 1);
-            i--;
-          } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
-            errorIndexes.add(Math.max(0, i - 1));
-            j--;
-          } else {
-            if (i > 0) i--;
-            else j--;
-          }
-        }
-      }
-    }
-
-    if (errorIndexes.size < minDiff) {
-      minDiff = errorIndexes.size;
-      bestErrorIndexes = errorIndexes;
     }
   }
-
-  tokens.forEach((token, idx) => {
-    const isActive = token.classList.contains('active');
-    if (bestErrorIndexes.has(idx) && isActive) {
-      token.classList.add('correct-highlight');
-    } else if (bestErrorIndexes.has(idx) && !isActive) {
-      token.classList.add('correct-missed');
-    } else if (!bestErrorIndexes.has(idx) && isActive) {
-      token.classList.add('incorrect-highlight');
-    }
-  });
 }
 
 // Slider: show correct value with visual indicator
@@ -2805,28 +2769,55 @@ function showPinFeedback(question, state) {
 function highlightContextGap(question) {
   const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
   const gaps = question.gaps || [];
+  let isIncorrect = false;
+  const correctContents = [];
+
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim().toLowerCase();
     const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
 
-    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
-    const first = variants[0];
-    if (first) {
-      const reveal = document.createElement('span');
-      reveal.dataset.joinCorrectReveal = "1";
-      reveal.style.cssText = 'color:var(--ok); font-weight:bold; margin-left:6px; font-size:0.9em;';
-      reveal.textContent = `(${first})`;
-      field.after(reveal);
+    if (!(val && accepted.includes(val))) {
+      isIncorrect = true;
     }
 
-    if (val && accepted.includes(val)) {
-      row.classList.add('correct-highlight');
-    } else {
-      row.classList.add('incorrect-highlight');
-    }
+    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
+    if (variants.length > 0) correctContents.push(variants.join(' | '));
+
+    row.classList.remove('correct-highlight', 'incorrect-highlight');
   });
+
+  if (isIncorrect && correctContents.length > 0) {
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (wrap) {
+      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
+      if (revealEl) revealEl.remove();
+
+      revealEl = document.createElement('div');
+      revealEl.className = 'student-answer-reveal';
+      revealEl.dataset.joinCorrectReveal = '1';
+
+      const title = document.createElement('div');
+      title.className = 'student-answer-reveal-title';
+      title.textContent = 'Correct Answer';
+      revealEl.appendChild(title);
+
+      correctContents.forEach(content => {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'student-answer-reveal-content';
+        contentDiv.textContent = content;
+        revealEl.appendChild(contentDiv);
+      });
+
+      const submissionBox = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
+        wrap.insertBefore(revealEl, submissionBox);
+      } else {
+        wrap.appendChild(revealEl);
+      }
+    }
+  }
 }
 
 function highlightPuzzle(question) {
@@ -3073,6 +3064,7 @@ function stopAssignmentQuestionAudioPlayback() {
   } catch { }
 }
 
+let activeAssignmentAudioKeyLock = null;
 async function playAssignmentQuestionAudio(question, opts = {}) {
   if (!hasAssignmentQuestionAudio(question)) return false;
 
@@ -3168,7 +3160,10 @@ async function playAssignmentQuestionVideo(question) {
   });
 }
 
+let activeMediaSequenceLock = null;
 async function runAssignmentQuestionMediaSequence(question, audioKey) {
+  if (activeMediaSequenceLock === audioKey) return;
+  activeMediaSequenceLock = audioKey;
   await playAssignmentQuestionAudio(question, { audioKey });
   await playAssignmentQuestionVideo(question);
   const s = live.player.assignment.state;
@@ -3176,6 +3171,10 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   if (live.player.mode !== 'assignment') return;
   if (!attempt || attempt.submitted) return;
   if (audioKey && audioKey !== lastAssignmentAudioKey) return;
+  
+  // ensure we don't play ambient if another sequence took over
+  if (activeMediaSequenceLock !== audioKey) return;
+  
   playAssignmentSfx('answering');
 }
 
