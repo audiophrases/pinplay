@@ -1655,6 +1655,16 @@ body.question-active .join-title-row {
   background: rgba(16, 185, 129, 0.1);
 }
 
+.rr-btn-continue {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.rr-btn-continue:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
 .rr-exhausted-msg {
   font-size: 0.82rem;
   color: #b91c1c;

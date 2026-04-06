@@ -601,8 +601,9 @@ async function startAssignmentAttempt(skipCheck) {
         body: { code, studentKey },
       });
 
-      if (checkData?.hasSubmittedAttempts && !checkData?.hasOpenAttempt) {
-        // Student has completed attempts — show choice modal
+      if (checkData?.hasSubmittedAttempts) {
+        // Student has at least one completed attempt — always show choice modal
+        // to allow them to "Review" past work even if they have an "Open" one to continue.
         showReviewRetakeChoice(checkData, code, studentKey, username, password);
         return;
       }
@@ -750,17 +751,18 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   });
   actions.appendChild(reviewBtn);
 
-  // Retake button — only if more attempts available
-  if (checkData.canRetake) {
-    const retakeBtn = document.createElement('button');
-    retakeBtn.className = 'rr-btn rr-btn-retake';
-    retakeBtn.type = 'button';
-    retakeBtn.innerHTML = `
-      <span class="rr-btn-icon">🔄</span>
-      <span class="rr-btn-label">Retake</span>
-      <span class="rr-btn-hint">Start new attempt</span>
+  // Retake or Continue button
+  if (checkData.canRetake || checkData.hasOpenAttempt) {
+    const isContinue = !!checkData.hasOpenAttempt;
+    const actionBtn = document.createElement('button');
+    actionBtn.className = isContinue ? 'rr-btn rr-btn-continue' : 'rr-btn rr-btn-retake';
+    actionBtn.type = 'button';
+    actionBtn.innerHTML = `
+      <span class="rr-btn-icon">${isContinue ? '▶️' : '🔄'}</span>
+      <span class="rr-btn-label">${isContinue ? 'Continue' : 'Retake'}</span>
+      <span class="rr-btn-hint">${isContinue ? 'Resume your current attempt' : 'Start a new attempt'}</span>
     `;
-    retakeBtn.addEventListener('click', async () => {
+    actionBtn.addEventListener('click', async () => {
       dismissReviewRetakeModal();
       try {
         await proceedWithAssignmentStart(code, studentKey, username, password);
@@ -769,7 +771,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
         showLoginError(err.message);
       }
     });
-    actions.appendChild(retakeBtn);
+    actions.appendChild(actionBtn);
   } else {
     const msg = document.createElement('div');
     msg.className = 'rr-exhausted-msg';
