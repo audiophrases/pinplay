@@ -3209,6 +3209,100 @@ async function exportCreationPrompt() {
   downloadJson(exportData, filename);
 }
 
+async function customPasswordPrompt(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '999999';
+    overlay.style.backdropFilter = 'blur(3px)';
+
+    const dialog = document.createElement('div');
+    dialog.style.backgroundColor = 'var(--panel-bg, #fff)';
+    dialog.style.color = 'var(--text, #333)';
+    dialog.style.padding = '24px';
+    dialog.style.borderRadius = 'var(--radius, 12px)';
+    dialog.style.boxShadow = '0 10px 40px rgba(0,0,0,0.3)';
+    dialog.style.minWidth = '320px';
+    dialog.style.display = 'flex';
+    dialog.style.flexDirection = 'column';
+    dialog.style.gap = '16px';
+    dialog.style.fontFamily = 'var(--font-sans, system-ui, sans-serif)';
+
+    const msgEl = document.createElement('div');
+    msgEl.textContent = message;
+    msgEl.style.fontWeight = '500';
+    msgEl.style.fontSize = '16px';
+
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.style.padding = '10px 14px';
+    input.style.border = '1px solid var(--border-color, #ccc)';
+    input.style.borderRadius = 'var(--radius, 8px)';
+    input.style.fontSize = '16px';
+    input.style.width = '100%';
+    input.style.boxSizing = 'border-box';
+    input.style.outline = 'none';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.justifyContent = 'flex-end';
+    btnRow.style.gap = '12px';
+    btnRow.style.marginTop = '8px';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'btn';
+    cancelBtn.style.backgroundColor = 'transparent';
+    cancelBtn.style.color = 'var(--text, #333)';
+
+    const okBtn = document.createElement('button');
+    okBtn.textContent = 'OK';
+    okBtn.className = 'btn';
+
+    btnRow.append(cancelBtn, okBtn);
+    dialog.append(msgEl, input, btnRow);
+    overlay.append(dialog);
+    document.body.append(overlay);
+
+    setTimeout(() => input.focus(), 10);
+
+    const cleanup = () => {
+      if (document.body.contains(overlay)) {
+        document.body.removeChild(overlay);
+      }
+    };
+
+    const submit = () => {
+      cleanup();
+      resolve(input.value);
+    };
+
+    const cancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    okBtn.addEventListener('click', submit);
+    cancelBtn.addEventListener('click', cancel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cancel();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') cancel();
+    });
+  });
+}
+
 // ---------- Live mode ----------
 function bindLiveEvents() {
   if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
@@ -3457,7 +3551,7 @@ async function runAssignmentSelfCheck() {
 
   try {
     if (!createSessionPassword) {
-      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
       if (typed == null) return;
       createSessionPassword = String(typed || '');
     }
@@ -3802,7 +3896,7 @@ async function fetchAssignmentResults(code) {
 async function refreshAssignmentsList() {
   try {
     if (!createSessionPassword) {
-      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
       if (typed == null) return;
       createSessionPassword = String(typed || '');
     }
@@ -3960,7 +4054,7 @@ async function createAssignmentFromCurrentQuiz() {
     await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true });
 
     if (!createSessionPassword) {
-      const typed = prompt('Teacher password (needed once for assignment API):', '');
+      const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
       if (typed == null) return;
       createSessionPassword = String(typed || '');
     }
