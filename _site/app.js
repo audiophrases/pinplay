@@ -2540,10 +2540,10 @@ function syncQuizFromUI() {
       if (q.audioMode !== 'file') q.audioData = q.audioData || '';
 
       // New rule: no checkbox.
-      // TTS is enabled when text exists; file mode enabled when audioData exists.
+      // TTS is enabled when text exists and language is not 'NONE'; file mode enabled when audioData exists.
       q.audioEnabled = q.type === 'audio'
         ? true
-        : (q.audioMode === 'file' ? !!q.audioData : !!String(q.audioText || '').trim());
+        : (q.audioMode === 'file' ? !!q.audioData : (textLang !== 'NONE' && !!String(q.audioText || '').trim()));
     }
 
     // Sync imageKeyword from form
