@@ -583,6 +583,7 @@ export default {
       const qIndex = Number(body?.qIndex);
       const points = Number(body?.points);
       const correction = String(body?.correction || '').slice(0, 400);
+      const correctionAudioKey = String(body?.correctionAudioKey || '').slice(0, 255);
 
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -602,6 +603,7 @@ export default {
           qIndex: Math.round(qIndex),
           points,
           correction,
+          correctionAudioKey,
         }),
       }));
     }
@@ -1549,6 +1551,7 @@ export class QuizRoom {
         const qIndex = Math.round(Number(body?.qIndex));
         const pointsRaw = Number(body?.points);
         const correction = String(body?.correction || '').slice(0, 400);
+        const correctionAudioKey = String(body?.correctionAudioKey || '').slice(0, 255);
 
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
@@ -1579,6 +1582,7 @@ export class QuizRoom {
             graded: true,
             pointsAwarded,
             correction,
+            correctionAudioKey,
             gradedAt: Date.now(),
           },
           updatedAt: Date.now(),
@@ -3720,6 +3724,11 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
         points: verdict?.correct ? Number(question?.points || 0) : 0,
         answer: item?.answer ?? null,
         correctAnswer: hostCorrectSummary(question),
+        teacherGrade: item?.teacherGrade ? {
+          pointsAwarded: Number(item.teacherGrade.pointsAwarded || 0),
+          correction: String(item.teacherGrade.correction || ''),
+          correctionAudioKey: String(item.teacherGrade.correctionAudioKey || ''),
+        } : null,
       };
     }).filter(Boolean);
   }
@@ -3782,6 +3791,7 @@ function buildTeacherGradingItems(assignment, attempt) {
             graded: !!grade.graded,
             pointsAwarded: Number(grade.pointsAwarded || 0),
             correction: String(grade.correction || ''),
+            correctionAudioKey: String(grade.correctionAudioKey || ''),
             gradedAt: Number(grade.gradedAt || 0) || null,
           }
           : null,

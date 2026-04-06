@@ -151,6 +151,16 @@ h3 {
   background: #15803d;
 }
 
+.btn.bad {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn.bad:hover {
+  background: #b91c1c;
+}
+
 label {
   display: block;
   margin: .6rem 0 .25rem;

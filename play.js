@@ -516,11 +516,12 @@ async function showTeacherFeedback(code, attemptId) {
       const question = questions[Number(qIdx)];
       if (!question) continue;
       const grade = answer?.teacherGrade;
-      if (grade?.graded && grade?.correction) {
+      if (grade?.graded && (grade?.correction || grade?.correctionAudioKey)) {
         feedbackItems.push({
           qIndex: Number(qIdx),
           question: question.prompt?.slice(0, 80) || `Question ${Number(qIdx) + 1}`,
-          correction: grade.correction,
+          correction: grade.correction || '',
+          correctionAudioKey: grade.correctionAudioKey || '',
           gradedAt: grade.gradedAt,
         });
       }
@@ -537,12 +538,24 @@ async function showTeacherFeedback(code, attemptId) {
       if (historyPanel) historyPanel.parentNode.insertBefore(feedbackPanel, historyPanel.nextSibling);
     }
 
-    const feedbackHtml = feedbackItems.map(item => `
-      <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
-        <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
-        <div style="color:#3fb950;">💬 Teacher: ${esc(item.correction)}</div>
-      </div>
-    `).join('');
+    const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+    const feedbackHtml = feedbackItems.map(item => {
+      let audioHtml = '';
+      if (item.correctionAudioKey) {
+        let src = item.correctionAudioKey;
+        if (!src.startsWith('http')) src = `${base}/api/media/${src}`;
+        audioHtml = `<div style="margin-top:6px;"><audio controls src="${src}" style="height:28px;"></audio></div>`;
+      }
+      return `
+        <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
+          <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
+          <div style="color:#3fb950; display:flex; flex-direction:column;">
+            <span>💬 Teacher: ${esc(item.correction)}</span>
+            ${audioHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
 
     feedbackPanel.innerHTML = `
       <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>

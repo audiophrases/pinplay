@@ -3503,7 +3503,7 @@ async function copyTextSmart(text) {
   }
 }
 
-async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correction = '') {
+async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correction = '', correctionAudioKey = '') {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   await api('/api/assignments/grade', {
     method: 'POST',
@@ -3514,6 +3514,7 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
       qIndex,
       points,
       correction,
+      correctionAudioKey,
     },
   });
 }
@@ -3751,7 +3752,6 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
         li.append(head, prompt, answer);
       }
-
       if (it?.teacherGraded) {
         const row = document.createElement('div');
         row.className = 'row gap top-space';
@@ -3769,13 +3769,104 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         correctionInput.value = String(it?.grade?.correction || '');
         correctionInput.style.maxWidth = '320px';
 
+        let currentAudioKey = String(it?.grade?.correctionAudioKey || '');
+        const audioStatus = document.createElement('span');
+        audioStatus.className = 'small muted';
+        audioStatus.style.marginLeft = '8px';
+
+        const recordBtn = document.createElement('button');
+        recordBtn.className = 'btn';
+        recordBtn.style.padding = '4px 8px';
+        recordBtn.innerHTML = '🎙️';
+        recordBtn.title = 'Record voice comment';
+
         const saveBtn = document.createElement('button');
         saveBtn.className = 'btn';
         saveBtn.textContent = it?.grade?.graded ? 'Update grade' : 'Save grade';
+
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        recordBtn.addEventListener('click', async () => {
+          if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            recordBtn.innerHTML = '🎙️';
+            recordBtn.classList.remove('bad');
+            return;
+          }
+
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+              ? 'audio/webm;codecs=opus'
+              : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+            
+            mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+            mediaRecorder.onstop = async () => {
+              const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+              stream.getTracks().forEach(t => t.stop());
+              
+              // Upload
+              try {
+                audioStatus.textContent = 'Uploading...';
+                const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
+                const fileName = `correction_${Date.now()}${ext}`;
+                const formData = new FormData();
+                formData.append('file', blob, fileName);
+                formData.append('path', `voice_records/${fileName}`);
+
+                const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+                const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+                if (!resp.ok) throw new Error('Upload failed');
+                const res = await resp.json();
+                currentAudioKey = res.path || res.key || '';
+                audioStatus.textContent = '🎙️ Recorded';
+                renderAudioPreview();
+              } catch (err) {
+                audioStatus.textContent = '❌ Upload failed';
+              }
+            };
+
+            mediaRecorder.start();
+            recordBtn.innerHTML = '⏹️';
+            recordBtn.classList.add('bad');
+            audioStatus.textContent = 'Recording...';
+          } catch (err) {
+            alert('Mic access denied or error: ' + err.message);
+          }
+        });
+
+        const previewWrap = document.createElement('div');
+        previewWrap.className = 'top-space';
+        previewWrap.style.display = 'none';
+
+        function renderAudioPreview() {
+          if (!currentAudioKey) {
+            previewWrap.style.display = 'none';
+            return;
+          }
+          previewWrap.innerHTML = '';
+          previewWrap.style.display = 'block';
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.style.height = '30px';
+          let src = currentAudioKey;
+          if (!src.startsWith('http')) {
+            const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+            src = `${base}/api/media/${src}`;
+          }
+          audio.src = src;
+          previewWrap.appendChild(audio);
+        }
+        renderAudioPreview();
+
         saveBtn.addEventListener('click', async () => {
           try {
             saveBtn.disabled = true;
-            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), String(correctionInput.value || ''));
+            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), String(correctionInput.value || ''), currentAudioKey);
             if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${safeAttemptId}.`;
             await fetchAssignmentResults(safeCode);
             await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
@@ -3786,8 +3877,9 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
           }
         });
 
-        row.append(pointsInput, correctionInput, saveBtn);
+        row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
         li.appendChild(row);
+        li.appendChild(previewWrap);
       }
 
       assignmentGradingListEl.appendChild(li);
