@@ -554,7 +554,7 @@ async function showTeacherFeedback(code, attemptId) {
   }
 }
 
-async function startAssignmentAttempt() {
+async function startAssignmentAttempt(skipCheck) {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
 
@@ -580,6 +580,30 @@ async function startAssignmentAttempt() {
   const studentKey = makeAssignmentStudentKey(username);
   if (!studentKey) throw new Error('Invalid username.');
 
+  // Check if student has previous attempts (unless skipping check for retake)
+  if (!skipCheck) {
+    try {
+      const checkData = await api('/api/assignment/check-status', {
+        method: 'POST',
+        body: { code, studentKey },
+      });
+
+      if (checkData?.hasSubmittedAttempts && !checkData?.hasOpenAttempt) {
+        // Student has completed attempts — show choice modal
+        showReviewRetakeChoice(checkData, code, studentKey, username, password);
+        return;
+      }
+      // If there's an open (unsubmitted) attempt, fall through to /start which will resume it
+    } catch (e) {
+      // If check-status fails (e.g. old backend), just continue silently
+      console.warn('check-status failed, continuing:', e?.message);
+    }
+  }
+
+  await proceedWithAssignmentStart(code, studentKey, username, password);
+}
+
+async function proceedWithAssignmentStart(code, studentKey, username, password) {
   const data = await api('/api/assignment/start', {
     method: 'POST',
     body: {
@@ -631,6 +655,226 @@ async function startAssignmentAttempt() {
   }, 5000);
 
   await loadAssignmentState();
+}
+
+function dismissReviewRetakeModal() {
+  const overlay = document.getElementById('reviewRetakeOverlay');
+  if (overlay) overlay.remove();
+}
+
+function showReviewRetakeChoice(checkData, code, studentKey, username, password) {
+  dismissReviewRetakeModal();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'reviewRetakeOverlay';
+  overlay.className = 'review-retake-overlay';
+
+  const card = document.createElement('div');
+  card.className = 'review-retake-card';
+
+  // Title
+  const h3 = document.createElement('h3');
+  h3.textContent = checkData.assignmentTitle || 'Assignment';
+  card.appendChild(h3);
+
+  // Subtitle
+  const sub = document.createElement('div');
+  sub.className = 'review-retake-subtitle';
+  const used = Number(checkData.attemptsUsed || 0);
+  const limit = Number(checkData.attemptsLimit || 0);
+  const limitText = limit === 0 ? 'unlimited' : `${limit}`;
+  sub.textContent = `${used} attempt${used !== 1 ? 's' : ''} completed · Limit: ${limitText}`;
+  card.appendChild(sub);
+
+  // Previous attempts list
+  const attempts = Array.isArray(checkData.previousAttempts) ? checkData.previousAttempts : [];
+  if (attempts.length > 0) {
+    const list = document.createElement('ul');
+    list.className = 'review-retake-attempts';
+
+    attempts.slice(0, 5).forEach((a) => {
+      const row = document.createElement('li');
+      row.className = 'review-retake-attempt-row';
+
+      const label = document.createElement('span');
+      label.className = 'rr-attempt-label';
+      label.textContent = `Attempt ${a.attemptNumber || '?'}`;
+
+      const score = document.createElement('span');
+      score.className = 'rr-attempt-score';
+      score.textContent = `${Number(a.totalScore || 0)} pts`;
+
+      const date = document.createElement('span');
+      date.className = 'rr-attempt-date';
+      date.textContent = a.submittedAt ? new Date(a.submittedAt).toLocaleDateString() : '';
+
+      row.append(label, score, date);
+      list.appendChild(row);
+    });
+
+    card.appendChild(list);
+  }
+
+  // Action buttons
+  const actions = document.createElement('div');
+  actions.className = 'review-retake-actions';
+  if (!checkData.canRetake) actions.classList.add('single-action');
+
+  // Review button — always available
+  const reviewBtn = document.createElement('button');
+  reviewBtn.className = 'rr-btn rr-btn-review';
+  reviewBtn.type = 'button';
+  reviewBtn.innerHTML = `
+    <span class="rr-btn-icon">📖</span>
+    <span class="rr-btn-label">Review</span>
+    <span class="rr-btn-hint">View your answers</span>
+  `;
+  reviewBtn.addEventListener('click', () => {
+    const latestAttempt = attempts[0];
+    if (!latestAttempt?.id) return;
+    dismissReviewRetakeModal();
+    enterAssignmentReviewMode(code, latestAttempt.id, username, checkData);
+  });
+  actions.appendChild(reviewBtn);
+
+  // Retake button — only if more attempts available
+  if (checkData.canRetake) {
+    const retakeBtn = document.createElement('button');
+    retakeBtn.className = 'rr-btn rr-btn-retake';
+    retakeBtn.type = 'button';
+    retakeBtn.innerHTML = `
+      <span class="rr-btn-icon">🔄</span>
+      <span class="rr-btn-label">Retake</span>
+      <span class="rr-btn-hint">Start new attempt</span>
+    `;
+    retakeBtn.addEventListener('click', async () => {
+      dismissReviewRetakeModal();
+      try {
+        await proceedWithAssignmentStart(code, studentKey, username, password);
+      } catch (err) {
+        setStatus(joinStatusEl, err.message, 'bad');
+        showLoginError(err.message);
+      }
+    });
+    actions.appendChild(retakeBtn);
+  } else {
+    const msg = document.createElement('div');
+    msg.className = 'rr-exhausted-msg';
+    msg.textContent = 'All attempts have been used. You can review your answers.';
+    card.appendChild(msg);
+  }
+
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  // Close on overlay click (outside card)
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismissReviewRetakeModal();
+  });
+}
+
+async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
+  try {
+    // Set up assignment state for review
+    live.player.assignment.attemptId = attemptId;
+    live.player.assignment.currentIndex = 0;
+    live.player.displayName = username;
+    setJoinTitle(`${username} · ${code} · Review`);
+
+    if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
+    if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+    if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
+    hideLoginError();
+
+    // Hide submit/finalize — this is read-only
+    if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.classList.add('hidden'); }
+    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
+
+    // Load the attempt state
+    await loadAssignmentState();
+
+    // Force show all questions as closed (read-only)
+    const state = live.player.assignment.state;
+    if (state?.attempt) state.attempt.submitted = true;
+
+    // Render
+    const mapped = mapAssignmentStateToPlayerState();
+    if (mapped) {
+      mapped.assignmentSubmitted = true;
+      mapped.questionClosed = true;
+      renderPlayerState(mapped);
+    }
+
+    // Show end-feedback results panel if applicable
+    renderInstantFeedbackFromState();
+
+    // Show teacher feedback if available
+    showTeacherFeedback(code, attemptId).catch(() => { });
+
+    // Add review mode bar at top
+    let bar = document.getElementById('reviewModeBar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'reviewModeBar';
+      bar.className = 'review-mode-bar';
+
+      const label = document.createElement('span');
+      label.textContent = '📖 Review Mode — viewing your submitted answers';
+      bar.appendChild(label);
+
+      const exitBtn = document.createElement('button');
+      exitBtn.className = 'rr-exit-btn';
+      exitBtn.type = 'button';
+      exitBtn.textContent = 'Exit Review';
+      exitBtn.addEventListener('click', () => {
+        exitAssignmentReviewMode(code, checkData);
+      });
+      bar.appendChild(exitBtn);
+
+      document.body.appendChild(bar);
+    }
+
+    setStatus(joinStatusEl, 'Reviewing submitted attempt ✅', 'ok');
+  } catch (err) {
+    setStatus(joinStatusEl, `Review error: ${err.message}`, 'bad');
+  }
+}
+
+function exitAssignmentReviewMode(code, checkData) {
+  // Remove review bar
+  const bar = document.getElementById('reviewModeBar');
+  if (bar) bar.remove();
+
+  // Remove results panel
+  const panel = document.getElementById('assignmentResultsPanel');
+  if (panel) panel.remove();
+
+  // Remove feedback panel
+  const fp = document.getElementById('joinFeedbackPanel');
+  if (fp) fp.remove();
+
+  // Reset attempt state
+  live.player.assignment.attemptId = null;
+  live.player.assignment.state = null;
+  live.player.assignment.currentIndex = 0;
+
+  // Re-show submit button
+  if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
+
+  // Clear the question area
+  if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
+  hideAssignmentCompleteMessage();
+
+  // Show the choice modal again if we have check data
+  if (checkData) {
+    const studentKey = makeAssignmentStudentKey(live.player.displayName || '');
+    const password = live.player.randomNamesMode ? '' : String(joinPasswordEl?.value || '').trim();
+    showReviewRetakeChoice(checkData, code, studentKey, live.player.displayName || '', password);
+  } else {
+    // Fallback — show identity step
+    if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+  }
 }
 
 async function finalizeAssignmentAttempt() {

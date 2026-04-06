@@ -692,6 +692,20 @@ export default {
       return withCors(json({ ok: true, name: pickRandomName({}) }));
     }
 
+    if (url.pathname === '/api/assignment/check-status' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/check-status', {
+        method: 'POST',
+        body: JSON.stringify({ code, studentKey }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/start' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -1395,6 +1409,57 @@ export class QuizRoom {
         if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: true }) });
+      }
+
+      if (url.pathname === '/assignments/check-status' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const allAttempts = Object.values(assignment.attempts || {});
+        const studentAttempts = allAttempts.filter((a) => String(a?.studentKey || '') === studentKey);
+        const submittedAttempts = studentAttempts.filter((a) => !!a?.submitted);
+        const openAttempt = studentAttempts.find((a) => !a?.submitted);
+
+        const limit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
+        const attemptsUsed = studentAttempts.length;
+        const canRetake = openAttempt ? true : (limit === 0 || attemptsUsed < limit);
+
+        const previousAttempts = submittedAttempts
+          .map((a) => {
+            const metrics = evaluateAssignmentAttempt(assignment, a);
+            return {
+              id: sanitizeAssignmentAttemptId(a?.id),
+              attemptNumber: studentAttempts.indexOf(a) + 1,
+              totalScore: Number(metrics?.totalScore ?? 0),
+              accuracy: metrics?.accuracy ?? null,
+              totalQuestions: Number(assignment?.quiz?.questions?.length || 0),
+              answeredCount: Number(metrics?.answeredCount || 0),
+              submittedAt: Number(a?.submittedAt || 0) || null,
+              startedAt: Number(a?.startedAt || 0) || null,
+            };
+          })
+          .sort((a, b) => Number(b?.submittedAt || 0) - Number(a?.submittedAt || 0));
+
+        return json({
+          ok: true,
+          hasSubmittedAttempts: submittedAttempts.length > 0,
+          hasOpenAttempt: !!openAttempt,
+          openAttemptId: openAttempt ? sanitizeAssignmentAttemptId(openAttempt.id) : null,
+          canRetake,
+          attemptsUsed,
+          attemptsLimit: limit,
+          feedbackMode: assignment.feedbackMode || 'none',
+          assignmentTitle: String(assignment.title || '').slice(0, 120),
+          previousAttempts,
+        });
       }
 
       if (url.pathname === '/assignments/start' && request.method === 'POST') {
