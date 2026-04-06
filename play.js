@@ -425,27 +425,55 @@ function mapAssignmentStateToPlayerState() {
   const idx = Math.max(0, Math.min(live.player.assignment.currentIndex, Math.max(0, questions.length - 1)));
   const question = questions[idx] || null;
 
-  const answeredCurrent = (attempt.answeredQIndexes || []).includes(idx);
   const isInstantFeedback = assignment.feedbackMode === 'instant';
+  const isReviewMode = !!live.player.assignment.reviewMode;
+  const isShowResults = isInstantFeedback || isReviewMode || (assignment.feedbackMode === 'end' && attempt.submitted);
 
   let questionClosed = false;
   let revealedResult = null;
   let correctAnswer = null;
 
-  if (isInstantFeedback && answeredCurrent) {
+  if (isShowResults && answeredCurrent) {
     questionClosed = true;
-    const answers = Array.isArray(attempt.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
-    const currentAnswer = answers.find(a => Number(a.qIndex) === idx);
-    if (currentAnswer) {
+    
+    // First, try to find teacher grading or auto-grading result
+    const rawAnswers = attempt?.answersByQ || {};
+    const rawItem = rawAnswers[String(idx)];
+    const teacherGrade = rawItem?.teacherGrade;
+    
+    const autoResults = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
+    const autoResult = autoResults.find(a => Number(a.qIndex) === idx);
+
+    if (teacherGrade && teacherGrade.graded) {
       revealedResult = {
-        correct: currentAnswer.correct,
-        pointsAwarded: currentAnswer.points || 0,
+        correct: Number(teacherGrade.pointsAwarded || 0) > 0,
+        pointsAwarded: Number(teacherGrade.pointsAwarded || 0),
+        correction: String(teacherGrade.correction || ''),
+        correctionAudioKey: String(teacherGrade.correctionAudioKey || ''),
+        graded: true,
+        teacherGrade: teacherGrade,
+      };
+      // For open questions, there is no single "correct answer" to reveal usually, 
+      // but we might show the expected answer if the quiz data has it.
+      correctAnswer = autoResult?.correctAnswer || null;
+    } else if (autoResult) {
+      revealedResult = {
+        correct: autoResult.correct,
+        pointsAwarded: autoResult.points || 0,
         correction: '',
         graded: true,
       };
-      correctAnswer = currentAnswer.correctAnswer;
+      correctAnswer = autoResult.correctAnswer;
     } else {
-      questionClosed = false;
+      // If we are in review mode but no result found yet, maybe it's pending grading
+      if (isReviewMode) {
+        revealedResult = {
+          graded: false,
+          correction: '',
+        };
+      } else {
+        questionClosed = false;
+      }
     }
   }
 
@@ -802,6 +830,9 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
     hideLoginError();
 
+    // Explicit review mode flag
+    live.player.assignment.reviewMode = true;
+
     // Hide submit/finalize — this is read-only
     if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.classList.add('hidden'); }
     if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
@@ -857,6 +888,7 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
 }
 
 function exitAssignmentReviewMode(code, checkData) {
+  live.player.assignment.reviewMode = false;
   // Remove review bar
   const bar = document.getElementById('reviewModeBar');
   if (bar) bar.remove();
@@ -1180,12 +1212,13 @@ function renderPlayerState(state) {
     joinAnswersEl.querySelectorAll('[data-join-points-inline="1"]').forEach((el) => el.remove());
   };
 
-  const renderInlineCorrection = (text = '') => {
+  const renderInlineCorrection = (rrNow = null) => {
     const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
     if (!wrap) return;
     wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
-    const corr = String(text || '').trim();
-    if (!corr) return;
+    const corr = String(rrNow?.correction || '').trim();
+    const audioKey = String(rrNow?.correctionAudioKey || '').trim();
+    if (!corr && !audioKey) return;
 
     const studentText = getStudentAnswerTextFromUI();
     const p = document.createElement('div');
@@ -1205,9 +1238,52 @@ function renderPlayerState(state) {
     const content = document.createElement('div');
     content.className = 'student-answer-reveal-content';
     content.style.color = '#7f1d1d';
-    content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+    
+    if (corr) {
+      content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+    } else {
+      content.textContent = '(Voice comment only)';
+    }
 
     p.append(title, content);
+
+    // Audio feedback
+    if (rrNow?.correctionAudioKey) {
+      const audioKey = rrNow.correctionAudioKey;
+      const audioWrap = document.createElement('div');
+      audioWrap.style.marginTop = '0.75rem';
+      audioWrap.style.display = 'flex';
+      audioWrap.style.alignItems = 'center';
+      audioWrap.style.gap = '0.5rem';
+
+      const audioBtn = document.createElement('button');
+      audioBtn.className = 'btn';
+      audioBtn.type = 'button';
+      audioBtn.style.padding = '0.4rem 0.8rem';
+      audioBtn.style.fontSize = '0.9rem';
+      audioBtn.innerHTML = '🔊 Play Voice Comment';
+      
+      const audioEl = new Audio();
+      const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+      audioEl.src = `${base}/api/media/${audioKey}`;
+      
+      audioBtn.onclick = () => {
+        if (audioEl.paused) {
+          audioEl.play().catch(err => console.warn('Audio playback failed:', err));
+          audioBtn.innerHTML = '⏸️ Pause';
+        } else {
+          audioEl.pause();
+          audioBtn.innerHTML = '🔊 Play Voice Comment';
+        }
+      };
+      
+      audioEl.onended = () => {
+        audioBtn.innerHTML = '🔊 Play Voice Comment';
+      };
+
+      audioWrap.appendChild(audioBtn);
+      p.appendChild(audioWrap);
+    }
 
     const submissionWrap = document.getElementById('joinSubmission');
     if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
@@ -1441,8 +1517,7 @@ function renderPlayerState(state) {
   }
 
   const rrNow = state.revealedResult;
-  const correctionText = rrNow?.correction || '';
-  renderInlineCorrection(String(correctionText || ''));
+  renderInlineCorrection(rrNow);
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
   if (questionClosed) {
@@ -1585,7 +1660,13 @@ function renderJoinQuestion(question) {
   joinQuestionWrap?.querySelectorAll('.question-video-wrap').forEach((el) => el.remove());
 
   applyJoinLayoutMode(true, question);
-  if (joinSubmitBtn) joinSubmitBtn.classList.remove('hidden');
+  if (joinSubmitBtn) {
+    if (live.player.assignment.reviewMode) {
+      joinSubmitBtn.classList.add('hidden');
+    } else {
+      joinSubmitBtn.classList.remove('hidden');
+    }
+  }
   if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
 
   // Store current question for keyboard shortcut
@@ -1695,6 +1776,24 @@ function renderJoinQuestion(question) {
       const text = document.createElement('span');
       text.textContent = a.text;
 
+      // --- NEW: Pre-fill answer ---
+      const state = live.player.assignment.state;
+      const rawAnswers = state?.attempt?.answersByQ || {};
+      const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+      const studentAnswer = String(answerObj?.answer || '');
+      if (studentAnswer) {
+        if (isMulti) {
+          const selected = studentAnswer.split('|').map(s => s.trim());
+          if (selected.includes(String(origIdx + 1)) || selected.includes(a.text)) input.checked = true;
+        } else {
+          if (studentAnswer === String(origIdx + 1) || studentAnswer === a.text) input.checked = true;
+        }
+      }
+      if (live.player.assignment.reviewMode) {
+        input.disabled = true;
+        row.classList.add('join-answer-locked');
+      }
+
       row.append(text, input);
       joinAnswersEl.appendChild(row);
     });
@@ -1752,6 +1851,13 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
+      
+      // --- NEW: Pre-fill Match Pairs ---
+      const state = live.player.assignment.state;
+      const rawAnswers = state?.attempt?.answersByQ || {};
+      const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+      const initialValues = Array.isArray(answerObj?.answer) ? answerObj.answer : null;
+
       if (question.imageData) {
         const overlay = document.createElement('div');
         overlay.id = 'matchPairsCenterOverlay';
@@ -1771,7 +1877,7 @@ function renderJoinQuestion(question) {
 
         const pairsWrap = document.createElement('div');
         pairsWrap.className = 'match-pairs-content-wrap';
-        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair');
+        renderMatchPairsColumns(pairsWrap, leftItems, rightOptions, 'joinPair', initialValues);
 
         overlay.append(imgWrap, pairsWrap);
 
@@ -1783,7 +1889,7 @@ function renderJoinQuestion(question) {
           joinAnswersEl.appendChild(overlay);
         }
       } else {
-        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair');
+        renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair', initialValues);
       }
     } else if (question.type === 'error_hunt') {
       const required = Number(question.requiredErrors) || Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
@@ -1803,6 +1909,13 @@ function renderJoinQuestion(question) {
       tokenWrap.className = 'error-token-wrap';
       tokenWrap.style.flexWrap = 'wrap';
       tokenWrap.style.justifyContent = 'center';
+      // --- NEW: Pre-fill Error Hunt ---
+      const state = live.player.assignment.state;
+      const rawAnswers = state?.attempt?.answersByQ || {};
+      const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+      const selectedTokens = Array.isArray(answerObj?.answer?.selectedTokens) ? answerObj.answer.selectedTokens : [];
+      const rewriteTokens = String(answerObj?.answer?.rewrite || '').split(' ').filter(Boolean);
+
       let tokens = tokenizeWords(question.prompt);
       tokens.forEach((tok, i) => {
         const b = document.createElement('button');
@@ -1812,7 +1925,21 @@ function renderJoinQuestion(question) {
         b.dataset.tokenText = tok;
         b.dataset.originalText = tok;
         b.textContent = tok;
+
+        if (selectedTokens.includes(i)) {
+          b.classList.add('active');
+          if (rewriteTokens[i]) {
+            b.textContent = rewriteTokens[i];
+            b.dataset.tokenText = rewriteTokens[i];
+          }
+        }
+        if (live.player.assignment.reviewMode) {
+          b.disabled = true;
+          b.classList.add('join-answer-locked');
+        }
+
         b.addEventListener('click', () => {
+          if (live.player.assignment.reviewMode) return;
           const isActive = b.classList.contains('active');
           if (isActive) {
             b.classList.remove('active');
@@ -1838,6 +1965,18 @@ function renderJoinQuestion(question) {
       input.maxLength = 120;
       input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
 
+      // --- NEW: Pre-fill answer if available ---
+      const state = live.player.assignment.state;
+      const rawAnswers = state?.attempt?.answersByQ || {};
+      const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+      if (answerObj?.answer) {
+        input.value = String(answerObj.answer);
+      }
+      if (live.player.assignment.reviewMode) {
+        input.disabled = true;
+        input.classList.add('join-answer-locked');
+      }
+
       const row = document.createElement('div');
       row.className = 'join-answer-inline-row';
       row.appendChild(input);
@@ -1849,8 +1988,38 @@ function renderJoinQuestion(question) {
   }
 
   if (question.type === 'puzzle') {
-    const options = question.options || [];
+    let options = Array.isArray(question.options) ? [...question.options] : [];
+    
+    // --- NEW: Pre-fill Puzzle ---
+    const state = live.player.assignment.state;
+    const rawAnswers = state?.attempt?.answersByQ || {};
+    const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+    const savedOrder = String(answerObj?.answer || '').split('|').map(s => s.trim()).filter(Boolean);
+    if (savedOrder.length > 0) {
+      // Reorder options to match the student's saved answer
+      const reordered = [];
+      savedOrder.forEach(text => {
+        const found = options.find(o => o.text === text);
+        if (found) reordered.push(found);
+      });
+      // Add any missing ones if necessary (fallback)
+      options.forEach(opt => {
+        if (!reordered.includes(opt)) reordered.push(opt);
+      });
+      options = reordered;
+    }
+
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
+    
+    if (live.player.assignment.reviewMode) {
+      joinAnswersEl.querySelectorAll('.puzzle-piece').forEach(p => {
+        p.draggable = false;
+        p.classList.add('join-answer-locked');
+      });
+      const reset = joinAnswersEl.querySelector('.puzzle-reset');
+      if (reset) reset.remove();
+    }
+
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -1868,6 +2037,19 @@ function renderJoinQuestion(question) {
 
     const slider = document.getElementById('joinSlider');
     const out = document.getElementById('joinSliderValue');
+
+    // --- NEW: Pre-fill slider ---
+    const state = live.player.assignment.state;
+    const rawAnswers = state?.attempt?.answersByQ || {};
+    const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+    if (answerObj?.answer != null && slider) {
+      slider.value = answerObj.answer;
+      if (out) out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
+    }
+    if (live.player.assignment.reviewMode && slider) {
+      slider.disabled = true;
+    }
+
     slider?.addEventListener('input', () => {
       out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
     });
@@ -2416,7 +2598,7 @@ function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
   appendReactionBar();
 }
 
-function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey) {
+function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey, initialValues = null) {
   const wrap = document.createElement('div');
   wrap.className = 'match-pairs-wrap match-pairs-wrap-interactive';
 
@@ -2511,31 +2693,47 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     row.type = 'button';
     row.className = 'match-pair-left';
 
-    const leftText = document.createElement('span');
-    leftText.className = 'match-left-text';
-    leftText.textContent = left;
-
     const hidden = document.createElement('input');
     hidden.type = 'hidden';
-    hidden.dataset[datasetKey] = String(i);
+    hidden.dataset[datasetKey] = String(idx);
 
-    row.append(leftText, hidden);
-    row.addEventListener('click', () => {
-      if (selectedRight) {
-        assignPair(i, selectedRight);
-        return;
-      }
-      selectedLeft = selectedLeft === i ? -1 : i;
-      refreshUi();
-    });
+    const item = document.createElement('div');
+    item.className = 'match-pairs-item match-pairs-item-left';
+    item.textContent = String(text || '').trim();
+    item.dataset.index = String(idx);
+    
+    // Support pre-filling
+    if (Array.isArray(initialValues) && initialValues[idx]) {
+      hidden.value = String(initialValues[idx]);
+    }
 
+    if (!live.player.assignment.reviewMode) {
+      item.addEventListener('click', () => {
+        if (selectedLeft === idx) {
+          selectedLeft = -1;
+        } else {
+          selectedLeft = idx;
+          if (selectedRight) {
+            assignPair(idx, selectedRight);
+            return;
+          }
+        }
+        refreshUi();
+      });
+    } else {
+      item.classList.add('join-answer-locked');
+    }
+
+    row.append(item, hidden);
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (live.player.assignment.reviewMode) return;
       hidden.value = '';
       refreshUi();
     });
 
     row.addEventListener('dragover', (e) => {
+      if (live.player.assignment.reviewMode) return;
       const value = e.dataTransfer?.getData('text/match-right');
       if (!value) return;
       e.preventDefault();
@@ -2548,11 +2746,12 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
     });
 
     row.addEventListener('drop', (e) => {
+      if (live.player.assignment.reviewMode) return;
       const value = e.dataTransfer?.getData('text/match-right');
       if (!value) return;
       e.preventDefault();
       clearDropTargets();
-      assignPair(i, value);
+      assignPair(idx, value);
     });
 
     rows.push({ container: row, hidden });
@@ -2562,26 +2761,31 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey)
   rightOptions.forEach((opt) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'btn';
-    btn.dataset.matchRight = String(opt || '');
-    btn.textContent = String(opt || '');
-    btn.draggable = true;
+    btn.className = 'match-pairs-item match-pairs-item-right';
+    btn.textContent = String(opt || '').trim();
+    btn.dataset.matchRight = String(opt || '').trim();
+    btn.draggable = !live.player.assignment.reviewMode;
 
-    btn.addEventListener('click', () => {
-      const value = btn.dataset.matchRight || '';
-      if (selectedLeft >= 0) {
-        assignPair(selectedLeft, value);
-        return;
-      }
-      selectedRight = selectedRight === value ? '' : value;
-      refreshUi();
-    });
+    if (!live.player.assignment.reviewMode) {
+      btn.addEventListener('click', () => {
+        const value = btn.dataset.matchRight || '';
+        if (selectedLeft >= 0) {
+          assignPair(selectedLeft, value);
+          return;
+        }
+        selectedRight = selectedRight === value ? '' : value;
+        refreshUi();
+      });
 
-    btn.addEventListener('dragstart', (e) => {
-      if (!e.dataTransfer) return;
-      e.dataTransfer.setData('text/match-right', btn.dataset.matchRight || '');
-      e.dataTransfer.effectAllowed = 'move';
-    });
+      btn.addEventListener('dragstart', (e) => {
+        if (!e.dataTransfer) return;
+        e.dataTransfer.setData('text/match-right', btn.dataset.matchRight || '');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+    } else {
+      btn.disabled = true;
+      btn.classList.add('join-answer-locked');
+    }
 
     rightButtonsByValue.set(String(opt || ''), btn);
     rightCol.appendChild(btn);
@@ -3674,6 +3878,46 @@ function renderVoiceRecorder(container, question) {
 
   wrap.append(recordBtn, stopBtn, timerEl, previewWrap, statusEl);
   container.appendChild(wrap);
+
+  // --- NEW: Pre-fill student recording ---
+  const state = live.player.assignment.state;
+  const rawAnswers = state?.attempt?.answersByQ || {};
+  const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+  const savedAudio = answerObj?.answer; // { audioUrl, durationMs, ... }
+  
+  if (savedAudio?.audioUrl) {
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    let src = savedAudio.audioUrl;
+    if (!src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+      src = `${base}/api/media/${src}`;
+    }
+    audio.src = src;
+    previewWrap.innerHTML = '';
+    previewWrap.appendChild(audio);
+    previewWrap.classList.remove('hidden');
+    
+    if (!live.player.assignment.reviewMode) {
+      // Allow re-recording if not in review mode
+      const rerecordBtn = document.createElement('button');
+      rerecordBtn.type = 'button';
+      rerecordBtn.className = 'btn';
+      rerecordBtn.textContent = '🔄 Re-record';
+      rerecordBtn.onclick = () => {
+        previewWrap.classList.add('hidden');
+        recordBtn.classList.remove('hidden');
+        _voiceRecordUpload = null;
+      };
+      previewWrap.appendChild(rerecordBtn);
+      recordBtn.classList.add('hidden');
+    } else {
+      recordBtn.classList.add('hidden');
+    }
+  } else if (live.player.assignment.reviewMode) {
+    recordBtn.classList.add('hidden');
+    statusEl.textContent = '(No recording provided)';
+  }
 
   const MAX_DURATION_SEC = 120;
   const MAX_SIZE_BYTES = 10 * 1024 * 1024;
