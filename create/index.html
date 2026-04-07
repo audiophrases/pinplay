@@ -52,10 +52,6 @@
                       <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
                     </div>
                     <div class="prompt-field">
-                      <label>Feel</label>
-                      <input id="promptFeel" type="text" placeholder="e.g. Fun, Academic, Intense" />
-                    </div>
-                    <div class="prompt-field">
                       <label>Time limit (sec)</label>
                       <input id="promptTimeLimit" type="number" value="30" min="0" max="300" />
                     </div>
@@ -66,23 +62,22 @@
                     <div class="prompt-field">
                       <label>Images</label>
                       <select id="promptImages">
-                        <option value="yes">Include images</option>
+                        <option value="some" selected>Some (when relevant)</option>
                         <option value="no">No images</option>
                       </select>
                     </div>
                     <div class="prompt-field">
                       <label>Audio/TTS</label>
                       <select id="promptAudio">
-                        <option value="yes">Include TTS audio</option>
+                        <option value="some" selected>Some (when relevant)</option>
                         <option value="no">No audio</option>
                       </select>
                     </div>
                     <div class="prompt-field">
-                      <label>Answers</label>
-                      <select id="promptAnswerType">
-                        <option value="balanced">Balanced mix</option>
-                        <option value="closed">Closed only (MCQ/TF)</option>
-                        <option value="open">Include open/voice answers</option>
+                      <label>Video</label>
+                      <select id="promptVideo">
+                        <option value="some" selected>Some (when relevant)</option>
+                        <option value="no">No videos</option>
                       </select>
                     </div>
                     <div class="prompt-field">

@@ -205,8 +205,7 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'pin', label: 'Pin spot', inTemplate: true, supportsAudio: true },
   { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
-  { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
-  { type: 'audio', label: 'Audio prompt', inTemplate: false, supportsAudio: true }
+  { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true }
 ];
 
 const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
@@ -330,15 +329,6 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "audioText can model the expected response register.",
     "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners."],
     "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading."]
-  },
-  "audio": {
-    "name": "Audio Prompt",
-    "rules": "Listening-focused question that relies on audio instructions/content before answering.",
-    "constraints": { "maxTextLength": 120 },
-    "pedagogicalUses": ["Listening comprehension checks.", "Dictation and sound-to-text transfer."],
-    "ttsStrategy": "audioText can intentionally differ from written prompt for retrieval contrast.",
-    "differentiationTips": ["Short, clear clips for support.", "Longer inferential clips for advanced listeners."],
-    "commonPitfalls": ["Written prompt duplicates full transcript.", "No clear listening target (detail, gist, inference)."]
   }
 };
 
@@ -3056,12 +3046,11 @@ async function exportCreationPrompt() {
   const theme = document.getElementById('promptTheme')?.value.trim();
   const lang = document.getElementById('promptLanguage')?.value.trim();
   const level = document.getElementById('promptLevel')?.value.trim();
-  const feel = document.getElementById('promptFeel')?.value.trim();
   const timeLimit = document.getElementById('promptTimeLimit')?.value;
   const count = document.getElementById('promptQuestionCount')?.value;
   const images = document.getElementById('promptImages')?.value;
   const audio = document.getElementById('promptAudio')?.value;
-  const answers = document.getElementById('promptAnswerType')?.value;
+  const video = document.getElementById('promptVideo')?.value;
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
   const customGoalEl = document.getElementById('promptGoalCustom') instanceof HTMLTextAreaElement ? document.getElementById('promptGoalCustom') : null;
   const goal = goalEl?.value;
@@ -3077,12 +3066,12 @@ async function exportCreationPrompt() {
   const cleanRequest = { theme };
   if (lang) cleanRequest.language = lang;
   if (level) cleanRequest.level = level;
-  if (feel) cleanRequest.feel = feel;
   if (timeLimit) cleanRequest.timeLimit = Number(timeLimit);
   if (count) cleanRequest.questionCount = Number(count);
-  cleanRequest.includeImages = images === 'yes';
-  cleanRequest.includeAudio = audio === 'yes';
-  cleanRequest.answerTypes = answers;
+  cleanRequest.images = images;
+  cleanRequest.audio = audio;
+  cleanRequest.video = video;
+
   if (goal === 'custom') {
     if (!customGoalText) {
       alert('Please enter a custom pedagogical goal before generating the prompt.');
@@ -3126,27 +3115,44 @@ async function exportCreationPrompt() {
       .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
       .map((type) => [type, (QUESTION_TYPE_EXPLANATIONS[type].pedagogicalUses || []).slice(0, 2)])
   );
+
   const featureGuides = {
-    imageKeyword: cleanRequest.includeImages
+    imageKeyword: cleanRequest.images === 'some'
       ? "Use a specific 2-5 word visual target. Keep imageData empty."
       : undefined,
-    audioMode: cleanRequest.includeAudio
+    audioMode: cleanRequest.audio === 'some'
       ? "Use audioMode 'tts', keep audioData empty, and set audioText intentionally (can differ from prompt for dictation/listening retrieval)."
       : undefined,
-    readAllQuestionsAloud: cleanRequest.includeAudio
+    videoEmbed: cleanRequest.video === 'some'
+      ? "Use 'media' object with kind: 'video', provider: 'youtube'|'vimeo'|'direct', and url. Set startAt/endAt in seconds if relevant."
+      : undefined,
+    readAllQuestionsAloud: cleanRequest.audio === 'some'
       ? "Set true only when broad accessibility/listening repetition is desired."
       : undefined
   };
+
+  const audioPedagogicalUse = cleanRequest.audio === 'some' ? {
+    role: "Audio is a modality/strategy, not a question type.",
+    usage: [
+      "Listening comprehension (prompt text = [Listening...], audioText = transcript)",
+      "Spelling/Dictation (prompt text = Spell this word, audioText = the word)",
+      "Speaking triggers (audioText provides the target phrase to say)"
+    ],
+    implementation: "Apply audio fields (audioMode: 'tts', audioText: '...') to existing supported question types."
+  } : undefined;
 
   const allowedTypesText = allowedTypes.join(', ');
   const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
     `Use only allowed question types: ${allowedTypesText}.`,
+    'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
-    cleanRequest.includeAudio
+    cleanRequest.audio === 'some'
       ? 'For generated audio use audioMode:"tts", audioData:"", and meaningful audioText.'
       : 'Do not add question audio fields unless required by request.',
+    cleanRequest.images === 'no' ? 'Do NOT include imageKeyword or imageData.' : 'Keep imageData empty.',
+    cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
   if (blockedTypesText) {
@@ -3183,7 +3189,7 @@ async function exportCreationPrompt() {
     metadata: {
       generatedAt: new Date().toISOString(),
       type: "PinPlay Creation Prompt",
-      version: "3.3"
+      version: "3.4"
     },
     request: cleanRequest,
     promptIntent: "Generate one valid PinPlay v3 quiz JSON from request constraints only.",
@@ -3191,7 +3197,8 @@ async function exportCreationPrompt() {
       allowedQuestionTypes: allowedTypes,
       typeExplanations: relevantTypeExplanations,
       typeUseCases,
-      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value))
+      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value)),
+      audioPedagogicalUse
     },
     exampleTemplate: {
       ...TEMPLATE_ALL_12_TYPES,
@@ -9405,7 +9412,6 @@ function labelForType(type) {
       match_pairs: 'Match pairs',
       error_hunt: 'Error hunt',
       puzzle: 'Puzzle',
-      audio: 'Quiz + Audio',
       slider: 'Slider',
       pin: 'Pin answer',
     }[type] || type
@@ -9426,7 +9432,6 @@ function iconForType(type) {
       match_pairs: '🔗',
       error_hunt: '🕵️',
       puzzle: '🧩',
-      audio: '🔊',
       slider: '📐',
       pin: '📍',
     }[type] || ''
