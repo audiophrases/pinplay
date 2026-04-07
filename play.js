@@ -3218,7 +3218,6 @@ function showSliderFeedback(question, state) {
   }
   const studentVal = Number(slider.value);
   if (!isNaN(correctVal)) {
-    slider.value = correctVal;
     const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
     if (out) out.innerHTML = `<span style="color:var(--muted);font-size:1.5rem;margin-right:12px;">${studentVal}</span> <strong>${correctVal}${unit}</strong>`;
   }
