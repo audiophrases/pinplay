@@ -3917,7 +3917,7 @@ function renderAssignmentResults(safeCode, data) {
     const li = document.createElement('li');
     const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
     const top = document.createElement('div');
-    const checked = a?.reviewedAt ? `<span style="color:#3b82f6; font-size: 1.1em; letter-spacing: -2px; margin-left: 6px;" title="Student has reviewed feedback">✔✔</span>` : '';
+    const checked = a?.reviewedAt ? `<span style="background: #3b82f6; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 8px; vertical-align: middle;" title="Student has reviewed feedback">REVIEWED</span>` : '';
     top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${checked} · ${totalScore} pts`;
 
     const meta = document.createElement('div');
