@@ -2714,26 +2714,26 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey,
 
     const hidden = document.createElement('input');
     hidden.type = 'hidden';
-    hidden.dataset[datasetKey] = String(i);
+    hidden.dataset[datasetKey] = String(idx);
 
     const item = document.createElement('div');
     item.className = 'match-pairs-item match-pairs-item-left';
-    item.textContent = String(left || '').trim();
-    item.dataset.index = String(i);
+    item.textContent = String(text || '').trim();
+    item.dataset.index = String(idx);
     
     // Support pre-filling
-    if (Array.isArray(initialValues) && initialValues[i]) {
-      hidden.value = String(initialValues[i]);
+    if (Array.isArray(initialValues) && initialValues[idx]) {
+      hidden.value = String(initialValues[idx]);
     }
 
     if (!live.player.assignment.reviewMode) {
       item.addEventListener('click', () => {
-        if (selectedLeft === i) {
+        if (selectedLeft === idx) {
           selectedLeft = -1;
         } else {
-          selectedLeft = i;
+          selectedLeft = idx;
           if (selectedRight) {
-            assignPair(i, selectedRight);
+            assignPair(idx, selectedRight);
             return;
           }
         }
@@ -2770,7 +2770,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey,
       if (!value) return;
       e.preventDefault();
       clearDropTargets();
-      assignPair(i, value);
+      assignPair(idx, value);
     });
 
     rows.push({ container: row, hidden });
