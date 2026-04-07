@@ -505,10 +505,33 @@ textarea {
 #hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers label.answer-row,
 #hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row,
 #hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row {
+  gap: 2px;
   align-self: center;
   height: auto;
   width: auto;
   flex: 0 1 auto;
+  padding-inline: .45rem;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers label.answer-row input[type="radio"],
+#hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row input[type="checkbox"],
+#hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row input[type="radio"] {
+  margin: 0;
+  margin-right: 2px;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+#hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers label.answer-row > span,
+#hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row > span,
+#hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row > span {
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #hostQuestionAnswers.project-answers .question-image-preview,
