@@ -477,6 +477,7 @@ const hallLobbyPlayersEl = document.getElementById('hallLobbyPlayers');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
 const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
+const projectorProgressEl = document.getElementById('projectorProgress');
 const projectorCorrectEl = document.getElementById('projectorCorrect');
 const projectorScoresEl = document.getElementById('projectorScores');
 const projectorReactionsEl = document.getElementById('projectorReactions');
@@ -5223,6 +5224,7 @@ function renderHostState(state) {
   if (livePinHudEl) livePinHudEl.textContent = state.pin || '-';
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
+  if (projectorProgressEl) projectorProgressEl.textContent = `❓ ${state.currentIndex + 1} / ${state.totalQuestions}`;
   if (projectorScoresEl) {
     const showScores = state.phase === 'results' || live.host.rankingMode;
     renderProjectorScores(showScores ? (state.players || []) : [], { animate: live.host.rankingMode });
