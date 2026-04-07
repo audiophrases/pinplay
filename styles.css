@@ -1268,11 +1268,28 @@ body.question-active .join-title-row {
   font-size: 1rem;
 }
 
+.match-pairs-item-right {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  background: #fff;
+  padding: .5rem .75rem;
+  text-align: center;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
 .match-pair-left.filled {
   border-color: #605dff;
 }
 
 .match-pair-left.active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 2px rgba(96, 93, 255, .2);
+}
+
+.match-pairs-item-right.active {
   border-color: var(--primary);
   box-shadow: inset 0 0 0 2px rgba(96, 93, 255, .2);
 }
