@@ -1665,7 +1665,8 @@ export class QuizRoom {
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         attempt.reviewedAt = Date.now();
-        await saveAssignmentsMap(this.state.storage, assignments);
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
         this.broadcastTeacherUpdate(code);
         return json({ ok: true });
       }
