@@ -3212,16 +3212,9 @@ function showSliderFeedback(question, state) {
   const out = document.getElementById('joinSliderValue');
   if (!slider) return;
   slider.disabled = true;
-  let correctVal = parseFloat(state.correctAnswer);
-  if (isNaN(correctVal)) {
-    correctVal = Number(question.target ?? question.correctSliderValue ?? question.correctAnswer);
-  }
   const studentVal = Number(slider.value);
-  if (!isNaN(correctVal)) {
-    slider.value = correctVal;
-    const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
-    if (out) out.innerHTML = `<span style="color:var(--muted);font-size:1.4rem;text-decoration:line-through;margin-right:12px;">${studentVal}</span> <strong>${correctVal}${unit}</strong>`;
-  }
+  const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
+  if (out && !isNaN(studentVal)) out.innerHTML = `<strong>${studentVal}${unit}</strong>`;
 }
 
 // Pin: show correct zone marker on the image
