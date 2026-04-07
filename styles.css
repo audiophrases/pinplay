@@ -702,55 +702,6 @@ textarea {
   max-height: min(40vh, 480px);
 }
 
-#hostQuestionCard.host-reveal-enabled .reveal-prep {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-#hostQuestionCard.host-reveal-enabled .reveal-in {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 220ms ease, transform 260ms cubic-bezier(.22, .61, .36, 1);
-  will-change: opacity, transform;
-}
-
-#hostQuestionCard.host-reveal-enabled .host-media-reserve {
-  width: min(100%, 820px);
-  min-height: clamp(220px, 30vh, 360px);
-  aspect-ratio: 16 / 9;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-#hostQuestionCard.host-reveal-enabled .host-media-reserve.question-image-preview {
-  border: 1px solid var(--line);
-  border-radius: .7rem;
-  background: linear-gradient(180deg, rgba(96, 93, 255, 0.05), rgba(96, 93, 255, 0.02));
-  overflow: hidden;
-}
-
-#hostQuestionCard.host-reveal-enabled .host-media-reserve.question-image-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-#hostQuestionCard.host-reveal-enabled .host-media-reserve.question-video-wrap {
-  transform-origin: center;
-}
-
-#hostQuestionCard.host-reveal-enabled .host-media-reserve.question-video-wrap.reveal-prep {
-  transform: translateY(8px) scale(0.98);
-}
-
-#hostQuestionCard.host-reveal-enabled #hostQuestionAnswers.project-answers {
-  gap: .65rem;
-}
-
-#hostQuestionCard.host-reveal-enabled #hostQuestionAnswers.project-answers .answer-row {
-  min-height: 3rem;
-}
-
 /* ==========================================================================
    5. STUDENT UI: FIXED FRAME REDESIGN (No Collisions, White Theme)
    ========================================================================== */
@@ -886,15 +837,6 @@ body.question-active .join-title-row {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #hostQuestionCard.host-reveal-enabled .reveal-prep,
-  #hostQuestionCard.host-reveal-enabled .reveal-in,
-  #hostQuestionCard.host-reveal-enabled .host-media-reserve.question-video-wrap.reveal-prep {
-    opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
-    animation: none !important;
-  }
-
   #joinStatusHud {
     transition: none;
   }
