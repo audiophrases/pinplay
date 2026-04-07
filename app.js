@@ -5790,7 +5790,7 @@ function renderHostQuestion(state) {
   const isTeacherGradedText = question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length;
 
   if (question.type === 'text' && !isTeacherGradedText) {
-    hostQuestionHintEl.textContent = showReveal ? '' : 'Type-answer question.';
+    hostQuestionHintEl.textContent = showReveal ? '' : '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
   }
@@ -10303,7 +10303,7 @@ function renderMatchPairsReveal(container, pairs) {
 
 function renderPuzzleRevealTokens(container, items) {
   const wrap = document.createElement('div');
-  wrap.className = 'puzzle-reveal-wrap';
+  wrap.className = 'puzzle-reveal-wrap project-text-reveal';
 
   items.forEach((token) => {
     const chip = document.createElement('span');

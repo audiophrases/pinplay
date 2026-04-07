@@ -508,7 +508,7 @@ textarea {
 #hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row,
 #hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row {
   gap: 0;
-  align-self: stretch;
+  align-self: center;
   justify-content: center;
   height: auto;
   flex: 1 1 300px;
@@ -520,6 +520,49 @@ textarea {
   min-width: 0;
   overflow: hidden;
   text-align: center;
+}
+
+#hostQuestionAnswers.project-answers .puzzle-bank-btn,
+#hostQuestionAnswers.project-answers .match-pair-left,
+#hostQuestionAnswers.project-answers .match-pairs-col .btn {
+  flex: 1 1 300px;
+  max-width: calc(50% - 0.65rem);
+  min-height: 60px;
+  padding: .85rem 1.6rem;
+  margin: 0;
+  white-space: normal;
+  text-align: center;
+  font-size: clamp(1rem, 2.1vw, 1.3rem);
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
+  color: var(--text);
+  cursor: default;
+}
+
+#hostQuestionAnswers.project-answers .match-pairs-wrap {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+}
+
+#hostQuestionAnswers.project-answers .match-pairs-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 48%;
+  align-items: center;
+}
+
+#hostQuestionAnswers.project-answers .puzzle-reveal-token {
+  margin: 4px;
+  display: inline-block;
 }
 
 #hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers label.answer-row > span,
