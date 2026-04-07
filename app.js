@@ -582,6 +582,9 @@ const live = {
     questionIntroKey: null,
     questionIntroStartedAt: 0,
     questionIntroDone: false,
+    hostRevealTimers: [],
+    hostRevealRafId: null,
+    lastHostRevealKey: null,
     adaptiveFitRaf: null,
     attemptsCache: null,
     attemptsFetchedAt: 0,
@@ -5460,10 +5463,96 @@ function renderHostState(state) {
   live.host.lastResponseCount = state.responseCount;
 }
 
+function clearHostRevealSequenceTimers() {
+  if (live.host.hostRevealRafId) {
+    cancelAnimationFrame(live.host.hostRevealRafId);
+    live.host.hostRevealRafId = null;
+  }
+  if (Array.isArray(live.host.hostRevealTimers) && live.host.hostRevealTimers.length) {
+    live.host.hostRevealTimers.forEach((timerId) => clearTimeout(timerId));
+  }
+  live.host.hostRevealTimers = [];
+}
+
+function runHostRevealSequence(container, opts = {}) {
+  if (!container) return;
+  const revealKey = String(opts.revealKey || '').trim();
+  if (!revealKey) return;
+
+  if (live.host.lastHostRevealKey === revealKey) return;
+  live.host.lastHostRevealKey = revealKey;
+  clearHostRevealSequenceTimers();
+
+  const promptEl = opts.promptEl || null;
+  const mediaEl = opts.mediaEl || null;
+  const itemEls = Array.isArray(opts.itemEls) ? opts.itemEls.filter(Boolean) : [];
+  const targets = [promptEl, mediaEl, ...itemEls].filter(Boolean);
+  if (!targets.length) return;
+
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  const promote = (el, delayMs = 0) => {
+    if (!el) return;
+    const timerId = setTimeout(() => {
+      el.classList.add('reveal-in');
+      el.classList.remove('reveal-prep');
+    }, Math.max(0, Number(delayMs) || 0));
+    live.host.hostRevealTimers.push(timerId);
+  };
+
+  if (reduceMotion) {
+    targets.forEach((el) => {
+      el.classList.add('reveal-in');
+      el.classList.remove('reveal-prep');
+    });
+    return;
+  }
+
+  live.host.hostRevealRafId = requestAnimationFrame(() => {
+    promote(promptEl, 0);
+    promote(mediaEl, 120);
+    itemEls.forEach((el, idx) => promote(el, 220 + (idx * 50)));
+    live.host.hostRevealRafId = null;
+  });
+}
+
 function renderHostQuestion(state) {
   const phase = state.phase;
   const question = state.question;
   const showReveal = !!state.questionClosed && (phase === 'question' || phase === 'results');
+  let stagedMediaEl = null;
+  const stagedItemEls = [];
+  const stageRevealElement = (el) => {
+    if (!el) return el;
+    el.classList.add('reveal-prep');
+    el.classList.remove('reveal-in');
+    return el;
+  };
+  const stageAnswerItem = (el) => {
+    if (!el) return el;
+    stageRevealElement(el);
+    stagedItemEls.push(el);
+    return el;
+  };
+  const setStagedMedia = (el) => {
+    stagedMediaEl = stageRevealElement(el);
+    return stagedMediaEl;
+  };
+  const finalizeQuestionReveal = () => {
+    if (!hostQuestionCardEl || phase !== 'question' || !question) return;
+    hostQuestionCardEl.classList.add('host-reveal-enabled');
+    const revealKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
+    stageRevealElement(hostQuestionPromptEl);
+    const revealItems = stagedItemEls.length
+      ? stagedItemEls
+      : Array.from(hostQuestionAnswersEl.children).filter((el) => el && el !== stagedMediaEl);
+    revealItems.forEach((el) => stageRevealElement(el));
+    runHostRevealSequence(hostQuestionCardEl, {
+      revealKey,
+      promptEl: hostQuestionPromptEl,
+      mediaEl: stagedMediaEl,
+      itemEls: revealItems,
+    });
+  };
 
   const applyProjectorLayoutMode = (active, q = null) => {
     if (!hostQuestionCardEl) return;
@@ -5620,11 +5709,15 @@ function renderHostQuestion(state) {
     const ans = document.createElement('div');
     ans.className = 'project-text-reveal';
     ans.textContent = value;
+    stageAnswerItem(ans);
     hostQuestionAnswersEl.appendChild(ans);
   };
 
   if (phase === 'results') {
     applyProjectorLayoutMode(false, null);
+    hostQuestionCardEl?.classList.remove('host-reveal-enabled');
+    clearHostRevealSequenceTimers();
+    live.host.lastHostRevealKey = null;
     hostQuestionWrap.classList.remove('hidden');
     hostQuestionPromptEl.textContent = '🏁 Final ranking reveal';
     hostQuestionAnswersEl.innerHTML = '';
@@ -5643,6 +5736,9 @@ function renderHostQuestion(state) {
   if (!question) {
     applyProjectorLayoutMode(false, null);
     hostQuestionCardEl?.classList.remove('intro-active');
+    hostQuestionCardEl?.classList.remove('host-reveal-enabled');
+    clearHostRevealSequenceTimers();
+    live.host.lastHostRevealKey = null;
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
@@ -5669,6 +5765,9 @@ function renderHostQuestion(state) {
       const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
       if (elapsed < 1000) {
         hostQuestionCardEl?.classList.add('intro-active');
+        hostQuestionCardEl?.classList.remove('host-reveal-enabled');
+        clearHostRevealSequenceTimers();
+        live.host.lastHostRevealKey = null;
         hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = '';
         hostQuestionHintEl.textContent = '';
@@ -5689,6 +5788,9 @@ function renderHostQuestion(state) {
 
       if (elapsed < 2000) {
         hostQuestionCardEl?.classList.add('intro-active');
+        hostQuestionCardEl?.classList.remove('host-reveal-enabled');
+        clearHostRevealSequenceTimers();
+        live.host.lastHostRevealKey = null;
         hostQuestionWrap.classList.add('center-stage');
         hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
         hostQuestionHintEl.textContent = '';
@@ -5723,12 +5825,13 @@ function renderHostQuestion(state) {
 
   if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
-    preview.className = 'pin-preview question-image-preview';
+    preview.className = 'pin-preview question-image-preview host-media-reserve';
     const img = document.createElement('img');
     img.src = question.imageData;
     img.alt = 'Question image';
     img.dataset.zoomable = '1';
     preview.appendChild(img);
+    setStagedMedia(preview);
     hostQuestionAnswersEl.appendChild(preview);
   }
 
@@ -5736,7 +5839,7 @@ function renderHostQuestion(state) {
   if (hostMedia.kind === 'video' && (hostMedia.url || hostMedia.embedUrl)) {
     const config = toVideoEmbedConfig(hostMedia);
     const wrap = document.createElement('div');
-    wrap.className = 'top-space question-video-wrap';
+    wrap.className = 'top-space question-video-wrap host-media-reserve';
     if (config.src) {
       if (config.provider === 'direct') {
         const video = document.createElement('video');
@@ -5753,12 +5856,14 @@ function renderHostQuestion(state) {
         wrap.appendChild(iframe);
       }
     }
+    setStagedMedia(wrap);
     hostQuestionAnswersEl.appendChild(wrap);
   }
 
   if (question.isPoll) {
     hostQuestionHintEl.textContent = showReveal ? 'Poll results (anonymous)' : 'Poll mode: no points, no correct answer.';
     if (showReveal) renderPollSummary();
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5785,12 +5890,14 @@ function renderHostQuestion(state) {
       txt.textContent = a.text;
 
       row.append(txt);
+      stageAnswerItem(row);
       hostQuestionAnswersEl.appendChild(row);
     });
 
 
 
     hostQuestionHintEl.textContent = question.type === 'audio' ? 'Audio question.' : '';
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5799,6 +5906,7 @@ function renderHostQuestion(state) {
   if (question.type === 'text' && !isTeacherGradedText) {
     hostQuestionHintEl.textContent = showReveal ? '' : '';
     if (showReveal) appendBigReveal(state.correctAnswer);
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5807,12 +5915,13 @@ function renderHostQuestion(state) {
 
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
-      preview.className = 'pin-preview question-image-preview';
+      preview.className = 'pin-preview question-image-preview host-media-reserve';
       const img = document.createElement('img');
       img.src = question.imageData;
       img.alt = 'Image prompt';
       img.dataset.zoomable = '1';
       preview.appendChild(img);
+      setStagedMedia(preview);
       hostQuestionAnswersEl.appendChild(preview);
     }
 
@@ -5826,7 +5935,10 @@ function renderHostQuestion(state) {
       projectorCorrectEl.textContent = '';
     }
 
-    if (!models.length) return;
+    if (!models.length) {
+      finalizeQuestionReveal();
+      return;
+    }
 
     // Fallback visible list (same behavior as the prior working state)
     models.forEach((r) => {
@@ -5836,8 +5948,10 @@ function renderHostQuestion(state) {
       const corr = String(r.correction || '').trim();
       text.textContent = corr || `${r.answer}`;
       row.append(text);
+      stageAnswerItem(row);
       hostQuestionAnswersEl.appendChild(row);
     });
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5858,6 +5972,7 @@ function renderHostQuestion(state) {
       }
       appendBigReveal(correct);
     }
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5871,13 +5986,16 @@ function renderHostQuestion(state) {
     } else {
       renderMatchPairsReveal(pairsWrap, question.pairs || []);
     }
+    stageAnswerItem(pairsWrap);
     hostQuestionAnswersEl.appendChild(pairsWrap);
+    finalizeQuestionReveal();
     return;
   }
 
   if (question.type === 'error_hunt') {
     hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5899,6 +6017,7 @@ function renderHostQuestion(state) {
         bank.appendChild(btn);
       });
 
+      stageAnswerItem(bank);
       hostQuestionAnswersEl.appendChild(bank);
     }
     if (showReveal) {
@@ -5912,12 +6031,14 @@ function renderHostQuestion(state) {
       }
     }
     if (projectorCorrectEl) projectorCorrectEl.textContent = '';
+    finalizeQuestionReveal();
     return;
   }
 
   if (question.type === 'slider') {
     hostQuestionHintEl.textContent = '';
     if (showReveal) appendBigReveal(state.correctAnswer);
+    finalizeQuestionReveal();
     return;
   }
 
@@ -5925,7 +6046,7 @@ function renderHostQuestion(state) {
     hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : '';
     if (question.imageData) {
       const wrap = document.createElement('div');
-      wrap.className = 'pin-preview';
+      wrap.className = 'pin-preview host-media-reserve';
       wrap.style.maxWidth = '680px';
       wrap.style.margin = '0 auto';
 
@@ -5964,12 +6085,15 @@ function renderHostQuestion(state) {
         wrap.appendChild(picksLayer);
       }
 
+      setStagedMedia(wrap);
       hostQuestionAnswersEl.appendChild(wrap);
     }
+    finalizeQuestionReveal();
     return;
   }
 
   hostQuestionHintEl.textContent = '';
+  finalizeQuestionReveal();
 }
 
 function computeCrazyCountScore(toScore, p, elapsedMs) {
