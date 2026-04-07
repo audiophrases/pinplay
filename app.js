@@ -6137,8 +6137,9 @@ function renderReactionPop(reactions) {
       const pop = document.createElement('span');
       pop.className = 'reaction-pop-item';
       pop.textContent = emoji;
-      pop.style.left = `${Math.round(10 + Math.random() * 80)}%`;
-      pop.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
+      pop.style.left = `${Math.round(8 + Math.random() * 84)}%`;
+      pop.style.setProperty('--reaction-base-bottom', `${Math.round(6 + Math.random() * 18)}%`);
+      pop.style.animationDelay = `${Math.round(Math.random() * 80)}ms`;
       container.appendChild(pop);
       setTimeout(() => pop.remove(), 1800);
     });
