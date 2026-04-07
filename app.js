@@ -5777,11 +5777,7 @@ function renderHostQuestion(state) {
       const txt = document.createElement('span');
       txt.textContent = a.text;
 
-      const input = document.createElement('input');
-      input.type = question.type === 'multi' ? 'checkbox' : 'radio';
-      input.disabled = true;
-
-      row.append(txt, input);
+      row.append(txt);
       hostQuestionAnswersEl.appendChild(row);
     });
 
