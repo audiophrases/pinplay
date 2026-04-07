@@ -3546,7 +3546,6 @@ function stopAssignmentQuestionAudioPlayback() {
   } catch { }
 }
 
-let activeAssignmentAudioKeyLock = null;
 async function playAssignmentQuestionAudio(question, opts = {}) {
   if (!hasAssignmentQuestionAudio(question)) return false;
 
@@ -3642,10 +3641,7 @@ async function playAssignmentQuestionVideo(question) {
   });
 }
 
-let activeMediaSequenceLock = null;
 async function runAssignmentQuestionMediaSequence(question, audioKey) {
-  if (activeMediaSequenceLock === audioKey) return;
-  activeMediaSequenceLock = audioKey;
   await playAssignmentQuestionAudio(question, { audioKey });
   await playAssignmentQuestionVideo(question);
   const s = live.player.assignment.state;
@@ -3655,7 +3651,6 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   if (audioKey && audioKey !== lastAssignmentAudioKey) return;
   
   // ensure we don't play ambient if another sequence took over
-  if (activeMediaSequenceLock !== audioKey) return;
   
   playAssignmentSfx('answering');
 }
