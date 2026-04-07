@@ -9413,6 +9413,7 @@ function iconForType(type) {
       error_hunt: '🕵️',
       puzzle: '🧩',
       slider: '📐',
+      voice_record: '🎙️',
       pin: '📍',
     }[type] || ''
   );
