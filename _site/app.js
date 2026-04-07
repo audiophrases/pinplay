@@ -9891,7 +9891,7 @@ function stopQuestionAudioPlayback() {
 async function playQuestionAudio(question, opts = {}) {
   if (!hasQuestionAudio(question)) return false;
 
-  const qIndex = Number(live.host.state?.question?.index);
+  const qIndex = Number(live.host.state?.currentIndex);
   const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
 
   // Keep one stable answering FX per question.
