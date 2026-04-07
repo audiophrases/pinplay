@@ -4557,7 +4557,14 @@ function handleHostHotkeys(e) {
     e.preventDefault();
     const q = live.host.state?.question;
     if (q && hasQuestionAudio(q)) {
-      playQuestionAudio(q);
+      playQuestionAudio(q).then(() => {
+        const s = live.host.state;
+        if (s && s.phase === 'question' && !s.questionClosed) {
+          resumeFx('answering');
+        }
+      }).catch(() => {
+        resumeFx('answering');
+      });
     }
     return;
   }
