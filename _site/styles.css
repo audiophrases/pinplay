@@ -511,28 +511,28 @@ textarea {
   align-self: center;
   justify-content: center;
   height: auto;
-  flex: 1 1 300px;
-  max-width: calc(50% - 0.65rem);
-  min-height: 60px;
-  padding: .85rem 1.6rem;
+  flex: 0 1 auto;
+  width: auto;
+  padding: .5rem .8rem;
   margin: 0;
-  white-space: normal;
+  white-space: nowrap;
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
+  font-size: clamp(1.25rem, 2.3vw, 1.6rem);
 }
 
 #hostQuestionAnswers.project-answers .puzzle-bank-btn,
 #hostQuestionAnswers.project-answers .match-pair-left,
 #hostQuestionAnswers.project-answers .match-pairs-col .btn {
-  flex: 1 1 300px;
-  max-width: calc(50% - 0.65rem);
-  min-height: 60px;
-  padding: .85rem 1.6rem;
+  flex: 0 1 auto;
+  width: auto;
+  padding: .5rem .8rem;
   margin: 0;
-  white-space: normal;
+  white-space: nowrap;
   text-align: center;
-  font-size: clamp(1rem, 2.1vw, 1.3rem);
+  font-size: clamp(1.25rem, 2.3vw, 1.6rem);
   border: 1px solid var(--line);
   border-radius: .65rem;
   background: #fff;
@@ -576,9 +576,12 @@ textarea {
 
 #hostQuestionAnswers.project-answers .question-image-preview,
 #hostQuestionAnswers.project-answers .question-video-wrap {
-  flex-basis: 100%;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
   align-self: center;
   justify-content: center;
+  margin-bottom: 0.5rem;
 }
 
 .project-answers .answer-row {
@@ -669,6 +672,7 @@ textarea {
   box-shadow: none !important;
   margin: 0 auto !important;
   width: 100% !important;
+  flex: 0 0 100% !important;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -677,7 +681,7 @@ textarea {
 /* 2. Center the image itself and keep rounded corners */
 #hostQuestionCard .question-image-preview img,
 #hostQuestionCard .pin-preview img {
-  max-height: min(40vh, 480px);
+  max-height: min(45vh, 520px);
   object-fit: contain;
   display: block;
   margin: 0 auto;
