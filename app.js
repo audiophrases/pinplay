@@ -5541,11 +5541,19 @@ function renderHostQuestion(state) {
     if (!hostQuestionCardEl || phase !== 'question' || !question) return;
     hostQuestionCardEl.classList.add('host-reveal-enabled');
     const revealKey = `${state.currentIndex}:${state.questionStartedAt || 0}`;
-    stageRevealElement(hostQuestionPromptEl);
     const revealItems = stagedItemEls.length
       ? stagedItemEls
       : Array.from(hostQuestionAnswersEl.children).filter((el) => el && el !== stagedMediaEl);
-    revealItems.forEach((el) => stageRevealElement(el));
+    const revealTargets = [hostQuestionPromptEl, stagedMediaEl, ...revealItems].filter(Boolean);
+    const shouldAnimate = live.host.lastHostRevealKey !== revealKey;
+    if (shouldAnimate) {
+      revealTargets.forEach((el) => stageRevealElement(el));
+    } else {
+      revealTargets.forEach((el) => {
+        el.classList.add('reveal-in');
+        el.classList.remove('reveal-prep');
+      });
+    }
     runHostRevealSequence(hostQuestionCardEl, {
       revealKey,
       promptEl: hostQuestionPromptEl,
@@ -6046,7 +6054,7 @@ function renderHostQuestion(state) {
     hostQuestionHintEl.textContent = showReveal ? 'Correct zone highlighted.' : '';
     if (question.imageData) {
       const wrap = document.createElement('div');
-      wrap.className = 'pin-preview host-media-reserve';
+      wrap.className = 'pin-preview';
       wrap.style.maxWidth = '680px';
       wrap.style.margin = '0 auto';
 
