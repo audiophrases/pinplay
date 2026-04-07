@@ -486,6 +486,12 @@ textarea {
   justify-content: center;
 }
 
+#hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers:has(label.answer-row),
+#hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers:has(label.answer-row),
+#hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers:has(label.answer-row) {
+  align-items: center;
+}
+
 .project-answers label.answer-row {
   display: flex;
   align-items: center;
@@ -494,6 +500,22 @@ textarea {
   width: auto;
   flex: 0 1 auto;
   cursor: default;
+}
+
+#hostQuestionCard[data-qtype="mcq"] #hostQuestionAnswers.project-answers label.answer-row,
+#hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row,
+#hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row {
+  align-self: center;
+  height: auto;
+  width: auto;
+  flex: 0 1 auto;
+}
+
+#hostQuestionAnswers.project-answers .question-image-preview,
+#hostQuestionAnswers.project-answers .question-video-wrap {
+  flex-basis: 100%;
+  align-self: center;
+  justify-content: center;
 }
 
 .project-answers .answer-row {
