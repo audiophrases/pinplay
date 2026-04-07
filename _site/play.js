@@ -436,12 +436,12 @@ function mapAssignmentStateToPlayerState() {
 
   if (isShowResults && answeredCurrent) {
     questionClosed = true;
-    
+
     // First, try to find teacher grading or auto-grading result
     const rawAnswers = attempt?.answersByQ || {};
     const rawItem = rawAnswers[String(idx)];
     const teacherGrade = rawItem?.teacherGrade;
-    
+
     const autoResults = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
     const autoResult = autoResults.find(a => Number(a.qIndex) === idx);
 
@@ -741,7 +741,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       row.className = 'review-retake-attempt-row rr-btn-review-inline';
       row.type = 'button';
       row.title = 'Click to review this attempt';
-      
+
       row.addEventListener('click', () => {
         dismissReviewRetakeModal();
         enterAssignmentReviewMode(code, a.id, username, checkData);
@@ -1257,7 +1257,7 @@ function renderPlayerState(state) {
     const content = document.createElement('div');
     content.className = 'student-answer-reveal-content';
     content.style.color = '#7f1d1d';
-    
+
     if (corr) {
       content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
     } else {
@@ -1281,11 +1281,11 @@ function renderPlayerState(state) {
       audioBtn.style.padding = '0.4rem 0.8rem';
       audioBtn.style.fontSize = '0.9rem';
       audioBtn.innerHTML = '🔊 Play Voice Comment';
-      
+
       const audioEl = new Audio();
       const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
       audioEl.src = `${base}/api/media/${audioKey}`;
-      
+
       audioBtn.onclick = () => {
         if (audioEl.paused) {
           audioEl.play().catch(err => console.warn('Audio playback failed:', err));
@@ -1295,7 +1295,7 @@ function renderPlayerState(state) {
           audioBtn.innerHTML = '🔊 Play Voice Comment';
         }
       };
-      
+
       audioEl.onended = () => {
         audioBtn.innerHTML = '🔊 Play Voice Comment';
       };
@@ -1870,7 +1870,7 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
-      
+
       // --- NEW: Pre-fill Match Pairs ---
       const state = live.player.assignment.state;
       const rawAnswers = state?.attempt?.answersByQ || {};
@@ -2008,7 +2008,7 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'puzzle') {
     let options = Array.isArray(question.options) ? [...question.options] : [];
-    
+
     // --- NEW: Pre-fill Puzzle ---
     const state = live.player.assignment.state;
     const rawAnswers = state?.attempt?.answersByQ || {};
@@ -2029,7 +2029,7 @@ function renderJoinQuestion(question) {
     }
 
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
-    
+
     if (live.player.assignment.reviewMode) {
       joinAnswersEl.querySelectorAll('.puzzle-piece').forEach(p => {
         p.draggable = false;
@@ -2720,7 +2720,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey,
     item.className = 'match-pairs-item match-pairs-item-left';
     item.textContent = String(left || '').trim();
     item.dataset.index = String(i);
-    
+
     // Support pre-filling
     if (Array.isArray(initialValues) && initialValues[i]) {
       hidden.value = String(initialValues[i]);
@@ -3214,7 +3214,7 @@ function showSliderFeedback(question, state) {
   slider.disabled = true;
   const studentVal = Number(slider.value);
   const unit = question.unit ? ` ${escapeHtml(question.unit)}` : '';
-  if (out && !isNaN(studentVal)) out.innerHTML = `<strong>${studentVal}${unit}</strong>`;
+  if (out && !isNaN(studentVal)) out.innerHTML = `<strong>${studentVal}${unit} Correct: ${correctVal}${unit}</strong>`;
 }
 
 // Pin: show correct zone marker on the image
@@ -3642,9 +3642,9 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   if (live.player.mode !== 'assignment') return;
   if (!attempt || attempt.submitted) return;
   if (audioKey && audioKey !== lastAssignmentAudioKey) return;
-  
+
   // ensure we don't play ambient if another sequence took over
-  
+
   playAssignmentSfx('answering');
 }
 
@@ -3847,7 +3847,7 @@ let _voiceRecordTimerId = null;
 function _cleanupVoiceRecordStream() {
   if (_voiceRecordTimerId) { clearInterval(_voiceRecordTimerId); _voiceRecordTimerId = null; }
   if (_voiceRecordRecorder && _voiceRecordRecorder.state !== 'inactive') {
-    try { _voiceRecordRecorder.stop(); } catch (_) {}
+    try { _voiceRecordRecorder.stop(); } catch (_) { }
   }
   _voiceRecordRecorder = null;
   if (_voiceRecordStream) {
@@ -3891,7 +3891,7 @@ function renderVoiceRecorder(container, question) {
   const rawAnswers = state?.attempt?.answersByQ || {};
   const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
   const savedAudio = answerObj?.answer; // { audioUrl, durationMs, ... }
-  
+
   if (savedAudio?.audioUrl) {
     const audio = document.createElement('audio');
     audio.controls = true;
@@ -3904,7 +3904,7 @@ function renderVoiceRecorder(container, question) {
     previewWrap.innerHTML = '';
     previewWrap.appendChild(audio);
     previewWrap.classList.remove('hidden');
-    
+
     if (!live.player.assignment.reviewMode) {
       // Allow re-recording if not in review mode
       const rerecordBtn = document.createElement('button');
