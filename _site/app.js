@@ -5721,7 +5721,7 @@ function renderHostQuestion(state) {
   const hasSharedImage = !hasHostVideo && question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
-  if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
+  if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -5863,35 +5863,15 @@ function renderHostQuestion(state) {
 
   if (question.type === 'match_pairs') {
     hostQuestionHintEl.textContent = '';
-    if (question.imageData) {
-      const overlay = document.createElement('div');
-      overlay.id = 'matchPairsCenterOverlay';
-      overlay.className = 'match-pairs-center-overlay host-mode';
-
-      const imgWrap = document.createElement('div');
-      imgWrap.className = 'match-pairs-img-wrap';
-      const img = document.createElement('img');
-      img.src = question.imageData;
-      img.dataset.zoomable = '1';
-      imgWrap.appendChild(img);
-
-      const pairsWrap = document.createElement('div');
-      pairsWrap.className = 'match-pairs-content-wrap';
-      if (!showReveal) {
-        renderMatchPairsPreview(pairsWrap, question.leftItems || [], question.rightOptions || []);
-      } else {
-        renderMatchPairsReveal(pairsWrap, question.pairs || []);
-      }
-
-      overlay.append(imgWrap, pairsWrap);
-      hostQuestionAnswersEl.appendChild(overlay);
+    const pairsWrap = document.createElement('div');
+    pairsWrap.className = 'match-pairs-content-wrap';
+    pairsWrap.style.width = '100%';
+    if (!showReveal) {
+      renderMatchPairsPreview(pairsWrap, question.leftItems || [], question.rightOptions || []);
     } else {
-      if (!showReveal) {
-        renderMatchPairsPreview(hostQuestionAnswersEl, question.leftItems || [], question.rightOptions || []);
-      } else {
-        renderMatchPairsReveal(hostQuestionAnswersEl, question.pairs || []);
-      }
+      renderMatchPairsReveal(pairsWrap, question.pairs || []);
     }
+    hostQuestionAnswersEl.appendChild(pairsWrap);
     return;
   }
 
