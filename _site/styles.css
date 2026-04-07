@@ -508,11 +508,12 @@ textarea {
 #hostQuestionCard[data-qtype="multi"] #hostQuestionAnswers.project-answers label.answer-row,
 #hostQuestionCard[data-qtype="tf"] #hostQuestionAnswers.project-answers label.answer-row {
   gap: 0;
-  align-self: center;
+  align-self: stretch;
   justify-content: center;
   height: auto;
-  width: auto;
-  flex: 0 1 auto;
+  flex: 1 1 300px;
+  max-width: calc(50% - 0.65rem);
+  min-height: 60px;
   padding: .85rem 1.6rem;
   margin: 0;
   white-space: normal;
@@ -608,13 +609,23 @@ textarea {
 }
 
 /* 1. Remove white background/border and center the container */
-#hostQuestionCard .pin-preview,
-#hostQuestionCard .question-image-preview {
+#hostQuestionCard .pin-preview {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
   margin: 0 auto !important;
   width: fit-content !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#hostQuestionCard .question-image-preview {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  margin: 0 auto !important;
+  width: 100% !important;
   display: flex;
   justify-content: center;
   align-items: center;
