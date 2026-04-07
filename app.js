@@ -840,10 +840,25 @@ function renderPromptTypesList() {
     .join('');
 }
 
+function syncCustomGoalFieldState() {
+  const goalEl = document.getElementById('promptGoal');
+  const customGoalEl = document.getElementById('promptGoalCustom');
+  if (!(goalEl instanceof HTMLSelectElement) || !(customGoalEl instanceof HTMLTextAreaElement)) return;
+  const isCustom = goalEl.value === 'custom';
+  customGoalEl.classList.toggle('hidden', !isCustom);
+  customGoalEl.disabled = !isCustom;
+  customGoalEl.setAttribute('aria-hidden', isCustom ? 'false' : 'true');
+}
+
 function bindBuilderEvents() {
   renderPromptTypesList();
   if (exportPromptBtn) {
     exportPromptBtn.addEventListener('click', exportCreationPrompt);
+  }
+  const goalEl = document.getElementById('promptGoal');
+  if (goalEl instanceof HTMLSelectElement) {
+    goalEl.addEventListener('change', syncCustomGoalFieldState);
+    syncCustomGoalFieldState();
   }
   const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
   const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
@@ -3047,8 +3062,10 @@ async function exportCreationPrompt() {
   const audio = document.getElementById('promptAudio')?.value;
   const answers = document.getElementById('promptAnswerType')?.value;
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
+  const customGoalEl = document.getElementById('promptGoalCustom') instanceof HTMLTextAreaElement ? document.getElementById('promptGoalCustom') : null;
   const goal = goalEl?.value;
   const goalText = goalEl?.options[goalEl.selectedIndex]?.text;
+  const customGoalText = customGoalEl?.value.trim();
 
   if (!theme) {
     alert('Please enter a theme for the quiz!');
@@ -3065,7 +3082,16 @@ async function exportCreationPrompt() {
   cleanRequest.includeImages = images === 'yes';
   cleanRequest.includeAudio = audio === 'yes';
   cleanRequest.answerTypes = answers;
-  if (goalText) cleanRequest.goal = goalText;
+  if (goal === 'custom') {
+    if (!customGoalText) {
+      alert('Please enter a custom pedagogical goal before generating the prompt.');
+      customGoalEl?.focus();
+      return;
+    }
+    cleanRequest.goal = customGoalText;
+  } else if (goalText) {
+    cleanRequest.goal = goalText;
+  }
 
   const typesMode = document.getElementById('promptTypesMode')?.value;
   const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked'))
@@ -3132,7 +3158,7 @@ async function exportCreationPrompt() {
     'Prefer short, clear prompt text and concise answer choices.'
   ];
   const qualityGoals = [
-    `Prioritize: ${goalText || 'balanced scaffold + retrieval practice'}.`,
+    `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
     'Use pedagogically meaningful distractors and progression.',
     'Keep language level aligned to request.',
     'Avoid redundant narration and filler text.'
