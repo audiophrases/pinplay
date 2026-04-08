@@ -29,8 +29,7 @@
           "text": "Bird",
           "correct": false
         }
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q2-multi",
@@ -60,8 +59,7 @@
           "text": "Broccoli",
           "correct": false
         }
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q3-tf",
@@ -83,8 +81,7 @@
           "text": "False",
           "correct": false
         }
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q4-text",
@@ -101,9 +98,7 @@
         "red",
         "crimson",
         "scarlet"
-      ],
-      "ttsLanguage": "FR",
-      "language": "fr-FR-DeniseNeural"
+      ]
     },
     {
       "id": "q5-context",
@@ -119,8 +114,7 @@
       "gaps": [
         "market",
         "apples"
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q6-match",
@@ -146,9 +140,7 @@
           "left": "Cow",
           "right": "Moo"
         }
-      ],
-      "ttsLanguage": "CA",
-      "language": "ca-ES-JoanaNeural"
+      ]
     },
     {
       "id": "q7-error",
@@ -164,8 +156,7 @@
       "corrected": "He goes to school every day.",
       "correctedVariants": [
         "He goes to school every day."
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q8-open",
@@ -177,9 +168,7 @@
       "audioMode": "tts",
       "audioText": "Please describe the weather you see.",
       "imageKeyword": "sunny blue sky",
-      "imageData": "",
-      "ttsLanguage": "OTHER",
-      "language": "ja-JP-NanamiNeural"
+      "imageData": ""
     },
     {
       "id": "q9-speaking",
@@ -191,8 +180,7 @@
       "audioMode": "tts",
       "audioText": "Tell me something about this image.",
       "imageKeyword": "robot waving",
-      "imageData": "",
-      "ttsLanguage": "EN"
+      "imageData": ""
     },
     {
       "id": "q10-puzzle",
@@ -212,8 +200,7 @@
         "on",
         "the",
         "mat"
-      ],
-      "ttsLanguage": "EN"
+      ]
     },
     {
       "id": "q11-slider",
@@ -230,8 +217,7 @@
       "max": 50,
       "target": 12,
       "margin": "low",
-      "unit": "books",
-      "ttsLanguage": "EN"
+      "unit": "books"
     },
     {
       "id": "q12-pin",
@@ -256,22 +242,7 @@
           "r": 6
         }
       ],
-      "pinMode": "all",
-      "ttsLanguage": "EN"
-    },
-    {
-      "id": "q13-voice-record",
-      "type": "voice_record",
-      "prompt": "Record yourself saying: I can describe this image in one sentence.",
-      "points": 1000,
-      "timeLimit": 0,
-      "audioEnabled": true,
-      "audioMode": "tts",
-      "audioText": "Please record your voice and say: I can describe this image in one sentence.",
-      "ttsLanguage": "OTHER",
-      "language": "es-ES-ElviraNeural",
-      "imageKeyword": "student speaking into microphone",
-      "imageData": ""
+      "pinMode": "all"
     }
   ],
   "language": "en-US-JennyNeural"

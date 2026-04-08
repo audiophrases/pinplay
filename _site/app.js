@@ -5,11 +5,9 @@ const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
-const TEMPLATE_ALL_13_TYPES = {
+const TEMPLATE_ALL_12_TYPES = {
   "version": 3,
   "title": "AI Quiz Reference",
-  "ttsLanguage": "EN",
-  "language": "en-US-AriaNeural",
   "readAllQuestionsAloud": true,
   "questions": [
     {
@@ -21,7 +19,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "What animal is this?",
-      "ttsLanguage": "EN",
       "imageKeyword": "cat face",
       "imageData": "",
       "answers": [
@@ -39,7 +36,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Select all fruits shown.",
-      "ttsLanguage": "EN",
       "imageKeyword": "basket of fruit",
       "imageData": "",
       "answers": [
@@ -58,7 +54,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Is this a mountain?",
-      "ttsLanguage": "EN",
       "imageKeyword": "snowy mountain peak",
       "imageData": "",
       "answers": [
@@ -75,8 +70,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "What color is this car?",
-      "ttsLanguage": "FR",
-      "language": "fr-FR-DeniseNeural",
       "imageKeyword": "red sports car",
       "imageData": "",
       "accepted": ["red", "crimson", "scarlet"]
@@ -90,7 +83,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "I went to the blank and bought some blank.",
-      "ttsLanguage": "EN",
       "imageKeyword": "supermarket aisle",
       "imageData": "",
       "gaps": ["market", "apples"]
@@ -104,8 +96,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Match these animals with their sounds.",
-      "ttsLanguage": "CA",
-      "language": "ca-ES-JoanaNeural",
       "imageKeyword": "farm animals group",
       "imageData": "",
       "pairs": [
@@ -123,7 +113,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "He go to school every days.",
-      "ttsLanguage": "EN",
       "imageKeyword": "boy going to school",
       "imageData": "",
       "corrected": "He goes to school every day.",
@@ -138,8 +127,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Please describe the weather you see.",
-      "ttsLanguage": "OTHER",
-      "language": "ja-JP-NanamiNeural",
       "imageKeyword": "sunny blue sky",
       "imageData": ""
     },
@@ -152,7 +139,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Tell me something about this image.",
-      "ttsLanguage": "EN",
       "imageKeyword": "robot waving",
       "imageData": ""
     },
@@ -165,7 +151,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Reorder these words.",
-      "ttsLanguage": "EN",
       "imageKeyword": "cat on a mat",
       "imageData": "",
       "items": ["The", "cat", "sat", "on", "the", "mat"]
@@ -179,7 +164,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "How many books?",
-      "ttsLanguage": "EN",
       "imageKeyword": "stack of books",
       "imageData": "",
       "min": 0,
@@ -197,7 +181,6 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Where are the joysticks on this controller?",
-      "ttsLanguage": "EN",
       "imageKeyword": "game controller top view",
       "imageData": "",
       "zones": [
@@ -205,20 +188,6 @@ const TEMPLATE_ALL_13_TYPES = {
         { "x": 43.4, "y": 24.8, "r": 6 }
       ],
       "pinMode": "all"
-    },
-    {
-      "id": "q13-voice-record",
-      "type": "voice_record",
-      "prompt": "Record yourself saying: I can describe this image in one sentence.",
-      "points": 1000,
-      "timeLimit": 0,
-      "audioEnabled": true,
-      "audioMode": "tts",
-      "audioText": "Please record your voice and say: I can describe this image in one sentence.",
-      "ttsLanguage": "OTHER",
-      "language": "es-ES-ElviraNeural",
-      "imageKeyword": "student speaking into microphone",
-      "imageData": ""
     }
   ]
 };
@@ -1136,10 +1105,6 @@ function bindBuilderEvents() {
   exportBtn.addEventListener('click', async () => {
     try {
       syncQuizFromUI();
-      const missingOtherVoice = collectMissingOtherTtsVoiceIssues(quiz);
-      if (missingOtherVoice.length) {
-        setStatus(hostStatusEl, `⚠️ ${missingOtherVoice.join(', ')} use ttsLanguage:"OTHER" without a valid Edge voice code. Default voice will be used on export.`, 'checking');
-      }
       await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
       downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
@@ -2298,10 +2263,6 @@ function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) 
   return getVoiceForTtsLanguage(fallbackLanguage);
 }
 
-function isLikelyEdgeVoiceId(value) {
-  return /^[a-z]{2,3}-[A-Z]{2,4}-[A-Za-z][A-Za-z0-9]*Neural$/.test(String(value || '').trim());
-}
-
 function getHearQuestionsMode(targetQuiz) {
   const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
   if (raw === 'NONE' || !raw) return 'NONE';
@@ -3143,7 +3104,7 @@ async function exportCreationPrompt() {
     .join('\n');
 
   const templateAllowedTypes = allowedTypes.filter((type) => TEMPLATE_QUESTION_TYPES.includes(type));
-  const filteredTemplateQuestions = TEMPLATE_ALL_13_TYPES.questions.filter((q) => templateAllowedTypes.includes(q.type));
+  const filteredTemplateQuestions = TEMPLATE_ALL_12_TYPES.questions.filter((q) => templateAllowedTypes.includes(q.type));
   const relevantTypeExplanations = Object.fromEntries(
     allowedTypes
       .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
@@ -3160,7 +3121,7 @@ async function exportCreationPrompt() {
       ? "Use a specific 2-5 word visual target. Keep imageData empty."
       : undefined,
     audioMode: cleanRequest.audio === 'some'
-      ? "For TTS questions include audioMode:'tts', audioText, question-level ttsLanguage, and question-level language when ttsLanguage:'OTHER'. Keep audioData empty."
+      ? "Use audioMode 'tts', keep audioData empty, and set audioText intentionally (can differ from prompt for dictation/listening retrieval)."
       : undefined,
     videoEmbed: cleanRequest.video === 'some'
       ? "Use 'media' object with kind: 'video', provider: 'youtube'|'vimeo'|'direct', and url. Set startAt/endAt in seconds if relevant."
@@ -3188,19 +3149,12 @@ async function exportCreationPrompt() {
     'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
     cleanRequest.audio === 'some'
-      ? 'For generated audio use audioMode:"tts", audioData:"", meaningful audioText, and always include question-level ttsLanguage.'
+      ? 'For generated audio use audioMode:"tts", audioData:"", and meaningful audioText.'
       : 'Do not add question audio fields unless required by request.',
-    cleanRequest.audio === 'some'
-      ? 'If question ttsLanguage is "OTHER", question language must be an exact Edge voice ID (format like "xx-XX-NameNeural").'
-      : undefined,
-    cleanRequest.audio === 'some'
-      ? 'For mixed-language quizzes, set ttsLanguage per question (and language only for OTHER) instead of relying only on quiz-level defaults.'
-      : undefined,
     cleanRequest.images === 'no' ? 'Do NOT include imageKeyword or imageData.' : 'Keep imageData empty.',
     cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
-  const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
   if (blockedTypesText) {
     mustFollowRules.push(`Do NOT use blocked types: ${blockedTypesText}.`);
   }
@@ -3208,8 +3162,7 @@ async function exportCreationPrompt() {
     'Output only one JSON object.',
     'Follow exampleTemplate key shapes.',
     'Keep ids stable and unique.',
-    'Prefer short, clear prompt text and concise answer choices.',
-    'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.'
+    'Prefer short, clear prompt text and concise answer choices.'
   ];
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
@@ -3223,7 +3176,7 @@ async function exportCreationPrompt() {
     textualSummary,
     '',
     'Must-follow rules',
-    normalizedMustFollowRules.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    mustFollowRules.map((r, i) => `${i + 1}. ${r}`).join('\n'),
     '',
     'Output contract',
     outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n'),
@@ -3248,7 +3201,7 @@ async function exportCreationPrompt() {
       audioPedagogicalUse
     },
     exampleTemplate: {
-      ...TEMPLATE_ALL_13_TYPES,
+      ...TEMPLATE_ALL_12_TYPES,
       questions: filteredTemplateQuestions
     }
   };
@@ -8766,22 +8719,15 @@ function normalizePinZones(question) {
 }
 
 function normalizeQuizForLive(raw) {
-  const quizTtsLanguage = normalizeTtsLanguage(raw.ttsLanguage);
-  const quizVoice = normalizeTtsVoice(raw.language, quizTtsLanguage);
   const normalized = {
     version: 1,
     title: String(raw.title || '').slice(0, 1200),
-    ttsLanguage: quizTtsLanguage,
-    language: quizVoice,
+    ttsLanguage: normalizeTtsLanguage(raw.ttsLanguage),
     readAllQuestionsAloud: !!raw.readAllQuestionsAloud,
     questions: [],
   };
 
   (raw.questions || []).forEach((q) => {
-    const questionLangSeed = q.ttsLanguage || (q.language ? guessTtsLanguageFromVoice(q.language) : quizTtsLanguage);
-    const questionTtsLanguage = normalizeTtsLanguage(questionLangSeed);
-    const preferredQuestionVoice = q.language || (questionTtsLanguage === 'OTHER' ? quizVoice : '');
-    const questionVoice = normalizeTtsVoice(preferredQuestionVoice, questionTtsLanguage);
     const base = {
       id: String(q.id || crypto.randomUUID()),
       type: q.type,
@@ -8792,16 +8738,12 @@ function normalizeQuizForLive(raw) {
       audioEnabled: !!q.audioEnabled || q.type === 'audio',
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1200),
-      ttsLanguage: questionTtsLanguage,
-      language: questionVoice,
+      ttsLanguage: normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language)),
+      language: normalizeTtsVoice(q.language, q.ttsLanguage || guessTtsLanguageFromVoice(q.language)),
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
       media: normalizeQuestionMedia(q.media),
     };
-
-    if (base.ttsLanguage === 'OTHER' && !String(q.language || '').trim() && !String(raw.language || '').trim()) {
-      base._ttsVoiceMissing = true;
-    }
 
     if (['mcq', 'multi', 'audio'].includes(q.type)) {
       const answers = (q.answers || [])
@@ -8940,22 +8882,6 @@ function normalizeQuizForLive(raw) {
   }
 
   return normalized;
-}
-
-function collectMissingOtherTtsVoiceIssues(targetQuiz) {
-  const issues = [];
-  if (!targetQuiz || !Array.isArray(targetQuiz.questions)) return issues;
-  targetQuiz.questions.forEach((q, idx) => {
-    if (!q || !supportsQuestionAudio(q.type)) return;
-    if (String(q.audioMode || '').toLowerCase() !== 'tts') return;
-    const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || targetQuiz.ttsLanguage);
-    if (ttsLanguage !== 'OTHER') return;
-    const rawVoice = String(q.language || '').trim();
-    if (!rawVoice || !isLikelyEdgeVoiceId(rawVoice)) {
-      issues.push(`Q${idx + 1}`);
-    }
-  });
-  return issues;
 }
 
 async function blobToDataUrl(blob) {
