@@ -15,6 +15,8 @@
       "audioMode": "tts",
       "audioText": "What animal is this?",
       "imageKeyword": "cat face",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         {
@@ -42,6 +44,8 @@
       "audioMode": "tts",
       "audioText": "Select all fruits shown.",
       "imageKeyword": "basket of fruit",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         {
@@ -73,6 +77,8 @@
       "audioMode": "tts",
       "audioText": "True or False indicator for this mountain",
       "imageKeyword": "snowy mountain peak",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         {
@@ -96,6 +102,8 @@
       "audioMode": "tts",
       "audioText": "What color is this car?",
       "imageKeyword": "red sports car",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "accepted": [
         "red",
@@ -115,6 +123,8 @@
       "audioMode": "tts",
       "audioText": "I went to the blank and bought some blank.",
       "imageKeyword": "supermarket aisle",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "gaps": [
         "market",
@@ -132,6 +142,8 @@
       "audioMode": "tts",
       "audioText": "Match these animals with their correct sounds.",
       "imageKeyword": "farm animals group",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "pairs": [
         {
@@ -160,6 +172,8 @@
       "audioMode": "tts",
       "audioText": "Find the error in this sentence.",
       "imageKeyword": "boy going to school",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": [
@@ -177,6 +191,8 @@
       "audioMode": "tts",
       "audioText": "Please describe the weather you see.",
       "imageKeyword": "sunny blue sky",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "ttsLanguage": "OTHER",
       "language": "ja-JP-NanamiNeural"
@@ -191,6 +207,8 @@
       "audioMode": "tts",
       "audioText": "Tell me something about this image.",
       "imageKeyword": "robot waving",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "ttsLanguage": "EN"
     },
@@ -204,6 +222,8 @@
       "audioMode": "tts",
       "audioText": "Reorder these words.",
       "imageKeyword": "cat on a mat",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "items": [
         "The",
@@ -225,6 +245,8 @@
       "audioMode": "tts",
       "audioText": "How many books?",
       "imageKeyword": "stack of books",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "min": 0,
       "max": 50,
@@ -243,6 +265,8 @@
       "audioMode": "tts",
       "audioText": "Where are the joysticks on this controller?",
       "imageKeyword": "game controller top view",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "zones": [
         {

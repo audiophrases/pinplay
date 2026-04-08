@@ -23,6 +23,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "What animal is this?",
       "ttsLanguage": "EN",
       "imageKeyword": "cat face",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         { "text": "Cat", "correct": true },
@@ -41,6 +43,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "Select all fruits shown.",
       "ttsLanguage": "EN",
       "imageKeyword": "basket of fruit",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         { "text": "Apple", "correct": true },
@@ -60,6 +64,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "Is this a mountain?",
       "ttsLanguage": "EN",
       "imageKeyword": "snowy mountain peak",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "answers": [
         { "text": "True", "correct": true },
@@ -78,6 +84,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "ttsLanguage": "FR",
       "language": "fr-FR-DeniseNeural",
       "imageKeyword": "red sports car",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "accepted": ["red", "crimson", "scarlet"]
     },
@@ -92,6 +100,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "I went to the blank and bought some blank.",
       "ttsLanguage": "EN",
       "imageKeyword": "supermarket aisle",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "gaps": ["market", "apples"]
     },
@@ -107,6 +117,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "ttsLanguage": "CA",
       "language": "ca-ES-JoanaNeural",
       "imageKeyword": "farm animals group",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "pairs": [
         { "left": "Dog", "right": "Bark" },
@@ -125,6 +137,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "He go to school every days.",
       "ttsLanguage": "EN",
       "imageKeyword": "boy going to school",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": ["He goes to school every day."]
@@ -167,6 +181,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "Reorder these words.",
       "ttsLanguage": "EN",
       "imageKeyword": "cat on a mat",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "items": ["The", "cat", "sat", "on", "the", "mat"]
     },
@@ -181,6 +197,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "How many books?",
       "ttsLanguage": "EN",
       "imageKeyword": "stack of books",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "min": 0,
       "max": 50,
@@ -199,6 +217,8 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioText": "Where are the joysticks on this controller?",
       "ttsLanguage": "EN",
       "imageKeyword": "game controller top view",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
       "imageData": "",
       "zones": [
         { "x": 57.2, "y": 25.1, "r": 6 },
@@ -845,6 +865,11 @@ function setSectionCollapsed(triggerEl, bodyEl, collapsed) {
 
 // ---------- Builder ----------
 function addQuestionToBuilder(question) {
+  if (question && typeof question === 'object') {
+    if (typeof question.imageKeyword !== 'string') question.imageKeyword = '';
+    if (typeof question.videoKeyword !== 'string') question.videoKeyword = '';
+    if (typeof question.videoProviderPreference !== 'string') question.videoProviderPreference = '';
+  }
   quiz.questions.push(question);
   pendingScrollQuestionIndex = quiz.questions.length - 1;
   renderBuilder();
@@ -1933,6 +1958,15 @@ function renderBuilder() {
         </div>
         <label class="top-space">Image keyword (auto-search on save)</label>
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. map of Spain, human heart" />
+        <label class="top-space">Video keyword (auto-search on save)</label>
+        <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. Spain map flyover, human heart animation" />
+        <label class="top-space">Video provider preference (optional)</label>
+        <select data-q="${idx}" data-field="videoProviderPreference">
+          <option value="" ${!q.videoProviderPreference ? 'selected' : ''}>Auto</option>
+          <option value="youtube" ${q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
+          <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
+          <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
+        </select>
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
           <button type="button" class="btn" data-toggle-pin-mode="${idx}">${q.pinMode === 'any' ? 'Any pin (1 spot is enough)' : 'All pins (must pin all spots)'}</button>        </div>
@@ -1969,6 +2003,15 @@ function renderBuilder() {
         <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
         <label class="top-space">Image keyword (auto-search on save)</label>
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
+        <label class="top-space">Video keyword (auto-search on save)</label>
+        <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. volcano eruption clip, Eiffel tower drone shot" />
+        <label class="top-space">Video provider preference (optional)</label>
+        <select data-q="${idx}" data-field="videoProviderPreference">
+          <option value="" ${!q.videoProviderPreference ? 'selected' : ''}>Auto</option>
+          <option value="youtube" ${q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
+          <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
+          <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
+        </select>
       `;
       if (q.imageData) {
         specific += `
@@ -2594,6 +2637,12 @@ function syncQuizFromUI() {
     // Sync imageKeyword from form
     const imageKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="imageKeyword"]`);
     if (imageKeywordEl) q.imageKeyword = String(imageKeywordEl.value || '').trim().slice(0, 140);
+    const videoKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoKeyword"]`);
+    if (videoKeywordEl) q.videoKeyword = String(videoKeywordEl.value || '').trim().slice(0, 140);
+    const videoProviderPreferenceEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoProviderPreference"]`);
+    q.videoProviderPreference = ['youtube', 'vimeo', 'direct'].includes(String(videoProviderPreferenceEl?.value || ''))
+      ? String(videoProviderPreferenceEl.value)
+      : '';
 
     if (q.type === 'text') {
       const accepted = [];
@@ -3178,11 +3227,14 @@ async function exportCreationPrompt() {
     imageKeyword: cleanRequest.images === 'some'
       ? "Use a specific 2-5 word visual target. Keep imageData empty."
       : undefined,
+    videoKeyword: cleanRequest.video === 'some'
+      ? "When you want auto-search on save, set videoKeyword (2-7 words) and optional videoProviderPreference:'youtube'|'vimeo'|'direct'."
+      : undefined,
     audioMode: cleanRequest.audio === 'some'
       ? "For TTS questions include audioMode:'tts', audioText, question-level ttsLanguage, and question-level language when ttsLanguage:'OTHER'. Keep audioData empty."
       : undefined,
     videoEmbed: cleanRequest.video === 'some'
-      ? "Use 'media' object with kind: 'video', provider: 'youtube'|'vimeo'|'direct', and url. Set startAt/endAt in seconds if relevant."
+      ? "Use 'media' object with kind:'video', provider:'youtube'|'vimeo'|'direct', and url for explicit videos. If media.url exists, it overrides auto-search keywords."
       : undefined,
     readAllQuestionsAloud: cleanRequest.audio === 'some'
       ? "Set true only when broad accessibility/listening repetition is desired."
@@ -3216,6 +3268,9 @@ async function exportCreationPrompt() {
       ? 'For mixed-language quizzes, set ttsLanguage per question (and language only for OTHER) instead of relying only on quiz-level defaults.'
       : undefined,
     cleanRequest.images === 'no' ? 'Do NOT include imageKeyword or imageData.' : 'Keep imageData empty.',
+    cleanRequest.video === 'some'
+      ? 'If both imageKeyword and videoKeyword are present, video takes precedence and image can be cleared when video is auto-filled.'
+      : undefined,
     cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
@@ -8814,6 +8869,9 @@ function normalizeQuizForLive(raw) {
       ttsLanguage: questionTtsLanguage,
       language: questionVoice,
       audioData: String(q.audioData || ''),
+      imageKeyword: String(q.imageKeyword || '').trim().slice(0, 140),
+      videoKeyword: String(q.videoKeyword || '').trim().slice(0, 140),
+      videoProviderPreference: ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || '')) ? String(q.videoProviderPreference) : '',
       imageData: String(q.imageData || ''),
       media: normalizeQuestionMedia(q.media),
     };
@@ -9061,6 +9119,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   const readAllQuestionsAloud = !!quiz.readAllQuestionsAloud;
   let converted = 0;
   let uploaded = 0;
+  let mediaAutoUpdated = false;
 
   // Show progress indicator (defined early so setProgress is available everywhere)
   const progressEl = document.getElementById('mediaProgressEl');
@@ -9072,13 +9131,37 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   };
 
   // Auto-fill missing images for questions with imageKeyword set
-  const missing = questions.filter(q => q && !q.imageData && q.imageKeyword).length;
-  if (missing > 0) {
-    setProgress(`🔍 Auto-searching images for ${missing} question(s)...`);
+  const missingVideo = questions.filter((q) => {
+    if (!q || q.type === 'pin') return false;
+    if (normalizeQuestionMedia(q.media).kind === 'video') return false;
+    return !!String(q.videoKeyword || '').trim();
+  }).length;
+  if (missingVideo > 0) {
+    setProgress(`🎬 Auto-searching videos for ${missingVideo} question(s)...`);
+    const result = await autoFillVideos(quiz, ({ index, total, status }) => {
+      setProgress(`🎬 Searching videos: ${index + 1}/${total} — ${status}`);
+    });
+    if (result.filled > 0) {
+      mediaAutoUpdated = true;
+      setProgress(`✅ Auto-filled ${result.filled} video(s)`);
+    }
+  } else {
+    const noKeywordVideos = questions.filter((q) => q && q.type !== 'pin' && normalizeQuestionMedia(q.media).kind !== 'video' && !String(q.videoKeyword || '').trim()).length;
+    if (noKeywordVideos > 0) {
+      setProgress(`ℹ️ Skipped video auto-fill for ${noKeywordVideos} question(s): missing videoKeyword`, 'checking');
+    }
+  }
+
+  const missingImages = questions.filter(q => q && !q.imageData && q.imageKeyword && normalizeQuestionMedia(q.media).kind !== 'video').length;
+  if (missingImages > 0) {
+    setProgress(`🔍 Auto-searching images for ${missingImages} question(s)...`);
     const result = await autoFillImages(quiz, ({ index, total, status }) => {
       setProgress(`🔍 Searching images: ${index + 1}/${total} — ${status}`);
     });
-    if (result.filled > 0) setProgress(`✅ Auto-filled ${result.filled} image(s)`);
+    if (result.filled > 0) {
+      mediaAutoUpdated = true;
+      setProgress(`✅ Auto-filled ${result.filled} image(s)`);
+    }
   }
 
   const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -9178,7 +9261,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   }
 
   // Update progress
-  if (uploaded > 0 || converted > 0) {
+  if (uploaded > 0 || converted > 0 || mediaAutoUpdated) {
     renderBuilder();
     setProgress(`✅ Media synced: ${uploaded} uploaded, ${converted} generated`, 'ok');
   } else if (strictMediaCheck) {
@@ -9314,7 +9397,7 @@ async function autoFillImages(quizData, onProgress) {
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
-    if (!q || q.imageData) { skipped++; continue; }
+    if (!q || q.imageData || normalizeQuestionMedia(q.media).kind === 'video') { skipped++; continue; }
     // Only use the explicit imageKeyword field — if empty, skip (creator doesn't want auto-image)
     const rawQuery = String(q.imageKeyword || '').trim().slice(0, 140);
     if (!rawQuery) { skipped++; continue; }
@@ -9376,6 +9459,60 @@ async function autoFillImages(quizData, onProgress) {
     }
   }
 
+  return { filled, skipped };
+}
+
+/**
+ * Auto-fill missing videos for questions that have no video media but have a videoKeyword set.
+ * Preserves the existing restriction that pin questions do not support question video.
+ * @param {object} quizData
+ * @param {function} onProgress - Optional callback({ index, total, status })
+ * @returns {{ filled: number, skipped: number }}
+ */
+async function autoFillVideos(quizData, onProgress) {
+  const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
+  let filled = 0;
+  let skipped = 0;
+  const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+
+  for (let i = 0; i < questions.length; i += 1) {
+    const q = questions[i];
+    if (!q || q.type === 'pin') { skipped += 1; continue; }
+    if (normalizeQuestionMedia(q.media).kind === 'video') { skipped += 1; continue; }
+
+    const keyword = String(q.videoKeyword || '').trim().slice(0, 140);
+    if (!keyword) { skipped += 1; continue; }
+    if (!beUrl) { skipped += 1; continue; }
+
+    onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
+    try {
+      const params = new URLSearchParams();
+      params.set('q', keyword);
+      params.set('count', '5');
+      const providerPref = ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || ''))
+        ? String(q.videoProviderPreference)
+        : '';
+      if (providerPref) params.set('provider', providerPref);
+      const res = await fetch(`${beUrl}/api/videos/search?${params.toString()}`, { method: 'GET' });
+      const data = await res.json();
+      const candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url));
+      if (!candidate) { skipped += 1; continue; }
+      const provider = ['youtube', 'vimeo', 'direct'].includes(String(candidate.provider || ''))
+        ? String(candidate.provider)
+        : detectVideoProvider(candidate.url || '');
+      q.media = normalizeQuestionMedia({
+        kind: 'video',
+        provider,
+        url: String(candidate.url || ''),
+        startAt: 0,
+        endAt: null,
+      });
+      replaceQuestionImageData(q, '');
+      filled += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
   return { filled, skipped };
 }
 
