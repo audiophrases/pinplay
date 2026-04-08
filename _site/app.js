@@ -3228,13 +3228,13 @@ async function exportCreationPrompt() {
       ? "Use a specific 2-5 word visual target. Keep imageData empty."
       : undefined,
     videoKeyword: cleanRequest.video === 'some'
-      ? "When you want auto-search on save, set videoKeyword (2-7 words) and optional videoProviderPreference:'youtube'|'vimeo'|'direct'."
+      ? "When video:'some', you MUST provide videoKeyword (2-7 words) as the primary signal for auto-search; videoProviderPreference:'youtube'|'vimeo'|'direct' is optional. Do NOT include media.url unless the user explicitly asks for a fixed/manual URL."
       : undefined,
     audioMode: cleanRequest.audio === 'some'
       ? "For TTS questions include audioMode:'tts', audioText, question-level ttsLanguage, and question-level language when ttsLanguage:'OTHER'. Keep audioData empty."
       : undefined,
     videoEmbed: cleanRequest.video === 'some'
-      ? "Use 'media' object with kind:'video', provider:'youtube'|'vimeo'|'direct', and url for explicit videos. If media.url exists, it overrides auto-search keywords."
+      ? "Strict exception path: use media.url only for user-supplied or manually verified links. Default to keyword-first flow with videoKeyword for auto-add."
       : undefined,
     readAllQuestionsAloud: cleanRequest.audio === 'some'
       ? "Set true only when broad accessibility/listening repetition is desired."
@@ -3271,6 +3271,15 @@ async function exportCreationPrompt() {
     cleanRequest.video === 'some'
       ? 'If both imageKeyword and videoKeyword are present, video takes precedence and image can be cleared when video is auto-filled.'
       : undefined,
+    cleanRequest.video === 'some'
+      ? 'Prefer videoKeyword over explicit media.url.'
+      : undefined,
+    cleanRequest.video === 'some'
+      ? 'Do not invent or guess YouTube/Vimeo URLs.'
+      : undefined,
+    cleanRequest.video === 'some'
+      ? 'If both videoKeyword and media.url are present, keep videoKeyword as source of truth unless the user explicitly asked for a fixed link.'
+      : undefined,
     cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
@@ -3283,7 +3292,8 @@ async function exportCreationPrompt() {
     'Follow exampleTemplate key shapes.',
     'Keep ids stable and unique.',
     'Prefer short, clear prompt text and concise answer choices.',
-    'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.'
+    'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.',
+    'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.'
   ];
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
