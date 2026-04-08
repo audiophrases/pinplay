@@ -1332,6 +1332,143 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/videos/search' && request.method === 'GET') {
+      const query = String(url.searchParams.get('q') || '').trim();
+      const count = clamp(Number(url.searchParams.get('count') || 8), 1, 40);
+      const preferredProviderRaw = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+      const preferredProvider = ['youtube', 'vimeo', 'direct'].includes(preferredProviderRaw) ? preferredProviderRaw : '';
+      const maxDurationSec = clamp(Number(url.searchParams.get('maxDurationSec') || 900), 10, 60 * 60);
+      if (!query) return json({ error: 'q required.' }, 400);
+
+      const normalized = [];
+      const seen = new Set();
+      const addItem = (item) => {
+        const urlValue = String(item?.url || '').trim();
+        const provider = ['youtube', 'vimeo', 'direct'].includes(String(item?.provider || '').trim()) ? String(item.provider).trim() : detectVideoProvider(urlValue);
+        const durationSec = item?.durationSec == null ? null : Number(item.durationSec);
+        if (!isHttpUrl(urlValue)) return;
+        if (!['youtube', 'vimeo', 'direct'].includes(provider)) return;
+        if (durationSec != null && Number.isFinite(durationSec) && durationSec > maxDurationSec) return;
+        if (seen.has(urlValue)) return;
+        seen.add(urlValue);
+        normalized.push({
+          url: urlValue,
+          provider,
+          title: String(item?.title || '').slice(0, 240),
+          thumb: isHttpUrl(item?.thumb) ? String(item.thumb) : '',
+          durationSec: durationSec != null && Number.isFinite(durationSec) ? Math.max(0, Math.round(durationSec)) : null,
+        });
+      };
+
+      try {
+        // YouTube (requires YOUTUBE_API_KEY)
+        if (!preferredProvider || preferredProvider === 'youtube') {
+          const ytKey = String(env.YOUTUBE_API_KEY || '').trim();
+          if (ytKey) {
+            const ytSearch = new URL('https://www.googleapis.com/youtube/v3/search');
+            ytSearch.searchParams.set('part', 'snippet');
+            ytSearch.searchParams.set('q', query);
+            ytSearch.searchParams.set('safeSearch', 'strict');
+            ytSearch.searchParams.set('type', 'video');
+            ytSearch.searchParams.set('videoEmbeddable', 'true');
+            ytSearch.searchParams.set('videoSyndicated', 'true');
+            ytSearch.searchParams.set('maxResults', String(Math.min(25, count * 2)));
+            ytSearch.searchParams.set('key', ytKey);
+            const ytRes = await fetch(ytSearch.toString(), { method: 'GET' });
+            const ytData = await ytRes.json().catch(() => ({}));
+            const ids = (Array.isArray(ytData?.items) ? ytData.items : [])
+              .map((it) => String(it?.id?.videoId || '').trim())
+              .filter(Boolean);
+            if (ids.length) {
+              const ytVideos = new URL('https://www.googleapis.com/youtube/v3/videos');
+              ytVideos.searchParams.set('part', 'contentDetails,status,snippet');
+              ytVideos.searchParams.set('id', ids.join(','));
+              ytVideos.searchParams.set('key', ytKey);
+              const ytVideosRes = await fetch(ytVideos.toString(), { method: 'GET' });
+              const ytVideosData = await ytVideosRes.json().catch(() => ({}));
+              const ytItems = Array.isArray(ytVideosData?.items) ? ytVideosData.items : [];
+              ytItems.forEach((it) => {
+                const id = String(it?.id || '').trim();
+                if (!id) return;
+                if (it?.status?.embeddable === false) return;
+                addItem({
+                  url: `https://www.youtube.com/watch?v=${id}`,
+                  provider: 'youtube',
+                  title: String(it?.snippet?.title || ''),
+                  thumb: String(it?.snippet?.thumbnails?.medium?.url || it?.snippet?.thumbnails?.default?.url || ''),
+                  durationSec: parseIso8601DurationToSec(it?.contentDetails?.duration),
+                });
+              });
+            }
+          }
+        }
+
+        // Vimeo (requires VIMEO_ACCESS_TOKEN)
+        if ((!preferredProvider || preferredProvider === 'vimeo') && normalized.length < count) {
+          const vimeoToken = String(env.VIMEO_ACCESS_TOKEN || '').trim();
+          if (vimeoToken) {
+            const vimeoSearch = new URL('https://api.vimeo.com/videos');
+            vimeoSearch.searchParams.set('query', query);
+            vimeoSearch.searchParams.set('per_page', String(Math.min(40, count * 2)));
+            vimeoSearch.searchParams.set('sort', 'relevant');
+            vimeoSearch.searchParams.set('filter', 'embeddable');
+            const vimeoRes = await fetch(vimeoSearch.toString(), {
+              method: 'GET',
+              headers: { Authorization: `Bearer ${vimeoToken}` },
+            });
+            const vimeoData = await vimeoRes.json().catch(() => ({}));
+            const vimeoItems = Array.isArray(vimeoData?.data) ? vimeoData.data : [];
+            vimeoItems.forEach((it) => {
+              addItem({
+                url: String(it?.link || ''),
+                provider: 'vimeo',
+                title: String(it?.name || ''),
+                thumb: String(it?.pictures?.sizes?.[2]?.link || it?.pictures?.sizes?.[0]?.link || ''),
+                durationSec: Number(it?.duration || 0),
+              });
+            });
+          }
+        }
+
+        // Direct videos via Pexels videos API (requires PEXELS_API_KEY)
+        if ((!preferredProvider || preferredProvider === 'direct') && normalized.length < count) {
+          const pexelsKey = String(env.PEXELS_API_KEY || '').trim();
+          if (pexelsKey) {
+            const pvUrl = new URL('https://api.pexels.com/videos/search');
+            pvUrl.searchParams.set('query', query);
+            pvUrl.searchParams.set('per_page', String(Math.min(40, count * 2)));
+            pvUrl.searchParams.set('page', '1');
+            pvUrl.searchParams.set('orientation', 'landscape');
+            const pvRes = await fetch(pvUrl.toString(), {
+              method: 'GET',
+              headers: {
+                Authorization: pexelsKey,
+                'User-Agent': 'PinPlay/1.0 (+https://audiophrases.github.io/pinplay/) educational quiz app',
+              },
+            });
+            const pvData = await pvRes.json().catch(() => ({}));
+            const videos = Array.isArray(pvData?.videos) ? pvData.videos : [];
+            videos.forEach((it) => {
+              const bestFile = (Array.isArray(it?.video_files) ? it.video_files : [])
+                .filter((f) => isHttpUrl(f?.link))
+                .sort((a, b) => Number(a?.width || 0) - Number(b?.width || 0))[0];
+              addItem({
+                url: String(bestFile?.link || ''),
+                provider: 'direct',
+                title: String(it?.url || `Pexels video ${it?.id || ''}`),
+                thumb: String(it?.image || ''),
+                durationSec: Number(it?.duration || 0),
+              });
+            });
+          }
+        }
+
+        return json({ items: normalized.slice(0, count) }, 200);
+      } catch (err) {
+        return json({ error: `Video search failed: ${err.message}` }, 502);
+      }
+    }
+
     if (url.pathname === '/api/images/fetch' && request.method === 'POST') {
       const body = await safeJson(request);
       const imageUrl = String(body?.url || '').trim();
@@ -4252,6 +4389,25 @@ function pickRandomName(playersMap) {
 function isHttpUrl(value) {
   const s = String(value || '').trim();
   return /^https?:\/\//i.test(s);
+}
+
+function detectVideoProvider(urlValue) {
+  const value = String(urlValue || '').toLowerCase();
+  if (!value) return 'direct';
+  if (value.includes('youtube.com') || value.includes('youtu.be')) return 'youtube';
+  if (value.includes('vimeo.com')) return 'vimeo';
+  return 'direct';
+}
+
+function parseIso8601DurationToSec(duration) {
+  const value = String(duration || '').trim();
+  if (!value) return null;
+  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+  if (!match) return null;
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  return (hours * 3600) + (minutes * 60) + seconds;
 }
 
 function arrayBufferToBase64(buffer) {
