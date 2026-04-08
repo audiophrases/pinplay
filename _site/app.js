@@ -2337,7 +2337,7 @@ function getVoiceForTtsLanguage(language) {
 
 function normalizeTtsVoice(voice, fallbackLanguage = DEFAULT_EDGE_TTS_LANGUAGE) {
   const raw = String(voice || '').trim();
-  if (EDGE_TTS_VOICE_OPTIONS.includes(raw)) return raw;
+  if (raw && EDGE_TTS_VOICE_OPTIONS.includes(raw)) return raw;
   return getVoiceForTtsLanguage(fallbackLanguage);
 }
 
@@ -2439,7 +2439,7 @@ function buildAudioSettingsMarkup(idx, q) {
     .map((x) => `<option value="${x.value}" ${ttsLanguage === x.value ? 'selected' : ''}>${x.label}</option>`)
     .join('');
 
-  const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : Object.values(EDGE_TTS_LANGUAGE_DEFAULTS).slice(0, 3);
+  const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : [EDGE_TTS_LANGUAGE_DEFAULTS['EN'], EDGE_TTS_LANGUAGE_DEFAULTS['CA'], EDGE_TTS_LANGUAGE_DEFAULTS['FR']];
   const voiceOptions = [...new Set(voiceSource)]
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
     .join('');
@@ -9483,7 +9483,7 @@ async function autoFillVideos(quizData, onProgress) {
   const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
   let filled = 0;
   let skipped = 0;
-  const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+  const beUrl = (loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev').replace(/\/+$/, '');
 
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
