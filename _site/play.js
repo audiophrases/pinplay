@@ -1207,11 +1207,6 @@ function renderPlayerState(state) {
       }
     }
 
-    // context_gap: highlightContextGap already builds per-gap content divs; don't overwrite
-    if (question.type === 'context_gap' && revealEl.querySelectorAll('.student-answer-reveal-content').length > 1) {
-      return;
-    }
-
     // Only update DOM if text actually changed
     const contentEl = revealEl.querySelector('.student-answer-reveal-content');
     if (contentEl && contentEl.textContent !== correctText) {
@@ -3254,57 +3249,14 @@ function showPinFeedback(question, state) {
 
 // Context gap: highlight each input
 function highlightContextGap(question) {
+  // Answer reveal is handled by renderJoinReveal using state.correctAnswer
+  // (question.gaps is not available on the student side).
+  // Only reset highlight styles on the input rows.
   const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
-  const gaps = question.gaps || [];
-  let isIncorrect = false;
-  const correctContents = [];
-
-  fields.forEach((field, idx) => {
-    const val = String(field.value || '').trim().toLowerCase();
-    const accepted = (gaps[idx] || '').split(',').map(s => s.trim().toLowerCase());
+  fields.forEach((field) => {
     const row = field.closest('.answer-row') || field.parentElement;
-    if (!row) return;
-
-    if (!(val && accepted.includes(val))) {
-      isIncorrect = true;
-    }
-
-    const variants = (gaps[idx] || '').split(',').map(s => s.trim());
-    if (variants.length > 0) correctContents.push(variants.join(' | '));
-
-    row.classList.remove('correct-highlight', 'incorrect-highlight');
+    if (row) row.classList.remove('correct-highlight', 'incorrect-highlight');
   });
-
-  if (isIncorrect && correctContents.length > 0) {
-    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-    if (wrap) {
-      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
-      if (revealEl) revealEl.remove();
-
-      revealEl = document.createElement('div');
-      revealEl.className = 'student-answer-reveal';
-      revealEl.dataset.joinCorrectReveal = '1';
-
-      const title = document.createElement('div');
-      title.className = 'student-answer-reveal-title';
-      title.textContent = 'Correct Answer';
-      revealEl.appendChild(title);
-
-      correctContents.forEach(content => {
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'student-answer-reveal-content';
-        contentDiv.textContent = content;
-        revealEl.appendChild(contentDiv);
-      });
-
-      const submissionBox = document.getElementById('joinSubmission');
-      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
-        wrap.insertBefore(revealEl, submissionBox);
-      } else {
-        wrap.appendChild(revealEl);
-      }
-    }
-  }
 }
 
 function highlightPuzzle(question) {
