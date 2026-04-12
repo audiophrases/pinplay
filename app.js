@@ -1960,10 +1960,9 @@ function renderBuilder() {
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. map of Spain, human heart" />
         <label class="top-space">Video keyword (auto-search on save)</label>
         <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. Spain map flyover, human heart animation" />
-        <label class="top-space">Video provider preference (optional)</label>
+        <label class="top-space">Video provider preference</label>
         <select data-q="${idx}" data-field="videoProviderPreference">
-          <option value="" ${!q.videoProviderPreference ? 'selected' : ''}>Auto</option>
-          <option value="youtube" ${q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
+          <option value="youtube" ${!q.videoProviderPreference || q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
           <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
           <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
         </select>
@@ -2005,10 +2004,9 @@ function renderBuilder() {
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
         <label class="top-space">Video keyword (auto-search on save)</label>
         <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. volcano eruption clip, Eiffel tower drone shot" />
-        <label class="top-space">Video provider preference (optional)</label>
+        <label class="top-space">Video provider preference</label>
         <select data-q="${idx}" data-field="videoProviderPreference">
-          <option value="" ${!q.videoProviderPreference ? 'selected' : ''}>Auto</option>
-          <option value="youtube" ${q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
+          <option value="youtube" ${!q.videoProviderPreference || q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
           <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
           <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
         </select>
@@ -9510,21 +9508,29 @@ async function autoFillVideos(quizData, onProgress) {
       params.set('count', '5');
       const providerPref = ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || ''))
         ? String(q.videoProviderPreference)
-        : '';
-      if (providerPref) params.set('provider', providerPref);
+        : 'youtube';
+
+      // Try preferred provider first, then fall back without provider filter
+      const providerAttempts = [providerPref, ''];
       let candidate = null;
-      for (const beUrl of backendCandidates) {
-        try {
-          const res = await fetch(`${beUrl}/api/videos/search?${params.toString()}`, { method: 'GET' });
-          if (!res.ok) {
-            await res.text().catch(() => '');
-            continue;
+      for (const attemptProvider of providerAttempts) {
+        if (candidate) break;
+        const attemptParams = new URLSearchParams(params);
+        if (attemptProvider) attemptParams.set('provider', attemptProvider);
+        else attemptParams.delete('provider');
+        for (const beUrl of backendCandidates) {
+          try {
+            const res = await fetch(`${beUrl}/api/videos/search?${attemptParams.toString()}`, { method: 'GET' });
+            if (!res.ok) {
+              await res.text().catch(() => '');
+              continue;
+            }
+            const data = await res.json().catch(() => ({}));
+            candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url)) || null;
+            if (candidate) break;
+          } catch (err) {
+            console.warn('Video search backend failed:', beUrl, err);
           }
-          const data = await res.json().catch(() => ({}));
-          candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url)) || null;
-          if (candidate) break;
-        } catch (err) {
-          console.warn('Video search backend failed:', beUrl, err);
         }
       }
       if (!candidate) { skipped += 1; continue; }
