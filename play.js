@@ -1161,7 +1161,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
 
     if (!show || !needsReveal) {
       if (revealEl) revealEl.remove();
@@ -1175,6 +1175,7 @@ function renderPlayerState(state) {
       if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
+      if (question.type === 'context_gap') correctText = (question.gaps || []).map((g, i) => `Gap ${i + 1}: ${g}`).join(' | ');
     }
 
     if (!correctText) {
@@ -1204,6 +1205,11 @@ function renderPlayerState(state) {
       } else {
         wrap.appendChild(revealEl);
       }
+    }
+
+    // context_gap: highlightContextGap already builds per-gap content divs; don't overwrite
+    if (question.type === 'context_gap' && revealEl.querySelectorAll('.student-answer-reveal-content').length > 1) {
+      return;
     }
 
     // Only update DOM if text actually changed
