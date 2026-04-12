@@ -2385,6 +2385,11 @@ function normalizeQuizAudioDefaults(targetQuiz) {
   }
 }
 
+function isHttpUrl(value) {
+  const s = String(value || '').trim();
+  return /^https?:\/\//i.test(s);
+}
+
 function detectVideoProvider(url) {
   const raw = String(url || '').toLowerCase();
   if (raw.includes('youtu.be') || raw.includes('youtube.com')) return 'youtube';
