@@ -9154,6 +9154,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     if (result.filled > 0) {
       mediaAutoUpdated = true;
       setProgress(`✅ Auto-filled ${result.filled} video(s)`);
+    } else {
+      setProgress('⚠️ Video auto-fill found no matches or backend search was unavailable', 'bad');
     }
   } else {
     const noKeywordVideos = questions.filter((q) => q && q.type !== 'pin' && normalizeQuestionMedia(q.media).kind !== 'video' && !String(q.videoKeyword || '').trim()).length;
@@ -9483,7 +9485,9 @@ async function autoFillVideos(quizData, onProgress) {
   const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
   let filled = 0;
   let skipped = 0;
-  const beUrl = (loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev').replace(/\/+$/, '');
+  const configuredBeUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+  const defaultBeUrl = DEFAULT_BACKEND_URL.replace(/\/+$/, '');
+  const backendCandidates = Array.from(new Set([configuredBeUrl, defaultBeUrl].filter(Boolean)));
 
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
@@ -9492,7 +9496,7 @@ async function autoFillVideos(quizData, onProgress) {
 
     const keyword = String(q.videoKeyword || '').trim().slice(0, 140);
     if (!keyword) { skipped += 1; continue; }
-    if (!beUrl) { skipped += 1; continue; }
+    if (!backendCandidates.length) { skipped += 1; continue; }
 
     onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
     try {
@@ -9503,9 +9507,21 @@ async function autoFillVideos(quizData, onProgress) {
         ? String(q.videoProviderPreference)
         : '';
       if (providerPref) params.set('provider', providerPref);
-      const res = await fetch(`${beUrl}/api/videos/search?${params.toString()}`, { method: 'GET' });
-      const data = await res.json();
-      const candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url));
+      let candidate = null;
+      for (const beUrl of backendCandidates) {
+        try {
+          const res = await fetch(`${beUrl}/api/videos/search?${params.toString()}`, { method: 'GET' });
+          if (!res.ok) {
+            await res.text().catch(() => '');
+            continue;
+          }
+          const data = await res.json().catch(() => ({}));
+          candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url)) || null;
+          if (candidate) break;
+        } catch (err) {
+          console.warn('Video search backend failed:', beUrl, err);
+        }
+      }
       if (!candidate) { skipped += 1; continue; }
       const provider = ['youtube', 'vimeo', 'direct'].includes(String(candidate.provider || ''))
         ? String(candidate.provider)
@@ -9519,7 +9535,8 @@ async function autoFillVideos(quizData, onProgress) {
       });
       replaceQuestionImageData(q, '');
       filled += 1;
-    } catch {
+    } catch (err) {
+      console.warn('Video auto-fill failed for keyword:', keyword, err);
       skipped += 1;
     }
   }
