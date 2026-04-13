@@ -619,7 +619,6 @@ const live = {
     currentAnsweringFx: null,
     currentAnsweringFxKey: null,
     lastAnsweringFxIndex: -1,
-    hostVideoPlaying: false,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
     pendingAutoAudioTimer: null,
@@ -4736,11 +4735,11 @@ function handleHostHotkeys(e) {
     if (q && hasQuestionAudio(q)) {
       playQuestionAudio(q).then(() => {
         const s = live.host.state;
-        if (s && s.phase === 'question' && !s.questionClosed && !live.host.hostVideoPlaying) {
+        if (s && s.phase === 'question' && !s.questionClosed) {
           resumeFx('answering');
         }
       }).catch(() => {
-        if (!live.host.hostVideoPlaying) resumeFx('answering');
+        resumeFx('answering');
       });
     }
     return;
@@ -5608,7 +5607,7 @@ function renderHostState(state) {
         const s = live.host.state;
         if (!s || s.phase !== 'question' || s.questionClosed) return;
         const answeringKey = `answering_q${Number.isFinite(s.currentIndex) ? s.currentIndex : 'preview'}`;
-        runHostQuestionMediaSequence(s.question, answeringKey).catch(() => { if (!live.host.hostVideoPlaying) resumeFx('answering'); });
+        runHostQuestionMediaSequence(s.question, answeringKey).catch(() => resumeFx('answering'));
       }, 3000);
       live.host.lastHostAudioKey = hostAudioKey;
     }
@@ -5878,6 +5877,10 @@ function renderHostQuestion(state) {
   hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('center-stage');
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+
+  // Preserve video element across re-renders so playback + event listeners survive
+  const prevVideoWrap = hostQuestionAnswersEl.querySelector('.question-video-wrap');
+  if (prevVideoWrap) prevVideoWrap.remove();
   hostQuestionAnswersEl.innerHTML = '';
 
   // Remove old audio buttons if any
@@ -5905,39 +5908,40 @@ function renderHostQuestion(state) {
   const hostMedia = normalizeQuestionMedia(question.media);
   if (hostMedia.kind === 'video' && (hostMedia.url || hostMedia.embedUrl)) {
     const config = toVideoEmbedConfig(hostMedia);
-    const wrap = document.createElement('div');
-    wrap.className = 'top-space question-video-wrap';
-    if (config.src) {
-      if (config.provider === 'direct') {
-        const video = document.createElement('video');
-        video.controls = true;
-        video.preload = 'metadata';
-        video.src = config.src;
-        video.className = 'question-video-el';
-        video.addEventListener('play', () => {
-          live.host.hostVideoPlaying = true;
-          stopFx('answering');
-        });
-        video.addEventListener('pause', () => {
-          live.host.hostVideoPlaying = false;
-          const s = live.host.state;
-          if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
-        });
-        video.addEventListener('ended', () => {
-          live.host.hostVideoPlaying = false;
-          const s = live.host.state;
-          if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
-        });
-        wrap.appendChild(video);
-      } else {
-        const iframe = document.createElement('iframe');
-        iframe.src = config.src;
-        iframe.allowFullscreen = true;
-        iframe.className = 'question-video-el';
-        wrap.appendChild(iframe);
+    // Reuse the preserved video wrap if the src matches (keeps playback state + listeners)
+    const prevVideo = prevVideoWrap?.querySelector('video.question-video-el');
+    if (prevVideoWrap && prevVideo && prevVideo.src === config.src) {
+      hostQuestionAnswersEl.appendChild(prevVideoWrap);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.className = 'top-space question-video-wrap';
+      if (config.src) {
+        if (config.provider === 'direct') {
+          const video = document.createElement('video');
+          video.controls = true;
+          video.preload = 'metadata';
+          video.src = config.src;
+          video.className = 'question-video-el';
+          video.addEventListener('play', () => { stopFx('answering'); });
+          video.addEventListener('pause', () => {
+            const s = live.host.state;
+            if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
+          });
+          video.addEventListener('ended', () => {
+            const s = live.host.state;
+            if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
+          });
+          wrap.appendChild(video);
+        } else {
+          const iframe = document.createElement('iframe');
+          iframe.src = config.src;
+          iframe.allowFullscreen = true;
+          iframe.className = 'question-video-el';
+          wrap.appendChild(iframe);
+        }
       }
+      hostQuestionAnswersEl.appendChild(wrap);
     }
-    hostQuestionAnswersEl.appendChild(wrap);
   }
 
   if (question.isPoll) {
@@ -10284,7 +10288,6 @@ async function playQuestionAudio(question, opts = {}) {
     if (!s || s.phase !== 'question' || s.questionClosed) return;
     if (!hasQuestionAudio(s.question || question)) return;
     if (live.host.currentAnsweringFxKey !== answeringKey) return;
-    if (live.host.hostVideoPlaying) return;
     resumeFx('answering');
   };
 
@@ -10389,7 +10392,6 @@ async function runHostQuestionMediaSequence(question, answeringKey) {
   const s = live.host.state;
   if (!s || s.phase !== 'question' || s.questionClosed) return;
   if (live.host.currentAnsweringFxKey !== answeringKey) return;
-  if (live.host.hostVideoPlaying) return;
   resumeFx('answering');
 }
 
