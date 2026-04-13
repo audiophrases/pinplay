@@ -6632,8 +6632,14 @@ function resetFx(name) {
   }
 }
 
+function isHostVideoPlaying() {
+  const el = document.querySelector('#hostQuestionAnswers .question-video-el');
+  return !!(el && el.tagName === 'VIDEO' && !el.paused && !el.ended);
+}
+
 function resumeFx(name) {
   if (name === 'answering') {
+    if (isHostVideoPlaying()) return;
     const a = live.host.currentAnsweringFx;
     if (!a) return;
     try {
