@@ -563,6 +563,7 @@ let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
 const edgeTtsBlobUrlCache = new Map();
+let previewPoll = null;
 let previewMode = {
   active: false,
   index: 0,
@@ -3184,7 +3185,7 @@ async function exportCreationPrompt() {
   const cleanRequest = { theme };
   if (lang) cleanRequest.language = lang;
   if (level) cleanRequest.level = level;
-  if (timeLimit) cleanRequest.timeLimit = Number(timeLimit);
+  cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) cleanRequest.questionCount = Number(count);
   cleanRequest.images = images;
   cleanRequest.audio = audio;
@@ -3288,9 +3289,13 @@ async function exportCreationPrompt() {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
     : `Use only allowed question types: ${allowedTypesText}.`;
+  const errorHuntRule = allowedTypes.includes('error_hunt')
+    ? 'error_hunt prompt field: The prompt must contain ONLY the sentence with errors — no leading instructions, labels, or prefixes (e.g. do NOT write "Fix this: ..."). The app scores by word-level diff between prompt and corrected; any extra words will be falsely detected as errors.'
+    : undefined;
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
     questionTypesRule,
+    errorHuntRule,
     'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
     cleanRequest.audio === 'some'
@@ -3571,6 +3576,9 @@ function bindLiveEvents() {
 
   const studentPreviewBtn = document.getElementById('studentPreviewBtn');
   if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment());
+
+  const livePreviewBtn = document.getElementById('livePreviewBtn');
+  if (livePreviewBtn) livePreviewBtn.addEventListener('click', () => launchLivePreview());
 
   if (previewRerollBtn) {
     previewRerollBtn.addEventListener('click', () => {
@@ -4213,7 +4221,8 @@ async function refreshAssignmentsList() {
       },
     });
 
-    const list = Array.isArray(data?.assignments) ? data.assignments : [];
+    const rawList = Array.isArray(data?.assignments) ? data.assignments : [];
+    const list = rawList.filter(a => a?.className !== '__preview__');
     if (!assignmentListEl) return;
     if (!list.length) {
       const li = document.createElement('li');
@@ -7608,6 +7617,22 @@ function stopPreviewMode() {
 }
 
 // ---------- Student Preview (opens as assignment in new tab) ----------
+
+function cleanupPreviewPoll() {
+  if (!previewPoll) return;
+  clearInterval(previewPoll.timer);
+  const oldCode = previewPoll.code;
+  previewPoll = null;
+  if (oldCode && createSessionPassword) {
+    api('/api/assignments/delete', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: oldCode },
+    }).then(() => {
+      setStatus(hostStatusEl, `Preview assignment ${oldCode} cleaned up.`, 'ok');
+    }).catch(() => {});
+  }
+}
+
 async function launchStudentPreviewAssignment() {
   try {
     syncQuizFromUI();
@@ -7633,6 +7658,9 @@ async function launchStudentPreviewAssignment() {
       }
     }
 
+    // Clean up any previous preview assignment
+    cleanupPreviewPoll();
+
     await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false });
 
     const payload = normalizeQuizForLive(quiz);
@@ -7655,14 +7683,74 @@ async function launchStudentPreviewAssignment() {
 
     const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
     const previewUrl = `${baseUrl}?assignment=${encodeURIComponent(code)}`;
-    window.open(previewUrl, '_blank');
+    const previewWin = window.open(previewUrl, '_blank');
 
-    setStatus(hostStatusEl, `Preview assignment created: ${code}. Opening in new tab…`, 'ok');
+    // Poll for preview tab close → auto-delete assignment
+    if (previewWin) {
+      previewPoll = {
+        code,
+        win: previewWin,
+        timer: setInterval(() => {
+          if (previewPoll?.win?.closed) cleanupPreviewPoll();
+        }, 2000),
+      };
+    }
+
+    setStatus(hostStatusEl, `Preview opened (${code}). Will auto-delete when you close the preview tab.`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Preview failed: ${err?.message || err}`, 'bad');
   } finally {
     const btn = document.getElementById('studentPreviewBtn');
     if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
+  }
+}
+
+// ---------- Live Preview (real live game + student tab auto-joined) ----------
+let livePreviewPoll = null;
+
+function cleanupLivePreviewPoll() {
+  if (!livePreviewPoll) return;
+  clearInterval(livePreviewPoll.timer);
+  livePreviewPoll = null;
+}
+
+async function launchLivePreview() {
+  const btn = document.getElementById('livePreviewBtn');
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+
+    // Create the live game (reuses full createLiveGame logic)
+    await createLiveGame();
+
+    const pin = live.host.pin;
+    if (!pin) throw new Error('Live game creation failed — no PIN.');
+
+    // Open student tab with auto-join flag
+    const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
+    const studentUrl = `${baseUrl}?pin=${encodeURIComponent(pin)}&autojoin=1`;
+    const studentWin = window.open(studentUrl, '_blank');
+
+    // Poll for student tab close → stop hosting
+    cleanupLivePreviewPoll();
+    if (studentWin) {
+      livePreviewPoll = {
+        pin,
+        win: studentWin,
+        timer: setInterval(() => {
+          if (livePreviewPoll?.win?.closed) {
+            cleanupLivePreviewPoll();
+            stopHostPolling();
+            setStatus(hostStatusEl, 'Live preview ended (student tab closed).', 'ok');
+          }
+        }, 2000),
+      };
+    }
+
+    setStatus(hostStatusEl, `Live preview started (PIN ${pin}). Student tab opened. Click Start when ready.`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Live preview failed: ${err?.message || err}`, 'bad');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Live Preview'; }
   }
 }
 
