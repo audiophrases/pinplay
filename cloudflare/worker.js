@@ -2611,13 +2611,16 @@ export class QuizRoom {
 
         if (room.responsesByQuestion[qIndex][playerId]) {
           const existing = room.responsesByQuestion[qIndex][playerId];
+          const isAutoGradedExisting = !question.isPoll && !(question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || isTeacherGradedTextQuestion(question));
           return json({
             ok: true,
             alreadyAnswered: true,
             correct: existing.correct,
             pointsAwarded: existing.pointsAwarded,
+            graded: isAutoGradedExisting,
             score: room.players[playerId].score,
             currentIndex: qIndex,
+            correctAnswer: isAutoGradedExisting ? hostCorrectSummary(question) : '',
           });
         }
 
@@ -2710,13 +2713,20 @@ export class QuizRoom {
 
         await this.#setRoom(room);
 
+        // Include correctAnswer for auto-graded questions so the student
+        // can see the same answer-reveal treatment as assignment mode.
+        const isAutoGraded = !question.isPoll && !teacherGradedFlow;
+        const answerCorrectSummary = isAutoGraded ? hostCorrectSummary(question) : '';
+
         return json({
           ok: true,
           alreadyAnswered: false,
           correct: verdict.correct,
           pointsAwarded,
+          graded: isAutoGraded,
           score: room.players[playerId].score,
           currentIndex: qIndex,
+          correctAnswer: answerCorrectSummary,
         });
       }
 
