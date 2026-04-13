@@ -58,6 +58,8 @@ const live = {
     timerInitialRemainingMs: null,
     adaptiveFitRaf: null,
     mode: 'live',
+    liveRevealApplied: false, // true when immediate answer reveal is showing in live mode
+    liveRevealForIndex: -1,   // question index the reveal corresponds to
     assignment: {
       code: null,
       attemptId: null,
@@ -1152,6 +1154,17 @@ async function rerollRandomName() {
 }
 
 function renderPlayerState(state) {
+  // Clear liveRevealApplied when the question changes (different index)
+  if (live.player.liveRevealApplied && state.currentIndex !== live.player.liveRevealForIndex) {
+    live.player.liveRevealApplied = false;
+    live.player.liveRevealForIndex = -1;
+  }
+  // Also clear when the teacher closes the question (full server-driven reveal takes over)
+  if (live.player.liveRevealApplied && !!state.questionClosed) {
+    live.player.liveRevealApplied = false;
+    live.player.liveRevealForIndex = -1;
+  }
+
   const renderJoinReveal = () => {
     // Target the broader container to avoid flex-wrap collisions
     const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
@@ -1164,7 +1177,8 @@ function renderPlayerState(state) {
     const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
 
     if (!show || !needsReveal) {
-      if (revealEl) revealEl.remove();
+      // Preserve reveal box placed by immediate live-mode answer reveal
+      if (revealEl && !live.player.liveRevealApplied) revealEl.remove();
       return;
     }
 
@@ -1224,7 +1238,10 @@ function renderPlayerState(state) {
   if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
 
   // Clear previous feedback to avoid carryover between questions
-  setJoinStatusHud('', '');
+  // (but preserve immediate live-mode answer reveal HUD)
+  if (!live.player.liveRevealApplied) {
+    setJoinStatusHud('', '');
+  }
 
   const renderInlinePoints = (_points) => {
     // Removed by request: do not show separate inline "+X pts" row.
@@ -1483,7 +1500,7 @@ function renderPlayerState(state) {
     joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
     if (isAnswerFullscreenLocked()) {
       setJoinStatusHud('Exit fullscreen to answer.', 'bad');
-    } else if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live') {
+    } else if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live' && !live.player.liveRevealApplied) {
       setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
     }
   }
@@ -1592,8 +1609,12 @@ function renderPlayerState(state) {
     const corr = String(rr?.correction || '').trim();
     if (corr) {
       setJoinStatusHud('', '');
+    } else if (!live.player.liveRevealApplied) {
+      // Only set generic status if immediate live reveal is not showing
     }
-    setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
+    if (!live.player.liveRevealApplied) {
+      setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
+    }
   } else {
     // Status shown in header row now, no need for separate status line
     setStatus(joinStatusEl, '', '');
@@ -2396,9 +2417,78 @@ async function submitLiveAnswer() {
     live.player.lastAnswerText = (question?.answers?.[answerIdx]?.text || '');
     live.player.lastAnswerCorrect = !!data.correct;
 
-    setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
-
     if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
+
+    // --- Immediate answer reveal (clone assignment-mode behavior) ---
+    const isPoll = !!question?.isPoll;
+    const isAutoGraded = !!data.graded;
+    if (!isPoll && isAutoGraded) {
+      const pts = Number(data.pointsAwarded || 0);
+      const resultText = data.correct ? '✅ Correct' : '❌ Incorrect';
+      let pointsText = '';
+      if (pts > 0) pointsText = ` · +${pts} points`;
+      else if (pts < 0) pointsText = ` · ${pts} points`;
+      let feedback = `${resultText}${pointsText}`;
+      if (question?.type === 'error_hunt' && data.correctAnswer) {
+        feedback += ` · Correct: ${data.correctAnswer}`;
+      }
+      setJoinStatusHud(feedback, data.correct ? 'ok' : 'bad');
+
+      // Apply color-coded highlighting + text reveal (same as assignment mode)
+      const syntheticState = {
+        question,
+        correctAnswer: String(data.correctAnswer || ''),
+      };
+      highlightAnswerItems(data.correct, syntheticState);
+
+      // Disable all answer inputs (same as assignment-mode questionClosed path)
+      if (joinAnswersEl) {
+        joinAnswersEl.querySelectorAll('input, select, button, textarea').forEach((el) => {
+          el.disabled = true;
+        });
+        joinAnswersEl.style.pointerEvents = 'none';
+      }
+
+      // Show correct-answer text reveal box for text-based question types
+      const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
+      const correctText = String(data.correctAnswer || '').trim();
+      if (needsReveal && correctText) {
+        const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+        if (wrap) {
+          let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
+          if (!revealEl) {
+            revealEl = document.createElement('div');
+            revealEl.className = 'student-answer-reveal';
+            revealEl.dataset.joinCorrectReveal = '1';
+            const title = document.createElement('div');
+            title.className = 'student-answer-reveal-title';
+            title.textContent = 'Correct Answer';
+            const content = document.createElement('div');
+            content.className = 'student-answer-reveal-content';
+            revealEl.append(title, content);
+            const submissionWrap = document.getElementById('joinSubmission');
+            if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+              wrap.insertBefore(revealEl, submissionWrap);
+            } else {
+              wrap.appendChild(revealEl);
+            }
+          }
+          const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+          if (contentEl && contentEl.textContent !== correctText) {
+            contentEl.textContent = correctText;
+          }
+        }
+      }
+    } else {
+      setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
+    }
+
+    // Mark that immediate reveal is active for this question index
+    // so polling renderPlayerState doesn't overwrite it before teacher closes
+    if (!isPoll && isAutoGraded) {
+      live.player.liveRevealApplied = true;
+      live.player.liveRevealForIndex = data.currentIndex;
+    }
   } catch (err) {
     const msg = String(err?.message || 'Could not submit answer.');
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {

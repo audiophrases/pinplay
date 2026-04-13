@@ -619,6 +619,7 @@ const live = {
     currentAnsweringFx: null,
     currentAnsweringFxKey: null,
     lastAnsweringFxIndex: -1,
+    hostVideoPlaying: false,
     seenReactionKeys: new Set(),
     lastHostAudioKey: null,
     pendingAutoAudioTimer: null,
@@ -4721,11 +4722,11 @@ function handleHostHotkeys(e) {
     if (q && hasQuestionAudio(q)) {
       playQuestionAudio(q).then(() => {
         const s = live.host.state;
-        if (s && s.phase === 'question' && !s.questionClosed) {
+        if (s && s.phase === 'question' && !s.questionClosed && !live.host.hostVideoPlaying) {
           resumeFx('answering');
         }
       }).catch(() => {
-        resumeFx('answering');
+        if (!live.host.hostVideoPlaying) resumeFx('answering');
       });
     }
     return;
@@ -5593,7 +5594,7 @@ function renderHostState(state) {
         const s = live.host.state;
         if (!s || s.phase !== 'question' || s.questionClosed) return;
         const answeringKey = `answering_q${Number.isFinite(s.currentIndex) ? s.currentIndex : 'preview'}`;
-        runHostQuestionMediaSequence(s.question, answeringKey).catch(() => resumeFx('answering'));
+        runHostQuestionMediaSequence(s.question, answeringKey).catch(() => { if (!live.host.hostVideoPlaying) resumeFx('answering'); });
       }, 3000);
       live.host.lastHostAudioKey = hostAudioKey;
     }
@@ -5899,6 +5900,20 @@ function renderHostQuestion(state) {
         video.preload = 'metadata';
         video.src = config.src;
         video.className = 'question-video-el';
+        video.addEventListener('play', () => {
+          live.host.hostVideoPlaying = true;
+          stopFx('answering');
+        });
+        video.addEventListener('pause', () => {
+          live.host.hostVideoPlaying = false;
+          const s = live.host.state;
+          if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
+        });
+        video.addEventListener('ended', () => {
+          live.host.hostVideoPlaying = false;
+          const s = live.host.state;
+          if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
+        });
         wrap.appendChild(video);
       } else {
         const iframe = document.createElement('iframe');
@@ -10186,6 +10201,7 @@ async function playQuestionAudio(question, opts = {}) {
     if (!s || s.phase !== 'question' || s.questionClosed) return;
     if (!hasQuestionAudio(s.question || question)) return;
     if (live.host.currentAnsweringFxKey !== answeringKey) return;
+    if (live.host.hostVideoPlaying) return;
     resumeFx('answering');
   };
 
@@ -10290,6 +10306,7 @@ async function runHostQuestionMediaSequence(question, answeringKey) {
   const s = live.host.state;
   if (!s || s.phase !== 'question' || s.questionClosed) return;
   if (live.host.currentAnsweringFxKey !== answeringKey) return;
+  if (live.host.hostVideoPlaying) return;
   resumeFx('answering');
 }
 
