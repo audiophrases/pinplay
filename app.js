@@ -7992,6 +7992,8 @@ function renderPreviewFrame() {
   if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
   if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
   renderProjectorScores(sim.hostState.players || []);
+  // Skip intro animation in preview — render question content immediately
+  live.host.questionIntroDone = true;
   renderHostQuestion(sim.hostState);
   renderHostAnswerHistory(sim.hostState);
   renderPreviewStudentStack(sim);
