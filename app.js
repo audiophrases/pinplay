@@ -3185,7 +3185,7 @@ async function exportCreationPrompt() {
   const cleanRequest = { theme };
   if (lang) cleanRequest.language = lang;
   if (level) cleanRequest.level = level;
-  if (timeLimit) cleanRequest.timeLimit = Number(timeLimit);
+  cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) cleanRequest.questionCount = Number(count);
   cleanRequest.images = images;
   cleanRequest.audio = audio;
@@ -3289,9 +3289,13 @@ async function exportCreationPrompt() {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
     : `Use only allowed question types: ${allowedTypesText}.`;
+  const errorHuntRule = allowedTypes.includes('error_hunt')
+    ? 'error_hunt prompt field: The prompt must contain ONLY the sentence with errors — no leading instructions, labels, or prefixes (e.g. do NOT write "Fix this: ..."). The app scores by word-level diff between prompt and corrected; any extra words will be falsely detected as errors.'
+    : undefined;
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
     questionTypesRule,
+    errorHuntRule,
     'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
     cleanRequest.audio === 'some'
