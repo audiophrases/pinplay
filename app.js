@@ -897,6 +897,17 @@ function syncCustomGoalFieldState() {
   customGoalEl.setAttribute('aria-hidden', isCustom ? 'false' : 'true');
 }
 
+function syncTypesGridVisibility() {
+  const modeEl = document.getElementById('promptTypesMode');
+  const typesListEl = document.getElementById('promptTypesList');
+  const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
+  const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
+  const hidden = modeEl && modeEl.value === 'ai_choice';
+  if (typesListEl) typesListEl.classList.toggle('hidden', hidden);
+  if (selectAllTypesBtn) selectAllTypesBtn.classList.toggle('hidden', hidden);
+  if (clearAllTypesBtn) clearAllTypesBtn.classList.toggle('hidden', hidden);
+}
+
 function bindBuilderEvents() {
   renderPromptTypesList();
   if (exportPromptBtn) {
@@ -906,6 +917,11 @@ function bindBuilderEvents() {
   if (goalEl instanceof HTMLSelectElement) {
     goalEl.addEventListener('change', syncCustomGoalFieldState);
     syncCustomGoalFieldState();
+  }
+  const typesModeEl = document.getElementById('promptTypesMode');
+  if (typesModeEl instanceof HTMLSelectElement) {
+    typesModeEl.addEventListener('change', syncTypesGridVisibility);
+    syncTypesGridVisibility();
   }
   const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
   const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
@@ -3184,7 +3200,9 @@ async function exportCreationPrompt() {
     return true;
   });
 
-  if (typesMode === 'include' && selectedTypes.length > 0) {
+  if (typesMode === 'ai_choice') {
+    cleanRequest.questionTypeSelection = 'ai_choice';
+  } else if (typesMode === 'include' && selectedTypes.length > 0) {
     cleanRequest.includeQuestionTypes = selectedTypes;
   } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
     cleanRequest.excludeQuestionTypes = selectedTypes;
@@ -3256,9 +3274,12 @@ async function exportCreationPrompt() {
 
   const allowedTypesText = allowedTypes.join(', ');
   const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
+  const questionTypesRule = typesMode === 'ai_choice'
+    ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
+    : `Use only allowed question types: ${allowedTypesText}.`;
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
-    `Use only allowed question types: ${allowedTypesText}.`,
+    questionTypesRule,
     'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
     cleanRequest.audio === 'some'
