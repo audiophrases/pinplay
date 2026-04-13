@@ -3669,7 +3669,7 @@ async function createLiveGame() {
     // --- NEW: Update QR Code ---
     const qrEl = document.querySelector('.hall-qr');
     if (qrEl && data.pin) {
-      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}&autojoin=1`;
       qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
     }
 
@@ -4463,7 +4463,7 @@ async function joinLiveGameAsHostByPin() {
     // --- NEW: Update QR Code ---
     const qrEl = document.querySelector('.hall-qr');
     if (qrEl && data.pin) {
-      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}`;
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${data.pin}&autojoin=1`;
       qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
     }
 
@@ -5400,7 +5400,7 @@ function renderHostState(state) {
     // --- NEW: Keep QR in sync with any PIN changes natively ---
     const qrEl = document.querySelector('.hall-qr');
     if (qrEl && state.pin) {
-      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${state.pin}`;
+      const joinUrl = `https://audiophrases.github.io/pinplay/?pin=${state.pin}&autojoin=1`;
       const expectedSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}`;
       if (qrEl.src !== expectedSrc) qrEl.src = expectedSrc;
     }
