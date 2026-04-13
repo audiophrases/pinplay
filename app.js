@@ -2433,6 +2433,7 @@ function toVideoEmbedConfig(media) {
       if (end != null) embed.searchParams.set('end', String(Math.floor(end)));
       embed.searchParams.set('rel', '0');
       embed.searchParams.set('enablejsapi', '1');
+      try { embed.searchParams.set('origin', window.location.origin); } catch { }
       return { provider, src: embed.toString(), start, end };
     }
     if (provider === 'vimeo') {
@@ -5915,7 +5916,10 @@ function renderHostQuestion(state) {
     const config = toVideoEmbedConfig(hostMedia);
     // Reuse the preserved video wrap if the src matches (keeps playback state + listeners)
     const prevVideo = prevVideoWrap?.querySelector('video.question-video-el');
+    const prevIframe = prevVideoWrap?.querySelector('iframe.question-video-el');
     if (prevVideoWrap && prevVideo && prevVideo.src === config.src) {
+      hostQuestionAnswersEl.appendChild(prevVideoWrap);
+    } else if (prevVideoWrap && prevIframe && prevIframe.src === config.src) {
       hostQuestionAnswersEl.appendChild(prevVideoWrap);
     } else {
       const wrap = document.createElement('div');
@@ -5940,9 +5944,11 @@ function renderHostQuestion(state) {
         } else {
           const iframe = document.createElement('iframe');
           iframe.src = config.src;
+          iframe.allow = 'autoplay; encrypted-media';
           iframe.allowFullscreen = true;
           iframe.className = 'question-video-el';
           wrap.appendChild(iframe);
+          if (config.provider === 'youtube') _subscribeYtIframe(iframe);
         }
       }
       hostQuestionAnswersEl.appendChild(wrap);
@@ -6641,9 +6647,47 @@ function resetFx(name) {
   }
 }
 
+// --- YouTube iframe state tracking via postMessage ---
+let _ytIframePlaying = false;
+let _ytIframeEl = null;
+
+window.addEventListener('message', (e) => {
+  if (!e.data || typeof e.data !== 'string') return;
+  let msg;
+  try { msg = JSON.parse(e.data); } catch { return; }
+  if (!msg || typeof msg.info?.playerState !== 'number') return;
+  if (_ytIframeEl && e.source !== _ytIframeEl.contentWindow) return;
+  const ps = msg.info.playerState;
+  if (ps === 1) {
+    _ytIframePlaying = true;
+    stopFx('answering');
+  } else if (ps === 0 || ps === 2) {
+    _ytIframePlaying = false;
+    const s = live.host.state;
+    if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
+  }
+});
+
+function _subscribeYtIframe(iframe) {
+  _ytIframeEl = iframe;
+  _ytIframePlaying = false;
+  const trySend = () => {
+    try {
+      iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*');
+    } catch { }
+  };
+  iframe.addEventListener('load', trySend, { once: true });
+  let attempts = 0;
+  const poller = setInterval(() => {
+    trySend();
+    if (++attempts >= 10) clearInterval(poller);
+  }, 500);
+}
+
 function isHostVideoPlaying() {
-  const el = document.querySelector('#hostQuestionAnswers .question-video-el');
-  return !!(el && el.tagName === 'VIDEO' && !el.paused && !el.ended);
+  if (_ytIframePlaying) return true;
+  const el = document.querySelector('#hostQuestionAnswers video.question-video-el');
+  return !!(el && !el.paused && !el.ended);
 }
 
 function resumeFx(name) {
