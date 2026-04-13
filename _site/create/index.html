@@ -104,9 +104,10 @@
                     <label>Question Types</label>
                     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
                       <select id="promptTypesMode" style="width: auto; min-width: 200px;">
+                        <option value="ai_choice" selected>Best fitting the quiz goals</option>
                         <option value="include">Include ONLY selected</option>
                         <option value="exclude">Exclude selected</option>
-                        <option value="all" selected>Use all available types</option>
+                        <option value="all">Use all available types</option>
                       </select>
                       <button type="button" class="btn small" id="promptSelectAllTypes">Select all</button>
                       <button type="button" class="btn small" id="promptClearAllTypes">Clear</button>
