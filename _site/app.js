@@ -563,7 +563,6 @@ let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
 const edgeTtsBlobUrlCache = new Map();
-let previewPoll = null;
 let previewMode = {
   active: false,
   index: 0,
@@ -4214,8 +4213,7 @@ async function refreshAssignmentsList() {
       },
     });
 
-    const rawList = Array.isArray(data?.assignments) ? data.assignments : [];
-    const list = rawList.filter(a => a?.className !== '__preview__');
+    const list = Array.isArray(data?.assignments) ? data.assignments : [];
     if (!assignmentListEl) return;
     if (!list.length) {
       const li = document.createElement('li');
@@ -7562,22 +7560,6 @@ function stopPreviewMode() {
 }
 
 // ---------- Student Preview (opens as assignment in new tab) ----------
-
-function cleanupPreviewPoll() {
-  if (!previewPoll) return;
-  clearInterval(previewPoll.timer);
-  const oldCode = previewPoll.code;
-  previewPoll = null;
-  if (oldCode && createSessionPassword) {
-    api('/api/assignments/delete', {
-      method: 'POST',
-      body: { password: createSessionPassword, code: oldCode },
-    }).then(() => {
-      setStatus(hostStatusEl, `Preview assignment ${oldCode} cleaned up.`, 'ok');
-    }).catch(() => {});
-  }
-}
-
 async function launchStudentPreviewAssignment() {
   try {
     syncQuizFromUI();
@@ -7603,9 +7585,6 @@ async function launchStudentPreviewAssignment() {
       }
     }
 
-    // Clean up any previous preview assignment
-    cleanupPreviewPoll();
-
     await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false });
 
     const payload = normalizeQuizForLive(quiz);
@@ -7628,20 +7607,9 @@ async function launchStudentPreviewAssignment() {
 
     const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
     const previewUrl = `${baseUrl}?assignment=${encodeURIComponent(code)}`;
-    const previewWin = window.open(previewUrl, '_blank');
+    window.open(previewUrl, '_blank');
 
-    // Poll for preview tab close → auto-delete assignment
-    if (previewWin) {
-      previewPoll = {
-        code,
-        win: previewWin,
-        timer: setInterval(() => {
-          if (previewPoll?.win?.closed) cleanupPreviewPoll();
-        }, 2000),
-      };
-    }
-
-    setStatus(hostStatusEl, `Preview opened (${code}). Will auto-delete when you close the preview tab.`, 'ok');
+    setStatus(hostStatusEl, `Preview assignment created: ${code}. Opening in new tab…`, 'ok');
   } catch (err) {
     setStatus(hostStatusEl, `Preview failed: ${err?.message || err}`, 'bad');
   } finally {
