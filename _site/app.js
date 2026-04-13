@@ -6617,7 +6617,7 @@ function resetFx(name) {
       // ignore
     }
     live.host.currentAnsweringFx = null;
-    live.host.lastAnsweringFxIndex = -1;
+    // Keep lastAnsweringFxIndex so the next prime/play avoids the same track
     live.host.currentAnsweringFxKey = null;
     return;
   }
