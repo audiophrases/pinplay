@@ -528,13 +528,13 @@ const joinPinEl = document.getElementById('joinPin');
 const joinNameEl = document.getElementById('joinName');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
-let joinQuestionWrap = document.getElementById('joinQuestionWrap');
-let joinProgressEl = document.getElementById('joinProgress');
-let joinScoreEl = document.getElementById('joinScore');
-let joinPromptEl = document.getElementById('joinPrompt');
-let joinAnswersEl = document.getElementById('joinAnswers');
-let joinSubmitBtn = document.getElementById('joinSubmitBtn');
-let joinFeedbackEl = document.getElementById('joinFeedback');
+const joinQuestionWrap = document.getElementById('joinQuestionWrap');
+const joinProgressEl = document.getElementById('joinProgress');
+const joinScoreEl = document.getElementById('joinScore');
+const joinPromptEl = document.getElementById('joinPrompt');
+const joinAnswersEl = document.getElementById('joinAnswers');
+const joinSubmitBtn = document.getElementById('joinSubmitBtn');
+const joinFeedbackEl = document.getElementById('joinFeedback');
 
 // Solo mode
 const pinValueEl = document.getElementById('pinValue');
@@ -565,7 +565,6 @@ let activeQuestionAudioEl = null;
 const edgeTtsBlobUrlCache = new Map();
 let previewMode = {
   active: false,
-  studentPreview: false,
   index: 0,
   showReveal: false,
   score: 0,
@@ -7349,12 +7348,8 @@ async function runManualMediaCheck() {
 
 async function submitLiveAnswer() {
   try {
-    if (previewMode.active && previewMode.studentPreview) {
-      submitStudentPreviewAnswer();
-      return;
-    }
     if (previewMode.active) {
-      setStatus(joinFeedbackEl, 'Unified preview: use teacher controls to move/reveal rounds.', 'ok');
+      setStatus(joinFeedbackEl, 'Preview mode: use teacher controls.', 'ok');
       return;
     }
 
