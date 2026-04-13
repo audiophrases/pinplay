@@ -299,6 +299,12 @@
               <button id="hostStartBtn" class="btn success">Start</button>
               <button id="hostPrevBtn" class="btn">←</button>
               <button id="hostNextBtn" class="btn">→</button>
+              <button id="previewUnifiedBtn" class="btn">👁 Preview</button>
+              <button id="previewRerollBtn" class="btn hidden">🎲 Reroll</button>
+              <button id="previewResimBtn" class="btn hidden">🔄 Re-sim</button>
+              <input id="previewJumpInput" type="number" min="1" class="hidden" style="width:64px;" placeholder="Q#" />
+              <button id="previewJumpBtn" class="btn hidden">Jump</button>
+              <button id="previewExitBtn" class="btn hidden">✕ Exit preview</button>
               <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" />
               <button id="hostJoinBtn" class="btn">Join as host</button>
             </div>
@@ -391,6 +397,12 @@
             <ul id="hostAttemptsList" class="list"></ul>
             </div>
             </div>
+          </div>
+
+          <div class="card hidden" id="studentPreviewStackCard">
+            <h2>👥 Simulated student responses</h2>
+            <p id="studentPreviewSummary" class="small muted"></p>
+            <div id="studentPreviewStack"></div>
           </div>
         </div>
       </section>
