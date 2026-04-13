@@ -3573,6 +3573,9 @@ function bindLiveEvents() {
   const studentPreviewBtn = document.getElementById('studentPreviewBtn');
   if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment());
 
+  const livePreviewBtn = document.getElementById('livePreviewBtn');
+  if (livePreviewBtn) livePreviewBtn.addEventListener('click', () => launchLivePreview());
+
   if (previewRerollBtn) {
     previewRerollBtn.addEventListener('click', () => {
       if (!previewMode.active) return;
@@ -7647,6 +7650,55 @@ async function launchStudentPreviewAssignment() {
   } finally {
     const btn = document.getElementById('studentPreviewBtn');
     if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
+  }
+}
+
+// ---------- Live Preview (real live game + student tab auto-joined) ----------
+let livePreviewPoll = null;
+
+function cleanupLivePreviewPoll() {
+  if (!livePreviewPoll) return;
+  clearInterval(livePreviewPoll.timer);
+  livePreviewPoll = null;
+}
+
+async function launchLivePreview() {
+  const btn = document.getElementById('livePreviewBtn');
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+
+    // Create the live game (reuses full createLiveGame logic)
+    await createLiveGame();
+
+    const pin = live.host.pin;
+    if (!pin) throw new Error('Live game creation failed — no PIN.');
+
+    // Open student tab with auto-join flag
+    const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
+    const studentUrl = `${baseUrl}?pin=${encodeURIComponent(pin)}&autojoin=1`;
+    const studentWin = window.open(studentUrl, '_blank');
+
+    // Poll for student tab close → stop hosting
+    cleanupLivePreviewPoll();
+    if (studentWin) {
+      livePreviewPoll = {
+        pin,
+        win: studentWin,
+        timer: setInterval(() => {
+          if (livePreviewPoll?.win?.closed) {
+            cleanupLivePreviewPoll();
+            stopHostPolling();
+            setStatus(hostStatusEl, 'Live preview ended (student tab closed).', 'ok');
+          }
+        }, 2000),
+      };
+    }
+
+    setStatus(hostStatusEl, `Live preview started (PIN ${pin}). Student tab opened. Click Start when ready.`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Live preview failed: ${err?.message || err}`, 'bad');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Live Preview'; }
   }
 }
 

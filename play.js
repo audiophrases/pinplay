@@ -88,6 +88,7 @@ function init() {
     }
   });
   initAssignmentFromUrl();
+  initLivePreviewFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
@@ -201,6 +202,24 @@ function initAssignmentFromUrl() {
   // instead of leaving the generic PIN/login screen visible.
   setTimeout(() => {
     validatePin().catch(() => { });
+  }, 0);
+}
+
+function initLivePreviewFromUrl() {
+  const params = new URLSearchParams(window.location.search || '');
+  const pin = String(params.get('pin') || '').trim();
+  const autojoin = params.get('autojoin') === '1';
+  if (!pin || !/^\d{6}$/.test(pin)) return;
+  if (!autojoin) return;
+
+  if (joinPinEl) joinPinEl.value = pin;
+  if (joinTitleEl) joinTitleEl.textContent = 'Live preview';
+
+  setTimeout(async () => {
+    try {
+      await validatePin();
+      await joinLiveGame();
+    } catch { }
   }, 0);
 }
 
