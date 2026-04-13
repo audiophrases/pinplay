@@ -528,13 +528,13 @@ const joinPinEl = document.getElementById('joinPin');
 const joinNameEl = document.getElementById('joinName');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
-let joinQuestionWrap = document.getElementById('joinQuestionWrap');
-let joinProgressEl = document.getElementById('joinProgress');
-let joinScoreEl = document.getElementById('joinScore');
-let joinPromptEl = document.getElementById('joinPrompt');
-let joinAnswersEl = document.getElementById('joinAnswers');
-let joinSubmitBtn = document.getElementById('joinSubmitBtn');
-let joinFeedbackEl = document.getElementById('joinFeedback');
+const joinQuestionWrap = document.getElementById('joinQuestionWrap');
+const joinProgressEl = document.getElementById('joinProgress');
+const joinScoreEl = document.getElementById('joinScore');
+const joinPromptEl = document.getElementById('joinPrompt');
+const joinAnswersEl = document.getElementById('joinAnswers');
+const joinSubmitBtn = document.getElementById('joinSubmitBtn');
+const joinFeedbackEl = document.getElementById('joinFeedback');
 
 // Solo mode
 const pinValueEl = document.getElementById('pinValue');
@@ -565,7 +565,6 @@ let activeQuestionAudioEl = null;
 const edgeTtsBlobUrlCache = new Map();
 let previewMode = {
   active: false,
-  studentPreview: false,
   index: 0,
   showReveal: false,
   score: 0,
@@ -3571,13 +3570,7 @@ function bindLiveEvents() {
   if (previewUnifiedBtn) previewUnifiedBtn.addEventListener('click', () => startPreviewMode());
 
   const studentPreviewBtn = document.getElementById('studentPreviewBtn');
-  if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => startStudentPreview());
-  const studentPreviewPrevBtn = document.getElementById('studentPreviewPrevBtn');
-  if (studentPreviewPrevBtn) studentPreviewPrevBtn.addEventListener('click', () => navigateStudentPreview(-1));
-  const studentPreviewNextBtn = document.getElementById('studentPreviewNextBtn');
-  if (studentPreviewNextBtn) studentPreviewNextBtn.addEventListener('click', () => navigateStudentPreview(1));
-  const studentPreviewExitBtn = document.getElementById('studentPreviewExitBtn');
-  if (studentPreviewExitBtn) studentPreviewExitBtn.addEventListener('click', () => stopStudentPreview());
+  if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment());
 
   if (previewRerollBtn) {
     previewRerollBtn.addEventListener('click', () => {
@@ -7355,12 +7348,8 @@ async function runManualMediaCheck() {
 
 async function submitLiveAnswer() {
   try {
-    if (previewMode.active && previewMode.studentPreview) {
-      submitStudentPreviewAnswer();
-      return;
-    }
     if (previewMode.active) {
-      setStatus(joinFeedbackEl, 'Unified preview: use teacher controls to move/reveal rounds.', 'ok');
+      setStatus(joinFeedbackEl, 'Preview mode: use teacher controls.', 'ok');
       return;
     }
 
@@ -7564,156 +7553,62 @@ function stopPreviewMode() {
   setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
 }
 
-// ---------- Student Preview Mode ----------
-function resolveJoinElements() {
-  joinQuestionWrap = document.getElementById('joinQuestionWrap');
-  joinProgressEl = document.getElementById('joinProgress');
-  joinScoreEl = document.getElementById('joinScore');
-  joinPromptEl = document.getElementById('joinPrompt');
-  joinAnswersEl = document.getElementById('joinAnswers');
-  joinSubmitBtn = document.getElementById('joinSubmitBtn');
-  joinFeedbackEl = document.getElementById('studentPreviewFeedback');
-}
+// ---------- Student Preview (opens as assignment in new tab) ----------
+async function launchStudentPreviewAssignment() {
+  try {
+    syncQuizFromUI();
+    if (!quiz.title?.trim()) {
+      setStatus(hostStatusEl, 'Add a quiz title first.', 'bad');
+      return;
+    }
+    if (!quiz.questions?.length) {
+      setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
+      return;
+    }
 
-function studentPreviewCorrectSummary(q) {
-  if (!q) return '';
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
-    const correct = (q.answers || []).filter(a => a.correct).map(a => a.text);
-    return correct.join(', ');
-  }
-  if (q.type === 'multi') return (q.answers || []).filter(a => a.correct).map(a => a.text).join(', ');
-  if (q.type === 'text') return (q.accepted || []).join(' / ');
-  if (q.type === 'context_gap') return (q.gaps || []).join(', ');
-  if (q.type === 'match_pairs') return (q.pairs || []).map(p => `${p.left} → ${p.right}`).join(' | ');
-  if (q.type === 'error_hunt') return q.corrected || '';
-  if (q.type === 'puzzle') return (q.items || []).join(' → ');
-  if (q.type === 'slider') return String(q.target || '');
-  return '';
-}
+    const btn = document.getElementById('studentPreviewBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+    setStatus(hostStatusEl, 'Creating preview assignment…', 'ok');
 
-function startStudentPreview() {
-  syncQuizFromUI();
-  if (!quiz.questions?.length) {
-    setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
-    return;
-  }
-  resolveJoinElements();
-  previewMode.active = true;
-  previewMode.studentPreview = true;
-  previewMode.index = 0;
-  previewMode.score = 0;
-  previewMode.answeredCurrent = false;
-  live.player.renderKey = null;
-  live.player.currentQuestion = null;
-  live.player.pinSelection = null;
-  live.player.pinSelections = [];
-
-  const card = document.getElementById('studentPreviewCard');
-  if (card) card.classList.remove('hidden');
-
-  // Bind submit handler to the freshly resolved button
-  if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
-
-  renderStudentPreviewQuestion();
-  card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function stopStudentPreview() {
-  previewMode.active = false;
-  previewMode.studentPreview = false;
-  previewMode.score = 0;
-  if (joinSubmitBtn) joinSubmitBtn.removeEventListener('click', submitLiveAnswer);
-  const card = document.getElementById('studentPreviewCard');
-  if (card) card.classList.add('hidden');
-  setStatus(hostStatusEl, 'Student preview closed.', 'ok');
-}
-
-function navigateStudentPreview(dir) {
-  const newIdx = previewMode.index + dir;
-  if (newIdx < 0 || newIdx >= quiz.questions.length) return;
-  previewMode.index = newIdx;
-  previewMode.answeredCurrent = false;
-  live.player.renderKey = null;
-  live.player.currentQuestion = null;
-  live.player.pinSelection = null;
-  live.player.pinSelections = [];
-  renderStudentPreviewQuestion();
-}
-
-function renderStudentPreviewQuestion() {
-  const q = quiz.questions[previewMode.index];
-  if (!q) return;
-  const safeQ = buildPreviewHostQuestion(q);
-  if (!safeQ) return;
-
-  live.player.currentQuestion = safeQ;
-  live.player.renderKey = null;
-
-  if (joinProgressEl) joinProgressEl.textContent = `Question ${previewMode.index + 1} / ${quiz.questions.length}`;
-  if (joinScoreEl) joinScoreEl.textContent = `Score: ${previewMode.score}`;
-  if (joinQuestionWrap) joinQuestionWrap.classList.remove('hidden');
-  if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.textContent = 'Submit'; }
-  setStatus(joinFeedbackEl, '', '');
-
-  const progEl = document.getElementById('studentPreviewProgress');
-  if (progEl) progEl.textContent = `${previewMode.index + 1} / ${quiz.questions.length}`;
-
-  // Remove any previous reveal block
-  const oldReveal = document.querySelector('#joinQuestionInteractive [data-student-preview-reveal]');
-  if (oldReveal) oldReveal.remove();
-
-  renderJoinQuestion(safeQ);
-}
-
-function submitStudentPreviewAnswer() {
-  if (!previewMode.active || !previewMode.studentPreview) return;
-  if (previewMode.answeredCurrent) return;
-
-  const q = quiz.questions[previewMode.index];
-  if (!q) return;
-
-  const answer = readJoinAnswer();
-  if (answer === null || answer === '') {
-    setStatus(joinFeedbackEl, 'Choose or type an answer first.', 'bad');
-    return;
-  }
-
-  const result = evaluatePreviewAnswer(q, answer);
-  previewMode.answeredCurrent = true;
-
-  const basePoints = Number(q.points || 1000);
-  if (result.correct) {
-    previewMode.score += basePoints;
-    setStatus(joinFeedbackEl, `Correct ✅ (+${basePoints})`, 'ok');
-  } else {
-    setStatus(joinFeedbackEl, 'Not correct ❌', 'bad');
-  }
-
-  if (joinScoreEl) joinScoreEl.textContent = `Score: ${previewMode.score}`;
-  if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.textContent = 'Submitted'; }
-
-  // Show correct answer reveal
-  const correctText = studentPreviewCorrectSummary(q);
-  if (correctText) {
-    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-    if (wrap) {
-      const revealEl = document.createElement('div');
-      revealEl.className = 'student-answer-reveal';
-      revealEl.dataset.studentPreviewReveal = '1';
-      const title = document.createElement('div');
-      title.className = 'student-answer-reveal-title';
-      title.textContent = result.correct ? 'Correct!' : 'Correct Answer';
-      const content = document.createElement('div');
-      content.className = 'student-answer-reveal-content';
-      content.textContent = correctText;
-      revealEl.append(title, content);
-      const submissionWrap = document.getElementById('joinSubmission');
-      if (submissionWrap) {
-        wrap.insertBefore(revealEl, submissionWrap);
-      } else {
-        wrap.appendChild(revealEl);
+    if (!createSessionPassword) {
+      createSessionPassword = prompt('Enter teacher password to create preview:');
+      if (!createSessionPassword) {
+        if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
+        setStatus(hostStatusEl, 'Preview cancelled.', 'bad');
+        return;
       }
     }
+
+    await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false });
+
+    const payload = normalizeQuizForLive(quiz);
+    const data = await api('/api/assignments/create', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        title: `[Preview] ${quiz.title}`,
+        className: '__preview__',
+        attemptsLimit: 0,
+        dueAt: null,
+        randomNames: true,
+        feedbackMode: 'instant',
+        quiz: payload,
+      },
+    });
+
+    const code = data?.assignment?.code;
+    if (!code) throw new Error('No assignment code returned.');
+
+    const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
+    const previewUrl = `${baseUrl}?assignment=${encodeURIComponent(code)}`;
+    window.open(previewUrl, '_blank');
+
+    setStatus(hostStatusEl, `Preview assignment created: ${code}. Opening in new tab…`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Preview failed: ${err?.message || err}`, 'bad');
+  } finally {
+    const btn = document.getElementById('studentPreviewBtn');
+    if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
   }
 }
 
