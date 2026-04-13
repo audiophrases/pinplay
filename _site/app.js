@@ -583,7 +583,7 @@ let previewMode = {
 };
 let createSessionPassword = '';
 let assignmentResultsCache = null;
-let assignmentFeedbackMode = 'none'; // 'none', 'instant', 'end'
+let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
 
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
