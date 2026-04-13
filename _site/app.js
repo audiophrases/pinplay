@@ -3128,21 +3128,31 @@ async function saveQuizToCloud() {
     syncQuizFromUI();
     await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
-    setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
 
     const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
     quiz._r2QuizId = quizId;
     quiz.title = quiz.title || 'Untitled Quiz';
 
+    // Skip upload if quiz JSON hasn't changed since last cloud save
+    const payload = JSON.stringify({ quiz, quizId });
+    const payloadHash = hashStringInt(payload);
+    if (quiz._lastCloudHash === payloadHash) {
+      setStatus(hostStatusEl, `✅ Already saved: ${quiz.title || 'Quiz'} (no changes)`, 'ok');
+      return;
+    }
+
+    setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
+
     // Upload quiz JSON to R2 (with title and questions for listing)
     const res = await fetch(`${base}/api/quizzes/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quiz, quizId })
+      body: payload
     });
 
     if (!res.ok) throw new Error('Upload failed');
     const data = await res.json();
+    quiz._lastCloudHash = payloadHash;
 
     setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
   } catch (err) {
@@ -9272,7 +9282,9 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     }
     q._lastPrompt = promptText;
 
-    if (!hearingDisabled && convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText) {
+    // Skip TTS generation if audio was already generated/uploaded and text hasn't changed
+    const alreadyHasAudio = q.audioData && q._ttsGenerated && q.audioMode === 'file';
+    if (!hearingDisabled && convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText && !alreadyHasAudio) {
       setProgress(`🔄 Generating Q${i + 1} audio...`);
       try {
         const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || getVoiceForTtsLanguage(quizLanguage) });
