@@ -300,6 +300,7 @@
               <button id="hostPrevBtn" class="btn">←</button>
               <button id="hostNextBtn" class="btn">→</button>
               <button id="previewUnifiedBtn" class="btn">👁 Preview</button>
+              <button id="studentPreviewBtn" class="btn">🧑‍🎓 Student</button>
               <button id="previewRerollBtn" class="btn hidden">🎲 Reroll</button>
               <button id="previewResimBtn" class="btn hidden">🔄 Re-sim</button>
               <input id="previewJumpInput" type="number" min="1" class="hidden" style="width:64px;" placeholder="Q#" />
@@ -403,6 +404,42 @@
             <h2>👥 Simulated student responses</h2>
             <p id="studentPreviewSummary" class="small muted"></p>
             <div id="studentPreviewStack"></div>
+          </div>
+
+          <div class="card hidden" id="studentPreviewCard">
+            <div class="row spread gap" style="margin-bottom:0.75rem;">
+              <h2 style="margin:0;">🧑‍🎓 Student preview</h2>
+              <div class="row gap">
+                <button id="studentPreviewPrevBtn" class="btn">←</button>
+                <span id="studentPreviewProgress" class="small muted"></span>
+                <button id="studentPreviewNextBtn" class="btn">→</button>
+                <button id="studentPreviewExitBtn" class="btn">✕ Close</button>
+              </div>
+            </div>
+            <p id="studentPreviewFeedback" class="feedback"></p>
+            <div id="studentPreviewViewport" class="student-preview-viewport">
+              <div id="joinQuestionWrap">
+                <div id="joinHeaderRow">
+                  <span id="joinPlayerName">Preview</span>
+                  <span id="joinModeLabel"></span>
+                  <span id="joinProgress">Question 1 / 1</span>
+                  <span id="joinTimer">Time: —</span>
+                  <span id="joinScore">Score: 0</span>
+                  <span id="joinStatusHud"></span>
+                </div>
+                <div id="joinQuestionInteractive">
+                  <h3 id="joinPrompt"></h3>
+                  <div id="joinAnswers"></div>
+                  <div id="joinSubmission">
+                    <button id="joinSubmitBtn" class="btn primary">Submit</button>
+                    <button id="betIndicator" class="bet-indicator" style="display:none">
+                      <span class="bet-btn">+40%</span>
+                    </button>
+                    <span id="reactionRow"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>

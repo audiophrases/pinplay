@@ -528,13 +528,13 @@ const joinPinEl = document.getElementById('joinPin');
 const joinNameEl = document.getElementById('joinName');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
-const joinQuestionWrap = document.getElementById('joinQuestionWrap');
-const joinProgressEl = document.getElementById('joinProgress');
-const joinScoreEl = document.getElementById('joinScore');
-const joinPromptEl = document.getElementById('joinPrompt');
-const joinAnswersEl = document.getElementById('joinAnswers');
-const joinSubmitBtn = document.getElementById('joinSubmitBtn');
-const joinFeedbackEl = document.getElementById('joinFeedback');
+let joinQuestionWrap = document.getElementById('joinQuestionWrap');
+let joinProgressEl = document.getElementById('joinProgress');
+let joinScoreEl = document.getElementById('joinScore');
+let joinPromptEl = document.getElementById('joinPrompt');
+let joinAnswersEl = document.getElementById('joinAnswers');
+let joinSubmitBtn = document.getElementById('joinSubmitBtn');
+let joinFeedbackEl = document.getElementById('joinFeedback');
 
 // Solo mode
 const pinValueEl = document.getElementById('pinValue');
