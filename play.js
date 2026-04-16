@@ -1959,60 +1959,30 @@ function renderJoinQuestion(question) {
         const pref = document.createElement('span');
         pref.className = 'prompt-prefix';
         pref.textContent = `Correct ${required} mistake${required > 1 ? 's' : ''}: `;
-        const main = document.createElement('span');
-        main.className = 'prompt-main';
-        main.textContent = String(question.prompt || '').trim();
-        promptEl.append(pref, main);
+        promptEl.append(pref);
       }
 
-      const tokenWrap = document.createElement('div');
-      tokenWrap.className = 'error-token-wrap';
-      tokenWrap.style.flexWrap = 'wrap';
-      tokenWrap.style.justifyContent = 'center';
-      // --- NEW: Pre-fill Error Hunt ---
+      // Single textarea pre-loaded with the sentence for students to edit
+      const ta = document.createElement('textarea');
+      ta.id = 'joinErrorHuntRewrite';
+      ta.className = 'join-answer-input error-hunt-textarea';
+      ta.rows = 3;
+      ta.maxLength = 300;
+      ta.dataset.originalPrompt = String(question.prompt || '').trim();
+
+      // Pre-fill from saved answer or original prompt
       const state = live.player.assignment.state;
       const rawAnswers = state?.attempt?.answersByQ || {};
       const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
-      const selectedTokens = Array.isArray(answerObj?.answer?.selectedTokens) ? answerObj.answer.selectedTokens : [];
-      const rewriteTokens = String(answerObj?.answer?.rewrite || '').split(' ').filter(Boolean);
+      const savedRewrite = answerObj?.answer?.rewrite;
+      ta.value = savedRewrite ? String(savedRewrite) : String(question.prompt || '').trim();
 
-      let tokens = tokenizeWords(question.prompt);
-      tokens.forEach((tok, i) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'btn error-token-chip';
-        b.dataset.errorToken = String(i);
-        b.dataset.tokenText = tok;
-        b.dataset.originalText = tok;
-        b.textContent = tok;
+      if (live.player.assignment.reviewMode) {
+        ta.disabled = true;
+        ta.classList.add('join-answer-locked');
+      }
 
-        if (selectedTokens.includes(i)) {
-          b.classList.add('active');
-          if (rewriteTokens[i]) {
-            b.textContent = rewriteTokens[i];
-            b.dataset.tokenText = rewriteTokens[i];
-          }
-        }
-        if (live.player.assignment.reviewMode) {
-          b.disabled = true;
-          b.classList.add('join-answer-locked');
-        }
-
-        b.addEventListener('click', () => {
-          if (live.player.assignment.reviewMode) return;
-          const isActive = b.classList.contains('active');
-          if (isActive) {
-            b.classList.remove('active');
-            return;
-          }
-          b.classList.add('active');
-        });
-        tokenWrap.appendChild(b);
-      });
-      joinAnswersEl.appendChild(tokenWrap);
-
-      // Enable inline edits/merges; rewrite will be built from tokens on submit
-      enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', null);
+      joinAnswersEl.appendChild(ta);
     } else if (question.type === 'speaking') {
       // No instruction text as requested
     } else if (question.type === 'voice_record') {
@@ -2560,27 +2530,28 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'error_hunt') {
-    const selectedChips = [...joinAnswersEl.querySelectorAll('[data-error-token]')];
-    const selected = selectedChips.filter((el) => el.classList.contains('active')).map((el) => Number(el.dataset.errorToken));
+    const ta = document.getElementById('joinErrorHuntRewrite');
+    const rewrite = String(ta?.value || '').trim();
+    if (!rewrite) return null;
+    const originalPrompt = String(ta?.dataset.originalPrompt || q.prompt || '').trim();
     const required = Number(q.requiredErrors) || countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]);
+    // Compute selectedTokens by diffing original prompt tokens vs student's rewrite tokens
+    const origTokens = tokenizeWords(originalPrompt);
+    const rewriteTokens = tokenizeWords(rewrite);
+    const selected = [];
+    const maxLen = Math.max(origTokens.length, rewriteTokens.length);
+    for (let i = 0; i < maxLen; i++) {
+      if ((origTokens[i] || '') !== (rewriteTokens[i] || '')) {
+        if (i < origTokens.length) selected.push(i);
+        else selected.push(origTokens.length - 1);
+      }
+    }
     if (required === 0) {
-      // No errors expected – accept if the rewritten text (if any) matches the prompt
-      const rewrite = selectedChips
-        .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-      const normalizedPrompt = normalizeTextAnswer(q.prompt);
+      const normalizedPrompt = normalizeTextAnswer(originalPrompt);
       const normalizedRewrite = normalizeTextAnswer(rewrite);
       return normalizedRewrite === normalizedPrompt ? { rewrite, selectedTokens: [] } : null;
     }
     if (selected.length === 0) return null;
-    const rewrite = selectedChips
-      .map((el) => String(el.dataset.tokenText || el.textContent || '').trim())
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    if (!rewrite) return null;
     return { rewrite, selectedTokens: selected };
   }
 
@@ -3278,10 +3249,11 @@ function highlightMatchPairs(question) {
 
 // Error hunt: highlight selected tokens
 function highlightErrorHunt(question, isCorrect) {
-  const tokens = joinAnswersEl.querySelectorAll('[data-error-token]');
-  tokens.forEach(token => {
-    token.classList.remove('correct-highlight', 'correct-missed', 'incorrect-highlight');
-  });
+  const ta = document.getElementById('joinErrorHuntRewrite');
+  if (ta) {
+    ta.disabled = true;
+    ta.classList.add('join-answer-locked');
+  }
 
   if (isCorrect === false) {
     const correctText = question.corrected || '';

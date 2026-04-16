@@ -1370,6 +1370,23 @@ body.question-active .join-title-row {
   opacity: 0.7;
 }
 
+.error-hunt-textarea {
+  width: 100%;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  padding: .75rem 1rem;
+  border: 2px solid var(--line);
+  border-radius: .75rem;
+  background: #fff;
+  resize: vertical;
+  font-family: inherit;
+}
+.error-hunt-textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
 /* Context Gap */
 .context-gap-inline {
   display: flex;
