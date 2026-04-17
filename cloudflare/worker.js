@@ -3293,11 +3293,6 @@ function evaluate(question, answer) {
         isCorrect = true;
         break;
       }
-      const dist = tokenEditDistance(rewriteTokens, tokenizeWords(vNorm));
-      if (dist <= 1) {
-        isCorrect = true;
-        break;
-      }
     }
     return { correct: isCorrect };
   }
