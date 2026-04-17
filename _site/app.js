@@ -1316,6 +1316,18 @@ function bindBuilderEvents() {
       return;
     }
 
+    const mediaToggleBtn = e.target.closest('[data-toggle-media]');
+    if (mediaToggleBtn) {
+      const idx = Number(mediaToggleBtn.dataset.toggleMedia);
+      const mediaType = mediaToggleBtn.dataset.mediaType;
+      const q = quiz.questions[idx];
+      if (!q) return;
+      if (!q.mediaExpand) q.mediaExpand = {};
+      q.mediaExpand[mediaType] = !q.mediaExpand[mediaType];
+      renderBuilder();
+      return;
+    }
+
     const imageSearchBtn = e.target.closest('[data-image-search]');
     if (imageSearchBtn) {
       const idx = Number(imageSearchBtn.dataset.imageSearch);
@@ -1678,11 +1690,11 @@ function findQuestionIndexFromBuilderEventTarget(target) {
   const withQ = el.closest('[data-q]');
   if (withQ && Number.isInteger(Number(withQ.dataset.q))) return Number(withQ.dataset.q);
 
-  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview],[data-toggle-pin-mode]');
+  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview],[data-toggle-pin-mode],[data-toggle-media]');
   if (!withBody) return null;
 
   const ds = withBody.dataset || {};
-  const raw = ds.q ?? ds.imageUpload ?? ds.pinUpload ?? ds.audioUpload ?? ds.imageSearch ?? ds.removeQuestion ?? ds.toggleQuestion ?? ds.toggleQuestionHeader ?? ds.moveUpQuestion ?? ds.moveDownQuestion ?? ds.addPinZone ?? ds.removePinZone ?? ds.pinPreview ?? ds.togglePinMode;
+  const raw = ds.q ?? ds.imageUpload ?? ds.pinUpload ?? ds.audioUpload ?? ds.imageSearch ?? ds.removeQuestion ?? ds.toggleQuestion ?? ds.toggleQuestionHeader ?? ds.moveUpQuestion ?? ds.moveDownQuestion ?? ds.addPinZone ?? ds.removePinZone ?? ds.pinPreview ?? ds.togglePinMode ?? ds.toggleMedia;
   const idx = Number(raw);
   return Number.isInteger(idx) ? idx : null;
 }
@@ -1710,18 +1722,31 @@ function renderBuilder() {
   quiz.questions.forEach((q, idx) => {
     const wrap = document.createElement('div');
     wrap.className = 'question-item';
+    if (!q.mediaExpand) q.mediaExpand = {};
 
-    const common = `
+    const isCollapsed = !!q.collapsed;
+    const truncPrompt = (q.prompt || '').length > 55 ? escapeHtml((q.prompt || '').slice(0, 55)) + '…' : escapeHtml(q.prompt || '');
+
+    // Detect media presence for button highlighting
+    const hasAudio = supportsQuestionAudio(q.type) && !!(q.audioText || q.audioData);
+    const hasImage = q.type !== 'pin' && !!(q.imageData || (q.imageKeyword || '').trim());
+    const hasVideo = !!((q.media?.url || '').trim());
+
+    const header = `
       <div class="question-header" data-toggle-question-header="${idx}" data-drag-question="${idx}" draggable="true" title="Click to collapse/expand · Drag header to reorder">
-        <strong>Q${idx + 1} · ${labelForType(q.type)}</strong>
-        <div class="question-actions">
-          <button class="btn" data-move-up-question="${idx}" title="Move up">↑</button>
-          <button class="btn" data-move-down-question="${idx}" title="Move down">↓</button>
-          <button class="btn" data-toggle-question="${idx}">${q.collapsed ? 'Expand' : 'Collapse'}</button>
-          <button class="btn" data-remove-question="${idx}">Remove</button>
+        <div class="q-header-left">
+          <span class="q-type-icon">${iconForType(q.type)}</span>
+          <strong>Q${idx + 1}</strong>
+          ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
-      </div>
-      <div class="${q.collapsed ? 'question-body-collapsed' : ''}">
+        <div class="question-actions">
+          <button class="btn btn-sm" data-move-up-question="${idx}" title="Move up">↑</button>
+          <button class="btn btn-sm" data-move-down-question="${idx}" title="Move down">↓</button>
+          <button class="btn btn-sm" data-remove-question="${idx}" title="Remove">✕</button>
+        </div>
+      </div>`;
+
+    let body = `<div class="${isCollapsed ? 'question-body-collapsed' : 'question-body'}">
       <label>Question (max 1200 chars)</label>
       <textarea data-q="${idx}" data-field="prompt" maxlength="1200">${escapeHtml(q.prompt || '')}</textarea>
       <div class="row gap top-space">
@@ -1797,10 +1822,6 @@ function renderBuilder() {
 
       if (q.type === 'multi') {
         specific += `<p class="small">Students must select all correct answers.</p>`;
-      }
-
-      if (supportsQuestionAudio(q.type)) {
-        specific += buildAudioSettingsMarkup(idx, q);
       }
     }
 
@@ -1975,14 +1996,6 @@ function renderBuilder() {
         </div>
         <label class="top-space">Image keyword (auto-search on save)</label>
         <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. map of Spain, human heart" />
-        <label class="top-space">Video keyword (auto-search on save)</label>
-        <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. Spain map flyover, human heart animation" />
-        <label class="top-space">Video provider preference</label>
-        <select data-q="${idx}" data-field="videoProviderPreference">
-          <option value="youtube" ${!q.videoProviderPreference || q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
-          <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
-          <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
-        </select>
         <div class="row gap top-space">
           <button type="button" class="btn" data-add-pin-zone="${idx}">+ Add correct point</button>
           <button type="button" class="btn" data-toggle-pin-mode="${idx}">${q.pinMode === 'any' ? 'Any pin (1 spot is enough)' : 'All pins (must pin all spots)'}</button>        </div>
@@ -2012,38 +2025,58 @@ function renderBuilder() {
       }
     }
 
-    if (q.type !== 'pin') {
-      specific += `
-        <label class="top-space">Question image (optional)</label>
-        <input data-image-upload="${idx}" type="file" accept="image/*" />
-        <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
-        <label class="top-space">Image keyword (auto-search on save)</label>
-        <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
-        <label class="top-space">Video keyword (auto-search on save)</label>
-        <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. volcano eruption clip, Eiffel tower drone shot" />
-        <label class="top-space">Video provider preference</label>
-        <select data-q="${idx}" data-field="videoProviderPreference">
-          <option value="youtube" ${!q.videoProviderPreference || q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
-          <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
-          <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
-        </select>
-      `;
-      if (q.imageData) {
-        specific += `
-          <div class="pin-preview question-image-preview">
-            <img src="${q.imageData}" alt="Question image" data-zoomable="1" />
-          </div>
-        `;
-      }
+    // --- Media toggle buttons ---
+    const showAudioBtn = supportsQuestionAudio(q.type);
+    const showImageBtn = q.type !== 'pin';
+
+    let mediaSection = `<div class="media-toggles top-space">`;
+    if (showAudioBtn) {
+      mediaSection += `<button type="button" class="btn media-toggle-btn${hasAudio ? ' media-active' : ''}${q.mediaExpand.audio ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="audio" title="TTS Audio">🔊</button>`;
+    }
+    if (showImageBtn) {
+      mediaSection += `<button type="button" class="btn media-toggle-btn${hasImage ? ' media-active' : ''}${q.mediaExpand.image ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="image" title="Image">🖼️</button>`;
+    }
+    mediaSection += `<button type="button" class="btn media-toggle-btn${hasVideo ? ' media-active' : ''}${q.mediaExpand.video ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="video" title="Video">🎬</button>`;
+    mediaSection += `</div>`;
+
+    // Audio section (collapsible)
+    if (showAudioBtn) {
+      mediaSection += `<div class="media-section-wrap" style="display:${q.mediaExpand.audio ? '' : 'none'}">`;
+      mediaSection += buildAudioSettingsMarkup(idx, q);
+      mediaSection += `</div>`;
     }
 
-    if (supportsQuestionAudio(q.type) && !['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
-      specific += buildAudioSettingsMarkup(idx, q);
+    // Image section (collapsible, non-pin only)
+    if (showImageBtn) {
+      mediaSection += `<div class="media-section-wrap" style="display:${q.mediaExpand.image ? '' : 'none'}">
+        <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+          <label>Question image (optional)</label>
+          <input data-image-upload="${idx}" type="file" accept="image/*" />
+          <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
+          <label class="top-space">Image keyword (auto-search on save)</label>
+          <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
+          ${q.imageData ? `<div class="pin-preview question-image-preview"><img src="${q.imageData}" alt="Question image" data-zoomable="1" /></div>` : ''}
+        </div>
+      </div>`;
     }
 
-    specific += buildVideoSettingsMarkup(idx, q);
+    // Video section (collapsible)
+    mediaSection += `<div class="media-section-wrap" style="display:${q.mediaExpand.video ? '' : 'none'}">`;
+    mediaSection += `<div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+      <label class="top-space">Video keyword (auto-search on save)</label>
+      <input data-q="${idx}" data-field="videoKeyword" type="text" maxlength="140" value="${escapeHtml(q.videoKeyword || '')}" placeholder="e.g. volcano eruption clip, Eiffel tower drone shot" />
+      <label class="top-space">Video provider preference</label>
+      <select data-q="${idx}" data-field="videoProviderPreference">
+        <option value="youtube" ${!q.videoProviderPreference || q.videoProviderPreference === 'youtube' ? 'selected' : ''}>YouTube</option>
+        <option value="vimeo" ${q.videoProviderPreference === 'vimeo' ? 'selected' : ''}>Vimeo</option>
+        <option value="direct" ${q.videoProviderPreference === 'direct' ? 'selected' : ''}>Direct</option>
+      </select>
+    </div>`;
+    mediaSection += buildVideoSettingsMarkup(idx, q);
+    mediaSection += `</div>`;
 
-    wrap.innerHTML = common + specific + '</div>';
+    body += specific + mediaSection + '</div>';
+    wrap.innerHTML = header + body;
     wrap.dataset.questionIndex = String(idx);
     questionListEl.appendChild(wrap);
   });
