@@ -1377,10 +1377,42 @@ function bindBuilderEvents() {
       const q = quiz.questions[idx];
       if (!q || q.type !== 'pin') return;
 
+      // Use the same aspect-ratio-aware calculation as attachPinPicker
+      // so builder coordinates are always consistent with the player.
+      const rect = preview.getBoundingClientRect();
+      let clickX = e.clientX - rect.left;
+      let clickY = e.clientY - rect.top;
+      let renderW = rect.width;
+      let renderH = rect.height;
+
       const img = preview.querySelector('img');
-      const rect = (img || preview).getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      if (img && img.naturalWidth && img.naturalHeight) {
+        const imgRatio = img.naturalWidth / img.naturalHeight;
+        const rectRatio = rect.width / rect.height;
+        let actualW = rect.width;
+        let actualH = rect.height;
+        let offsetX = 0;
+        let offsetY = 0;
+        if (Math.abs(imgRatio - rectRatio) > 0.01) {
+          if (imgRatio > rectRatio) {
+            actualW = rect.width;
+            actualH = rect.width / imgRatio;
+            offsetY = (rect.height - actualH) / 2;
+          } else {
+            actualH = rect.height;
+            actualW = rect.height * imgRatio;
+            offsetX = (rect.width - actualW) / 2;
+          }
+        }
+        clickX -= offsetX;
+        clickY -= offsetY;
+        renderW = actualW;
+        renderH = actualH;
+      }
+
+      const x = (clickX / renderW) * 100;
+      const y = (clickY / renderH) * 100;
+      if (x < 0 || x > 100 || y < 0 || y > 100) return;
       const zones = normalizePinZones(q);
       if (zones.length < 12) {
         zones.push({ x: round(clamp(x, 0, 100), 1), y: round(clamp(y, 0, 100), 1), r: zones[0]?.r || 15 });
@@ -2015,12 +2047,14 @@ function renderBuilder() {
         specific += `
           <div class="pin-preview" data-pin-preview="${idx}">
             <img src="${q.imageData}" alt="Pin question image" />
+            <div class="pin-picks-layer" data-builder-pin-layer="${idx}">
             ${zones.map((z) => {
           const left = clamp(z.x, 0, 100);
           const top = clamp(z.y, 0, 100);
           const size = clamp(z.r * 2, 2, 100);
           return `<div class="pin-zone" style="left:${left}%; top:${top}%; width:${size}%; height:${size}%;"></div><div class="pin-dot" style="left:${left}%; top:${top}%;"></div>`;
         }).join('')}
+            </div>
           </div>
         `;
       }
@@ -2085,6 +2119,13 @@ function renderBuilder() {
   questionListEl.querySelectorAll('[data-q]').forEach((el) => {
     el.addEventListener('input', syncQuizFromUI);
     el.addEventListener('change', syncQuizFromUI);
+  });
+
+  // Sync builder pin overlay layers to actual image bounds
+  questionListEl.querySelectorAll('[data-builder-pin-layer]').forEach((layer) => {
+    const wrap = layer.closest('.pin-preview');
+    const img = wrap?.querySelector('img');
+    if (wrap && img) syncPicksLayerBounds(wrap, layer, img);
   });
 
   if (collapseAllBtn) {
