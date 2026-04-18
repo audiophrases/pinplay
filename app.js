@@ -7683,7 +7683,7 @@ async function launchStudentPreviewAssignment() {
     setStatus(hostStatusEl, 'Creating preview assignment…', 'ok');
 
     if (!createSessionPassword) {
-      createSessionPassword = prompt('Enter teacher password to create preview:');
+      createSessionPassword = await customPasswordPrompt('Enter teacher password to create preview:');
       if (!createSessionPassword) {
         if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
         setStatus(hostStatusEl, 'Preview cancelled.', 'bad');
