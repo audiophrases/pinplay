@@ -1214,6 +1214,7 @@ body.question-active .join-title-row {
   z-index: 10;
   cursor: crosshair;
   max-width: none !important;
+  width: auto !important;
   margin: 0 !important;
 }
 
