@@ -2621,6 +2621,7 @@ export class QuizRoom {
             score: room.players[playerId].score,
             currentIndex: qIndex,
             correctAnswer: isAutoGradedExisting ? hostCorrectSummary(question) : '',
+            correctZones: isAutoGradedExisting && question.type === 'pin' ? (question.zones || []) : undefined,
           });
         }
 
@@ -2727,6 +2728,7 @@ export class QuizRoom {
           score: room.players[playerId].score,
           currentIndex: qIndex,
           correctAnswer: answerCorrectSummary,
+          correctZones: isAutoGraded && question.type === 'pin' ? (question.zones || []) : undefined,
         });
       }
 
@@ -2971,6 +2973,10 @@ function playerState(room, playerId) {
         && !isTeacherGradedTextQuestion(room.quiz.questions[qIndex])
         ? hostCorrectSummary(room.quiz.questions[qIndex])
         : '',
+    correctZones:
+      (room.phase === 'question' || room.phase === 'results') && room.questionClosed && room.quiz.questions[qIndex]?.type === 'pin'
+        ? (room.quiz.questions[qIndex].zones || [])
+        : undefined,
     questionClosed: room.phase === 'question' ? !!room.questionClosed : false,
     questionStartedAt: room.phase === 'question' ? room.questionStartedAt || null : null,
     questionDeadlineAt:
@@ -3036,7 +3042,11 @@ function hostQuestionPayload(question) {
   if (question.type === 'pin') {
     const zones = (Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x: 50, y: 50, r: 15 }])
       .slice(0, 12)
-      .map((z) => ({ x: Number(z?.x), y: Number(z?.y), r: Number(z?.r) }));
+      .map((z) => ({
+        x: clamp(finiteOr(z?.x, 50), 0, 100),
+        y: clamp(finiteOr(z?.y, 50), 0, 100),
+        r: clamp(finiteOr(z?.r, 15), 1, 100),
+      }));
     return {
       ...base,
       zones,
@@ -3320,7 +3330,7 @@ function evaluate(question, answer) {
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
 
-    const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z?.x ?? 50), Number(z?.y ?? 50)) <= Number(z?.r ?? 15))).length;
+    const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, finiteOr(z?.x, 50), finiteOr(z?.y, 50)) <= finiteOr(z?.r, 15))).length;
     const pinMode = String(question.pinMode || 'all');
     let required = 1;
     if (pinMode === 'all') required = zones.length;
@@ -3730,6 +3740,11 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   return Math.max(1, maxErrors);
 }
 
+function finiteOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function distance2D(x1, y1, x2, y2) {
   const dx = x1 - x2;
   const dy = y1 - y2;
@@ -3901,6 +3916,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
         points: verdict?.correct ? Number(question?.points || 0) : 0,
         answer: item?.answer ?? null,
         correctAnswer: hostCorrectSummary(question),
+        correctZones: question.type === 'pin' ? (question.zones || []) : undefined,
         teacherGrade: item?.teacherGrade ? {
           pointsAwarded: Number(item.teacherGrade.pointsAwarded || 0),
           correction: String(item.teacherGrade.correction || ''),
@@ -4337,7 +4353,9 @@ function hostCorrectSummary(question) {
   }
 
   if (question.type === 'pin') {
-    return 'Pin zone set';
+    const zones = Array.isArray(question.zones) ? question.zones : [];
+    if (!zones.length) return 'Pin zone set';
+    return zones.map((z, i) => `Zone ${i + 1}: (${Math.round(z.x)}%, ${Math.round(z.y)}%) r=${Math.round(z.r)}`).join(' | ');
   }
 
   return '';

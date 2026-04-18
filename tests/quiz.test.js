@@ -17,6 +17,8 @@ function sliderTolerance(margin, min, max) {
 
 function distance2D(x1, y1, x2, y2) { return Math.sqrt((x1-x2)**2 + (y1-y2)**2); }
 
+function finiteOr(value, fallback) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
+
 function countErrorHuntRequiredTokens(prompt, corrected) {
   const source = tokenizeWords(prompt); const target = tokenizeWords(corrected);
   const rows = source.length + 1; const cols = target.length + 1;
@@ -71,7 +73,7 @@ function evaluate(question, answer) {
     const zones = (Array.isArray(question.zones) && question.zones.length ? question.zones : [question.zone || { x:50,y:50,r:15 }]).slice(0,12);
     const picks = (Array.isArray(answer) ? answer : []).map(p => ({ x:Number(p?.x),y:Number(p?.y) })).filter(p => Number.isFinite(p.x)&&Number.isFinite(p.y));
     if (!picks.length) return { correct: false };
-    const covered = zones.filter(z => picks.some(p => distance2D(p.x,p.y,Number(z?.x??50),Number(z?.y??50)) <= Number(z?.r??15))).length;
+    const covered = zones.filter(z => picks.some(p => distance2D(p.x,p.y,finiteOr(z?.x,50),finiteOr(z?.y,50)) <= finiteOr(z?.r,15))).length;
     const ok = String(question.pinMode||'all') === 'any' ? covered >= 1 : covered >= zones.length;
     return { correct: ok };
   }
@@ -1016,6 +1018,18 @@ describe('evaluate: pin on image', () => {
   it('empty picks → false', () => {
     const q = { type: 'pin', zones: [{ x: 50, y: 50, r: 15 }] };
     assert.ok(!evaluate(q, []).correct);
+  });
+  it('NaN zone values fall back to defaults', () => {
+    const q = { type: 'pin', zones: [{ x: undefined, y: undefined, r: undefined }], pinMode: 'all' };
+    // defaults: x=50, y=50, r=15 → pick at (50,50) should hit
+    assert.ok(evaluate(q, [{ x: 50, y: 50 }]).correct);
+    // pick far away should miss
+    assert.ok(!evaluate(q, [{ x: 90, y: 90 }]).correct);
+  });
+  it('NaN zone x/y does not cause permanent miss', () => {
+    const q = { type: 'pin', zones: [{ x: NaN, y: NaN, r: NaN }], pinMode: 'all' };
+    // defaults: x=50, y=50, r=15
+    assert.ok(evaluate(q, [{ x: 50, y: 50 }]).correct);
   });
 });
 

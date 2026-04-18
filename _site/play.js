@@ -454,6 +454,7 @@ function mapAssignmentStateToPlayerState() {
   let questionClosed = false;
   let revealedResult = null;
   let correctAnswer = null;
+  let correctZones = undefined;
 
   if (isShowResults && answeredCurrent) {
     questionClosed = true;
@@ -486,6 +487,7 @@ function mapAssignmentStateToPlayerState() {
         graded: true,
       };
       correctAnswer = autoResult.correctAnswer;
+      correctZones = autoResult.correctZones;
     } else {
       // If we are in review mode but no result found yet, maybe it's pending grading
       if (isReviewMode) {
@@ -517,6 +519,7 @@ function mapAssignmentStateToPlayerState() {
     correction: '',
     revealedResult,
     correctAnswer,
+    correctZones: correctZones || undefined,
   };
 }
 
@@ -2427,6 +2430,7 @@ async function submitLiveAnswer() {
       const syntheticState = {
         question,
         correctAnswer: String(data.correctAnswer || ''),
+        correctZones: Array.isArray(data.correctZones) ? data.correctZones : undefined,
       };
       highlightAnswerItems(data.correct, syntheticState);
 
@@ -3315,8 +3319,10 @@ function showPinFeedback(question, state) {
   const picksLayer = preview.querySelector('.pin-picks-layer');
   const targetContainer = picksLayer || preview;
 
-  // Show correct zone(s) as green circles
-  const zones = Array.isArray(question.zones) ? question.zones : [];
+  // Show correct zone(s) as green circles — prefer zones from state (server response) over question
+  const zones = Array.isArray(state?.correctZones) && state.correctZones.length
+    ? state.correctZones
+    : (Array.isArray(question.zones) ? question.zones : []);
   zones.forEach(zone => {
     const marker = document.createElement('div');
     marker.className = 'pin-correct-marker';
