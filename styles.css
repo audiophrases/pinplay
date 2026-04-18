@@ -430,6 +430,7 @@ textarea {
   border-radius: .6rem;
   overflow: hidden;
   max-width: 480px;
+  width: fit-content;
 }
 
 .pin-preview img {

@@ -1377,7 +1377,8 @@ function bindBuilderEvents() {
       const q = quiz.questions[idx];
       if (!q || q.type !== 'pin') return;
 
-      const rect = preview.getBoundingClientRect();
+      const img = preview.querySelector('img');
+      const rect = (img || preview).getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       const zones = normalizePinZones(q);
