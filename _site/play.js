@@ -1089,34 +1089,103 @@ function renderInstantFeedbackFromState() {
   panel.id = 'assignmentResultsPanel';
   panel.className = 'assignment-results';
 
+  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+
+  // --- Score summary header ---
+  const correctCount = answers.filter(a => a.correct).length;
+  const totalCount = answers.length;
+  const totalPoints = answers.reduce((sum, a) => sum + Number(a.points || 0), 0);
+
+  const header = document.createElement('div');
+  header.className = 'assignment-results-header';
+
   const title = document.createElement('div');
   title.className = 'assignment-results-title';
+  title.textContent = 'Final Results';
+  header.appendChild(title);
+
+  const scoreSummary = document.createElement('div');
+  scoreSummary.className = 'assignment-results-score';
+  scoreSummary.textContent = `${correctCount}/${totalCount} correct · ${totalPoints} points`;
+  header.appendChild(scoreSummary);
+
+  panel.appendChild(header);
+
+  // --- Collapsible toggle ---
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'assignment-results-toggle';
+  toggleBtn.innerHTML = '<span class="toggle-arrow">▾</span> Question Summary';
+  let listCollapsed = false;
+  toggleBtn.addEventListener('click', () => {
+    listCollapsed = !listCollapsed;
+    listWrap.classList.toggle('collapsed', listCollapsed);
+    toggleBtn.querySelector('.toggle-arrow').textContent = listCollapsed ? '▸' : '▾';
+  });
+  panel.appendChild(toggleBtn);
+
+  // --- Scrollable, clickable question list ---
+  const listWrap = document.createElement('div');
+  listWrap.className = 'assignment-results-list-wrap';
 
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
 
-  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+  const isReview = !!live.player.assignment.reviewMode;
 
-  // Show all results in end mode or final summary
-  title.textContent = 'Final Results';
-  answers.forEach((a) => {
+  answers.forEach((a, i) => {
     const q = questions[a.qIndex] || {};
     const li = document.createElement('li');
-    li.className = a.correct ? 'ok' : 'bad';
-    const result = a.correct ? '✅ Correct' : '❌ Incorrect';
-    const points = Number(a.points || 0);
+    li.className = (a.correct ? 'ok' : 'bad') + ' clickable';
+    if (Number(a.qIndex) === currentQIndex) li.classList.add('active');
 
-    // FIX: Show negative deductions in the assignment recap list
+    const qNum = document.createElement('span');
+    qNum.className = 'result-q-num';
+    qNum.textContent = `Q${Number(a.qIndex) + 1}`;
+    li.appendChild(qNum);
+
+    const icon = document.createElement('span');
+    icon.className = 'result-icon';
+    icon.textContent = a.correct ? '✅' : '❌';
+    li.appendChild(icon);
+
+    const points = Number(a.points || 0);
     let pointsText = '';
-    if (points > 0) pointsText = ` · +${points} points`;
-    else if (points < 0) pointsText = ` · ${points} points`;
-    const prompt = q.prompt ? String(q.prompt).slice(0, 60) : `Q${Number(a.qIndex) + 1}`;
-    li.textContent = `${result}${pointsText}  ·  ${prompt}`;
+    if (points > 0) pointsText = `+${points}`;
+    else if (points < 0) pointsText = `${points}`;
+
+    if (pointsText) {
+      const ptsEl = document.createElement('span');
+      ptsEl.className = 'result-pts';
+      ptsEl.textContent = pointsText;
+      li.appendChild(ptsEl);
+    }
+
+    const prompt = q.prompt ? String(q.prompt).slice(0, 55) : `Question ${Number(a.qIndex) + 1}`;
+    const promptEl = document.createElement('span');
+    promptEl.className = 'result-prompt';
+    promptEl.textContent = prompt;
+    li.appendChild(promptEl);
+
+    // Click to navigate to question
+    const qIndex = Number(a.qIndex);
+    li.addEventListener('click', () => {
+      live.player.assignment.currentIndex = qIndex;
+      const mapped = mapAssignmentStateToPlayerState();
+      if (mapped) {
+        if (isReview) {
+          mapped.assignmentSubmitted = true;
+          mapped.questionClosed = true;
+        }
+        renderPlayerState(mapped);
+      }
+    });
+
     list.appendChild(li);
   });
 
-  panel.appendChild(title);
-  panel.appendChild(list);
+  listWrap.appendChild(list);
+  panel.appendChild(listWrap);
   wrap.appendChild(panel);
 }
 
@@ -1546,13 +1615,15 @@ function renderPlayerState(state) {
     const answered = new Set(Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.map((x) => Number(x)) : []);
     const hasUnanswered = [...Array(Math.max(0, total)).keys()].some((i) => !answered.has(i));
 
+    const isReview = !!live.player.assignment.reviewMode;
+
     if (assignmentPrevBtn) {
       assignmentPrevBtn.classList.remove('hidden');
-      assignmentPrevBtn.disabled = idx <= 0 || assignmentSubmitted;
+      assignmentPrevBtn.disabled = idx <= 0 || (assignmentSubmitted && !isReview);
     }
     if (assignmentNextBtn) {
       assignmentNextBtn.classList.remove('hidden');
-      assignmentNextBtn.disabled = idx >= Math.max(0, total - 1) || assignmentSubmitted;
+      assignmentNextBtn.disabled = idx >= Math.max(0, total - 1) || (assignmentSubmitted && !isReview);
     }
     if (assignmentNextPendingBtn) {
       assignmentNextPendingBtn.classList.remove('hidden');
@@ -1561,9 +1632,11 @@ function renderPlayerState(state) {
 
     if (assignmentBannerEl) {
       assignmentBannerEl.classList.remove('hidden');
-      assignmentBannerEl.textContent = assignmentSubmitted
-        ? 'Assignment submitted. Waiting for teacher review.'
-        : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
+      assignmentBannerEl.textContent = isReview
+        ? `Reviewing question ${idx + 1} of ${total}`
+        : assignmentSubmitted
+          ? 'Assignment submitted. Waiting for teacher review.'
+          : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
     }
   } else {
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');

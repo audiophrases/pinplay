@@ -1672,19 +1672,103 @@ body.question-active .join-title-row {
   border-radius: 10px;
 }
 
+.assignment-results-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
 .assignment-results-title {
   font-weight: 700;
   color: #4338ca;
-  margin-bottom: 0.35rem;
+}
+
+.assignment-results-score {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.assignment-results-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  padding: 0.3rem 0;
+  margin: 0.15rem 0 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.assignment-results-toggle:hover {
+  color: #4338ca;
+}
+
+.toggle-arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 0.9rem;
+}
+
+.assignment-results-list-wrap {
+  max-height: 40vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
+}
+
+.assignment-results-list-wrap.collapsed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.assignment-results-list-wrap::-webkit-scrollbar {
+  width: 5px;
+}
+
+.assignment-results-list-wrap::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.35);
+  border-radius: 4px;
 }
 
 .assignment-results-list {
   margin: 0;
-  padding-left: 1rem;
+  padding: 0;
+  list-style: none;
 }
 
 .assignment-results-list li {
-  margin: 0.15rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  transition: background 0.15s;
+}
+
+.assignment-results-list li.clickable {
+  cursor: pointer;
+}
+
+.assignment-results-list li.clickable:hover {
+  background: rgba(99, 102, 241, 0.13);
+}
+
+.assignment-results-list li.active {
+  background: rgba(99, 102, 241, 0.18);
+  font-weight: 600;
 }
 
 .assignment-results-list li.ok {
@@ -1693,6 +1777,36 @@ body.question-active .join-title-row {
 
 .assignment-results-list li.bad {
   color: #b91c1c;
+}
+
+.result-q-num {
+  flex-shrink: 0;
+  font-weight: 700;
+  min-width: 2rem;
+  font-size: 0.82rem;
+  opacity: 0.7;
+}
+
+.result-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.result-pts {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.result-prompt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Review / Retake Choice Modal */
