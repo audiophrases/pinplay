@@ -3278,6 +3278,7 @@ async function exportCreationPrompt() {
   const level = document.getElementById('promptLevel')?.value.trim();
   const timeLimit = document.getElementById('promptTimeLimit')?.value;
   const count = document.getElementById('promptQuestionCount')?.value;
+  const batchSize = document.getElementById('promptBatchSize')?.value;
   const images = document.getElementById('promptImages')?.value;
   const audio = document.getElementById('promptAudio')?.value;
   const video = document.getElementById('promptVideo')?.value;
@@ -3298,6 +3299,7 @@ async function exportCreationPrompt() {
   if (level) cleanRequest.level = level;
   cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) cleanRequest.questionCount = Number(count);
+  cleanRequest.batchSize = Math.max(3, Math.min(100, Number(batchSize) || 6));
   cleanRequest.images = images;
   cleanRequest.audio = audio;
   cleanRequest.video = video;
@@ -3437,16 +3439,13 @@ async function exportCreationPrompt() {
     'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.',
     'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.'
   ];
-  const batchNote = (Number(count) || 0) > 25
-    ? `This quiz requests ${count} questions. Generate them in batches of ~15-20 for higher quality. The teacher will use Import → Append to combine batches. Start with questions 1-${Math.min(20, Math.ceil(Number(count) / 2))}.`
-    : '';
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
     'Use pedagogically meaningful distractors and progression.',
     "Prioritize high-quality 'near-miss' distractors that perfectly challenge students — not too obvious, not too difficult.",
     'Keep language level aligned to request.',
     'Avoid redundant narration and filler text.',
-    batchNote
+    `Create the ${cleanRequest.questionCount || 10} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
   ].filter(Boolean);
 
   const promptText = [
