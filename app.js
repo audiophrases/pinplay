@@ -320,7 +320,7 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "error_hunt": {
     "name": "Error Hunting",
-    "rules": "The prompt is a sentence with errors. Students tap words (tokens) they think are wrong. 'corrected' must be the full fixed sentence.",
+    "rules": "CRITICAL: The 'prompt' field MUST ONLY contain the sentence with errors — no instructions, labels, or prefixes (e.g. never write 'Fix this: ...'). The app scores by word-level diff between prompt and corrected; extra words break scoring. Students tap wrong tokens. 'corrected' must be the full fixed sentence.",
     "constraints": { "maxTokens": 40 },
     "pedagogicalUses": ["Editing and proofreading routines.", "Metalinguistic awareness tasks."],
     "ttsStrategy": "audioText can read the incorrect sentence to trigger listening-for-errors.",
@@ -3325,11 +3325,7 @@ async function exportCreationPrompt() {
       .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
       .map((type) => [type, JSON.parse(JSON.stringify(QUESTION_TYPE_EXPLANATIONS[type]))])
   );
-  const typeUseCases = Object.fromEntries(
-    allowedTypes
-      .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
-      .map((type) => [type, (QUESTION_TYPE_EXPLANATIONS[type].pedagogicalUses || []).slice(0, 2)])
-  );
+  // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
 
   const featureGuides = {
     imageKeyword: cleanRequest.images === 'some'
@@ -3364,14 +3360,9 @@ async function exportCreationPrompt() {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
     : `Use only allowed question types: ${allowedTypesText}.`;
-  const errorHuntRule = allowedTypes.includes('error_hunt')
-    ? 'error_hunt prompt field: The prompt must contain ONLY the sentence with errors — no leading instructions, labels, or prefixes (e.g. do NOT write "Fix this: ..."). The app scores by word-level diff between prompt and corrected; any extra words will be falsely detected as errors.'
-    : undefined;
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
     questionTypesRule,
-    errorHuntRule,
-    'Do NOT emit "type": "audio" or create an "audio" question-type category.',
     'Use imageData as "" (never base64 in generated output).',
     cleanRequest.audio === 'some'
       ? 'For generated audio use audioMode:"tts", audioData:"", meaningful audioText, and always include question-level ttsLanguage.'
@@ -3421,34 +3412,43 @@ async function exportCreationPrompt() {
     'Task',
     textualSummary,
     '',
+    'Quality goals',
+    qualityGoals.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    '',
     'Must-follow rules',
     normalizedMustFollowRules.map((r, i) => `${i + 1}. ${r}`).join('\n'),
     '',
     'Output contract',
-    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n'),
-    '',
-    'Quality goals',
-    qualityGoals.map((r, i) => `${i + 1}. ${r}`).join('\n')
+    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n')
   ].join('\n').trim();
+
+  // Shrink exampleTemplate: keep max 2 examples (1 simple + 1 complex) to save tokens
+  const EXAMPLE_SIMPLE_TYPES = ['mcq'];
+  const EXAMPLE_COMPLEX_TYPES = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
+  const pickedExamples = [];
+  const simpleEx = filteredTemplateQuestions.find((q) => EXAMPLE_SIMPLE_TYPES.includes(q.type));
+  if (simpleEx) pickedExamples.push(simpleEx);
+  const complexEx = filteredTemplateQuestions.find((q) => EXAMPLE_COMPLEX_TYPES.includes(q.type) && q.type !== simpleEx?.type);
+  if (complexEx) pickedExamples.push(complexEx);
+  // Fallback: if no match found, take first 2 filtered questions
+  if (!pickedExamples.length) pickedExamples.push(...filteredTemplateQuestions.slice(0, 2));
 
   const exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
       type: "PinPlay Creation Prompt",
-      version: "3.4"
+      version: "3.5"
     },
-    request: cleanRequest,
-    promptIntent: "Generate one valid PinPlay v3 quiz JSON from request constraints only.",
+    promptIntent: "Generate one valid PinPlay v3 quiz JSON from the Task block below.",
     context: {
       allowedQuestionTypes: allowedTypes,
       typeExplanations: relevantTypeExplanations,
-      typeUseCases,
       featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value)),
       audioPedagogicalUse
     },
     exampleTemplate: {
       ...TEMPLATE_ALL_13_TYPES,
-      questions: filteredTemplateQuestions
+      questions: pickedExamples
     }
   };
 
@@ -3461,15 +3461,13 @@ async function exportCreationPrompt() {
       info.differentiationTips = (info.differentiationTips || []).slice(0, 1);
       info.commonPitfalls = (info.commonPitfalls || []).slice(0, 1);
       if (typeof info.ttsStrategy === 'string') info.ttsStrategy = info.ttsStrategy.slice(0, 120);
-      if (typeof info.rules === 'string') info.rules = info.rules.slice(0, 180);
+      if (typeof info.rules === 'string') info.rules = info.rules.slice(0, 300);
     });
   }
   if (JSON.stringify(exportData).length > CONTEXT_BUDGET) {
     delete exportData.context.typeExplanations;
   }
-  if (JSON.stringify(exportData).length > CONTEXT_BUDGET) {
-    delete exportData.context.typeUseCases;
-  }
+  // typeUseCases no longer exists; skip this trim step
 
   try {
     await navigator.clipboard.writeText(promptText);
