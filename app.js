@@ -903,7 +903,7 @@ function syncTypesGridVisibility() {
   const typesListEl = document.getElementById('promptTypesList');
   const selectAllTypesBtn = document.getElementById('promptSelectAllTypes');
   const clearAllTypesBtn = document.getElementById('promptClearAllTypes');
-  const hidden = modeEl && modeEl.value === 'ai_choice';
+  const hidden = modeEl && (modeEl.value === 'ai_choice' || modeEl.value === 'all' || modeEl.value === 'exclude_teacher_graded');
   if (typesListEl) typesListEl.classList.toggle('hidden', hidden);
   if (selectAllTypesBtn) selectAllTypesBtn.classList.toggle('hidden', hidden);
   if (clearAllTypesBtn) clearAllTypesBtn.classList.toggle('hidden', hidden);
@@ -3333,9 +3333,10 @@ async function exportCreationPrompt() {
   const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked'))
     .map(cb => cb.value)
     .filter((type) => CANONICAL_QUESTION_TYPES.includes(type));
+  const TEACHER_GRADED_TYPES = ['open', 'speaking', 'voice_record'];
   const allowedTypes = CANONICAL_QUESTION_TYPES.filter((type) => {
     if (typesMode === 'include' && selectedTypes.length) return selectedTypes.includes(type);
-    if (typesMode === 'exclude' && selectedTypes.length) return !selectedTypes.includes(type);
+    if (typesMode === 'exclude_teacher_graded') return !TEACHER_GRADED_TYPES.includes(type);
     return true;
   });
 
@@ -3343,8 +3344,8 @@ async function exportCreationPrompt() {
     cleanRequest.questionTypeSelection = 'ai_choice';
   } else if (typesMode === 'include' && selectedTypes.length > 0) {
     cleanRequest.includeQuestionTypes = selectedTypes;
-  } else if (typesMode === 'exclude' && selectedTypes.length > 0) {
-    cleanRequest.excludeQuestionTypes = selectedTypes;
+  } else if (typesMode === 'exclude_teacher_graded') {
+    cleanRequest.excludeQuestionTypes = TEACHER_GRADED_TYPES;
   }
 
   const textualSummary = Object.entries(cleanRequest)

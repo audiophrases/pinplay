@@ -44,6 +44,24 @@
                       <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
                     </div>
                     <div class="prompt-field">
+                      <label>Goal</label>
+                      <select id="promptGoal">
+                        <option value="learning">More learning (scaffolded)</option>
+                        <option value="practising">More practising (retrieval)</option>
+                        <option value="balanced">Balanced mix (S-R-S-R)</option>
+                        <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
+                        <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
+                        <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
+                        <option value="custom" selected>Custom pedagogical goal...</option>
+                      </select>
+                      <textarea
+                        id="promptGoalCustom"
+                        class="top-space"
+                        rows="3"
+                        placeholder="e.g. Build conceptual understanding first, then retrieval under time pressure"
+                      ></textarea>
+                    </div>
+                    <div class="prompt-field">
                       <label>Language</label>
                       <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
                     </div>
@@ -53,15 +71,15 @@
                     </div>
                     <div class="prompt-field">
                       <label>Time limit (sec)</label>
-                      <input id="promptTimeLimit" type="number" value="30" min="0" max="300" />
+                      <input id="promptTimeLimit" type="number" value="0" min="0" max="300" />
                     </div>
                     <div class="prompt-field">
                       <label>Questions</label>
-                      <input id="promptQuestionCount" type="number" value="10" min="1" max="50" />
+                      <input id="promptQuestionCount" type="number" value="15" min="1" max="50" />
                     </div>
                     <div class="prompt-field">
                       <label>Create in batches of</label>
-                      <input id="promptBatchSize" type="number" value="6" min="3" max="100" />
+                      <input id="promptBatchSize" type="number" value="5" min="3" max="100" />
                     </div>
                     <div class="prompt-field">
                       <label>Images</label>
@@ -80,37 +98,18 @@
                     <div class="prompt-field">
                       <label>Video</label>
                       <select id="promptVideo">
-                        <option value="some" selected>Some (when relevant)</option>
-                        <option value="no">No videos</option>
+                        <option value="some">Some (when relevant)</option>
+                        <option value="no" selected>No videos</option>
                       </select>
-                    </div>
-                    <div class="prompt-field">
-                      <label>Goal</label>
-                      <select id="promptGoal">
-                        <option value="learning">More learning (scaffolded)</option>
-                        <option value="practising">More practising (retrieval)</option>
-                        <option value="balanced">Balanced mix (S-R-S-R)</option>
-                        <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
-                        <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
-                        <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
-                        <option value="custom">Custom pedagogical goal...</option>
-                      </select>
-                      <textarea
-                        id="promptGoalCustom"
-                        class="hidden top-space"
-                        disabled
-                        rows="3"
-                        placeholder="e.g. Build conceptual understanding first, then retrieval under time pressure"
-                      ></textarea>
                     </div>
                   </div>
                   <div class="prompt-field full-width top-space">
                     <label>Question Types</label>
                     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
                       <select id="promptTypesMode" style="width: auto; min-width: 200px;">
-                        <option value="ai_choice" selected>Best fitting the quiz goals</option>
-                        <option value="include">Include ONLY selected</option>
-                        <option value="exclude">Exclude selected</option>
+                        <option value="exclude_teacher_graded" selected>Exclude teacher-corrected</option>
+                        <option value="ai_choice">Best fitting the quiz goals</option>
+                        <option value="include">Include selected</option>
                         <option value="all">Use all available types</option>
                       </select>
                       <button type="button" class="btn small" id="promptSelectAllTypes">Select all</button>
