@@ -1231,16 +1231,52 @@ function bindBuilderEvents() {
         }
         return next;
       });
-      quiz = parsed;
+
+      // Ask user: replace or append?
+      const hasExisting = quiz.questions && quiz.questions.length > 0;
+      let mode = 'replace';
+      if (hasExisting) {
+        const choice = confirm(
+          `You already have ${quiz.questions.length} question(s).\n\n` +
+          `OK = Append ${parsed.questions.length} new question(s) at the end\n` +
+          `Cancel = Replace all with the imported quiz`
+        );
+        mode = choice ? 'append' : 'replace';
+      }
+
+      if (mode === 'append') {
+        // Deduplicate IDs: renumber incoming questions to avoid collisions
+        const existingIds = new Set(quiz.questions.map((q) => q.id));
+        let counter = quiz.questions.length;
+        parsed.questions.forEach((q) => {
+          counter++;
+          if (existingIds.has(q.id)) {
+            q.id = `q${counter}-${q.type || 'q'}`;
+          }
+          existingIds.add(q.id);
+        });
+        quiz.questions.push(...parsed.questions);
+        // Merge top-level settings from imported file only if current quiz has none
+        if (parsed.title && !quiz.title) quiz.title = parsed.title;
+        if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
+          quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
+        }
+      } else {
+        quiz = parsed;
+      }
+
       collapseAllQuestions(quiz);
       renderBuilder();
       await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
       const savedOk = saveQuiz(quiz);
+      const label = mode === 'append'
+        ? `${parsed.questions.length} question(s) appended ✅ (total: ${quiz.questions.length})`
+        : 'Quiz imported ✅';
       if (savedOk) {
-        alert('Quiz imported ✅');
+        alert(label);
       } else {
-        alert('Quiz imported ✅ (local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
+        alert(label + ' (local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
       }
     } catch (err) {
       alert(`Import failed: ${err.message}`);
@@ -3401,12 +3437,16 @@ async function exportCreationPrompt() {
     'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.',
     'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.'
   ];
+  const batchNote = (Number(count) || 0) > 25
+    ? `This quiz requests ${count} questions. Generate them in batches of ~15-20 for higher quality. The teacher will use Import → Append to combine batches. Start with questions 1-${Math.min(20, Math.ceil(Number(count) / 2))}.`
+    : '';
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
     'Use pedagogically meaningful distractors and progression.',
     'Keep language level aligned to request.',
-    'Avoid redundant narration and filler text.'
-  ];
+    'Avoid redundant narration and filler text.',
+    batchNote
+  ].filter(Boolean);
 
   const promptText = [
     'Task',
