@@ -3443,6 +3443,7 @@ async function exportCreationPrompt() {
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
     'Use pedagogically meaningful distractors and progression.',
+    "Prioritize high-quality 'near-miss' distractors that perfectly challenge students — not too obvious, not too difficult.",
     'Keep language level aligned to request.',
     'Avoid redundant narration and filler text.',
     batchNote
