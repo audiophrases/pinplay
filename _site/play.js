@@ -67,6 +67,7 @@ const live = {
       currentIndex: 0,
       pollingTimer: null,
       forceAutoAdvance: false,
+      pendingComplete: false,
     },
   },
 };
@@ -1476,7 +1477,7 @@ function renderPlayerState(state) {
   const answeredSet = new Set(Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.map((x) => Number(x)) : []);
   const allAssignmentAnswersSaved = live.player.mode === 'assignment' && assignmentTotal > 0 && answeredSet.size >= assignmentTotal;
 
-  if (allAssignmentAnswersSaved && !assignmentSubmitted) {
+  if (allAssignmentAnswersSaved && !assignmentSubmitted && !live.player.assignment.pendingComplete) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
     stopJoinTimer();
@@ -1580,7 +1581,7 @@ function renderPlayerState(state) {
     const isContinueMode = isAssignment && (questionClosed || state.answeredCurrent) && !assignmentSubmitted;
 
     if (isContinueMode) {
-      joinSubmitBtn.textContent = 'Continue';
+      joinSubmitBtn.textContent = live.player.assignment.pendingComplete ? 'Finish quiz' : 'Continue';
       joinSubmitBtn.disabled = false;
     } else {
       joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
@@ -2422,7 +2423,13 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer() {
   try {
-    if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
+    if (joinSubmitBtn && (joinSubmitBtn.textContent === 'Continue' || joinSubmitBtn.textContent === 'Finish quiz')) {
+      if (live.player.assignment.pendingComplete) {
+        live.player.assignment.pendingComplete = false;
+        const mapped = mapAssignmentStateToPlayerState();
+        if (mapped) renderPlayerState(mapped);
+        return;
+      }
       moveAssignmentIndex(1);
       return;
     }
@@ -2450,6 +2457,14 @@ async function submitLiveAnswer() {
       const mode = data?.attempt?.assignment?.feedbackMode || 'none';
       if (mode !== 'instant') {
         live.player.assignment.forceAutoAdvance = true;
+      }
+
+      // Check if this was the last answer and feedback is instant
+      const totalQs = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
+      const answeredQs = Array.isArray(data?.attempt?.answeredQIndexes) ? data.attempt.answeredQIndexes.length : 0;
+      if (mode === 'instant' && totalQs > 0 && answeredQs >= totalQs) {
+        live.player.assignment.pendingComplete = true;
+        live.player.assignment.forceAutoAdvance = false;
       }
 
       setJoinStatusHud('Answer saved ✅', 'ok');
