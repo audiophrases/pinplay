@@ -6083,14 +6083,8 @@ function renderHostQuestion(state) {
     const correctSet = new Set(Array.isArray(question.correctIndexes) ? question.correctIndexes : []);
 
     // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
-    const seed = Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
-    const indices = (question.answers || []).map((_, i) => i);
-    let sr = seed;
-    for (let s = indices.length - 1; s > 0; s--) {
-      sr = (sr * 16807) % 2147483647;
-      const j = sr % (s + 1);
-      [indices[s], indices[j]] = [indices[j], indices[s]];
-    }
+    const seed = questionShuffleSeed(question);
+    const indices = seededShuffleIndices((question.answers || []).length, seed);
 
     indices.forEach((origIdx, displayNum) => {
       const a = question.answers[origIdx];
@@ -7213,14 +7207,18 @@ function renderJoinQuestion(question) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
-    question.answers.forEach((a, idx) => {
+    const seed = questionShuffleSeed(question);
+    const indices = seededShuffleIndices((question.answers || []).length, seed);
+
+    indices.forEach((origIdx) => {
+      const a = question.answers[origIdx];
       const row = document.createElement('label');
       row.className = 'answer-row';
 
       const input = document.createElement('input');
       input.type = isMulti ? 'checkbox' : 'radio';
       if (!isMulti) input.name = 'join-answer';
-      input.value = String(idx);
+      input.value = String(origIdx);
       input.dataset.joinAnswer = '1';
 
       const text = document.createElement('span');
@@ -7352,7 +7350,7 @@ function renderJoinQuestion(question) {
       enableInlineErrorTokenEditing(tokenWrap, '[data-error-token]', input);
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
-      const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
+      const rightOptions = shuffle(Array.isArray(question.rightOptions) ? question.rightOptions : []);
       if (question.imageData) {
         const overlay = document.createElement('div');
         overlay.id = 'matchPairsCenterOverlay';
@@ -7408,7 +7406,7 @@ function renderJoinQuestion(question) {
   }
 
   if (question.type === 'puzzle') {
-    const options = (question.options || []).slice(0, 12);
+    const options = shuffle((question.options || []).slice(0, 12));
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
 
     if (hasQuestionAudio(question)) {
@@ -8427,14 +8425,18 @@ function renderSoloQuestion() {
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
     const isMulti = q.type === 'multi';
 
-    (q.answers || []).forEach((a, idx) => {
+    const seed = questionShuffleSeed(q);
+    const indices = seededShuffleIndices((q.answers || []).length, seed);
+
+    indices.forEach((origIdx) => {
+      const a = q.answers[origIdx];
       const row = document.createElement('label');
       row.className = 'answer-row';
 
       const input = document.createElement('input');
       input.type = isMulti ? 'checkbox' : 'radio';
       if (!isMulti) input.name = 'solo-answer';
-      input.value = String(idx);
+      input.value = String(origIdx);
       input.dataset.soloAnswer = '1';
 
       const text = document.createElement('span');
@@ -10488,6 +10490,21 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function questionShuffleSeed(question) {
+  return Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
+}
+
+function seededShuffleIndices(length, seed) {
+  const indices = Array.from({ length }, (_, i) => i);
+  let sr = seed;
+  for (let s = indices.length - 1; s > 0; s--) {
+    sr = (sr * 16807) % 2147483647;
+    const j = sr % (s + 1);
+    [indices[s], indices[j]] = [indices[j], indices[s]];
+  }
+  return indices;
 }
 
 function supportsQuestionAudio(type) {
