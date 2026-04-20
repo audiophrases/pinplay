@@ -1210,76 +1210,90 @@ function bindBuilderEvents() {
   // delete actions are integrated into open dialogs
 
   importInput.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      validateImportedQuiz(parsed);
-      // Normalize prompts/corrections on import for compatibility
-      parsed.questions = (parsed.questions || []).map((q) => {
-        const next = { ...q };
-        if (!next.prompt && next.question) next.prompt = next.question;
-        if (!Array.isArray(next.correctedVariants) && next.corrected) {
-          next.correctedVariants = String(next.corrected).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
-        }
-        if (!next.corrected && Array.isArray(next.correctedVariants) && next.correctedVariants.length) {
-          next.corrected = next.correctedVariants[0];
-        }
-        if (!next.requiredErrors && next.prompt && next.corrected) {
-          next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
-        }
-        return next;
-      });
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-      // Ask user: replace or append?
-      const hasExisting = quiz.questions && quiz.questions.length > 0;
-      let mode = 'replace';
-      if (hasExisting) {
-        const choice = confirm(
-          `You already have ${quiz.questions.length} question(s).\n\n` +
-          `OK = Append ${parsed.questions.length} new question(s) at the end\n` +
-          `Cancel = Replace all with the imported quiz`
-        );
-        mode = choice ? 'append' : 'replace';
-      }
+    // Ask user: replace or append? (only when quiz already has questions)
+    const hasExisting = quiz.questions && quiz.questions.length > 0;
+    let mode = 'replace';
+    if (hasExisting) {
+      const choice = confirm(
+        `You already have ${quiz.questions.length} question(s).\n\n` +
+        `OK = Append new question(s) from ${files.length} file(s) at the end\n` +
+        `Cancel = Replace all with the imported file${files.length > 1 ? 's' : ''}`
+      );
+      mode = choice ? 'append' : 'replace';
+    }
 
-      if (mode === 'append') {
-        // Deduplicate IDs: renumber incoming questions to avoid collisions
-        const existingIds = new Set(quiz.questions.map((q) => q.id));
-        let counter = quiz.questions.length;
-        parsed.questions.forEach((q) => {
-          counter++;
-          if (existingIds.has(q.id)) {
-            q.id = `q${counter}-${q.type || 'q'}`;
+    let totalAppended = 0;
+    const errors = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        validateImportedQuiz(parsed);
+        // Normalize prompts/corrections on import for compatibility
+        parsed.questions = (parsed.questions || []).map((q) => {
+          const next = { ...q };
+          if (!next.prompt && next.question) next.prompt = next.question;
+          if (!Array.isArray(next.correctedVariants) && next.corrected) {
+            next.correctedVariants = String(next.corrected).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
           }
-          existingIds.add(q.id);
+          if (!next.corrected && Array.isArray(next.correctedVariants) && next.correctedVariants.length) {
+            next.corrected = next.correctedVariants[0];
+          }
+          if (!next.requiredErrors && next.prompt && next.corrected) {
+            next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
+          }
+          return next;
         });
-        quiz.questions.push(...parsed.questions);
-        // Merge top-level settings from imported file only if current quiz has none
-        if (parsed.title && !quiz.title) quiz.title = parsed.title;
-        if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
-          quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
+
+        if (mode === 'append' || (mode === 'replace' && i > 0)) {
+          // Deduplicate IDs: renumber incoming questions to avoid collisions
+          const existingIds = new Set(quiz.questions.map((q) => q.id));
+          let counter = quiz.questions.length;
+          parsed.questions.forEach((q) => {
+            counter++;
+            if (existingIds.has(q.id)) {
+              q.id = `q${counter}-${q.type || 'q'}`;
+            }
+            existingIds.add(q.id);
+          });
+          quiz.questions.push(...parsed.questions);
+          if (parsed.title && !quiz.title) quiz.title = parsed.title;
+          if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
+            quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
+          }
+        } else {
+          // First file in replace mode
+          quiz = parsed;
         }
-      } else {
-        quiz = parsed;
+        totalAppended += parsed.questions.length;
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message}`);
       }
+    }
 
-      collapseAllQuestions(quiz);
-      renderBuilder();
-      await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
+    collapseAllQuestions(quiz);
+    renderBuilder();
+    await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
-      const savedOk = saveQuiz(quiz);
-      const label = mode === 'append'
-        ? `${parsed.questions.length} question(s) appended ✅ (total: ${quiz.questions.length})`
-        : 'Quiz imported ✅';
-      if (savedOk) {
-        alert(label);
-      } else {
-        alert(label + ' (local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
-      }
-    } catch (err) {
-      alert(`Import failed: ${err.message}`);
+    const savedOk = saveQuiz(quiz);
+    let label;
+    if (mode === 'replace' && files.length === 1 && !errors.length) {
+      label = 'Quiz imported ✅';
+    } else {
+      label = `${totalAppended} question(s) from ${files.length - errors.length} file(s) ✅ (total: ${quiz.questions.length})`;
+    }
+    if (errors.length) {
+      label += `\n\nFailed files:\n${errors.join('\n')}`;
+    }
+    if (savedOk) {
+      alert(label);
+    } else {
+      alert(label + '\n(local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
     }
     importInput.value = '';
   });
