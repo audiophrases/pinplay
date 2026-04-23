@@ -680,6 +680,42 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/get-quiz' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      }));
+    }
+
+    if (url.pathname === '/api/assignments/update-quiz' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const quiz = normalizeQuiz(body?.quiz || {});
+      if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/update-quiz', {
+        method: 'POST',
+        body: JSON.stringify({ code, quiz }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/get' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -1956,6 +1992,81 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, deleted: code });
+      }
+
+      if (url.pathname === '/assignments/get-quiz' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        const meta = publicAssignment(assignment, { includeQuiz: false });
+        return json({ ok: true, assignment: meta, quiz: assignment.quiz || null });
+      }
+
+      if (url.pathname === '/assignments/update-quiz' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const quiz = normalizeQuiz(body?.quiz || {});
+        if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        const oldQuestions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
+        const oldIndexToId = new Map();
+        oldQuestions.forEach((q, i) => {
+          const qid = q && q.id ? String(q.id) : '';
+          if (qid) oldIndexToId.set(i, qid);
+        });
+
+        const newIdToIndex = new Map();
+        quiz.questions.forEach((q, i) => {
+          const qid = q && q.id ? String(q.id) : '';
+          if (qid) newIdToIndex.set(qid, i);
+        });
+
+        const now = Date.now();
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        let remappedAttempts = 0;
+        let droppedAnswers = 0;
+
+        for (const attemptId of Object.keys(assignment.attempts)) {
+          const attempt = assignment.attempts[attemptId];
+          if (!attempt || typeof attempt !== 'object') continue;
+
+          const oldAnswers = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+          const newAnswers = {};
+          for (const [idxRaw, item] of Object.entries(oldAnswers)) {
+            const oldIdx = Number(idxRaw);
+            const qid = oldIndexToId.get(oldIdx);
+            if (!qid) { droppedAnswers += 1; continue; }
+            const newIdx = newIdToIndex.get(qid);
+            if (newIdx == null) { droppedAnswers += 1; continue; }
+            newAnswers[String(newIdx)] = item;
+          }
+          attempt.answersByQ = newAnswers;
+          attempt.updatedAt = now;
+          remappedAttempts += 1;
+
+          const metrics = evaluateAssignmentAttempt({ ...assignment, quiz }, attempt);
+          attempt.autoScore = metrics.autoScore;
+        }
+
+        assignment.quiz = quiz;
+        assignment.updatedAt = now;
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+          remappedAttempts,
+          droppedAnswers,
+        });
       }
 
       if (url.pathname === '/init' && request.method === 'POST') {

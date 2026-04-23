@@ -451,6 +451,7 @@ const backendStatusEl = document.getElementById('backendStatus');
 const hostCardEl = document.getElementById('hostCard');
 const createLiveBtn = document.getElementById('createLiveBtn');
 const hostApplyBuilderBtn = document.getElementById('hostApplyBuilderBtn');
+const applyAssignmentBtn = document.getElementById('applyAssignmentBtn');
 const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
@@ -585,6 +586,8 @@ let previewMode = {
 let createSessionPassword = '';
 let assignmentResultsCache = null;
 let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
+let applyTargetAssignmentCode = ''; // set by "Open Quiz" on an assignment row; target for "Apply to Assignment"
+let applyTargetAssignmentTitle = '';
 
 
 const hostTimerBarFill = ensureTimerProgressBar(hostQuestionCardEl, 'hostTimerBar');
@@ -1269,6 +1272,7 @@ function bindBuilderEvents() {
         } else {
           // First file in replace mode
           quiz = parsed;
+          setApplyAssignmentTarget('', '');
         }
         totalAppended += parsed.questions.length;
       } catch (err) {
@@ -3150,6 +3154,7 @@ function openLocalLibraryDialog(opts = {}) {
       const chosen = item.raw;
       validateImportedQuiz(chosen.quiz);
       quiz = chosen.quiz;
+      setApplyAssignmentTarget('', '');
       collapseAllQuestions(quiz);
       renderBuilder();
       saveQuiz(quiz);
@@ -3177,6 +3182,7 @@ async function openQuizFromDrive(opts = {}) {
         const loadedQuiz = openData?.quiz;
         validateImportedQuiz(loadedQuiz);
         quiz = loadedQuiz;
+        setApplyAssignmentTarget('', '');
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
@@ -3229,6 +3235,7 @@ async function openQuizFromCloud() {
         validateImportedQuiz(loadedQuiz);
         quiz = loadedQuiz;
         quiz._r2QuizId = quizKey.replace('quizzes/', '').replace('.json', '');
+        setApplyAssignmentTarget('', '');
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
@@ -3640,6 +3647,7 @@ async function customPasswordPrompt(message) {
 function bindLiveEvents() {
   if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
+  if (applyAssignmentBtn) applyAssignmentBtn.addEventListener('click', applyQuizToAssignment);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
   if (hostAttemptsExportBtn) hostAttemptsExportBtn.addEventListener('click', exportHostAttemptsCsv);
@@ -4394,6 +4402,21 @@ async function refreshAssignmentsList() {
         if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
       });
 
+      const openQuizBtn = document.createElement('button');
+      openQuizBtn.className = 'btn';
+      openQuizBtn.textContent = 'Open Quiz';
+      openQuizBtn.title = 'Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.';
+      openQuizBtn.addEventListener('click', async () => {
+        try {
+          openQuizBtn.disabled = true;
+          await openAssignmentInBuilder(code, String(a?.title || ''));
+        } catch (err) {
+          if (assignmentStatusEl) assignmentStatusEl.textContent = `Open quiz error: ${err.message}`;
+        } finally {
+          openQuizBtn.disabled = false;
+        }
+      });
+
       const viewResultsBtn = document.createElement('button');
       viewResultsBtn.className = 'btn';
       viewResultsBtn.textContent = 'View results';
@@ -4435,6 +4458,7 @@ async function refreshAssignmentsList() {
             },
           });
           if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
+          if (applyTargetAssignmentCode === code) setApplyAssignmentTarget('', '');
           await refreshAssignmentsList();
         } catch (err) {
           if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete error: ${err.message}`;
@@ -4443,7 +4467,7 @@ async function refreshAssignmentsList() {
         }
       });
 
-      row.append(copyCodeBtn, copyLinkBtn, viewResultsBtn, toggleBtn, deleteBtn);
+      row.append(copyCodeBtn, copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, deleteBtn);
       li.append(title, meta, row);
       assignmentListEl.appendChild(li);
     });
@@ -4564,6 +4588,106 @@ async function hostApplyBuilderToLive() {
     setStatus(hostStatusEl, 'Live game updated from builder ✅', 'ok');
     await pollHostState();
   } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+}
+
+function setApplyAssignmentTarget(code, title) {
+  applyTargetAssignmentCode = String(code || '').trim();
+  applyTargetAssignmentTitle = String(title || '').trim();
+  if (!applyAssignmentBtn) return;
+  if (applyTargetAssignmentCode) {
+    applyAssignmentBtn.style.display = '';
+    applyAssignmentBtn.textContent = `Apply to Assignment (${applyTargetAssignmentCode})`;
+    applyAssignmentBtn.title = applyTargetAssignmentTitle
+      ? `Save edits back to assignment "${applyTargetAssignmentTitle}" (${applyTargetAssignmentCode})`
+      : `Save edits back to assignment ${applyTargetAssignmentCode}`;
+  } else {
+    applyAssignmentBtn.style.display = 'none';
+    applyAssignmentBtn.textContent = 'Apply to Assignment';
+    applyAssignmentBtn.title = '';
+  }
+}
+
+async function openAssignmentInBuilder(code, titleHint) {
+  const codeTrim = String(code || '').trim();
+  if (!codeTrim) throw new Error('Missing assignment code.');
+
+  if (!createSessionPassword) {
+    const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
+    if (typed == null) return;
+    createSessionPassword = String(typed || '');
+  }
+  if (!createSessionPassword) throw new Error('Teacher password is required.');
+
+  const data = await api('/api/assignments/get-quiz', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: codeTrim },
+  });
+
+  const loadedQuiz = data?.quiz;
+  if (!loadedQuiz || !Array.isArray(loadedQuiz.questions) || !loadedQuiz.questions.length) {
+    throw new Error('Assignment has no editable quiz data.');
+  }
+
+  validateImportedQuiz(loadedQuiz);
+  quiz = loadedQuiz;
+  collapseAllQuestions(quiz);
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local-save is best-effort */ }
+
+  setApplyAssignmentTarget(codeTrim, titleHint || data?.assignment?.title || loadedQuiz.title || '');
+
+  if (builderSettingsToggleEl && builderSettingsBodyEl) {
+    setSectionCollapsed(builderSettingsToggleEl, builderSettingsBodyEl, false);
+    builderSettingsToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  if (assignmentStatusEl) {
+    assignmentStatusEl.textContent = `Opened assignment ${codeTrim} in the builder. Edit, then click "Apply to Assignment".`;
+  }
+  setStatus(hostStatusEl, `Editing assignment ${codeTrim} — click Apply to Assignment to save changes.`, 'ok');
+}
+
+async function applyQuizToAssignment() {
+  try {
+    if (!applyTargetAssignmentCode) {
+      throw new Error('No assignment loaded. Click "Open Quiz" on an assignment first.');
+    }
+
+    syncQuizFromUI();
+    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
+
+    await ensureQuizMediaReady({ contextLabel: 'apply to assignment', convertTtsToMp3: true, strictMediaCheck: true });
+
+    if (!createSessionPassword) {
+      const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
+    const code = applyTargetAssignmentCode;
+    const data = await api('/api/assignments/update-quiz', {
+      method: 'POST',
+      body: {
+        password: createSessionPassword,
+        code,
+        quiz: normalizeQuizForLive(quiz),
+      },
+    });
+
+    const remapped = Number(data?.remappedAttempts || 0);
+    const dropped = Number(data?.droppedAnswers || 0);
+    const droppedNote = dropped > 0 ? ` · ${dropped} stale answer${dropped === 1 ? '' : 's'} dropped` : '';
+    const msg = `Assignment ${code} updated ✅ ${remapped} attempt${remapped === 1 ? '' : 's'} re-scored${droppedNote}`;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = msg;
+    setStatus(hostStatusEl, msg, 'ok');
+
+    await refreshAssignmentsList();
+  } catch (err) {
+    if (assignmentStatusEl) assignmentStatusEl.textContent = `Apply to assignment error: ${err.message}`;
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
