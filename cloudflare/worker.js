@@ -645,6 +645,25 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/delete-attempt' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/delete-attempt', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId }),
+      }));
+    }
+
     if (url.pathname === '/api/assignments/toggle-active' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -1960,6 +1979,28 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/delete-attempt' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        if (!assignment.attempts[attemptId]) return json({ error: 'Attempt not found.' }, 404);
+
+        delete assignment.attempts[attemptId];
+        assignment.updatedAt = Date.now();
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, deleted: attemptId });
       }
 
       if (url.pathname === '/assignments/toggle-active' && request.method === 'POST') {

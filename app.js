@@ -3879,6 +3879,18 @@ async function reopenAssignmentAttempt(code, attemptId) {
   });
 }
 
+async function deleteAssignmentAttempt(code, attemptId) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/delete-attempt', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      attemptId,
+    },
+  });
+}
+
 async function setAssignmentActive(code, active) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   await api('/api/assignments/toggle-active', {
@@ -4304,6 +4316,26 @@ function renderAssignmentResults(safeCode, data) {
       });
       row.appendChild(reopenBtn);
     }
+
+    const deleteAttemptBtn = document.createElement('button');
+    deleteAttemptBtn.className = 'btn';
+    deleteAttemptBtn.textContent = 'Delete Attempt';
+    deleteAttemptBtn.title = 'Permanently delete this attempt. This cannot be undone.';
+    deleteAttemptBtn.addEventListener('click', async () => {
+      const who = String(a?.studentName || 'this student');
+      if (!confirm(`Delete ${who}'s attempt? This cannot be undone.`)) return;
+      try {
+        deleteAttemptBtn.disabled = true;
+        await deleteAssignmentAttempt(safeCode, attemptId);
+        if (assignmentStatusEl) assignmentStatusEl.textContent = `Deleted ${who}'s attempt.`;
+        await fetchAssignmentResults(safeCode);
+      } catch (err) {
+        if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete attempt error: ${err.message}`;
+      } finally {
+        deleteAttemptBtn.disabled = false;
+      }
+    });
+    row.appendChild(deleteAttemptBtn);
 
     li.append(top, meta, row);
     assignmentResultsListEl.appendChild(li);

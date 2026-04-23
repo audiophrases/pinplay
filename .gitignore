@@ -1,6 +1,7 @@
 .wrangler/
 node_modules/
 .DS_Store
+.claude/
 
 uploads/
 .dev.vars*
