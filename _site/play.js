@@ -3,6 +3,27 @@ const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
 const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
+const QUESTION_TYPE_ICONS = {
+  mcq: '🔘',
+  multi: '☑️',
+  tf: '✅❌',
+  audio: '🎧',
+  text: '⌨️',
+  context_gap: '🕳️',
+  match_pairs: '🔗',
+  error_hunt: '🕵️',
+  open: '💬',
+  speaking: '🗣️',
+  voice_record: '🎙️',
+  image_open: '🖼️',
+  puzzle: '🧩',
+  slider: '📐',
+  pin: '📍',
+};
+function questionTypeIcon(type) {
+  return QUESTION_TYPE_ICONS[String(type || '').toLowerCase()] || '❓';
+}
+
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
@@ -1062,20 +1083,19 @@ function renderInstantFeedbackFromState() {
   const state = live.player.assignment.state;
   const attempt = state?.attempt;
   const assignment = attempt?.assignment;
-  const answers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
+  const autoAnswers = Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : [];
+  const rawAnswersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
   const feedbackMode = assignment?.feedbackMode || 'none';
   const currentQIndex = live.player.assignment.currentIndex || 0;
 
   // Determine if we should show feedback and what to show
   let shouldShowFeedback = false;
-  let isEndMode = false;
-  let currentQuestionAnswered = false;
 
   if (feedbackMode !== 'none') {
     const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
     const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
-    shouldShowFeedback = !!attempt?.submitted && answers.length > 0 && answeredCount >= totalQuestions;
-    isEndMode = true;
+    const anyAnswered = autoAnswers.length > 0 || Object.keys(rawAnswersByQ).length > 0;
+    shouldShowFeedback = !!attempt?.submitted && anyAnswered && answeredCount >= totalQuestions;
   }
 
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
@@ -1092,10 +1112,59 @@ function renderInstantFeedbackFromState() {
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
 
+  // Build a unified row per answered question: auto-graded + teacher-graded (graded or pending).
+  const autoByQ = new Map();
+  autoAnswers.forEach((a) => { autoByQ.set(Number(a.qIndex), a); });
+
+  const answeredIndexes = Object.keys(rawAnswersByQ)
+    .map((k) => Number(k))
+    .filter((n) => Number.isFinite(n) && questions[n])
+    .sort((a, b) => a - b);
+
+  const rows = answeredIndexes.map((qIndex) => {
+    const q = questions[qIndex] || {};
+    const rawItem = rawAnswersByQ[String(qIndex)] || {};
+    const auto = autoByQ.get(qIndex);
+    const teacherGrade = rawItem.teacherGrade || null;
+
+    if (auto) {
+      return {
+        qIndex,
+        q,
+        status: auto.correct ? 'correct' : 'incorrect',
+        statusIcon: auto.correct ? '✅' : '❌',
+        points: Number(auto.points || 0),
+        liClass: auto.correct ? 'ok' : 'bad',
+      };
+    }
+    if (teacherGrade && teacherGrade.graded) {
+      const pts = Number(teacherGrade.pointsAwarded || 0);
+      const isCorrect = pts > 0;
+      return {
+        qIndex,
+        q,
+        status: isCorrect ? 'correct' : 'incorrect',
+        statusIcon: isCorrect ? '✅' : '❌',
+        points: pts,
+        liClass: isCorrect ? 'ok' : 'bad',
+      };
+    }
+    // Teacher-graded but not yet graded (open / image_open / speaking / voice_record / text fallback)
+    return {
+      qIndex,
+      q,
+      status: 'pending',
+      statusIcon: '⏳',
+      points: 0,
+      liClass: 'pending',
+    };
+  });
+
   // --- Score summary header ---
-  const correctCount = answers.filter(a => a.correct).length;
-  const totalCount = answers.length;
-  const totalPoints = answers.reduce((sum, a) => sum + Number(a.points || 0), 0);
+  const correctCount = rows.filter((r) => r.status === 'correct').length;
+  const pendingCount = rows.filter((r) => r.status === 'pending').length;
+  const totalCount = rows.length;
+  const totalPoints = rows.reduce((sum, r) => sum + Number(r.points || 0), 0);
 
   const header = document.createElement('div');
   header.className = 'assignment-results-header';
@@ -1107,7 +1176,8 @@ function renderInstantFeedbackFromState() {
 
   const scoreSummary = document.createElement('div');
   scoreSummary.className = 'assignment-results-score';
-  scoreSummary.textContent = `${correctCount}/${totalCount} correct · ${totalPoints} points`;
+  const pendingTxt = pendingCount > 0 ? ` · ${pendingCount} pending ⏳` : '';
+  scoreSummary.textContent = `${correctCount}/${totalCount} correct${pendingTxt} · ${totalPoints} points`;
   header.appendChild(scoreSummary);
 
   panel.appendChild(header);
@@ -1116,7 +1186,7 @@ function renderInstantFeedbackFromState() {
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className = 'assignment-results-toggle';
-  toggleBtn.innerHTML = '<span class="toggle-arrow">▾</span> Question Summary';
+  toggleBtn.innerHTML = '<span class="toggle-arrow">▾</span> 📋 Question Summary';
   let listCollapsed = false;
   toggleBtn.addEventListener('click', () => {
     listCollapsed = !listCollapsed;
@@ -1134,26 +1204,31 @@ function renderInstantFeedbackFromState() {
 
   const isReview = !!live.player.assignment.reviewMode;
 
-  answers.forEach((a, i) => {
-    const q = questions[a.qIndex] || {};
+  rows.forEach((r) => {
     const li = document.createElement('li');
-    li.className = (a.correct ? 'ok' : 'bad') + ' clickable';
-    if (Number(a.qIndex) === currentQIndex) li.classList.add('active');
+    li.className = `${r.liClass} clickable`;
+    if (Number(r.qIndex) === currentQIndex) li.classList.add('active');
 
     const qNum = document.createElement('span');
     qNum.className = 'result-q-num';
-    qNum.textContent = `Q${Number(a.qIndex) + 1}`;
+    qNum.textContent = `Q${Number(r.qIndex) + 1}`;
     li.appendChild(qNum);
+
+    const typeIcon = document.createElement('span');
+    typeIcon.className = 'result-type-icon';
+    typeIcon.textContent = questionTypeIcon(r.q.type);
+    typeIcon.title = String(r.q.type || '');
+    li.appendChild(typeIcon);
 
     const icon = document.createElement('span');
     icon.className = 'result-icon';
-    icon.textContent = a.correct ? '✅' : '❌';
+    icon.textContent = r.statusIcon;
+    if (r.status === 'pending') icon.title = 'Waiting for teacher grading';
     li.appendChild(icon);
 
-    const points = Number(a.points || 0);
     let pointsText = '';
-    if (points > 0) pointsText = `+${points}`;
-    else if (points < 0) pointsText = `${points}`;
+    if (r.points > 0) pointsText = `+${r.points}`;
+    else if (r.points < 0) pointsText = `${r.points}`;
 
     if (pointsText) {
       const ptsEl = document.createElement('span');
@@ -1162,14 +1237,14 @@ function renderInstantFeedbackFromState() {
       li.appendChild(ptsEl);
     }
 
-    const prompt = q.prompt ? String(q.prompt).slice(0, 55) : `Question ${Number(a.qIndex) + 1}`;
+    const prompt = r.q.prompt ? String(r.q.prompt).slice(0, 55) : `Question ${Number(r.qIndex) + 1}`;
     const promptEl = document.createElement('span');
     promptEl.className = 'result-prompt';
     promptEl.textContent = prompt;
     li.appendChild(promptEl);
 
     // Click to navigate to question
-    const qIndex = Number(a.qIndex);
+    const qIndex = Number(r.qIndex);
     li.addEventListener('click', () => {
       live.player.assignment.currentIndex = qIndex;
       const mapped = mapAssignmentStateToPlayerState();
@@ -1804,7 +1879,11 @@ function renderJoinQuestion(question) {
       joinSubmitBtn.classList.remove('hidden');
     }
   }
-  if (joinPromptEl) joinPromptEl.textContent = question.prompt || '(No question text)';
+  if (joinPromptEl) {
+    const icon = questionTypeIcon(question.type);
+    const promptText = question.prompt || '(No question text)';
+    joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+  }
 
   // Store current question for keyboard shortcut
   live.player.currentQuestion = question;
