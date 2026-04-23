@@ -1643,6 +1643,7 @@ export class QuizRoom {
         const previousAttempts = submittedAttempts
           .map((a) => {
             const metrics = evaluateAssignmentAttempt(assignment, a);
+            const teacherActivity = summarizeTeacherActivity(assignment, a);
             return {
               id: sanitizeAssignmentAttemptId(a?.id),
               attemptNumber: studentAttempts.indexOf(a) + 1,
@@ -1652,6 +1653,11 @@ export class QuizRoom {
               answeredCount: Number(metrics?.answeredCount || 0),
               submittedAt: Number(a?.submittedAt || 0) || null,
               startedAt: Number(a?.startedAt || 0) || null,
+              reviewedAt: Number(a?.reviewedAt || 0) || null,
+              teacherGradedCount: teacherActivity.gradedCount,
+              teacherFeedbackCount: teacherActivity.feedbackCount,
+              lastTeacherActivityAt: teacherActivity.lastTeacherActivityAt,
+              hasNewTeacherActivity: teacherActivity.hasNewActivity,
             };
           })
           .sort((a, b) => Number(b?.submittedAt || 0) - Number(a?.submittedAt || 0));
@@ -4093,6 +4099,46 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
     answersWithCorrectness,
+  };
+}
+
+function summarizeTeacherActivity(assignment, attempt) {
+  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+  const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+
+  let gradedCount = 0;
+  let feedbackCount = 0;
+  let lastTeacherActivityAt = 0;
+
+  Object.entries(answersByQ).forEach(([idxRaw, item]) => {
+    const qIndex = Number(idxRaw);
+    const question = questions[qIndex];
+    if (!question) return;
+    if (!isAssignmentTeacherGradedQuestion(question)) return;
+
+    const grade = item?.teacherGrade;
+    if (!grade || !grade.graded) return;
+    gradedCount += 1;
+
+    const hasCorrectionText = !!String(grade.correction || '').trim();
+    const hasCorrectionAudio = !!String(grade.correctionAudioKey || '').trim();
+    if (hasCorrectionText || hasCorrectionAudio) feedbackCount += 1;
+
+    const gradedAt = Number(grade.gradedAt || 0);
+    if (Number.isFinite(gradedAt) && gradedAt > lastTeacherActivityAt) {
+      lastTeacherActivityAt = gradedAt;
+    }
+  });
+
+  const reviewedAt = Number(attempt?.reviewedAt || 0);
+  const hasNewActivity = lastTeacherActivityAt > 0
+    && (!Number.isFinite(reviewedAt) || reviewedAt <= 0 || reviewedAt < lastTeacherActivityAt);
+
+  return {
+    gradedCount,
+    feedbackCount,
+    lastTeacherActivityAt: lastTeacherActivityAt || null,
+    hasNewActivity,
   };
 }
 

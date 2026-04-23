@@ -1921,6 +1921,41 @@ button.review-retake-attempt-row:active {
   color: var(--muted);
 }
 
+.review-retake-attempt-row .rr-attempt-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+
+.review-retake-attempt-row .rr-attempt-badge.is-new {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.review-retake-attempt-row .rr-attempt-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #dc2626;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  animation: rr-badge-pulse 1.6s ease-out infinite;
+}
+
+@keyframes rr-badge-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
 .review-retake-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

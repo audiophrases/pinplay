@@ -786,7 +786,20 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       const row = document.createElement('button');
       row.className = 'review-retake-attempt-row rr-btn-review-inline';
       row.type = 'button';
-      row.title = 'Click to review this attempt';
+
+      const gradedCount = Number(a.teacherGradedCount || 0);
+      const feedbackCount = Number(a.teacherFeedbackCount || 0);
+      const hasNew = !!a.hasNewTeacherActivity;
+      const totalTeacher = gradedCount;
+
+      if (totalTeacher > 0) {
+        const parts = [];
+        if (gradedCount > 0) parts.push(`${gradedCount} graded`);
+        if (feedbackCount > 0) parts.push(`${feedbackCount} with feedback`);
+        row.title = `${hasNew ? 'New from teacher · ' : ''}${parts.join(' · ')}. Click to review.`;
+      } else {
+        row.title = 'Click to review this attempt';
+      }
 
       row.addEventListener('click', () => {
         dismissReviewRetakeModal();
@@ -806,6 +819,21 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       date.textContent = a.submittedAt ? new Date(a.submittedAt).toLocaleDateString() : '';
 
       row.append(label, score, date);
+
+      if (totalTeacher > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'rr-attempt-badge' + (hasNew ? ' is-new' : '');
+        const icon = feedbackCount > 0 ? '💬' : '📝';
+        badge.textContent = `${icon} ${totalTeacher}`;
+        if (hasNew) {
+          const dot = document.createElement('span');
+          dot.className = 'rr-attempt-badge-dot';
+          dot.setAttribute('aria-hidden', 'true');
+          badge.appendChild(dot);
+        }
+        row.appendChild(badge);
+      }
+
       list.appendChild(row);
     });
 
