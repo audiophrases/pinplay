@@ -728,10 +728,14 @@ export default {
       const quiz = normalizeQuiz(body?.quiz || {});
       if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
 
+      const forward = { code, quiz };
+      if (typeof body?.title === 'string') forward.title = String(body.title).slice(0, 120);
+      if (typeof body?.randomNames === 'boolean') forward.randomNames = !!body.randomNames;
+
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/update-quiz', {
         method: 'POST',
-        body: JSON.stringify({ code, quiz }),
+        body: JSON.stringify(forward),
       }));
     }
 
@@ -2104,6 +2108,25 @@ export class QuizRoom {
         }
 
         assignment.quiz = quiz;
+
+        let titleChanged = false;
+        if (typeof body?.title === 'string') {
+          const nextTitle = String(body.title).trim().slice(0, 120);
+          if (nextTitle && nextTitle !== String(assignment.title || '')) {
+            assignment.title = nextTitle;
+            titleChanged = true;
+          }
+        }
+
+        let randomNamesChanged = false;
+        if (typeof body?.randomNames === 'boolean') {
+          const nextRandom = !!body.randomNames;
+          if (nextRandom !== !!assignment.randomNames) {
+            assignment.randomNames = nextRandom;
+            randomNamesChanged = true;
+          }
+        }
+
         assignment.updatedAt = now;
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
@@ -2113,6 +2136,8 @@ export class QuizRoom {
           assignment: publicAssignment(assignment, { includeQuiz: false }),
           remappedAttempts,
           droppedAnswers,
+          titleChanged,
+          randomNamesChanged,
         });
       }
 

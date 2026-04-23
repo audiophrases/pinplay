@@ -4664,11 +4664,19 @@ async function openAssignmentInBuilder(code, titleHint) {
 
   validateImportedQuiz(loadedQuiz);
   quiz = loadedQuiz;
+  // Prefer the assignment's canonical title over the embedded quiz title (they can drift).
+  const assignmentTitle = String(data?.assignment?.title || titleHint || loadedQuiz.title || '').trim();
+  if (assignmentTitle) quiz.title = assignmentTitle;
   collapseAllQuestions(quiz);
   renderBuilder();
   try { saveQuiz(quiz); } catch { /* local-save is best-effort */ }
 
-  setApplyAssignmentTarget(codeTrim, titleHint || data?.assignment?.title || loadedQuiz.title || '');
+  // Sync the Login / random-names toggle so the teacher sees this assignment's current setting.
+  if (typeof data?.assignment?.randomNames === 'boolean') {
+    setRandomNamesToggleState(!!data.assignment.randomNames);
+  }
+
+  setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
   if (builderSettingsToggleEl && builderSettingsBodyEl) {
     setSectionCollapsed(builderSettingsToggleEl, builderSettingsBodyEl, false);
@@ -4707,15 +4715,26 @@ async function applyQuizToAssignment() {
         password: createSessionPassword,
         code,
         quiz: normalizeQuizForLive(quiz),
+        title: String(quiz.title || '').trim(),
+        randomNames: isRandomNamesEnabled(),
       },
     });
 
     const remapped = Number(data?.remappedAttempts || 0);
     const dropped = Number(data?.droppedAnswers || 0);
     const droppedNote = dropped > 0 ? ` · ${dropped} stale answer${dropped === 1 ? '' : 's'} dropped` : '';
-    const msg = `Assignment ${code} updated ✅ ${remapped} attempt${remapped === 1 ? '' : 's'} re-scored${droppedNote}`;
+    const metaBits = [];
+    if (data?.titleChanged) metaBits.push('title updated');
+    if (data?.randomNamesChanged) {
+      metaBits.push(isRandomNamesEnabled() ? 'login → random names' : 'random names → login required');
+    }
+    const metaNote = metaBits.length ? ` · ${metaBits.join(' · ')}` : '';
+    const msg = `Assignment ${code} updated ✅ ${remapped} attempt${remapped === 1 ? '' : 's'} re-scored${droppedNote}${metaNote}`;
     if (assignmentStatusEl) assignmentStatusEl.textContent = msg;
     setStatus(hostStatusEl, msg, 'ok');
+
+    // Refresh the target label in case the title changed.
+    if (data?.titleChanged) setApplyAssignmentTarget(code, String(quiz.title || '').trim());
 
     await refreshAssignmentsList();
   } catch (err) {
