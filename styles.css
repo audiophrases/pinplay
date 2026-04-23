@@ -1779,6 +1779,17 @@ body.question-active .join-title-row {
   color: #b91c1c;
 }
 
+.assignment-results-list li.pending {
+  color: #92400e;
+}
+
+.result-type-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.9;
+}
+
 .result-q-num {
   flex-shrink: 0;
   font-weight: 700;

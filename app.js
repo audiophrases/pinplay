@@ -7312,7 +7312,13 @@ function renderJoinQuestion(question) {
   if (oldOverlay) oldOverlay.remove();
 
   // context_gap renders the sentence inline with blanks, so avoid duplicating the same text above.
-  joinPromptEl.textContent = question.type === 'context_gap' ? '' : (question.prompt || '(No question text)');
+  if (question.type === 'context_gap') {
+    joinPromptEl.textContent = '';
+  } else {
+    const icon = iconForType(question.type);
+    const promptText = question.prompt || '(No question text)';
+    joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+  }
   joinAnswersEl.innerHTML = '';
 
   const mediaCfgForImage = toVideoEmbedConfig(question.media || {});
@@ -10214,6 +10220,7 @@ function iconForType(type) {
       mcq: '🔘',
       multi: '☑️',
       tf: '✅❌',
+      audio: '🎧',
       text: '⌨️',
       open: '💬',
       speaking: '🗣️',
