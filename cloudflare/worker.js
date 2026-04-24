@@ -645,6 +645,40 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/grading-overview' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/grading-overview?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      }));
+    }
+
+    if (url.pathname === '/api/assignments/question-grading' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const qIndex = Math.round(Number(body?.qIndex));
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room/assignments/question-grading?code=${encodeURIComponent(code)}&qIndex=${encodeURIComponent(qIndex)}`, {
+        method: 'GET',
+      }));
+    }
+
     if (url.pathname === '/api/assignments/delete-attempt' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -1989,6 +2023,120 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+      }
+
+      if (url.pathname === '/assignments/grading-overview' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        const questions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
+        const attempts = assignment.attempts && typeof assignment.attempts === 'object' ? Object.values(assignment.attempts) : [];
+        const submittedAttempts = attempts.filter((a) => a && a.submitted);
+
+        const overview = questions.map((q, qIndex) => {
+          const teacherGraded = isAssignmentTeacherGradedQuestion(q);
+          let answeredCount = 0;
+          let gradedCount = 0;
+          let pendingCount = 0;
+          let withFeedbackCount = 0;
+
+          submittedAttempts.forEach((a) => {
+            const item = a?.answersByQ?.[String(qIndex)];
+            if (!item) return;
+            answeredCount += 1;
+            if (!teacherGraded) return;
+            const grade = item.teacherGrade;
+            if (grade && grade.graded) {
+              gradedCount += 1;
+              if ((grade.correction && String(grade.correction).trim()) || (grade.correctionAudioKey && String(grade.correctionAudioKey).trim())) {
+                withFeedbackCount += 1;
+              }
+            } else {
+              pendingCount += 1;
+            }
+          });
+
+          return {
+            qIndex,
+            qType: String(q?.type || ''),
+            prompt: String(q?.prompt || ''),
+            maxPoints: Math.max(0, Math.round(Number(q?.points || 1000))),
+            teacherGraded,
+            answeredCount,
+            gradedCount,
+            pendingCount,
+            withFeedbackCount,
+          };
+        });
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+          totalAttempts: attempts.length,
+          submittedAttempts: submittedAttempts.length,
+          questions: overview,
+        });
+      }
+
+      if (url.pathname === '/assignments/question-grading' && request.method === 'GET') {
+        const code = sanitizeAssignmentCode(url.searchParams.get('code'));
+        const qIndex = Math.round(Number(url.searchParams.get('qIndex')));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        const questions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
+        const question = questions[qIndex];
+        if (!question) return json({ error: 'Question not found.' }, 404);
+
+        const attempts = assignment.attempts && typeof assignment.attempts === 'object' ? Object.values(assignment.attempts) : [];
+        const submitted = attempts.filter((a) => a && a.submitted);
+        submitted.sort((a, b) => Number(a?.submittedAt || 0) - Number(b?.submittedAt || 0));
+
+        const items = submitted
+          .map((a) => {
+            const item = a?.answersByQ?.[String(qIndex)];
+            if (!item) return null;
+            const grade = item.teacherGrade && typeof item.teacherGrade === 'object' ? item.teacherGrade : null;
+            return {
+              attemptId: sanitizeAssignmentAttemptId(a?.id),
+              studentName: sanitizeName(a?.studentName || 'Student'),
+              studentKey: sanitizeAssignmentStudentKey(a?.studentKey),
+              submittedAt: Number(a?.submittedAt || 0) || null,
+              answer: item.answer ?? null,
+              answerText: summarizeHistoryAnswer(question, item.answer),
+              grade: grade
+                ? {
+                  graded: !!grade.graded,
+                  pointsAwarded: Number(grade.pointsAwarded || 0),
+                  correction: String(grade.correction || ''),
+                  correctionAudioKey: String(grade.correctionAudioKey || ''),
+                  gradedAt: Number(grade.gradedAt || 0) || null,
+                }
+                : null,
+            };
+          })
+          .filter(Boolean);
+
+        return json({
+          ok: true,
+          assignment: publicAssignment(assignment, { includeQuiz: false }),
+          question: {
+            qIndex,
+            qType: String(question?.type || ''),
+            prompt: String(question?.prompt || ''),
+            maxPoints: Math.max(0, Math.round(Number(question?.points || 1000))),
+            teacherGraded: isAssignmentTeacherGradedQuestion(question),
+          },
+          items,
+        });
       }
 
       if (url.pathname === '/assignments/delete-attempt' && request.method === 'POST') {

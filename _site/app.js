@@ -481,6 +481,7 @@ const assignmentResultsFilterEl = document.getElementById('assignmentResultsFilt
 const assignmentResultsListEl = document.getElementById('assignmentResultsList');
 const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
+const gradeByQuestionBtnEl = document.getElementById('gradeByQuestionBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -3666,6 +3667,16 @@ function bindLiveEvents() {
       renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
     }
   });
+  if (gradeByQuestionBtnEl) gradeByQuestionBtnEl.addEventListener('click', () => {
+    const code = assignmentResultsCache?.code;
+    if (!code) {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open View results on an assignment first.';
+      return;
+    }
+    enterGradeByQuestionMode(code).catch((err) => {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-question error: ${err.message}`;
+    });
+  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -4247,6 +4258,389 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
   } catch (err) {
     if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading error: ${err.message}`;
   }
+}
+
+function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, onSavedRefresh }) {
+  const wrap = document.createDocumentFragment();
+  const row = document.createElement('div');
+  row.className = 'row gap top-space';
+
+  const pointsInput = document.createElement('input');
+  pointsInput.type = 'number';
+  pointsInput.min = '0';
+  pointsInput.max = String(maxPoints);
+  pointsInput.value = String(Number(initialGrade?.pointsAwarded || 0));
+  pointsInput.style.width = '90px';
+
+  const correctionInput = document.createElement('input');
+  correctionInput.type = 'text';
+  correctionInput.placeholder = 'Correction (optional)';
+  correctionInput.value = String(initialGrade?.correction || '');
+  correctionInput.style.maxWidth = '320px';
+
+  let currentAudioKey = String(initialGrade?.correctionAudioKey || '');
+  const audioStatus = document.createElement('span');
+  audioStatus.className = 'small muted';
+  audioStatus.style.marginLeft = '8px';
+
+  const recordBtn = document.createElement('button');
+  recordBtn.className = 'btn';
+  recordBtn.style.padding = '4px 8px';
+  recordBtn.innerHTML = '🎙️';
+  recordBtn.title = 'Record voice comment';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn';
+  saveBtn.textContent = initialGrade?.graded ? 'Update grade' : 'Save grade';
+
+  const previewWrap = document.createElement('div');
+  previewWrap.className = 'top-space';
+  previewWrap.style.display = 'none';
+
+  function renderAudioPreview() {
+    if (!currentAudioKey) {
+      previewWrap.style.display = 'none';
+      previewWrap.innerHTML = '';
+      return;
+    }
+    previewWrap.innerHTML = '';
+    previewWrap.style.display = 'block';
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.style.height = '30px';
+    let src = currentAudioKey;
+    if (!src.startsWith('http')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    audio.src = src;
+    previewWrap.appendChild(audio);
+  }
+  renderAudioPreview();
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+
+  recordBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      recordBtn.innerHTML = '🎙️';
+      recordBtn.classList.remove('bad');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        stream.getTracks().forEach((t) => t.stop());
+        try {
+          audioStatus.textContent = 'Uploading...';
+          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
+          const fileName = `correction_${Date.now()}${ext}`;
+          const formData = new FormData();
+          formData.append('file', blob, fileName);
+          formData.append('path', `voice_records/${fileName}`);
+          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+          if (!resp.ok) throw new Error('Upload failed');
+          const res = await resp.json();
+          currentAudioKey = res.path || res.key || '';
+          audioStatus.textContent = '🎙️ Recorded';
+          renderAudioPreview();
+        } catch (err) {
+          audioStatus.textContent = '❌ Upload failed';
+        }
+      };
+      mediaRecorder.start();
+      recordBtn.innerHTML = '⏹️';
+      recordBtn.classList.add('bad');
+      audioStatus.textContent = 'Recording...';
+    } catch (err) {
+      alert('Mic access denied or error: ' + err.message);
+    }
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    try {
+      saveBtn.disabled = true;
+      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), String(correctionInput.value || ''), currentAudioKey);
+      saveBtn.textContent = 'Update grade';
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(qIndex) + 1} · ${attemptId}.`;
+      if (typeof onSavedRefresh === 'function') await onSavedRefresh();
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
+  wrap.appendChild(row);
+  wrap.appendChild(previewWrap);
+  return wrap;
+}
+
+async function enterGradeByQuestionMode(code) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) throw new Error('Missing assignment code.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading per-question overview for ${safeCode}...`;
+  if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+
+  const data = await api('/api/assignments/grading-overview', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode },
+  });
+
+  const questions = Array.isArray(data?.questions) ? data.questions : [];
+  const teacherGraded = questions.filter((q) => q?.teacherGraded);
+  const submitted = Number(data?.submittedAttempts || 0);
+  const title = String(data?.assignment?.title || safeCode);
+
+  if (assignmentGradingSummaryEl) {
+    assignmentGradingSummaryEl.textContent = teacherGraded.length
+      ? `${title} · Per-question grading · ${submitted} submitted attempt${submitted === 1 ? '' : 's'} · Pick a question below.`
+      : `${title} · No teacher-graded questions in this quiz.`;
+  }
+
+  if (!assignmentGradingListEl) return;
+  assignmentGradingListEl.innerHTML = '';
+
+  if (!teacherGraded.length) return;
+
+  teacherGraded.forEach((q) => {
+    const li = document.createElement('li');
+    li.style.cursor = 'pointer';
+
+    const icon = iconForType(q.qType) || '❓';
+    const head = document.createElement('div');
+    head.innerHTML = `<strong>Q${Number(q.qIndex) + 1} · ${icon} ${escapeHtml(String(q.qType || ''))}</strong>`;
+
+    const prompt = document.createElement('div');
+    prompt.className = 'small muted';
+    prompt.textContent = String(q.prompt || '').slice(0, 220) || '(no prompt)';
+
+    const counts = document.createElement('div');
+    counts.className = 'small top-space';
+    const pending = Number(q.pendingCount || 0);
+    const graded = Number(q.gradedCount || 0);
+    const answered = Number(q.answeredCount || 0);
+    const feedback = Number(q.withFeedbackCount || 0);
+    const badges = [];
+    badges.push(`${answered} answered`);
+    badges.push(`<span style="color:${pending > 0 ? '#b45309' : '#15803d'}">${graded}/${answered} graded</span>`);
+    if (pending > 0) badges.push(`<strong style="color:#b45309">${pending} pending ⏳</strong>`);
+    if (feedback > 0) badges.push(`${feedback} with feedback 💬`);
+    counts.innerHTML = badges.join(' · ');
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'row gap top-space';
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn primary';
+    openBtn.textContent = pending > 0 ? `Grade ${pending} pending` : (answered > 0 ? 'Review graded' : 'Open');
+    openBtn.addEventListener('click', () => {
+      enterQuestionGradingFocus(safeCode, Number(q.qIndex)).catch((err) => {
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Question grading error: ${err.message}`;
+      });
+    });
+    actionRow.appendChild(openBtn);
+
+    li.append(head, prompt, counts, actionRow);
+    li.addEventListener('click', (e) => {
+      if (e.target === openBtn) return;
+      openBtn.click();
+    });
+    assignmentGradingListEl.appendChild(li);
+  });
+}
+
+async function enterQuestionGradingFocus(code, qIndex) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) throw new Error('Missing assignment code.');
+  if (!Number.isFinite(Number(qIndex))) throw new Error('Missing qIndex.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading answers for Q${Number(qIndex) + 1}...`;
+  if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+
+  const data = await api('/api/assignments/question-grading', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode, qIndex: Number(qIndex) },
+  });
+
+  const question = data?.question || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const maxPoints = Math.max(0, Math.round(Number(question?.maxPoints || 1000)));
+  const icon = iconForType(question.qType) || '❓';
+  const gradedNow = items.filter((x) => x?.grade?.graded).length;
+  const pendingNow = items.length - gradedNow;
+
+  // Header: back button + nav + summary
+  const headerLi = document.createElement('li');
+  headerLi.style.listStyle = 'none';
+  headerLi.style.padding = '0';
+  headerLi.style.borderBottom = 'none';
+
+  const headerRow = document.createElement('div');
+  headerRow.className = 'row gap';
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn';
+  backBtn.textContent = '← All questions';
+  backBtn.addEventListener('click', () => {
+    enterGradeByQuestionMode(safeCode).catch((err) => {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Overview error: ${err.message}`;
+    });
+  });
+  headerRow.appendChild(backBtn);
+
+  const prevBtn = document.createElement('button');
+  prevBtn.className = 'btn';
+  prevBtn.textContent = '‹ Prev question';
+  prevBtn.addEventListener('click', () => {
+    if (Number(qIndex) > 0) {
+      enterQuestionGradingFocus(safeCode, Number(qIndex) - 1).catch((err) => {
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Nav error: ${err.message}`;
+      });
+    }
+  });
+  prevBtn.disabled = Number(qIndex) <= 0;
+  headerRow.appendChild(prevBtn);
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'btn';
+  nextBtn.textContent = 'Next question ›';
+  nextBtn.addEventListener('click', () => {
+    enterQuestionGradingFocus(safeCode, Number(qIndex) + 1).catch((err) => {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Nav error: ${err.message}`;
+    });
+  });
+  headerRow.appendChild(nextBtn);
+
+  headerLi.appendChild(headerRow);
+
+  const promptWrap = document.createElement('div');
+  promptWrap.className = 'top-space';
+  promptWrap.innerHTML = `<strong>Q${Number(qIndex) + 1} · ${icon} ${escapeHtml(String(question.qType || ''))}</strong>`;
+  const promptText = document.createElement('div');
+  promptText.className = 'small muted';
+  promptText.style.whiteSpace = 'pre-wrap';
+  promptText.textContent = String(question.prompt || '') || '(no prompt)';
+  promptWrap.appendChild(promptText);
+  headerLi.appendChild(promptWrap);
+
+  if (assignmentGradingSummaryEl) {
+    assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1} · ${items.length} answer${items.length === 1 ? '' : 's'} · ${gradedNow} graded · ${pendingNow} pending · max ${maxPoints} pts`;
+  }
+
+  if (!assignmentGradingListEl) return;
+  assignmentGradingListEl.innerHTML = '';
+  assignmentGradingListEl.appendChild(headerLi);
+
+  if (!question.teacherGraded) {
+    const li = document.createElement('li');
+    li.className = 'small muted';
+    li.textContent = 'This question is auto-graded — no teacher grading needed.';
+    assignmentGradingListEl.appendChild(li);
+    return;
+  }
+
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'small muted';
+    li.textContent = 'No submitted answers for this question yet.';
+    assignmentGradingListEl.appendChild(li);
+    return;
+  }
+
+  items.forEach((it) => {
+    const li = document.createElement('li');
+
+    const head = document.createElement('div');
+    const pendingBadge = !it?.grade?.graded
+      ? ` <span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:700;vertical-align:middle;">PENDING</span>`
+      : ` <span style="background:#dcfce7;color:#166534;border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:700;vertical-align:middle;">GRADED</span>`;
+    head.innerHTML = `<strong>${escapeHtml(String(it?.studentName || 'Student'))}</strong>${pendingBadge}`;
+    li.appendChild(head);
+
+    const meta = document.createElement('div');
+    meta.className = 'small muted';
+    meta.textContent = it?.submittedAt ? `Submitted ${new Date(it.submittedAt).toLocaleString()}` : '';
+    if (meta.textContent) li.appendChild(meta);
+
+    const answerWrap = document.createElement('div');
+    answerWrap.className = 'top-space';
+
+    // Voice record: show an audio player
+    if (String(question.qType || '') === 'voice_record' && it?.answer && typeof it.answer === 'object' && it.answer.audioUrl) {
+      const label = document.createElement('div');
+      label.className = 'small';
+      label.textContent = 'Answer: 🎙️ Voice recording';
+      answerWrap.appendChild(label);
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'metadata';
+      let audioSrc = it.answer.audioUrl;
+      if (!audioSrc.startsWith('http') && !audioSrc.startsWith('data:')) {
+        const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+        audioSrc = `${base}/api/media/${audioSrc}`;
+      }
+      audio.src = audioSrc;
+      answerWrap.appendChild(audio);
+      if (it.answer.durationMs) {
+        const dur = document.createElement('span');
+        dur.className = 'small muted';
+        dur.textContent = ` (${Math.round(it.answer.durationMs / 1000)}s)`;
+        answerWrap.appendChild(dur);
+      }
+    } else if (String(question.qType || '') === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
+      const label = document.createElement('div');
+      label.className = 'small';
+      label.textContent = 'Answer: 🖼️ Image';
+      answerWrap.appendChild(label);
+      const img = document.createElement('img');
+      let src = String(it.answer.imageUrl || '');
+      if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+        const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+        src = `${base}/api/media/${src}`;
+      }
+      img.src = src;
+      img.alt = 'Student image';
+      img.style.maxWidth = '320px';
+      img.style.maxHeight = '200px';
+      img.style.borderRadius = '6px';
+      img.style.display = 'block';
+      img.style.marginTop = '4px';
+      answerWrap.appendChild(img);
+    } else {
+      const label = document.createElement('div');
+      label.className = 'small';
+      label.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
+      answerWrap.appendChild(label);
+    }
+    li.appendChild(answerWrap);
+
+    const controls = buildGradeControls({
+      code: safeCode,
+      attemptId: it.attemptId,
+      qIndex: Number(qIndex),
+      maxPoints,
+      initialGrade: it.grade,
+      onSavedRefresh: async () => {
+        await enterQuestionGradingFocus(safeCode, Number(qIndex));
+      },
+    });
+    li.appendChild(controls);
+
+    assignmentGradingListEl.appendChild(li);
+  });
 }
 
 function renderAssignmentResults(safeCode, data) {
