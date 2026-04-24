@@ -89,6 +89,7 @@ const live = {
       pollingTimer: null,
       forceAutoAdvance: false,
       pendingComplete: false,
+      resultsListCollapsed: false,
     },
   },
 };
@@ -998,6 +999,7 @@ function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.attemptId = null;
   live.player.assignment.state = null;
   live.player.assignment.currentIndex = 0;
+  live.player.assignment.resultsListCollapsed = false;
 
   // Re-show submit button
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
@@ -1214,10 +1216,11 @@ function renderInstantFeedbackFromState() {
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className = 'assignment-results-toggle';
-  toggleBtn.innerHTML = '<span class="toggle-arrow">▾</span> 📋 Question Summary';
-  let listCollapsed = false;
+  let listCollapsed = !!live.player.assignment.resultsListCollapsed;
+  toggleBtn.innerHTML = `<span class="toggle-arrow">${listCollapsed ? '▸' : '▾'}</span> 📋 Question Summary`;
   toggleBtn.addEventListener('click', () => {
     listCollapsed = !listCollapsed;
+    live.player.assignment.resultsListCollapsed = listCollapsed;
     listWrap.classList.toggle('collapsed', listCollapsed);
     toggleBtn.querySelector('.toggle-arrow').textContent = listCollapsed ? '▸' : '▾';
   });
@@ -1226,6 +1229,7 @@ function renderInstantFeedbackFromState() {
   // --- Scrollable, clickable question list ---
   const listWrap = document.createElement('div');
   listWrap.className = 'assignment-results-list-wrap';
+  if (listCollapsed) listWrap.classList.add('collapsed');
 
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
