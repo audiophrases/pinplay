@@ -676,6 +676,71 @@ textarea {
   text-align: center;
 }
 
+/* ---- Host live transition polish ----
+   The intro has 3 stages driven by JS: 0 = points splash, 1 = prompt, 2 = full question.
+   Each stage gets a soft cross-fade so content settles in instead of cutting. */
+#hostQuestionCard #hostQuestionPrompt,
+#hostQuestionCard #hostQuestionAnswers,
+#hostQuestionCard #hostQuestionHint {
+  transition: opacity 280ms ease, transform 280ms ease;
+  will-change: opacity, transform;
+}
+
+#hostQuestionCard.intro-active[data-intro-stage="0"] #hostQuestionPrompt {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.question-intro-points {
+  font-size: clamp(2.6rem, 6.5vw, 5.4rem);
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, #f59e0b, #ef4444 60%, #db2777);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding: 1.5rem 0.5rem;
+  animation: questionIntroSplashIn 480ms cubic-bezier(.2, .9, .2, 1.25) both;
+}
+
+@keyframes questionIntroSplashIn {
+  from { opacity: 0; transform: scale(.74) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+#hostQuestionCard.intro-active[data-intro-stage="1"] #hostQuestionPrompt {
+  animation: questionPromptIn 360ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes questionPromptIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Stage 2 / done — the full question content fades in cleanly.
+   Exclude the video wrapper so playback isn't disturbed by transform. */
+#hostQuestionCard:not(.intro-active) #hostQuestionAnswers > *:not(.question-video-wrap) {
+  animation: questionContentIn 360ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes questionContentIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #hostQuestionCard #hostQuestionPrompt,
+  #hostQuestionCard #hostQuestionAnswers,
+  #hostQuestionCard #hostQuestionHint,
+  .question-intro-points,
+  #hostQuestionCard.intro-active[data-intro-stage="1"] #hostQuestionPrompt,
+  #hostQuestionCard:not(.intro-active) #hostQuestionAnswers > *:not(.question-video-wrap) {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
 #projectorCorrect {
   min-height: 1.25rem;
   margin-top: .45rem;

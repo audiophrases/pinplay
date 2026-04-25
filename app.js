@@ -6511,9 +6511,15 @@ function renderHostQuestion(state) {
   const inQuestionIntro = phase === 'question' && !showReveal;
   if (!inQuestionIntro) {
     hostQuestionCardEl?.classList.remove('intro-active');
+    if (hostQuestionCardEl) delete hostQuestionCardEl.dataset.introStage;
     live.host.questionIntroKey = null;
     live.host.questionIntroStartedAt = 0;
     live.host.questionIntroDone = false;
+    live.host.questionIntroStage = -1;
+    if (live.host.questionIntroTimer) {
+      clearTimeout(live.host.questionIntroTimer);
+      live.host.questionIntroTimer = null;
+    }
   }
 
   if (!question) {
@@ -6539,45 +6545,63 @@ function renderHostQuestion(state) {
       live.host.questionIntroKey = introKey;
       live.host.questionIntroStartedAt = Date.now();
       live.host.questionIntroDone = false;
+      live.host.questionIntroStage = -1;
+      if (live.host.questionIntroTimer) {
+        clearTimeout(live.host.questionIntroTimer);
+        live.host.questionIntroTimer = null;
+      }
     }
 
     if (!live.host.questionIntroDone) {
+      const STAGE_POINTS_MS = 1000;
+      const STAGE_PROMPT_MS = 2000;
       const elapsed = Date.now() - Number(live.host.questionIntroStartedAt || Date.now());
-      if (elapsed < 1000) {
-        hostQuestionCardEl?.classList.add('intro-active');
-        hostQuestionWrap.classList.add('center-stage');
-        hostQuestionPromptEl.textContent = '';
-        hostQuestionHintEl.textContent = '';
-        hostQuestionAnswersEl.innerHTML = '';
+      const stage = elapsed < STAGE_POINTS_MS ? 0 : (elapsed < STAGE_PROMPT_MS ? 1 : 2);
 
-        const points = Number(question.points || 0).toLocaleString('en-US');
-        const splash = document.createElement('div');
-        splash.className = 'question-intro-points';
-        splash.textContent = `🎯 ${points} points`;
-        hostQuestionAnswersEl.appendChild(splash);
-        requestAnimationFrame(() => {
-          // Force one more render pass during intro even when host state payload is unchanged.
+      const scheduleNextStage = (delayMs) => {
+        if (live.host.questionIntroTimer) clearTimeout(live.host.questionIntroTimer);
+        live.host.questionIntroTimer = setTimeout(() => {
+          live.host.questionIntroTimer = null;
           live.host.lastQuestionRenderKey = null;
           renderHostState(live.host.state || {});
-        });
-        return;
-      }
+        }, Math.max(16, delayMs));
+      };
 
-      if (elapsed < 2000) {
+      if (stage < 2) {
         hostQuestionCardEl?.classList.add('intro-active');
         hostQuestionWrap.classList.add('center-stage');
-        hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
-        hostQuestionHintEl.textContent = '';
-        hostQuestionAnswersEl.innerHTML = '';
-        requestAnimationFrame(() => {
-          // Force one more render pass during intro even when host state payload is unchanged.
-          live.host.lastQuestionRenderKey = null;
-          renderHostState(live.host.state || {});
-        });
+        if (hostQuestionCardEl) hostQuestionCardEl.dataset.introStage = String(stage);
+
+        // Only rebuild DOM when the stage actually changes — avoids 60Hz innerHTML thrash.
+        if (live.host.questionIntroStage !== stage) {
+          live.host.questionIntroStage = stage;
+          hostQuestionHintEl.textContent = '';
+
+          if (stage === 0) {
+            hostQuestionPromptEl.textContent = '';
+            hostQuestionAnswersEl.innerHTML = '';
+            const points = Number(question.points || 0).toLocaleString('en-US');
+            const splash = document.createElement('div');
+            splash.className = 'question-intro-points';
+            splash.textContent = `🎯 ${points} points`;
+            hostQuestionAnswersEl.appendChild(splash);
+          } else {
+            // Stage 1: keep splash mounted underneath if any so we cross-fade rather than hard-cut.
+            hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+          }
+        }
+
+        scheduleNextStage((stage === 0 ? STAGE_POINTS_MS : STAGE_PROMPT_MS) - elapsed);
         return;
       }
 
       live.host.questionIntroDone = true;
+      live.host.questionIntroStage = 2;
+      if (hostQuestionCardEl) hostQuestionCardEl.dataset.introStage = '2';
+      if (live.host.questionIntroTimer) {
+        clearTimeout(live.host.questionIntroTimer);
+        live.host.questionIntroTimer = null;
+      }
     }
   }
 
