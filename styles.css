@@ -592,6 +592,8 @@ textarea {
 #hostQuestionAnswers.project-answers .match-pairs-col .btn {
   flex: 0 1 auto;
   width: auto;
+  max-width: 100%;
+  min-width: 0;
   padding: .5rem .8rem;
   margin: 0;
   white-space: nowrap;
@@ -608,20 +610,37 @@ textarea {
   cursor: default;
 }
 
+/* Match-pairs definitions can be long sentences — let them wrap and shrink
+   instead of overflowing the column and forcing a horizontal scrollbar. */
+#hostQuestionAnswers.project-answers .match-pair-left,
+#hostQuestionAnswers.project-answers .match-pairs-col .btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+  font-size: clamp(1.05rem, 1.8vw, 1.45rem);
+  line-height: 1.25;
+}
+
 #hostQuestionAnswers.project-answers .match-pairs-wrap {
   display: flex;
   justify-content: center;
-  gap: 2rem;
+  gap: 1.25rem;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  overflow: hidden;
 }
 
 #hostQuestionAnswers.project-answers .match-pairs-col {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-  max-width: 48%;
-  align-items: center;
+  gap: 1rem;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 50%;
+  align-items: stretch;
 }
 
 #hostQuestionAnswers.project-answers .puzzle-reveal-token {
