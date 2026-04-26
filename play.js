@@ -346,12 +346,36 @@ async function validatePin() {
 }
 
 async function joinLiveGame() {
+  const originalLabel = joinBtn ? joinBtn.textContent : '';
+  let busyApplied = false;
+  const setBusyState = () => {
+    if (busyApplied || !joinBtn) return;
+    busyApplied = true;
+    joinBtn.disabled = true;
+    joinBtn.dataset.originalLabel = originalLabel;
+    joinBtn.textContent = '⏳ Please wait…';
+    if (!live.player.randomNamesMode) {
+      setStatus(joinStatusEl, '⏳ Checking your login… please wait, do not click again.', 'ok');
+    } else {
+      setStatus(joinStatusEl, '⏳ Joining… please wait.', 'ok');
+    }
+  };
+  const clearBusyState = () => {
+    if (!joinBtn) return;
+    joinBtn.disabled = false;
+    if (joinBtn.dataset.originalLabel) {
+      joinBtn.textContent = joinBtn.dataset.originalLabel;
+      delete joinBtn.dataset.originalLabel;
+    }
+  };
+
   try {
     if (live.player.mode === 'assignment') {
       if (!live.player.assignment.code) {
         await validatePin();
         if (!live.player.assignment.code) return;
       }
+      setBusyState();
       await startAssignmentAttempt();
       return;
     }
@@ -368,6 +392,8 @@ async function joinLiveGame() {
       if (!username || !password) throw new Error('Enter valid username and password.');
       if (username.length < 2 || password.length < 4) throw new Error('Enter valid username and password.');
     }
+
+    setBusyState();
 
     const data = await api('/api/join', {
       method: 'POST',
@@ -402,6 +428,8 @@ async function joinLiveGame() {
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
     showLoginError(err.message);
+  } finally {
+    clearBusyState();
   }
 }
 
