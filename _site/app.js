@@ -4269,13 +4269,17 @@ function focusQuestionGradingAnswer(attemptId) {
     .find((el) => String(el.dataset.gradingAttemptId || '') === safeAttemptId);
   if (!row) return;
 
-  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-
   const target = row.querySelector('[data-grade-points-input]')
     || row.querySelector('input, textarea, button');
   if (target && typeof target.focus === 'function') {
     target.focus({ preventScroll: true });
     if (typeof target.select === 'function') target.select();
+  }
+
+  const rect = row.getBoundingClientRect();
+  const viewportH = window.innerHeight || document.documentElement.clientHeight;
+  if (rect.bottom > viewportH || rect.top < 0) {
+    row.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }
 }
 
@@ -4657,8 +4661,14 @@ async function enterQuestionGradingFocus(code, qIndex) {
       onSavedRefresh: async () => {
         const nextItem = items[itemIndex + 1] || null;
         const focusAttemptId = String(nextItem?.attemptId || it?.attemptId || '');
+        const scroller = document.scrollingElement || document.documentElement;
+        const savedScrollTop = scroller ? scroller.scrollTop : 0;
         await enterQuestionGradingFocus(safeCode, Number(qIndex));
-        requestAnimationFrame(() => focusQuestionGradingAnswer(focusAttemptId));
+        if (scroller) scroller.scrollTop = savedScrollTop;
+        requestAnimationFrame(() => {
+          if (scroller) scroller.scrollTop = savedScrollTop;
+          focusQuestionGradingAnswer(focusAttemptId);
+        });
       },
     });
     li.appendChild(controls);
