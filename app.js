@@ -4260,6 +4260,25 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
   }
 }
 
+function focusQuestionGradingAnswer(attemptId) {
+  if (!assignmentGradingListEl) return;
+  const safeAttemptId = String(attemptId || '');
+  if (!safeAttemptId) return;
+
+  const row = [...assignmentGradingListEl.querySelectorAll('[data-grading-attempt-id]')]
+    .find((el) => String(el.dataset.gradingAttemptId || '') === safeAttemptId);
+  if (!row) return;
+
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const target = row.querySelector('[data-grade-points-input]')
+    || row.querySelector('input, textarea, button');
+  if (target && typeof target.focus === 'function') {
+    target.focus({ preventScroll: true });
+    if (typeof target.select === 'function') target.select();
+  }
+}
+
 function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, onSavedRefresh }) {
   const wrap = document.createDocumentFragment();
   const row = document.createElement('div');
@@ -4271,6 +4290,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   pointsInput.max = String(maxPoints);
   pointsInput.value = String(Number(initialGrade?.pointsAwarded || 0));
   pointsInput.style.width = '90px';
+  pointsInput.dataset.gradePointsInput = '1';
 
   const correctionInput = document.createElement('input');
   correctionInput.type = 'text';
@@ -4372,7 +4392,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
       await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), String(correctionInput.value || ''), currentAudioKey);
       saveBtn.textContent = 'Update grade';
       if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(qIndex) + 1} · ${attemptId}.`;
-      if (typeof onSavedRefresh === 'function') await onSavedRefresh();
+      if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
     } catch (err) {
       if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
     } finally {
@@ -4560,8 +4580,9 @@ async function enterQuestionGradingFocus(code, qIndex) {
     return;
   }
 
-  items.forEach((it) => {
+  items.forEach((it, itemIndex) => {
     const li = document.createElement('li');
+    li.dataset.gradingAttemptId = String(it?.attemptId || '');
 
     const head = document.createElement('div');
     const pendingBadge = !it?.grade?.graded
@@ -4634,7 +4655,10 @@ async function enterQuestionGradingFocus(code, qIndex) {
       maxPoints,
       initialGrade: it.grade,
       onSavedRefresh: async () => {
+        const nextItem = items[itemIndex + 1] || null;
+        const focusAttemptId = String(nextItem?.attemptId || it?.attemptId || '');
         await enterQuestionGradingFocus(safeCode, Number(qIndex));
+        requestAnimationFrame(() => focusQuestionGradingAnswer(focusAttemptId));
       },
     });
     li.appendChild(controls);
