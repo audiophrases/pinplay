@@ -4269,7 +4269,8 @@ function focusQuestionGradingAnswer(attemptId) {
     .find((el) => String(el.dataset.gradingAttemptId || '') === safeAttemptId);
   if (!row) return;
 
-  const target = row.querySelector('[data-grade-points-input]')
+  const target = row.querySelector('[data-grade-correction-input]')
+    || row.querySelector('[data-grade-points-input]')
     || row.querySelector('input, textarea, button');
   if (target && typeof target.focus === 'function') {
     target.focus({ preventScroll: true });
@@ -4295,12 +4296,17 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   pointsInput.value = String(Number(initialGrade?.pointsAwarded || 0));
   pointsInput.style.width = '90px';
   pointsInput.dataset.gradePointsInput = '1';
+  pointsInput.addEventListener('click', () => {
+    pointsInput.value = '1000';
+    if (typeof pointsInput.select === 'function') pointsInput.select();
+  });
 
   const correctionInput = document.createElement('input');
   correctionInput.type = 'text';
   correctionInput.placeholder = 'Correction (optional)';
   correctionInput.value = String(initialGrade?.correction || '');
   correctionInput.style.maxWidth = '320px';
+  correctionInput.dataset.gradeCorrectionInput = '1';
 
   let currentAudioKey = String(initialGrade?.correctionAudioKey || '');
   const audioStatus = document.createElement('span');
