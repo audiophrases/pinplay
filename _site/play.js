@@ -2204,12 +2204,13 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'voice_record') {
       renderVoiceRecorder(joinAnswersEl, question);
     } else {
-      const input = document.createElement('input');
-      input.type = 'text';
+      const isOpenAnswer = question.type === 'open' || question.type === 'image_open';
+      const input = document.createElement(isOpenAnswer ? 'textarea' : 'input');
+      if (!isOpenAnswer) input.type = 'text';
       input.id = 'joinTextAnswer';
       input.className = 'join-answer-input';
-      input.maxLength = 120;
-      input.placeholder = (question.type === 'open' || question.type === 'image_open') ? 'Type 1-2 short sentences' : 'Type your answer';
+      input.maxLength = isOpenAnswer ? 500 : 120;
+      input.placeholder = 'Type your answer';
 
       // --- NEW: Pre-fill answer if available ---
       const state = live.player.assignment.state;

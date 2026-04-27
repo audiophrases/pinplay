@@ -2971,7 +2971,7 @@ export class QuizRoom {
           };
         } else if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || isTeacherGradedTextQuestion(question)) {
           room.responsesByQuestion[qIndex][playerId] = {
-            answer: String(body?.answer || '').slice(0, 220),
+            answer: String(body?.answer || '').slice(0, 500),
             correct: false,
             bet,
             pointsAwarded: 0,
