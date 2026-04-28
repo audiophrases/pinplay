@@ -2,6 +2,7 @@
 node_modules/
 .DS_Store
 .claude/
+_site/
 
 uploads/
 .dev.vars*
