@@ -587,7 +587,7 @@ let previewMode = {
 let createSessionPassword = '';
 let assignmentResultsCache = null;
 const notifySelection = { code: '', ids: new Set() };
-const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v1';
+const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v3';
 let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
 let applyTargetAssignmentCode = ''; // set by "Open Quiz" on an assignment row; target for "Apply to Assignment"
 let applyTargetAssignmentTitle = '';
@@ -5299,7 +5299,7 @@ function renderAssignmentResults(safeCode, data) {
 function loadNotifyTemplate() {
   const fallback = {
     subject: 'Feedback ready for "{{quizTitle}}"',
-    body: 'Hi {{studentName}},\n\nYour teacher feedback / corrections for the quiz "{{quizTitle}}" are ready. Open the assignment here to review them:\n\n{{quizLink}}\n\nThanks,\nEugeni',
+    body: 'Hello,\n\nCorrections ready for {{quizTitle}}.\n\nPlease review at: {{quizLink}}\n\nThanks,\nEugeni',
   };
   try {
     const raw = localStorage.getItem(NOTIFY_TEMPLATE_KEY);
@@ -5380,7 +5380,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const subjectLabel = document.createElement('label');
   subjectLabel.className = 'small muted';
-  subjectLabel.textContent = 'Subject (placeholders: {{studentName}}, {{quizTitle}}, {{quizLink}})';
+  subjectLabel.textContent = 'Subject (placeholders: {{quizTitle}}, {{quizLink}} — note: {{studentName}} resolves to the first BCC recipient only)';
   const subjectInput = document.createElement('input');
   subjectInput.type = 'text';
   subjectInput.value = tpl.subject;
