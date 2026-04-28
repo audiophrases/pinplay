@@ -4416,6 +4416,435 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   return wrap;
 }
 
+// ============================================================================
+// Grade-by-Question focused modal — single-student view with keyboard shortcuts
+// ============================================================================
+const gradingFocusState = {
+  active: false,
+  code: '',
+  qIndex: 0,
+  question: null,
+  maxPoints: 1000,
+  items: [],
+  current: 0,
+  saving: false,
+  mediaRecorder: null,
+  audioChunks: [],
+  saveCurrentAndAdvance: null,
+  markCurrentAndAdvance: null,
+};
+
+async function openGradingFocusModal(code, qIndex) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) throw new Error('Missing assignment code.');
+  if (!Number.isFinite(Number(qIndex))) throw new Error('Missing qIndex.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading Q${Number(qIndex) + 1}...`;
+
+  const data = await api('/api/assignments/question-grading', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode, qIndex: Number(qIndex) },
+  });
+
+  const question = data?.question || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+
+  if (!question.teacherGraded) {
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1} is auto-graded — no teacher grading needed.`;
+    return;
+  }
+
+  if (!items.length) {
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1}: no answers yet.`;
+    return;
+  }
+
+  let startIdx = items.findIndex((it) => !it?.grade?.graded);
+  if (startIdx < 0) startIdx = 0;
+
+  gradingFocusState.active = true;
+  gradingFocusState.code = safeCode;
+  gradingFocusState.qIndex = Number(qIndex);
+  gradingFocusState.question = question;
+  gradingFocusState.maxPoints = Math.max(0, Math.round(Number(question?.maxPoints || 1000)));
+  gradingFocusState.items = items;
+  gradingFocusState.current = startIdx;
+  gradingFocusState.saving = false;
+  gradingFocusState.mediaRecorder = null;
+  gradingFocusState.audioChunks = [];
+
+  ensureGradingFocusModal();
+  showGradingFocusModal();
+  renderGradingFocusItem();
+  document.addEventListener('keydown', gradingFocusKeydown, true);
+}
+
+function ensureGradingFocusModal() {
+  let modal = document.getElementById('gradingFocusModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'gradingFocusModal';
+  modal.className = 'grading-focus-modal';
+  modal.innerHTML = `<div class="grading-focus-content" id="gradingFocusContent" role="dialog" aria-modal="true" aria-label="Grade question"></div>`;
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeGradingFocusModal();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function showGradingFocusModal() {
+  const modal = document.getElementById('gradingFocusModal');
+  if (modal) modal.classList.add('visible');
+}
+
+function hideGradingFocusModal() {
+  const modal = document.getElementById('gradingFocusModal');
+  if (modal) modal.classList.remove('visible');
+}
+
+function closeGradingFocusModal() {
+  if (!gradingFocusState.active) {
+    hideGradingFocusModal();
+    return;
+  }
+  gradingFocusState.active = false;
+  if (gradingFocusState.mediaRecorder && gradingFocusState.mediaRecorder.state === 'recording') {
+    try { gradingFocusState.mediaRecorder.stop(); } catch (e) {}
+  }
+  document.removeEventListener('keydown', gradingFocusKeydown, true);
+  hideGradingFocusModal();
+  // Refresh question overview to reflect updated counts.
+  const code = gradingFocusState.code;
+  if (code) {
+    enterGradeByQuestionMode(code).catch(() => {});
+  }
+}
+
+function moveGradingFocusTo(idx) {
+  const max = gradingFocusState.items.length;
+  gradingFocusState.current = Math.max(0, Math.min(max, idx));
+  renderGradingFocusItem();
+}
+
+function renderGradingFocusItem() {
+  const content = document.getElementById('gradingFocusContent');
+  if (!content) return;
+
+  const { items, current, question, qIndex, maxPoints } = gradingFocusState;
+  if (!items.length) return;
+
+  const gradedCount = items.filter((x) => x?.grade?.graded).length;
+  const pendingCount = items.length - gradedCount;
+  const icon = iconForType(question?.qType) || '❓';
+  const qType = String(question?.qType || '');
+
+  if (current >= items.length) {
+    content.innerHTML = `
+      <div class="grading-focus-header">
+        <div class="gf-meta"><strong>Q${qIndex + 1} · ${escapeHtml(qType)}</strong> · All ${items.length} reviewed</div>
+        <button class="btn gf-close" data-close-focus title="Close (Esc)">✕ Close</button>
+      </div>
+      <div class="grading-focus-done">🎉 You've reached the end. <kbd>P</kbd> to go back, <kbd>Esc</kbd> to close.</div>
+    `;
+    content.querySelector('[data-close-focus]').addEventListener('click', closeGradingFocusModal);
+    gradingFocusState.saveCurrentAndAdvance = null;
+    gradingFocusState.markCurrentAndAdvance = null;
+    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+    return;
+  }
+
+  const it = items[current];
+  const grade = it?.grade || {};
+  const graded = !!grade.graded;
+
+  let answerHtml = '';
+  if (qType === 'voice_record' && it?.answer && typeof it.answer === 'object' && it.answer.audioUrl) {
+    let src = String(it.answer.audioUrl || '');
+    if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    const dur = it.answer.durationMs ? ` <span class="small muted">(${Math.round(it.answer.durationMs / 1000)}s)</span>` : '';
+    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls preload="metadata" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>`;
+  } else if (qType === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
+    let src = String(it.answer.imageUrl || '');
+    if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    answerHtml = `<div class="small">🖼️ Image</div><img src="${escapeHtml(src)}" alt="Student image" style="max-width:100%;max-height:340px;border-radius:8px;display:block;margin-top:6px;" />`;
+  } else {
+    const text = String(it?.answerText || '') || '(blank)';
+    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>`;
+  }
+
+  const pendingBadge = !graded
+    ? `<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 10px;font-size:0.75rem;font-weight:700;">PENDING</span>`
+    : `<span style="background:#dcfce7;color:#166534;border-radius:10px;padding:2px 10px;font-size:0.75rem;font-weight:700;">GRADED · ${Number(grade.pointsAwarded || 0)} pts</span>`;
+
+  const submittedAt = it?.submittedAt ? `Submitted ${new Date(it.submittedAt).toLocaleString()}` : '';
+  const initialPoints = Number(grade?.pointsAwarded || 0);
+  const initialCorrection = String(grade?.correction || '');
+  const initialAudioKey = String(grade?.correctionAudioKey || '');
+
+  content.innerHTML = `
+    <div class="grading-focus-header">
+      <div class="gf-meta">
+        <strong>Q${qIndex + 1} · ${icon} ${escapeHtml(qType)}</strong>
+        <div class="small muted">Student ${current + 1} of ${items.length} · ${gradedCount} graded · ${pendingCount} pending · max ${maxPoints} pts</div>
+      </div>
+      <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
+    </div>
+    <div class="grading-focus-prompt">${escapeHtml(String(question?.prompt || '') || '(no prompt)')}</div>
+    <div class="grading-focus-body">
+      <div class="grading-focus-student-name">${escapeHtml(String(it?.studentName || 'Student'))} ${pendingBadge}</div>
+      <div class="small muted">${escapeHtml(submittedAt)}</div>
+      <div>${answerHtml}</div>
+    </div>
+    <div class="grading-focus-quickactions">
+      <button class="btn gf-correct" data-mark-correct title="Mark Correct (C)">✓ Correct! · 1000 pts<span class="kbd-hint">C</span></button>
+      <button class="btn gf-wrong" data-mark-wrong title="Mark Wrong (W)">✗ Wrong · 0 pts<span class="kbd-hint">W</span></button>
+      <button class="btn" data-skip title="Skip without saving (N / →)">⏭ Skip<span class="kbd-hint">N</span></button>
+    </div>
+    <div class="grading-focus-controls">
+      <label class="small muted" for="gfPointsInput">Points</label>
+      <input id="gfPointsInput" type="number" min="0" max="${maxPoints}" value="${initialPoints}" data-grade-points-input style="width:90px;" />
+      <input type="text" placeholder="Correction (optional)" value="${escapeHtml(initialCorrection)}" data-grade-correction-input style="flex:1;min-width:200px;" />
+      <button class="btn" data-grade-record-btn title="Record voice (R)">🎙️</button>
+      <span class="small muted" data-grade-audio-status></span>
+      <button class="btn primary" data-save-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
+    </div>
+    <div data-audio-preview class="top-space" style="display:${initialAudioKey ? 'block' : 'none'};"></div>
+    <div class="grading-focus-nav">
+      <button class="btn" data-prev-student title="Previous student (P / ←)">‹ Prev</button>
+      <span class="small muted">${current + 1} / ${items.length}</span>
+      <button class="btn" data-next-student title="Next student (N / →)">Next ›</button>
+    </div>
+    <div class="grading-focus-shortcuts">
+      <span><kbd>C</kbd> Correct!</span>
+      <span><kbd>W</kbd> Wrong</span>
+      <span><kbd>Enter</kbd> Save &amp; next</span>
+      <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
+      <span><kbd>E</kbd> Edit correction</span>
+      <span><kbd>G</kbd> Edit points</span>
+      <span><kbd>R</kbd> Record</span>
+      <span><kbd>Esc</kbd> Close</span>
+    </div>
+  `;
+
+  let currentAudioKey = initialAudioKey;
+  const recordBtn = content.querySelector('[data-grade-record-btn]');
+  const audioStatus = content.querySelector('[data-grade-audio-status]');
+  const previewWrap = content.querySelector('[data-audio-preview]');
+  const saveBtn = content.querySelector('[data-save-grade]');
+  const pointsEl = content.querySelector('[data-grade-points-input]');
+  const correctionEl = content.querySelector('[data-grade-correction-input]');
+
+  function renderAudioPreview() {
+    if (!currentAudioKey) {
+      previewWrap.style.display = 'none';
+      previewWrap.innerHTML = '';
+      return;
+    }
+    let src = currentAudioKey;
+    if (!src.startsWith('http')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    previewWrap.innerHTML = `<audio controls src="${escapeHtml(src)}" style="height:32px;"></audio>`;
+    previewWrap.style.display = 'block';
+  }
+  renderAudioPreview();
+
+  recordBtn.addEventListener('click', async () => {
+    const rec = gradingFocusState.mediaRecorder;
+    if (rec && rec.state === 'recording') {
+      try { rec.stop(); } catch (e) {}
+      recordBtn.innerHTML = '🎙️';
+      recordBtn.classList.remove('bad');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const newRec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      gradingFocusState.mediaRecorder = newRec;
+      gradingFocusState.audioChunks = [];
+      newRec.ondataavailable = (e) => { if (e.data.size > 0) gradingFocusState.audioChunks.push(e.data); };
+      newRec.onstop = async () => {
+        const blob = new Blob(gradingFocusState.audioChunks, { type: newRec.mimeType || 'audio/webm' });
+        stream.getTracks().forEach((t) => t.stop());
+        try {
+          audioStatus.textContent = 'Uploading...';
+          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
+          const fileName = `correction_${Date.now()}${ext}`;
+          const formData = new FormData();
+          formData.append('file', blob, fileName);
+          formData.append('path', `voice_records/${fileName}`);
+          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+          if (!resp.ok) throw new Error('Upload failed');
+          const res = await resp.json();
+          currentAudioKey = res.path || res.key || '';
+          audioStatus.textContent = '🎙️ Recorded';
+          renderAudioPreview();
+        } catch (err) {
+          audioStatus.textContent = '❌ Upload failed';
+        }
+      };
+      newRec.start();
+      recordBtn.innerHTML = '⏹️';
+      recordBtn.classList.add('bad');
+      audioStatus.textContent = 'Recording...';
+    } catch (err) {
+      alert('Mic access denied or error: ' + err.message);
+    }
+  });
+
+  async function persistAndAdvance({ points, correction, audioKey }) {
+    if (gradingFocusState.saving) return;
+    gradingFocusState.saving = true;
+    saveBtn.disabled = true;
+    try {
+      await gradeAssignmentQuestion(
+        gradingFocusState.code,
+        it.attemptId,
+        gradingFocusState.qIndex,
+        Number(points || 0),
+        String(correction || ''),
+        String(audioKey || '')
+      );
+      it.grade = {
+        ...(it.grade || {}),
+        graded: true,
+        pointsAwarded: Number(points || 0),
+        correction: String(correction || ''),
+        correctionAudioKey: String(audioKey || ''),
+      };
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded ${it.studentName || 'student'} · Q${gradingFocusState.qIndex + 1} · ${Number(points || 0)} pts.`;
+      moveGradingFocusTo(gradingFocusState.current + 1);
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+      saveBtn.disabled = false;
+    } finally {
+      gradingFocusState.saving = false;
+    }
+  }
+
+  async function saveCurrentAndAdvance() {
+    const points = Number(pointsEl?.value || 0);
+    const correction = String(correctionEl?.value || '');
+    await persistAndAdvance({ points, correction, audioKey: currentAudioKey });
+  }
+
+  async function markCurrentAndAdvance({ points, defaultCorrection }) {
+    if (pointsEl) pointsEl.value = String(points);
+    if (correctionEl && defaultCorrection !== undefined && !correctionEl.value) {
+      correctionEl.value = defaultCorrection;
+    }
+    const correction = String(correctionEl?.value || '');
+    await persistAndAdvance({ points, correction, audioKey: currentAudioKey });
+  }
+
+  content.querySelector('[data-close-focus]').addEventListener('click', closeGradingFocusModal);
+  content.querySelector('[data-mark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' }));
+  content.querySelector('[data-mark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
+  content.querySelector('[data-skip]').addEventListener('click', () => moveGradingFocusTo(current + 1));
+  content.querySelector('[data-prev-student]').addEventListener('click', () => moveGradingFocusTo(current - 1));
+  content.querySelector('[data-next-student]').addEventListener('click', () => moveGradingFocusTo(current + 1));
+  saveBtn.addEventListener('click', saveCurrentAndAdvance);
+
+  gradingFocusState.saveCurrentAndAdvance = saveCurrentAndAdvance;
+  gradingFocusState.markCurrentAndAdvance = markCurrentAndAdvance;
+
+  // Reset focus to body so single-key shortcuts fire (no auto-focus on text inputs).
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  content.scrollTop = 0;
+}
+
+function gradingFocusKeydown(e) {
+  if (!gradingFocusState.active) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const target = e.target;
+  const tag = target?.tagName || '';
+  const isTextEditing = (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable);
+
+  // Runs in the capture phase, so swallow the event before any other global
+  // hotkey listener (e.g. handleHostHotkeys, which binds C/W/P/R/etc.) sees it.
+  const swallow = () => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+
+  if (e.key === 'Escape') {
+    swallow();
+    closeGradingFocusModal();
+    return;
+  }
+
+  // Enter saves & advances even from inside an input field (so teacher can edit
+  // points/correction then hit Enter without reaching for the mouse).
+  if (e.key === 'Enter' && !e.shiftKey) {
+    swallow();
+    if (typeof gradingFocusState.saveCurrentAndAdvance === 'function') {
+      gradingFocusState.saveCurrentAndAdvance();
+    }
+    return;
+  }
+
+  // All other shortcuts only fire when no text input is focused, so the teacher
+  // can still type freely after tabbing/clicking into a field. We deliberately
+  // do NOT stopPropagation in this branch — input fields rely on the keydown
+  // continuing to its target so the character is added to the value.
+  if (isTextEditing) return;
+
+  const k = e.key.toLowerCase();
+  if (k === 'c') {
+    swallow();
+    if (typeof gradingFocusState.markCurrentAndAdvance === 'function') {
+      gradingFocusState.markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' });
+    }
+  } else if (k === 'w') {
+    swallow();
+    if (typeof gradingFocusState.markCurrentAndAdvance === 'function') {
+      gradingFocusState.markCurrentAndAdvance({ points: 0 });
+    }
+  } else if (k === 'arrowright' || k === 'n') {
+    swallow();
+    moveGradingFocusTo(gradingFocusState.current + 1);
+  } else if (k === 'arrowleft' || k === 'p') {
+    swallow();
+    moveGradingFocusTo(gradingFocusState.current - 1);
+  } else if (k === 'e') {
+    swallow();
+    const el = document.querySelector('#gradingFocusContent [data-grade-correction-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'g') {
+    swallow();
+    const el = document.querySelector('#gradingFocusContent [data-grade-points-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'r') {
+    swallow();
+    const el = document.querySelector('#gradingFocusContent [data-grade-record-btn]');
+    if (el) el.click();
+  }
+  // To fully isolate the modal from the host hotkeys (M, L, O, D, S, A, F),
+  // also swallow those letter keys while the modal is open and no input is
+  // focused. Without this, e.g. pressing 'L' would also call createLiveGame()
+  // behind the modal. We don't bind these to anything inside the modal — just
+  // suppress them.
+  else if (['l', 'o', 'd', 's', 'a', 'm', 'f'].includes(k)) {
+    swallow();
+  }
+}
+
 async function enterGradeByQuestionMode(code) {
   const safeCode = String(code || '').trim().toUpperCase();
   if (!safeCode) throw new Error('Missing assignment code.');
@@ -4476,7 +4905,7 @@ async function enterGradeByQuestionMode(code) {
     openBtn.className = 'btn primary';
     openBtn.textContent = pending > 0 ? `Grade ${pending} pending` : (answered > 0 ? 'Review graded' : 'Open');
     openBtn.addEventListener('click', () => {
-      enterQuestionGradingFocus(safeCode, Number(q.qIndex)).catch((err) => {
+      openGradingFocusModal(safeCode, Number(q.qIndex)).catch((err) => {
         if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Question grading error: ${err.message}`;
       });
     });
