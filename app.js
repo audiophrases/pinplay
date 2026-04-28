@@ -587,7 +587,7 @@ let previewMode = {
 let createSessionPassword = '';
 let assignmentResultsCache = null;
 const notifySelection = { code: '', ids: new Set() };
-const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v3';
+const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v4';
 let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
 let applyTargetAssignmentCode = ''; // set by "Open Quiz" on an assignment row; target for "Apply to Assignment"
 let applyTargetAssignmentTitle = '';
@@ -5299,7 +5299,7 @@ function renderAssignmentResults(safeCode, data) {
 function loadNotifyTemplate() {
   const fallback = {
     subject: 'Feedback ready for "{{quizTitle}}"',
-    body: 'Hello,\n\nCorrections ready for {{quizTitle}}.\n\nPlease review at: {{quizLink}}\n\nThanks,\nEugeni',
+    body: 'Hello,\n\nCorrections ready for {{quizTitle}}.\n\nPlease review them at: {{quizLink}}\n\nThanks,\nEugeni',
   };
   try {
     const raw = localStorage.getItem(NOTIFY_TEMPLATE_KEY);
