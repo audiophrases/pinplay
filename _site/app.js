@@ -5465,22 +5465,22 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     recipientsBox.value = recipients.join(', ');
 
     const bcc = recipients.join(',');
-    const mailto = `mailto:?bcc=${encodeURIComponent(bcc)}&subject=${encodeURIComponent(sampleSubject)}&body=${encodeURIComponent(sampleBody)}`;
-    if (mailto.length > 1900) {
-      mailtoBtn.removeAttribute('href');
-      mailtoBtn.style.opacity = '0.5';
-      mailtoBtn.style.pointerEvents = 'none';
-      mailtoBtn.title = 'Recipient list too long for mailto: — use copy buttons instead.';
-    } else if (recipients.length === 0) {
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${encodeURIComponent(bcc)}&su=${encodeURIComponent(sampleSubject)}&body=${encodeURIComponent(sampleBody)}`;
+    if (recipients.length === 0) {
       mailtoBtn.removeAttribute('href');
       mailtoBtn.style.opacity = '0.5';
       mailtoBtn.style.pointerEvents = 'none';
       mailtoBtn.title = 'No resolved emails.';
+    } else if (gmailUrl.length > 7000) {
+      mailtoBtn.removeAttribute('href');
+      mailtoBtn.style.opacity = '0.5';
+      mailtoBtn.style.pointerEvents = 'none';
+      mailtoBtn.title = 'Recipient list too long for a URL — use copy buttons instead.';
     } else {
-      mailtoBtn.href = mailto;
+      mailtoBtn.href = gmailUrl;
       mailtoBtn.style.opacity = '1';
       mailtoBtn.style.pointerEvents = 'auto';
-      mailtoBtn.title = 'Opens default mail client (Gmail in your browser) with subject, body, and BCCs pre-filled.';
+      mailtoBtn.title = 'Opens Gmail compose in a new tab with subject, body, and BCCs pre-filled.';
     }
   };
 
