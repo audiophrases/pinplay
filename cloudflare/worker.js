@@ -733,6 +733,67 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/mark-notified' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptIdsRaw = Array.isArray(body?.attemptIds) ? body.attemptIds : [];
+      const attemptIds = attemptIdsRaw
+        .map((id) => sanitizeAssignmentAttemptId(id))
+        .filter(Boolean);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptIds.length) return json({ error: 'attemptIds required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/mark-notified', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptIds }),
+      }));
+    }
+
+    if (url.pathname === '/api/assignments/lookup-emails' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const usernamesRaw = Array.isArray(body?.usernames) ? body.usernames : [];
+      const usernames = usernamesRaw
+        .map((u) => String(u || '').trim())
+        .filter(Boolean)
+        .slice(0, 200);
+
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!usernames.length) return json({ ok: true, results: [] });
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
+      const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
+      if (!lookupUrl) return json({ error: 'Roster lookup is not configured.' }, 501);
+
+      try {
+        const lookupRes = await fetch(lookupUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          redirect: 'follow',
+          body: JSON.stringify({ usernames, secret: lookupSecret }),
+        });
+        const text = await lookupRes.text();
+        let parsed = {};
+        try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
+        if (!lookupRes.ok || !parsed?.ok) {
+          return withCors(json({ error: parsed?.error || 'Roster lookup failed.' }, 502));
+        }
+        const results = Array.isArray(parsed.results) ? parsed.results : [];
+        return withCors(json({ ok: true, results }));
+      } catch (err) {
+        return withCors(json({ error: 'Roster lookup unavailable.' }, 502));
+      }
+    }
+
     if (url.pathname === '/api/assignments/get-quiz' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -2159,6 +2220,39 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, deleted: attemptId });
+      }
+
+      if (url.pathname === '/assignments/mark-notified' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptIds = Array.isArray(body?.attemptIds)
+          ? body.attemptIds.map((id) => sanitizeAssignmentAttemptId(id)).filter(Boolean)
+          : [];
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptIds.length) return json({ error: 'attemptIds required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const now = Date.now();
+        const notified = [];
+        attemptIds.forEach((attemptId) => {
+          const attempt = assignment.attempts[attemptId];
+          if (!attempt) return;
+          attempt.notifiedAt = now;
+          attempt.updatedAt = now;
+          notified.push(attemptId);
+        });
+
+        if (!notified.length) return json({ error: 'No matching attempts.' }, 404);
+
+        assignment.updatedAt = now;
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, notifiedAt: now, notified });
       }
 
       if (url.pathname === '/assignments/toggle-active' && request.method === 'POST') {
@@ -4326,6 +4420,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     submitted: full.submitted,
     submittedAt: full.submittedAt,
     reviewedAt: full.reviewedAt,
+    notifiedAt: Number(attempt?.notifiedAt || 0) || null,
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
   };

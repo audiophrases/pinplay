@@ -586,6 +586,8 @@ let previewMode = {
 };
 let createSessionPassword = '';
 let assignmentResultsCache = null;
+const notifySelection = { code: '', ids: new Set() };
+const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v1';
 let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
 let applyTargetAssignmentCode = ''; // set by "Open Quiz" on an assignment row; target for "Apply to Assignment"
 let applyTargetAssignmentTitle = '';
@@ -5150,12 +5152,84 @@ function renderAssignmentResults(safeCode, data) {
     return;
   }
 
+  if (notifySelection.code !== safeCode) {
+    notifySelection.code = safeCode;
+    notifySelection.ids = new Set();
+  }
+  const visibleIds = new Set(filtered.map((a) => String(a?.id || '')));
+  for (const id of [...notifySelection.ids]) {
+    if (!visibleIds.has(id)) notifySelection.ids.delete(id);
+  }
+
+  const headerLi = document.createElement('li');
+  headerLi.style.background = 'rgba(59,130,246,0.06)';
+  headerLi.style.borderRadius = '8px';
+  const headerRow = document.createElement('div');
+  headerRow.className = 'row gap';
+  headerRow.style.alignItems = 'center';
+
+  const selectAll = document.createElement('input');
+  selectAll.type = 'checkbox';
+  selectAll.title = 'Select all visible';
+  const allSelected = filtered.length > 0 && filtered.every((a) => notifySelection.ids.has(String(a?.id || '')));
+  selectAll.checked = allSelected;
+  selectAll.addEventListener('change', () => {
+    if (selectAll.checked) {
+      filtered.forEach((a) => notifySelection.ids.add(String(a?.id || '')));
+    } else {
+      filtered.forEach((a) => notifySelection.ids.delete(String(a?.id || '')));
+    }
+    renderAssignmentResults(safeCode, data);
+  });
+
+  const selectedCountEl = document.createElement('span');
+  selectedCountEl.className = 'small muted';
+  selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
+
+  const notifyBtn = document.createElement('button');
+  notifyBtn.className = 'btn';
+  notifyBtn.textContent = 'Notify selected';
+  notifyBtn.disabled = notifySelection.ids.size === 0;
+  notifyBtn.addEventListener('click', () => {
+    const chosen = filtered.filter((a) => notifySelection.ids.has(String(a?.id || '')));
+    if (!chosen.length) return;
+    openNotifyModal(safeCode, assignment, chosen, () => fetchAssignmentResults(safeCode));
+  });
+
+  headerRow.append(selectAll, selectedCountEl, notifyBtn);
+  headerLi.appendChild(headerRow);
+  assignmentResultsListEl.appendChild(headerLi);
+
   filtered.forEach((a) => {
     const li = document.createElement('li');
     const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
+    const attemptId = String(a?.id || '');
+
     const top = document.createElement('div');
-    const checked = a?.reviewedAt ? `<span style="background: #3b82f6; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 8px; vertical-align: middle;" title="Student has reviewed feedback">REVIEWED</span>` : '';
-    top.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${checked} · ${totalScore} pts`;
+    top.style.display = 'flex';
+    top.style.alignItems = 'center';
+    top.style.gap = '8px';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = notifySelection.ids.has(attemptId);
+    cb.title = 'Select for notify';
+    cb.addEventListener('change', () => {
+      if (cb.checked) notifySelection.ids.add(attemptId);
+      else notifySelection.ids.delete(attemptId);
+      selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
+      notifyBtn.disabled = notifySelection.ids.size === 0;
+      selectAll.checked = filtered.length > 0 && filtered.every((x) => notifySelection.ids.has(String(x?.id || '')));
+    });
+
+    const reviewedBadge = a?.reviewedAt ? `<span style="background: #3b82f6; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 4px; vertical-align: middle;" title="Student has reviewed feedback">REVIEWED</span>` : '';
+    const notifiedBadge = a?.notifiedAt
+      ? `<span style="background: #10b981; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 4px; vertical-align: middle;" title="Notified ${new Date(Number(a.notifiedAt)).toLocaleString()}">NOTIFIED</span>`
+      : '';
+
+    const label = document.createElement('span');
+    label.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${reviewedBadge}${notifiedBadge} · ${totalScore} pts`;
+    top.append(cb, label);
 
     const meta = document.createElement('div');
     meta.className = 'small muted';
@@ -5167,7 +5241,6 @@ function renderAssignmentResults(safeCode, data) {
 
     const row = document.createElement('div');
     row.className = 'row gap top-space';
-    const attemptId = String(a?.id || '');
 
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn';
@@ -5217,6 +5290,275 @@ function renderAssignmentResults(safeCode, data) {
     li.append(top, meta, row);
     assignmentResultsListEl.appendChild(li);
   });
+}
+
+function loadNotifyTemplate() {
+  const fallback = {
+    subject: 'Feedback ready for "{{quizTitle}}"',
+    body: 'Hi {{studentName}},\n\nYour teacher feedback / corrections for the quiz "{{quizTitle}}" are ready. Open the assignment here to review them:\n\n{{quizLink}}\n\nThanks,\nEugeni',
+  };
+  try {
+    const raw = localStorage.getItem(NOTIFY_TEMPLATE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return {
+      subject: typeof parsed?.subject === 'string' && parsed.subject ? parsed.subject : fallback.subject,
+      body: typeof parsed?.body === 'string' && parsed.body ? parsed.body : fallback.body,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveNotifyTemplate(subject, body) {
+  try {
+    localStorage.setItem(NOTIFY_TEMPLATE_KEY, JSON.stringify({ subject, body }));
+  } catch {}
+}
+
+function buildAssignmentJoinLink(code) {
+  const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
+  return `${base}?assignment=${encodeURIComponent(code)}`;
+}
+
+function applyNotifyTemplate(template, vars) {
+  return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : ''));
+}
+
+async function lookupEmailsForUsernames(usernames) {
+  const cleaned = Array.from(new Set(usernames.map((u) => String(u || '').trim()).filter(Boolean)));
+  if (!cleaned.length) return new Map();
+  if (!createSessionPassword) return new Map();
+  try {
+    const data = await api('/api/assignments/lookup-emails', {
+      method: 'POST',
+      body: { password: createSessionPassword, usernames: cleaned },
+    });
+    const map = new Map();
+    const results = Array.isArray(data?.results) ? data.results : [];
+    results.forEach((r) => {
+      const username = String(r?.username || '').trim().toLowerCase();
+      const email = String(r?.email || '').trim();
+      if (username && email) map.set(username, email);
+    });
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+async function markAttemptsNotified(safeCode, attemptIds) {
+  if (!createSessionPassword) throw new Error('Teacher password missing.');
+  return api('/api/assignments/mark-notified', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode, attemptIds },
+  });
+}
+
+function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
+  const tpl = loadNotifyTemplate();
+  const quizTitle = String(assignment?.title || safeCode);
+  const quizLink = buildAssignmentJoinLink(safeCode);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(3px);';
+
+  const dialog = document.createElement('div');
+  dialog.style.cssText = 'background:var(--panel-bg,#fff);color:var(--text,#333);padding:20px;border-radius:var(--radius,12px);box-shadow:0 10px 40px rgba(0,0,0,0.3);width:min(720px,94vw);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:12px;font-family:var(--font-sans,system-ui,sans-serif);';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;font-size:18px;';
+  title.textContent = `Notify students — ${quizTitle}`;
+
+  const status = document.createElement('div');
+  status.className = 'small muted';
+  status.textContent = `Looking up emails for ${attempts.length} student(s)...`;
+
+  const subjectLabel = document.createElement('label');
+  subjectLabel.className = 'small muted';
+  subjectLabel.textContent = 'Subject (placeholders: {{studentName}}, {{quizTitle}}, {{quizLink}})';
+  const subjectInput = document.createElement('input');
+  subjectInput.type = 'text';
+  subjectInput.value = tpl.subject;
+  subjectInput.style.cssText = 'padding:8px 12px;border:1px solid var(--border-color,#ccc);border-radius:8px;font-size:14px;width:100%;box-sizing:border-box;';
+
+  const bodyLabel = document.createElement('label');
+  bodyLabel.className = 'small muted';
+  bodyLabel.textContent = 'Body';
+  const bodyInput = document.createElement('textarea');
+  bodyInput.value = tpl.body;
+  bodyInput.rows = 8;
+  bodyInput.style.cssText = 'padding:8px 12px;border:1px solid var(--border-color,#ccc);border-radius:8px;font-size:14px;width:100%;box-sizing:border-box;font-family:inherit;resize:vertical;';
+
+  const recipientsLabel = document.createElement('label');
+  recipientsLabel.className = 'small muted';
+  recipientsLabel.textContent = 'Recipients (BCC)';
+  const recipientsBox = document.createElement('textarea');
+  recipientsBox.readOnly = true;
+  recipientsBox.rows = 3;
+  recipientsBox.style.cssText = 'padding:8px 12px;border:1px solid var(--border-color,#ccc);border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;font-family:monospace;background:rgba(0,0,0,0.02);';
+
+  const missingNote = document.createElement('div');
+  missingNote.className = 'small';
+  missingNote.style.color = '#b45309';
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px;';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.style.background = 'transparent';
+
+  const copyAddrBtn = document.createElement('button');
+  copyAddrBtn.className = 'btn';
+  copyAddrBtn.textContent = 'Copy addresses';
+
+  const copyAllBtn = document.createElement('button');
+  copyAllBtn.className = 'btn';
+  copyAllBtn.textContent = 'Copy all (one block)';
+
+  const mailtoBtn = document.createElement('a');
+  mailtoBtn.className = 'btn';
+  mailtoBtn.textContent = 'Open in Gmail';
+  mailtoBtn.style.textDecoration = 'none';
+  mailtoBtn.target = '_blank';
+  mailtoBtn.rel = 'noopener';
+
+  const markBtn = document.createElement('button');
+  markBtn.className = 'btn';
+  markBtn.textContent = 'Mark as notified';
+  markBtn.style.background = '#10b981';
+  markBtn.style.color = 'white';
+
+  btnRow.append(closeBtn, copyAddrBtn, copyAllBtn, mailtoBtn, markBtn);
+  dialog.append(title, status, subjectLabel, subjectInput, bodyLabel, bodyInput, recipientsLabel, recipientsBox, missingNote, btnRow);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  const cleanup = () => {
+    if (document.body.contains(overlay)) document.body.removeChild(overlay);
+  };
+  closeBtn.addEventListener('click', cleanup);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+
+  let recipients = [];
+  let resolvedAttempts = [];
+  let missingNames = [];
+
+  const refreshDerived = () => {
+    const subject = subjectInput.value;
+    const body = bodyInput.value;
+
+    const sampleVars = {
+      studentName: resolvedAttempts[0]?.studentName || 'Student',
+      quizTitle,
+      quizLink,
+    };
+    const sampleSubject = applyNotifyTemplate(subject, sampleVars);
+    const sampleBody = applyNotifyTemplate(body, sampleVars);
+
+    recipientsBox.value = recipients.join(', ');
+
+    const bcc = recipients.join(',');
+    const mailto = `mailto:?bcc=${encodeURIComponent(bcc)}&subject=${encodeURIComponent(sampleSubject)}&body=${encodeURIComponent(sampleBody)}`;
+    if (mailto.length > 1900) {
+      mailtoBtn.removeAttribute('href');
+      mailtoBtn.style.opacity = '0.5';
+      mailtoBtn.style.pointerEvents = 'none';
+      mailtoBtn.title = 'Recipient list too long for mailto: — use copy buttons instead.';
+    } else if (recipients.length === 0) {
+      mailtoBtn.removeAttribute('href');
+      mailtoBtn.style.opacity = '0.5';
+      mailtoBtn.style.pointerEvents = 'none';
+      mailtoBtn.title = 'No resolved emails.';
+    } else {
+      mailtoBtn.href = mailto;
+      mailtoBtn.style.opacity = '1';
+      mailtoBtn.style.pointerEvents = 'auto';
+      mailtoBtn.title = 'Opens default mail client (Gmail in your browser) with subject, body, and BCCs pre-filled.';
+    }
+  };
+
+  subjectInput.addEventListener('input', () => { saveNotifyTemplate(subjectInput.value, bodyInput.value); refreshDerived(); });
+  bodyInput.addEventListener('input', () => { saveNotifyTemplate(subjectInput.value, bodyInput.value); refreshDerived(); });
+
+  copyAddrBtn.addEventListener('click', async () => {
+    const ok = await copyTextSmart(recipients.join(', '));
+    copyAddrBtn.textContent = ok ? 'Copied!' : 'Copy failed';
+    setTimeout(() => { copyAddrBtn.textContent = 'Copy addresses'; }, 1500);
+  });
+
+  copyAllBtn.addEventListener('click', async () => {
+    const subject = subjectInput.value;
+    const body = bodyInput.value;
+    const sampleVars = {
+      studentName: resolvedAttempts[0]?.studentName || 'Student',
+      quizTitle,
+      quizLink,
+    };
+    const block = `BCC:\n${recipients.join(', ')}\n\nSubject:\n${applyNotifyTemplate(subject, sampleVars)}\n\nBody:\n${applyNotifyTemplate(body, sampleVars)}`;
+    const ok = await copyTextSmart(block);
+    copyAllBtn.textContent = ok ? 'Copied!' : 'Copy failed';
+    setTimeout(() => { copyAllBtn.textContent = 'Copy all (one block)'; }, 1500);
+  });
+
+  markBtn.addEventListener('click', async () => {
+    const ids = attempts.map((a) => String(a?.id || '')).filter(Boolean);
+    if (!ids.length) return;
+    try {
+      markBtn.disabled = true;
+      markBtn.textContent = 'Marking...';
+      await markAttemptsNotified(safeCode, ids);
+      markBtn.textContent = 'Marked ✓';
+      if (typeof onAfterMarked === 'function') onAfterMarked();
+      setTimeout(cleanup, 600);
+    } catch (err) {
+      markBtn.disabled = false;
+      markBtn.textContent = 'Mark as notified';
+      missingNote.textContent = `Mark failed: ${err.message}`;
+    }
+  });
+
+  // Resolve emails: prefer attempt.studentEmail (future), fallback to roster lookup by studentName.
+  (async () => {
+    const haveEmail = [];
+    const needLookup = [];
+    attempts.forEach((a) => {
+      const direct = String(a?.studentEmail || '').trim();
+      if (direct) {
+        haveEmail.push({ ...a, _email: direct });
+      } else {
+        needLookup.push(a);
+      }
+    });
+
+    let lookupMap = new Map();
+    if (needLookup.length) {
+      lookupMap = await lookupEmailsForUsernames(needLookup.map((a) => String(a?.studentName || '')));
+    }
+
+    resolvedAttempts = attempts.map((a) => {
+      const direct = String(a?.studentEmail || '').trim();
+      if (direct) return { ...a, _email: direct };
+      const key = String(a?.studentName || '').trim().toLowerCase();
+      const email = lookupMap.get(key) || '';
+      return { ...a, _email: email };
+    });
+
+    recipients = Array.from(new Set(resolvedAttempts.map((a) => a._email).filter(Boolean)));
+    missingNames = resolvedAttempts.filter((a) => !a._email).map((a) => a.studentName || 'Student');
+
+    if (missingNames.length) {
+      missingNote.textContent = `No email found for: ${missingNames.join(', ')} (check the roster sheet)`;
+    } else {
+      missingNote.textContent = '';
+    }
+    status.textContent = `${recipients.length} recipient(s) resolved · ${attempts.length} attempt(s) selected`;
+    refreshDerived();
+  })();
+
+  setTimeout(() => subjectInput.focus(), 10);
 }
 
 async function fetchAssignmentResults(code) {
