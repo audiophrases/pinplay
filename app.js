@@ -4630,6 +4630,7 @@ function renderGradingFocusItem() {
       <span><kbd>E</kbd> Edit correction</span>
       <span><kbd>G</kbd> Edit points</span>
       <span><kbd>R</kbd> Record</span>
+      <span><kbd>Space</kbd> Play answer</span>
       <span><kbd>Esc</kbd> Close</span>
     </div>
   `;
@@ -4834,6 +4835,19 @@ function gradingFocusKeydown(e) {
     swallow();
     const el = document.querySelector('#gradingFocusContent [data-grade-record-btn]');
     if (el) el.click();
+  } else if (k === ' ' || e.code === 'Space') {
+    // Toggle play/pause on the student's answer audio (voice_record questions).
+    // Swallowing in capture phase also prevents the host's spacebar reveal-answer
+    // hotkey from firing while the modal is open.
+    swallow();
+    const audio = document.querySelector('#gradingFocusContent .grading-focus-body audio');
+    if (audio) {
+      if (audio.paused) {
+        audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
+    }
   }
   // To fully isolate the modal from the host hotkeys (M, L, O, D, S, A, F),
   // also swallow those letter keys while the modal is open and no input is
