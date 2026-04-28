@@ -5162,15 +5162,12 @@ function renderAssignmentResults(safeCode, data) {
   }
 
   const headerLi = document.createElement('li');
-  headerLi.style.background = 'rgba(59,130,246,0.06)';
-  headerLi.style.borderRadius = '8px';
-  const headerRow = document.createElement('div');
-  headerRow.className = 'row gap';
-  headerRow.style.alignItems = 'center';
+  headerLi.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; background:rgba(59,130,246,0.08); border-radius:8px; margin-bottom:6px;';
 
   const selectAll = document.createElement('input');
   selectAll.type = 'checkbox';
   selectAll.title = 'Select all visible';
+  selectAll.style.cssText = 'width:18px; height:18px; cursor:pointer; flex:none; margin:0;';
   const allSelected = filtered.length > 0 && filtered.every((a) => notifySelection.ids.has(String(a?.id || '')));
   selectAll.checked = allSelected;
   selectAll.addEventListener('change', () => {
@@ -5184,11 +5181,13 @@ function renderAssignmentResults(safeCode, data) {
 
   const selectedCountEl = document.createElement('span');
   selectedCountEl.className = 'small muted';
+  selectedCountEl.style.cssText = 'flex:1; min-width:0;';
   selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
 
   const notifyBtn = document.createElement('button');
   notifyBtn.className = 'btn';
   notifyBtn.textContent = 'Notify selected';
+  notifyBtn.style.flex = 'none';
   notifyBtn.disabled = notifySelection.ids.size === 0;
   notifyBtn.addEventListener('click', () => {
     const chosen = filtered.filter((a) => notifySelection.ids.has(String(a?.id || '')));
@@ -5196,24 +5195,23 @@ function renderAssignmentResults(safeCode, data) {
     openNotifyModal(safeCode, assignment, chosen, () => fetchAssignmentResults(safeCode));
   });
 
-  headerRow.append(selectAll, selectedCountEl, notifyBtn);
-  headerLi.appendChild(headerRow);
+  headerLi.append(selectAll, selectedCountEl, notifyBtn);
   assignmentResultsListEl.appendChild(headerLi);
 
   filtered.forEach((a) => {
     const li = document.createElement('li');
+    li.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:10px 12px; margin:6px 0; border:1px solid rgba(0,0,0,0.08); border-radius:8px; background:rgba(255,255,255,0.4);';
     const totalScore = Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
     const attemptId = String(a?.id || '');
 
     const top = document.createElement('div');
-    top.style.display = 'flex';
-    top.style.alignItems = 'center';
-    top.style.gap = '8px';
+    top.style.cssText = 'display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
 
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = notifySelection.ids.has(attemptId);
     cb.title = 'Select for notify';
+    cb.style.cssText = 'width:18px; height:18px; cursor:pointer; flex:none; margin:0;';
     cb.addEventListener('change', () => {
       if (cb.checked) notifySelection.ids.add(attemptId);
       else notifySelection.ids.delete(attemptId);
@@ -5222,14 +5220,20 @@ function renderAssignmentResults(safeCode, data) {
       selectAll.checked = filtered.length > 0 && filtered.every((x) => notifySelection.ids.has(String(x?.id || '')));
     });
 
-    const reviewedBadge = a?.reviewedAt ? `<span style="background: #3b82f6; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 4px; vertical-align: middle;" title="Student has reviewed feedback">REVIEWED</span>` : '';
+    const reviewedBadge = a?.reviewedAt ? `<span style="background:#3b82f6; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Student has reviewed feedback">REVIEWED</span>` : '';
     const notifiedBadge = a?.notifiedAt
-      ? `<span style="background: #10b981; color: white; border-radius: 12px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; margin-left: 4px; vertical-align: middle;" title="Notified ${new Date(Number(a.notifiedAt)).toLocaleString()}">NOTIFIED</span>`
+      ? `<span style="background:#10b981; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Notified ${new Date(Number(a.notifiedAt)).toLocaleString()}">NOTIFIED</span>`
       : '';
 
-    const label = document.createElement('span');
-    label.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${reviewedBadge}${notifiedBadge} · ${totalScore} pts`;
-    top.append(cb, label);
+    const nameWrap = document.createElement('span');
+    nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${reviewedBadge}${notifiedBadge}`;
+
+    const scoreEl = document.createElement('span');
+    scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
+    scoreEl.textContent = `${totalScore} pts`;
+
+    top.append(cb, nameWrap, scoreEl);
 
     const meta = document.createElement('div');
     meta.className = 'small muted';
@@ -5240,7 +5244,7 @@ function renderAssignmentResults(safeCode, data) {
     meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
 
     const row = document.createElement('div');
-    row.className = 'row gap top-space';
+    row.className = 'row gap';
 
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn';
