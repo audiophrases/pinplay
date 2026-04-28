@@ -2644,6 +2644,147 @@ button.review-retake-attempt-row:active {
 }
 
 /* ==========================================================================
+   GRADE BY QUESTION — FOCUSED MODAL
+   ========================================================================== */
+.grading-focus-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9998;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.grading-focus-modal.visible { display: flex; }
+.grading-focus-content {
+  background: var(--card, #fff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 1rem;
+  padding: 1.4rem 1.6rem;
+  width: min(96vw, 920px);
+  max-height: 94vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.grading-focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.grading-focus-header .gf-meta {
+  flex: 1;
+  min-width: 0;
+}
+.grading-focus-header .gf-close {
+  font-size: 1rem;
+  padding: 4px 10px;
+}
+.grading-focus-prompt {
+  font-size: 1.05rem;
+  white-space: pre-wrap;
+  background: #f8f9ff;
+  border-left: 4px solid var(--primary, #4f46e5);
+  padding: 0.7rem 0.9rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.grading-focus-body {
+  background: #fff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 0.75rem;
+  padding: 1rem 1.15rem;
+}
+.grading-focus-student-name {
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.grading-focus-answer {
+  margin-top: 0.6rem;
+  font-size: 1.15rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.grading-focus-quickactions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.grading-focus-quickactions .btn {
+  font-size: 1rem;
+  padding: 0.55rem 0.95rem;
+  font-weight: 600;
+}
+.grading-focus-quickactions .btn.gf-correct {
+  background: #16a34a;
+  color: #fff;
+  border-color: #15803d;
+}
+.grading-focus-quickactions .btn.gf-correct:hover { background: #15803d; }
+.grading-focus-quickactions .btn.gf-wrong {
+  background: #dc2626;
+  color: #fff;
+  border-color: #b91c1c;
+}
+.grading-focus-quickactions .btn.gf-wrong:hover { background: #b91c1c; }
+.grading-focus-quickactions .kbd-hint {
+  background: rgba(255,255,255,0.25);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  margin-left: 0.4rem;
+  font-family: monospace;
+}
+.grading-focus-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line, #e2e8f0);
+}
+.grading-focus-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.grading-focus-shortcuts {
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--line, #e2e8f0);
+}
+.grading-focus-shortcuts kbd {
+  background: #f1f5f9;
+  border: 1px solid var(--line, #e2e8f0);
+  border-bottom-width: 2px;
+  border-radius: 0.25rem;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  margin-right: 3px;
+}
+.grading-focus-done {
+  text-align: center;
+  padding: 2rem 0;
+  font-size: 1.1rem;
+}
+
+/* ==========================================================================
    STUDENT ANSWER REVEAL (Context-Aware)
    ========================================================================== */
 .student-answer-reveal {
