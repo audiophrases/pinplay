@@ -1,4 +1,0 @@
-Q2 langForQuestion: FR
-Q2 voice: fr-FR-DeniseNeural
-Q6 langForQuestion: OTHER
-Q6 voice: es-ES-ElviraNeural

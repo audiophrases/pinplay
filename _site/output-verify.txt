@@ -1,2 +1,0 @@
-Q2 voice evaluation: fr-FR-DeniseNeural
-Video autoFill backend URL: https://pinplay-api.eugenime.workers.dev
