@@ -9,6 +9,8 @@
 | `EDGE_TTS_URL` | Text-to-speech bridge URL |
 | `STUDENT_LOGIN_VERIFY_SECRET` | Student login auth |
 | `STUDENT_LOGIN_VERIFY_URL` | Student login verification endpoint |
+| `STUDENT_ROSTER_LOOKUP_SECRET` | Roster email-lookup auth (notify flow) |
+| `STUDENT_ROSTER_LOOKUP_URL` | Roster email-lookup endpoint (notify flow) |
 
 ## Check secrets (IMPORTANT: use --name flag!)
 
@@ -36,6 +38,8 @@ echo "value" | npx wrangler secret put SECRET_NAME --name pinplay-api
    EDGE_TTS_URL=https://...
    STUDENT_LOGIN_VERIFY_SECRET=...
    STUDENT_LOGIN_VERIFY_URL=https://...
+   STUDENT_ROSTER_LOOKUP_SECRET=...
+   STUDENT_ROSTER_LOOKUP_URL=https://...
    ```
 3. Run: `cloudflare\restore-secrets.cmd`
 
