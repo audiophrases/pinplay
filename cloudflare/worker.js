@@ -851,14 +851,19 @@ export default {
     if (url.pathname === '/api/assignment/check-status' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
-      const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      const usernameKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      const username = String(body?.username || body?.studentName || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
-      if (!studentKey) return json({ error: 'Student key required.' }, 400);
+      if (!usernameKey && !username) return json({ error: 'Student key or username required.' }, 400);
+
+      const { emailKey } = await resolveEmailKey(env, username);
+      const primaryKey = emailKey || usernameKey;
+      const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/check-status', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey }),
+        body: JSON.stringify({ code, studentKey: primaryKey, legacyStudentKey: legacyKey }),
       }));
     }
 
@@ -935,9 +940,15 @@ export default {
         }
       }
 
+      // Resolve email-derived studentKey for stable identity across username
+      // changes and to distinguish students with the same username.
+      const { emailKey } = await resolveEmailKey(env, studentName);
+      const primaryKey = emailKey || studentKey;
+      const legacyKey = (emailKey && studentKey && studentKey !== emailKey) ? studentKey : '';
+
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey, studentName }),
+        body: JSON.stringify({ code, studentKey: primaryKey, legacyStudentKey: legacyKey, studentName }),
       }));
     }
 
@@ -1724,6 +1735,7 @@ export class QuizRoom {
         const body = await safeJson(request);
         const code = sanitizeAssignmentCode(body?.code);
         const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        const legacyStudentKey = sanitizeAssignmentStudentKey(body?.legacyStudentKey);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
@@ -1733,7 +1745,8 @@ export class QuizRoom {
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         const allAttempts = Object.values(assignment.attempts || {});
-        const studentAttempts = allAttempts.filter((a) => String(a?.studentKey || '') === studentKey);
+        const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
+        const studentAttempts = allAttempts.filter((a) => matchKeys.has(String(a?.studentKey || '')));
         const submittedAttempts = studentAttempts.filter((a) => !!a?.submitted);
         const openAttempt = studentAttempts.find((a) => !a?.submitted);
 
@@ -1781,6 +1794,7 @@ export class QuizRoom {
         const body = await safeJson(request);
         const code = sanitizeAssignmentCode(body?.code);
         const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        const legacyStudentKey = sanitizeAssignmentStudentKey(body?.legacyStudentKey);
         const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
@@ -1797,13 +1811,14 @@ export class QuizRoom {
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         const attempts = Object.values(assignment.attempts || {});
+        const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
 
-        const existingOpen = attempts.find((a) => String(a?.studentKey || '') === studentKey && !a?.submitted);
+        const existingOpen = attempts.find((a) => matchKeys.has(String(a?.studentKey || '')) && !a?.submitted);
         if (existingOpen) {
           return json({ ok: true, alreadyStarted: true, attempt: publicAssignmentAttempt(assignment, existingOpen) });
         }
 
-        const startedCount = attempts.filter((a) => String(a?.studentKey || '') === studentKey).length;
+        const startedCount = attempts.filter((a) => matchKeys.has(String(a?.studentKey || ''))).length;
         const limit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
         if (limit > 0 && startedCount >= limit) {
           return json({ error: 'Attempts limit reached for this assignment.' }, 409);
@@ -4227,6 +4242,43 @@ function sanitizeAssignmentAttemptId(value) {
 function sanitizeAssignmentStudentKey(value) {
   const normalized = normalizeStudentKeyInput(value || '');
   return normalized.slice(0, 96);
+}
+
+// Email-derived student key. Stable across username changes; distinguishes
+// students who happen to pick the same username (e.g. two "Martina"s).
+function makeStudentKeyFromEmail(email) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e) return '';
+  const base = e.replace(/[^a-z0-9._@-]+/g, '');
+  return base ? `usr_${base}`.slice(0, 96) : '';
+}
+
+// Looks up the student's email by username via the roster bridge.
+// Returns { email, emailKey } — both empty strings if lookup fails or
+// the bridge isn't configured. Safe to call optimistically.
+async function resolveEmailKey(env, username) {
+  const name = String(username || '').trim();
+  if (!name) return { email: '', emailKey: '' };
+  const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
+  const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
+  if (!lookupUrl) return { email: '', emailKey: '' };
+  try {
+    const res = await fetch(lookupUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      redirect: 'follow',
+      body: JSON.stringify({ usernames: [name], secret: lookupSecret }),
+    });
+    const text = await res.text();
+    let parsed = {};
+    try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
+    if (!res.ok || !parsed?.ok) return { email: '', emailKey: '' };
+    const r = (Array.isArray(parsed.results) ? parsed.results : [])[0];
+    const email = String(r?.email || '').trim().toLowerCase();
+    return { email, emailKey: makeStudentKeyFromEmail(email) };
+  } catch {
+    return { email: '', emailKey: '' };
+  }
 }
 
 function sanitizeAssignmentAnswer(_question, raw) {

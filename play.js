@@ -702,7 +702,7 @@ async function startAssignmentAttempt(skipCheck) {
     try {
       const checkData = await api('/api/assignment/check-status', {
         method: 'POST',
-        body: { code, studentKey },
+        body: { code, studentKey, username },
       });
 
       if (checkData?.hasSubmittedAttempts) {
