@@ -794,6 +794,81 @@ export default {
       }
     }
 
+    // One-time migration: rewrite every attempt.studentKey from username-derived
+    // to email-derived. Defaults to dry-run; pass dryRun:false to actually apply.
+    // Idempotent — safe to run again.
+    if (url.pathname === '/api/assignments/rekey-by-email' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const dryRun = body?.dryRun === false ? false : true;
+      if (!password) return json({ error: 'Password required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
+      const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
+      if (!lookupUrl) return json({ error: 'Roster lookup is not configured.' }, 501);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+
+      const listRes = await stub.fetch('https://room/assignments/list-students', { method: 'GET' });
+      if (!listRes.ok) return withCors(listRes);
+      const listData = await listRes.json();
+      const studentNames = Array.isArray(listData?.studentNames) ? listData.studentNames : [];
+      if (!studentNames.length) {
+        return withCors(json({ ok: true, dryRun, totalAttempts: 0, plannedCount: 0, appliedCount: 0, plan: [], unmatchedNames: [] }));
+      }
+
+      const emailMap = {};
+      const unmatchedNames = [];
+      const BATCH = 200;
+      for (let i = 0; i < studentNames.length; i += BATCH) {
+        const slice = studentNames.slice(i, i + BATCH);
+        try {
+          const lookupRes = await fetch(lookupUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            redirect: 'follow',
+            body: JSON.stringify({ usernames: slice, secret: lookupSecret }),
+          });
+          const text = await lookupRes.text();
+          let parsed = {};
+          try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
+          if (!lookupRes.ok || !parsed?.ok) {
+            return withCors(json({ error: parsed?.error || 'Roster lookup failed mid-batch.' }, 502));
+          }
+          const results = Array.isArray(parsed.results) ? parsed.results : [];
+          const matched = new Set();
+          results.forEach((r) => {
+            const name = String(r?.username || '').trim().toLowerCase();
+            const email = String(r?.email || '').trim().toLowerCase();
+            if (name && email) {
+              emailMap[name] = email;
+              matched.add(name);
+            }
+          });
+          slice.forEach((n) => { if (!matched.has(n)) unmatchedNames.push(n); });
+        } catch (err) {
+          return withCors(json({ error: 'Roster lookup unavailable.' }, 502));
+        }
+      }
+
+      const applyRes = await stub.fetch('https://room/assignments/rekey-bulk', {
+        method: 'POST',
+        body: JSON.stringify({ emailMap, dryRun }),
+      });
+      if (!applyRes.ok) return withCors(applyRes);
+      const applyData = await applyRes.json();
+
+      return withCors(json({
+        ok: true,
+        ...applyData,
+        unmatchedNames,
+        unmatchedCount: unmatchedNames.length,
+      }));
+    }
+
     if (url.pathname === '/api/assignments/get-quiz' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -2270,6 +2345,70 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
 
         return json({ ok: true, notifiedAt: now, notified });
+      }
+
+      // Returns every distinct, lowercased studentName found across all
+      // assignments' attempts. Used by the rekey orchestrator to build the
+      // username→email map.
+      if (url.pathname === '/assignments/list-students' && request.method === 'GET') {
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const unique = new Set();
+        Object.values(assignments || {}).forEach((assignment) => {
+          const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+          Object.values(attempts).forEach((a) => {
+            const name = String(a?.studentName || '').trim().toLowerCase();
+            if (name) unique.add(name);
+          });
+        });
+        return json({ ok: true, studentNames: Array.from(unique) });
+      }
+
+      // Rewrites attempt.studentKey based on an email map. With dryRun:true,
+      // returns the plan without mutating storage. The mutation is idempotent —
+      // running twice produces the same end state.
+      if (url.pathname === '/assignments/rekey-bulk' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const dryRun = !!body?.dryRun;
+        const emailMap = (body && typeof body.emailMap === 'object' && body.emailMap) ? body.emailMap : {};
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const plan = [];
+        let totalAttempts = 0;
+        let appliedCount = 0;
+
+        Object.entries(assignments || {}).forEach(([code, assignment]) => {
+          const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+          Object.values(attempts).forEach((a) => {
+            totalAttempts += 1;
+            const nameKey = String(a?.studentName || '').trim().toLowerCase();
+            if (!nameKey) return;
+            const email = String(emailMap[nameKey] || '').trim().toLowerCase();
+            if (!email) return;
+            const newKey = makeStudentKeyFromEmail(email);
+            if (!newKey) return;
+            const fromKey = String(a?.studentKey || '');
+            if (fromKey === newKey) return;
+            plan.push({
+              code,
+              attemptId: String(a?.id || ''),
+              studentName: String(a?.studentName || ''),
+              email,
+              fromKey,
+              toKey: newKey,
+            });
+            if (!dryRun) {
+              a.studentKey = newKey;
+              a.updatedAt = Date.now();
+              appliedCount += 1;
+            }
+          });
+        });
+
+        if (!dryRun && appliedCount > 0) {
+          await this.state.storage.put('assignments', assignments);
+        }
+
+        return json({ ok: true, dryRun, totalAttempts, plannedCount: plan.length, appliedCount, plan });
       }
 
       if (url.pathname === '/assignments/toggle-active' && request.method === 'POST') {
