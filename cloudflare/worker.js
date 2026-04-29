@@ -1713,7 +1713,9 @@ export class QuizRoom {
         const assignments = await loadAssignmentsMap(this.state.storage);
         const assignment = assignments?.[code] || null;
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+        // Note: no `active` check — closed assignments must still be loadable so
+        // students can reach review mode for past attempts (teacher feedback).
+        // New attempts are still blocked downstream at /assignments/start.
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: true }) });
       }
