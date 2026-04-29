@@ -479,6 +479,8 @@ const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
 const assignmentResultsFilterEl = document.getElementById('assignmentResultsFilter');
 const assignmentResultsClassFilterEl = document.getElementById('assignmentResultsClassFilter');
+const assignmentResultsSortEl = document.getElementById('assignmentResultsSort');
+const assignmentResultsBestOnlyEl = document.getElementById('assignmentResultsBestOnly');
 const assignmentResultsListEl = document.getElementById('assignmentResultsList');
 const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
@@ -3673,6 +3675,16 @@ function bindLiveEvents() {
       renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
     }
   });
+  if (assignmentResultsSortEl) assignmentResultsSortEl.addEventListener('change', () => {
+    if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
+      renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
+    }
+  });
+  if (assignmentResultsBestOnlyEl) assignmentResultsBestOnlyEl.addEventListener('change', () => {
+    if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
+      renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
+    }
+  });
   if (gradeByQuestionBtnEl) gradeByQuestionBtnEl.addEventListener('click', () => {
     const code = assignmentResultsCache?.code;
     if (!code) {
@@ -5151,16 +5163,53 @@ function renderAssignmentResults(safeCode, data) {
     if (current && classes.includes(current)) assignmentResultsClassFilterEl.value = current;
   }
   const classFilter = String(assignmentResultsClassFilterEl?.value || '').trim();
+  const sortMode = String(assignmentResultsSortEl?.value || 'name');
+  const bestOnly = !!assignmentResultsBestOnlyEl?.checked;
 
-  const filtered = attempts.filter((a) => {
+  const attemptScore = (a) => Number(a?.metrics?.totalScore ?? a?.metrics?.autoScore ?? 0);
+  const attemptCompletion = (a) => {
+    const total = Number(a?.metrics?.totalQuestions || 0);
+    if (!total) return 0;
+    return (Number(a?.metrics?.answeredCount || 0) / total) * 100;
+  };
+
+  let working = attempts.filter((a) => {
     if (filter === 'submitted' && !a?.submitted) return false;
     if (filter === 'pending' && Number(a?.metrics?.pendingTeacherGradeCount || 0) === 0) return false;
+    if (filter === 'fully-answered') {
+      const total = Number(a?.metrics?.totalQuestions || 0);
+      if (!total || Number(a?.metrics?.answeredCount || 0) < total) return false;
+    }
     if (classFilter && String(a?._class || '').trim() !== classFilter) return false;
     return true;
   });
 
+  if (bestOnly) {
+    const byStudent = new Map();
+    working.forEach((a) => {
+      const key = String(a?.studentName || '').trim().toLowerCase() || String(a?.id || '');
+      const cur = byStudent.get(key);
+      if (!cur || attemptScore(a) > attemptScore(cur)) byStudent.set(key, a);
+    });
+    working = Array.from(byStudent.values());
+  }
+
+  const sorters = {
+    'name': (a, b) => String(a?.studentName || '').localeCompare(String(b?.studentName || '')),
+    'score-desc': (a, b) => attemptScore(b) - attemptScore(a),
+    'accuracy-desc': (a, b) => Number(b?.metrics?.accuracy ?? -1) - Number(a?.metrics?.accuracy ?? -1),
+    'completion-desc': (a, b) => attemptCompletion(b) - attemptCompletion(a),
+    'latest': (a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0),
+    'pending-desc': (a, b) => Number(b?.metrics?.pendingTeacherGradeCount || 0) - Number(a?.metrics?.pendingTeacherGradeCount || 0),
+  };
+  working.sort(sorters[sortMode] || sorters.name);
+  const filtered = working;
+
   if (assignmentResultsSummaryEl) {
-    assignmentResultsSummaryEl.textContent = `${assignment?.title || safeCode} · Showing ${filtered.length}/${attempts.length} attempts`;
+    const titlePart = assignment?.title || safeCode;
+    assignmentResultsSummaryEl.textContent = bestOnly
+      ? `${titlePart} · ${filtered.length} student(s) · best of ${attempts.length} attempt(s)`
+      : `${titlePart} · Showing ${filtered.length}/${attempts.length} attempts`;
   }
 
   if (!assignmentResultsListEl) return;
@@ -5264,7 +5313,8 @@ function renderAssignmentResults(safeCode, data) {
     const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
     const total = Number(a?.metrics?.totalQuestions || 0);
     const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
-    meta.textContent = `Answered: ${answered}/${total} · Pending teacher: ${pending} · Accuracy: ${acc}`;
+    const completion = total ? `${Math.round((answered / total) * 100)}%` : '—';
+    meta.textContent = `Completion: ${completion} (${answered}/${total}) · Accuracy: ${acc} · Pending teacher: ${pending}`;
 
     const row = document.createElement('div');
     row.className = 'row gap';

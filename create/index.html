@@ -331,16 +331,28 @@
                     </div>
                   </div>
                   <ul id="assignmentList" class="list"></ul>
-                  <div class="row gap top-space">
+                  <div class="row gap top-space" style="flex-wrap:wrap;">
                     <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
                     <select id="assignmentResultsFilter" style="max-width:180px;">
                       <option value="all">All attempts</option>
                       <option value="pending">Pending grading</option>
                       <option value="submitted">Submitted only</option>
+                      <option value="fully-answered">Fully answered</option>
                     </select>
                     <select id="assignmentResultsClassFilter" style="max-width:160px;">
                       <option value="">All classes</option>
                     </select>
+                    <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts">
+                      <option value="name">Sort: Name (A→Z)</option>
+                      <option value="score-desc">Sort: Score (high→low)</option>
+                      <option value="accuracy-desc">Sort: Accuracy (high→low)</option>
+                      <option value="completion-desc">Sort: Completion (high→low)</option>
+                      <option value="latest">Sort: Latest activity</option>
+                      <option value="pending-desc">Sort: Pending grading first</option>
+                    </select>
+                    <label class="small" style="display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                      <input type="checkbox" id="assignmentResultsBestOnly" /> Best per student
+                    </label>
                     <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)">Grade by Question</button>
                   </div>
                   <ul id="assignmentResultsList" class="list"></ul>
