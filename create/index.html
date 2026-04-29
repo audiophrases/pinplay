@@ -338,6 +338,9 @@
                       <option value="pending">Pending grading</option>
                       <option value="submitted">Submitted only</option>
                     </select>
+                    <select id="assignmentResultsClassFilter" style="max-width:160px;">
+                      <option value="">All classes</option>
+                    </select>
                     <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)">Grade by Question</button>
                   </div>
                   <ul id="assignmentResultsList" class="list"></ul>
@@ -389,9 +392,6 @@
               </div>
             </div>
             <div class="row gap top-space">
-              <select id="hostAttemptsClassFilter" style="max-width:200px;">
-                <option value="">All classes</option>
-              </select>
               <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
             </div>
             <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>

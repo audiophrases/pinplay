@@ -478,6 +478,7 @@ const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
 const assignmentResultsFilterEl = document.getElementById('assignmentResultsFilter');
+const assignmentResultsClassFilterEl = document.getElementById('assignmentResultsClassFilter');
 const assignmentResultsListEl = document.getElementById('assignmentResultsList');
 const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
@@ -491,7 +492,6 @@ const hostPlayersEl = document.getElementById('hostPlayers');
 const hostAnswerHistoryEl = document.getElementById('hostAnswerHistory');
 const hostAttemptsRefreshBtn = document.getElementById('hostAttemptsRefreshBtn');
 const hostAttemptsExportBtn = document.getElementById('hostAttemptsExportBtn');
-const hostAttemptsClassFilterEl = document.getElementById('hostAttemptsClassFilter');
 const hostAttemptsSearchEl = document.getElementById('hostAttemptsSearch');
 const hostAttemptsSummaryEl = document.getElementById('hostAttemptsSummary');
 const hostAttemptsListEl = document.getElementById('hostAttemptsList');
@@ -3654,7 +3654,6 @@ function bindLiveEvents() {
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
   if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
   if (hostAttemptsExportBtn) hostAttemptsExportBtn.addEventListener('click', exportHostAttemptsCsv);
-  if (hostAttemptsClassFilterEl) hostAttemptsClassFilterEl.addEventListener('change', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
   if (hostAttemptsSearchEl) hostAttemptsSearchEl.addEventListener('input', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
   if (hostStartBtn) hostStartBtn.addEventListener('click', hostStartGame);
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
@@ -3665,6 +3664,11 @@ function bindLiveEvents() {
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (assignmentSelfCheckBtn) assignmentSelfCheckBtn.addEventListener('click', runAssignmentSelfCheck);
   if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
+    if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
+      renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
+    }
+  });
+  if (assignmentResultsClassFilterEl) assignmentResultsClassFilterEl.addEventListener('change', () => {
     if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
       renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
     }
@@ -5133,9 +5137,25 @@ function renderAssignmentResults(safeCode, data) {
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   const filter = String(assignmentResultsFilterEl?.value || 'all');
 
+  if (assignmentResultsClassFilterEl) {
+    const current = String(assignmentResultsClassFilterEl.value || '');
+    const classes = [...new Set(attempts.map((a) => String(a?._class || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    assignmentResultsClassFilterEl.innerHTML = '<option value="">All classes</option>';
+    classes.forEach((c) => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      assignmentResultsClassFilterEl.appendChild(opt);
+    });
+    if (current && classes.includes(current)) assignmentResultsClassFilterEl.value = current;
+  }
+  const classFilter = String(assignmentResultsClassFilterEl?.value || '').trim();
+
   const filtered = attempts.filter((a) => {
-    if (filter === 'submitted') return !!a?.submitted;
-    if (filter === 'pending') return Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0;
+    if (filter === 'submitted' && !a?.submitted) return false;
+    if (filter === 'pending' && Number(a?.metrics?.pendingTeacherGradeCount || 0) === 0) return false;
+    if (classFilter && String(a?._class || '').trim() !== classFilter) return false;
     return true;
   });
 
@@ -5224,10 +5244,13 @@ function renderAssignmentResults(safeCode, data) {
     const notifiedBadge = a?.notifiedAt
       ? `<span style="background:#10b981; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Notified ${new Date(Number(a.notifiedAt)).toLocaleString()}">NOTIFIED</span>`
       : '';
+    const classBadge = a?._class
+      ? `<span style="background:rgba(0,0,0,0.07); color:var(--text,#333); border-radius:10px; padding:2px 8px; font-size:0.7rem; font-weight:600;" title="Class">${escapeHtml(String(a._class))}</span>`
+      : '';
 
     const nameWrap = document.createElement('span');
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${reviewedBadge}${notifiedBadge}`;
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${notifiedBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -5603,8 +5626,36 @@ async function fetchAssignmentResults(code) {
 
     assignmentResultsCache = { code: safeCode, data };
     renderAssignmentResults(safeCode, data);
+    enrichAssignmentAttemptsWithClass(safeCode, data).catch(() => {});
   } catch (err) {
     if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Results error: ${err.message}`;
+  }
+}
+
+async function enrichAssignmentAttemptsWithClass(safeCode, data) {
+  const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
+  if (!attempts.length) return;
+
+  const usernames = attempts
+    .map((a) => String(a?.studentName || '').trim())
+    .filter(Boolean);
+  if (!usernames.length) return;
+
+  const map = await lookupRosterByUsernames(usernames);
+  if (!map.size) return;
+
+  let changed = false;
+  attempts.forEach((a) => {
+    const key = String(a?.studentName || '').trim().toLowerCase();
+    const record = map.get(key);
+    if (record?.class && a._class !== record.class) {
+      a._class = record.class;
+      changed = true;
+    }
+  });
+
+  if (changed && assignmentResultsCache?.code === safeCode && assignmentResultsCache?.data === data) {
+    renderAssignmentResults(safeCode, data);
   }
 }
 
@@ -6688,35 +6739,18 @@ function renderHostAnswerHistory(state) {
 }
 
 function getFilteredHostAttempts(students) {
-  const classFilter = String(hostAttemptsClassFilterEl?.value || '').trim().toLowerCase();
   const search = String(hostAttemptsSearchEl?.value || '').trim().toLowerCase();
 
   return (Array.isArray(students) ? students : []).filter((s) => {
-    const cls = String(s.className || '').trim().toLowerCase();
     const name = String(s.username || s.displayName || '').trim().toLowerCase();
     const email = String(s.email || '').trim().toLowerCase();
-    const classOk = !classFilter || cls === classFilter;
-    const searchOk = !search || name.includes(search) || email.includes(search) || cls.includes(search);
-    return classOk && searchOk;
+    return !search || name.includes(search) || email.includes(search);
   });
 }
 
 function renderHostAttemptsSnapshot(data) {
   const students = Array.isArray(data?.students) ? data.students : [];
   const quizTitle = String(data?.quiz?.title || '').trim() || '(untitled quiz)';
-
-  if (hostAttemptsClassFilterEl) {
-    const current = String(hostAttemptsClassFilterEl.value || '');
-    const classes = [...new Set(students.map((s) => String(s.className || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    hostAttemptsClassFilterEl.innerHTML = '<option value="">All classes</option>';
-    classes.forEach((c) => {
-      const opt = document.createElement('option');
-      opt.value = c;
-      opt.textContent = c;
-      hostAttemptsClassFilterEl.appendChild(opt);
-    });
-    if (current && classes.includes(current)) hostAttemptsClassFilterEl.value = current;
-  }
 
   const filtered = getFilteredHostAttempts(students);
 
@@ -6840,42 +6874,11 @@ async function fetchHostAttempts({ force = false } = {}) {
     live.host.attemptsCache = data;
     live.host.attemptsFetchedAt = Date.now();
     renderHostAttemptsSnapshot(data);
-    enrichHostAttemptsWithClass(data).catch(() => {});
   } catch (err) {
     if (hostAttemptsSummaryEl) hostAttemptsSummaryEl.textContent = `Attempt snapshot error: ${err.message}`;
   } finally {
     live.host.attemptsLoading = false;
     if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.disabled = false;
-  }
-}
-
-async function enrichHostAttemptsWithClass(data) {
-  const students = Array.isArray(data?.students) ? data.students : [];
-  if (!students.length) return;
-
-  const usernamesNeedingClass = students
-    .filter((s) => !String(s?.className || '').trim())
-    .map((s) => String(s?.username || s?.displayName || '').trim())
-    .filter(Boolean);
-
-  if (!usernamesNeedingClass.length) return;
-
-  const map = await lookupRosterByUsernames(usernamesNeedingClass);
-  if (!map.size) return;
-
-  let changed = false;
-  students.forEach((s) => {
-    if (String(s?.className || '').trim()) return;
-    const key = String(s?.username || s?.displayName || '').trim().toLowerCase();
-    const record = map.get(key);
-    if (record?.class) {
-      s.className = record.class;
-      changed = true;
-    }
-  });
-
-  if (changed && live.host.attemptsCache === data) {
-    renderHostAttemptsSnapshot(data);
   }
 }
 
