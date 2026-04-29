@@ -5329,26 +5329,45 @@ function applyNotifyTemplate(template, vars) {
   return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : ''));
 }
 
-async function lookupEmailsForUsernames(usernames) {
-  const cleaned = Array.from(new Set(usernames.map((u) => String(u || '').trim()).filter(Boolean)));
-  if (!cleaned.length) return new Map();
-  if (!createSessionPassword) return new Map();
-  try {
-    const data = await api('/api/assignments/lookup-emails', {
-      method: 'POST',
-      body: { password: createSessionPassword, usernames: cleaned },
-    });
-    const map = new Map();
-    const results = Array.isArray(data?.results) ? data.results : [];
-    results.forEach((r) => {
-      const username = String(r?.username || '').trim().toLowerCase();
-      const email = String(r?.email || '').trim();
-      if (username && email) map.set(username, email);
-    });
-    return map;
-  } catch {
-    return new Map();
+// Cache: lowercased username → { email, class }. Persists across fetches/renders.
+// We cache negative results too (empty fields) so we don't re-lookup the same misses.
+const rosterCache = new Map();
+
+async function lookupRosterByUsernames(usernames) {
+  const cleaned = Array.from(new Set(
+    usernames.map((u) => String(u || '').trim().toLowerCase()).filter(Boolean)
+  ));
+  const need = cleaned.filter((u) => !rosterCache.has(u));
+
+  if (need.length && createSessionPassword) {
+    try {
+      const data = await api('/api/assignments/lookup-emails', {
+        method: 'POST',
+        body: { password: createSessionPassword, usernames: need },
+      });
+      const results = Array.isArray(data?.results) ? data.results : [];
+      const seen = new Set();
+      results.forEach((r) => {
+        const username = String(r?.username || '').trim().toLowerCase();
+        if (!username) return;
+        rosterCache.set(username, {
+          email: String(r?.email || '').trim(),
+          class: String(r?.class || '').trim(),
+        });
+        seen.add(username);
+      });
+      // Cache empty records for usernames the lookup didn't return, to avoid re-querying.
+      need.forEach((u) => { if (!seen.has(u)) rosterCache.set(u, { email: '', class: '' }); });
+    } catch {
+      // On failure, don't poison the cache — let the next attempt retry.
+    }
   }
+
+  const out = new Map();
+  cleaned.forEach((u) => {
+    if (rosterCache.has(u)) out.set(u, rosterCache.get(u));
+  });
+  return out;
 }
 
 async function markAttemptsNotified(safeCode, attemptIds) {
@@ -5539,15 +5558,15 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
     let lookupMap = new Map();
     if (needLookup.length) {
-      lookupMap = await lookupEmailsForUsernames(needLookup.map((a) => String(a?.studentName || '')));
+      lookupMap = await lookupRosterByUsernames(needLookup.map((a) => String(a?.studentName || '')));
     }
 
     resolvedAttempts = attempts.map((a) => {
       const direct = String(a?.studentEmail || '').trim();
       if (direct) return { ...a, _email: direct };
       const key = String(a?.studentName || '').trim().toLowerCase();
-      const email = lookupMap.get(key) || '';
-      return { ...a, _email: email };
+      const record = lookupMap.get(key);
+      return { ...a, _email: record?.email || '' };
     });
 
     recipients = Array.from(new Set(resolvedAttempts.map((a) => a._email).filter(Boolean)));
@@ -6821,11 +6840,42 @@ async function fetchHostAttempts({ force = false } = {}) {
     live.host.attemptsCache = data;
     live.host.attemptsFetchedAt = Date.now();
     renderHostAttemptsSnapshot(data);
+    enrichHostAttemptsWithClass(data).catch(() => {});
   } catch (err) {
     if (hostAttemptsSummaryEl) hostAttemptsSummaryEl.textContent = `Attempt snapshot error: ${err.message}`;
   } finally {
     live.host.attemptsLoading = false;
     if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.disabled = false;
+  }
+}
+
+async function enrichHostAttemptsWithClass(data) {
+  const students = Array.isArray(data?.students) ? data.students : [];
+  if (!students.length) return;
+
+  const usernamesNeedingClass = students
+    .filter((s) => !String(s?.className || '').trim())
+    .map((s) => String(s?.username || s?.displayName || '').trim())
+    .filter(Boolean);
+
+  if (!usernamesNeedingClass.length) return;
+
+  const map = await lookupRosterByUsernames(usernamesNeedingClass);
+  if (!map.size) return;
+
+  let changed = false;
+  students.forEach((s) => {
+    if (String(s?.className || '').trim()) return;
+    const key = String(s?.username || s?.displayName || '').trim().toLowerCase();
+    const record = map.get(key);
+    if (record?.class) {
+      s.className = record.class;
+      changed = true;
+    }
+  });
+
+  if (changed && live.host.attemptsCache === data) {
+    renderHostAttemptsSnapshot(data);
   }
 }
 
