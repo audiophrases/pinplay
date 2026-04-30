@@ -1,6 +1,9 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
+// Self-service login lookup (Apps Script web app, deployed with "Anyone in iecomaruga.cat" access).
+// Empty string = link is hidden. Paste the deployment URL after publishing login-lookup.gs.
+const LOGIN_LOOKUP_URL = '';
 const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
 const QUESTION_TYPE_ICONS = {
@@ -30,6 +33,14 @@ const joinModeHintEl = document.getElementById('joinModeHint');
 const joinNameWrapEl = document.getElementById('joinNameWrap');
 const joinPasswordWrapEl = document.getElementById('joinPasswordWrap');
 const joinSignupHintEl = document.getElementById('joinSignupHint');
+const loginLookupLinkEl = document.getElementById('loginLookupLink');
+if (loginLookupLinkEl) {
+  if (LOGIN_LOOKUP_URL) {
+    loginLookupLinkEl.href = LOGIN_LOOKUP_URL;
+  } else {
+    loginLookupLinkEl.style.display = 'none';
+  }
+}
 
 const joinPinEl = document.getElementById('joinPin');
 const validatePinBtn = document.getElementById('validatePinBtn');
