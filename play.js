@@ -3,7 +3,7 @@ const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
 // Self-service login lookup (Apps Script web app, deployed with "Anyone in iecomaruga.cat" access).
 // Empty string = link is hidden. Paste the deployment URL after publishing login-lookup.gs.
-const LOGIN_LOOKUP_URL = '';
+const LOGIN_LOOKUP_URL = 'https://script.google.com/a/macros/iecomaruga.cat/s/AKfycbz5lL1e-bzNT8moViNmCzYEf2tiyCEU_j8BmHlQ_8Lvqhryj7dsoAo8yCiFoS4WWc7mqw/exec';
 const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
 const QUESTION_TYPE_ICONS = {
