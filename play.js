@@ -473,6 +473,92 @@ function moveAssignmentIndex(delta) {
   playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
+  if (live.player.assignment.reviewMode) renderReviewNavigator();
+}
+
+function jumpToAssignmentQuestion(qIndex) {
+  if (live.player.mode !== 'assignment') return;
+  const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
+  if (total <= 0) return;
+  const target = clampAssignmentIndex(Number(qIndex || 0), total);
+  if (target !== live.player.assignment.currentIndex) {
+    live.player.assignment.currentIndex = target;
+    const mapped = mapAssignmentStateToPlayerState();
+    if (mapped) renderPlayerState(mapped);
+  }
+  renderReviewNavigator();
+  if (joinQuestionWrap) joinQuestionWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Builds (or refreshes) the horizontal "navigator strip" shown during review mode:
+// one numbered chip per question with a status badge (correct/wrong/feedback/pending/unanswered).
+// Tap a chip to jump to that question. The active chip is highlighted and auto-scrolled into view.
+function renderReviewNavigator() {
+  if (!live.player.assignment?.reviewMode) {
+    const existing = document.getElementById('reviewNavigator');
+    if (existing) existing.remove();
+    document.body.classList.remove('review-mode-active');
+    return;
+  }
+  const state = live.player.assignment.state;
+  const questions = Array.isArray(state?.attempt?.assignment?.quiz?.questions) ? state.attempt.assignment.quiz.questions : [];
+  if (!questions.length) return;
+
+  const answersByQ = (state?.attempt?.answersByQ && typeof state.attempt.answersByQ === 'object') ? state.attempt.answersByQ : {};
+  const autoMap = new Map();
+  (Array.isArray(state?.attempt?.answersWithCorrectness) ? state.attempt.answersWithCorrectness : []).forEach((a) => {
+    if (a && Number.isFinite(Number(a.qIndex))) autoMap.set(Number(a.qIndex), a);
+  });
+
+  let nav = document.getElementById('reviewNavigator');
+  if (!nav) {
+    nav = document.createElement('div');
+    nav.id = 'reviewNavigator';
+    nav.className = 'review-navigator';
+    document.body.appendChild(nav);
+  }
+  document.body.classList.add('review-mode-active');
+
+  const currentIdx = Number(live.player.assignment.currentIndex || 0);
+  nav.innerHTML = '';
+
+  questions.forEach((_, qIndex) => {
+    const ans = answersByQ[String(qIndex)];
+    const grade = ans?.teacherGrade;
+    const hasFeedback = !!(grade?.graded && (grade.correction || grade.correctionAudioKey));
+    const auto = autoMap.get(qIndex);
+
+    let statusClass;
+    let badge;
+    if (hasFeedback) {
+      statusClass = 'feedback'; badge = '💬';
+    } else if (grade?.graded) {
+      const pts = Number(grade.pointsAwarded || 0);
+      statusClass = pts > 0 ? 'correct' : 'wrong';
+      badge = pts > 0 ? '✓' : '✗';
+    } else if (auto) {
+      statusClass = auto.correct ? 'correct' : 'wrong';
+      badge = auto.correct ? '✓' : '✗';
+    } else if (!ans) {
+      statusClass = 'unanswered'; badge = '⏸';
+    } else {
+      statusClass = 'pending'; badge = '⏳';
+    }
+
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `rev-chip status-${statusClass}`;
+    if (qIndex === currentIdx) chip.classList.add('active');
+    chip.title = `Question ${qIndex + 1} — ${statusClass}`;
+    chip.innerHTML = `<span class="rev-chip-num">${qIndex + 1}</span><span class="rev-chip-badge">${badge}</span>`;
+    chip.addEventListener('click', () => jumpToAssignmentQuestion(qIndex));
+    nav.appendChild(chip);
+  });
+
+  const active = nav.querySelector('.rev-chip.active');
+  if (active && typeof active.scrollIntoView === 'function') {
+    active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
 }
 
 function moveAssignmentToNextUnanswered() {
@@ -662,8 +748,13 @@ async function showTeacherFeedback(code, attemptId) {
         audioHtml = `<div style="margin-top:6px;"><audio controls src="${src}" style="height:28px;"></audio></div>`;
       }
       return `
-        <div style="padding:8px 0;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;">
-          <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">"${esc(item.question)}..."</div>
+        <div class="feedback-item" data-q-index="${item.qIndex}" role="button" tabindex="0"
+             style="padding:10px 8px;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;cursor:pointer;border-radius:6px;transition:background 0.15s;"
+             title="Tap to jump to question ${item.qIndex + 1}">
+          <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">
+            <span style="background:#3fb950;color:white;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:bold;margin-right:6px;">Q${item.qIndex + 1}</span>
+            "${esc(item.question)}..."
+          </div>
           <div style="color:#3fb950; display:flex; flex-direction:column;">
             <span>💬 Teacher: ${esc(item.correction)}</span>
             ${audioHtml}
@@ -673,10 +764,32 @@ async function showTeacherFeedback(code, attemptId) {
     }).join('');
 
     feedbackPanel.innerHTML = `
-      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length})</div>
+      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length}) — tap to jump</div>
       ${feedbackHtml}
     `;
     feedbackPanel.style.display = 'block';
+
+    // Wire up click + keyboard activation on each feedback item
+    feedbackPanel.querySelectorAll('.feedback-item').forEach((el) => {
+      const qIndex = Number(el.getAttribute('data-q-index') || -1);
+      if (!Number.isFinite(qIndex) || qIndex < 0) return;
+      const activate = (ev) => {
+        if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        // Don't hijack clicks on inner audio controls
+        if (ev.target && ev.target.closest && ev.target.closest('audio')) return;
+        jumpToAssignmentQuestion(qIndex);
+      };
+      el.addEventListener('click', activate);
+      el.addEventListener('keydown', activate);
+      el.addEventListener('mouseenter', () => { el.style.background = 'rgba(63,185,80,0.10)'; });
+      el.addEventListener('mouseleave', () => { el.style.background = ''; });
+    });
+
+    // Auto-scroll the feedback panel into view so students see it without hunting
+    setTimeout(() => {
+      feedbackPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   } catch (e) {
     console.log('Could not load teacher feedback:', e);
   }
