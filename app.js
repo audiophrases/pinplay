@@ -1218,7 +1218,8 @@ function bindBuilderEvents() {
   // delete actions are integrated into open dialogs
 
   importInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     if (!files.length) return;
 
     // Ask user: replace or append? (only when quiz already has questions)
