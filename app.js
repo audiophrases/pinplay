@@ -1093,7 +1093,7 @@ function bindBuilderEvents() {
         if (!q) return;
         const audio = String(q.audioData || '');
         const isMp3 = /\.mp3(\?|$)/i.test(audio) || audio.startsWith('data:audio/mpeg') || audio.startsWith('data:audio/mp3');
-        const looksLikeTts = q._ttsGenerated || /\/quiz-[^/]+\/audio\/q\d+\.mp3(\?|$)/i.test(audio);
+        const looksLikeTts = q._ttsGenerated || /\/quiz-[^/]+\/audio\/q\d+(?:-[a-z0-9-]+)?\.mp3(\?|$)/i.test(audio);
         if (q.audioMode === 'file' && audio && isMp3 && looksLikeTts) {
           q.audioData = '';
           q.audioMode = 'tts';
@@ -2760,7 +2760,19 @@ function syncQuizFromUI() {
 
       const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
-      q.audioText = String(audioTextEl?.value || '').slice(0, 1200);
+      const nextAudioText = String(audioTextEl?.value || '').slice(0, 1200);
+      const prevAudioText = String(q.audioText || '');
+      q.audioText = nextAudioText;
+
+      // If audioText changed and we previously generated TTS, drop the stale mp3
+      // so the next publish regenerates from the new text.
+      if (nextAudioText !== prevAudioText && q._ttsGenerated) {
+        q.audioData = '';
+        q.audioMode = 'tts';
+        q._ttsGenerated = false;
+        q._userAudioUploaded = false;
+        q._audioVersion = '';
+      }
 
       const textLang = normalizeTtsLanguage(ttsLanguageQuestionEl?.value || q.ttsLanguage || quizTtsLanguage);
       q.ttsLanguage = textLang;
@@ -11144,16 +11156,20 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     // If hearing is disabled, skip TTS generation
     const hearingDisabled = (quizLanguage === 'NONE') || (String(q.ttsLanguage || '').toUpperCase() === 'NONE');
 
-    // Auto-regenerate TTS if question text changed
-    if (q.audioMode === 'file' && q.audioData && q._lastPrompt && q._lastPrompt !== promptText) {
+    // Auto-regenerate TTS if question text or audioText changed
+    const promptChanged = q._lastPrompt && q._lastPrompt !== promptText;
+    const audioTextChanged = q._lastAudioText != null && q._lastAudioText !== overrideText;
+    if (q.audioMode === 'file' && q.audioData && (promptChanged || audioTextChanged)) {
       setProgress(`🔄 Regenerating Q${i + 1} audio (text changed)...`);
       q.audioMode = 'tts'; // Force TTS regeneration
       q.audioData = null;
       q._ttsGenerated = false;
       q._userAudioUploaded = false;
+      q._audioVersion = '';
       converted += 1;
     }
     q._lastPrompt = promptText;
+    q._lastAudioText = overrideText;
 
     // Skip TTS generation if audio was already generated/uploaded and text hasn't changed
     const alreadyHasAudio = q.audioData && q._ttsGenerated && q.audioMode === 'file';
@@ -11166,9 +11182,10 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
           if (uploadToR2) {
             setProgress(`🔄 Uploading Q${i + 1} audio to cloud...`);
             try {
-              const key = `${quizId}/audio/q${i}.mp3`;
+              const token = ensureQuestionAudioVersion(q);
+              const key = `${quizId}/audio/q${i}-${token}.mp3`;
               await uploadMediaToR2(audioData, key);
-              q.audioData = `${r2Base}/${key}`;
+              q.audioData = `${r2Base}/${key}?v=${encodeURIComponent(token)}`;
             } catch (err) {
               console.warn(`Q${i + 1} audio upload failed, keeping data URL:`, err);
               q.audioData = audioData; // fallback to data URL
@@ -11285,6 +11302,15 @@ function ensureQuestionImageVersion(question, fallbackToken = '') {
   if (existing) return existing;
   const next = String(fallbackToken || makeImageRevisionToken());
   question._imageVersion = next;
+  return next;
+}
+
+function ensureQuestionAudioVersion(question, fallbackToken = '') {
+  if (!question || typeof question !== 'object') return '';
+  const existing = String(question._audioVersion || '').trim();
+  if (existing) return existing;
+  const next = String(fallbackToken || makeImageRevisionToken());
+  question._audioVersion = next;
   return next;
 }
 
