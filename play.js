@@ -1104,6 +1104,9 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     // Show teacher feedback if available
     showTeacherFeedback(code, attemptId).catch(() => { });
 
+    // Build the per-question navigator strip
+    renderReviewNavigator();
+
     // Add review mode bar at top
     let bar = document.getElementById('reviewModeBar');
     if (!bar) {
@@ -1138,6 +1141,10 @@ function exitAssignmentReviewMode(code, checkData) {
   // Remove review bar
   const bar = document.getElementById('reviewModeBar');
   if (bar) bar.remove();
+  // Remove navigator strip
+  const nav = document.getElementById('reviewNavigator');
+  if (nav) nav.remove();
+  document.body.classList.remove('review-mode-active');
 
   // Remove results panel
   const panel = document.getElementById('assignmentResultsPanel');

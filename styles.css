@@ -2168,6 +2168,84 @@ button.review-retake-attempt-row:active {
   background: rgba(255, 255, 255, 0.35);
 }
 
+/* Per-question navigator strip — sits just below .review-mode-bar */
+.review-navigator {
+  position: fixed;
+  top: 36px;
+  left: 0;
+  right: 0;
+  z-index: 1049;
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.rev-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 2px 4px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+
+.rev-chip:hover {
+  transform: scale(1.05);
+  background: rgba(0, 0, 0, 0.10);
+}
+
+.rev-chip.active {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.rev-chip-num {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rev-chip-badge {
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.rev-chip.status-correct { background: rgba(63, 185, 80, 0.18); }
+.rev-chip.status-correct .rev-chip-num { color: #047857; }
+
+.rev-chip.status-wrong { background: rgba(248, 81, 73, 0.18); }
+.rev-chip.status-wrong .rev-chip-num { color: #b91c1c; }
+
+.rev-chip.status-feedback { background: rgba(99, 102, 241, 0.18); }
+.rev-chip.status-feedback .rev-chip-num { color: #4338ca; }
+
+.rev-chip.status-pending { background: rgba(245, 158, 11, 0.18); }
+.rev-chip.status-pending .rev-chip-num { color: #92400e; }
+
+.rev-chip.status-unanswered { background: rgba(0, 0, 0, 0.04); opacity: 0.7; }
+.rev-chip.status-unanswered .rev-chip-num { color: #6b7280; }
+
+/* Push page content down so it isn't hidden under the fixed bars */
+body.review-mode-active {
+  padding-top: 90px;
+}
+
 /* Responsive utility */
 @media (max-width: 640px) {
   .row.gap .btn {
