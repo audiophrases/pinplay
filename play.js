@@ -2305,9 +2305,11 @@ function renderJoinQuestion(question) {
         promptEl.innerHTML = '';
         const pref = document.createElement('span');
         pref.className = 'prompt-prefix';
-        pref.textContent = `Correct ${required} mistake${required > 1 ? 's' : ''}: `;
+        pref.textContent = `Replace ${required} incorrect ${required === 1 ? 'word' : 'words'}: `;
         promptEl.append(pref);
       }
+
+      const originalPrompt = String(question.prompt || '').trim();
 
       // Single textarea pre-loaded with the sentence for students to edit
       const ta = document.createElement('textarea');
@@ -2315,21 +2317,73 @@ function renderJoinQuestion(question) {
       ta.className = 'join-answer-input error-hunt-textarea';
       ta.rows = 3;
       ta.maxLength = 300;
-      ta.dataset.originalPrompt = String(question.prompt || '').trim();
+      ta.dataset.originalPrompt = originalPrompt;
 
       // Pre-fill from saved answer or original prompt
       const state = live.player.assignment.state;
       const rawAnswers = state?.attempt?.answersByQ || {};
       const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
       const savedRewrite = answerObj?.answer?.rewrite;
-      ta.value = savedRewrite ? String(savedRewrite) : String(question.prompt || '').trim();
+      ta.value = savedRewrite ? String(savedRewrite) : originalPrompt;
 
-      if (live.player.assignment.reviewMode) {
+      const isLocked = !!live.player.assignment.reviewMode;
+      if (isLocked) {
         ta.disabled = true;
         ta.classList.add('join-answer-locked');
       }
 
-      joinAnswersEl.appendChild(ta);
+      const wrap = document.createElement('div');
+      wrap.className = 'error-hunt-rewrite-wrap';
+      wrap.appendChild(ta);
+
+      const statusRow = document.createElement('div');
+      statusRow.className = 'error-hunt-status';
+
+      const counter = document.createElement('span');
+      counter.className = 'error-hunt-counter';
+      statusRow.appendChild(counter);
+
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'error-hunt-reset';
+      resetBtn.textContent = '↺ Reset to original';
+      if (isLocked) resetBtn.disabled = true;
+      statusRow.appendChild(resetBtn);
+
+      const diff = document.createElement('div');
+      diff.className = 'error-hunt-diff hidden';
+
+      wrap.append(statusRow, diff);
+      joinAnswersEl.appendChild(wrap);
+
+      const updateErrorHuntUI = () => {
+        const current = String(ta.value || '');
+        const { editedCount, html } = renderErrorHuntDiff(originalPrompt, current);
+        const wordLabel = required === 1 ? 'word' : 'words';
+        counter.innerHTML = `<strong>${editedCount}</strong> / ${required} ${wordLabel} changed`;
+        counter.classList.toggle('error-hunt-counter-match', editedCount === required && required > 0);
+        counter.classList.toggle('error-hunt-counter-over', editedCount > required);
+
+        const isPristine = current.trim() === originalPrompt;
+        resetBtn.classList.toggle('hidden', isPristine || isLocked);
+
+        if (isPristine || editedCount === 0) {
+          diff.classList.add('hidden');
+          diff.innerHTML = '';
+        } else {
+          diff.classList.remove('hidden');
+          diff.innerHTML = html;
+        }
+      };
+
+      resetBtn.addEventListener('click', () => {
+        ta.value = originalPrompt;
+        updateErrorHuntUI();
+        ta.focus();
+      });
+
+      ta.addEventListener('input', updateErrorHuntUI);
+      updateErrorHuntUI();
     } else if (question.type === 'speaking') {
       // No instruction text as requested
     } else if (question.type === 'voice_record') {
@@ -4246,6 +4300,69 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   }
 
   return Math.max(1, maxErrors);
+}
+
+// Live diff for the student-facing error hunt textarea: returns the number of
+// word-level edits (matching countErrorHuntRequiredTokens semantics) and an
+// HTML string showing the current rewrite with changed/added/removed words
+// highlighted relative to the original prompt.
+function renderErrorHuntDiff(original, current) {
+  const srcRaw = tokenizeWords(original);
+  const tgtRaw = tokenizeWords(current);
+  const src = srcRaw.map(normalizeTextAnswer);
+  const tgt = tgtRaw.map(normalizeTextAnswer);
+  const m = src.length;
+  const n = tgt.length;
+  if (m === 0 && n === 0) return { editedCount: 0, html: '' };
+
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (src[i - 1] === tgt[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+  }
+
+  const opsRev = [];
+  const errorPositions = new Set();
+  let i = m;
+  let j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && src[i - 1] === tgt[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+      opsRev.push({ kind: 'same', text: tgtRaw[j - 1] });
+      i--; j--;
+    } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+      opsRev.push({ kind: 'changed', text: tgtRaw[j - 1] });
+      errorPositions.add(i - 1);
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j] === dp[i][j - 1] + 1)) {
+      opsRev.push({ kind: 'added', text: tgtRaw[j - 1] });
+      errorPositions.add(Math.max(0, i - 1));
+      j--;
+    } else if (i > 0) {
+      opsRev.push({ kind: 'removed', text: srcRaw[i - 1] });
+      errorPositions.add(i - 1);
+      i--;
+    } else {
+      break;
+    }
+  }
+  const ops = opsRev.reverse();
+
+  const html = ops.map((o) => {
+    const t = escapeHtml(o.text);
+    if (o.kind === 'same') return `<span class="ehd-same">${t}</span>`;
+    if (o.kind === 'changed') return `<span class="ehd-changed">${t}</span>`;
+    if (o.kind === 'added') return `<span class="ehd-added">${t}</span>`;
+    return `<span class="ehd-removed">${t}</span>`;
+  }).join(' ');
+
+  return { editedCount: errorPositions.size, html };
 }
 
 // ===== Voice Record =====
