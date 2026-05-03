@@ -272,6 +272,14 @@ async function validatePin() {
       const a = info?.assignment || {};
       live.player.randomNamesMode = !!a?.randomNames;
 
+      // Reflect the actual quiz title in the browser tab / iOS share sheet.
+      // (Static HTML <title> still wins for server-side link-unfurlers; those
+      // are handled by the worker's /s/:code share-preview route.)
+      const tabTitle = String(a?.title || a?.quizTitle || '').trim();
+      if (tabTitle) {
+        try { document.title = tabTitle; } catch {}
+      }
+
       if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
       if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
 

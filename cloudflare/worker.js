@@ -120,6 +120,50 @@ export default {
       return json({ ok: true, service: 'pinplay-api' });
     }
 
+    // Public assignment share-preview endpoint. Returns an HTML stub with
+    // assignment-specific <title>/og:title so messaging-app link unfurlers
+    // (iMessage, Slack, Discord, WhatsApp) render the actual quiz title
+    // instead of the static "PinPlay · Student" served by GitHub Pages.
+    // Real users get a near-instant redirect to the GitHub Pages app.
+    if (url.pathname.startsWith('/s/') && request.method === 'GET') {
+      const code = sanitizeAssignmentCode(url.pathname.slice(3));
+      const targetBase = 'https://audiophrases.github.io/pinplay/';
+      const target = code
+        ? `${targetBase}?assignment=${encodeURIComponent(code)}`
+        : targetBase;
+
+      let title = 'PinPlay · Assignment';
+      let description = 'Open this PinPlay assignment to take the quiz.';
+      if (code) {
+        try {
+          const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+          const r = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+            method: 'GET',
+          });
+          if (r.ok) {
+            const data = await r.json();
+            const a = data?.assignment || {};
+            const t = String(a.title || a.quizTitle || '').trim();
+            if (t) title = t;
+            const total = Number(a.totalQuestions || 0);
+            const dueAt = Number(a.dueAt || 0);
+            const parts = [];
+            if (total) parts.push(`${total} question${total === 1 ? '' : 's'}`);
+            if (dueAt) parts.push(`Due ${new Date(dueAt).toISOString().slice(0, 10)}`);
+            if (parts.length) description = parts.join(' · ');
+          }
+        } catch { /* fall through with defaults */ }
+      }
+
+      return new Response(renderAssignmentSharePage({ title, description, target }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'public, max-age=60',
+        },
+      });
+    }
+
     // Serve quiz media (audio/images) from R2
     if (url.pathname.startsWith('/api/media/') && request.method === 'GET') {
       const key = url.pathname.replace('/api/media/', '');
@@ -5188,4 +5232,45 @@ function json(data, status = 200) {
       ...CORS_HEADERS,
     },
   });
+}
+
+function escapeHtmlAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderAssignmentSharePage({ title, description, target }) {
+  const t = escapeHtmlAttr(title);
+  const d = escapeHtmlAttr(description);
+  const u = escapeHtmlAttr(target);
+  // JSON.stringify is safe for the inline <script> redirect because the
+  // sanitized assignment code can only contain [A-Z0-9], so `target` cannot
+  // contain quotes or `</script>`. The extra `<` escape is belt-and-braces.
+  const jsTarget = JSON.stringify(target).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${t}</title>
+<meta name="description" content="${d}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${t}">
+<meta property="og:description" content="${d}">
+<meta property="og:url" content="${u}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${t}">
+<meta name="twitter:description" content="${d}">
+<link rel="canonical" href="${u}">
+<meta http-equiv="refresh" content="0;url=${u}">
+</head>
+<body style="font-family:system-ui,sans-serif;padding:24px;color:#333;">
+<p>Opening assignment… <a href="${u}">Tap here if you're not redirected.</a></p>
+<script>location.replace(${jsTarget});</script>
+</body>
+</html>`;
 }

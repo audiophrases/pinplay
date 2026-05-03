@@ -5420,8 +5420,13 @@ function saveNotifyTemplate(subject, body) {
 }
 
 function buildAssignmentJoinLink(code) {
-  const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
-  return `${base}?assignment=${encodeURIComponent(code)}`;
+  // Route through the Cloudflare Worker's /s/:code share endpoint so that
+  // messaging-app link unfurlers (iMessage, Slack, Discord, WhatsApp) get a
+  // server-rendered <title>/og:title with the actual quiz name. Real users
+  // are redirected on to the GitHub Pages app instantly.
+  const safeCode = encodeURIComponent(String(code || '').trim());
+  const workerBase = (loadBackendUrl() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
+  return `${workerBase}/s/${safeCode}`;
 }
 
 function applyNotifyTemplate(template, vars) {
@@ -5768,10 +5773,9 @@ async function refreshAssignmentsList() {
       return;
     }
 
-    const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
     list.forEach((a) => {
       const code = String(a?.code || '').trim();
-      const link = `${base}?assignment=${encodeURIComponent(code)}`;
+      const link = buildAssignmentJoinLink(code);
       const li = document.createElement('li');
 
       const title = document.createElement('div');
@@ -5946,8 +5950,7 @@ async function createAssignmentFromCurrentQuiz() {
     });
 
     const code = String(data?.assignment?.code || '').trim();
-    const base = String(window.location.href || '').replace(/\/create\/?(?:index\.html)?(?:\?.*)?(?:#.*)?$/i, '/');
-    const link = `${base}?assignment=${encodeURIComponent(code)}`;
+    const link = buildAssignmentJoinLink(code);
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}`;
 
