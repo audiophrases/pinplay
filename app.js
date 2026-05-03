@@ -12935,12 +12935,6 @@ function buildPaperQuestionHtml(q, index) {
       body = ` <em>(answer ${min}–${max}${unit ? ' ' + escapeHtml(unit) : ''})</em>`;
       break;
     }
-    case 'pin': {
-      const zoneCount = Array.isArray(q.zones) ? q.zones.length : 0;
-      const mode = q.pinMode === 'all' && zoneCount ? ` (describe all ${zoneCount} spots)` : ' (describe the spot)';
-      body = ` <em>${escapeHtml(mode)}</em>`;
-      break;
-    }
     default:
       body = '';
   }
@@ -12968,7 +12962,9 @@ function exportQuizToPdf(quizData) {
   }
 
   const safeTitle = escapeHtml(title);
-  const body = questions.map((q, i) => buildPaperQuestionHtml(q, i)).join('');
+  // Pin questions require an image to be answerable — skip them on paper.
+  const paperQuestions = questions.filter((q) => q.type !== 'pin');
+  const body = paperQuestions.map((q, i) => buildPaperQuestionHtml(q, i)).join('');
 
   const html = `<!doctype html>
 <html lang="en">
@@ -12978,7 +12974,7 @@ function exportQuizToPdf(quizData) {
 <style>
   @page { size: A4; margin: 12mm 12mm; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111; font-size: 10pt; line-height: 1.3; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111; font-size: 11pt; line-height: 1.3; margin: 0; padding: 0; }
   .pdf-header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px solid #222; padding-bottom: 4px; margin-bottom: 6px; }
   .pdf-header h1 { margin: 0; font-size: 13pt; }
   .pdf-header-meta { font-size: 9pt; color: #555; white-space: nowrap; }
@@ -13010,7 +13006,7 @@ function exportQuizToPdf(quizData) {
   <button type="button" class="pdf-print-toolbar" onclick="window.print()">🖨️ Print / Save as PDF</button>
   <header class="pdf-header">
     <h1>${safeTitle}</h1>
-    <span class="pdf-header-meta">${questions.length} questions</span>
+    <span class="pdf-header-meta">${paperQuestions.length} questions</span>
   </header>
   <div class="pdf-student"><span>Name: <u></u></span><span>Class: <u></u></span><span>Date: <u></u></span></div>
   <p class="pdf-note-instr">Write your answers in your notebook (number each one).</p>
