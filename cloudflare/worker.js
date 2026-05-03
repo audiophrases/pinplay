@@ -3203,6 +3203,8 @@ export class QuizRoom {
             currentIndex: qIndex,
             correctAnswer: isAutoGradedExisting ? hostCorrectSummary(question) : '',
             correctZones: isAutoGradedExisting && question.type === 'pin' ? (question.zones || []) : undefined,
+            partialScore: Number(existing.partialScore || 0) || undefined,
+            partialTotal: Number(existing.partialTotal || 0) || undefined,
           });
         }
 
@@ -3251,6 +3253,9 @@ export class QuizRoom {
             lock.awardedPoints = pointsAwarded;
             lock.awardedAt = Date.now();
             room.scoreLocksByQuestion[qIndex][playerId] = lock;
+          } else if (question.type === 'context_gap' && Number(verdict.partialScore || 0) > 0 && Number(verdict.partialTotal || 0) > 0) {
+            const proportional = Math.round(basePoints * (verdict.partialScore / verdict.partialTotal));
+            pointsAwarded = proportional + applyBetScore(basePoints, 0, false, bet);
           } else {
             // FIX: Actually apply the penalty math for incorrect answers!
             pointsAwarded = applyBetScore(basePoints, 0, false, bet);
@@ -3263,6 +3268,8 @@ export class QuizRoom {
             pointsAwarded,
             graded: true,
             submittedAt: Date.now(),
+            partialScore: Number(verdict.partialScore || 0) || undefined,
+            partialTotal: Number(verdict.partialTotal || 0) || undefined,
           };
         }
 
@@ -3310,6 +3317,8 @@ export class QuizRoom {
           currentIndex: qIndex,
           correctAnswer: answerCorrectSummary,
           correctZones: isAutoGraded && question.type === 'pin' ? (question.zones || []) : undefined,
+          partialScore: Number(verdict.partialScore || 0) || undefined,
+          partialTotal: Number(verdict.partialTotal || 0) || undefined,
         });
       }
 
@@ -3860,7 +3869,8 @@ function evaluate(question, answer) {
   }
 
   if (question.type === 'context_gap') {
-    return { correct: isContextGapCorrect(answer, question.gaps || []) };
+    const g = gradeContextGap(answer, question.gaps || []);
+    return { correct: g.correct, partialScore: g.score, partialTotal: g.total };
   }
 
   if (question.type === 'match_pairs') {
@@ -4170,6 +4180,19 @@ function isContextGapCorrect(answer, gaps) {
   const expected = contextGapExpectedOptions(gaps);
   if (!guess.length || guess.length !== expected.length) return false;
   return guess.every((g, i) => expected[i].includes(g));
+}
+
+function gradeContextGap(answer, gaps) {
+  const expected = contextGapExpectedOptions(gaps);
+  const total = expected.length;
+  if (!total) return { correct: false, score: 0, total: 0 };
+  const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer) : [];
+  let score = 0;
+  for (let i = 0; i < total; i++) {
+    const g = guess[i] || '';
+    if (g && expected[i].includes(g)) score++;
+  }
+  return { correct: score === total, score, total };
 }
 
 function isMatchPairsCorrect(answer, pairsRaw) {
@@ -4492,6 +4515,9 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     if (verdict?.correct) {
       correctCount += 1;
       autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
+    } else if (question.type === 'context_gap' && Number(verdict?.partialScore || 0) > 0 && Number(verdict?.partialTotal || 0) > 0) {
+      const proportional = Math.round(basePoints * (verdict.partialScore / verdict.partialTotal));
+      autoScore += proportional + applyBetScore(basePoints, 0, false, item?.bet);
     } else {
       autoScore += applyBetScore(basePoints, 0, false, item?.bet); // <-- FIXED: Uses bet penalty
     }
@@ -4528,13 +4554,24 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
       const question = assignment?.quiz?.questions?.[qIndex];
       if (!question || isAssignmentTeacherGradedQuestion(question)) return null;
       const verdict = evaluate(question, item?.answer);
+      const basePoints = Number(question?.points || 0);
+      let points = verdict?.correct ? basePoints : 0;
+      if (!verdict?.correct && question.type === 'context_gap') {
+        const partialScore = Number(verdict?.partialScore || 0);
+        const partialTotal = Number(verdict?.partialTotal || 0);
+        if (partialScore > 0 && partialTotal > 0) {
+          points = Math.round(basePoints * (partialScore / partialTotal));
+        }
+      }
       return {
         qIndex,
         correct: verdict?.correct === true,
-        points: verdict?.correct ? Number(question?.points || 0) : 0,
+        points,
         answer: item?.answer ?? null,
         correctAnswer: hostCorrectSummary(question),
         correctZones: question.type === 'pin' ? (question.zones || []) : undefined,
+        partialScore: Number(verdict?.partialScore || 0) || undefined,
+        partialTotal: Number(verdict?.partialTotal || 0) || undefined,
         teacherGrade: item?.teacherGrade ? {
           pointsAwarded: Number(item.teacherGrade.pointsAwarded || 0),
           correction: String(item.teacherGrade.correction || ''),

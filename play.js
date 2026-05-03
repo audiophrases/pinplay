@@ -537,8 +537,11 @@ function renderReviewNavigator() {
       statusClass = pts > 0 ? 'correct' : 'wrong';
       badge = pts > 0 ? '✓' : '✗';
     } else if (auto) {
-      statusClass = auto.correct ? 'correct' : 'wrong';
-      badge = auto.correct ? '✓' : '✗';
+      const partialScore = Number(auto.partialScore || 0);
+      const partialTotal = Number(auto.partialTotal || 0);
+      const isPartial = !auto.correct && questions[qIndex]?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+      statusClass = auto.correct ? 'correct' : (isPartial ? 'partial' : 'wrong');
+      badge = auto.correct ? '✓' : (isPartial ? '◐' : '✗');
     } else if (!ans) {
       statusClass = 'unanswered'; badge = '⏸';
     } else {
@@ -633,6 +636,8 @@ function mapAssignmentStateToPlayerState() {
         pointsAwarded: autoResult.points || 0,
         correction: '',
         graded: true,
+        partialScore: Number(autoResult.partialScore || 0),
+        partialTotal: Number(autoResult.partialTotal || 0),
       };
       correctAnswer = autoResult.correctAnswer;
       correctZones = autoResult.correctZones;
@@ -1317,13 +1322,16 @@ function renderInstantFeedbackFromState() {
     const teacherGrade = rawItem.teacherGrade || null;
 
     if (auto) {
+      const partialScore = Number(auto.partialScore || 0);
+      const partialTotal = Number(auto.partialTotal || 0);
+      const isPartial = !auto.correct && q.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
       return {
         qIndex,
         q,
-        status: auto.correct ? 'correct' : 'incorrect',
-        statusIcon: auto.correct ? '✅' : '❌',
+        status: auto.correct ? 'correct' : (isPartial ? 'partial' : 'incorrect'),
+        statusIcon: auto.correct ? '✅' : (isPartial ? '⚠️' : '❌'),
         points: Number(auto.points || 0),
-        liClass: auto.correct ? 'ok' : 'bad',
+        liClass: auto.correct ? 'ok' : (isPartial ? 'warn' : 'bad'),
       };
     }
     if (teacherGrade && teacherGrade.graded) {
@@ -1937,7 +1945,12 @@ function renderPlayerState(state) {
           setJoinStatusHud('📝 Waiting for teacher grading.', 'ok');
         } else {
           // Highlight items: green for correct, red for student's wrong answer
-          const resultText = rr.correct ? '✅ Correct' : '❌ Incorrect';
+          const partialScore = Number(rr.partialScore || 0);
+          const partialTotal = Number(rr.partialTotal || 0);
+          const isPartial = !rr.correct && state.question?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+          const resultText = rr.correct
+            ? '✅ Correct'
+            : (isPartial ? `⚠️ Partial · ${partialScore}/${partialTotal} gaps` : '❌ Incorrect');
           const pts = Number(rr.pointsAwarded || 0);
 
           // FIX: Show negative deductions properly
@@ -1949,7 +1962,7 @@ function renderPlayerState(state) {
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
             feedback += ` · Correct: ${state.correctAnswer}`;
           }
-          setJoinStatusHud(feedback, rr.correct ? 'ok' : 'bad');
+          setJoinStatusHud(feedback, rr.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
 
           // Disable all choice inputs and interactivity
@@ -2829,7 +2842,12 @@ async function submitLiveAnswer() {
     const isAutoGraded = !!data.graded;
     if (!isPoll && isAutoGraded) {
       const pts = Number(data.pointsAwarded || 0);
-      const resultText = data.correct ? '✅ Correct' : '❌ Incorrect';
+      const partialScore = Number(data.partialScore || 0);
+      const partialTotal = Number(data.partialTotal || 0);
+      const isPartial = !data.correct && question?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+      const resultText = data.correct
+        ? '✅ Correct'
+        : (isPartial ? `⚠️ Partial · ${partialScore}/${partialTotal} gaps` : '❌ Incorrect');
       let pointsText = '';
       if (pts > 0) pointsText = ` · +${pts} points`;
       else if (pts < 0) pointsText = ` · ${pts} points`;
@@ -2837,7 +2855,7 @@ async function submitLiveAnswer() {
       if (question?.type === 'error_hunt' && data.correctAnswer) {
         feedback += ` · Correct: ${data.correctAnswer}`;
       }
-      setJoinStatusHud(feedback, data.correct ? 'ok' : 'bad');
+      setJoinStatusHud(feedback, data.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
 
       // Apply color-coded highlighting + text reveal (same as assignment mode)
       const syntheticState = {

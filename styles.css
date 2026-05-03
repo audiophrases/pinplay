@@ -2319,6 +2319,9 @@ button.review-retake-attempt-row:active {
 .rev-chip.status-feedback { background: rgba(99, 102, 241, 0.18); }
 .rev-chip.status-feedback .rev-chip-num { color: #4338ca; }
 
+.rev-chip.status-partial { background: rgba(245, 158, 11, 0.18); }
+.rev-chip.status-partial .rev-chip-num { color: #92400e; }
+
 .rev-chip.status-pending { background: rgba(245, 158, 11, 0.18); }
 .rev-chip.status-pending .rev-chip-num { color: #92400e; }
 

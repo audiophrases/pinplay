@@ -9493,7 +9493,8 @@ function evaluatePreviewAnswer(q, answer) {
   }
   if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
-    return { correct: isContextGapCorrect(answer, q.gaps || []) };
+    const g = gradeContextGap(answer, q.gaps || []);
+    return { correct: g.correct, partialScore: g.score, partialTotal: g.total };
   }
   if (q.type === 'match_pairs') {
     const guess = Array.isArray(answer) ? answer.map(normalizeTextAnswer).filter(Boolean) : [];
@@ -9934,6 +9935,13 @@ function bindSoloEvents() {
       pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
       soloGame.score += pts;
       setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
+    } else if (q.type === 'context_gap' && Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
+      const proportional = Math.round(basePoints * (result.partialScore / result.partialTotal));
+      const betPenalty = live.player.selectedBet === 3 ? Math.round(basePoints * 0.4) : 0;
+      pts = proportional - betPenalty;
+      soloGame.score += pts;
+      const sign = pts >= 0 ? `+${pts}` : `${pts}`;
+      setStatus(feedbackEl, `Partial · ${result.partialScore}/${result.partialTotal} gaps · ${sign} pts · ${result.hint || ''}`.trim(), pts >= 0 ? 'ok' : 'bad');
     } else {
       pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
       soloGame.score += pts;
@@ -10346,7 +10354,8 @@ function evaluateSoloQuestion(q) {
       return { correct: false, hint: 'Complete all blanks.' };
     }
     const expectedHint = expectedOptions.map((opts) => opts.join(' / ')).join(' | ');
-    return { correct: isContextGapCorrect(guess, q.gaps || []), hint: `Expected: ${expectedHint}` };
+    const graded = gradeContextGap(guess, q.gaps || []);
+    return { correct: graded.correct, partialScore: graded.score, partialTotal: graded.total, hint: `Expected: ${expectedHint}` };
   }
 
   if (q.type === 'match_pairs') {
@@ -11698,6 +11707,19 @@ function isContextGapCorrect(guessRaw, gaps) {
   const expected = contextGapExpectedOptions(gaps);
   if (!guess.length || guess.length !== expected.length) return false;
   return guess.every((g, i) => expected[i].includes(g));
+}
+
+function gradeContextGap(guessRaw, gaps) {
+  const expected = contextGapExpectedOptions(gaps);
+  const total = expected.length;
+  if (!total) return { correct: false, score: 0, total: 0 };
+  const guess = Array.isArray(guessRaw) ? guessRaw.map(normalizeTextAnswer) : [];
+  let score = 0;
+  for (let i = 0; i < total; i++) {
+    const g = guess[i] || '';
+    if (g && expected[i].includes(g)) score++;
+  }
+  return { correct: score === total, score, total };
 }
 
 function isMatchPairsCorrect(guessRaw, pairsRaw) {
