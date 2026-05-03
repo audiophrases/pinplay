@@ -12881,121 +12881,83 @@ function buildPaperQuestionHtml(q, index) {
   const promptText = String(q.prompt || '').trim() || '(No prompt)';
   // Treat voice-record + speaking as written open-answer on paper.
   const paperType = (q.type === 'voice_record' || q.type === 'speaking') ? 'open' : q.type;
+  const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
-  const parts = [];
-  parts.push(`<div class="pdf-q">`);
-  parts.push(`<div class="pdf-q-head"><span class="pdf-q-num">${number}.</span><span class="pdf-q-prompt">${escapeHtml(promptText)}</span></div>`);
-
-  const imageData = String(q.imageData || '').trim();
-  if (imageData && q.type !== 'pin') {
-    parts.push(`<div class="pdf-q-image"><img src="${escapeHtml(imageData)}" alt="" /></div>`);
-  }
+  // Body content depends on type. Stays compact: horizontal where possible, no answer space.
+  let body = '';
 
   switch (paperType) {
-    case 'mcq': {
-      const options = (q.answers || []).map((a) => String(a.text || '').trim()).filter(Boolean);
-      const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-      parts.push(`<ul class="pdf-options pdf-options-circle">${
-        options.map((opt, i) => `<li><span class="pdf-bullet">○</span><span class="pdf-opt-letter">${letters[i] || (i + 1)}.</span> ${escapeHtml(opt)}</li>`).join('')
-      }</ul>`);
-      break;
-    }
+    case 'mcq':
     case 'multi': {
       const options = (q.answers || []).map((a) => String(a.text || '').trim()).filter(Boolean);
-      const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-      parts.push(`<p class="pdf-instruction">Select <strong>all</strong> that apply.</p>`);
-      parts.push(`<ul class="pdf-options pdf-options-square">${
-        options.map((opt, i) => `<li><span class="pdf-bullet">☐</span><span class="pdf-opt-letter">${letters[i] || (i + 1)}.</span> ${escapeHtml(opt)}</li>`).join('')
-      }</ul>`);
+      const bullet = paperType === 'multi' ? '☐' : '○';
+      const tag = paperType === 'multi' ? ' <em>(select all)</em>' : '';
+      body = `${tag}<span class="pdf-opts">${
+        options.map((opt, i) => `<span class="pdf-opt"><span class="pdf-bullet">${bullet}</span><b>${letters[i] || (i + 1)}.</b> ${escapeHtml(opt)}</span>`).join('')
+      }</span>`;
       break;
     }
     case 'tf': {
-      parts.push(`<ul class="pdf-options pdf-options-circle pdf-options-inline"><li><span class="pdf-bullet">○</span> True</li><li><span class="pdf-bullet">○</span> False</li></ul>`);
+      body = `<span class="pdf-opts"><span class="pdf-opt"><span class="pdf-bullet">○</span> True</span><span class="pdf-opt"><span class="pdf-bullet">○</span> False</span></span>`;
       break;
     }
-    case 'text': {
-      parts.push(`<div class="pdf-answer-line"></div>`);
-      break;
-    }
-    case 'open': {
-      const lines = 4;
-      parts.push(`<div class="pdf-answer-block">${'<div class="pdf-answer-line"></div>'.repeat(lines)}</div>`);
+    case 'text':
+    case 'open':
+    case 'error_hunt': {
+      // Just the prompt — students answer in their notebook. No extra body.
+      body = '';
       break;
     }
     case 'context_gap': {
-      const gapCount = Array.isArray(q.gaps) ? q.gaps.length : 0;
-      if (gapCount > 0) {
-        parts.push(`<p class="pdf-instruction">Fill in each numbered gap with the missing word.</p>`);
-        let gIdx = 0;
-        const promptHtml = escapeHtml(promptText).replace(/_{2,}/g, () => {
-          gIdx += 1;
-          return `<span class="pdf-gap">(${gIdx}) __________</span>`;
-        });
-        parts.push(`<p class="pdf-context-text">${promptHtml}</p>`);
-        const list = [];
-        for (let i = 1; i <= gapCount; i++) {
-          list.push(`<li>(${i}) <span class="pdf-mini-line"></span></li>`);
-        }
-        parts.push(`<ol class="pdf-gap-list">${list.join('')}</ol>`);
-      } else {
-        parts.push(`<div class="pdf-answer-line"></div>`);
-      }
+      // Gaps are inlined in the prompt itself, replacing ____ with numbered short blanks.
+      // No separate answer block — students write in their notebook.
+      body = '';
       break;
     }
     case 'match_pairs': {
       const pairs = (q.pairs || []).filter((p) => (p.left || '').trim() && (p.right || '').trim());
-      const lefts = pairs.map((p, i) => ({ key: i + 1, text: String(p.left).trim() }));
-      const rights = shuffleArrayCopy(pairs.map((p, i) => ({ key: String.fromCharCode(65 + i), text: String(p.right).trim() })));
-      parts.push(`<p class="pdf-instruction">Write the matching letter next to each item.</p>`);
-      parts.push(`<table class="pdf-match"><thead><tr><th>Item</th><th>Match</th><th>Options</th></tr></thead><tbody>${
-        lefts.map((l, i) => {
-          const right = rights[i];
-          return `<tr><td>${l.key}. ${escapeHtml(l.text)}</td><td class="pdf-match-blank">____</td><td>${right ? `${right.key}. ${escapeHtml(right.text)}` : ''}</td></tr>`;
-        }).join('')
-      }</tbody></table>`);
-      break;
-    }
-    case 'error_hunt': {
-      parts.push(`<p class="pdf-instruction">Rewrite the sentence with the error(s) corrected.</p>`);
-      parts.push(`<div class="pdf-answer-block">${'<div class="pdf-answer-line"></div>'.repeat(2)}</div>`);
+      const lefts = pairs.map((p, i) => `<b>${i + 1}.</b> ${escapeHtml(String(p.left).trim())}`);
+      const rights = shuffleArrayCopy(pairs.map((p, i) => ({ key: String.fromCharCode(65 + i), text: String(p.right).trim() })))
+        .map((r) => `<b>${r.key}.</b> ${escapeHtml(r.text)}`);
+      body = `<span class="pdf-match-row"><span class="pdf-match-col"><i>Items:</i> ${lefts.join(' &nbsp;·&nbsp; ')}</span><span class="pdf-match-col"><i>Options:</i> ${rights.join(' &nbsp;·&nbsp; ')}</span></span>`;
       break;
     }
     case 'puzzle': {
       const items = (q.items || []).map((it) => String(it || '').trim()).filter(Boolean);
       const shuffled = shuffleArrayCopy(items);
-      parts.push(`<p class="pdf-instruction">Number the items in the correct order (1, 2, 3, …).</p>`);
-      parts.push(`<ul class="pdf-puzzle">${
-        shuffled.map((it) => `<li><span class="pdf-puzzle-num">____</span> ${escapeHtml(it)}</li>`).join('')
-      }</ul>`);
+      body = ` <em>(reorder)</em> <span class="pdf-puzzle">${shuffled.map((it) => `<span class="pdf-chip">${escapeHtml(it)}</span>`).join(' ')}</span>`;
       break;
     }
     case 'slider': {
       const min = Number.isFinite(q.min) ? q.min : 0;
       const max = Number.isFinite(q.max) ? q.max : 100;
       const unit = String(q.unit || '').trim();
-      parts.push(`<p class="pdf-instruction">Write a number between <strong>${min}</strong> and <strong>${max}</strong>${unit ? ` (${escapeHtml(unit)})` : ''}.</p>`);
-      parts.push(`<div class="pdf-slider-line"><span class="pdf-slider-end">${min}</span><span class="pdf-slider-track"></span><span class="pdf-slider-end">${max}</span></div>`);
-      parts.push(`<p class="pdf-answer-inline">Answer: <span class="pdf-mini-line"></span>${unit ? ` ${escapeHtml(unit)}` : ''}</p>`);
+      body = ` <em>(answer ${min}–${max}${unit ? ' ' + escapeHtml(unit) : ''})</em>`;
       break;
     }
     case 'pin': {
       const zoneCount = Array.isArray(q.zones) ? q.zones.length : 0;
-      const mode = q.pinMode === 'all' ? `Mark all ${zoneCount || ''} spot(s).` : 'Mark the correct spot.';
-      parts.push(`<p class="pdf-instruction">${escapeHtml(mode)} Draw a circle on the image.</p>`);
-      if (imageData) {
-        parts.push(`<div class="pdf-q-image pdf-pin-image"><img src="${escapeHtml(imageData)}" alt="" /></div>`);
-      } else {
-        parts.push(`<p class="pdf-note small">[Image not available in PDF — only embedded images are included.]</p>`);
-      }
+      const mode = q.pinMode === 'all' && zoneCount ? ` (describe all ${zoneCount} spots)` : ' (describe the spot)';
+      body = ` <em>${escapeHtml(mode)}</em>`;
       break;
     }
-    default: {
-      parts.push(`<div class="pdf-answer-block">${'<div class="pdf-answer-line"></div>'.repeat(3)}</div>`);
-    }
+    default:
+      body = '';
   }
 
-  parts.push(`</div>`);
-  return parts.join('');
+  // Build the prompt — for context_gap, inline numbered short blanks.
+  let promptHtml;
+  if (paperType === 'context_gap') {
+    let gIdx = 0;
+    promptHtml = escapeHtml(promptText).replace(/_{2,}/g, () => {
+      gIdx += 1;
+      return `<span class="pdf-gap">(${gIdx})___</span>`;
+    });
+  } else {
+    promptHtml = escapeHtml(promptText);
+  }
+
+  return `<div class="pdf-q"><span class="pdf-q-num">${number}.</span> <span class="pdf-q-prompt">${promptHtml}</span>${body}</div>`;
 }
 
 function exportQuizToPdf(quizData) {
@@ -13014,49 +12976,29 @@ function exportQuizToPdf(quizData) {
 <meta charset="UTF-8" />
 <title>${safeTitle}</title>
 <style>
-  @page { size: A4; margin: 18mm 16mm; }
+  @page { size: A4; margin: 12mm 12mm; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111; font-size: 11pt; line-height: 1.4; margin: 0; padding: 0; }
-  .pdf-header { border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 16px; }
-  .pdf-header h1 { margin: 0 0 4px; font-size: 20pt; }
-  .pdf-meta { display: flex; gap: 24px; flex-wrap: wrap; font-size: 10pt; color: #444; }
-  .pdf-student-fields { display: flex; gap: 18px; margin-top: 10px; font-size: 10pt; }
-  .pdf-student-fields > div { flex: 1; border-bottom: 1px solid #999; padding-bottom: 2px; min-height: 20px; }
-  .pdf-student-fields label { color: #555; }
-  .pdf-q { page-break-inside: avoid; margin: 0 0 18px; padding: 10px 0 8px; border-top: 1px dashed #ccc; }
-  .pdf-q:first-of-type { border-top: none; }
-  .pdf-q-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
-  .pdf-q-num { font-weight: 700; min-width: 22px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111; font-size: 10pt; line-height: 1.3; margin: 0; padding: 0; }
+  .pdf-header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px solid #222; padding-bottom: 4px; margin-bottom: 6px; }
+  .pdf-header h1 { margin: 0; font-size: 13pt; }
+  .pdf-header-meta { font-size: 9pt; color: #555; white-space: nowrap; }
+  .pdf-student { font-size: 9pt; color: #444; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px dashed #ccc; }
+  .pdf-student span { display: inline-block; min-width: 28%; }
+  .pdf-student u { text-decoration: none; border-bottom: 1px solid #777; padding: 0 30px 0 4px; }
+  .pdf-note-instr { font-size: 8.5pt; color: #777; font-style: italic; margin-bottom: 6px; }
+  .pdf-q { page-break-inside: avoid; margin: 0 0 4px; padding: 3px 0; }
+  .pdf-q + .pdf-q { border-top: 1px dotted #ddd; padding-top: 4px; }
+  .pdf-q-num { font-weight: 700; }
   .pdf-q-prompt { font-weight: 600; }
-  .pdf-q-image { margin: 6px 0; }
-  .pdf-q-image img { max-width: 100%; max-height: 70mm; object-fit: contain; display: block; }
-  .pdf-pin-image img { max-height: 100mm; }
-  .pdf-options { list-style: none; padding: 0; margin: 4px 0 0 22px; }
-  .pdf-options li { margin: 4px 0; }
-  .pdf-options-inline { display: flex; gap: 36px; }
-  .pdf-bullet { display: inline-block; width: 16px; font-size: 14pt; line-height: 1; vertical-align: middle; }
-  .pdf-opt-letter { display: inline-block; min-width: 18px; font-weight: 600; }
-  .pdf-instruction { font-style: italic; color: #444; margin: 4px 0 6px 22px; font-size: 10pt; }
-  .pdf-answer-line { border-bottom: 1px solid #555; height: 22px; margin: 6px 22px; }
-  .pdf-answer-block { margin-top: 4px; }
-  .pdf-mini-line { display: inline-block; border-bottom: 1px solid #555; min-width: 80px; height: 14px; vertical-align: middle; }
-  .pdf-context-text { margin: 6px 22px; line-height: 1.8; }
-  .pdf-gap { display: inline-block; min-width: 90px; border-bottom: 1px solid #555; padding: 0 4px; font-weight: 600; }
-  .pdf-gap-list { margin: 8px 0 0 22px; }
-  .pdf-gap-list li { margin: 6px 0; }
-  .pdf-match { width: calc(100% - 22px); margin-left: 22px; border-collapse: collapse; font-size: 10.5pt; }
-  .pdf-match th, .pdf-match td { border: 1px solid #999; padding: 6px 8px; text-align: left; vertical-align: top; }
-  .pdf-match th { background: #f3f3f3; font-size: 9.5pt; }
-  .pdf-match-blank { width: 60px; text-align: center; color: #888; }
-  .pdf-puzzle { list-style: none; padding: 0; margin: 4px 0 0 22px; }
-  .pdf-puzzle li { margin: 4px 0; }
-  .pdf-puzzle-num { display: inline-block; min-width: 36px; border-bottom: 1px solid #555; margin-right: 8px; text-align: center; }
-  .pdf-slider-line { display: flex; align-items: center; gap: 8px; margin: 8px 22px; }
-  .pdf-slider-track { flex: 1; height: 2px; background: #555; position: relative; }
-  .pdf-slider-end { font-weight: 600; }
-  .pdf-answer-inline { margin: 6px 22px; }
-  .pdf-note { color: #777; margin: 4px 22px; font-size: 9.5pt; }
-  .pdf-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ccc; text-align: center; font-size: 9pt; color: #888; }
+  .pdf-opts { display: inline; }
+  .pdf-opt { display: inline-block; margin: 0 12px 0 0; white-space: nowrap; }
+  .pdf-bullet { display: inline-block; font-size: 11pt; line-height: 1; vertical-align: -1px; margin-right: 2px; }
+  .pdf-gap { display: inline-block; border-bottom: 1px solid #555; padding: 0 18px 0 4px; font-weight: 600; font-size: 8.5pt; vertical-align: 1px; }
+  .pdf-match-row { display: block; margin-top: 2px; font-size: 9.5pt; }
+  .pdf-match-col { display: block; }
+  .pdf-puzzle { display: inline; }
+  .pdf-chip { display: inline-block; border: 1px solid #999; border-radius: 3px; padding: 0 5px; margin: 1px 2px; font-size: 9.5pt; background: #f7f7f7; }
+  em, i { color: #555; font-style: italic; }
   @media print {
     .pdf-print-toolbar { display: none !important; }
   }
@@ -13068,19 +13010,11 @@ function exportQuizToPdf(quizData) {
   <button type="button" class="pdf-print-toolbar" onclick="window.print()">🖨️ Print / Save as PDF</button>
   <header class="pdf-header">
     <h1>${safeTitle}</h1>
-    <div class="pdf-meta">
-      <span><strong>Questions:</strong> ${questions.length}</span>
-    </div>
-    <div class="pdf-student-fields">
-      <div><label>Name:</label></div>
-      <div><label>Class:</label></div>
-      <div><label>Date:</label></div>
-    </div>
+    <span class="pdf-header-meta">${questions.length} questions</span>
   </header>
-  <main>
-    ${body}
-  </main>
-  <footer class="pdf-footer">PinPlay · Paper version</footer>
+  <div class="pdf-student"><span>Name: <u></u></span><span>Class: <u></u></span><span>Date: <u></u></span></div>
+  <p class="pdf-note-instr">Write your answers in your notebook (number each one).</p>
+  <main>${body}</main>
   <script>
     window.addEventListener('load', function () {
       setTimeout(function () { window.print(); }, 350);
