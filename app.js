@@ -1686,7 +1686,7 @@ function bindBuilderEvents() {
     const q = quiz.questions[idx];
 
     // answerLanguage: validate/autocomplete on blur (empty is valid → fallback to question language)
-    if (el.dataset.field === 'answerLanguage' && q.type === 'voice_text') {
+    if (el.dataset.field === 'answerLanguage' && (q.type === 'voice_text' || q.type === 'voice_record')) {
       const raw = String(el.value || '').trim();
       const status = questionListEl.querySelector(`[data-answer-lang-status="${idx}"]`);
       const result = normalizeRecognitionLang(raw);
@@ -2045,8 +2045,16 @@ function renderBuilder() {
     }
 
     if (q.type === 'voice_record') {
+      const stored = String(q.answerLanguage || '');
+      const datalistId = `recogLangs-vr-${idx}`;
       specific += `
-        <p class="small top-space">Students record audio (max 2 min). You grade by listening to playback.</p>
+        <p class="small top-space">Students record audio (max 2 min). You grade by listening to playback. Browser also runs silent speech-to-text in the background — the transcript appears next to the audio in the grading view to help you skim.</p>
+        <label class="top-space" for="answerLang-vr-${idx}">Recognition language (BCP-47)</label>
+        <input id="answerLang-vr-${idx}" data-q="${idx}" data-field="answerLanguage" list="${datalistId}" maxlength="10" value="${escapeHtml(stored)}" placeholder="e.g. es-ES, ca-ES, en-US — leave blank to follow the question audio language" />
+        <datalist id="${datalistId}">
+          ${SPEECH_RECOGNITION_LANGS.map((c) => `<option value="${c}"></option>`).join('')}
+        </datalist>
+        <div class="small muted" data-answer-lang-status="${idx}"></div>
       `;
     }
 
@@ -2946,7 +2954,7 @@ function syncQuizFromUI() {
       q.accepted = accepted;
     }
 
-    if (q.type === 'voice_text') {
+    if (q.type === 'voice_text' || q.type === 'voice_record') {
       const langEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="answerLanguage"]`);
       const raw = String(langEl?.value || '').trim();
       const result = normalizeRecognitionLang(raw);
@@ -4282,6 +4290,13 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         }
         answer.textContent = 'Answer: 🎙️ Voice recording';
         li.append(head, prompt, answer, audioWrap);
+        const transcript = String(it.answer.transcript || '').trim();
+        if (transcript) {
+          const tEl = document.createElement('div');
+          tEl.className = 'small muted top-space voice-record-transcript';
+          tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+          li.appendChild(tEl);
+        }
       } else {
         answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
         li.append(head, prompt, answer);
@@ -10780,6 +10795,7 @@ function makeVoiceRecordQuestion(opts = {}) {
     language,
     audioData: '',
     media: makeDefaultQuestionMedia(),
+    answerLanguage: '',
   };
 }
 

@@ -2961,7 +2961,12 @@ function readJoinAnswer() {
 
   if (q.type === 'voice_record') {
     if (!_voiceRecordUpload || _voiceRecordUpload.uploading || _voiceRecordUpload.error) return null;
-    return { audioUrl: _voiceRecordUpload.url, durationMs: _voiceRecordUpload.durationMs, mimeType: _voiceRecordUpload.mimeType };
+    return {
+      audioUrl: _voiceRecordUpload.url,
+      durationMs: _voiceRecordUpload.durationMs,
+      mimeType: _voiceRecordUpload.mimeType,
+      transcript: String(_voiceRecordUpload.transcript || ''),
+    };
   }
 
   if (q.type === 'context_gap') {
@@ -4396,10 +4401,68 @@ function renderErrorHuntDiff(original, current) {
 }
 
 // ===== Voice Record =====
-let _voiceRecordUpload = null; // { url, durationMs, mimeType, uploading, error }
+let _voiceRecordUpload = null; // { url, durationMs, mimeType, uploading, error, transcript }
 let _voiceRecordStream = null;
 let _voiceRecordRecorder = null;
 let _voiceRecordTimerId = null;
+
+// Silent background speech recognition that runs in parallel with MediaRecorder.
+// Transcript is collected without showing it to the student; teacher sees it
+// alongside the audio in the grading view.
+let _voiceRecordSR = null;
+let _voiceRecordSRActive = false;
+let _voiceRecordSRFinal = '';
+
+function _startVoiceRecordSilentSR(lang) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  _voiceRecordSRFinal = '';
+  _voiceRecordSRActive = true;
+
+  const start = () => {
+    if (!_voiceRecordSRActive) return;
+    let rec;
+    try {
+      rec = new SR();
+    } catch (_) { return; }
+    rec.lang = lang || 'en-US';
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          const t = String(e.results[i][0]?.transcript || '').trim();
+          if (t) _voiceRecordSRFinal = (_voiceRecordSRFinal + ' ' + t).trim();
+        }
+      }
+    };
+    rec.onerror = () => { /* silent: collection is best-effort */ };
+    rec.onend = () => {
+      // Auto-restart if MediaRecorder is still going (Chrome occasionally
+      // ends recognition mid-utterance with continuous=true).
+      if (_voiceRecordSRActive) start();
+    };
+
+    try {
+      rec.start();
+      _voiceRecordSR = rec;
+    } catch (_) {
+      _voiceRecordSR = null;
+    }
+  };
+
+  start();
+}
+
+function _stopVoiceRecordSilentSR() {
+  _voiceRecordSRActive = false;
+  if (_voiceRecordSR) {
+    try { _voiceRecordSR.onend = null; _voiceRecordSR.onresult = null; _voiceRecordSR.onerror = null; _voiceRecordSR.stop(); } catch (_) { }
+    _voiceRecordSR = null;
+  }
+}
 
 function _cleanupVoiceRecordStream() {
   if (_voiceRecordTimerId) { clearInterval(_voiceRecordTimerId); _voiceRecordTimerId = null; }
@@ -4411,6 +4474,7 @@ function _cleanupVoiceRecordStream() {
     _voiceRecordStream.getTracks().forEach((t) => t.stop());
     _voiceRecordStream = null;
   }
+  _stopVoiceRecordSilentSR();
 }
 
 function renderVoiceRecorder(container, question) {
@@ -4516,9 +4580,9 @@ function renderVoiceRecorder(container, question) {
     previewWrap.append(audio, durLabel, rerecordBtn);
   }
 
-  async function uploadBlob(blob, durationMs) {
+  async function uploadBlob(blob, durationMs, transcript) {
     const mimeType = blob.type || 'audio/webm';
-    _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null };
+    _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null, transcript: transcript || '' };
     statusEl.textContent = 'Uploading…';
     statusEl.className = 'voice-record-upload-status uploading';
 
@@ -4539,15 +4603,15 @@ function renderVoiceRecorder(container, question) {
       const mediaKey = data?.path || data?.key || data?.url || '';
       if (!mediaKey) throw new Error('No media key returned');
 
-      _voiceRecordUpload = { url: mediaKey, durationMs, mimeType, uploading: false, error: null };
+      _voiceRecordUpload = { url: mediaKey, durationMs, mimeType, uploading: false, error: null, transcript: transcript || '' };
       statusEl.textContent = '✓ Uploaded';
       statusEl.className = 'voice-record-upload-status uploaded';
     } catch (err) {
-      _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: false, error: err.message };
+      _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: false, error: err.message, transcript: transcript || '' };
       statusEl.textContent = `⚠ ${err.message}. Tap to retry.`;
       statusEl.className = 'voice-record-upload-status error';
       statusEl.style.cursor = 'pointer';
-      statusEl.onclick = () => { statusEl.onclick = null; uploadBlob(blob, durationMs); };
+      statusEl.onclick = () => { statusEl.onclick = null; uploadBlob(blob, durationMs, transcript); };
     }
   }
 
@@ -4576,6 +4640,9 @@ function renderVoiceRecorder(container, question) {
       const durationMs = Date.now() - startTime;
       const blob = new Blob(chunks, { type: _voiceRecordRecorder.mimeType || 'audio/webm' });
 
+      _stopVoiceRecordSilentSR();
+      const transcript = String(_voiceRecordSRFinal || '').trim().slice(0, 4000);
+
       if (_voiceRecordTimerId) { clearInterval(_voiceRecordTimerId); _voiceRecordTimerId = null; }
       timerEl.classList.add('hidden');
       recordBtn.classList.remove('hidden');
@@ -4592,10 +4659,17 @@ function renderVoiceRecorder(container, question) {
       }
 
       showPreview(blob, durationMs);
-      uploadBlob(blob, durationMs);
+      uploadBlob(blob, durationMs, transcript);
       _voiceRecordStream?.getTracks().forEach((t) => t.stop());
       _voiceRecordStream = null;
     };
+
+    // Kick off silent background recognition in parallel with MediaRecorder.
+    const explicitLang = String(question?.answerLanguage || '').trim();
+    const recogLang = /^[a-z]{2,3}-[A-Z]{2,4}$/.test(explicitLang)
+      ? explicitLang
+      : _bcp47FromQuestionLanguage(question?.language);
+    _startVoiceRecordSilentSR(recogLang);
 
     _voiceRecordRecorder.start(1000); // collect chunks every 1s
 

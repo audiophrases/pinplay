@@ -3782,7 +3782,7 @@ function publicQuestion(question) {
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
       language: question.type === 'voice_text' ? String(question.language || 'en-US-Wave') : undefined,
-      answerLanguage: question.type === 'voice_text' ? String(question.answerLanguage || '') : undefined,
+      answerLanguage: (question.type === 'voice_text' || question.type === 'voice_record') ? String(question.answerLanguage || '') : undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
@@ -4069,7 +4069,9 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'voice_record') {
-      normalized.questions.push({ ...base });
+      const lang = String(q.answerLanguage || '').trim();
+      const answerLanguage = /^[a-z]{2,3}-[A-Z]{2,4}$/.test(lang) ? lang : '';
+      normalized.questions.push({ ...base, answerLanguage });
       return;
     }
 
@@ -4495,18 +4497,23 @@ async function resolveEmailKey(env, username) {
   }
 }
 
-function sanitizeAssignmentAnswer(_question, raw) {
-  const walk = (v, depth = 0) => {
+function sanitizeAssignmentAnswer(question, raw) {
+  const isVoiceRecord = question?.type === 'voice_record';
+  const walk = (v, depth = 0, parentKey = '') => {
     if (depth > 3) return null;
     if (v == null) return null;
-    if (typeof v === 'string') return v.slice(0, 500);
+    if (typeof v === 'string') {
+      const cap = (isVoiceRecord && parentKey === 'transcript') ? 4000 : 500;
+      return v.slice(0, cap);
+    }
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
     if (typeof v === 'boolean') return v;
-    if (Array.isArray(v)) return v.slice(0, 50).map((x) => walk(x, depth + 1));
+    if (Array.isArray(v)) return v.slice(0, 50).map((x) => walk(x, depth + 1, parentKey));
     if (typeof v === 'object') {
       const out = {};
       Object.keys(v).slice(0, 20).forEach((k) => {
-        out[String(k).slice(0, 40)] = walk(v[k], depth + 1);
+        const safeKey = String(k).slice(0, 40);
+        out[safeKey] = walk(v[k], depth + 1, safeKey);
       });
       return out;
     }
