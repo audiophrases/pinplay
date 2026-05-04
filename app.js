@@ -229,14 +229,15 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q13-voice-record",
       "type": "voice_record",
-      "prompt": "Record yourself saying: I can describe this image in one sentence.",
+      "prompt": "Record yourself describing this image in one sentence in Spanish.",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Please record your voice and say: I can describe this image in one sentence.",
-      "ttsLanguage": "OTHER",
-      "language": "es-ES-ElviraNeural",
+      "audioText": "Record one sentence in Spanish describing the image.",
+      "ttsLanguage": "EN",
+      "language": "en-US-AriaNeural",
+      "answerLanguage": "es-ES",
       "imageKeyword": "student speaking into microphone",
       "imageData": ""
     },
@@ -391,21 +392,21 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "voice_record": {
     "name": "Voice Recording",
-    "rules": "Students record a spoken answer. Teacher grades manually by listening to the playback.",
-    "constraints": { "maxDurationSec": 120, "maxSizeMB": 10 },
+    "rules": "Students record a spoken answer (max 2 min). Teacher grades manually by listening to the playback. The browser also runs silent background speech-to-text — the transcript is shown to the teacher next to the audio in the grading view to help triage. Set 'answerLanguage' to the BCP-47 tag of the expected spoken language (e.g. 'en-US', 'es-ES', 'ca-ES'). If left blank, the recognizer falls back to deriving from the question 'language' (Edge TTS voice).",
+    "constraints": { "maxDurationSec": 120, "maxSizeMB": 10, "answerLanguageFormat": "BCP-47 (xx or xx-XX)" },
     "pedagogicalUses": ["Oral fluency and pronunciation practice.", "Extended spoken response for deeper assessment."],
     "ttsStrategy": "audioText can model the expected response register.",
-    "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners."],
-    "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading."]
+    "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners.", "Set 'answerLanguage' explicitly when the spoken response language differs from the question/quiz language (e.g. quiz in English, answer in Spanish)."],
+    "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading.", "Forgetting 'answerLanguage' on cross-language tasks — the transcript will use the question language and may be unintelligible."]
   },
   "voice_text": {
     "name": "Voice Answer (auto-graded)",
-    "rules": "Students speak their answer. The browser transcribes it via Web Speech API and it's auto-graded against accepted answers (case- and punctuation-insensitive).",
-    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 },
-    "pedagogicalUses": ["Pronunciation practice with instant feedback.", "Oral retrieval drills."],
+    "rules": "Students speak their answer. The browser transcribes it via Web Speech API and it's auto-graded against the 'accepted' array (case- and punctuation-insensitive). Set 'answerLanguage' to the BCP-47 tag of the expected spoken language (e.g. 'en-US', 'es-ES', 'ca-ES'). If left blank, the recognizer falls back to deriving from the question 'language' (Edge TTS voice).",
+    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120, "answerLanguageFormat": "BCP-47 (xx or xx-XX)" },
+    "pedagogicalUses": ["Pronunciation practice with instant feedback.", "Oral retrieval drills.", "Vocabulary checks across languages (question prompt in one language, expected spoken answer in another)."],
     "ttsStrategy": "audioText can model the expected pronunciation.",
-    "differentiationTips": ["Add several accepted variants for spelling/phrasing flexibility.", "Set the question 'language' to a BCP-47 voice (e.g. es-ES-ElviraNeural) to hint the recognizer."],
-    "commonPitfalls": ["Recognizer needs Chrome/Edge/Safari and an internet connection.", "Multi-word answers may pick up filler — keep accepted answers concise."]
+    "differentiationTips": ["Add several accepted variants for spelling/phrasing flexibility (singular/plural, with/without article).", "Always set 'answerLanguage' when the question prompt language differs from the expected spoken response language."],
+    "commonPitfalls": ["Recognizer needs Chrome/Edge/Safari and an internet connection.", "Multi-word answers may pick up filler — keep accepted answers concise.", "Missing 'answerLanguage' on cross-language tasks causes mis-recognition."]
   }
 };
 
