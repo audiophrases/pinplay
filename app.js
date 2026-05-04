@@ -239,6 +239,22 @@ const TEMPLATE_ALL_13_TYPES = {
       "language": "es-ES-ElviraNeural",
       "imageKeyword": "student speaking into microphone",
       "imageData": ""
+    },
+    {
+      "id": "q14-voice-text",
+      "type": "voice_text",
+      "prompt": "Say the Spanish word for 'apple'.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Say the Spanish word for apple.",
+      "ttsLanguage": "EN",
+      "language": "en-US-AriaNeural",
+      "answerLanguage": "es-ES",
+      "accepted": ["manzana", "una manzana", "la manzana"],
+      "imageKeyword": "red apple",
+      "imageData": ""
     }
   ]
 };

@@ -19,6 +19,8 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - Multi-select (select all correct options)
 - True / False
 - Type answer (auto-checked, multiple accepted answers)
+- Voice answer (auto-checked via Web Speech API; per-question recognition language with BCP-47 autocomplete, e.g. `es-ES`, `ca-ES`)
+- Voice record (student-recorded audio, teacher-graded by playback)
 - Open answer (teacher-graded)
 - Speaking answer (teacher-graded oral mode)
 - Image open answer (teacher-graded)
