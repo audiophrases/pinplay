@@ -1222,6 +1222,14 @@ body.question-active .join-title-row {
   text-align: center;
 }
 
+.voice-record-transcript {
+  background: #f8f9fa;
+  border-left: 3px solid var(--line);
+  padding: .5rem .75rem;
+  border-radius: 4px;
+  word-break: break-word;
+}
+
 /* ==========================================================================
    STUDENT ANSWER REVEAL HIGHLIGHTS (Four States)
    ========================================================================== */

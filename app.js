@@ -5256,6 +5256,13 @@ async function enterQuestionGradingFocus(code, qIndex) {
         dur.textContent = ` (${Math.round(it.answer.durationMs / 1000)}s)`;
         answerWrap.appendChild(dur);
       }
+      const transcript = String(it.answer.transcript || '').trim();
+      if (transcript) {
+        const tEl = document.createElement('div');
+        tEl.className = 'small muted top-space voice-record-transcript';
+        tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+        answerWrap.appendChild(tEl);
+      }
     } else if (String(question.qType || '') === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
       const label = document.createElement('div');
       label.className = 'small';
@@ -6904,6 +6911,13 @@ function renderHostAnswerHistory(state) {
           if (!audioSrc.startsWith('http')) audioSrc = (loadBackendUrl() || '') + '/' + audioSrc;
           audio.src = audioSrc;
           row.appendChild(audio);
+          const transcript = String(entry.answer.transcript || '').trim();
+          if (transcript) {
+            const tEl = document.createElement('div');
+            tEl.className = 'small muted voice-record-transcript';
+            tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+            row.appendChild(tEl);
+          }
         }
 
         const isCurrent = Number(block.qIndex) === Number(state?.currentIndex);
