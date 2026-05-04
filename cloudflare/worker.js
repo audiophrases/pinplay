@@ -3782,6 +3782,7 @@ function publicQuestion(question) {
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
       language: question.type === 'voice_text' ? String(question.language || 'en-US-Wave') : undefined,
+      answerLanguage: question.type === 'voice_text' ? String(question.answerLanguage || '') : undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
@@ -4044,9 +4045,15 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'text' || q.type === 'voice_text') {
+      const extra = {};
+      if (q.type === 'voice_text') {
+        const lang = String(q.answerLanguage || '').trim();
+        extra.answerLanguage = /^[a-z]{2,3}-[A-Z]{2,4}$/.test(lang) ? lang : '';
+      }
       normalized.questions.push({
         ...base,
         accepted: (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120)),
+        ...extra,
       });
       return;
     }

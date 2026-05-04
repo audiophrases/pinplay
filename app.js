@@ -1668,6 +1668,30 @@ function bindBuilderEvents() {
     if (!Number.isInteger(idx) || !quiz.questions[idx]) return;
 
     const q = quiz.questions[idx];
+
+    // answerLanguage: validate/autocomplete on blur (empty is valid → fallback to question language)
+    if (el.dataset.field === 'answerLanguage' && q.type === 'voice_text') {
+      const raw = String(el.value || '').trim();
+      const status = questionListEl.querySelector(`[data-answer-lang-status="${idx}"]`);
+      const result = normalizeRecognitionLang(raw);
+      if (result.ok) {
+        if (raw && raw !== result.value) el.value = result.value;
+        q.answerLanguage = result.value;
+        if (status) {
+          status.textContent = result.value
+            ? `Recognizer will use ${result.value}.`
+            : `No recognition language set — will fall back to the question audio language.`;
+          status.style.color = '';
+        }
+      } else {
+        q.answerLanguage = '';
+        if (status) {
+          status.textContent = `Unrecognized language code "${raw}". Will fall back to the question audio language.`;
+          status.style.color = 'var(--bad, #b91c1c)';
+        }
+      }
+    }
+
     const value = String(el.value || '').trim();
     if (!value) return;
 
@@ -1956,9 +1980,20 @@ function renderBuilder() {
       while (accepted.length < Math.min(3, maxAccepted)) accepted.push('');
       const acceptedLastFilled = String(accepted[accepted.length - 1] || '').trim().length > 0;
       if (acceptedLastFilled && accepted.length < maxAccepted) accepted.push('');
-      const intro = q.type === 'voice_text'
-        ? '<p class="small top-space">Students speak; the browser transcribes via Web Speech API and auto-grades against accepted answers (case- and punctuation-insensitive). Requires Chrome / Edge / Safari + internet.</p>'
-        : '';
+      let intro = '';
+      if (q.type === 'voice_text') {
+        const stored = String(q.answerLanguage || '');
+        const datalistId = `recogLangs-${idx}`;
+        intro = `
+          <p class="small top-space">Students speak; the browser transcribes via Web Speech API and auto-grades against accepted answers (case- and punctuation-insensitive). Requires Chrome / Edge / Safari + internet.</p>
+          <label class="top-space" for="answerLang-${idx}">Recognition language (BCP-47)</label>
+          <input id="answerLang-${idx}" data-q="${idx}" data-field="answerLanguage" list="${datalistId}" maxlength="10" value="${escapeHtml(stored)}" placeholder="e.g. es-ES, ca-ES, en-US — leave blank to follow the question audio language" />
+          <datalist id="${datalistId}">
+            ${SPEECH_RECOGNITION_LANGS.map((c) => `<option value="${c}"></option>`).join('')}
+          </datalist>
+          <div class="small muted" data-answer-lang-status="${idx}"></div>
+        `;
+      }
       specific += `
         ${intro}
         <label class="top-space">Accepted answers (dynamic, max 20)</label>
@@ -2529,6 +2564,46 @@ function isLikelyEdgeVoiceId(value) {
   return /^[a-z]{2,3}-[A-Z]{2,4}-[A-Za-z][A-Za-z0-9]*Neural$/.test(String(value || '').trim());
 }
 
+// BCP-47 tags supported by the Web Speech API for voice_text auto-grading.
+// Two-letter shortcuts auto-complete to a default region (es -> es-ES).
+const SPEECH_RECOGNITION_LANGS = [
+  'en-US', 'en-GB', 'en-AU', 'en-IN',
+  'es-ES', 'es-MX', 'es-AR',
+  'ca-ES',
+  'fr-FR', 'fr-CA',
+  'de-DE', 'de-AT', 'de-CH',
+  'it-IT',
+  'pt-PT', 'pt-BR',
+  'nl-NL', 'nl-BE',
+  'pl-PL', 'ru-RU', 'tr-TR', 'cs-CZ', 'sk-SK', 'uk-UA', 'el-GR', 'sv-SE', 'da-DK', 'nb-NO', 'fi-FI', 'hu-HU', 'ro-RO', 'bg-BG', 'hr-HR',
+  'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW', 'zh-HK',
+  'ar-SA', 'ar-EG', 'he-IL', 'hi-IN', 'th-TH', 'vi-VN', 'id-ID', 'ms-MY',
+];
+const SPEECH_RECOGNITION_LANG_DEFAULTS = {
+  en: 'en-US', es: 'es-ES', ca: 'ca-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT',
+  pt: 'pt-PT', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', tr: 'tr-TR',
+  ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN', ar: 'ar-SA', he: 'he-IL', hi: 'hi-IN',
+  cs: 'cs-CZ', sk: 'sk-SK', uk: 'uk-UA', el: 'el-GR', sv: 'sv-SE', da: 'da-DK',
+  nb: 'nb-NO', no: 'nb-NO', fi: 'fi-FI', hu: 'hu-HU', ro: 'ro-RO', bg: 'bg-BG',
+  hr: 'hr-HR', th: 'th-TH', vi: 'vi-VN', id: 'id-ID', ms: 'ms-MY',
+};
+
+// Returns { ok: true, value: 'es-ES' } | { ok: false, value: '' }
+function normalizeRecognitionLang(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return { ok: true, value: '' };
+  const m = raw.match(/^([A-Za-z]{2,3})(?:[-_]([A-Za-z]{2,4}))?$/);
+  if (!m) return { ok: false, value: '' };
+  const lang = m[1].toLowerCase();
+  if (m[2]) {
+    const candidate = `${lang}-${m[2].toUpperCase()}`;
+    if (SPEECH_RECOGNITION_LANGS.includes(candidate)) return { ok: true, value: candidate };
+    return { ok: false, value: '' };
+  }
+  const filled = SPEECH_RECOGNITION_LANG_DEFAULTS[lang];
+  return filled ? { ok: true, value: filled } : { ok: false, value: '' };
+}
+
 function getHearQuestionsMode(targetQuiz) {
   const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
   if (raw === 'NONE' || !raw) return 'NONE';
@@ -2853,6 +2928,13 @@ function syncQuizFromUI() {
         accepted.push(String(aEl?.value || '').slice(0, 120));
       }
       q.accepted = accepted;
+    }
+
+    if (q.type === 'voice_text') {
+      const langEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="answerLanguage"]`);
+      const raw = String(langEl?.value || '').trim();
+      const result = normalizeRecognitionLang(raw);
+      q.answerLanguage = result.ok ? result.value : '';
     }
 
     if (q.type === 'context_gap') {
@@ -10662,6 +10744,7 @@ function makeVoiceTextQuestion(opts = {}) {
     audioData: '',
     media: makeDefaultQuestionMedia(),
     accepted: ['', '', ''],
+    answerLanguage: '',
   };
 }
 

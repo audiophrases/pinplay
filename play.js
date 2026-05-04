@@ -4649,7 +4649,10 @@ function renderVoiceTextRecognizer(container, question) {
   _stopVoiceTextRecognition();
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const lang = _bcp47FromQuestionLanguage(question?.language);
+  const explicit = String(question?.answerLanguage || '').trim();
+  const lang = /^[a-z]{2,3}-[A-Z]{2,4}$/.test(explicit)
+    ? explicit
+    : _bcp47FromQuestionLanguage(question?.language);
 
   const wrap = document.createElement('div');
   wrap.className = 'voice-text-recognizer';
