@@ -4745,7 +4745,11 @@ function renderGradingFocusItem() {
       src = `${base}/api/media/${src}`;
     }
     const dur = it.answer.durationMs ? ` <span class="small muted">(${Math.round(it.answer.durationMs / 1000)}s)</span>` : '';
-    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls preload="metadata" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>`;
+    const transcript = String(it.answer.transcript || '').trim();
+    const transcriptHtml = transcript
+      ? `<div class="small muted top-space voice-record-transcript"><em>Transcript:</em> ${escapeHtml(transcript)}</div>`
+      : '';
+    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls preload="metadata" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>${transcriptHtml}`;
   } else if (qType === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
     let src = String(it.answer.imageUrl || '');
     if (src && !src.startsWith('http') && !src.startsWith('data:')) {
