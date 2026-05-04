@@ -1686,25 +1686,33 @@ function bindBuilderEvents() {
 
     const q = quiz.questions[idx];
 
-    // answerLanguage: validate/autocomplete on blur (empty is valid → fallback to question language)
+    // answerLanguage: validate/autocomplete on blur (empty is valid → fallback to question/quiz language)
     if (el.dataset.field === 'answerLanguage' && (q.type === 'voice_text' || q.type === 'voice_record')) {
       const raw = String(el.value || '').trim();
-      const status = questionListEl.querySelector(`[data-answer-lang-status="${idx}"]`);
+      const statusEl = questionListEl.querySelector(`[data-answer-lang-status="${idx}"]`);
       const result = normalizeRecognitionLang(raw);
       if (result.ok) {
         if (raw && raw !== result.value) el.value = result.value;
         q.answerLanguage = result.value;
-        if (status) {
-          status.textContent = result.value
-            ? `Recognizer will use ${result.value}.`
-            : `No recognition language set — will fall back to the question audio language.`;
-          status.style.color = '';
-        }
       } else {
         q.answerLanguage = '';
-        if (status) {
-          status.textContent = `Unrecognized language code "${raw}". Will fall back to the question audio language.`;
-          status.style.color = 'var(--bad, #b91c1c)';
+      }
+
+      const status = getRecognitionLangState(q);
+      if (statusEl) {
+        if (!result.ok && raw) {
+          statusEl.innerHTML = `⚠ Unrecognized language code "<strong>${escapeHtml(raw)}</strong>". ${renderRecognitionLangStatus(status)}`;
+          statusEl.classList.remove('muted');
+          statusEl.style.color = 'var(--bad, #b91c1c)';
+        } else {
+          statusEl.innerHTML = renderRecognitionLangStatus(status);
+          if (status.state === 'missing') {
+            statusEl.classList.remove('muted');
+            statusEl.style.color = 'var(--bad, #b91c1c)';
+          } else {
+            statusEl.classList.add('muted');
+            statusEl.style.color = '';
+          }
         }
       }
     }
@@ -2001,6 +2009,8 @@ function renderBuilder() {
       if (q.type === 'voice_text') {
         const stored = String(q.answerLanguage || '');
         const datalistId = `recogLangs-${idx}`;
+        const status = getRecognitionLangState(q);
+        const statusHtml = renderRecognitionLangStatus(status);
         intro = `
           <p class="small top-space">Students speak; the browser transcribes via Web Speech API and auto-grades against accepted answers (case- and punctuation-insensitive). Requires Chrome / Edge / Safari + internet.</p>
           <label class="top-space" for="answerLang-${idx}">Recognition language (BCP-47)</label>
@@ -2008,7 +2018,7 @@ function renderBuilder() {
           <datalist id="${datalistId}">
             ${SPEECH_RECOGNITION_LANGS.map((c) => `<option value="${c}"></option>`).join('')}
           </datalist>
-          <div class="small muted" data-answer-lang-status="${idx}"></div>
+          <div class="small ${status.state === 'missing' ? '' : 'muted'}" data-answer-lang-status="${idx}" style="${status.state === 'missing' ? 'color:var(--bad,#b91c1c);' : ''}">${statusHtml}</div>
         `;
       }
       specific += `
@@ -2048,6 +2058,8 @@ function renderBuilder() {
     if (q.type === 'voice_record') {
       const stored = String(q.answerLanguage || '');
       const datalistId = `recogLangs-vr-${idx}`;
+      const status = getRecognitionLangState(q);
+      const statusHtml = renderRecognitionLangStatus(status);
       specific += `
         <p class="small top-space">Students record audio (max 2 min). You grade by listening to playback. Browser also runs silent speech-to-text in the background — the transcript appears next to the audio in the grading view to help you skim.</p>
         <label class="top-space" for="answerLang-vr-${idx}">Recognition language (BCP-47)</label>
@@ -2055,7 +2067,7 @@ function renderBuilder() {
         <datalist id="${datalistId}">
           ${SPEECH_RECOGNITION_LANGS.map((c) => `<option value="${c}"></option>`).join('')}
         </datalist>
-        <div class="small muted" data-answer-lang-status="${idx}"></div>
+        <div class="small ${status.state === 'missing' ? '' : 'muted'}" data-answer-lang-status="${idx}" style="${status.state === 'missing' ? 'color:var(--bad,#b91c1c);' : ''}">${statusHtml}</div>
       `;
     }
 
@@ -2612,6 +2624,34 @@ const SPEECH_RECOGNITION_LANG_DEFAULTS = {
   nb: 'nb-NO', no: 'nb-NO', fi: 'fi-FI', hu: 'hu-HU', ro: 'ro-RO', bg: 'bg-BG',
   hr: 'hr-HR', th: 'th-TH', vi: 'vi-VN', id: 'id-ID', ms: 'ms-MY',
 };
+
+// Returns { state, fallback } where state ∈ 'explicit'|'fallback'|'missing'.
+// 'missing' means the runtime will silently default to en-US (footgun).
+function getRecognitionLangState(question) {
+  const explicit = String(question?.answerLanguage || '').trim();
+  if (/^[a-z]{2,3}-[A-Z]{2,4}$/.test(explicit)) return { state: 'explicit', fallback: explicit };
+
+  const qLang = String(question?.language || '').trim();
+  const qLangPrefix = qLang.match(/^([a-z]{2,3})[-_]([A-Za-z]{2,4})/);
+  if (qLangPrefix) return { state: 'fallback', fallback: `${qLangPrefix[1].toLowerCase()}-${qLangPrefix[2].toUpperCase()}` };
+
+  const quizTts = String(quiz?.ttsLanguage || '').toUpperCase();
+  if (quizTts && quizTts !== 'NONE') {
+    const quizVoice = String(quiz?.language || '').trim();
+    const m = quizVoice.match(/^([a-z]{2,3})[-_]([A-Za-z]{2,4})/);
+    if (m) return { state: 'fallback', fallback: `${m[1].toLowerCase()}-${m[2].toUpperCase()}` };
+  }
+
+  return { state: 'missing', fallback: '' };
+}
+
+// Renders the inline status string for the recognition language input.
+function renderRecognitionLangStatus(status) {
+  if (!status) return '';
+  if (status.state === 'explicit') return `Recognizer will use <strong>${escapeHtml(status.fallback)}</strong>.`;
+  if (status.state === 'fallback') return `Will fall back to <strong>${escapeHtml(status.fallback)}</strong> from the question/quiz language.`;
+  return `⚠ No language fallback available. Set Recognition language explicitly — otherwise the recognizer will default to <strong>en-US</strong>.`;
+}
 
 // Returns { ok: true, value: 'es-ES' } | { ok: false, value: '' }
 function normalizeRecognitionLang(input) {
