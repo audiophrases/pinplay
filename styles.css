@@ -1179,6 +1179,49 @@ body.question-active .join-title-row {
   background: #fee2e2;
 }
 
+/* Voice text recognizer (auto-graded voice answer) */
+.voice-text-recognizer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .75rem;
+  width: 100%;
+  padding: 1rem 0;
+}
+.voice-text-mic-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 1.15rem;
+  padding: .65rem 1.75rem;
+  border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(96, 93, 255, 0.3);
+}
+.voice-text-stop-btn {
+  background: #ff3b30;
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 1.15rem;
+  padding: .65rem 1.75rem;
+  border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+  animation: pulseStop 1.5s infinite;
+}
+.voice-text-transcript {
+  min-height: 1.5rem;
+  font-size: 1.1rem;
+  text-align: center;
+  max-width: 90%;
+}
+.voice-text-transcript .muted {
+  opacity: .6;
+}
+.voice-text-status {
+  text-align: center;
+}
+
 /* ==========================================================================
    STUDENT ANSWER REVEAL HIGHLIGHTS (Four States)
    ========================================================================== */

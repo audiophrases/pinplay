@@ -18,6 +18,7 @@ const QUESTION_TYPE_ICONS = {
   open: '💬',
   speaking: '🗣️',
   voice_record: '🎙️',
+  voice_text: '🎤',
   image_open: '🖼️',
   puzzle: '🧩',
   slider: '📐',
@@ -1548,7 +1549,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
+    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
 
     if (!show || !needsReveal) {
       // Preserve reveal box placed by immediate live-mode answer reveal
@@ -1559,7 +1560,7 @@ function renderPlayerState(state) {
     let correctText = String(state.correctAnswer || '').trim();
 
     if (!correctText) {
-      if (question.type === 'text') correctText = (question.accepted || []).join(' | ');
+      if (question.type === 'text' || question.type === 'voice_text') correctText = (question.accepted || []).join(' | ');
       if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
@@ -2101,6 +2102,7 @@ function renderJoinQuestion(question) {
   live.player.currentQuestion = question;
 
   if (joinAnswersEl) {
+    if (typeof _stopVoiceTextRecognition === 'function') _stopVoiceTextRecognition();
     joinAnswersEl.innerHTML = '';
     joinAnswersEl.style.pointerEvents = 'auto';
     joinAnswersEl.classList.remove('two-col', 'answers-locked');
@@ -2259,7 +2261,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'voice_text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
@@ -2409,6 +2411,8 @@ function renderJoinQuestion(question) {
       // No instruction text as requested
     } else if (question.type === 'voice_record') {
       renderVoiceRecorder(joinAnswersEl, question);
+    } else if (question.type === 'voice_text') {
+      renderVoiceTextRecognizer(joinAnswersEl, question);
     } else {
       const isOpenAnswer = question.type === 'open' || question.type === 'image_open';
       const input = document.createElement(isOpenAnswer ? 'textarea' : 'input');
@@ -2882,7 +2886,7 @@ async function submitLiveAnswer() {
       }
 
       // Show correct-answer text reveal box for text-based question types
-      const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
+      const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
       const correctText = String(data.correctAnswer || '').trim();
       if (needsReveal && correctText) {
         const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
@@ -2946,7 +2950,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
+  if (q.type === 'text' || q.type === 'voice_text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }
@@ -3959,7 +3963,7 @@ function cancelPendingAssignmentQuestionAutoplay() {
 }
 
 function supportsAssignmentQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking', 'voice_record'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'voice_text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking', 'voice_record'].includes(String(type || ''));
 }
 
 function normalizeAssignmentQuestionMedia(rawMedia) {
@@ -4619,6 +4623,166 @@ function renderVoiceRecorder(container, question) {
   stopBtn.addEventListener('click', () => {
     if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') {
       _voiceRecordRecorder.stop();
+    }
+  });
+}
+
+let _voiceTextRecognition = null;
+
+function _stopVoiceTextRecognition() {
+  if (_voiceTextRecognition) {
+    try { _voiceTextRecognition.onresult = null; _voiceTextRecognition.onend = null; _voiceTextRecognition.onerror = null; _voiceTextRecognition.stop(); } catch (_) { }
+    _voiceTextRecognition = null;
+  }
+}
+
+function _bcp47FromQuestionLanguage(lang) {
+  const raw = String(lang || '').trim();
+  if (!raw) return 'en-US';
+  const m = raw.match(/^([a-z]{2,3})[-_]([A-Za-z]{2,4})/);
+  if (m) return `${m[1].toLowerCase()}-${m[2].toUpperCase()}`;
+  if (/^[a-z]{2,3}$/i.test(raw)) return raw.toLowerCase();
+  return 'en-US';
+}
+
+function renderVoiceTextRecognizer(container, question) {
+  _stopVoiceTextRecognition();
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const lang = _bcp47FromQuestionLanguage(question?.language);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'voice-text-recognizer';
+
+  // Hidden field that the existing submit pipeline reads via #joinTextAnswer
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.id = 'joinTextAnswer';
+  wrap.appendChild(hidden);
+
+  const transcriptEl = document.createElement('div');
+  transcriptEl.className = 'voice-text-transcript';
+  transcriptEl.setAttribute('aria-live', 'polite');
+  transcriptEl.textContent = '';
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'voice-text-status small muted';
+
+  // Pre-fill from saved answer (assignment re-entry)
+  const stateA = live.player.assignment?.state;
+  const rawAnswers = stateA?.attempt?.answersByQ || {};
+  const savedAns = rawAnswers[String(live.player.assignment?.currentIndex)]?.answer;
+  if (typeof savedAns === 'string' && savedAns.trim()) {
+    hidden.value = savedAns;
+    transcriptEl.textContent = `“${savedAns}”`;
+  }
+
+  const isLocked = !!live.player.assignment?.reviewMode;
+
+  if (!SR) {
+    // Fallback for Firefox / unsupported browsers: typed input
+    const typed = document.createElement('input');
+    typed.type = 'text';
+    typed.className = 'join-answer-input';
+    typed.maxLength = 120;
+    typed.placeholder = 'Speech recognition not supported — type your answer';
+    typed.value = hidden.value || '';
+    typed.addEventListener('input', () => { hidden.value = typed.value; });
+    if (isLocked) typed.disabled = true;
+    statusEl.textContent = 'Speech recognition not available in this browser. Use Chrome, Edge or Safari.';
+    wrap.append(typed, statusEl);
+    container.appendChild(wrap);
+    return;
+  }
+
+  const micBtn = document.createElement('button');
+  micBtn.type = 'button';
+  micBtn.className = 'btn voice-text-mic-btn';
+  micBtn.textContent = '🎤 Tap to speak';
+  micBtn.disabled = isLocked;
+
+  const stopBtn = document.createElement('button');
+  stopBtn.type = 'button';
+  stopBtn.className = 'btn voice-text-stop-btn hidden';
+  stopBtn.textContent = '■ Stop';
+
+  const retryHint = document.createElement('div');
+  retryHint.className = 'small muted';
+  retryHint.textContent = `Recognizing language: ${lang}`;
+
+  wrap.append(micBtn, stopBtn, transcriptEl, statusEl, retryHint);
+  container.appendChild(wrap);
+
+  let finalTranscript = hidden.value || '';
+  let interimTranscript = '';
+
+  const renderTranscript = () => {
+    const final = finalTranscript.trim();
+    const interim = interimTranscript.trim();
+    if (!final && !interim) { transcriptEl.textContent = ''; return; }
+    transcriptEl.innerHTML = `“<strong>${escapeHtml(final)}</strong>${interim ? ` <span class="muted">${escapeHtml(interim)}</span>` : ''}”`;
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (_voiceTextRecognition) return;
+    finalTranscript = '';
+    interimTranscript = '';
+    hidden.value = '';
+    renderTranscript();
+
+    const rec = new SR();
+    rec.lang = lang;
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = (e) => {
+      interimTranscript = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0]?.transcript || '';
+        if (e.results[i].isFinal) {
+          finalTranscript = (finalTranscript + ' ' + text).trim();
+        } else {
+          interimTranscript += text;
+        }
+      }
+      hidden.value = finalTranscript;
+      renderTranscript();
+    };
+
+    rec.onerror = (e) => {
+      const err = String(e?.error || 'unknown');
+      const msg = err === 'not-allowed' || err === 'service-not-allowed'
+        ? 'Microphone access denied. Check browser permissions.'
+        : err === 'no-speech'
+        ? 'Didn’t catch that. Tap and try again.'
+        : `Recognition error: ${err}`;
+      statusEl.textContent = msg;
+    };
+
+    rec.onend = () => {
+      _voiceTextRecognition = null;
+      micBtn.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+      micBtn.textContent = finalTranscript ? '🎤 Re-record' : '🎤 Tap to speak';
+      if (finalTranscript) statusEl.textContent = 'Saved. Tap Submit to grade.';
+    };
+
+    try {
+      rec.start();
+      _voiceTextRecognition = rec;
+      micBtn.classList.add('hidden');
+      stopBtn.classList.remove('hidden');
+      statusEl.textContent = 'Listening…';
+    } catch (err) {
+      statusEl.textContent = `Could not start mic: ${err?.message || err}`;
+      _voiceTextRecognition = null;
+    }
+  });
+
+  stopBtn.addEventListener('click', () => {
+    if (_voiceTextRecognition) {
+      try { _voiceTextRecognition.stop(); } catch (_) { }
     }
   });
 }

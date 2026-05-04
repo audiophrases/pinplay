@@ -256,7 +256,8 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'pin', label: 'Pin spot', inTemplate: true, supportsAudio: true },
   { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
-  { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true }
+  { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
+  { type: 'voice_text', label: 'Voice Answer', inTemplate: true, supportsAudio: true }
 ];
 
 const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
@@ -380,6 +381,15 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "audioText can model the expected response register.",
     "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners."],
     "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading."]
+  },
+  "voice_text": {
+    "name": "Voice Answer (auto-graded)",
+    "rules": "Students speak their answer. The browser transcribes it via Web Speech API and it's auto-graded against accepted answers (case- and punctuation-insensitive).",
+    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 },
+    "pedagogicalUses": ["Pronunciation practice with instant feedback.", "Oral retrieval drills."],
+    "ttsStrategy": "audioText can model the expected pronunciation.",
+    "differentiationTips": ["Add several accepted variants for spelling/phrasing flexibility.", "Set the question 'language' to a BCP-47 voice (e.g. es-ES-ElviraNeural) to hint the recognizer."],
+    "commonPitfalls": ["Recognizer needs Chrome/Edge/Safari and an internet connection.", "Multi-word answers may pick up filler — keep accepted answers concise."]
   }
 };
 
@@ -402,6 +412,7 @@ const addTextAudioBtn = document.getElementById('addTextAudioBtn');
 const addOpenBtn = document.getElementById('addOpenBtn');
 const addSpeakingBtn = document.getElementById('addSpeakingBtn');
 const addVoiceRecordBtn = document.getElementById('addVoiceRecordBtn');
+const addVoiceTextBtn = document.getElementById('addVoiceTextBtn');
 const addImageOpenBtn = document.getElementById('addImageOpenBtn');
 const addContextGapBtn = document.getElementById('addContextGapBtn');
 const addMatchPairsBtn = document.getElementById('addMatchPairsBtn');
@@ -999,6 +1010,12 @@ function bindBuilderEvents() {
   if (addVoiceRecordBtn) {
     addVoiceRecordBtn.addEventListener('click', () => {
       addQuestionToBuilder(makeVoiceRecordQuestion());
+    });
+  }
+
+  if (addVoiceTextBtn) {
+    addVoiceTextBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeVoiceTextQuestion());
     });
   }
 
@@ -1657,7 +1674,7 @@ function bindBuilderEvents() {
     let shouldExpand = false;
     let nextSelector = '';
 
-    if ((el.dataset.acceptedIndex != null) && q.type === 'text') {
+    if ((el.dataset.acceptedIndex != null) && (q.type === 'text' || q.type === 'voice_text')) {
       const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-accepted-index]`)];
       const last = fields[fields.length - 1];
       if (el === last && fields.length < 20) {
@@ -1931,7 +1948,7 @@ function renderBuilder() {
       }
     }
 
-    if (q.type === 'text') {
+    if (q.type === 'text' || q.type === 'voice_text') {
       const maxAccepted = 20;
       const acceptedRaw = (Array.isArray(q.accepted) ? q.accepted : []).slice(0, maxAccepted).map((x) => String(x || '').slice(0, 120));
       const acceptedNonEmpty = acceptedRaw.filter((x) => x.trim().length > 0);
@@ -1939,7 +1956,11 @@ function renderBuilder() {
       while (accepted.length < Math.min(3, maxAccepted)) accepted.push('');
       const acceptedLastFilled = String(accepted[accepted.length - 1] || '').trim().length > 0;
       if (acceptedLastFilled && accepted.length < maxAccepted) accepted.push('');
+      const intro = q.type === 'voice_text'
+        ? '<p class="small top-space">Students speak; the browser transcribes via Web Speech API and auto-grades against accepted answers (case- and punctuation-insensitive). Requires Chrome / Edge / Safari + internet.</p>'
+        : '';
       specific += `
+        ${intro}
         <label class="top-space">Accepted answers (dynamic, max 20)</label>
         <div class="answers-grid">
           ${accepted
@@ -2825,7 +2846,7 @@ function syncQuizFromUI() {
       ? String(videoProviderPreferenceEl.value)
       : '';
 
-    if (q.type === 'text') {
+    if (q.type === 'text' || q.type === 'voice_text') {
       const accepted = [];
       for (let aIdx = 0; aIdx < 20; aIdx++) {
         const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-accepted-index="${aIdx}"]`);
@@ -7326,7 +7347,7 @@ function renderHostQuestion(state) {
 
     const max = Math.max(1, ...summary.items.map((x) => Number(x.count || 0)));
 
-    const textLikeTypes = new Set(['text', 'open', 'image_open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
+    const textLikeTypes = new Set(['text', 'voice_text', 'open', 'image_open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
     const isTextLike = textLikeTypes.has(String(summary.type || ''));
     const mode = isTextLike ? String(live.host.pollViewMode || 'bar') : 'bar';
 
@@ -7675,7 +7696,7 @@ function renderHostQuestion(state) {
 
   const isTeacherGradedText = question.type === 'text' && !(question.accepted || []).filter((x) => String(x || '').trim()).length;
 
-  if (question.type === 'text' && !isTeacherGradedText) {
+  if ((question.type === 'text' || question.type === 'voice_text') && !isTeacherGradedText) {
     hostQuestionHintEl.textContent = showReveal ? '' : '';
     if (showReveal) appendBigReveal(state.correctAnswer);
     return;
@@ -8546,7 +8567,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question && ['text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
 
     if (!show || !needsReveal) {
       if (revealEl) revealEl.remove();
@@ -8556,7 +8577,7 @@ function renderPlayerState(state) {
     let correctText = String(state.correctAnswer || '').trim();
 
     if (!correctText) {
-      if (question.type === 'text') correctText = (question.accepted || []).join(' | ');
+      if (question.type === 'text' || question.type === 'voice_text') correctText = (question.accepted || []).join(' | ');
       if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
@@ -8815,7 +8836,7 @@ function renderJoinQuestion(question) {
     return;
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'voice_text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     if (question.type === 'image_open' && question.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -8952,6 +8973,11 @@ function renderJoinQuestion(question) {
       const note = document.createElement('p');
       note.className = 'small';
       note.textContent = 'Voice recording is available in assignment mode.';
+      joinAnswersEl.appendChild(note);
+    } else if (question.type === 'voice_text') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Voice answer is available in assignment mode.';
       joinAnswersEl.appendChild(note);
     } else {
       const isOpenAnswer = question.type === 'open' || question.type === 'image_open';
@@ -9155,7 +9181,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open') {
+  if (q.type === 'text' || q.type === 'voice_text' || q.type === 'open' || q.type === 'image_open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }
@@ -9461,7 +9487,7 @@ function buildPreviewHostQuestion(q) {
     return { ...base, answers, correctIndexes: answers.map((a, i) => (a.isCorrect ? i : null)).filter((x) => x !== null) };
   }
 
-  if (q.type === 'text') return { ...base, accepted: q.accepted || [] };
+  if (q.type === 'text' || q.type === 'voice_text') return { ...base, accepted: q.accepted || [] };
   if (q.type === 'puzzle') return { ...base, options: q.items || [], items: q.items || [] };
   if (q.type === 'slider') return { ...base, min: q.min, max: q.max, target: q.target, margin: q.margin, unit: q.unit };
   if (q.type === 'context_gap') return { ...base, gapCount: Number((q.gaps || []).filter(Boolean).length || 0) };
@@ -9489,7 +9515,7 @@ function evaluatePreviewAnswer(q, answer) {
     const expected = (q.answers || []).map((a, i) => (a.correct ? i : null)).filter((x) => x !== null);
     return { correct: selected.length === expected.length && selected.every((i) => expected.includes(i)) };
   }
-  if (q.type === 'text') {
+  if (q.type === 'text' || q.type === 'voice_text') {
     const guess = normalizeTextAnswer(answer);
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     return { correct: accepted.length ? accepted.includes(guess) : false };
@@ -9703,7 +9729,7 @@ function buildPreviewOpenResponses(question, simPlayers, quality) {
 function summarizePreviewStudentAnswer(question, player, openResponseMap = null) {
   if (!question || !player?.answeredCurrent) return '(no submission)';
 
-  if (openResponseMap && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'text')) {
+  if (openResponseMap && (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'text' || question.type === 'voice_text')) {
     const txt = String(openResponseMap.get(player.id) || '').trim();
     if (txt) return txt;
   }
@@ -9723,6 +9749,7 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   if (question.type === 'open' || question.type === 'image_open') return ok ? 'open: strong response' : 'open: basic response';
   if (question.type === 'speaking') return ok ? 'speaking: clear oral response' : 'speaking: oral response needs improvement';
   if (question.type === 'voice_record') return ok ? 'voice: clear recording' : 'voice: recording needs review';
+  if (question.type === 'voice_text') return ok ? 'voice answer: matched accepted' : 'voice answer: not matched';
   if (question.type === 'slider') {
     const min = Number(question.min || 0);
     const max = Number(question.max || 100);
@@ -10045,7 +10072,7 @@ function renderSoloQuestion() {
     return;
   }
 
-  if (q.type === 'text' || q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record' || q.type === 'context_gap' || q.type === 'error_hunt') {
+  if (q.type === 'text' || q.type === 'voice_text' || q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record' || q.type === 'context_gap' || q.type === 'error_hunt') {
     if (q.type === 'image_open' && q.imageData) {
       const preview = document.createElement('div');
       preview.className = 'pin-preview question-image-preview';
@@ -10182,6 +10209,11 @@ function renderSoloQuestion() {
       const note = document.createElement('p');
       note.className = 'small';
       note.textContent = 'Voice recording: available in assignment mode.';
+      answersEl.appendChild(note);
+    } else if (q.type === 'voice_text') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Voice answer: available in assignment mode.';
       answersEl.appendChild(note);
     } else {
       const isOpenAnswer = q.type === 'open' || q.type === 'image_open';
@@ -10327,7 +10359,7 @@ function evaluateSoloQuestion(q) {
     return { correct: sameSet, hint: sameSet ? '' : 'You must select all correct answers (and no wrong ones).' };
   }
 
-  if (q.type === 'text') {
+  if (q.type === 'text' || q.type === 'voice_text') {
     const val = document.getElementById('soloTextAnswer')?.value || '';
     const guess = normalizeTextAnswer(val);
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
@@ -10613,6 +10645,26 @@ function makeSpeakingQuestion(opts = {}) {
   };
 }
 
+function makeVoiceTextQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
+  return {
+    id: crypto.randomUUID(),
+    type: 'voice_text',
+    prompt: 'Speak your answer aloud.',
+    points: 1000,
+    timeLimit: 0,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioMode: 'tts',
+    audioText: '',
+    ttsLanguage,
+    language,
+    audioData: '',
+    media: makeDefaultQuestionMedia(),
+    accepted: ['', '', ''],
+  };
+}
+
 function makeVoiceRecordQuestion(opts = {}) {
   const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
   const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
@@ -10889,7 +10941,7 @@ function normalizeQuizForLive(raw) {
       return;
     }
 
-    if (q.type === 'text') {
+    if (q.type === 'text' || q.type === 'voice_text') {
       const accepted = (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120));
       normalized.questions.push({ ...base, accepted });
       return;
@@ -11626,6 +11678,7 @@ function labelForType(type) {
       multi: 'Multi-select',
       tf: 'True / False',
       text: 'Type answer',
+      voice_text: 'Voice answer (auto-graded)',
       open: 'Open short answer',
       speaking: 'Speaking answer (teacher-graded)',
       image_open: 'Image prompt writing',
@@ -11656,6 +11709,7 @@ function iconForType(type) {
       puzzle: '🧩',
       slider: '📐',
       voice_record: '🎙️',
+      voice_text: '🎤',
       pin: '📍',
     }[type] || ''
   );
@@ -11663,7 +11717,7 @@ function iconForType(type) {
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
-  if (['text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
+  if (['text', 'voice_text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }
 
@@ -12883,7 +12937,7 @@ function buildPaperQuestionHtml(q, index) {
   const number = index + 1;
   const promptText = String(q.prompt || '').trim() || '(No prompt)';
   // Treat voice-record + speaking as written open-answer on paper.
-  const paperType = (q.type === 'voice_record' || q.type === 'speaking') ? 'open' : q.type;
+  const paperType = (q.type === 'voice_record' || q.type === 'speaking') ? 'open' : (q.type === 'voice_text' ? 'text' : q.type);
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
   // Body content depends on type. Stays compact: horizontal where possible, no answer space.

@@ -3642,7 +3642,7 @@ function hostQuestionPayload(question) {
     };
   }
 
-  if (question.type === 'text') {
+  if (question.type === 'text' || question.type === 'voice_text') {
     return {
       ...base,
       accepted: (question.accepted || []).filter(Boolean),
@@ -3772,7 +3772,7 @@ function publicQuestion(question) {
     };
   }
 
-  if (question.type === 'text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
+  if (question.type === 'text' || question.type === 'voice_text' || question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'error_hunt') {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -3781,6 +3781,7 @@ function publicQuestion(question) {
       isPoll: !!question.isPoll,
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
+      language: question.type === 'voice_text' ? String(question.language || 'en-US-Wave') : undefined,
       gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
@@ -3906,7 +3907,7 @@ function evaluate(question, answer) {
     return { correct: selected.every((idx) => expected.includes(idx)) };
   }
 
-  if (question.type === 'text') {
+  if (question.type === 'text' || question.type === 'voice_text') {
     const guess = normalizeTextAnswer(answer);
     const accepted = (question.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     return { correct: accepted.includes(guess) };
@@ -4042,7 +4043,7 @@ function normalizeQuiz(quiz) {
       return;
     }
 
-    if (q.type === 'text') {
+    if (q.type === 'text' || q.type === 'voice_text') {
       normalized.questions.push({
         ...base,
         accepted: (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120)),
@@ -5065,6 +5066,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'text') {
     if (isTeacherGradedTextQuestion(question)) return 'Teacher-graded typed answer';
+    return (question.accepted || []).filter(Boolean).join(' | ');
+  }
+
+  if (question.type === 'voice_text') {
     return (question.accepted || []).filter(Boolean).join(' | ');
   }
 
