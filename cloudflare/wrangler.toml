@@ -15,7 +15,8 @@ class_name = "QuizRoom"
 tag = "v1"
 new_sqlite_classes = ["QuizRoom"]
 
-[[ratelimits]]
-binding = "AUTH_RL"
+[[unsafe.bindings]]
+name = "AUTH_RL"
+type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 50, period = 60 }
