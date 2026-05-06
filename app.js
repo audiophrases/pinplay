@@ -3408,7 +3408,7 @@ async function openQuizFromCloud() {
     const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
     setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
 
-    const data = await api('/api/quizzes', { method: 'GET' });
+    const data = await api('/api/quizzes', { method: 'GET', headers: { Authorization: `Bearer ${createSessionPassword}` } });
     const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
 
     if (!cloudQuizzes.length) {
@@ -3443,7 +3443,7 @@ async function openQuizFromCloud() {
       onDelete: async (item) => {
         // Delete from R2 via Worker API
         const quizKey = item.raw.key;
-        await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE' });
+        await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
         setStatus(hostStatusEl, `Deleted from Cloud: ${item.label}`, 'ok');
       },
       highlightId: null,
@@ -3478,7 +3478,7 @@ async function saveQuizToCloud() {
     // Upload quiz JSON to R2 (with title and questions for listing)
     const res = await fetch(`${base}/api/quizzes/upload`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionPassword}` },
       body: payload
     });
 
@@ -4409,7 +4409,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
                 formData.append('path', `voice_records/${fileName}`);
 
                 const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-                const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+                const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
                 if (!resp.ok) throw new Error('Upload failed');
                 const res = await resp.json();
                 currentAudioKey = res.path || res.key || '';
@@ -4596,7 +4596,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
           formData.append('file', blob, fileName);
           formData.append('path', `voice_records/${fileName}`);
           const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
           if (!resp.ok) throw new Error('Upload failed');
           const res = await resp.json();
           currentAudioKey = res.path || res.key || '';
@@ -4955,7 +4955,7 @@ function renderGradingFocusItem() {
           formData.append('file', blob, fileName);
           formData.append('path', `voice_records/${fileName}`);
           const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', body: formData });
+          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
           if (!resp.ok) throw new Error('Upload failed');
           const res = await resp.json();
           currentAudioKey = res.path || res.key || '';
@@ -11572,7 +11572,7 @@ async function uploadMediaToR2(dataUrl, key) {
   form.append('path', key);
 
   const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
-  const res = await fetch(`${base}/api/media/upload`, { method: 'POST', body: form });
+  const res = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: form });
   if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
   return await res.json();
 }

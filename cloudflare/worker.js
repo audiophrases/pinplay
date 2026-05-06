@@ -185,6 +185,9 @@ export default {
 
     // List quizzes stored in R2
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
+      const token = readBearer(request);
+      const authOk = await verifyCreatePassword(env, token);
+      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         // List quiz JSONs stored in R2 (prefix filter to be safe across jurisdictions)
         const listed = await env.QUIZ_MEDIA.list({ limit: 1000, prefix: 'quizzes/' });
@@ -223,6 +226,9 @@ export default {
 
     // Delete quiz JSON and associated media prefix from R2
     if (url.pathname.startsWith('/api/quizzes/') && request.method === 'DELETE') {
+      const token = readBearer(request);
+      const authOk = await verifyCreatePassword(env, token);
+      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         const raw = url.pathname.replace('/api/quizzes/', '');
         if (!raw) return json({ error: 'quiz key required' }, 400);
@@ -250,6 +256,9 @@ export default {
 
     // Upload quiz JSON to R2
     if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
+      const token = readBearer(request);
+      const authOk = await verifyCreatePassword(env, token);
+      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         const body = await safeJson(request);
         const quizId = body?.quizId || `quiz-${Date.now()}`;
@@ -263,6 +272,9 @@ export default {
 
     // Upload quiz media to R2 (authenticated)
     if (url.pathname === '/api/media/upload' && request.method === 'POST') {
+      const token = readBearer(request);
+      const authOk = await verifyCreatePassword(env, token);
+      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       const contentType = request.headers.get('content-type') || '';
       if (!contentType.includes('multipart/form-data')) {
         return json({ error: 'Use multipart/form-data' }, 400);
