@@ -2328,7 +2328,7 @@ function renderJoinQuestion(question) {
         promptEl.innerHTML = '';
         const pref = document.createElement('span');
         pref.className = 'prompt-prefix';
-        pref.textContent = `Replace ${required} incorrect ${required === 1 ? 'word' : 'words'}: `;
+        pref.textContent = `${required} ${required === 1 ? 'edit' : 'edits'} to fix the sentence: `;
         promptEl.append(pref);
       }
 
@@ -2382,8 +2382,8 @@ function renderJoinQuestion(question) {
       const updateErrorHuntUI = () => {
         const current = String(ta.value || '');
         const { editedCount, html } = renderErrorHuntDiff(originalPrompt, current);
-        const wordLabel = required === 1 ? 'word' : 'words';
-        counter.innerHTML = `<strong>${editedCount}</strong> / ${required} ${wordLabel} changed`;
+        const editsLabel = required === 1 ? 'edit' : 'edits';
+        counter.innerHTML = `<strong>${editedCount}</strong> / ${required} ${editsLabel} made`;
         counter.classList.toggle('error-hunt-counter-match', editedCount === required && required > 0);
         counter.classList.toggle('error-hunt-counter-over', editedCount > required);
 
