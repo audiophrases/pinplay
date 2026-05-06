@@ -4790,7 +4790,7 @@ function renderGradingFocusItem() {
     const transcriptHtml = transcript
       ? `<div class="small muted top-space voice-record-transcript"><em>Transcript:</em> ${escapeHtml(transcript)}</div>`
       : '';
-    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls preload="metadata" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>${transcriptHtml}`;
+    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls autoplay preload="auto" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>${transcriptHtml}`;
   } else if (qType === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
     let src = String(it.answer.imageUrl || '');
     if (src && !src.startsWith('http') && !src.startsWith('data:')) {
