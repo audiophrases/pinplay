@@ -19,4 +19,4 @@ new_sqlite_classes = ["QuizRoom"]
 name = "AUTH_RL"
 type = "ratelimit"
 namespace_id = "1001"
-simple = { limit = 30, period = 60 }
+simple = { limit = 50, period = 60 }
