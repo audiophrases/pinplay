@@ -626,7 +626,7 @@ export default {
       const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
       const qIndex = Number(body?.qIndex);
       const points = Number(body?.points);
-      const correction = String(body?.correction || '').slice(0, 400);
+      const correction = String(body?.correction || '').slice(0, 1500);
       const correctionAudioKey = String(body?.correctionAudioKey || '').slice(0, 255);
 
       if (!password) return json({ error: 'Password required.' }, 400);
@@ -1997,7 +1997,7 @@ export class QuizRoom {
         const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
         const qIndex = Math.round(Number(body?.qIndex));
         const pointsRaw = Number(body?.points);
-        const correction = String(body?.correction || '').slice(0, 400);
+        const correction = String(body?.correction || '').slice(0, 1500);
         const correctionAudioKey = String(body?.correctionAudioKey || '').slice(0, 255);
 
         if (!code) return json({ error: 'Assignment code required.' }, 400);

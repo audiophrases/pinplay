@@ -1389,6 +1389,30 @@ body.question-active .join-title-row {
   color: var(--ok);
 }
 
+.diff-del {
+  color: #b91c1c;
+  text-decoration: line-through;
+  text-decoration-color: rgba(185, 28, 28, 0.65);
+  text-decoration-thickness: 2px;
+  background: rgba(254, 226, 226, 0.55);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.diff-ins {
+  color: #15803d;
+  font-weight: 600;
+  background: rgba(220, 252, 231, 0.7);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.diff-arrow {
+  color: #6b7280;
+  margin: 0 2px;
+  font-weight: 600;
+}
+
 #joinFeedback {
   position: fixed;
   inset: 0;

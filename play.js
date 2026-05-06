@@ -2710,9 +2710,24 @@ function escapeHtmlText(s) {
     .replace(/>/g, '&gt;');
 }
 
+const CORRECTION_DIFF_PREFIX = '§§DIFF§§';
+
+function renderStructuredCorrectionDiff(text) {
+  const safe = escapeHtmlText(text);
+  return safe
+    .replace(/\[-([\s\S]+?)-\]\s*\{\+([\s\S]+?)\+\}/g, (_, a, b) =>
+      `<span class="diff-del">${a}</span> <span class="diff-arrow">&rarr;</span> <span class="diff-ins">${b}</span>`)
+    .replace(/\[-([\s\S]+?)-\]/g, (_, a) => `<span class="diff-del">${a}</span>`)
+    .replace(/\{\+([\s\S]+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
+}
+
 function buildCorrectionDiffHtml(correction, original) {
+  const corr = String(correction || '');
+  if (corr.startsWith(CORRECTION_DIFF_PREFIX)) {
+    return renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+  }
   const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
-  const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
+  const tokens = corr.match(/\s+|[^\s]+/g) || [];
   return tokens.map((tok) => {
     const safe = escapeHtmlText(tok);
     const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];

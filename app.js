@@ -4638,6 +4638,44 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
 // ============================================================================
 // Grade-by-Question focused modal — single-student view with keyboard shortcuts
 // ============================================================================
+const CORRECTION_DIFF_PREFIX = '§§DIFF§§';
+
+function computeWordDiff(original, edited) {
+  const a = String(original || '').match(/\S+/g) || [];
+  const b = String(edited || '').match(/\S+/g) || [];
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      dp[i + 1][j + 1] = a[i] === b[j] ? dp[i][j] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) { ops.push({ t: 'eq', s: a[i - 1] }); i--; j--; }
+    else if (dp[i - 1][j] >= dp[i][j - 1]) { ops.push({ t: 'del', s: a[i - 1] }); i--; }
+    else { ops.push({ t: 'ins', s: b[j - 1] }); j--; }
+  }
+  while (i > 0) { ops.push({ t: 'del', s: a[i - 1] }); i--; }
+  while (j > 0) { ops.push({ t: 'ins', s: b[j - 1] }); j--; }
+  ops.reverse();
+  const out = [];
+  let dels = [], inss = [];
+  const flush = () => {
+    if (dels.length) out.push(`[-${dels.join(' ')}-]`);
+    if (inss.length) out.push(`{+${inss.join(' ')}+}`);
+    dels = []; inss = [];
+  };
+  for (const op of ops) {
+    if (op.t === 'eq') { flush(); out.push(op.s); }
+    else if (op.t === 'del') dels.push(op.s);
+    else inss.push(op.s);
+  }
+  flush();
+  return out.join(' ');
+}
+
 const gradingFocusState = {
   active: false,
   code: '',
@@ -4811,6 +4849,13 @@ function renderGradingFocusItem() {
   const initialPoints = Number(grade?.pointsAwarded || 0);
   const initialCorrection = String(grade?.correction || '');
   const initialAudioKey = String(grade?.correctionAudioKey || '');
+  const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
+  const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
+  const preloadedAnswer = !initialCorrection && studentAnswerText ? studentAnswerText : '';
+  const correctionFieldValue = initialCorrection || preloadedAnswer;
+  const correctionPlaceholder = preloadedAnswer
+    ? 'Edit the answer to show corrections (red→green diff)'
+    : 'Correction (optional)';
 
   content.innerHTML = `
     <div class="grading-focus-header">
@@ -4834,7 +4879,7 @@ function renderGradingFocusItem() {
     <div class="grading-focus-controls">
       <label class="small muted" for="gfPointsInput">Points</label>
       <input id="gfPointsInput" type="number" min="0" max="${maxPoints}" value="${initialPoints}" data-grade-points-input style="width:90px;" />
-      <input type="text" placeholder="Correction (optional)" value="${escapeHtml(initialCorrection)}" data-grade-correction-input style="flex:1;min-width:200px;" />
+      <input type="text" placeholder="${escapeHtml(correctionPlaceholder)}" value="${escapeHtml(correctionFieldValue)}" data-grade-correction-input style="flex:1;min-width:200px;" />
       <button class="btn" data-grade-record-btn title="Record voice (R)">🎙️</button>
       <span class="small muted" data-grade-audio-status></span>
       <button class="btn primary" data-save-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
@@ -4959,19 +5004,39 @@ function renderGradingFocusItem() {
     }
   }
 
+  function buildFinalCorrection(rawValue) {
+    const v = String(rawValue || '');
+    if (preloadedAnswer) {
+      if (v === preloadedAnswer) return '';
+      if (v.trim()) return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+    }
+    return v;
+  }
+
   async function saveCurrentAndAdvance() {
     const points = Number(pointsEl?.value || 0);
-    const correction = String(correctionEl?.value || '');
-    await persistAndAdvance({ points, correction, audioKey: currentAudioKey });
+    await persistAndAdvance({
+      points,
+      correction: buildFinalCorrection(correctionEl?.value),
+      audioKey: currentAudioKey,
+    });
   }
 
   async function markCurrentAndAdvance({ points, defaultCorrection }) {
     if (pointsEl) pointsEl.value = String(points);
+    if (correctionEl && preloadedAnswer && correctionEl.value === preloadedAnswer) {
+      correctionEl.value = '';
+    }
     if (correctionEl && defaultCorrection !== undefined && !correctionEl.value) {
       correctionEl.value = defaultCorrection;
+      await persistAndAdvance({ points, correction: defaultCorrection, audioKey: currentAudioKey });
+      return;
     }
-    const correction = String(correctionEl?.value || '');
-    await persistAndAdvance({ points, correction, audioKey: currentAudioKey });
+    await persistAndAdvance({
+      points,
+      correction: buildFinalCorrection(correctionEl?.value),
+      audioKey: currentAudioKey,
+    });
   }
 
   content.querySelector('[data-close-focus]').addEventListener('click', closeGradingFocusModal);
@@ -8714,9 +8779,22 @@ function escapeHtmlText(s) {
     .replace(/>/g, '&gt;');
 }
 
+function renderStructuredCorrectionDiff(text) {
+  const safe = escapeHtmlText(text);
+  return safe
+    .replace(/\[-([\s\S]+?)-\]\s*\{\+([\s\S]+?)\+\}/g, (_, a, b) =>
+      `<span class="diff-del">${a}</span> <span class="diff-arrow">&rarr;</span> <span class="diff-ins">${b}</span>`)
+    .replace(/\[-([\s\S]+?)-\]/g, (_, a) => `<span class="diff-del">${a}</span>`)
+    .replace(/\{\+([\s\S]+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
+}
+
 function buildCorrectionDiffHtml(correction, original) {
+  const corr = String(correction || '');
+  if (corr.startsWith(CORRECTION_DIFF_PREFIX)) {
+    return renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+  }
   const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
-  const tokens = String(correction || '').match(/\s+|[^\s]+/g) || [];
+  const tokens = corr.match(/\s+|[^\s]+/g) || [];
   return tokens.map((tok) => {
     const safe = escapeHtmlText(tok);
     const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
