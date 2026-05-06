@@ -4002,11 +4002,20 @@ async function createLiveGame() {
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
     await ensureQuizMediaReady({ contextLabel: 'create live game', convertTtsToMp3: true, strictMediaCheck: true });
+
+    if (!createSessionPassword) {
+      const typed = await customPasswordPrompt('Teacher password (needed to create live game):');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
     const payload = normalizeQuizForLive(quiz);
     const data = await api('/api/create', {
       method: 'POST',
       body: {
         quiz: payload,
+        password: createSessionPassword,
         options: {
           randomNames: isRandomNamesEnabled(),
         },

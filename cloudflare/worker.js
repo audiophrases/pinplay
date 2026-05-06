@@ -295,6 +295,11 @@ export default {
 
     if (url.pathname === '/api/create' && request.method === 'POST') {
       const body = await safeJson(request);
+      const password = String(body?.password || '');
+      if (!password) return json({ error: 'Teacher password required.' }, 401);
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong teacher password.' }, 401);
+
       let quiz = body?.quiz;
       const options = body?.options || {};
 
