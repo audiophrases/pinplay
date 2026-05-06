@@ -1,0 +1,1 @@
+deploy.cmd > deploy.log 2>&1

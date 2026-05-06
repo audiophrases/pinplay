@@ -5,22 +5,22 @@ robocopy . _site /S /XD .git .wrangler node_modules cloudflare tests music _site
 
 echo.
 echo Deploying Assets (pinplay-cdn)...
-powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.jsonc %* 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath deploy.log -Encoding utf8; exit $LASTEXITCODE }"
+call npx wrangler deploy --config wrangler.jsonc %*
 if %errorlevel% neq 0 goto :fail
 
 echo.
 echo Deploying API (pinplay-api)...
 pushd cloudflare
-powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.toml %* 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath ..\deploy.log -Append -Encoding utf8; exit $LASTEXITCODE }"
+call npx wrangler deploy --config wrangler.toml %*
 set err=%errorlevel%
 popd
 if %err% neq 0 goto :fail
 
 echo.
-echo Deployment Complete! (full log in deploy.log)
+echo Deployment Complete!
 exit /b 0
 
 :fail
 echo.
-echo ERROR: Deployment failed. See deploy.log for details.
+echo ERROR: Deployment failed.
 exit /b 1
