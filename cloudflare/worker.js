@@ -443,7 +443,11 @@ export default {
     if (url.pathname === '/api/host/join' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
+      const password = String(body?.password || '');
       if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!password) return json({ error: 'Teacher password required.' }, 401);
+      const ok = await verifyCreatePassword(env, password);
+      if (!ok) return json({ error: 'Wrong teacher password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
       return withCors(

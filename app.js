@@ -6371,9 +6371,16 @@ async function joinLiveGameAsHostByPin() {
     const pin = String(hostJoinPinEl?.value || '').trim();
     if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits.');
 
+    if (!createSessionPassword) {
+      const typed = await customPasswordPrompt('Teacher password (needed to resume host control):');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+    }
+    if (!createSessionPassword) throw new Error('Teacher password is required.');
+
     const data = await api('/api/host/join', {
       method: 'POST',
-      body: { pin },
+      body: { pin, password: createSessionPassword },
     });
 
     live.host.pin = data.pin;
