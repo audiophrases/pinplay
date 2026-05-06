@@ -719,29 +719,39 @@ async function loadAttemptHistory(code, studentKey) {
   return;
 }
 
+function collectTeacherFeedbackItems(state) {
+  const answers = state?.attempt?.answersByQ || {};
+  const questions = state?.attempt?.assignment?.quiz?.questions || [];
+  const items = [];
+  for (const [qIdx, answer] of Object.entries(answers)) {
+    const idx = Number(qIdx);
+    const question = questions[idx];
+    if (!question) continue;
+    const grade = answer?.teacherGrade;
+    if (grade?.graded && (grade?.correction || grade?.correctionAudioKey)) {
+      const promptText = String(question.prompt || `Question ${idx + 1}`);
+      items.push({
+        qIndex: idx,
+        question: promptText.length > 120 ? `${promptText.slice(0, 120)}…` : promptText,
+        correction: grade.correction || '',
+        correctionAudioKey: grade.correctionAudioKey || '',
+        gradedAt: grade.gradedAt,
+      });
+    }
+  }
+  items.sort((a, b) => a.qIndex - b.qIndex);
+  return items;
+}
+
 // Show teacher feedback for graded open answers
 async function showTeacherFeedback(code, attemptId) {
   try {
-    const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
-    const answers = data?.attempt?.answersByQ || {};
-    const questions = data?.attempt?.assignment?.quiz?.questions || [];
-
-    const feedbackItems = [];
-    for (const [qIdx, answer] of Object.entries(answers)) {
-      const question = questions[Number(qIdx)];
-      if (!question) continue;
-      const grade = answer?.teacherGrade;
-      if (grade?.graded && (grade?.correction || grade?.correctionAudioKey)) {
-        feedbackItems.push({
-          qIndex: Number(qIdx),
-          question: question.prompt?.slice(0, 80) || `Question ${Number(qIdx) + 1}`,
-          correction: grade.correction || '',
-          correctionAudioKey: grade.correctionAudioKey || '',
-          gradedAt: grade.gradedAt,
-        });
-      }
+    let state = live.player.assignment?.state;
+    if (!state?.attempt?.answersByQ) {
+      state = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
     }
 
+    const feedbackItems = collectTeacherFeedbackItems(state);
     if (feedbackItems.length === 0) return;
 
     let feedbackPanel = document.getElementById('joinFeedbackPanel');
@@ -759,7 +769,7 @@ async function showTeacherFeedback(code, attemptId) {
       if (item.correctionAudioKey) {
         let src = item.correctionAudioKey;
         if (!src.startsWith('http')) src = `${base}/api/media/${src}`;
-        audioHtml = `<div style="margin-top:6px;"><audio controls src="${src}" style="height:28px;"></audio></div>`;
+        audioHtml = `<div style="margin-top:6px;"><audio controls src="${escapeHtml(src)}" style="height:28px;"></audio></div>`;
       }
       return `
         <div class="feedback-item" data-q-index="${item.qIndex}" role="button" tabindex="0"
@@ -767,10 +777,10 @@ async function showTeacherFeedback(code, attemptId) {
              title="Tap to jump to question ${item.qIndex + 1}">
           <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">
             <span style="background:#3fb950;color:white;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:bold;margin-right:6px;">Q${item.qIndex + 1}</span>
-            "${esc(item.question)}..."
+            "${escapeHtml(item.question)}"
           </div>
           <div style="color:#3fb950; display:flex; flex-direction:column;">
-            <span>💬 Teacher: ${esc(item.correction)}</span>
+            ${item.correction ? `<span>💬 Teacher: ${escapeHtml(item.correction)}</span>` : ''}
             ${audioHtml}
           </div>
         </div>
@@ -800,13 +810,160 @@ async function showTeacherFeedback(code, attemptId) {
       el.addEventListener('mouseleave', () => { el.style.background = ''; });
     });
 
-    // Auto-scroll the feedback panel into view so students see it without hunting
-    setTimeout(() => {
-      feedbackPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    // Surface the stepped overlay first so the student doesn't miss the teacher's commentary
+    showTeacherFeedbackOverlay(feedbackItems);
   } catch (e) {
     console.log('Could not load teacher feedback:', e);
   }
+}
+
+function dismissTeacherFeedbackOverlay() {
+  const existing = document.getElementById('teacherFeedbackOverlay');
+  if (!existing) return;
+  if (existing._tfOnKey) document.removeEventListener('keydown', existing._tfOnKey);
+  existing.remove();
+}
+
+// Modal that walks the student through every question with teacher commentary
+// (written or voice) before they freely browse the rest of the review.
+function showTeacherFeedbackOverlay(items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  dismissTeacherFeedbackOverlay();
+
+  const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+  let cursor = 0;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'teacherFeedbackOverlay';
+  overlay.className = 'teacher-feedback-overlay';
+
+  const card = document.createElement('div');
+  card.className = 'teacher-feedback-card';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-labelledby', 'tfOverlayTitle');
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'tf-close-btn';
+  closeBtn.setAttribute('aria-label', 'Close feedback overlay');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', dismissTeacherFeedbackOverlay);
+  card.appendChild(closeBtn);
+
+  const header = document.createElement('div');
+  header.className = 'tf-header';
+  const titleEl = document.createElement('h3');
+  titleEl.id = 'tfOverlayTitle';
+  titleEl.textContent = '💬 Teacher Feedback';
+  const subtitleEl = document.createElement('div');
+  subtitleEl.className = 'tf-subtitle';
+  header.appendChild(titleEl);
+  header.appendChild(subtitleEl);
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'tf-body';
+  card.appendChild(body);
+
+  const footer = document.createElement('div');
+  footer.className = 'tf-footer';
+
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'tf-nav-btn tf-prev';
+  prevBtn.innerHTML = '<span aria-hidden="true">←</span> Previous';
+
+  const viewBtn = document.createElement('button');
+  viewBtn.type = 'button';
+  viewBtn.className = 'tf-view-btn';
+  viewBtn.textContent = 'Open this question';
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'tf-nav-btn tf-next';
+  nextBtn.innerHTML = 'Next <span aria-hidden="true">→</span>';
+
+  footer.appendChild(prevBtn);
+  footer.appendChild(viewBtn);
+  footer.appendChild(nextBtn);
+  card.appendChild(footer);
+
+  const dismissHint = document.createElement('div');
+  dismissHint.className = 'tf-dismiss-hint';
+  dismissHint.textContent = 'Close to review the rest of the quiz';
+  card.appendChild(dismissHint);
+
+  function render() {
+    const item = items[cursor];
+    if (!item) return;
+    subtitleEl.textContent = `${cursor + 1} of ${items.length}`;
+
+    const promptText = String(item.question || `Question ${item.qIndex + 1}`);
+    const corrText = String(item.correction || '');
+    let audioHtml = '';
+    if (item.correctionAudioKey) {
+      let src = String(item.correctionAudioKey || '');
+      if (!src.startsWith('http')) src = `${base}/api/media/${src}`;
+      audioHtml = `
+        <div class="tf-row">
+          <div class="tf-row-label">🎙️ Voice feedback</div>
+          <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
+        </div>`;
+    }
+    const corrHtml = corrText ? `
+      <div class="tf-row">
+        <div class="tf-row-label">📝 Teacher wrote</div>
+        <div class="tf-correction-text">${escapeHtml(corrText)}</div>
+      </div>` : '';
+
+    body.innerHTML = `
+      <div class="tf-q-tag">Q${item.qIndex + 1}</div>
+      <div class="tf-q-prompt">${escapeHtml(promptText)}</div>
+      ${corrHtml}
+      ${audioHtml}
+    `;
+
+    prevBtn.disabled = cursor === 0;
+    nextBtn.disabled = cursor === items.length - 1;
+  }
+
+  prevBtn.addEventListener('click', () => {
+    if (cursor > 0) { cursor -= 1; render(); }
+  });
+  nextBtn.addEventListener('click', () => {
+    if (cursor < items.length - 1) { cursor += 1; render(); }
+  });
+  viewBtn.addEventListener('click', () => {
+    const item = items[cursor];
+    dismissTeacherFeedbackOverlay();
+    if (item) jumpToAssignmentQuestion(item.qIndex);
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismissTeacherFeedbackOverlay();
+  });
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      dismissTeacherFeedbackOverlay();
+    } else if (e.key === 'ArrowLeft' && cursor > 0) {
+      e.preventDefault();
+      cursor -= 1;
+      render();
+    } else if (e.key === 'ArrowRight' && cursor < items.length - 1) {
+      e.preventDefault();
+      cursor += 1;
+      render();
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  overlay._tfOnKey = onKey;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  render();
 }
 
 async function startAssignmentAttempt(skipCheck) {
@@ -1152,6 +1309,7 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
 
 function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.reviewMode = false;
+  dismissTeacherFeedbackOverlay();
   // Remove review bar
   const bar = document.getElementById('reviewModeBar');
   if (bar) bar.remove();
