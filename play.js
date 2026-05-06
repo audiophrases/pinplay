@@ -733,6 +733,7 @@ function collectTeacherFeedbackItems(state) {
       items.push({
         qIndex: idx,
         question: promptText.length > 120 ? `${promptText.slice(0, 120)}…` : promptText,
+        studentAnswer: typeof answer?.answer === 'string' ? answer.answer : '',
         correction: grade.correction || '',
         correctionAudioKey: grade.correctionAudioKey || '',
         gradedAt: grade.gradedAt,
@@ -780,7 +781,7 @@ async function showTeacherFeedback(code, attemptId) {
             "${escapeHtml(item.question)}"
           </div>
           <div style="color:#3fb950; display:flex; flex-direction:column;">
-            ${item.correction ? `<span>💬 Teacher: ${escapeHtml(item.correction)}</span>` : ''}
+            ${item.correction ? `<span>💬 Teacher: ${buildCorrectionDiffHtml(item.correction, item.studentAnswer || '')}</span>` : ''}
             ${audioHtml}
           </div>
         </div>
@@ -914,7 +915,7 @@ function showTeacherFeedbackOverlay(items) {
     const corrHtml = corrText ? `
       <div class="tf-row">
         <div class="tf-row-label">📝 Teacher wrote</div>
-        <div class="tf-correction-text">${escapeHtml(corrText)}</div>
+        <div class="tf-correction-text">${buildCorrectionDiffHtml(corrText, item.studentAnswer || '')}</div>
       </div>` : '';
 
     body.innerHTML = `
@@ -940,8 +941,15 @@ function showTeacherFeedbackOverlay(items) {
     if (item) jumpToAssignmentQuestion(item.qIndex);
   });
 
+  // Only close on a click that *both* started and ended on the backdrop —
+  // otherwise selecting text inside the card and releasing outside would dismiss it.
+  let mouseDownOnBackdrop = false;
+  overlay.addEventListener('mousedown', (e) => {
+    mouseDownOnBackdrop = e.target === overlay;
+  });
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismissTeacherFeedbackOverlay();
+    if (e.target === overlay && mouseDownOnBackdrop) dismissTeacherFeedbackOverlay();
+    mouseDownOnBackdrop = false;
   });
 
   const onKey = (e) => {
