@@ -4450,15 +4450,27 @@ function makePin() {
 }
 
 async function verifyCreatePassword(env, password, request) {
+  const ip = request ? (request.headers.get('CF-Connecting-IP') || 'unknown') : null;
+
+  if (env.AUTH_RL && ip) {
+    try {
+      const { success } = await env.AUTH_RL.limit({ key: `auth:${ip}` });
+      if (!success) return false;
+    } catch (_) { /* fail open if RL binding errors */ }
+  }
+
   const raw = String(password || '').trim().normalize('NFC');
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
   const digest = await sha256Hex(raw);
   const ok = digest === hash;
-  if (!ok && env.AUTH_RL && request) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-    try { await env.AUTH_RL.limit({ key: `auth-fail:${ip}` }); } catch (_) { /* fail open */ }
+
+  if (!ok && env.AUTH_RL && ip) {
+    try {
+      await Promise.all([0, 1, 2, 3].map(() => env.AUTH_RL.limit({ key: `auth:${ip}` })));
+    } catch (_) { /* fail open */ }
   }
+
   return ok;
 }
 
