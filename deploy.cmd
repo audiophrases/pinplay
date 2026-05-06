@@ -5,13 +5,13 @@ robocopy . _site /S /XD .git .wrangler node_modules cloudflare tests music _site
 
 echo.
 echo Deploying Assets (pinplay-cdn)...
-powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.jsonc %* 2>&1 | Tee-Object -FilePath deploy.log; exit $LASTEXITCODE }"
+powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.jsonc %* 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath deploy.log -Encoding utf8; exit $LASTEXITCODE }"
 if %errorlevel% neq 0 goto :fail
 
 echo.
 echo Deploying API (pinplay-api)...
 pushd cloudflare
-powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.toml %* 2>&1 | Tee-Object -FilePath ..\deploy.log -Append; exit $LASTEXITCODE }"
+powershell -NoProfile -Command "& { npx wrangler deploy --config wrangler.toml %* 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath ..\deploy.log -Append -Encoding utf8; exit $LASTEXITCODE }"
 set err=%errorlevel%
 popd
 if %err% neq 0 goto :fail
