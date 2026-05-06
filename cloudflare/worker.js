@@ -186,7 +186,7 @@ export default {
     // List quizzes stored in R2
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
       const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token);
+      const authOk = await verifyCreatePassword(env, token, request);
       if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         // List quiz JSONs stored in R2 (prefix filter to be safe across jurisdictions)
@@ -227,7 +227,7 @@ export default {
     // Delete quiz JSON and associated media prefix from R2
     if (url.pathname.startsWith('/api/quizzes/') && request.method === 'DELETE') {
       const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token);
+      const authOk = await verifyCreatePassword(env, token, request);
       if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         const raw = url.pathname.replace('/api/quizzes/', '');
@@ -257,7 +257,7 @@ export default {
     // Upload quiz JSON to R2
     if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
       const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token);
+      const authOk = await verifyCreatePassword(env, token, request);
       if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       try {
         const body = await safeJson(request);
@@ -273,7 +273,7 @@ export default {
     // Upload quiz media to R2 (authenticated)
     if (url.pathname === '/api/media/upload' && request.method === 'POST') {
       const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token);
+      const authOk = await verifyCreatePassword(env, token, request);
       if (!authOk) return json({ error: 'Unauthorized.' }, 401);
       const contentType = request.headers.get('content-type') || '';
       if (!contentType.includes('multipart/form-data')) {
@@ -297,7 +297,7 @@ export default {
       const body = await safeJson(request);
       const password = String(body?.password || '');
       if (!password) return json({ error: 'Teacher password required.' }, 401);
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong teacher password.' }, 401);
 
       let quiz = body?.quiz;
@@ -451,7 +451,7 @@ export default {
       const password = String(body?.password || '');
       if (!pin) return json({ error: 'PIN required.' }, 400);
       if (!password) return json({ error: 'Teacher password required.' }, 401);
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong teacher password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
@@ -582,7 +582,7 @@ export default {
       const password = String(body?.password || '');
       if (!password) return json({ error: 'Password required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
       return json({ ok: true }, 200);
     }
@@ -591,7 +591,7 @@ export default {
       const body = await safeJson(request);
       const password = String(body?.password || '');
       if (!password) return json({ error: 'Password required.' }, 400);
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const quiz = normalizeQuiz(body?.quiz || {});
@@ -614,7 +614,7 @@ export default {
       const body = await safeJson(request);
       const password = String(body?.password || '');
       if (!password) return json({ error: 'Password required.' }, 400);
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const limit = Math.max(1, Math.min(200, Number(body?.limit || 50)));
@@ -631,7 +631,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -656,7 +656,7 @@ export default {
       if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
       if (!Number.isFinite(points)) return json({ error: 'points required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -682,7 +682,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -700,7 +700,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -717,7 +717,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -735,7 +735,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -753,7 +753,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -771,7 +771,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -788,7 +788,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -810,7 +810,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptIds.length) return json({ error: 'attemptIds required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -832,7 +832,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!usernames.length) return json({ ok: true, results: [] });
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
@@ -868,7 +868,7 @@ export default {
       const dryRun = body?.dryRun === false ? false : true;
       if (!password) return json({ error: 'Password required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
@@ -941,7 +941,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -957,7 +957,7 @@ export default {
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password);
+      const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const quiz = normalizeQuiz(body?.quiz || {});
@@ -4449,7 +4449,14 @@ function makePin() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-async function verifyCreatePassword(env, password) {
+async function verifyCreatePassword(env, password, request) {
+  if (env.AUTH_RL && request) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try {
+      const { success } = await env.AUTH_RL.limit({ key: `auth:${ip}` });
+      if (!success) return false;
+    } catch (_) { /* fail open if RL binding errors */ }
+  }
   const raw = String(password || '').trim().normalize('NFC');
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
