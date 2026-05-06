@@ -1548,6 +1548,20 @@ body.question-active .join-title-row {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
+.prompt-edit-count {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: 0 .45em;
+  margin: 0 .15em;
+  border-radius: 999px;
+  background: var(--primary, #4f46e5);
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
 .error-hunt-rewrite-wrap {
   width: 100%;
   display: flex;

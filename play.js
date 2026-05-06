@@ -2494,7 +2494,10 @@ function renderJoinQuestion(question) {
         promptEl.innerHTML = '';
         const pref = document.createElement('span');
         pref.className = 'prompt-prefix';
-        pref.textContent = `${required} ${required === 1 ? 'edit' : 'edits'} to fix the sentence: `;
+        const numEl = document.createElement('span');
+        numEl.className = 'prompt-edit-count';
+        numEl.textContent = String(required);
+        pref.append('Make ', numEl, ` ${required === 1 ? 'edit' : 'edits'} to fix the sentence: `);
         promptEl.append(pref);
       }
 
