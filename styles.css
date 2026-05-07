@@ -3194,11 +3194,33 @@ body.review-mode-active {
 }
 .grading-focus-controls {
   display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line, #e2e8f0);
+}
+.grading-focus-controls .gf-controls-row {
+  display: flex;
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--line, #e2e8f0);
+}
+.grading-focus-correction-textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+  line-height: 1.45;
+  font-family: inherit;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+}
+.grading-focus-correction-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 .grading-focus-nav {
   display: flex;
@@ -3206,14 +3228,35 @@ body.review-mode-active {
   align-items: center;
   gap: 0.5rem;
 }
+.grading-focus-shortcuts-toggle {
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--line, #e2e8f0);
+}
+.grading-focus-shortcuts-toggle > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+  list-style: none;
+  user-select: none;
+  padding: 0.15rem 0;
+}
+.grading-focus-shortcuts-toggle > summary::-webkit-details-marker { display: none; }
+.grading-focus-shortcuts-toggle > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  transition: transform 0.15s;
+}
+.grading-focus-shortcuts-toggle[open] > summary::before {
+  transform: rotate(90deg);
+}
 .grading-focus-shortcuts {
   font-size: 0.78rem;
   color: var(--muted, #64748b);
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--line, #e2e8f0);
+  padding-top: 0.4rem;
 }
 .grading-focus-shortcuts kbd {
   background: #f1f5f9;

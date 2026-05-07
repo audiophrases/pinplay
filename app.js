@@ -4886,12 +4886,14 @@ function renderGradingFocusItem() {
       <button class="btn" data-skip title="Skip without saving (N / →)">⏭ Skip<span class="kbd-hint">N</span></button>
     </div>
     <div class="grading-focus-controls">
-      <label class="small muted" for="gfPointsInput">Points</label>
-      <input id="gfPointsInput" type="number" min="0" max="${maxPoints}" value="${initialPoints}" data-grade-points-input style="width:90px;" />
-      <input type="text" placeholder="${escapeHtml(correctionPlaceholder)}" value="${escapeHtml(correctionFieldValue)}" data-grade-correction-input style="flex:1;min-width:200px;" />
-      <button class="btn" data-grade-record-btn title="Record voice (R)">🎙️</button>
-      <span class="small muted" data-grade-audio-status></span>
-      <button class="btn primary" data-save-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
+      <div class="gf-controls-row">
+        <label class="small muted" for="gfPointsInput">Points</label>
+        <input id="gfPointsInput" type="number" min="0" max="${maxPoints}" value="${initialPoints}" data-grade-points-input style="width:90px;" />
+        <button class="btn" data-grade-record-btn title="Record voice (R)">🎙️</button>
+        <span class="small muted" data-grade-audio-status></span>
+        <button class="btn primary" data-save-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
+      </div>
+      <textarea class="grading-focus-correction-textarea" rows="3" placeholder="${escapeHtml(correctionPlaceholder)}" data-grade-correction-input>${escapeHtml(correctionFieldValue)}</textarea>
     </div>
     <div data-audio-preview class="top-space" style="display:${initialAudioKey ? 'block' : 'none'};"></div>
     <div class="grading-focus-nav">
@@ -4899,17 +4901,21 @@ function renderGradingFocusItem() {
       <span class="small muted">${current + 1} / ${items.length}</span>
       <button class="btn" data-next-student title="Next student (N / →)">Next ›</button>
     </div>
-    <div class="grading-focus-shortcuts">
-      <span><kbd>C</kbd> Correct!</span>
-      <span><kbd>W</kbd> Wrong</span>
-      <span><kbd>Enter</kbd> Save &amp; next</span>
-      <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
-      <span><kbd>E</kbd> Edit correction</span>
-      <span><kbd>G</kbd> Edit points</span>
-      <span><kbd>R</kbd> Record</span>
-      <span><kbd>Space</kbd> Play answer</span>
-      <span><kbd>Esc</kbd> Close</span>
-    </div>
+    <details class="grading-focus-shortcuts-toggle">
+      <summary>⌨ Shortcuts</summary>
+      <div class="grading-focus-shortcuts">
+        <span><kbd>C</kbd> Correct!</span>
+        <span><kbd>W</kbd> Wrong</span>
+        <span><kbd>Enter</kbd> Save &amp; next</span>
+        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> Newline</span>
+        <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
+        <span><kbd>E</kbd> Edit correction</span>
+        <span><kbd>G</kbd> Edit points</span>
+        <span><kbd>R</kbd> Record</span>
+        <span><kbd>Space</kbd> Play answer</span>
+        <span><kbd>Esc</kbd> Close</span>
+      </div>
+    </details>
   `;
 
   let currentAudioKey = initialAudioKey;
