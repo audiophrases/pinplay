@@ -5686,13 +5686,8 @@ function saveNotifyTemplate(subject, body) {
 }
 
 function buildAssignmentJoinLink(code) {
-  // Route through the Cloudflare Worker's /s/:code share endpoint so that
-  // messaging-app link unfurlers (iMessage, Slack, Discord, WhatsApp) get a
-  // server-rendered <title>/og:title with the actual quiz name. Real users
-  // are redirected on to the GitHub Pages app instantly.
   const safeCode = encodeURIComponent(String(code || '').trim());
-  const workerBase = (loadBackendUrl() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
-  return `${workerBase}/s/${safeCode}`;
+  return `https://audiophrases.github.io/pinplay/?assignment=${safeCode}`;
 }
 
 function applyNotifyTemplate(template, vars) {
