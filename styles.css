@@ -1192,9 +1192,9 @@ body.question-active .join-title-row {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: .75rem;
+  gap: .5rem;
   width: 100%;
-  padding: 1rem 0;
+  padding: .5rem 0;
 }
 .voice-text-mic-btn {
   background: var(--primary);
@@ -1218,7 +1218,6 @@ body.question-active .join-title-row {
   animation: pulseStop 1.5s infinite;
 }
 .voice-text-transcript {
-  min-height: 1.5rem;
   font-size: 1.1rem;
   text-align: center;
   max-width: 90%;

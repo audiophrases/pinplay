@@ -4967,11 +4967,7 @@ function renderVoiceTextRecognizer(container, question) {
   stopBtn.className = 'btn voice-text-stop-btn hidden';
   stopBtn.textContent = '■ Stop';
 
-  const retryHint = document.createElement('div');
-  retryHint.className = 'small muted';
-  retryHint.textContent = `Recognizing language: ${lang}`;
-
-  wrap.append(micBtn, stopBtn, transcriptEl, statusEl, retryHint);
+  wrap.append(micBtn, stopBtn, transcriptEl, statusEl);
   container.appendChild(wrap);
 
   let finalTranscript = hidden.value || '';
