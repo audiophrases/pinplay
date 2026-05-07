@@ -3519,7 +3519,10 @@ async function exportCreationPrompt() {
   if (level) cleanRequest.level = level;
   cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) cleanRequest.questionCount = Number(count);
-  cleanRequest.batchSize = Math.max(3, Math.min(100, Number(batchSize) || 6));
+  const batchSizeNum = Number(batchSize);
+  if (batchSizeNum >= 3) {
+    cleanRequest.batchSize = Math.min(100, batchSizeNum);
+  }
   cleanRequest.images = images;
   cleanRequest.audio = audio;
   cleanRequest.video = video;
@@ -3666,7 +3669,9 @@ async function exportCreationPrompt() {
     "Prioritize high-quality 'near-miss' distractors that perfectly challenge students — not too obvious, not too difficult.",
     'Keep language level aligned to request.',
     'Avoid redundant narration and filler text.',
-    `Create the ${cleanRequest.questionCount || 10} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
+    cleanRequest.batchSize
+      ? `Create the ${cleanRequest.questionCount || 10} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
+      : `Create the entire ${cleanRequest.questionCount || 10} question quiz in a single batch (one JSON object containing all questions).`
   ].filter(Boolean);
 
   const promptText = [
