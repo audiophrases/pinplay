@@ -17,8 +17,9 @@
         <div class="card" id="createAuthCard">
           <h2>Teacher access</h2>
 
-          <label>Password</label>
-          <input id="createPassword" type="password" placeholder="Enter teacher password" />
+          <label>Password
+            <input id="createPassword" type="password" placeholder="Enter teacher password" />
+          </label>
           <div class="row gap top-space">
             <button id="unlockCreateBtn" class="btn primary">Unlock</button>
             <span id="createAuthStatus" class="small"></span>
@@ -40,71 +41,81 @@
                 <div id="creationPromptBody" class="section-collapsible-body hidden">
                   <div class="creation-prompt-grid">
                     <div class="prompt-field">
-                      <label>Theme</label>
-                      <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
+                      <label>Theme
+                        <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Goal</label>
-                      <select id="promptGoal">
-                        <option value="learning">More learning (scaffolded)</option>
-                        <option value="practising">More practising (retrieval)</option>
-                        <option value="balanced">Balanced mix (S-R-S-R)</option>
-                        <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
-                        <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
-                        <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
-                        <option value="custom" selected>Custom pedagogical goal...</option>
-                      </select>
-                      <textarea
-                        id="promptGoalCustom"
-                        class="top-space"
-                        rows="3"
-                        placeholder="e.g. Build conceptual understanding first, then retrieval under time pressure"
-                      ></textarea>
+                      <label>Goal
+                        <select id="promptGoal">
+                          <option value="learning">More learning (scaffolded)</option>
+                          <option value="practising">More practising (retrieval)</option>
+                          <option value="balanced">Balanced mix (S-R-S-R)</option>
+                          <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
+                          <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
+                          <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
+                          <option value="custom" selected>Custom pedagogical goal...</option>
+                        </select>
+                        <textarea
+                          id="promptGoalCustom"
+                          class="top-space"
+                          rows="3"
+                          placeholder="e.g. Build conceptual understanding first, then retrieval under time pressure"
+                        ></textarea>
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Language</label>
-                      <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
+                      <label>Language
+                        <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Level</label>
-                      <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
+                      <label>Level
+                        <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Time limit (sec)</label>
-                      <input id="promptTimeLimit" type="number" value="0" min="0" max="300" />
+                      <label>Time limit (sec)
+                        <input id="promptTimeLimit" type="number" value="0" min="0" max="300" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Questions</label>
-                      <input id="promptQuestionCount" type="number" value="15" min="1" max="50" />
+                      <label>Questions
+                        <input id="promptQuestionCount" type="number" value="15" min="1" max="50" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Create in batches of</label>
-                      <input id="promptBatchSize" type="number" value="0" min="0" max="100" />
+                      <label>Create in batches of
+                        <input id="promptBatchSize" type="number" value="0" min="0" max="100" />
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Images</label>
-                      <select id="promptImages">
-                        <option value="some" selected>Some (when relevant)</option>
-                        <option value="no">No images</option>
-                      </select>
+                      <label>Images
+                        <select id="promptImages">
+                          <option value="some" selected>Some (when relevant)</option>
+                          <option value="no">No images</option>
+                        </select>
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Audio/TTS</label>
-                      <select id="promptAudio">
-                        <option value="some" selected>Some (when relevant)</option>
-                        <option value="no">No audio</option>
-                      </select>
+                      <label>Audio/TTS
+                        <select id="promptAudio">
+                          <option value="some" selected>Some (when relevant)</option>
+                          <option value="no">No audio</option>
+                        </select>
+                      </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Video</label>
-                      <select id="promptVideo">
-                        <option value="some">Some (when relevant)</option>
-                        <option value="no" selected>No videos</option>
-                      </select>
+                      <label>Video
+                        <select id="promptVideo">
+                          <option value="some">Some (when relevant)</option>
+                          <option value="no" selected>No videos</option>
+                        </select>
+                      </label>
                     </div>
                   </div>
                   <div class="prompt-field full-width top-space">
-                    <label>Question Types</label>
+                    <label for="promptTypesMode">Question Types</label>
                     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
                       <select id="promptTypesMode" style="width: auto; min-width: 200px;">
                         <option value="exclude_teacher_graded" selected>Exclude teacher-corrected</option>
@@ -147,25 +158,28 @@
                     <button id="openDriveBtn" class="btn" style="display:none">Open Drive</button>
                   </div>
 
-                  <label>Quiz title</label>
-                  <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+                  <label>Quiz title
+                    <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+                  </label>
 
                   <div class="row gap top-space" id="quizAudioDefaultsRow">
                     <div style="min-width:220px;">
-                      <label>Hear questions</label>
-                      <select id="quizTtsLanguage">
-                        <option value="NONE">Don't hear questions</option>
-                        <option value="EN">English</option>
-                        <option value="CA">Català</option>
-                        <option value="FR">Français</option>
-                        <option value="OTHER">Other</option>
-                      </select>
+                      <label>Hear questions
+                        <select id="quizTtsLanguage">
+                          <option value="NONE">Don't hear questions</option>
+                          <option value="EN">English</option>
+                          <option value="CA">Català</option>
+                          <option value="FR">Français</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </label>
                     </div>
                     <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
-                      <label>Language / voice</label>
-                      <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
-                      <select id="quizTtsOtherVoice">
-                      </select>
+                      <label>Language / voice
+                        <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
+                        <select id="quizTtsOtherVoice">
+                        </select>
+                      </label>
                     </div>
                   </div>
                 </div>
