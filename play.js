@@ -4776,13 +4776,22 @@ function renderVoiceRecorder(container, question) {
       const formData = new FormData();
       formData.append('file', blob, fileName);
       formData.append('path', `voice_records/${fileName}`);
-      formData.append('pin', live.player.pin || '');
-      formData.append('playerId', live.player.id || '');
+      if (live.player.mode === 'assignment') {
+        formData.append('code', live.player.assignment.code || '');
+        formData.append('attemptId', live.player.assignment.attemptId || '');
+      } else {
+        formData.append('pin', live.player.pin || '');
+        formData.append('playerId', live.player.id || '');
+      }
 
       const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      const uploadHeaders = {};
+      if (live.player.mode !== 'assignment' && live.player.token) {
+        uploadHeaders['X-Player-Token'] = live.player.token;
+      }
       const resp = await fetch(`${base}/api/player/voice-upload`, {
         method: 'POST',
-        headers: { 'X-Player-Token': live.player.token || '' },
+        headers: uploadHeaders,
         body: formData,
       });
       if (!resp.ok) throw new Error(`Upload failed (${resp.status})`);

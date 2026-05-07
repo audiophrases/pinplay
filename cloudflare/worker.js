@@ -302,23 +302,39 @@ export default {
       }
       let formData;
       try { formData = await request.formData(); } catch (e) { return json({ error: 'Invalid form data' }, 400); }
-      const pin = sanitizePin(formData.get('pin'));
-      const playerId = sanitizeId(formData.get('playerId'));
       const file = formData.get('file');
       const path = String(formData.get('path') || '');
-      if (!pin) return json({ error: 'PIN required.' }, 400);
-      if (!playerId) return json({ error: 'playerId required.' }, 400);
-      if (!playerToken) return json({ error: 'Player token required.' }, 401);
       if (!file || !path) return json({ error: 'Missing file or path' }, 400);
       // Restrict to voice_records/ prefix to prevent path traversal
       if (!path.startsWith('voice_records/')) return json({ error: 'Invalid upload path.' }, 400);
-      // Verify player token via the room Durable Object
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const verifyResp = await stub.fetch('https://room/player/state', {
-        method: 'POST',
-        body: JSON.stringify({ playerId, playerToken }),
-      });
-      if (!verifyResp.ok) return withCors(verifyResp);
+
+      // Support two auth modes: live game (pin+playerId+token) or assignment (code+attemptId)
+      const pin = sanitizePin(formData.get('pin'));
+      const playerId = sanitizeId(formData.get('playerId'));
+      const code = sanitizeAssignmentCode(formData.get('code'));
+      const attemptId = sanitizeAssignmentAttemptId(formData.get('attemptId'));
+
+      if (pin && playerId) {
+        // Live game mode: verify player token
+        if (!playerToken) return json({ error: 'Player token required.' }, 401);
+        const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+        const verifyResp = await stub.fetch('https://room/player/state', {
+          method: 'POST',
+          body: JSON.stringify({ playerId, playerToken }),
+        });
+        if (!verifyResp.ok) return withCors(verifyResp);
+      } else if (code && attemptId) {
+        // Assignment mode: verify that this attempt exists
+        const assignStub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+        const verifyResp = await assignStub.fetch(
+          `https://room/assignments/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`,
+          { method: 'GET' },
+        );
+        if (!verifyResp.ok) return withCors(verifyResp);
+      } else {
+        return json({ error: 'Provide pin+playerId (live) or code+attemptId (assignment).' }, 401);
+      }
+
       try {
         await env.QUIZ_MEDIA.put(path, file.stream(), {
           httpMetadata: { contentType: file.type }
