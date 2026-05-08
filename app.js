@@ -502,6 +502,9 @@ const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const assignmentInstantFeedbackBtn = document.getElementById('assignmentInstantFeedbackBtn');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
+const toggleArchivedAssignmentsBtn = document.getElementById('toggleArchivedAssignmentsBtn');
+let showArchivedAssignments = false;
+let assignmentsListCache = [];
 const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
@@ -3862,6 +3865,10 @@ function bindLiveEvents() {
   if (assignmentInstantFeedbackBtn) assignmentInstantFeedbackBtn.addEventListener('click', toggleInstantFeedbackMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
+  if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
+    showArchivedAssignments = !showArchivedAssignments;
+    renderAssignmentsList();
+  });
   if (assignmentResultsFilterEl) assignmentResultsFilterEl.addEventListener('change', () => {
     if (assignmentResultsCache?.code && assignmentResultsCache?.data) {
       renderAssignmentResults(assignmentResultsCache.code, assignmentResultsCache.data);
@@ -4134,6 +4141,18 @@ async function setAssignmentActive(code, active) {
       password: createSessionPassword,
       code,
       active: !!active,
+    },
+  });
+}
+
+async function setAssignmentArchived(code, archived) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/toggle-archive', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      archived: !!archived,
     },
   });
 }
@@ -5888,128 +5907,187 @@ async function refreshAssignmentsList() {
     });
 
     const rawList = Array.isArray(data?.assignments) ? data.assignments : [];
-    const list = rawList.filter(a => a?.className !== '__preview__');
-    if (!assignmentListEl) return;
-    if (!list.length) {
-      const li = document.createElement('li');
-      li.textContent = 'No assignments yet.';
-      assignmentListEl.appendChild(li);
-      return;
-    }
-
-    list.forEach((a) => {
-      const code = String(a?.code || '').trim();
-      const link = buildAssignmentJoinLink(code);
-      const li = document.createElement('li');
-
-      const title = document.createElement('div');
-      const pendingGrading = Number(a?.pendingGradingCount || 0);
-      const pendingAttempts = Number(a?.pendingAttemptsCount || 0);
-      const pendingBadge = pendingGrading > 0
-        ? ` <span class="badge-pending" title="${pendingAttempts} attempt(s) with ungraded teacher-graded answers">${pendingAttempts} att · ${pendingGrading} to grade</span>`
-        : '';
-      title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}`;
-
-      const meta = document.createElement('div');
-      meta.className = 'small muted';
-      const dueAt = Number(a?.dueAt || 0);
-      const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
-      const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
-      meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${attemptsText} · ${dueText}`;
-
-      const row = document.createElement('div');
-      row.className = 'row gap top-space';
-
-      const copyCodeBtn = document.createElement('button');
-      copyCodeBtn.className = 'btn';
-      copyCodeBtn.textContent = 'Copy code';
-      copyCodeBtn.addEventListener('click', async () => {
-        const ok = await copyTextSmart(code);
-        if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied code: ${code}` : 'Copy failed';
-      });
-
-      const copyLinkBtn = document.createElement('button');
-      copyLinkBtn.className = 'btn';
-      copyLinkBtn.textContent = 'Copy link';
-      copyLinkBtn.addEventListener('click', async () => {
-        const ok = await copyTextSmart(link);
-        if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
-      });
-
-      const openQuizBtn = document.createElement('button');
-      openQuizBtn.className = 'btn';
-      openQuizBtn.textContent = 'Open Quiz';
-      openQuizBtn.title = 'Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.';
-      openQuizBtn.addEventListener('click', async () => {
-        try {
-          openQuizBtn.disabled = true;
-          await openAssignmentInBuilder(code, String(a?.title || ''));
-        } catch (err) {
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Open quiz error: ${err.message}`;
-        } finally {
-          openQuizBtn.disabled = false;
-        }
-      });
-
-      const viewResultsBtn = document.createElement('button');
-      viewResultsBtn.className = 'btn';
-      viewResultsBtn.textContent = 'View results';
-      viewResultsBtn.addEventListener('click', () => {
-        fetchAssignmentResults(code);
-      });
-
-      const toggleBtn = document.createElement('button');
-      toggleBtn.className = 'btn';
-      toggleBtn.textContent = a?.active ? 'Close assignment' : 'Reopen assignment';
-      toggleBtn.addEventListener('click', async () => {
-        try {
-          toggleBtn.disabled = true;
-          await setAssignmentActive(code, !a?.active);
-          if (assignmentStatusEl) assignmentStatusEl.textContent = !a?.active
-            ? `Assignment ${code} reopened.`
-            : `Assignment ${code} closed.`;
-          await refreshAssignmentsList();
-        } catch (err) {
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Toggle error: ${err.message}`;
-        } finally {
-          toggleBtn.disabled = false;
-        }
-      });
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', async () => {
-        if (!confirm(`Delete assignment ${code}? This cannot be undone.`)) return;
-        try {
-          deleteBtn.disabled = true;
-          await api('/api/assignments/delete', {
-            method: 'POST',
-            body: {
-              password: createSessionPassword,
-              feedbackMode: assignmentFeedbackMode,
-              code,
-            },
-          });
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
-          if (applyTargetAssignmentCode === code) setApplyAssignmentTarget('', '');
-          await refreshAssignmentsList();
-        } catch (err) {
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete error: ${err.message}`;
-        } finally {
-          deleteBtn.disabled = false;
-        }
-      });
-
-      row.append(copyCodeBtn, copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, deleteBtn);
-      li.append(title, meta, row);
-      assignmentListEl.appendChild(li);
-    });
+    assignmentsListCache = rawList.filter(a => a?.className !== '__preview__');
+    renderAssignmentsList();
   } catch (err) {
     if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment list error: ${err.message}`;
   } finally {
     if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = false;
   }
+}
+
+function renderAssignmentsList() {
+  if (!assignmentListEl) return;
+  assignmentListEl.innerHTML = '';
+
+  const list = Array.isArray(assignmentsListCache) ? assignmentsListCache : [];
+  const active = list.filter((a) => !a?.archived);
+  const archived = list.filter((a) => !!a?.archived);
+  const archivedPendingGrading = archived.reduce((sum, a) => sum + Number(a?.pendingGradingCount || 0), 0);
+  const archivedPendingAttempts = archived.reduce((sum, a) => sum + Number(a?.pendingAttemptsCount || 0), 0);
+
+  if (toggleArchivedAssignmentsBtn) {
+    const base = showArchivedAssignments ? 'Hide archived' : 'Show archived';
+    let label = archived.length ? `${base} (${archived.length})` : base;
+    if (archivedPendingGrading > 0) {
+      label += ` · ${archivedPendingAttempts} att · ${archivedPendingGrading} to grade`;
+    }
+    toggleArchivedAssignmentsBtn.textContent = label;
+    toggleArchivedAssignmentsBtn.classList.toggle('has-pending', archivedPendingGrading > 0);
+    toggleArchivedAssignmentsBtn.title = archivedPendingGrading > 0
+      ? `${archivedPendingAttempts} archived attempt(s) with ${archivedPendingGrading} ungraded teacher-graded answer(s)`
+      : 'Show or hide archived assignments';
+  }
+
+  if (!list.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No assignments yet.';
+    assignmentListEl.appendChild(li);
+    return;
+  }
+
+  active.forEach((a) => assignmentListEl.appendChild(buildAssignmentListItem(a)));
+
+  if (showArchivedAssignments && archived.length) {
+    const divider = document.createElement('li');
+    divider.className = 'small muted top-space';
+    divider.style.listStyle = 'none';
+    divider.textContent = `— Archived (${archived.length}) —`;
+    assignmentListEl.appendChild(divider);
+    archived.forEach((a) => assignmentListEl.appendChild(buildAssignmentListItem(a)));
+  }
+}
+
+function buildAssignmentListItem(a) {
+  const code = String(a?.code || '').trim();
+  const link = buildAssignmentJoinLink(code);
+  const li = document.createElement('li');
+  if (a?.archived) li.classList.add('assignment-archived');
+
+  const title = document.createElement('div');
+  const pendingGrading = Number(a?.pendingGradingCount || 0);
+  const pendingAttempts = Number(a?.pendingAttemptsCount || 0);
+  const pendingBadge = pendingGrading > 0
+    ? ` <span class="badge-pending" title="${pendingAttempts} attempt(s) with ungraded teacher-graded answers">${pendingAttempts} att · ${pendingGrading} to grade</span>`
+    : '';
+  const archivedTag = a?.archived ? ' <span class="badge-archived" title="Archived — hidden from default view">archived</span>' : '';
+  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}${archivedTag}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'small muted';
+  const dueAt = Number(a?.dueAt || 0);
+  const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
+  const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
+  meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${attemptsText} · ${dueText}`;
+
+  const row = document.createElement('div');
+  row.className = 'row gap top-space';
+
+  const copyCodeBtn = document.createElement('button');
+  copyCodeBtn.className = 'btn';
+  copyCodeBtn.textContent = 'Copy code';
+  copyCodeBtn.addEventListener('click', async () => {
+    const ok = await copyTextSmart(code);
+    if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied code: ${code}` : 'Copy failed';
+  });
+
+  const copyLinkBtn = document.createElement('button');
+  copyLinkBtn.className = 'btn';
+  copyLinkBtn.textContent = 'Copy link';
+  copyLinkBtn.addEventListener('click', async () => {
+    const ok = await copyTextSmart(link);
+    if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
+  });
+
+  const openQuizBtn = document.createElement('button');
+  openQuizBtn.className = 'btn';
+  openQuizBtn.textContent = 'Open Quiz';
+  openQuizBtn.title = 'Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.';
+  openQuizBtn.addEventListener('click', async () => {
+    try {
+      openQuizBtn.disabled = true;
+      await openAssignmentInBuilder(code, String(a?.title || ''));
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Open quiz error: ${err.message}`;
+    } finally {
+      openQuizBtn.disabled = false;
+    }
+  });
+
+  const viewResultsBtn = document.createElement('button');
+  viewResultsBtn.className = 'btn';
+  viewResultsBtn.textContent = 'View results';
+  viewResultsBtn.addEventListener('click', () => {
+    fetchAssignmentResults(code);
+  });
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'btn';
+  toggleBtn.textContent = a?.active ? 'Close assignment' : 'Reopen assignment';
+  toggleBtn.addEventListener('click', async () => {
+    try {
+      toggleBtn.disabled = true;
+      await setAssignmentActive(code, !a?.active);
+      if (assignmentStatusEl) assignmentStatusEl.textContent = !a?.active
+        ? `Assignment ${code} reopened.`
+        : `Assignment ${code} closed.`;
+      await refreshAssignmentsList();
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Toggle error: ${err.message}`;
+    } finally {
+      toggleBtn.disabled = false;
+    }
+  });
+
+  const archiveBtn = document.createElement('button');
+  archiveBtn.className = 'btn';
+  archiveBtn.textContent = a?.archived ? 'Unarchive' : 'Archive';
+  archiveBtn.title = a?.archived
+    ? 'Restore to the main list'
+    : 'Hide from the main list (assignment stays open and active)';
+  archiveBtn.addEventListener('click', async () => {
+    try {
+      archiveBtn.disabled = true;
+      await setAssignmentArchived(code, !a?.archived);
+      if (assignmentStatusEl) assignmentStatusEl.textContent = !a?.archived
+        ? `Assignment ${code} archived.`
+        : `Assignment ${code} unarchived.`;
+      await refreshAssignmentsList();
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Archive error: ${err.message}`;
+    } finally {
+      archiveBtn.disabled = false;
+    }
+  });
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.addEventListener('click', async () => {
+    if (!confirm(`Delete assignment ${code}? This cannot be undone.`)) return;
+    try {
+      deleteBtn.disabled = true;
+      await api('/api/assignments/delete', {
+        method: 'POST',
+        body: {
+          password: createSessionPassword,
+          feedbackMode: assignmentFeedbackMode,
+          code,
+        },
+      });
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
+      if (applyTargetAssignmentCode === code) setApplyAssignmentTarget('', '');
+      await refreshAssignmentsList();
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete error: ${err.message}`;
+    } finally {
+      deleteBtn.disabled = false;
+    }
+  });
+
+  row.append(copyCodeBtn, copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, archiveBtn, deleteBtn);
+  li.append(title, meta, row);
+  return li;
 }
 
 async function toggleInstantFeedbackMode() {

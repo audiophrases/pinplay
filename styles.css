@@ -2233,6 +2233,31 @@ button.review-retake-attempt-row:active {
   vertical-align: baseline;
 }
 
+.badge-archived {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.15);
+  color: #475569;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+  vertical-align: baseline;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.assignment-archived {
+  opacity: 0.72;
+}
+
+#toggleArchivedAssignmentsBtn.has-pending {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
 .review-retake-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

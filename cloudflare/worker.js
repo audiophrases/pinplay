@@ -833,6 +833,24 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/toggle-archive' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      const archived = !!body?.archived;
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const ok = await verifyCreatePassword(env, password, request);
+      if (!ok) return json({ error: 'Wrong password.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/toggle-archive', {
+        method: 'POST',
+        body: JSON.stringify({ code, archived }),
+      }));
+    }
+
     if (url.pathname === '/api/assignments/delete' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -2542,6 +2560,23 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.active = !!body?.active;
+        assignment.updatedAt = Date.now();
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
+      }
+
+      if (url.pathname === '/assignments/toggle-archive' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.archived = !!body?.archived;
         assignment.updatedAt = Date.now();
         assignments[code] = assignment;
         await this.state.storage.put('assignments', assignments);
@@ -4910,6 +4945,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     randomNames: !!assignment.randomNames,
     feedbackMode: assignment.feedbackMode || 'none',
     active: !!assignment.active,
+    archived: !!assignment.archived,
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),
   };
