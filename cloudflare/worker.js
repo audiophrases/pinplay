@@ -1906,7 +1906,11 @@ export class QuizRoom {
         const list = Object.values(assignments || {})
           .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
           .slice(0, limit)
-          .map((a) => publicAssignment(a, { includeQuiz: false }));
+          .map((a) => {
+            const pub = publicAssignment(a, { includeQuiz: false });
+            const pending = summarizePendingGrading(a);
+            return pub ? { ...pub, ...pending } : pub;
+          });
         return json({ ok: true, assignments: list });
       }
 
@@ -4786,6 +4790,35 @@ function summarizeTeacherActivity(assignment, attempt) {
     lastTeacherActivityAt: lastTeacherActivityAt || null,
     hasNewActivity,
   };
+}
+
+function summarizePendingGrading(assignment) {
+  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+  const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+  const teacherIdx = new Set();
+  questions.forEach((q, i) => { if (isAssignmentTeacherGradedQuestion(q)) teacherIdx.add(i); });
+
+  let pendingGradingCount = 0;
+  let pendingAttemptsCount = 0;
+
+  if (teacherIdx.size > 0) {
+    Object.values(attempts).forEach((attempt) => {
+      if (!attempt?.submitted) return;
+      const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+      let attemptHasPending = false;
+      teacherIdx.forEach((qIndex) => {
+        const item = answers[String(qIndex)];
+        if (!item || item.answer == null) return;
+        const grade = item?.teacherGrade;
+        if (grade && grade.graded) return;
+        pendingGradingCount += 1;
+        attemptHasPending = true;
+      });
+      if (attemptHasPending) pendingAttemptsCount += 1;
+    });
+  }
+
+  return { pendingGradingCount, pendingAttemptsCount };
 }
 
 function publicAssignmentAttemptSummary(assignment, attempt) {

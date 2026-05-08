@@ -5903,7 +5903,12 @@ async function refreshAssignmentsList() {
       const li = document.createElement('li');
 
       const title = document.createElement('div');
-      title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q`;
+      const pendingGrading = Number(a?.pendingGradingCount || 0);
+      const pendingAttempts = Number(a?.pendingAttemptsCount || 0);
+      const pendingBadge = pendingGrading > 0
+        ? ` <span class="badge-pending" title="${pendingAttempts} attempt(s) with ungraded teacher-graded answers">${pendingAttempts} att · ${pendingGrading} to grade</span>`
+        : '';
+      title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}`;
 
       const meta = document.createElement('div');
       meta.className = 'small muted';
