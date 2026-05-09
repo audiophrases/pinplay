@@ -103,6 +103,7 @@ const live = {
       pendingComplete: false,
       resultsListCollapsed: false,
       bypassAllAnsweredScreen: false,
+      dirtyAnswer: false,
     },
   },
 };
@@ -188,6 +189,24 @@ function init() {
       e.preventDefault();
       submitLiveAnswer();
     });
+
+    // Detect edits on a previously-saved answer in deferred-feedback assignments so the
+    // submit button flips back from Continue to Save answer (otherwise edits silently lost).
+    const markAnswerDirty = () => {
+      if (live.player.mode !== 'assignment') return;
+      if (!live.player.assignment.state) return;
+      if (live.player.assignment.reviewMode) return;
+      if (live.player.assignment.state.attempt?.submitted) return;
+      const fbMode = String(live.player.assignment.state.attempt?.assignment?.feedbackMode || 'none');
+      if (fbMode === 'instant') return;
+      if (live.player.assignment.dirtyAnswer) return;
+      live.player.assignment.dirtyAnswer = true;
+      if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
+        joinSubmitBtn.textContent = 'Save answer';
+      }
+    };
+    joinAnswersEl.addEventListener('input', markAnswerDirty);
+    joinAnswersEl.addEventListener('change', markAnswerDirty);
   }
 }
 
@@ -2001,6 +2020,8 @@ function renderPlayerState(state) {
     live.player.currentQuestion = state.question;
     live.player.pinSelection = null;
     live.player.pinSelections = [];
+    // Fresh question render → no edits pending.
+    live.player.assignment.dirtyAnswer = false;
 
     // --- NEW: Reset Bet UI state for the new question ---
     live.player.selectedBet = 0;
@@ -2055,7 +2076,7 @@ function renderPlayerState(state) {
     && state.feedbackMode !== 'instant'
     && !live.player.assignment.reviewMode;
 
-  // Update shouldDisable to include answeredCurrent for both modes
+  // Inputs stay enabled in editable mode; the submit button gates re-save vs continue.
   const shouldDisable = questionClosed
     || assignmentSubmitted
     || (!!state.answeredCurrent && !isEditableSavedAnswer)
@@ -2063,10 +2084,10 @@ function renderPlayerState(state) {
 
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
-    // Change to Continue if the question is closed OR if the student has already answered
-    // (but stay on "Save answer" while the saved answer is still editable).
+    // After a saved answer, show Continue so the student can advance. If they edit the
+    // inputs (dirty), flip back to Save answer so the change actually gets persisted.
     const isContinueMode = isAssignment
-      && (questionClosed || (state.answeredCurrent && !isEditableSavedAnswer))
+      && (questionClosed || (state.answeredCurrent && !live.player.assignment.dirtyAnswer))
       && !assignmentSubmitted;
 
     if (isContinueMode) {
@@ -3080,6 +3101,9 @@ async function submitLiveAnswer() {
       if (mode !== 'instant' && !wasAlreadyAnswered) {
         live.player.assignment.forceAutoAdvance = true;
       }
+      // Save succeeded → clear dirty so the button rebuilds as Continue (deferred mode)
+      // or whatever the post-save state dictates.
+      live.player.assignment.dirtyAnswer = false;
 
       // Check if this was the last answer and feedback is instant
       const totalQs = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
