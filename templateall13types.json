@@ -17,6 +17,7 @@
       "imageKeyword": "cat face",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         {
@@ -46,6 +47,7 @@
       "imageKeyword": "basket of fruit",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         {
@@ -79,6 +81,7 @@
       "imageKeyword": "snowy mountain peak",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         {
@@ -104,6 +107,7 @@
       "imageKeyword": "red sports car",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "accepted": [
         "red",
@@ -125,6 +129,7 @@
       "imageKeyword": "supermarket aisle",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "gaps": [
         "market",
@@ -144,6 +149,7 @@
       "imageKeyword": "farm animals group",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "pairs": [
         {
@@ -171,9 +177,10 @@
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Find the error in this sentence.",
-      "imageKeyword": "boy going to school",
+      "imageKeyword": "",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "kid running to school",
       "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": [
@@ -193,6 +200,7 @@
       "imageKeyword": "sunny blue sky",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "ttsLanguage": "OTHER",
       "language": "ja-JP-NanamiNeural"
@@ -209,6 +217,7 @@
       "imageKeyword": "robot waving",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "ttsLanguage": "EN"
     },
@@ -224,6 +233,7 @@
       "imageKeyword": "cat on a mat",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "items": [
         "The",
@@ -247,6 +257,7 @@
       "imageKeyword": "stack of books",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "min": 0,
       "max": 50,
@@ -267,6 +278,7 @@
       "imageKeyword": "game controller top view",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "zones": [
         {

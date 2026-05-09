@@ -25,6 +25,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "cat face",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         { "text": "Cat", "correct": true },
@@ -45,6 +46,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "basket of fruit",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         { "text": "Apple", "correct": true },
@@ -66,6 +68,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "snowy mountain peak",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "answers": [
         { "text": "True", "correct": true },
@@ -86,6 +89,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "red sports car",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "accepted": ["red", "crimson", "scarlet"]
     },
@@ -102,6 +106,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "supermarket aisle",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "gaps": ["market", "apples"]
     },
@@ -119,6 +124,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "farm animals group",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "pairs": [
         { "left": "Dog", "right": "Bark" },
@@ -136,9 +142,10 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioMode": "tts",
       "audioText": "He go to school every days.",
       "ttsLanguage": "EN",
-      "imageKeyword": "boy going to school",
+      "imageKeyword": "",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "kid running to school",
       "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": ["He goes to school every day."]
@@ -183,6 +190,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "cat on a mat",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "items": ["The", "cat", "sat", "on", "the", "mat"]
     },
@@ -199,6 +207,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "stack of books",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "min": 0,
       "max": 50,
@@ -219,6 +228,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "game controller top view",
       "videoKeyword": "",
       "videoProviderPreference": "",
+      "gifKeyword": "",
       "imageData": "",
       "zones": [
         { "x": 57.2, "y": 25.1, "r": 6 },
@@ -907,6 +917,7 @@ function setSectionCollapsed(triggerEl, bodyEl, collapsed) {
 function addQuestionToBuilder(question) {
   if (question && typeof question === 'object') {
     if (typeof question.imageKeyword !== 'string') question.imageKeyword = '';
+    if (typeof question.gifKeyword !== 'string') question.gifKeyword = '';
     if (typeof question.videoKeyword !== 'string') question.videoKeyword = '';
     if (typeof question.videoProviderPreference !== 'string') question.videoProviderPreference = '';
   }
@@ -1444,6 +1455,13 @@ function bindBuilderEvents() {
       return;
     }
 
+    const gifSearchBtn = e.target.closest('[data-gif-search]');
+    if (gifSearchBtn) {
+      const idx = Number(gifSearchBtn.dataset.gifSearch);
+      openGifSearchDialog(idx);
+      return;
+    }
+
     const clearImageBtn = e.target.closest('[data-clear-image]');
     if (clearImageBtn) {
       const idx = Number(clearImageBtn.dataset.clearImage);
@@ -1864,7 +1882,7 @@ function findQuestionIndexFromBuilderEventTarget(target) {
   const withQ = el.closest('[data-q]');
   if (withQ && Number.isInteger(Number(withQ.dataset.q))) return Number(withQ.dataset.q);
 
-  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview],[data-toggle-pin-mode],[data-toggle-media]');
+  const withBody = el.closest('[data-image-upload],[data-pin-upload],[data-audio-upload],[data-image-search],[data-gif-search],[data-remove-question],[data-toggle-question],[data-toggle-question-header],[data-move-up-question],[data-move-down-question],[data-add-pin-zone],[data-remove-pin-zone],[data-pin-preview],[data-toggle-pin-mode],[data-toggle-media]');
   if (!withBody) return null;
 
   const ds = withBody.dataset || {};
@@ -1903,7 +1921,7 @@ function renderBuilder() {
 
     // Detect media presence for button highlighting
     const hasAudio = supportsQuestionAudio(q.type) && !!(q.audioText || q.audioData);
-    const hasImage = q.type !== 'pin' && !!(q.imageData || (q.imageKeyword || '').trim());
+    const hasImage = q.type !== 'pin' && !!(q.imageData || (q.imageKeyword || '').trim() || (q.gifKeyword || '').trim());
     const hasVideo = !!((q.media?.url || '').trim());
 
     const header = `
@@ -2255,9 +2273,11 @@ function renderBuilder() {
         <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
           <label>Question image (optional)</label>
           <input data-image-upload="${idx}" type="file" accept="image/*" />
-          <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
+          <div class="row gap top-space"><button type="button" class="btn" data-image-search="${idx}">Search web image</button><button type="button" class="btn" data-gif-search="${idx}">Search GIFs</button><button type="button" class="btn" data-clear-image="${idx}">Clear image</button></div>
           <label class="top-space">Image keyword (auto-search on save)</label>
           <input data-q="${idx}" data-field="imageKeyword" type="text" maxlength="140" value="${escapeHtml(q.imageKeyword || '')}" placeholder="e.g. rubber band, volcano, Eiffel tower" />
+          <label class="top-space">GIF keyword (auto-search GIFs on save)</label>
+          <input data-q="${idx}" data-field="gifKeyword" type="text" maxlength="140" value="${escapeHtml(q.gifKeyword || '')}" placeholder="e.g. happy dance, surprised cat, applause" />
           ${q.imageData ? `<div class="pin-preview question-image-preview"><img src="${q.imageData}" alt="Question image" data-zoomable="1" /></div>` : ''}
         </div>
       </div>`;
@@ -2981,6 +3001,8 @@ function syncQuizFromUI() {
     // Sync imageKeyword from form
     const imageKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="imageKeyword"]`);
     if (imageKeywordEl) q.imageKeyword = String(imageKeywordEl.value || '').trim().slice(0, 140);
+    const gifKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="gifKeyword"]`);
+    if (gifKeywordEl) q.gifKeyword = String(gifKeywordEl.value || '').trim().slice(0, 140);
     const videoKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoKeyword"]`);
     if (videoKeywordEl) q.videoKeyword = String(videoKeywordEl.value || '').trim().slice(0, 140);
     const videoProviderPreferenceEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoProviderPreference"]`);
@@ -3275,6 +3297,128 @@ async function openImageSearchDialog(questionIdx) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
+}
+
+const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
+
+async function giphySearch(query, limit = 24) {
+  const url = new URL('https://api.giphy.com/v1/gifs/search');
+  url.searchParams.set('api_key', GIPHY_API_KEY);
+  url.searchParams.set('q', query);
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('rating', 'g');
+  url.searchParams.set('lang', 'en');
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`GIPHY search failed (${res.status})`);
+  const data = await res.json();
+  return (Array.isArray(data?.data) ? data.data : []).map((it) => ({
+    id: String(it?.id || ''),
+    title: String(it?.title || 'GIF'),
+    thumb: String(it?.images?.fixed_width_small?.url || it?.images?.fixed_height_small?.url || ''),
+    url: String(it?.images?.fixed_height?.url || it?.images?.original?.url || ''),
+  })).filter((it) => it.url);
+}
+
+async function openGifSearchDialog(questionIdx) {
+  const q = quiz.questions?.[Number(questionIdx)];
+  if (!q) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const h = document.createElement('h3');
+  h.textContent = 'Search GIFs (GIPHY)';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(h, closeBtn);
+
+  const row = document.createElement('div');
+  row.className = 'row gap top-space';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Search GIFs';
+  input.value = String(q.gifKeyword || q.prompt || '').slice(0, 140);
+  const searchBtn = document.createElement('button');
+  searchBtn.className = 'btn primary';
+  searchBtn.textContent = 'Search';
+  row.append(input, searchBtn);
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+
+  const results = document.createElement('div');
+  results.className = 'answers-grid top-space';
+  results.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
+  results.style.gap = '.45rem';
+
+  const runSearch = async () => {
+    const query = String(input.value || '').trim();
+    if (!query) {
+      status.textContent = 'Enter a search query.';
+      return;
+    }
+    status.textContent = 'Searching GIFs...';
+    results.innerHTML = '';
+
+    try {
+      const items = await giphySearch(query, 24);
+      if (!items.length) {
+        status.textContent = 'No GIFs found.';
+        return;
+      }
+      status.textContent = `Found ${items.length} GIFs. Click one to use.`;
+
+      items.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '.2rem';
+        card.style.cursor = 'pointer';
+
+        const img = document.createElement('img');
+        img.src = item.thumb || item.url;
+        img.alt = item.title;
+        img.style.width = '100%';
+        img.style.borderRadius = '.4rem';
+        img.style.maxHeight = '110px';
+        img.style.objectFit = 'cover';
+
+        card.addEventListener('click', () => {
+          replaceQuestionImageData(q, item.url);
+          renderBuilder();
+          setStatus(hostStatusEl, 'GIF embedded from GIPHY.', 'ok');
+          overlay.remove();
+        });
+        card.append(img);
+        results.appendChild(card);
+      });
+    } catch (err) {
+      status.textContent = String(err?.message || 'GIF search failed.');
+    }
+  };
+
+  searchBtn.addEventListener('click', runSearch);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runSearch();
+    }
+  });
+
+  dialog.append(head, row, status, results);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  if (input.value.trim()) runSearch();
 }
 
 function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {
@@ -3591,9 +3735,15 @@ async function exportCreationPrompt() {
   );
   // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
 
+  const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
+  const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
+
   const featureGuides = {
-    imageKeyword: cleanRequest.images === 'some'
-      ? "Use a specific 2-5 word visual target. Keep imageData empty."
+    imageKeyword: wantsImages
+      ? "Static images: use imageKeyword (2-5 word visual target like 'red apple', 'human heart diagram'). Auto-search runs on save. Keep imageData empty."
+      : undefined,
+    gifKeyword: wantsGifs
+      ? "Animated GIFs: use gifKeyword (2-5 words describing an action/emotion like 'surprised cat', 'thumbs up applause', 'happy dance'). At save time the app searches GIPHY and embeds the CDN URL into imageData. GIFs work best for emotion/reaction prompts, demonstrating motion (verbs in language quizzes), or celebrating correct answers — NOT for static reference imagery (maps, diagrams, anatomy). Keep imageKeyword and imageData empty when using gifKeyword."
       : undefined,
     videoKeyword: cleanRequest.video === 'some'
       ? "When video:'some', you MUST provide videoKeyword (2-7 words) as the primary signal for auto-search; videoProviderPreference:'youtube'|'vimeo'|'direct' is optional. Do NOT include media.url unless the user explicitly asks for a fixed/manual URL."
@@ -3637,7 +3787,18 @@ async function exportCreationPrompt() {
     cleanRequest.audio === 'some'
       ? 'For mixed-language quizzes, set ttsLanguage per question (and language only for OTHER) instead of relying only on quiz-level defaults.'
       : undefined,
-    cleanRequest.images === 'no' ? 'Do NOT include imageKeyword or imageData.' : 'Keep imageData empty.',
+    cleanRequest.images === 'no'
+      ? 'Do NOT include imageKeyword, gifKeyword, or imageData on any question.'
+      : 'Keep imageData empty (auto-search fills it at save time).',
+    wantsImages && !wantsGifs
+      ? 'Use imageKeyword for visual cues. Do NOT use gifKeyword.'
+      : undefined,
+    wantsGifs && !wantsImages
+      ? 'Use gifKeyword (not imageKeyword) for visual cues. Pick prompts where animated reactions/actions add pedagogical value; if a question only benefits from a static reference image, leave both keyword fields empty.'
+      : undefined,
+    wantsGifs && wantsImages
+      ? 'Choose imageKeyword for static reference visuals (maps, diagrams, anatomy, objects) and gifKeyword for action/emotion/reaction visuals (verbs, celebrations, demonstrations of motion). Set exactly one of the two on any given question — never both.'
+      : undefined,
     cleanRequest.video === 'some'
       ? 'If both imageKeyword and videoKeyword are present, video takes precedence and image can be cleared when video is auto-filled.'
       : undefined,
@@ -11107,6 +11268,7 @@ function normalizeQuizForLive(raw) {
       language: questionVoice,
       audioData: String(q.audioData || ''),
       imageKeyword: String(q.imageKeyword || '').trim().slice(0, 140),
+      gifKeyword: String(q.gifKeyword || '').trim().slice(0, 140),
       videoKeyword: String(q.videoKeyword || '').trim().slice(0, 140),
       videoProviderPreference: ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || '')) ? String(q.videoProviderPreference) : '',
       imageData: String(q.imageData || ''),
@@ -11391,7 +11553,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     }
   }
 
-  const missingImages = questions.filter(q => q && !q.imageData && q.imageKeyword && normalizeQuestionMedia(q.media).kind !== 'video').length;
+  const missingImages = questions.filter(q => q && !q.imageData && (q.imageKeyword || q.gifKeyword) && normalizeQuestionMedia(q.media).kind !== 'video').length;
   if (missingImages > 0) {
     setProgress(`🔍 Auto-searching images for ${missingImages} question(s)...`);
     const result = await autoFillImages(quiz, ({ index, total, status }) => {
@@ -11653,6 +11815,21 @@ async function autoFillImages(quizData, onProgress) {
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (!q || q.imageData || normalizeQuestionMedia(q.media).kind === 'video') { skipped++; continue; }
+
+    // GIF path takes priority: store GIPHY CDN URL directly in imageData (no resize, animation preserved)
+    const gifQuery = String(q.gifKeyword || '').trim().slice(0, 140);
+    if (gifQuery) {
+      onProgress?.({ index: i, total: questions.length, status: 'Searching GIFs...' });
+      try {
+        const items = await giphySearch(gifQuery, 5);
+        if (items[0]?.url) {
+          replaceQuestionImageData(q, items[0].url);
+          filled++;
+          continue;
+        }
+      } catch { /* fall through to imageKeyword if any */ }
+    }
+
     // Only use the explicit imageKeyword field — if empty, skip (creator doesn't want auto-image)
     const rawQuery = String(q.imageKeyword || '').trim().slice(0, 140);
     if (!rawQuery) { skipped++; continue; }
