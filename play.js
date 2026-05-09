@@ -2462,17 +2462,20 @@ function renderJoinQuestion(question) {
       const text = document.createElement('span');
       text.textContent = a.text;
 
-      // --- NEW: Pre-fill answer ---
+      // Pre-fill from saved answer. mcq/tf/audio save Number(origIdx); multi saves an
+      // array of indices. Both can legitimately be 0, so don't fall back via `|| ''`.
       const state = live.player.assignment.state;
       const rawAnswers = state?.attempt?.answersByQ || {};
       const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
-      const studentAnswer = String(answerObj?.answer || '');
-      if (studentAnswer) {
+      const savedRaw = answerObj?.answer;
+      if (savedRaw != null) {
         if (isMulti) {
-          const selected = studentAnswer.split('|').map(s => s.trim());
-          if (selected.includes(String(origIdx + 1)) || selected.includes(a.text)) input.checked = true;
-        } else {
-          if (studentAnswer === String(origIdx + 1) || studentAnswer === a.text) input.checked = true;
+          const arr = Array.isArray(savedRaw) ? savedRaw : [savedRaw];
+          if (arr.some((v) => Number(v) === origIdx || String(v) === a.text)) {
+            input.checked = true;
+          }
+        } else if (Number(savedRaw) === origIdx || String(savedRaw) === a.text) {
+          input.checked = true;
         }
       }
       if (live.player.assignment.reviewMode) {
@@ -2722,20 +2725,20 @@ function renderJoinQuestion(question) {
   if (question.type === 'puzzle') {
     let options = Array.isArray(question.options) ? [...question.options] : [];
 
-    // --- NEW: Pre-fill Puzzle ---
+    // Pre-fill puzzle: saved answer is an array of piece texts (string[]).
     const state = live.player.assignment.state;
     const rawAnswers = state?.attempt?.answersByQ || {};
     const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
-    const savedOrder = String(answerObj?.answer || '').split('|').map(s => s.trim()).filter(Boolean);
+    const savedOrder = Array.isArray(answerObj?.answer)
+      ? answerObj.answer.map((s) => String(s).trim()).filter(Boolean)
+      : [];
     if (savedOrder.length > 0) {
-      // Reorder options to match the student's saved answer
       const reordered = [];
-      savedOrder.forEach(text => {
-        const found = options.find(o => o.text === text);
-        if (found) reordered.push(found);
+      savedOrder.forEach((text) => {
+        const found = options.find((opt) => String(opt).trim() === text);
+        if (found != null && !reordered.includes(found)) reordered.push(found);
       });
-      // Add any missing ones if necessary (fallback)
-      options.forEach(opt => {
+      options.forEach((opt) => {
         if (!reordered.includes(opt)) reordered.push(opt);
       });
       options = reordered;
