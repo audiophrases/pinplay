@@ -466,7 +466,7 @@ function moveAssignmentIndex(delta) {
   playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
-  if (live.player.assignment.reviewMode) renderReviewNavigator();
+  renderReviewNavigator();
 }
 
 function jumpToAssignmentQuestion(qIndex) {
@@ -487,13 +487,20 @@ function jumpToAssignmentQuestion(qIndex) {
 // one numbered chip per question with a status badge (correct/wrong/feedback/pending/unanswered).
 // Tap a chip to jump to that question. The active chip is highlighted and auto-scrolled into view.
 function renderReviewNavigator() {
-  if (!live.player.assignment?.reviewMode) {
+  const state = live.player.assignment?.state;
+  const isReview = !!live.player.assignment?.reviewMode;
+  const isAssignmentAttempt = live.player.mode === 'assignment'
+    && !!state?.attempt?.assignment
+    && !state.attempt.submitted
+    && String(state.attempt.assignment.feedbackMode || 'none') !== 'instant';
+
+  // Only render during review (after submit) or during a non-instant-feedback attempt.
+  if (!isReview && !isAssignmentAttempt) {
     const existing = document.getElementById('reviewNavigator');
     if (existing) existing.remove();
     document.body.classList.remove('review-mode-active');
     return;
   }
-  const state = live.player.assignment.state;
   const questions = Array.isArray(state?.attempt?.assignment?.quiz?.questions) ? state.attempt.assignment.quiz.questions : [];
   if (!questions.length) return;
 
@@ -523,7 +530,11 @@ function renderReviewNavigator() {
 
     let statusClass;
     let badge;
-    if (hasFeedback) {
+    if (isAssignmentAttempt) {
+      // Mid-attempt: don't leak correctness, just show answered vs unanswered.
+      if (ans) { statusClass = 'pending'; badge = '✓'; }
+      else { statusClass = 'unanswered'; badge = '⏸'; }
+    } else if (hasFeedback) {
       statusClass = 'feedback'; badge = '💬';
     } else if (grade?.graded) {
       const pts = Number(grade.pointsAwarded || 0);
@@ -545,7 +556,9 @@ function renderReviewNavigator() {
     chip.type = 'button';
     chip.className = `rev-chip status-${statusClass}`;
     if (qIndex === currentIdx) chip.classList.add('active');
-    chip.title = `Question ${qIndex + 1} — ${statusClass}`;
+    chip.title = isAssignmentAttempt
+      ? `Question ${qIndex + 1} — ${ans ? 'answered' : 'unanswered'}`
+      : `Question ${qIndex + 1} — ${statusClass}`;
     chip.innerHTML = `<span class="rev-chip-num">${qIndex + 1}</span><span class="rev-chip-badge">${badge}</span>`;
     chip.addEventListener('click', () => jumpToAssignmentQuestion(qIndex));
     nav.appendChild(chip);
@@ -692,6 +705,7 @@ async function loadAssignmentState() {
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   renderInstantFeedbackFromState();
+  renderReviewNavigator();
 }
 
 // Load and display previous attempts for a student (disabled: requested removal of history panel)
@@ -2081,8 +2095,24 @@ function renderPlayerState(state) {
   if (joinFinalizeBtn) {
     const showFinalize = live.player.mode === 'assignment';
     joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
-    joinFinalizeBtn.disabled = assignmentSubmitted;
-    joinFinalizeBtn.textContent = assignmentSubmitted ? 'Assignment submitted' : 'Submit assignment';
+    // For non-instant feedback, require all questions answered before allowing submit
+    // (matches the server-side gate). Instant mode keeps the legacy "any answer ok" rule.
+    const totalForGate = Number(state.totalQuestions || 0);
+    const answeredForGate = Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.length : 0;
+    const remainingForGate = Math.max(0, totalForGate - answeredForGate);
+    const requiresAllAnswered = state.feedbackMode !== 'instant' && totalForGate > 0;
+    const blockedByUnanswered = requiresAllAnswered && remainingForGate > 0;
+    joinFinalizeBtn.disabled = assignmentSubmitted || blockedByUnanswered;
+    if (assignmentSubmitted) {
+      joinFinalizeBtn.textContent = 'Assignment submitted';
+      joinFinalizeBtn.title = '';
+    } else if (blockedByUnanswered) {
+      joinFinalizeBtn.textContent = `Submit · ${remainingForGate} unanswered`;
+      joinFinalizeBtn.title = `Answer all ${totalForGate} questions before submitting.`;
+    } else {
+      joinFinalizeBtn.textContent = 'Submit assignment';
+      joinFinalizeBtn.title = '';
+    }
   }
 
   if (live.player.mode === 'assignment') {

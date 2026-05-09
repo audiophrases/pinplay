@@ -2278,6 +2278,21 @@ export class QuizRoom {
         if (Number(metrics.answeredCount || 0) <= 0) {
           return json({ error: 'Answer at least one question before submitting.' }, 409);
         }
+        // Deferred-feedback assignments are global exercises: require every question
+        // answered before the student finalizes. Instant mode keeps the legacy ≥1 rule.
+        if (String(assignment.feedbackMode || 'none') !== 'instant') {
+          const totalQuestions = Math.max(0, Math.round(Number(assignment.totalQuestions
+            || (Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions.length : 0))));
+          if (totalQuestions > 0 && Number(metrics.answeredCount || 0) < totalQuestions) {
+            const remaining = totalQuestions - Number(metrics.answeredCount || 0);
+            return json({
+              error: `Answer all questions before submitting (${remaining} unanswered).`,
+              code: 'UNANSWERED_REMAINING',
+              remaining,
+              totalQuestions,
+            }, 409);
+          }
+        }
 
         attempt.submitted = true;
         attempt.submittedAt = Date.now();
