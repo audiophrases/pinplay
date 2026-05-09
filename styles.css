@@ -1064,6 +1064,15 @@ body.question-active .join-title-row {
   .audio-eq i { animation: none; transform: scaleY(0.7); }
 }
 
+/* Record buttons are locked while the question audio is playing so the
+   mic doesn't pick up the prompt audio. */
+.voice-record-btn.audio-locked,
+.voice-text-mic-btn.audio-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
 /* BOTTOM STICKY SECTION: Interaction Container */
 #joinQuestionInteractive {
   position: fixed;

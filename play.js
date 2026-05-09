@@ -4214,8 +4214,36 @@ function hasAssignmentQuestionAudio(question) {
   return !!question.audioEnabled;
 }
 
+let _assignmentAudioPlaying = false;
+
 function setAssignmentAudioPlayingUi(playing) {
-  if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', !!playing);
+  _assignmentAudioPlaying = !!playing;
+  if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
+  _refreshAssignmentRecordBtnsForAudio();
+}
+
+// Lock voice_record / voice_text record buttons while question audio plays
+// so the mic doesn't pick up the prompt audio. Preserves any prior disabled
+// state (e.g. review mode) so unlocking only undoes our lock.
+function _refreshAssignmentRecordBtnsForAudio() {
+  const btns = document.querySelectorAll('.voice-record-btn, .voice-text-mic-btn');
+  btns.forEach((btn) => {
+    if (_assignmentAudioPlaying) {
+      if (btn.dataset.audioLocked === '1') return;
+      btn.dataset.priorDisabled = btn.disabled ? '1' : '0';
+      btn.dataset.audioLocked = '1';
+      btn.disabled = true;
+      btn.classList.add('audio-locked');
+      btn.title = 'Listen to the question first';
+    } else if (btn.dataset.audioLocked === '1') {
+      const prior = btn.dataset.priorDisabled === '1';
+      delete btn.dataset.audioLocked;
+      delete btn.dataset.priorDisabled;
+      btn.disabled = prior;
+      btn.classList.remove('audio-locked');
+      btn.removeAttribute('title');
+    }
+  });
 }
 
 function stopAssignmentQuestionAudioPlayback() {
@@ -4706,6 +4734,7 @@ function renderVoiceRecorder(container, question) {
 
   wrap.append(recordBtn, stopBtn, timerEl, previewWrap, statusEl);
   container.appendChild(wrap);
+  _refreshAssignmentRecordBtnsForAudio();
 
   // --- NEW: Pre-fill student recording ---
   const state = live.player.assignment.state;
@@ -4997,6 +5026,7 @@ function renderVoiceTextRecognizer(container, question) {
 
   wrap.append(micBtn, stopBtn, transcriptEl, statusEl);
   container.appendChild(wrap);
+  _refreshAssignmentRecordBtnsForAudio();
 
   let finalTranscript = hidden.value || '';
   let interimTranscript = '';
