@@ -1785,7 +1785,21 @@ function renderPlayerState(state) {
   }
 
   if (joinProgressEl) joinProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
-  if (joinScoreEl) joinScoreEl.textContent = `Score: ${state.score}`;
+  if (joinScoreEl) {
+    // In deferred-feedback assignments, the running score leaks correctness — hide it
+    // until the student submits. Live mode and instant-feedback assignments still show it.
+    const hideScore = live.player.mode === 'assignment'
+      && state.feedbackMode !== 'instant'
+      && !state.assignmentSubmitted
+      && !live.player.assignment.reviewMode;
+    if (hideScore) {
+      joinScoreEl.textContent = '';
+      joinScoreEl.classList.add('hidden');
+    } else {
+      joinScoreEl.textContent = `Score: ${state.score}`;
+      joinScoreEl.classList.remove('hidden');
+    }
+  }
 
   // Clear previous feedback to avoid carryover between questions
   // (but preserve immediate live-mode answer reveal HUD)
