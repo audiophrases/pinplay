@@ -9803,7 +9803,7 @@ async function launchStudentPreviewAssignment() {
         attemptsLimit: 0,
         dueAt: null,
         randomNames: true,
-        feedbackMode: 'instant',
+        feedbackMode: assignmentFeedbackMode,
         quiz: payload,
       },
     });
