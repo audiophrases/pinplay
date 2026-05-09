@@ -2725,26 +2725,27 @@ function renderJoinQuestion(question) {
   if (question.type === 'puzzle') {
     let options = Array.isArray(question.options) ? [...question.options] : [];
 
-    // Pre-fill puzzle: saved answer is an array of piece texts (string[]).
+    // Saved puzzle answer is the picked-piece order (string[]). Read it before
+    // building the DnD so we can replay the picks afterwards.
     const state = live.player.assignment.state;
     const rawAnswers = state?.attempt?.answersByQ || {};
     const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
     const savedOrder = Array.isArray(answerObj?.answer)
       ? answerObj.answer.map((s) => String(s).trim()).filter(Boolean)
       : [];
-    if (savedOrder.length > 0) {
-      const reordered = [];
-      savedOrder.forEach((text) => {
-        const found = options.find((opt) => String(opt).trim() === text);
-        if (found != null && !reordered.includes(found)) reordered.push(found);
-      });
-      options.forEach((opt) => {
-        if (!reordered.includes(opt)) reordered.push(opt);
-      });
-      options = reordered;
-    }
 
     createPuzzleDnd(joinAnswersEl, options, 'joinPuzzlePieces');
+
+    // Replay the saved picks by clicking the matching bank buttons in order.
+    // markAnswerDirty fires inside pickPiece, so reset the dirty flag afterwards.
+    if (savedOrder.length > 0) {
+      const wrap = joinAnswersEl.querySelector('.puzzle-wrap');
+      savedOrder.forEach((text) => {
+        const btn = wrap?.querySelector(`[data-puzzle-bank-piece="${CSS.escape(text)}"]`);
+        if (btn && !btn.disabled) btn.click();
+      });
+      live.player.assignment.dirtyAnswer = false;
+    }
 
     if (live.player.assignment.reviewMode) {
       joinAnswersEl.querySelectorAll('.puzzle-piece').forEach(p => {
@@ -2838,6 +2839,21 @@ function renderJoinQuestion(question) {
     container.append(countLabel, wrap);
     joinAnswersEl.appendChild(container);
 
+    // Pre-fill from saved answer (array of {x, y}). Pin selections were reset to []
+    // at the start of the render pass; restore them here so the dots reappear.
+    {
+      const state2 = live.player.assignment.state;
+      const rawAnswers2 = state2?.attempt?.answersByQ || {};
+      const answerObj2 = rawAnswers2[String(live.player.assignment.currentIndex)];
+      const savedPicks = Array.isArray(answerObj2?.answer)
+        ? answerObj2.answer.filter((p) => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+        : [];
+      if (savedPicks.length > 0) {
+        live.player.pinSelections = savedPicks.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+        live.player.pinSelection = live.player.pinSelections[0] || null;
+      }
+    }
+
     const renderPicks = () => {
       picksLayer.innerHTML = '';
       const picks = live.player.pinSelections || [];
@@ -2871,6 +2887,7 @@ function renderJoinQuestion(question) {
       live.player.pinSelections = picks;
       live.player.pinSelection = picks[0] || null;
       renderPicks();
+      markAnswerDirty();
     });
 
     renderPicks();
