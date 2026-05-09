@@ -2262,6 +2262,12 @@ function renderJoinQuestion(question) {
     const icon = questionTypeIcon(question.type);
     const promptText = question.prompt || '(No question text)';
     joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+    const eq = document.createElement('span');
+    eq.className = 'audio-eq';
+    eq.setAttribute('aria-hidden', 'true');
+    eq.innerHTML = '<i></i><i></i><i></i>';
+    joinPromptEl.append(' ', eq);
+    joinPromptEl.classList.remove('audio-playing');
   }
 
   // Store current question for keyboard shortcut
@@ -4208,6 +4214,10 @@ function hasAssignmentQuestionAudio(question) {
   return !!question.audioEnabled;
 }
 
+function setAssignmentAudioPlayingUi(playing) {
+  if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', !!playing);
+}
+
 function stopAssignmentQuestionAudioPlayback() {
   try {
     if (activeAssignmentQuestionAudioEl) {
@@ -4220,6 +4230,8 @@ function stopAssignmentQuestionAudioPlayback() {
   try {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   } catch { }
+
+  setAssignmentAudioPlayingUi(false);
 }
 
 async function playAssignmentQuestionAudio(question, opts = {}) {
@@ -4231,8 +4243,10 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
 
   const playAudioEl = (audioEl) => new Promise((resolve) => {
     activeAssignmentQuestionAudioEl = audioEl;
+    setAssignmentAudioPlayingUi(true);
     const onFinish = () => {
       if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
+      setAssignmentAudioPlayingUi(false);
       resolve(true);
     };
     audioEl.addEventListener('ended', onFinish, { once: true });
@@ -4287,11 +4301,13 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = question.language || 'en-US';
-      utterance.addEventListener('end', () => { }, { once: true });
-      utterance.addEventListener('error', () => { }, { once: true });
+      setAssignmentAudioPlayingUi(true);
+      utterance.addEventListener('end', () => { setAssignmentAudioPlayingUi(false); }, { once: true });
+      utterance.addEventListener('error', () => { setAssignmentAudioPlayingUi(false); }, { once: true });
       window.speechSynthesis.speak(utterance);
       return true;
     } catch {
+      setAssignmentAudioPlayingUi(false);
       return false;
     }
   }
