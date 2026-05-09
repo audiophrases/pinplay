@@ -154,24 +154,7 @@ function init() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       const q = live.player.currentQuestion;
       if (!q) return;
-      // Play recorded audio file if available
-      if (q.audioMode === 'file' && q.audioData) {
-        try {
-          // Support relative paths - prepend Worker API base URL
-          let audioUrl = q.audioData;
-          if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
-            const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
-            audioUrl = `${base}/api/media/${audioUrl}`;
-          }
-          const audio = new Audio(audioUrl);
-          audio.play();
-        } catch (e) { console.warn('Audio playback failed:', e); }
-        return;
-      }
-      // Otherwise use Edge TTS
-      const text = q.audioText || q.prompt || '';
-      const lang = q.language || 'en-US-AndrewMultilingualNeural';
-      speakText(text, lang);
+      playAssignmentQuestionAudio(q).catch((err) => console.warn('Audio playback failed:', err));
     }
   });
 
@@ -2265,7 +2248,7 @@ function renderJoinQuestion(question) {
     const eq = document.createElement('span');
     eq.className = 'audio-eq';
     eq.setAttribute('aria-hidden', 'true');
-    eq.innerHTML = '<i></i><i></i><i></i>';
+    eq.innerHTML = '<i></i>'.repeat(10);
     joinPromptEl.append(' ', eq);
     joinPromptEl.classList.remove('audio-playing');
   }

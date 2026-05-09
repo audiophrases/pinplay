@@ -1027,13 +1027,12 @@ body.question-active .join-title-row {
   width: 100% !important;
 }
 
-/* "Audio is playing" indicator — 3 bouncing equalizer bars next to the question text */
+/* "Audio is playing" indicator — VU-meter style bars next to the question text */
 .audio-eq {
   display: none;
   align-items: flex-end;
-  gap: 3px;
-  width: 22px;
-  height: 18px;
+  gap: 2px;
+  height: 22px;
   vertical-align: middle;
   margin-left: 0.55rem;
 }
@@ -1044,20 +1043,43 @@ body.question-active .join-title-row {
 
 .audio-eq i {
   display: block;
-  width: 4px;
+  width: 3px;
   height: 100%;
-  background: var(--primary);
-  border-radius: 2px;
+  background: linear-gradient(to top,
+    #2ecc71 0%, #2ecc71 35%,
+    #f1c40f 55%, #f1c40f 70%,
+    #e74c3c 88%, #e74c3c 100%);
+  border-radius: 1px;
   transform-origin: bottom center;
-  animation: audio-eq-bounce 0.9s ease-in-out infinite;
 }
 
-.audio-eq i:nth-child(2) { animation-delay: 0.15s; }
-.audio-eq i:nth-child(3) { animation-delay: 0.3s; }
+.audio-eq i:nth-child(1)  { animation: audio-eq-a 0.70s ease-in-out infinite        ; }
+.audio-eq i:nth-child(2)  { animation: audio-eq-b 0.55s ease-in-out infinite -0.10s ; }
+.audio-eq i:nth-child(3)  { animation: audio-eq-c 0.85s ease-in-out infinite -0.05s ; }
+.audio-eq i:nth-child(4)  { animation: audio-eq-a 0.60s ease-in-out infinite -0.20s ; }
+.audio-eq i:nth-child(5)  { animation: audio-eq-b 0.95s ease-in-out infinite -0.15s ; }
+.audio-eq i:nth-child(6)  { animation: audio-eq-c 0.70s ease-in-out infinite -0.25s ; }
+.audio-eq i:nth-child(7)  { animation: audio-eq-a 0.50s ease-in-out infinite -0.30s ; }
+.audio-eq i:nth-child(8)  { animation: audio-eq-b 0.80s ease-in-out infinite -0.10s ; }
+.audio-eq i:nth-child(9)  { animation: audio-eq-c 0.65s ease-in-out infinite -0.20s ; }
+.audio-eq i:nth-child(10) { animation: audio-eq-a 0.75s ease-in-out infinite -0.05s ; }
 
-@keyframes audio-eq-bounce {
-  0%, 100% { transform: scaleY(0.35); }
-  50%      { transform: scaleY(1); }
+@keyframes audio-eq-a {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(0.95); }
+}
+
+@keyframes audio-eq-b {
+  0%, 100% { transform: scaleY(0.50); }
+  30%      { transform: scaleY(0.15); }
+  70%      { transform: scaleY(0.85); }
+}
+
+@keyframes audio-eq-c {
+  0%, 100% { transform: scaleY(0.30); }
+  25%      { transform: scaleY(0.70); }
+  60%      { transform: scaleY(1.00); }
+  85%      { transform: scaleY(0.40); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1067,10 +1089,16 @@ body.question-active .join-title-row {
 /* Record buttons are locked while the question audio is playing so the
    mic doesn't pick up the prompt audio. */
 .voice-record-btn.audio-locked,
-.voice-text-mic-btn.audio-locked {
-  opacity: 0.5;
-  cursor: not-allowed;
-  filter: grayscale(0.4);
+.voice-text-mic-btn.audio-locked,
+.voice-record-btn.audio-locked:hover,
+.voice-text-mic-btn.audio-locked:hover {
+  background: #c5c8cf !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  opacity: 0.7;
+  filter: grayscale(1);
 }
 
 /* BOTTOM STICKY SECTION: Interaction Container */
