@@ -192,21 +192,22 @@ function init() {
 
     // Detect edits on a previously-saved answer in deferred-feedback assignments so the
     // submit button flips back from Continue to Save answer (otherwise edits silently lost).
-    const markAnswerDirty = () => {
-      if (live.player.mode !== 'assignment') return;
-      if (!live.player.assignment.state) return;
-      if (live.player.assignment.reviewMode) return;
-      if (live.player.assignment.state.attempt?.submitted) return;
-      const fbMode = String(live.player.assignment.state.attempt?.assignment?.feedbackMode || 'none');
-      if (fbMode === 'instant') return;
-      if (live.player.assignment.dirtyAnswer) return;
-      live.player.assignment.dirtyAnswer = true;
-      if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
-        joinSubmitBtn.textContent = 'Save answer';
-      }
-    };
     joinAnswersEl.addEventListener('input', markAnswerDirty);
     joinAnswersEl.addEventListener('change', markAnswerDirty);
+  }
+}
+
+function markAnswerDirty() {
+  if (live.player.mode !== 'assignment') return;
+  if (!live.player.assignment.state) return;
+  if (live.player.assignment.reviewMode) return;
+  if (live.player.assignment.state.attempt?.submitted) return;
+  const fbMode = String(live.player.assignment.state.attempt?.assignment?.feedbackMode || 'none');
+  if (fbMode === 'instant') return;
+  if (live.player.assignment.dirtyAnswer) return;
+  live.player.assignment.dirtyAnswer = true;
+  if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
+    joinSubmitBtn.textContent = 'Save answer';
   }
 }
 
@@ -3479,6 +3480,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey,
     selectedLeft = -1;
     selectedRight = '';
     refreshUi();
+    markAnswerDirty();
   };
 
   const drawConnections = () => {
@@ -3578,6 +3580,7 @@ function renderMatchPairsColumns(container, leftItems, rightOptions, datasetKey,
       if (live.player.assignment.reviewMode) return;
       hidden.value = '';
       refreshUi();
+      markAnswerDirty();
     });
 
     row.addEventListener('dragover', (e) => {
@@ -3711,6 +3714,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
       else selected.insertBefore(draggedRow, row.nextSibling);
       clearDropHints();
       refreshSelectedIndexes();
+      markAnswerDirty();
     });
   };
 
@@ -3735,6 +3739,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     rowEl.remove();
     refreshSelectedIndexes();
     refreshBankButtons();
+    markAnswerDirty();
   };
 
   const buildBankButton = (value, pieceId) => {
@@ -3764,6 +3769,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     selected.querySelectorAll('[data-puzzle-piece]').forEach((el) => el.remove());
     refreshSelectedIndexes();
     refreshBankButtons();
+    markAnswerDirty();
   };
 
   selected.addEventListener('contextmenu', (e) => {
@@ -3808,6 +3814,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
     selected.appendChild(row);
     refreshSelectedIndexes();
     refreshBankButtons();
+    markAnswerDirty();
   };
 
   options.forEach((text, i) => {
