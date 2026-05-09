@@ -102,6 +102,7 @@ const live = {
       forceAutoAdvance: false,
       pendingComplete: false,
       resultsListCollapsed: false,
+      bypassAllAnsweredScreen: false,
     },
   },
 };
@@ -658,6 +659,7 @@ function mapAssignmentStateToPlayerState() {
     questionClosed,
     questionCloseReason: questionClosed ? 'manual_reveal' : null,
     answeredCurrent,
+    feedbackMode: String(assignment.feedbackMode || 'none'),
     assignmentSubmitted: !!attempt?.submitted,
     answeredQIndexes: Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : [],
     question,
@@ -1388,6 +1390,8 @@ function showAssignmentCompleteMessage(text, opts = {}) {
     showFinishButton = false,
     finishLabel = 'Submit assignment',
     submitted = false,
+    showReviewButton = false,
+    reviewLabel = '↶ Review and edit answers',
   } = opts || {};
 
   const submissionWrap = document.getElementById('joinSubmission');
@@ -1418,6 +1422,28 @@ function showAssignmentCompleteMessage(text, opts = {}) {
   const bodyEl = document.createElement('div');
   bodyEl.textContent = text || 'Assignment submitted. You have completed this attempt.';
   box.appendChild(bodyEl);
+
+  if (showReviewButton && !submitted) {
+    const reviewBtn = document.createElement('button');
+    reviewBtn.type = 'button';
+    reviewBtn.className = 'btn top-space';
+    reviewBtn.textContent = reviewLabel;
+    reviewBtn.style.marginRight = '0.5rem';
+    reviewBtn.addEventListener('click', () => {
+      live.player.assignment.bypassAllAnsweredScreen = true;
+      hideAssignmentCompleteMessage();
+      const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions
+        || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
+      // Land on the first question so the student can sweep through.
+      jumpToAssignmentQuestion(0);
+      if (total > 0) {
+        // Re-render in case currentIndex was already 0.
+        const mapped = mapAssignmentStateToPlayerState();
+        if (mapped) renderPlayerState(mapped);
+      }
+    });
+    box.appendChild(reviewBtn);
+  }
 
   if (showFinishButton && !submitted) {
     const btn = document.createElement('button');
@@ -1909,7 +1935,7 @@ function renderPlayerState(state) {
   const answeredSet = new Set(Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.map((x) => Number(x)) : []);
   const allAssignmentAnswersSaved = live.player.mode === 'assignment' && assignmentTotal > 0 && answeredSet.size >= assignmentTotal;
 
-  if (allAssignmentAnswersSaved && !assignmentSubmitted && !live.player.assignment.pendingComplete) {
+  if (allAssignmentAnswersSaved && !assignmentSubmitted && !live.player.assignment.pendingComplete && !live.player.assignment.bypassAllAnsweredScreen) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
     stopJoinTimer();
@@ -1926,10 +1952,13 @@ function renderPlayerState(state) {
     }
     setJoinStatusHud('All answers saved ✅', 'ok');
     setStatus(joinStatusEl, 'End of quiz reached. Submit assignment to finish.', 'ok');
+    const allowEditing = state.feedbackMode !== 'instant';
     showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
       title: 'End of quiz 🎉',
       showFinishButton: true,
       finishLabel: 'Submit assignment',
+      showReviewButton: allowEditing,
+      reviewLabel: '↶ Review and edit answers',
     });
     scheduleJoinAdaptiveFit();
     return;
@@ -2004,13 +2033,27 @@ function renderPlayerState(state) {
     lastClosedQuestionIndex = state.currentIndex;
   }
 
+  // In assignment mode with deferred feedback (non-instant) and not yet submitted,
+  // a previously-saved answer can be edited and re-saved until the student finalizes.
+  const isEditableSavedAnswer = live.player.mode === 'assignment'
+    && !!state.answeredCurrent
+    && !assignmentSubmitted
+    && state.feedbackMode !== 'instant'
+    && !live.player.assignment.reviewMode;
+
   // Update shouldDisable to include answeredCurrent for both modes
-  const shouldDisable = questionClosed || assignmentSubmitted || !!state.answeredCurrent || isAnswerFullscreenLocked();
+  const shouldDisable = questionClosed
+    || assignmentSubmitted
+    || (!!state.answeredCurrent && !isEditableSavedAnswer)
+    || isAnswerFullscreenLocked();
 
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
     // Change to Continue if the question is closed OR if the student has already answered
-    const isContinueMode = isAssignment && (questionClosed || state.answeredCurrent) && !assignmentSubmitted;
+    // (but stay on "Save answer" while the saved answer is still editable).
+    const isContinueMode = isAssignment
+      && (questionClosed || (state.answeredCurrent && !isEditableSavedAnswer))
+      && !assignmentSubmitted;
 
     if (isContinueMode) {
       joinSubmitBtn.textContent = live.player.assignment.pendingComplete ? 'Finish quiz' : 'Continue';
@@ -2439,6 +2482,22 @@ function renderJoinQuestion(question) {
       const gapCount = Number(question.gapCount || (question.gaps || []).length || 1);
       const count = Math.max(1, Math.min(10, gapCount));
       renderInlineContextGapInputs(joinAnswersEl, question.prompt, count, 'joinGap');
+
+      // Pre-fill from previously-saved answer (array of strings, one per gap).
+      const savedAnswers = (() => {
+        const raw = live.player.assignment.state?.attempt?.answersByQ || {};
+        const obj = raw[String(live.player.assignment.currentIndex)];
+        return Array.isArray(obj?.answer) ? obj.answer : null;
+      })();
+      if (savedAnswers) {
+        joinAnswersEl.querySelectorAll('[data-join-gap]').forEach((input) => {
+          const i = Number(input.dataset.joinGap);
+          if (Number.isFinite(i) && savedAnswers[i] != null) {
+            input.value = String(savedAnswers[i]);
+            input.readOnly = false;
+          }
+        });
+      }
     } else if (question.type === 'match_pairs') {
       const leftItems = Array.isArray(question.leftItems) ? question.leftItems : [];
       const rightOptions = Array.isArray(question.rightOptions) ? question.rightOptions : [];
@@ -2972,6 +3031,10 @@ async function submitLiveAnswer() {
       if (!code || !attemptId) throw new Error('Start assignment first.');
 
       const qIndex = Number(live.player.assignment.currentIndex || 0);
+      // If this question was already answered before this save, treat the call as an
+      // edit (deferred-feedback mode) and stay put rather than auto-advancing.
+      const wasAlreadyAnswered = Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
+        && live.player.assignment.state.attempt.answeredQIndexes.map(Number).includes(qIndex);
       const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
@@ -2984,7 +3047,7 @@ async function submitLiveAnswer() {
       });
 
       const mode = data?.attempt?.assignment?.feedbackMode || 'none';
-      if (mode !== 'instant') {
+      if (mode !== 'instant' && !wasAlreadyAnswered) {
         live.player.assignment.forceAutoAdvance = true;
       }
 
