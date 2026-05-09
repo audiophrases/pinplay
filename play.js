@@ -2160,34 +2160,11 @@ function renderPlayerState(state) {
 
     if (assignmentBannerEl) {
       assignmentBannerEl.classList.remove('hidden');
-      // While bypassing the all-answered overlay (after "Review and edit answers"), show
-      // a clickable hook so the student can return to the end-of-quiz summary screen.
-      const inReviewEdit = !!live.player.assignment.bypassAllAnsweredScreen
-        && !assignmentSubmitted
-        && total > 0
-        && answered.size >= total
-        && !isReview;
-      if (inReviewEdit) {
-        assignmentBannerEl.textContent = '';
-        const txt = document.createElement('span');
-        txt.textContent = `Editing · ${answered.size}/${total} answered · `;
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;text-decoration:underline;font:inherit;padding:0;';
-        back.textContent = '↩ Back to summary';
-        back.addEventListener('click', () => {
-          live.player.assignment.bypassAllAnsweredScreen = false;
-          const mapped = mapAssignmentStateToPlayerState();
-          if (mapped) renderPlayerState(mapped);
-        });
-        assignmentBannerEl.append(txt, back);
-      } else {
-        assignmentBannerEl.textContent = isReview
-          ? `Reviewing question ${idx + 1} of ${total}`
-          : assignmentSubmitted
-            ? 'Assignment submitted. Waiting for teacher review.'
-            : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
-      }
+      assignmentBannerEl.textContent = isReview
+        ? `Reviewing question ${idx + 1} of ${total}`
+        : assignmentSubmitted
+          ? 'Assignment submitted. Waiting for teacher review.'
+          : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
     }
   } else {
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
