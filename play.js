@@ -2248,7 +2248,7 @@ function renderJoinQuestion(question) {
     const eq = document.createElement('span');
     eq.className = 'audio-eq';
     eq.setAttribute('aria-hidden', 'true');
-    eq.innerHTML = '<span>🎧</span>';
+    eq.innerHTML = '<span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="emoji">🎧</span>';
     joinPromptEl.append(' ', eq);
     joinPromptEl.classList.remove('audio-playing');
   }
