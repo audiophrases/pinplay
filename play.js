@@ -2242,9 +2242,15 @@ function renderJoinQuestion(question) {
     }
   }
   if (joinPromptEl) {
-    const icon = questionTypeIcon(question.type);
-    const promptText = question.prompt || '(No question text)';
-    joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+    if (question.type === 'context_gap') {
+      // Sentence is rendered inline with input blanks below; show a generic cue here instead of duplicating it.
+      const gapCount = Math.max(1, Math.min(10, Number(question.gapCount || (question.gaps || []).length || 1)));
+      joinPromptEl.textContent = gapCount > 1 ? '🕳️ Fill in the gaps' : '🕳️ Fill in the gap';
+    } else {
+      const icon = questionTypeIcon(question.type);
+      const promptText = question.prompt || '(No question text)';
+      joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+    }
     const eq = document.createElement('span');
     eq.className = 'audio-eq';
     eq.setAttribute('aria-hidden', 'true');

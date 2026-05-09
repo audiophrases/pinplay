@@ -8943,9 +8943,10 @@ function renderJoinQuestion(question) {
   const oldOverlay = document.getElementById('matchPairsCenterOverlay');
   if (oldOverlay) oldOverlay.remove();
 
-  // context_gap renders the sentence inline with blanks, so avoid duplicating the same text above.
+  // context_gap renders the sentence inline with blanks, so show a generic cue instead of duplicating it.
   if (question.type === 'context_gap') {
-    joinPromptEl.textContent = '';
+    const gapCount = Math.max(1, Math.min(10, Number(question.gapCount || (question.gaps || []).length || 1)));
+    joinPromptEl.textContent = gapCount > 1 ? '🕳️ Fill in the gaps' : '🕳️ Fill in the gap';
   } else {
     const icon = iconForType(question.type);
     const promptText = question.prompt || '(No question text)';
