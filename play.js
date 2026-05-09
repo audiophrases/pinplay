@@ -481,7 +481,14 @@ function moveAssignmentIndex(delta) {
   if (live.player.mode !== 'assignment') return;
   const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
   if (total <= 0) return;
-  live.player.assignment.currentIndex = clampAssignmentIndex(Number(live.player.assignment.currentIndex || 0) + Number(delta || 0), total);
+  const step = Number(delta || 0);
+  const requested = Number(live.player.assignment.currentIndex || 0) + step;
+  // If the student advances past the last question while editing answers, drop the
+  // bypass so the End-of-quiz screen reappears on the next render.
+  if (step > 0 && requested >= total && live.player.assignment.bypassAllAnsweredScreen) {
+    live.player.assignment.bypassAllAnsweredScreen = false;
+  }
+  live.player.assignment.currentIndex = clampAssignmentIndex(requested, total);
   pickNewAnsweringTrack();
   playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
@@ -1411,7 +1418,7 @@ function showAssignmentCompleteMessage(text, opts = {}) {
     finishLabel = 'Submit assignment',
     submitted = false,
     showReviewButton = false,
-    reviewLabel = '↶ Review and edit answers',
+    reviewLabel = 'Edit answers',
   } = opts || {};
 
   const submissionWrap = document.getElementById('joinSubmission');
@@ -1992,7 +1999,7 @@ function renderPlayerState(state) {
       showFinishButton: true,
       finishLabel: 'Submit assignment',
       showReviewButton: allowEditing,
-      reviewLabel: '↶ Review and edit answers',
+      reviewLabel: 'Edit answers',
     });
     scheduleJoinAdaptiveFit();
     return;
