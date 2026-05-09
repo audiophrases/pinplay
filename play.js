@@ -466,7 +466,7 @@ function moveAssignmentIndex(delta) {
   playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
-  renderReviewNavigator();
+  if (live.player.assignment.reviewMode) renderReviewNavigator();
 }
 
 function jumpToAssignmentQuestion(qIndex) {
@@ -487,20 +487,13 @@ function jumpToAssignmentQuestion(qIndex) {
 // one numbered chip per question with a status badge (correct/wrong/feedback/pending/unanswered).
 // Tap a chip to jump to that question. The active chip is highlighted and auto-scrolled into view.
 function renderReviewNavigator() {
-  const state = live.player.assignment?.state;
-  const isReview = !!live.player.assignment?.reviewMode;
-  const isAssignmentAttempt = live.player.mode === 'assignment'
-    && !!state?.attempt?.assignment
-    && !state.attempt.submitted
-    && String(state.attempt.assignment.feedbackMode || 'none') !== 'instant';
-
-  // Only render during review (after submit) or during a non-instant-feedback attempt.
-  if (!isReview && !isAssignmentAttempt) {
+  if (!live.player.assignment?.reviewMode) {
     const existing = document.getElementById('reviewNavigator');
     if (existing) existing.remove();
     document.body.classList.remove('review-mode-active');
     return;
   }
+  const state = live.player.assignment.state;
   const questions = Array.isArray(state?.attempt?.assignment?.quiz?.questions) ? state.attempt.assignment.quiz.questions : [];
   if (!questions.length) return;
 
@@ -530,11 +523,7 @@ function renderReviewNavigator() {
 
     let statusClass;
     let badge;
-    if (isAssignmentAttempt) {
-      // Mid-attempt: don't leak correctness, just show answered vs unanswered.
-      if (ans) { statusClass = 'pending'; badge = '✓'; }
-      else { statusClass = 'unanswered'; badge = '⏸'; }
-    } else if (hasFeedback) {
+    if (hasFeedback) {
       statusClass = 'feedback'; badge = '💬';
     } else if (grade?.graded) {
       const pts = Number(grade.pointsAwarded || 0);
@@ -556,9 +545,7 @@ function renderReviewNavigator() {
     chip.type = 'button';
     chip.className = `rev-chip status-${statusClass}`;
     if (qIndex === currentIdx) chip.classList.add('active');
-    chip.title = isAssignmentAttempt
-      ? `Question ${qIndex + 1} — ${ans ? 'answered' : 'unanswered'}`
-      : `Question ${qIndex + 1} — ${statusClass}`;
+    chip.title = `Question ${qIndex + 1} — ${statusClass}`;
     chip.innerHTML = `<span class="rev-chip-num">${qIndex + 1}</span><span class="rev-chip-badge">${badge}</span>`;
     chip.addEventListener('click', () => jumpToAssignmentQuestion(qIndex));
     nav.appendChild(chip);
@@ -705,7 +692,6 @@ async function loadAssignmentState() {
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   renderInstantFeedbackFromState();
-  renderReviewNavigator();
 }
 
 // Load and display previous attempts for a student (disabled: requested removal of history panel)
