@@ -2248,7 +2248,7 @@ function renderJoinQuestion(question) {
     const eq = document.createElement('span');
     eq.className = 'audio-eq';
     eq.setAttribute('aria-hidden', 'true');
-    eq.innerHTML = '<i></i>'.repeat(10);
+    eq.innerHTML = '<i></i><i></i><i></i>';
     joinPromptEl.append(' ', eq);
     joinPromptEl.classList.remove('audio-playing');
   }
@@ -4205,6 +4205,13 @@ function setAssignmentAudioPlayingUi(playing) {
   _refreshAssignmentRecordBtnsForAudio();
 }
 
+// Hide just the visual bars (used to fade them out ~0.7s before audio ends
+// so the indicator doesn't disappear at the exact moment audio stops, which
+// felt abrupt). The record-button lock stays until actual audio end.
+function hideAssignmentAudioBarsEarly() {
+  if (joinPromptEl) joinPromptEl.classList.remove('audio-playing');
+}
+
 // Lock voice_record / voice_text record buttons while question audio plays
 // so the mic doesn't pick up the prompt audio. Preserves any prior disabled
 // state (e.g. review mode) so unlocking only undoes our lock.
@@ -4255,11 +4262,24 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
   const playAudioEl = (audioEl) => new Promise((resolve) => {
     activeAssignmentQuestionAudioEl = audioEl;
     setAssignmentAudioPlayingUi(true);
+    let earlyHideTimer = null;
+    const clearEarlyHide = () => {
+      if (earlyHideTimer) { clearTimeout(earlyHideTimer); earlyHideTimer = null; }
+    };
     const onFinish = () => {
+      clearEarlyHide();
       if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
       setAssignmentAudioPlayingUi(false);
       resolve(true);
     };
+    audioEl.addEventListener('loadedmetadata', () => {
+      const dur = audioEl.duration;
+      if (!Number.isFinite(dur) || dur <= 0.7) return;
+      clearEarlyHide();
+      earlyHideTimer = setTimeout(() => {
+        if (activeAssignmentQuestionAudioEl === audioEl) hideAssignmentAudioBarsEarly();
+      }, Math.max(0, (dur - 0.7) * 1000));
+    }, { once: true });
     audioEl.addEventListener('ended', onFinish, { once: true });
     audioEl.addEventListener('error', onFinish, { once: true });
     audioEl.play().catch(() => onFinish());

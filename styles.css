@@ -1027,12 +1027,14 @@ body.question-active .join-title-row {
   width: 100% !important;
 }
 
-/* "Audio is playing" indicator — VU-meter style bars next to the question text */
+/* "Audio is playing" indicator — 3 green equalizer bars next to the question text.
+   Each bar uses a different keyframe shape and a prime-ish duration so they
+   never sync into a uniform wave, which would read as a "loading" spinner. */
 .audio-eq {
   display: none;
   align-items: flex-end;
-  gap: 2px;
-  height: 22px;
+  gap: 3px;
+  height: 18px;
   vertical-align: middle;
   margin-left: 0.55rem;
 }
@@ -1043,43 +1045,40 @@ body.question-active .join-title-row {
 
 .audio-eq i {
   display: block;
-  width: 3px;
+  width: 4px;
   height: 100%;
-  background: linear-gradient(to top,
-    #2ecc71 0%, #2ecc71 35%,
-    #f1c40f 55%, #f1c40f 70%,
-    #e74c3c 88%, #e74c3c 100%);
-  border-radius: 1px;
+  background: #2ecc71;
+  border-radius: 2px;
   transform-origin: bottom center;
 }
 
-.audio-eq i:nth-child(1)  { animation: audio-eq-a 0.70s ease-in-out infinite        ; }
-.audio-eq i:nth-child(2)  { animation: audio-eq-b 0.55s ease-in-out infinite -0.10s ; }
-.audio-eq i:nth-child(3)  { animation: audio-eq-c 0.85s ease-in-out infinite -0.05s ; }
-.audio-eq i:nth-child(4)  { animation: audio-eq-a 0.60s ease-in-out infinite -0.20s ; }
-.audio-eq i:nth-child(5)  { animation: audio-eq-b 0.95s ease-in-out infinite -0.15s ; }
-.audio-eq i:nth-child(6)  { animation: audio-eq-c 0.70s ease-in-out infinite -0.25s ; }
-.audio-eq i:nth-child(7)  { animation: audio-eq-a 0.50s ease-in-out infinite -0.30s ; }
-.audio-eq i:nth-child(8)  { animation: audio-eq-b 0.80s ease-in-out infinite -0.10s ; }
-.audio-eq i:nth-child(9)  { animation: audio-eq-c 0.65s ease-in-out infinite -0.20s ; }
-.audio-eq i:nth-child(10) { animation: audio-eq-a 0.75s ease-in-out infinite -0.05s ; }
+.audio-eq i:nth-child(1) { animation: audio-eq-1 0.62s ease-in-out infinite; }
+.audio-eq i:nth-child(2) { animation: audio-eq-2 0.83s ease-in-out infinite; }
+.audio-eq i:nth-child(3) { animation: audio-eq-3 0.71s ease-in-out infinite; }
 
-@keyframes audio-eq-a {
-  0%, 100% { transform: scaleY(0.25); }
-  50%      { transform: scaleY(0.95); }
+@keyframes audio-eq-1 {
+  0%   { transform: scaleY(0.30); }
+  22%  { transform: scaleY(0.85); }
+  46%  { transform: scaleY(0.40); }
+  72%  { transform: scaleY(1.00); }
+  100% { transform: scaleY(0.30); }
 }
 
-@keyframes audio-eq-b {
-  0%, 100% { transform: scaleY(0.50); }
-  30%      { transform: scaleY(0.15); }
-  70%      { transform: scaleY(0.85); }
+@keyframes audio-eq-2 {
+  0%   { transform: scaleY(0.55); }
+  18%  { transform: scaleY(0.20); }
+  44%  { transform: scaleY(0.95); }
+  66%  { transform: scaleY(0.45); }
+  88%  { transform: scaleY(0.75); }
+  100% { transform: scaleY(0.55); }
 }
 
-@keyframes audio-eq-c {
-  0%, 100% { transform: scaleY(0.30); }
-  25%      { transform: scaleY(0.70); }
-  60%      { transform: scaleY(1.00); }
-  85%      { transform: scaleY(0.40); }
+@keyframes audio-eq-3 {
+  0%   { transform: scaleY(0.40); }
+  28%  { transform: scaleY(0.90); }
+  55%  { transform: scaleY(0.25); }
+  82%  { transform: scaleY(0.65); }
+  100% { transform: scaleY(0.40); }
 }
 
 @media (prefers-reduced-motion: reduce) {
