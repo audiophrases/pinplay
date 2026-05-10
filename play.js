@@ -395,6 +395,9 @@ async function joinLiveGame() {
 
   try {
     if (live.player.mode === 'assignment') {
+      // Unlock ambient audio while we still have the user gesture; later
+      // .play() calls happen after awaits and would otherwise be blocked.
+      unlockAssignmentAmbient();
       if (!live.player.assignment.code) {
         await validatePin();
         if (!live.player.assignment.code) return;
@@ -4563,6 +4566,37 @@ function playAssignmentSfx(name) {
 
 function pickNewAnsweringTrack() {
   currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
+}
+
+// Browsers (esp. iOS Safari) only allow Audio.play() inside a user gesture.
+// `joinLiveGame` -> `startAssignmentAttempt` chains several awaits before the
+// first ambient .play() is called, which breaks that gesture link and the
+// .play() promise rejects silently. This warmup runs synchronously inside the
+// click handler: a silent play()+pause() on every ambient track unlocks them
+// for later, off-gesture playback.
+let assignmentAmbientUnlocked = false;
+function unlockAssignmentAmbient() {
+  if (assignmentAmbientUnlocked) return;
+  const all = [
+    assignmentAmbient.hall,
+    assignmentAmbient.final,
+    ...(assignmentAmbient.answering || []),
+  ].filter(Boolean);
+  if (!all.length) return;
+  all.forEach((a) => {
+    try {
+      const prevVolume = a.volume;
+      a.muted = true;
+      const p = a.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => { try { a.pause(); a.currentTime = 0; a.muted = false; a.volume = prevVolume; } catch { } })
+         .catch(() => { try { a.muted = false; a.volume = prevVolume; } catch { } });
+      } else {
+        a.pause(); a.currentTime = 0; a.muted = false; a.volume = prevVolume;
+      }
+    } catch { }
+  });
+  assignmentAmbientUnlocked = true;
 }
 
 // Soft-pause the current answering track (no currentTime reset) so a mic
