@@ -1351,6 +1351,8 @@ function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.state = null;
   live.player.assignment.currentIndex = 0;
   live.player.assignment.resultsListCollapsed = false;
+  live.player.assignment.pendingComplete = false;
+  live.player.assignment.bypassAllAnsweredScreen = false;
 
   // Re-show submit button
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
@@ -2387,7 +2389,11 @@ function renderJoinQuestion(question) {
     joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
   }
   const interactiveOverlay = document.getElementById('joinQuestionInteractive');
-  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage);
+  // Make the bottom bar see-through when navigating questions from Final Results so
+  // the question summary behind it stays readable for every question type.
+  const isReviewingResults = !!live.player.assignment?.reviewMode
+    || !!live.player.assignment?.state?.attempt?.submitted;
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || isReviewingResults);
 
   if (hasAnyImage) {
     let imgSrc = question.imageData;
@@ -3133,10 +3139,14 @@ async function submitLiveAnswer() {
       // or whatever the post-save state dictates.
       live.player.assignment.dirtyAnswer = false;
 
-      // Check if this was the last answer and feedback is instant
+      // Check if this save just completed the quiz. In instant mode, always pause on
+      // the last question's feedback before End-of-quiz. In deferred modes, only pause
+      // on the *first* completion (so re-saving an answer post-completion doesn't trap
+      // the student back on this question).
       const totalQs = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
       const answeredQs = Array.isArray(data?.attempt?.answeredQIndexes) ? data.attempt.answeredQIndexes.length : 0;
-      if (mode === 'instant' && totalQs > 0 && answeredQs >= totalQs) {
+      const justCompleted = totalQs > 0 && answeredQs >= totalQs;
+      if (justCompleted && (mode === 'instant' || !wasAlreadyAnswered)) {
         live.player.assignment.pendingComplete = true;
         live.player.assignment.forceAutoAdvance = false;
       }
