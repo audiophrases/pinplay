@@ -4275,6 +4275,7 @@ let activeAssignmentQuestionAudioEl = null;
 
 function initAssignmentSfx() {
   try {
+    console.log('[ambient] initAssignmentSfx start');
     assignmentAmbient.hall = new Audio('music/hall.mp3');
     assignmentAmbient.final = new Audio('music/final.mp3');
     // All answering sounds
@@ -4292,7 +4293,8 @@ function initAssignmentSfx() {
       new Audio('music/answering11.mp3'),
     ];
     Object.values(assignmentAmbient).flat().forEach(a => { if (a) a.volume = 0.7; });
-  } catch { }
+    console.log('[ambient] initAssignmentSfx done', { hall: !!assignmentAmbient.hall, final: !!assignmentAmbient.final, answeringCount: assignmentAmbient.answering.length });
+  } catch (err) { console.warn('[ambient] initAssignmentSfx threw', err); }
 }
 
 function stopAllAssignmentAmbient() {
