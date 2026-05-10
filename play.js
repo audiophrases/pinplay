@@ -113,7 +113,12 @@ init();
 function init() {
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
-  initAssignmentSfx();
+  // `assignmentAmbient` is declared further down with `const`, so calling
+  // initAssignmentSfx() synchronously here hits the temporal dead zone and
+  // the try/catch swallows the ReferenceError, leaving the answering pool
+  // empty. Defer to a microtask so the rest of the module body finishes
+  // evaluating first.
+  queueMicrotask(initAssignmentSfx);
   initBetControl();
   initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
