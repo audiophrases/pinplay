@@ -4565,6 +4565,35 @@ function pickNewAnsweringTrack() {
   currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
 }
 
+// Soft-pause the current answering track (no currentTime reset) so a mic
+// recording can run without the loop bleeding in. Pair with
+// resumeAssignmentAnsweringAmbient to continue from the same spot, matching
+// live mode's stopFx/resumeFx semantics.
+function pauseAssignmentAnsweringAmbient() {
+  try {
+    if (currentAnsweringIdx < 0) return;
+    const a = assignmentAmbient.answering[currentAnsweringIdx];
+    if (a) a.pause();
+  } catch { }
+}
+
+// Resume the answering ambient after a mic-driven pause (voice_record /
+// voice_text). Guarded so we don't restart if the student has already left
+// the question, submitted, or while the question's prompt audio is still
+// playing.
+function resumeAssignmentAnsweringAmbient() {
+  if (live.player.mode !== 'assignment') return;
+  const s = live.player.assignment?.state;
+  const attempt = s?.attempt;
+  if (!attempt || attempt.submitted) return;
+  if (_assignmentAudioPlaying) return;
+  try {
+    if (currentAnsweringIdx < 0) { playAssignmentSfx('answering'); return; }
+    const a = assignmentAmbient.answering[currentAnsweringIdx];
+    if (a) a.play().catch(() => { });
+  } catch { }
+}
+
 function ensureTimerProgressBar(cardEl, id) {
   if (!cardEl) return null;
   let bar = cardEl.querySelector(`[data-timer-bar="${id}"]`);
@@ -5027,11 +5056,15 @@ function renderVoiceRecorder(container, question) {
   }
 
   recordBtn.addEventListener('click', async () => {
+    // Pause assignment ambient so it doesn't bleed into the recording.
+    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
     try {
       _voiceRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       statusEl.textContent = 'Mic access denied. Check browser settings.';
       statusEl.className = 'voice-record-upload-status error';
+      // Mic failed to open — bring ambient back so the student isn't left in silence.
+      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
       return;
     }
 
@@ -5066,6 +5099,7 @@ function renderVoiceRecorder(container, question) {
         recordBtn.classList.remove('hidden');
         _voiceRecordStream?.getTracks().forEach((t) => t.stop());
         _voiceRecordStream = null;
+        if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
         return;
       }
 
@@ -5073,6 +5107,7 @@ function renderVoiceRecorder(container, question) {
       uploadBlob(blob, durationMs, transcript);
       _voiceRecordStream?.getTracks().forEach((t) => t.stop());
       _voiceRecordStream = null;
+      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
     };
 
     // Kick off silent background recognition in parallel with MediaRecorder.
@@ -5251,7 +5286,11 @@ function renderVoiceTextRecognizer(container, question) {
       stopBtn.classList.add('hidden');
       micBtn.textContent = finalTranscript ? '🎤 Re-record' : '🎤 Tap to speak';
       if (finalTranscript) statusEl.textContent = 'Saved. Tap Submit to grade.';
+      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
     };
+
+    // Pause assignment ambient so it doesn't bleed into recognition.
+    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
 
     try {
       rec.start();
@@ -5262,6 +5301,7 @@ function renderVoiceTextRecognizer(container, question) {
     } catch (err) {
       statusEl.textContent = `Could not start mic: ${err?.message || err}`;
       _voiceTextRecognition = null;
+      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
     }
   });
 
