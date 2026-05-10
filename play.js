@@ -535,6 +535,16 @@ function renderReviewNavigator() {
     nav = document.createElement('div');
     nav.id = 'reviewNavigator';
     nav.className = 'review-navigator';
+    // Translate vertical wheel into horizontal scroll along the chip strip.
+    // Only intercepts when there's actually horizontal overflow, so the page
+    // can still scroll normally on short quizzes.
+    nav.addEventListener('wheel', (e) => {
+      if (nav.scrollWidth <= nav.clientWidth) return;
+      const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (delta === 0) return;
+      e.preventDefault();
+      nav.scrollLeft += delta;
+    }, { passive: false });
     document.body.appendChild(nav);
   }
   document.body.classList.add('review-mode-active');
