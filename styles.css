@@ -2758,6 +2758,23 @@ body.review-mode-active #joinQuestionWrap {
   padding-top: 178px !important;
 }
 
+/* The bottom answer/save bar is read-only context in review mode (showing which
+   option was picked). Strip its chrome so the results panel is visible beneath,
+   and let clicks pass through so the panel's bottom rows are reachable. The
+   answer pills keep their own white background, so they remain visually
+   distinct as floating chips over the panel. */
+body.review-mode-active #joinQuestionInteractive {
+  background: transparent !important;
+  border-top: none !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+
+/* Hide the disabled Save Answer button — it adds vertical chrome with no purpose in review. */
+body.review-mode-active #joinSubmission {
+  display: none !important;
+}
+
 /* Responsive utility */
 @media (max-width: 640px) {
   .row.gap .btn {
