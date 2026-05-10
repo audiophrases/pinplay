@@ -1707,6 +1707,42 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/gifs/search' && request.method === 'GET') {
+      const query = String(url.searchParams.get('q') || '').trim();
+      const limit = clamp(Number(url.searchParams.get('limit') || 24), 1, 50);
+      if (!query) return json({ error: 'q required.' }, 400);
+
+      const giphyKey = String(env.GIPHY_API_KEY || '').trim();
+      if (!giphyKey) {
+        return json({ error: 'GIPHY search is not configured (missing GIPHY_API_KEY).' }, 503);
+      }
+
+      try {
+        const apiUrl = new URL('https://api.giphy.com/v1/gifs/search');
+        apiUrl.searchParams.set('api_key', giphyKey);
+        apiUrl.searchParams.set('q', query);
+        apiUrl.searchParams.set('limit', String(limit));
+        apiUrl.searchParams.set('rating', 'g');
+        apiUrl.searchParams.set('lang', 'en');
+
+        const res = await fetch(apiUrl.toString());
+        if (!res.ok) {
+          const raw = await res.text();
+          return json({ error: `GIPHY search failed (HTTP ${res.status}): ${raw.slice(0, 200)}` }, 502);
+        }
+        const data = await res.json();
+        const items = (Array.isArray(data?.data) ? data.data : []).map((it) => ({
+          id: String(it?.id || ''),
+          title: String(it?.title || 'GIF'),
+          thumb: String(it?.images?.fixed_width_small?.url || it?.images?.fixed_height_small?.url || ''),
+          url: String(it?.images?.fixed_height?.url || it?.images?.original?.url || ''),
+        })).filter((it) => it.url);
+        return json({ provider: 'giphy', items }, 200);
+      } catch (err) {
+        return json({ error: `GIPHY search failed: ${err.message}` }, 502);
+      }
+    }
+
     if (url.pathname === '/api/videos/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
       const count = clamp(Number(url.searchParams.get('count') || 8), 1, 40);

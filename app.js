@@ -3299,51 +3299,22 @@ async function openImageSearchDialog(questionIdx) {
   });
 }
 
-const GIPHY_KEY_STORAGE = 'pinplay_giphy_key';
-const GIPHY_DEFAULT_KEY = 'dc6zaTOxFJmzC';
-
-function getGiphyKey() {
-  try {
-    const stored = (localStorage.getItem(GIPHY_KEY_STORAGE) || '').trim();
-    if (stored) return stored;
-  } catch {}
-  return GIPHY_DEFAULT_KEY;
-}
-
-async function promptForGiphyKey() {
-  const current = getGiphyKey();
-  const msg = `Enter your GIPHY API key. Free key from https://developers.giphy.com/dashboard\n\n(Leave blank to keep current.)`;
-  const next = window.prompt(msg, current === GIPHY_DEFAULT_KEY ? '' : current);
-  if (next == null) return null;
-  const trimmed = next.trim();
-  try {
-    if (trimmed) localStorage.setItem(GIPHY_KEY_STORAGE, trimmed);
-    else localStorage.removeItem(GIPHY_KEY_STORAGE);
-  } catch {}
-  return trimmed || GIPHY_DEFAULT_KEY;
-}
-
 async function giphySearch(query, limit = 24) {
-  const url = new URL('https://api.giphy.com/v1/gifs/search');
-  url.searchParams.set('api_key', getGiphyKey());
+  const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+  const url = new URL(`${base}/api/gifs/search`);
   url.searchParams.set('q', query);
   url.searchParams.set('limit', String(limit));
-  url.searchParams.set('rating', 'g');
-  url.searchParams.set('lang', 'en');
   const res = await fetch(url.toString());
-  if (res.status === 401 || res.status === 403 || res.status === 429) {
-    const err = new Error(`GIPHY API key rejected (${res.status}). Get a free key at developers.giphy.com and set it via the "Search GIFs" dialog.`);
-    err.code = 'GIPHY_KEY_INVALID';
-    throw err;
+  if (!res.ok) {
+    let msg = `GIF search failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (data?.error) msg = data.error;
+    } catch {}
+    throw new Error(msg);
   }
-  if (!res.ok) throw new Error(`GIPHY search failed (${res.status})`);
   const data = await res.json();
-  return (Array.isArray(data?.data) ? data.data : []).map((it) => ({
-    id: String(it?.id || ''),
-    title: String(it?.title || 'GIF'),
-    thumb: String(it?.images?.fixed_width_small?.url || it?.images?.fixed_height_small?.url || ''),
-    url: String(it?.images?.fixed_height?.url || it?.images?.original?.url || ''),
-  })).filter((it) => it.url);
+  return Array.isArray(data?.items) ? data.items : [];
 }
 
 async function openGifSearchDialog(questionIdx) {
@@ -3360,18 +3331,11 @@ async function openGifSearchDialog(questionIdx) {
   head.className = 'row spread gap';
   const h = document.createElement('h3');
   h.textContent = 'Search GIFs (GIPHY)';
-  const headBtns = document.createElement('div');
-  headBtns.className = 'row gap';
-  const keyBtn = document.createElement('button');
-  keyBtn.className = 'btn small';
-  keyBtn.textContent = 'API key';
-  keyBtn.title = 'Set or update your GIPHY API key';
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn';
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => overlay.remove());
-  headBtns.append(keyBtn, closeBtn);
-  head.append(h, headBtns);
+  head.append(h, closeBtn);
 
   const row = document.createElement('div');
   row.className = 'row gap top-space';
@@ -3386,12 +3350,6 @@ async function openGifSearchDialog(questionIdx) {
 
   const status = document.createElement('p');
   status.className = 'small top-space';
-
-  keyBtn.addEventListener('click', async () => {
-    await promptForGiphyKey();
-    status.textContent = 'API key updated. Click Search to retry.';
-    status.className = 'small top-space ok';
-  });
 
   const results = document.createElement('div');
   results.className = 'answers-grid top-space';
@@ -11870,9 +11828,7 @@ async function autoFillImages(quizData, onProgress) {
         console.warn(`[GIF auto-fill] No results for "${gifQuery}"`);
       } catch (err) {
         console.error(`[GIF auto-fill] "${gifQuery}":`, err);
-        if (err && err.code === 'GIPHY_KEY_INVALID') {
-          onProgress?.({ index: i, total: questions.length, status: 'GIPHY key invalid — open Search GIFs → API key' });
-        }
+        onProgress?.({ index: i, total: questions.length, status: `GIF search failed: ${err.message}` });
       }
     }
 
