@@ -542,6 +542,18 @@ function renderReviewNavigator() {
   const currentIdx = Number(live.player.assignment.currentIndex || 0);
   nav.innerHTML = '';
 
+  // Exit-review pill, pinned to the left (sticky so it stays visible while chips scroll)
+  const exitChip = document.createElement('button');
+  exitChip.type = 'button';
+  exitChip.className = 'rev-chip-exit';
+  exitChip.title = 'Exit review mode';
+  exitChip.innerHTML = '<span class="rev-chip-exit-icon">✕</span><span class="rev-chip-exit-label">Exit Review</span>';
+  exitChip.addEventListener('click', () => {
+    const ctx = live.player.assignment?.reviewExitContext || {};
+    exitAssignmentReviewMode(ctx.code, ctx.checkData);
+  });
+  nav.appendChild(exitChip);
+
   questions.forEach((_, qIndex) => {
     const ans = answersByQ[String(qIndex)];
     const grade = ans?.teacherGrade;
@@ -1295,31 +1307,11 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     // Show teacher feedback if available
     showTeacherFeedback(code, attemptId).catch(() => { });
 
-    // Build the per-question navigator strip
+    // Stash exit context so the navigator's Exit chip can call exitAssignmentReviewMode
+    live.player.assignment.reviewExitContext = { code, checkData };
+
+    // Build the per-question navigator strip (includes the Exit chip)
     renderReviewNavigator();
-
-    // Add review mode bar at top
-    let bar = document.getElementById('reviewModeBar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'reviewModeBar';
-      bar.className = 'review-mode-bar';
-
-      const label = document.createElement('span');
-      label.textContent = '📖 Review Mode — viewing your submitted answers';
-      bar.appendChild(label);
-
-      const exitBtn = document.createElement('button');
-      exitBtn.className = 'rr-exit-btn';
-      exitBtn.type = 'button';
-      exitBtn.textContent = 'Exit Review';
-      exitBtn.addEventListener('click', () => {
-        exitAssignmentReviewMode(code, checkData);
-      });
-      bar.appendChild(exitBtn);
-
-      document.body.appendChild(bar);
-    }
 
     setStatus(joinStatusEl, 'Reviewing submitted attempt ✅', 'ok');
   } catch (err) {
@@ -1329,10 +1321,8 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
 
 function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.reviewMode = false;
+  live.player.assignment.reviewExitContext = null;
   dismissTeacherFeedbackOverlay();
-  // Remove review bar
-  const bar = document.getElementById('reviewModeBar');
-  if (bar) bar.remove();
   // Remove navigator strip
   const nav = document.getElementById('reviewNavigator');
   if (nav) nav.remove();

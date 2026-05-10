@@ -2624,46 +2624,12 @@ button.review-retake-attempt-row:active {
   }
 }
 
-/* Review mode top bar */
-.review-mode-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1050;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
-}
-
-.review-mode-bar .rr-exit-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-  border-radius: 6px;
-  padding: 0.25rem 0.65rem;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 700;
-  transition: background 0.15s;
-}
-
-.review-mode-bar .rr-exit-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-/* Per-question navigator strip — sits just below .review-mode-bar */
+/* Per-question navigator strip — fixed at the top during review mode.
+   The existing fixed header/prompt are shifted down by .review-mode-active rules below
+   so this strip never overlaps the question instructions. */
 .review-navigator {
   position: fixed;
-  top: 36px;
+  top: 0;
   left: 0;
   right: 0;
   z-index: 1049;
@@ -2677,6 +2643,44 @@ button.review-retake-attempt-row:active {
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Exit-review pill, pinned to the left so it stays reachable while chips scroll */
+.rev-chip-exit {
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  margin-right: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.35);
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.rev-chip-exit:hover {
+  filter: brightness(1.08);
+  transform: scale(1.03);
+}
+
+.rev-chip-exit-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rev-chip-exit-label {
+  line-height: 1;
 }
 
 .rev-chip {
@@ -2736,9 +2740,22 @@ button.review-retake-attempt-row:active {
 .rev-chip.status-unanswered { background: rgba(0, 0, 0, 0.04); opacity: 0.7; }
 .rev-chip.status-unanswered .rev-chip-num { color: #6b7280; }
 
-/* Push page content down so it isn't hidden under the fixed bars */
+/* Review mode shifts the existing fixed header and prompt down by the navigator
+   strip's height (~48px) so the question instructions stay fully visible. */
 body.review-mode-active {
-  padding-top: 90px;
+  padding-top: 48px;
+}
+
+body.review-mode-active #joinHeaderRow {
+  top: 48px;
+}
+
+body.review-mode-active #joinPrompt {
+  top: 94px;
+}
+
+body.review-mode-active #joinQuestionWrap {
+  padding-top: 178px !important;
 }
 
 /* Responsive utility */
