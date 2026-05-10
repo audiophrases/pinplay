@@ -4570,10 +4570,12 @@ function pickNewAnsweringTrack() {
 
 // Browsers (esp. iOS Safari) only allow Audio.play() inside a user gesture.
 // `joinLiveGame` -> `startAssignmentAttempt` chains several awaits before the
-// first ambient .play() is called, which breaks that gesture link and the
-// .play() promise rejects silently. This warmup runs synchronously inside the
-// click handler: a silent play()+pause() on every ambient track unlocks them
-// for later, off-gesture playback.
+// first ambient .play() is called, which breaks the gesture link and the
+// .play() promise rejects silently. This warmup runs fully synchronously
+// inside the click handler — play() then pause() on each track within the
+// same tick — to register the user-activation flag on every Audio element.
+// We restore volume synchronously so a later .play() can never find the
+// element in a half-muted state from a still-pending unlock promise.
 let assignmentAmbientUnlocked = false;
 function unlockAssignmentAmbient() {
   if (assignmentAmbientUnlocked) return;
@@ -4586,14 +4588,12 @@ function unlockAssignmentAmbient() {
   all.forEach((a) => {
     try {
       const prevVolume = a.volume;
-      a.muted = true;
+      a.volume = 0;
       const p = a.play();
-      if (p && typeof p.then === 'function') {
-        p.then(() => { try { a.pause(); a.currentTime = 0; a.muted = false; a.volume = prevVolume; } catch { } })
-         .catch(() => { try { a.muted = false; a.volume = prevVolume; } catch { } });
-      } else {
-        a.pause(); a.currentTime = 0; a.muted = false; a.volume = prevVolume;
-      }
+      a.pause();
+      a.currentTime = 0;
+      a.volume = prevVolume;
+      if (p && typeof p.catch === 'function') p.catch(() => { });
     } catch { }
   });
   assignmentAmbientUnlocked = true;
