@@ -2080,9 +2080,11 @@ function renderPlayerState(state) {
     startJoinTimer(state);
   }
 
-  // Play hall sound when question just closed (once per question)
+  // Question just closed (instant feedback reveal, etc.) — silence the
+  // answering loop so the student can read the result without hall.mp3
+  // crashing in. The next question's render will restart ambient.
   if (questionClosed && state.currentIndex !== lastClosedQuestionIndex) {
-    playAssignmentSfx('hall');
+    stopAllAssignmentAmbient();
     lastClosedQuestionIndex = state.currentIndex;
   }
 
