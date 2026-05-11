@@ -9891,7 +9891,9 @@ function evaluatePreviewAnswer(q, answer) {
   if (q.type === 'text' || q.type === 'voice_text') {
     const guess = normalizeTextAnswer(answer);
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
-    return { correct: accepted.length ? accepted.includes(guess) : false };
+    // Expand "or" alternatives: "boss or manager" accepts "boss" or "manager" separately
+    const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
+    return { correct: expanded.length ? expanded.includes(guess) : false };
   }
   if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
@@ -10736,9 +10738,11 @@ function evaluateSoloQuestion(q) {
     const val = document.getElementById('soloTextAnswer')?.value || '';
     const guess = normalizeTextAnswer(val);
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
+    // Expand "or" alternatives: "boss or manager" accepts "boss" or "manager" separately
+    const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
 
     if (!accepted.length) return { correct: false, hint: 'No accepted answers set.' };
-    return { correct: accepted.includes(guess), hint: `Accepted: ${accepted.slice(0, 2).join(' / ')}` };
+    return { correct: expanded.includes(guess), hint: `Accepted: ${expanded.slice(0, 3).join(' / ')}` };
   }
 
   if (q.type === 'open' || q.type === 'image_open') {

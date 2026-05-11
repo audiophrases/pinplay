@@ -4180,7 +4180,9 @@ function evaluate(question, answer) {
   if (question.type === 'text' || question.type === 'voice_text') {
     const guess = normalizeTextAnswer(answer);
     const accepted = (question.accepted || []).map(normalizeTextAnswer).filter(Boolean);
-    return { correct: accepted.includes(guess) };
+    // Expand "or" alternatives: "boss or manager" accepts "boss" or "manager" separately
+    const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
+    return { correct: expanded.includes(guess) };
   }
 
   if (question.type === 'context_gap') {
