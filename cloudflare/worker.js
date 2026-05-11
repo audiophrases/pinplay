@@ -5348,7 +5348,8 @@ function pickRandomName(playersMap) {
   const adjectives = RANDOM_NAME_ADJECTIVES;
   const people = RANDOM_NAME_PEOPLE;
   const womenPeople = people.filter((n) => FEMALE_NAME_HINTS.has(String(n || '').toLowerCase()));
-  const peopleTarget = womenPeople.length > 0 && Math.random() < 0.5 ? womenPeople : people;
+  const menPeople = people.filter((n) => !FEMALE_NAME_HINTS.has(String(n || '').toLowerCase()));
+  const peopleTarget = womenPeople.length > 0 && Math.random() < 0.5 ? womenPeople : (menPeople.length > 0 ? menPeople : people);
   const total = adjectives.length * peopleTarget.length;
 
   for (let i = 0; i < Math.min(total, 320); i += 1) {
