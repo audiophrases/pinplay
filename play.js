@@ -1125,6 +1125,38 @@ function dismissReviewRetakeModal() {
   if (overlay) overlay.remove();
 }
 
+async function deleteOwnAttempt(code, attemptId, studentKey, username, password, prevCheckData) {
+  try {
+    await api('/api/assignment/delete-my-attempt', {
+      method: 'POST',
+      body: { code, attemptId, studentKey, studentName: username, password },
+    });
+  } catch (err) {
+    window.alert(`Could not delete attempt: ${err.message}`);
+    return;
+  }
+
+  try {
+    const fresh = await api('/api/assignment/check-status', {
+      method: 'POST',
+      body: { code, studentKey, username },
+    });
+    dismissReviewRetakeModal();
+    if (fresh?.hasSubmittedAttempts || fresh?.hasOpenAttempt) {
+      showReviewRetakeChoice(fresh, code, studentKey, username, password);
+    } else {
+      // Nothing left to manage — return the student to the identity step
+      // so they can start a fresh attempt.
+      if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+      setStatus(joinStatusEl, 'All previous attempts deleted. Ready to start fresh ✅', 'ok');
+    }
+  } catch (err) {
+    // If refresh fails, fall back to closing the modal silently.
+    dismissReviewRetakeModal();
+    setStatus(joinStatusEl, `Attempt deleted, but refresh failed: ${err.message}`, 'bad');
+  }
+}
+
 function showReviewRetakeChoice(checkData, code, studentKey, username, password) {
   dismissReviewRetakeModal();
 
@@ -1149,14 +1181,76 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   sub.textContent = `${used} attempt${used !== 1 ? 's' : ''} completed · Limit: ${limitText}`;
   card.appendChild(sub);
 
-  // Previous attempts list
+  // Helper: build the trash button used by both completed and unfinished rows.
+  const makeDeleteButton = (attemptId, attemptLabel) => {
+    const del = document.createElement('span');
+    del.className = 'rr-attempt-delete';
+    del.setAttribute('role', 'button');
+    del.setAttribute('tabindex', '0');
+    del.setAttribute('aria-label', `Delete ${attemptLabel}`);
+    del.title = `Delete ${attemptLabel}`;
+    del.textContent = '🗑️';
+    const trigger = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const ok = window.confirm(`Delete ${attemptLabel}? This cannot be undone.`);
+      if (!ok) return;
+      deleteOwnAttempt(code, attemptId, studentKey, username, password, checkData);
+    };
+    del.addEventListener('click', trigger);
+    del.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') trigger(e);
+    });
+    return del;
+  };
+
+  // Previous attempts list (completed + optionally the unfinished one)
   const attempts = Array.isArray(checkData.previousAttempts) ? checkData.previousAttempts : [];
-  if (attempts.length > 0) {
+  const openAttempt = checkData.openAttempt || (checkData.hasOpenAttempt && checkData.openAttemptId
+    ? { id: checkData.openAttemptId, startedAt: null, attemptNumber: null }
+    : null);
+  const hasAnyRow = attempts.length > 0 || !!openAttempt;
+  if (hasAnyRow) {
     const list = document.createElement('ul');
     list.className = 'review-retake-attempts';
 
+    // Unfinished attempt row (rendered first when present).
+    if (openAttempt) {
+      const li = document.createElement('li');
+      li.className = 'rr-attempt-li';
+
+      const row = document.createElement('div');
+      row.className = 'review-retake-attempt-row rr-attempt-row-open';
+      row.title = 'Unfinished attempt';
+
+      const label = document.createElement('span');
+      label.className = 'rr-attempt-label';
+      label.textContent = openAttempt.attemptNumber
+        ? `Attempt ${openAttempt.attemptNumber}`
+        : 'In progress';
+
+      const badge = document.createElement('span');
+      badge.className = 'rr-attempt-badge rr-attempt-badge-open';
+      badge.textContent = 'Unfinished';
+
+      const date = document.createElement('span');
+      date.className = 'rr-attempt-date';
+      date.textContent = openAttempt.startedAt
+        ? `Started ${new Date(openAttempt.startedAt).toLocaleDateString()}`
+        : '';
+
+      row.append(label, badge, date);
+      li.appendChild(row);
+      li.appendChild(makeDeleteButton(openAttempt.id, openAttempt.attemptNumber
+        ? `Attempt ${openAttempt.attemptNumber} (unfinished)`
+        : 'unfinished attempt'));
+      list.appendChild(li);
+    }
+
     attempts.slice(0, 5).forEach((a) => {
-      // Changed to button to make it explicitly interactive
+      const li = document.createElement('li');
+      li.className = 'rr-attempt-li';
+
       const row = document.createElement('button');
       row.className = 'review-retake-attempt-row rr-btn-review-inline';
       row.type = 'button';
@@ -1208,7 +1302,9 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
         row.appendChild(badge);
       }
 
-      list.appendChild(row);
+      li.appendChild(row);
+      li.appendChild(makeDeleteButton(a.id, `Attempt ${a.attemptNumber || '?'}`));
+      list.appendChild(li);
     });
 
     card.appendChild(list);

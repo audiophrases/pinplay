@@ -1077,6 +1077,48 @@ export default {
       }));
     }
 
+    // Student-facing: delete one of the caller's own attempts (completed or open).
+    // Auth: studentKey ownership is enforced in the DO; for non-random-names
+    // assignments we additionally verify the student's password.
+    if (url.pathname === '/api/assignment/delete-my-attempt' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const usernameKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      const username = sanitizeName(body?.studentName || body?.username || '');
+      const password = String(body?.password || '').trim();
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+      if (!usernameKey && !username) return json({ error: 'Student key or username required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+
+      // Check assignment login mode and verify password when required.
+      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      });
+      if (!getRes.ok) return withCors(getRes);
+      const getData = await getRes.json();
+      const assignment = getData?.assignment || null;
+      if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+      if (assignment.randomNames === false) {
+        if (!password) return json({ error: 'Password required.' }, 401);
+        if (!username) return json({ error: 'Username required.' }, 400);
+        const verify = await verifyStudentLogin(env, username, password, code);
+        if (!verify.ok) return json({ error: verify.error || 'Unauthorized.' }, verify.status || 401);
+      }
+
+      const { emailKey } = await resolveEmailKey(env, username);
+      const primaryKey = emailKey || usernameKey;
+      const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
+
+      return withCors(await stub.fetch('https://room/assignments/delete-attempt-by-student', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId, studentKey: primaryKey, legacyStudentKey: legacyKey }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/start' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -2031,6 +2073,11 @@ export class QuizRoom {
           hasSubmittedAttempts: submittedAttempts.length > 0,
           hasOpenAttempt: !!openAttempt,
           openAttemptId: openAttempt ? sanitizeAssignmentAttemptId(openAttempt.id) : null,
+          openAttempt: openAttempt ? {
+            id: sanitizeAssignmentAttemptId(openAttempt.id),
+            startedAt: Number(openAttempt.startedAt || 0) || null,
+            attemptNumber: studentAttempts.indexOf(openAttempt) + 1,
+          } : null,
           canRetake,
           attemptsUsed,
           attemptsLimit: limit,
@@ -2495,6 +2542,38 @@ export class QuizRoom {
 
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         if (!assignment.attempts[attemptId]) return json({ error: 'Attempt not found.' }, 404);
+
+        delete assignment.attempts[attemptId];
+        assignment.updatedAt = Date.now();
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, deleted: attemptId });
+      }
+
+      // Student-facing: delete an attempt only if it belongs to the caller.
+      if (url.pathname === '/assignments/delete-attempt-by-student' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        const legacyStudentKey = sanitizeAssignmentStudentKey(body?.legacyStudentKey);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+        if (!studentKey && !legacyStudentKey) return json({ error: 'Student key required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts[attemptId];
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
+        if (!matchKeys.has(String(attempt.studentKey || ''))) {
+          return json({ error: 'This attempt does not belong to you.' }, 403);
+        }
 
         delete assignment.attempts[attemptId];
         assignment.updatedAt = Date.now();
@@ -4652,6 +4731,46 @@ function makeStudentKeyFromEmail(email) {
 // Looks up the student's email by username via the roster bridge.
 // Returns { email, emailKey } — both empty strings if lookup fails or
 // the bridge isn't configured. Safe to call optimistically.
+// Verifies a student's password against the configured login verify service.
+// Returns { ok: true } on success, or { ok: false, status, error } on failure.
+// Mirrors the verification block in /api/assignment/start.
+async function verifyStudentLogin(env, studentName, password, code) {
+  const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
+  const verifySecret = String(env.STUDENT_LOGIN_VERIFY_SECRET || '').trim();
+  if (!verifyUrl) return { ok: false, status: 501, error: 'Login verification is not configured.' };
+
+  const overrideUser = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
+  const overridePass = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
+  if (overrideUser && overridePass && studentName === overrideUser && password === overridePass) {
+    return { ok: true };
+  }
+
+  const verifyNames = [studentName];
+  const lowerName = sanitizeName(studentName).toLowerCase();
+  if (lowerName && !verifyNames.includes(lowerName)) verifyNames.push(lowerName);
+
+  const verifyHeaders = { 'Content-Type': 'application/json' };
+  if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
+
+  try {
+    for (const candidateName of verifyNames) {
+      const vRes = await fetch(verifyUrl, {
+        method: 'POST',
+        headers: verifyHeaders,
+        redirect: 'follow',
+        body: JSON.stringify({ username: candidateName, password, pin: code, secret: verifySecret }),
+      });
+      const vTxt = await vRes.text();
+      let parsed = {};
+      try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
+      if (vRes.ok && parsed && parsed.ok === true) return { ok: true };
+    }
+    return { ok: false, status: 401, error: 'Invalid username or password.' };
+  } catch {
+    return { ok: false, status: 502, error: 'Login verification service unavailable.' };
+  }
+}
+
 async function resolveEmailKey(env, username) {
   const name = String(username || '').trim();
   if (!name) return { email: '', emailKey: '' };
