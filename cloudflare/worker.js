@@ -646,8 +646,35 @@ export default {
       const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
-      const quiz = normalizeQuiz(body?.quiz || {});
+      let quiz = normalizeQuiz(body?.quiz || {});
       if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+      // Auto-extract base64 media to R2 before storing in Durable Object to avoid SQLITE_TOOBIG
+      if (env.QUIZ_MEDIA) {
+        const quizId = `assign-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        quiz = JSON.parse(JSON.stringify(quiz)); // deep clone
+        for (const q of quiz.questions || []) {
+          for (const field of ['audioData', 'imageData']) {
+            const val = q[field];
+            if (val && typeof val === 'string' && val.startsWith('data:')) {
+              const match = val.match(/^data:([^;]+);base64,(.+)$/);
+              if (match) {
+                const mime = match[1];
+                const binaryStr = atob(match[2]);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
+                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
+                    : mime.includes('png') ? '.png' : '.bin';
+                const key = `${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
+                await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
+                q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
+                q.audioMode = field === 'audioData' ? 'file' : q.audioMode;
+              }
+            }
+          }
+        }
+      }
 
       const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Assignment';
       const className = sanitizeClassName(body?.className);
