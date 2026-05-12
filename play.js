@@ -50,6 +50,7 @@ const joinPasswordEl = document.getElementById('joinPassword');
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
 const rerollNameBtn = document.getElementById('rerollNameBtn');
+const muteMusicBtn = document.getElementById('muteMusicBtn');
 const joinTitleEl = document.getElementById('joinTitle');
 const joinQuestionWrap = document.getElementById('joinQuestionWrap');
 const joinProgressEl = document.getElementById('joinProgress');
@@ -119,6 +120,7 @@ function init() {
   // empty. Defer to a microtask so the rest of the module body finishes
   // evaluating first.
   queueMicrotask(initAssignmentSfx);
+  initMuteMusicBtn();
   initBetControl();
   initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
@@ -4653,7 +4655,39 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   playAssignmentSfx('answering');
 }
 
+// User-controlled mute for ambient/game music (answering loop, final.mp3).
+// Question audio (`playAssignmentQuestionAudio`) is intentionally not gated —
+// the student still needs to hear question prompts.
+const MUSIC_MUTE_KEY = 'pinplay.assignmentMusicMuted';
+let assignmentMusicMuted = (() => {
+  try { return localStorage.getItem(MUSIC_MUTE_KEY) === '1'; } catch { return false; }
+})();
+
+function refreshMuteMusicBtnUi() {
+  if (!muteMusicBtn) return;
+  muteMusicBtn.textContent = assignmentMusicMuted ? '🔇' : '🎵';
+  muteMusicBtn.setAttribute('aria-pressed', assignmentMusicMuted ? 'true' : 'false');
+  muteMusicBtn.title = assignmentMusicMuted ? 'Unmute music' : 'Mute music';
+  muteMusicBtn.setAttribute('aria-label', muteMusicBtn.title);
+}
+
+function setAssignmentMusicMuted(muted) {
+  assignmentMusicMuted = !!muted;
+  try { localStorage.setItem(MUSIC_MUTE_KEY, assignmentMusicMuted ? '1' : '0'); } catch { }
+  if (assignmentMusicMuted) stopAllAssignmentAmbient();
+  refreshMuteMusicBtnUi();
+}
+
+function initMuteMusicBtn() {
+  refreshMuteMusicBtnUi();
+  if (!muteMusicBtn) return;
+  muteMusicBtn.addEventListener('click', () => setAssignmentMusicMuted(!assignmentMusicMuted));
+}
+
 function playAssignmentSfx(name) {
+  // User has muted ambient/game music. Question audio is handled in
+  // `playAssignmentQuestionAudio` and stays audible.
+  if (assignmentMusicMuted) return;
   try {
     // Stop any currently playing ambient first
     stopAllAssignmentAmbient();
@@ -4733,6 +4767,7 @@ function pauseAssignmentAnsweringAmbient() {
 // playing.
 function resumeAssignmentAnsweringAmbient() {
   if (live.player.mode !== 'assignment') return;
+  if (assignmentMusicMuted) return;
   const s = live.player.assignment?.state;
   const attempt = s?.attempt;
   if (!attempt || attempt.submitted) return;
