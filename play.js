@@ -4380,7 +4380,6 @@ let activeAssignmentQuestionAudioEl = null;
 
 function initAssignmentSfx() {
   try {
-    console.log('[ambient] initAssignmentSfx start');
     assignmentAmbient.hall = new Audio('music/hall.mp3');
     assignmentAmbient.final = new Audio('music/final.mp3');
     // All answering sounds
@@ -4398,8 +4397,7 @@ function initAssignmentSfx() {
       new Audio('music/answering11.mp3'),
     ];
     Object.values(assignmentAmbient).flat().forEach(a => { if (a) a.volume = 0.7; });
-    console.log('[ambient] initAssignmentSfx done', { hall: !!assignmentAmbient.hall, final: !!assignmentAmbient.final, answeringCount: assignmentAmbient.answering.length });
-  } catch (err) { console.warn('[ambient] initAssignmentSfx threw', err); }
+  } catch { }
 }
 
 function stopAllAssignmentAmbient() {
@@ -4695,22 +4693,12 @@ function playAssignmentSfx(name) {
       // Use pre-selected track for current question
       if (currentAnsweringIdx < 0) pickNewAnsweringTrack();
       const a = assignmentAmbient.answering[currentAnsweringIdx];
-      console.log('[ambient]', { name, idx: currentAnsweringIdx, hasEl: !!a, src: a?.src, vol: a?.volume, muted: a?.muted, unlocked: assignmentAmbientUnlocked });
-      if (a) {
-        a.currentTime = 0;
-        a.play().then(() => console.log('[ambient] play resolved', { idx: currentAnsweringIdx }))
-                .catch((err) => console.warn('[ambient] play rejected', { idx: currentAnsweringIdx, err: String(err?.name || err) }));
-      }
+      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
     } else {
       const a = assignmentAmbient[name];
-      console.log('[ambient]', { name, hasEl: !!a, src: a?.src, vol: a?.volume, muted: a?.muted });
-      if (a) {
-        a.currentTime = 0;
-        a.play().then(() => console.log('[ambient] play resolved', { name }))
-                .catch((err) => console.warn('[ambient] play rejected', { name, err: String(err?.name || err) }));
-      }
+      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
     }
-  } catch (err) { console.warn('[ambient] playAssignmentSfx threw', err); }
+  } catch { }
 }
 
 function pickNewAnsweringTrack() {
@@ -4742,11 +4730,10 @@ function unlockAssignmentAmbient() {
       a.pause();
       a.currentTime = 0;
       a.volume = prevVolume;
-      if (p && typeof p.catch === 'function') p.catch((err) => console.warn('[ambient] unlock rejected', String(err?.name || err)));
-    } catch (err) { console.warn('[ambient] unlock threw', err); }
+      if (p && typeof p.catch === 'function') p.catch(() => { });
+    } catch { }
   });
   assignmentAmbientUnlocked = true;
-  console.log('[ambient] unlocked', { count: all.length });
 }
 
 // Soft-pause the current answering track (no currentTime reset) so a mic
