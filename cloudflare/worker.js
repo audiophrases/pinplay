@@ -5034,7 +5034,6 @@ function summarizePendingGrading(assignment) {
   let pendingAttemptsCount = 0;
 
   Object.values(attempts).forEach((attempt) => {
-    if (!attempt?.submitted) return;
     const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
     let attemptHasPending = false;
     Object.entries(answers).forEach(([idxRaw, item]) => {
