@@ -1,5 +1,5 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
-const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
+const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
 // Self-service login lookup (Apps Script web app, deployed with "Anyone in iecomaruga.cat" access).
 // Empty string = link is hidden. Paste the deployment URL after publishing login-lookup.gs.
@@ -1998,7 +1998,7 @@ function renderPlayerState(state) {
       audioBtn.innerHTML = '🔊 Play Voice Comment';
 
       const audioEl = new Audio();
-      const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+      const base = loadBackendUrl() || 'https://api.pinplay.win';
       audioEl.src = `${base}/api/media/${audioKey}`;
 
       audioBtn.onclick = () => {
@@ -2504,7 +2504,7 @@ function renderJoinQuestion(question) {
   if (hasAnyImage) {
     let imgSrc = question.imageData;
     if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
-      const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+      const base = loadBackendUrl() || "https://api.pinplay.win";
       imgSrc = `${base}/api/media/${imgSrc}`;
     }
     if (joinQuestionWrap) {
@@ -2623,7 +2623,7 @@ function renderJoinQuestion(question) {
         if (question.audioMode === 'file' && question.audioData) {
           let audioUrl = question.audioData;
           if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
-            const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+            const base = loadBackendUrl() || 'https://api.pinplay.win';
             audioUrl = `${base}/api/media/${audioUrl}`;
           }
           const audio = new Audio(audioUrl);
@@ -2643,7 +2643,7 @@ function renderJoinQuestion(question) {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
-      let bgSrc = question.imageData; if (!bgSrc.StartsWith("http") && !bgSrc.StartsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; bgSrc = `${base}/api/media/${bgSrc}`; } wrap.style.backgroundImage = `url(${bgSrc})`;
+      let bgSrc = question.imageData; if (!bgSrc.StartsWith("http") && !bgSrc.StartsWith("data:")) { const base = loadBackendUrl() || "https://api.pinplay.win"; bgSrc = `${base}/api/media/${bgSrc}`; } wrap.style.backgroundImage = `url(${bgSrc})`;
       wrap.style.backgroundRepeat = 'no-repeat';
       wrap.style.backgroundPosition = 'center';
       wrap.style.backgroundSize = 'contain';
@@ -2692,7 +2692,7 @@ function renderJoinQuestion(question) {
         const img = document.createElement('img');
         let imgSrc = question.imageData;
         if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
-          const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev";
+          const base = loadBackendUrl() || "https://api.pinplay.win";
           imgSrc = `${base}/api/media/${imgSrc}`;
         }
         img.src = imgSrc;
@@ -2935,7 +2935,7 @@ function renderJoinQuestion(question) {
     wrap.style.margin = '0 auto';
 
     const img = document.createElement('img');
-    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://pinplay-api.eugenime.workers.dev"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
+    let imgSrc = question.imageData; if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://api.pinplay.win"; imgSrc = `${base}/api/media/${imgSrc}`; } img.src = imgSrc;
     img.alt = 'Pin question image';
 
     const picksLayer = document.createElement('div');
@@ -4779,7 +4779,7 @@ async function speakText(text, lang = 'en-US-Wave') {
 
   // Use Edge TTS via backend API (same as teacher UI)
   try {
-    const base = 'https://pinplay-api.eugenime.workers.dev';
+    const base = 'https://api.pinplay.win';
     // Map lang to Edge TTS voice format (e.g., 'en-US' -> 'en-US-JennyNeural')
     const voice = lang?.includes('Neural') ? lang : (lang?.replace('-Wave', '') || 'en-US') + '-JennyNeural';
     const key = `${voice}::${value}`;
@@ -5096,7 +5096,7 @@ function renderVoiceRecorder(container, question) {
     audio.controls = true;
     let src = savedAudio.audioUrl;
     if (!src.startsWith('http') && !src.startsWith('data:')) {
-      const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+      const base = loadBackendUrl() || 'https://api.pinplay.win';
       src = `${base}/api/media/${src}`;
     }
     audio.src = src;

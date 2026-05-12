@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'pinplay.quiz.v1';
 const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
-const DEFAULT_BACKEND_URL = 'https://pinplay-api.eugenime.workers.dev';
+const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
@@ -3549,7 +3549,7 @@ async function openQuizFromDrive(opts = {}) {
 // Open quiz from Cloud (R2)
 async function openQuizFromCloud() {
   try {
-    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    const base = loadBackendUrl() || 'https://api.pinplay.win';
     setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
 
     const data = await api('/api/quizzes', { method: 'GET', headers: { Authorization: `Bearer ${createSessionPassword}` } });
@@ -3569,7 +3569,7 @@ async function openQuizFromCloud() {
       })),
       onOpen: async (item) => {
         const quizKey = item.raw.key;
-        const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+        const base = loadBackendUrl() || 'https://api.pinplay.win';
         setStatus(hostStatusEl, '☁️ Loading from cloud...', 'ok');
         const res = await fetch(`${base}/api/media/${quizKey}`);
         if (!res.ok) throw new Error('Failed to load quiz from cloud');
@@ -3603,7 +3603,7 @@ async function saveQuizToCloud() {
   try {
     syncQuizFromUI();
     await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
-    const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+    const base = loadBackendUrl() || 'https://api.pinplay.win';
 
     const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
     quiz._r2QuizId = quizId;
@@ -11569,7 +11569,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
 
   const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   quiz._r2QuizId = quizId;
-  const r2Base = `${loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev'}/api/media`;
+  const r2Base = `${loadBackendUrl() || 'https://api.pinplay.win'}/api/media`;
 
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
@@ -11699,7 +11699,7 @@ async function uploadMediaToR2(dataUrl, key) {
   form.append('file', blob, key.split('/').pop());
   form.append('path', key);
 
-  const base = loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev';
+  const base = loadBackendUrl() || 'https://api.pinplay.win';
   const res = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: form });
   if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
   return await res.json();

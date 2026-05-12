@@ -17,7 +17,7 @@ const quizDir = process.argv[2];
 if (!quizDir) { console.error('Usage: node deploy-quiz-media.js <quiz-folder>'); process.exit(1); }
 
 const baseName = path.basename(quizDir);
-const workerUrl = 'https://pinplay-api.eugenime.workers.dev';
+const workerUrl = 'https://api.pinplay.win';
 const cloudflareDir = path.join(__dirname, 'cloudflare');
 
 console.log(`\n🚀 Deploying quiz media: ${baseName}\n`);

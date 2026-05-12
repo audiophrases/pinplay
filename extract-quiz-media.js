@@ -78,7 +78,7 @@ questions.forEach((q, idx) => {
 });
 
 // Write clean JSON with Worker API URLs
-const workerBase = 'https://pinplay-api.eugenime.workers.dev/api/media';
+const workerBase = 'https://api.pinplay.win/api/media';
 const cleanJson = JSON.stringify(quiz, null, 2);
 const cleanPath = path.join(outDir, baseName + '.json');
 fs.writeFileSync(cleanPath, cleanJson, 'utf-8');

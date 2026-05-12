@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const quizDir = process.argv[2];
-const workerUrl = (process.argv[3] || 'https://pinplay-api.eugenime.workers.dev').replace(/\/$/, '');
+const workerUrl = (process.argv[3] || 'https://api.pinplay.win').replace(/\/$/, '');
 
 if (!quizDir) {
   console.error('Usage: node upload-quiz-media.js <quiz-folder> <worker-url>');

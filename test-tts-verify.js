@@ -39,6 +39,6 @@ console.log("Q2 voice evaluation:", q.language);
 // Test video backend logic fallback
 function loadBackendUrl() { return ''; }
 
-const beUrl = (loadBackendUrl() || 'https://pinplay-api.eugenime.workers.dev').replace(/\/+$/, '');
+const beUrl = (loadBackendUrl() || 'https://api.pinplay.win').replace(/\/+$/, '');
 console.log("Video autoFill backend URL:", beUrl);
 
