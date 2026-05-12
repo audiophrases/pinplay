@@ -526,6 +526,7 @@ const assignmentResultsListEl = document.getElementById('assignmentResultsList')
 const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSummary');
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
 const gradeByQuestionBtnEl = document.getElementById('gradeByQuestionBtn');
+const gradeByStudentBtnEl = document.getElementById('gradeByStudentBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -4058,6 +4059,16 @@ function bindLiveEvents() {
       if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-question error: ${err.message}`;
     });
   });
+  if (gradeByStudentBtnEl) gradeByStudentBtnEl.addEventListener('click', () => {
+    const code = assignmentResultsCache?.code;
+    if (!code) {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open View results on an assignment first.';
+      return;
+    }
+    enterGradeByStudentMode(code).catch((err) => {
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-student error: ${err.message}`;
+    });
+  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -5199,6 +5210,544 @@ function gradingFocusKeydown(e) {
   // behind the modal. We don't bind these to anything inside the modal — just
   // suppress them.
   else if (['l', 'o', 'd', 's', 'a', 'm', 'f'].includes(k)) {
+    swallow();
+  }
+}
+
+// ==========================================================================
+//   GRADE BY STUDENT — focused modal (mirrors Grade by Question)
+// ==========================================================================
+
+const studentGradingFocusState = {
+  active: false,
+  code: '',
+  attemptId: '',
+  studentName: '',
+  items: [],       // teacher-graded question items for this attempt
+  current: 0,      // index into items[]
+  saving: false,
+  mediaRecorder: null,
+  audioChunks: [],
+  saveCurrentAndAdvance: null,
+  markCurrentAndAdvance: null,
+};
+
+async function enterGradeByStudentMode(code) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) throw new Error('Missing assignment code.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading student list for ${safeCode}...`;
+  if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+
+  const data = await api('/api/assignments/results', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode },
+  });
+
+  const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
+  const title = String(data?.assignment?.title || safeCode);
+
+  // Only show submitted attempts that have at least one teacher-graded answer
+  const gradable = attempts.filter((a) => a?.submitted);
+  gradable.sort((a, b) => {
+    const pa = Number(b?.metrics?.pendingTeacherGradeCount || 0);
+    const pb = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    if (pa !== pb) return pa - pb;
+    return String(a?.studentName || '').localeCompare(String(b?.studentName || ''));
+  });
+
+  const totalPending = gradable.reduce((s, a) => s + Number(a?.metrics?.pendingTeacherGradeCount || 0), 0);
+
+  if (assignmentGradingSummaryEl) {
+    assignmentGradingSummaryEl.textContent = gradable.length
+      ? `${title} · Per-student grading · ${gradable.length} submitted attempt${gradable.length === 1 ? '' : 's'} · ${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'} · Pick a student below.`
+      : `${title} · No submitted attempts yet.`;
+  }
+
+  if (!assignmentGradingListEl) return;
+  assignmentGradingListEl.innerHTML = '';
+
+  if (!gradable.length) return;
+
+  gradable.forEach((a) => {
+    const li = document.createElement('li');
+    li.style.cursor = 'pointer';
+
+    const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    const answered = Number(a?.metrics?.answeredCount || 0);
+    const total = Number(a?.metrics?.totalQuestions || 0);
+
+    const head = document.createElement('div');
+    const classBadge = a?._class
+      ? ` <span style="background:rgba(0,0,0,0.07);border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:600;">${escapeHtml(String(a._class))}</span>`
+      : '';
+    head.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}`;
+
+    const counts = document.createElement('div');
+    counts.className = 'small top-space';
+    const badges = [];
+    badges.push(`${answered}/${total} answered`);
+    badges.push(`<span style="color:${pending > 0 ? '#b45309' : '#15803d'}">${pending} pending teacher grade${pending === 1 ? '' : 's'}</span>`);
+    if (a?.submittedAt) badges.push(`Submitted ${new Date(a.submittedAt).toLocaleString()}`);
+    counts.innerHTML = badges.join(' · ');
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'row gap top-space';
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn primary';
+    openBtn.textContent = pending > 0 ? `Grade ${pending} pending` : 'Review answers';
+    openBtn.addEventListener('click', () => {
+      openStudentGradingFocusModal(safeCode, String(a?.id || ''), String(a?.studentName || 'Student')).catch((err) => {
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Student grading error: ${err.message}`;
+      });
+    });
+    actionRow.appendChild(openBtn);
+
+    li.append(head, counts, actionRow);
+    li.addEventListener('click', (e) => {
+      if (e.target === openBtn) return;
+      openBtn.click();
+    });
+    assignmentGradingListEl.appendChild(li);
+  });
+}
+
+async function openStudentGradingFocusModal(code, attemptId, studentName) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  const safeAttemptId = String(attemptId || '').trim();
+  if (!safeCode || !safeAttemptId) throw new Error('Missing code or attemptId.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading answers for ${studentName || safeAttemptId}...`;
+
+  const data = await api('/api/assignments/attempt', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode, attemptId: safeAttemptId },
+  });
+
+  const allItems = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
+  const items = allItems.filter((it) => it?.teacherGraded);
+
+  if (!items.length) {
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `No teacher-graded questions found for ${studentName || safeAttemptId}.`;
+    return;
+  }
+
+  let startIdx = items.findIndex((it) => !it?.grade?.graded);
+  if (startIdx < 0) startIdx = 0;
+
+  studentGradingFocusState.active = true;
+  studentGradingFocusState.code = safeCode;
+  studentGradingFocusState.attemptId = safeAttemptId;
+  studentGradingFocusState.studentName = String(studentName || 'Student');
+  studentGradingFocusState.items = items;
+  studentGradingFocusState.current = startIdx;
+  studentGradingFocusState.saving = false;
+  studentGradingFocusState.mediaRecorder = null;
+  studentGradingFocusState.audioChunks = [];
+
+  ensureStudentGradingFocusModal();
+  showStudentGradingFocusModal();
+  renderStudentGradingFocusItem();
+  document.addEventListener('keydown', studentGradingFocusKeydown, true);
+}
+
+function ensureStudentGradingFocusModal() {
+  let modal = document.getElementById('studentGradingFocusModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'studentGradingFocusModal';
+  modal.className = 'grading-focus-modal';
+  modal.innerHTML = `<div class="grading-focus-content" id="studentGradingFocusContent" role="dialog" aria-modal="true" aria-label="Grade student"></div>`;
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeStudentGradingFocusModal();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function showStudentGradingFocusModal() {
+  const modal = document.getElementById('studentGradingFocusModal');
+  if (modal) modal.classList.add('visible');
+}
+
+function hideStudentGradingFocusModal() {
+  const modal = document.getElementById('studentGradingFocusModal');
+  if (modal) modal.classList.remove('visible');
+}
+
+function closeStudentGradingFocusModal() {
+  if (!studentGradingFocusState.active) {
+    hideStudentGradingFocusModal();
+    return;
+  }
+  studentGradingFocusState.active = false;
+  if (studentGradingFocusState.mediaRecorder && studentGradingFocusState.mediaRecorder.state === 'recording') {
+    try { studentGradingFocusState.mediaRecorder.stop(); } catch (e) {}
+  }
+  document.removeEventListener('keydown', studentGradingFocusKeydown, true);
+  hideStudentGradingFocusModal();
+  // Refresh student list to reflect updated counts.
+  const code = studentGradingFocusState.code;
+  if (code) {
+    enterGradeByStudentMode(code).catch(() => {});
+  }
+}
+
+function moveStudentGradingFocusTo(idx) {
+  const max = studentGradingFocusState.items.length;
+  studentGradingFocusState.current = Math.max(0, Math.min(max, idx));
+  renderStudentGradingFocusItem();
+}
+
+function renderStudentGradingFocusItem() {
+  const content = document.getElementById('studentGradingFocusContent');
+  if (!content) return;
+
+  const { items, current, studentName, attemptId } = studentGradingFocusState;
+  if (!items.length) return;
+
+  const gradedCount = items.filter((x) => x?.grade?.graded).length;
+  const pendingCount = items.length - gradedCount;
+
+  if (current >= items.length) {
+    content.innerHTML = `
+      <div class="grading-focus-header">
+        <div class="gf-meta"><strong>${escapeHtml(studentName)}</strong> · All ${items.length} reviewed</div>
+        <button class="btn gf-close" data-close-sfocus title="Close (Esc)">✕ Close</button>
+      </div>
+      <div class="grading-focus-done">🎉 All questions reviewed for this student. <kbd>P</kbd> to go back, <kbd>Esc</kbd> to close.</div>
+    `;
+    content.querySelector('[data-close-sfocus]').addEventListener('click', closeStudentGradingFocusModal);
+    studentGradingFocusState.saveCurrentAndAdvance = null;
+    studentGradingFocusState.markCurrentAndAdvance = null;
+    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+    return;
+  }
+
+  const it = items[current];
+  const grade = it?.grade || {};
+  const graded = !!grade.graded;
+  const qType = String(it?.qType || '');
+  const icon = iconForType(qType) || '❓';
+  const maxPoints = Math.max(0, Math.round(Number(it?.maxPoints || 1000)));
+
+  let answerHtml = '';
+  if (qType === 'voice_record' && it?.answer && typeof it.answer === 'object' && it.answer.audioUrl) {
+    let src = String(it.answer.audioUrl || '');
+    if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    const dur = it.answer.durationMs ? ` <span class="small muted">(${Math.round(it.answer.durationMs / 1000)}s)</span>` : '';
+    const transcript = String(it.answer.transcript || '').trim();
+    const transcriptHtml = transcript
+      ? `<div class="small muted top-space voice-record-transcript"><em>Transcript:</em> ${escapeHtml(transcript)}</div>`
+      : '';
+    answerHtml = `<div class="small">🎙️ Voice recording${dur}</div><audio controls autoplay preload="auto" src="${escapeHtml(src)}" style="margin-top:6px;"></audio>${transcriptHtml}`;
+  } else if (qType === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
+    let src = String(it.answer.imageUrl || '');
+    if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    answerHtml = `<div class="small">🖼️ Image</div><img src="${escapeHtml(src)}" alt="Student image" style="max-width:100%;max-height:340px;border-radius:8px;display:block;margin-top:6px;" />`;
+  } else {
+    const text = String(it?.answerText || '') || '(blank)';
+    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>`;
+  }
+
+  const pendingBadge = !graded
+    ? `<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 10px;font-size:0.75rem;font-weight:700;">PENDING</span>`
+    : `<span style="background:#dcfce7;color:#166534;border-radius:10px;padding:2px 10px;font-size:0.75rem;font-weight:700;">GRADED · ${Number(grade.pointsAwarded || 0)} pts</span>`;
+
+  const initialPoints = Number(grade?.pointsAwarded || 0);
+  const initialCorrection = String(grade?.correction || '');
+  const initialAudioKey = String(grade?.correctionAudioKey || '');
+  const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
+  const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
+  const preloadedAnswer = !initialCorrection && studentAnswerText ? studentAnswerText : '';
+  const correctionFieldValue = initialCorrection || preloadedAnswer;
+  const correctionPlaceholder = preloadedAnswer
+    ? 'Edit the answer to show corrections (red→green diff)'
+    : 'Correction (optional)';
+
+  content.innerHTML = `
+    <div class="grading-focus-header">
+      <div class="gf-meta">
+        <strong>${escapeHtml(studentName)}</strong>
+        <div class="small muted">Question ${current + 1} of ${items.length} · ${gradedCount} graded · ${pendingCount} pending</div>
+      </div>
+      <button class="btn gf-close" data-close-sfocus title="Close (Esc)">✕</button>
+    </div>
+    <div class="grading-focus-prompt">
+      <strong>Q${Number(it?.qIndex || 0) + 1} · ${icon} ${escapeHtml(qType)}</strong> · max ${maxPoints} pts
+      <div class="small muted" style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(String(it?.prompt || '') || '(no prompt)')}</div>
+    </div>
+    <div class="grading-focus-body">
+      <div class="grading-focus-student-name">${pendingBadge}</div>
+      <div>${answerHtml}</div>
+    </div>
+    <div class="grading-focus-quickactions">
+      <button class="btn gf-correct" data-smark-correct title="Mark Correct (C)">✓ Correct! · ${maxPoints} pts<span class="kbd-hint">C</span></button>
+      <button class="btn gf-wrong" data-smark-wrong title="Mark Wrong (W)">✗ Wrong · 0 pts<span class="kbd-hint">W</span></button>
+      <button class="btn" data-sskip title="Skip without saving (N / →)">⏭ Skip<span class="kbd-hint">N</span></button>
+    </div>
+    <div class="grading-focus-controls">
+      <div class="gf-controls-row">
+        <label class="small muted" for="sgfPointsInput">Points</label>
+        <input id="sgfPointsInput" type="number" min="0" max="${maxPoints}" value="${initialPoints}" data-sgrade-points-input style="width:90px;" />
+        <button class="btn" data-sgrade-record-btn title="Record voice (R)">🎙️</button>
+        <span class="small muted" data-sgrade-audio-status></span>
+        <button class="btn primary" data-ssave-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
+      </div>
+      <textarea class="grading-focus-correction-textarea" rows="3" placeholder="${escapeHtml(correctionPlaceholder)}" data-sgrade-correction-input>${escapeHtml(correctionFieldValue)}</textarea>
+    </div>
+    <div data-saudio-preview class="top-space" style="display:${initialAudioKey ? 'block' : 'none'};"></div>
+    <div class="grading-focus-nav">
+      <button class="btn" data-sprev-question title="Previous question (P / ←)">‹ Prev</button>
+      <span class="small muted">${current + 1} / ${items.length}</span>
+      <button class="btn" data-snext-question title="Next question (N / →)">Next ›</button>
+    </div>
+    <details class="grading-focus-shortcuts-toggle">
+      <summary>⌨ Shortcuts</summary>
+      <div class="grading-focus-shortcuts">
+        <span><kbd>C</kbd> Correct!</span>
+        <span><kbd>W</kbd> Wrong</span>
+        <span><kbd>Enter</kbd> Save &amp; next</span>
+        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> Newline</span>
+        <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
+        <span><kbd>E</kbd> Edit correction</span>
+        <span><kbd>G</kbd> Edit points</span>
+        <span><kbd>R</kbd> Record</span>
+        <span><kbd>Space</kbd> Play answer</span>
+        <span><kbd>Esc</kbd> Close</span>
+      </div>
+    </details>
+  `;
+
+  let currentAudioKey = initialAudioKey;
+  const recordBtn = content.querySelector('[data-sgrade-record-btn]');
+  const audioStatus = content.querySelector('[data-sgrade-audio-status]');
+  const previewWrap = content.querySelector('[data-saudio-preview]');
+  const saveBtn = content.querySelector('[data-ssave-grade]');
+  const pointsEl = content.querySelector('[data-sgrade-points-input]');
+  const correctionEl = content.querySelector('[data-sgrade-correction-input]');
+
+  function renderAudioPreview() {
+    if (!currentAudioKey) {
+      previewWrap.style.display = 'none';
+      previewWrap.innerHTML = '';
+      return;
+    }
+    let src = currentAudioKey;
+    if (!src.startsWith('http')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      src = `${base}/api/media/${src}`;
+    }
+    previewWrap.innerHTML = `<audio controls src="${escapeHtml(src)}" style="height:32px;"></audio>`;
+    previewWrap.style.display = 'block';
+  }
+  renderAudioPreview();
+
+  recordBtn.addEventListener('click', async () => {
+    const rec = studentGradingFocusState.mediaRecorder;
+    if (rec && rec.state === 'recording') {
+      try { rec.stop(); } catch (e) {}
+      recordBtn.innerHTML = '🎙️';
+      recordBtn.classList.remove('bad');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const newRec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      studentGradingFocusState.mediaRecorder = newRec;
+      studentGradingFocusState.audioChunks = [];
+      newRec.ondataavailable = (e) => { if (e.data.size > 0) studentGradingFocusState.audioChunks.push(e.data); };
+      newRec.onstop = async () => {
+        const blob = new Blob(studentGradingFocusState.audioChunks, { type: newRec.mimeType || 'audio/webm' });
+        stream.getTracks().forEach((t) => t.stop());
+        try {
+          audioStatus.textContent = 'Uploading...';
+          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
+          const fileName = `correction_${Date.now()}${ext}`;
+          const formData = new FormData();
+          formData.append('file', blob, fileName);
+          formData.append('path', `voice_records/${fileName}`);
+          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
+          if (!resp.ok) throw new Error('Upload failed');
+          const res = await resp.json();
+          currentAudioKey = res.path || res.key || '';
+          audioStatus.textContent = '🎙️ Recorded';
+          renderAudioPreview();
+        } catch (err) {
+          audioStatus.textContent = '❌ Upload failed';
+        }
+      };
+      newRec.start();
+      recordBtn.innerHTML = '⏹️';
+      recordBtn.classList.add('bad');
+      audioStatus.textContent = 'Recording...';
+    } catch (err) {
+      alert('Mic access denied or error: ' + err.message);
+    }
+  });
+
+  async function persistAndAdvance({ points, correction, audioKey }) {
+    if (studentGradingFocusState.saving) return;
+    studentGradingFocusState.saving = true;
+    saveBtn.disabled = true;
+    try {
+      await gradeAssignmentQuestion(
+        studentGradingFocusState.code,
+        studentGradingFocusState.attemptId,
+        Number(it.qIndex || 0),
+        Number(points || 0),
+        String(correction || ''),
+        String(audioKey || '')
+      );
+      it.grade = {
+        ...(it.grade || {}),
+        graded: true,
+        pointsAwarded: Number(points || 0),
+        correction: String(correction || ''),
+        correctionAudioKey: String(audioKey || ''),
+      };
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${studentGradingFocusState.studentName} · ${Number(points || 0)} pts.`;
+      moveStudentGradingFocusTo(studentGradingFocusState.current + 1);
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+      saveBtn.disabled = false;
+    } finally {
+      studentGradingFocusState.saving = false;
+    }
+  }
+
+  function buildFinalCorrection(rawValue) {
+    const v = String(rawValue || '');
+    if (preloadedAnswer) {
+      if (v === preloadedAnswer) return '';
+      if (v.trim()) return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+    }
+    return v;
+  }
+
+  async function saveCurrentAndAdvance() {
+    const points = Number(pointsEl?.value || 0);
+    await persistAndAdvance({
+      points,
+      correction: buildFinalCorrection(correctionEl?.value),
+      audioKey: currentAudioKey,
+    });
+  }
+
+  async function markCurrentAndAdvance({ points, defaultCorrection }) {
+    if (pointsEl) pointsEl.value = String(points);
+    if (correctionEl && preloadedAnswer && correctionEl.value === preloadedAnswer) {
+      correctionEl.value = '';
+    }
+    if (correctionEl && defaultCorrection !== undefined && !correctionEl.value) {
+      correctionEl.value = defaultCorrection;
+      await persistAndAdvance({ points, correction: defaultCorrection, audioKey: currentAudioKey });
+      return;
+    }
+    await persistAndAdvance({
+      points,
+      correction: buildFinalCorrection(correctionEl?.value),
+      audioKey: currentAudioKey,
+    });
+  }
+
+  content.querySelector('[data-close-sfocus]').addEventListener('click', closeStudentGradingFocusModal);
+  content.querySelector('[data-smark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: maxPoints, defaultCorrection: 'Correct!' }));
+  content.querySelector('[data-smark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
+  content.querySelector('[data-sskip]').addEventListener('click', () => moveStudentGradingFocusTo(current + 1));
+  content.querySelector('[data-sprev-question]').addEventListener('click', () => moveStudentGradingFocusTo(current - 1));
+  content.querySelector('[data-snext-question]').addEventListener('click', () => moveStudentGradingFocusTo(current + 1));
+  saveBtn.addEventListener('click', saveCurrentAndAdvance);
+
+  studentGradingFocusState.saveCurrentAndAdvance = saveCurrentAndAdvance;
+  studentGradingFocusState.markCurrentAndAdvance = markCurrentAndAdvance;
+
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  content.scrollTop = 0;
+}
+
+function studentGradingFocusKeydown(e) {
+  if (!studentGradingFocusState.active) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const target = e.target;
+  const tag = target?.tagName || '';
+  const isTextEditing = (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable);
+
+  const swallow = () => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+
+  if (e.key === 'Escape') {
+    swallow();
+    closeStudentGradingFocusModal();
+    return;
+  }
+
+  if (e.key === 'Enter' && !e.shiftKey) {
+    swallow();
+    if (typeof studentGradingFocusState.saveCurrentAndAdvance === 'function') {
+      studentGradingFocusState.saveCurrentAndAdvance();
+    }
+    return;
+  }
+
+  if (isTextEditing) return;
+
+  const k = e.key.toLowerCase();
+  if (k === 'c') {
+    swallow();
+    if (typeof studentGradingFocusState.markCurrentAndAdvance === 'function') {
+      const it = studentGradingFocusState.items[studentGradingFocusState.current];
+      const maxPts = Math.max(0, Math.round(Number(it?.maxPoints || 1000)));
+      studentGradingFocusState.markCurrentAndAdvance({ points: maxPts, defaultCorrection: 'Correct!' });
+    }
+  } else if (k === 'w') {
+    swallow();
+    if (typeof studentGradingFocusState.markCurrentAndAdvance === 'function') {
+      studentGradingFocusState.markCurrentAndAdvance({ points: 0 });
+    }
+  } else if (k === 'arrowright' || k === 'n') {
+    swallow();
+    moveStudentGradingFocusTo(studentGradingFocusState.current + 1);
+  } else if (k === 'arrowleft' || k === 'p') {
+    swallow();
+    moveStudentGradingFocusTo(studentGradingFocusState.current - 1);
+  } else if (k === 'e') {
+    swallow();
+    const el = document.querySelector('#studentGradingFocusContent [data-sgrade-correction-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'g') {
+    swallow();
+    const el = document.querySelector('#studentGradingFocusContent [data-sgrade-points-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'r') {
+    swallow();
+    const el = document.querySelector('#studentGradingFocusContent [data-sgrade-record-btn]');
+    if (el) el.click();
+  } else if (k === ' ' || e.code === 'Space') {
+    swallow();
+    const audio = document.querySelector('#studentGradingFocusContent .grading-focus-body audio');
+    if (audio) {
+      if (audio.paused) audio.play().catch(() => {});
+      else audio.pause();
+    }
+  } else if (['l', 'o', 'd', 's', 'a', 'm', 'f'].includes(k)) {
     swallow();
   }
 }
