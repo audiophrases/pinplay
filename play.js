@@ -499,8 +499,6 @@ function moveAssignmentIndex(delta) {
     live.player.assignment.bypassAllAnsweredScreen = false;
   }
   live.player.assignment.currentIndex = clampAssignmentIndex(requested, total);
-  pickNewAnsweringTrack();
-  playAssignmentSfx('answering');
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   if (live.player.assignment.reviewMode) renderReviewNavigator();
@@ -629,8 +627,6 @@ function moveAssignmentToNextUnanswered() {
     const idx = (current + step) % total;
     if (!answered.has(idx)) {
       live.player.assignment.currentIndex = idx;
-      pickNewAnsweringTrack();
-      playAssignmentSfx('answering');
       const mapped = mapAssignmentStateToPlayerState();
       if (mapped) renderPlayerState(mapped);
       return;
@@ -742,8 +738,6 @@ async function loadAssignmentState() {
   if (live.player.assignment.forceAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
     live.player.assignment.currentIndex = autoIdx;
     live.player.assignment.forceAutoAdvance = false;
-    pickNewAnsweringTrack();
-    playAssignmentSfx('answering');
   } else {
     live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
   }
@@ -2120,12 +2114,16 @@ function renderPlayerState(state) {
   const assignmentQuestionChanged = isAssignmentQuestionPhase
     && (state.currentIndex !== lastRenderedQuestionIndex || live.player.renderKey !== key);
 
-  // Play answering ambient when entering a new question in assignment mode
+  // Play answering ambient when entering a new question in assignment mode.
+  // If the question has prompt audio, hold off — runAssignmentQuestionMediaSequence
+  // will start ambient only after the audio finishes, so it never overlaps.
   if (assignmentQuestionChanged) {
     cancelPendingAssignmentQuestionAutoplay();
     lastRenderedQuestionIndex = state.currentIndex;
     pickNewAnsweringTrack();
-    playAssignmentSfx('answering');
+    if (!hasAssignmentQuestionAudio(state.question)) {
+      playAssignmentSfx('answering');
+    }
   } else if (!isAssignmentQuestionPhase) {
     cancelPendingAssignmentQuestionAutoplay();
   }
@@ -5233,7 +5231,23 @@ function renderVoiceRecorder(container, question) {
     try {
       _voiceRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      statusEl.textContent = 'Mic access denied. Check browser settings.';
+      statusEl.innerHTML = '';
+      const n = err?.name || '';
+      if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
+        statusEl.textContent = 'Mic access denied. Allow the microphone in browser settings, then ';
+        const reloadLink = document.createElement('a');
+        reloadLink.href = '#';
+        reloadLink.textContent = 'reload the page';
+        reloadLink.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
+        statusEl.appendChild(reloadLink);
+        statusEl.appendChild(document.createTextNode('.'));
+      } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
+        statusEl.textContent = 'No microphone found. Connect a mic and try again.';
+      } else if (n === 'NotReadableError' || n === 'TrackStartError') {
+        statusEl.textContent = 'Microphone is in use by another app. Close it and try again.';
+      } else {
+        statusEl.textContent = `Mic error: ${err?.message || err}`;
+      }
       statusEl.className = 'voice-record-upload-status error';
       // Mic failed to open — bring ambient back so the student isn't left in silence.
       if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
