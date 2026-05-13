@@ -120,7 +120,7 @@ function init() {
   // empty. Defer to a microtask so the rest of the module body finishes
   // evaluating first.
   queueMicrotask(initAssignmentSfx);
-  initMuteMusicBtn();
+  queueMicrotask(initMuteMusicBtn);
   initBetControl();
   initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
