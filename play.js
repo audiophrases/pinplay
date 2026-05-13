@@ -4670,7 +4670,18 @@ function refreshMuteMusicBtnUi() {
 function setAssignmentMusicMuted(muted) {
   assignmentMusicMuted = !!muted;
   try { localStorage.setItem(MUSIC_MUTE_KEY, assignmentMusicMuted ? '1' : '0'); } catch { }
-  if (assignmentMusicMuted) stopAllAssignmentAmbient();
+  if (assignmentMusicMuted) {
+    // Pause (not stop) the answering track so the same position is kept for unmute.
+    pauseAssignmentAnsweringAmbient();
+    // Stop hall/final which are not resumable mid-play.
+    try {
+      if (assignmentAmbient.hall) { assignmentAmbient.hall.pause(); assignmentAmbient.hall.currentTime = 0; }
+      if (assignmentAmbient.final) { assignmentAmbient.final.pause(); assignmentAmbient.final.currentTime = 0; }
+    } catch { }
+  } else {
+    // Unmute — resume the same answering track from where it was paused.
+    resumeAssignmentAnsweringAmbient();
+  }
   refreshMuteMusicBtnUi();
 }
 
