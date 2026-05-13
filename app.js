@@ -1647,14 +1647,68 @@ function bindBuilderEvents() {
     const overItem = e.target.closest('.question-item');
     if (!overItem) return;
     e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    // If files are being dragged from the OS, show a copy-drop highlight
+    const hasFiles = e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files');
+    if (hasFiles && dragQuestionIndex == null) {
+      questionListEl.querySelectorAll('.question-item.file-drop-target').forEach((el) => el.classList.remove('file-drop-target'));
+      overItem.classList.add('file-drop-target');
+      e.dataTransfer.dropEffect = 'copy';
+    } else {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }
   });
 
-  questionListEl.addEventListener('drop', (e) => {
+  questionListEl.addEventListener('dragleave', (e) => {
+    const overItem = e.target.closest('.question-item');
+    if (overItem) overItem.classList.remove('file-drop-target');
+  });
+
+  questionListEl.addEventListener('drop', async (e) => {
     const overItem = e.target.closest('.question-item');
     if (!overItem) return;
     e.preventDefault();
+    overItem.classList.remove('file-drop-target');
 
+    // OS file drop onto a question card
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 0 && dragQuestionIndex == null) {
+      const idx = Number(overItem.dataset.questionIndex);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= quiz.questions.length) return;
+      const q = quiz.questions[idx];
+      const imageFile = files.find((f) => f.type.startsWith('image/'));
+      const audioFile = files.find((f) => f.type.startsWith('audio/'));
+      let applied = false;
+      if (imageFile) {
+        try {
+          const nextImageData = await imageFileToOptimizedDataUrl(imageFile);
+          replaceQuestionImageData(q, nextImageData);
+          applied = true;
+        } catch (err) {
+          setStatus(hostStatusEl, `Image load failed: ${err.message}`, 'bad');
+        }
+      }
+      if (audioFile) {
+        try {
+          q.audioData = await fileToDataUrl(audioFile);
+          q.audioMode = 'file';
+          q.audioEnabled = true;
+          q._ttsGenerated = false;
+          q._userAudioUploaded = true;
+          applied = true;
+        } catch (err) {
+          setStatus(hostStatusEl, `Audio load failed: ${err.message}`, 'bad');
+        }
+      }
+      if (applied) {
+        renderBuilder();
+        setStatus(hostStatusEl, `File(s) applied to Q${idx + 1}.`, 'ok');
+      } else if (files.length > 0) {
+        setStatus(hostStatusEl, 'Unsupported file type. Drop an image or audio file.', 'bad');
+      }
+      return;
+    }
+
+    // Internal question reorder
     const to = Number(overItem.dataset.questionIndex);
     const from = Number.isFinite(dragQuestionIndex) ? dragQuestionIndex : Number(e.dataTransfer?.getData('text/plain'));
 
@@ -1670,6 +1724,7 @@ function bindBuilderEvents() {
   questionListEl.addEventListener('dragend', () => {
     dragQuestionIndex = null;
     questionListEl.querySelectorAll('.question-item.dragging').forEach((el) => el.classList.remove('dragging'));
+    questionListEl.querySelectorAll('.question-item.file-drop-target').forEach((el) => el.classList.remove('file-drop-target'));
   });
 
   questionListEl.addEventListener('paste', async (e) => {

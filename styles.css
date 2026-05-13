@@ -371,6 +371,12 @@ textarea {
   opacity: .55;
 }
 
+.question-item.file-drop-target {
+  border: 2px dashed var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
 .question-body-collapsed {
   display: none;
 }
