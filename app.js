@@ -459,6 +459,8 @@ const saveCloudBtn = document.getElementById('saveCloudBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
+const addMediaBatchBtn = document.getElementById('addMediaBatchBtn');
+const addMediaBatchInput = document.getElementById('addMediaBatchInput');
 const builderSectionToggleEl = document.getElementById('builderSectionToggle');
 const builderCardBodyEl = document.getElementById('builderCardBody');
 const creationPromptToggleEl = document.getElementById('creationPromptToggle');
@@ -1375,6 +1377,70 @@ function bindBuilderEvents() {
       quiz.questions.forEach((q) => { q.collapsed = shouldCollapse; });
       collapseAllBtn.textContent = shouldCollapse ? 'Expand all' : 'Collapse all';
       renderBuilder();
+    });
+  }
+
+  if (addMediaBatchBtn && addMediaBatchInput) {
+    addMediaBatchBtn.addEventListener('click', () => addMediaBatchInput.click());
+
+    addMediaBatchInput.addEventListener('change', async () => {
+      const files = Array.from(addMediaBatchInput.files || []);
+      addMediaBatchInput.value = '';
+      if (!files.length) return;
+
+      // Group files by their leading integer (e.g. "1.jpg" → 1, "02.mp3" → 2)
+      const byIndex = new Map(); // number → { image?: File, audio?: File }
+      for (const file of files) {
+        const base = file.name.replace(/\.[^.]+$/, '');
+        const num = parseInt(base, 10);
+        if (!Number.isFinite(num) || num < 1) continue;
+        if (!byIndex.has(num)) byIndex.set(num, {});
+        const entry = byIndex.get(num);
+        if (file.type.startsWith('image/') && !entry.image) entry.image = file;
+        else if (file.type.startsWith('audio/') && !entry.audio) entry.audio = file;
+      }
+
+      if (byIndex.size === 0) {
+        setStatus(hostStatusEl, 'No numbered media files found. Name files 1.jpg, 2.jpg … or 1.mp3, 2.mp3 …', 'bad');
+        return;
+      }
+
+      let applied = 0;
+      const sorted = [...byIndex.keys()].sort((a, b) => a - b);
+      for (const num of sorted) {
+        const qIdx = num - 1; // 1-based → 0-based
+        const q = quiz.questions[qIdx];
+        if (!q) continue;
+        const { image, audio } = byIndex.get(num);
+        if (image) {
+          try {
+            const data = await imageFileToOptimizedDataUrl(image);
+            replaceQuestionImageData(q, data);
+            applied++;
+          } catch (err) {
+            setStatus(hostStatusEl, `Q${num}: image failed – ${err.message}`, 'bad');
+          }
+        }
+        if (audio) {
+          try {
+            q.audioData = await fileToDataUrl(audio);
+            q.audioMode = 'file';
+            q.audioEnabled = true;
+            q._ttsGenerated = false;
+            q._userAudioUploaded = true;
+            applied++;
+          } catch (err) {
+            setStatus(hostStatusEl, `Q${num}: audio failed – ${err.message}`, 'bad');
+          }
+        }
+      }
+
+      if (applied > 0) {
+        renderBuilder();
+        setStatus(hostStatusEl, `Media batch applied: ${applied} file(s) assigned to ${byIndex.size} question(s).`, 'ok');
+      } else {
+        setStatus(hostStatusEl, 'No files were matched to existing questions.', 'bad');
+      }
     });
   }
 
