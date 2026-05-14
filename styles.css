@@ -1250,6 +1250,21 @@ body.question-active .join-title-row {
   background: var(--primary);
 }
 
+.voice-record-btn kbd,
+.voice-record-stop-btn kbd {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.45);
+  border-bottom-width: 2px;
+  border-radius: 0.2rem;
+  padding: 0 5px;
+  font-size: 0.65em;
+  font-family: monospace;
+  vertical-align: middle;
+  margin-left: 0.4em;
+  pointer-events: none;
+  user-select: none;
+}
+
 .voice-record-stop-btn {
   background: #ff3b30;
   color: white;

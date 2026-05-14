@@ -174,6 +174,17 @@ function init() {
     }
   });
 
+  // Press 'r' / 'R' to start or stop voice recording
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'r' && e.key !== 'R') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled)');
+    if (stopBtn) { e.preventDefault(); stopBtn.click(); return; }
+    const recBtn = document.querySelector('.voice-record-btn:not(.hidden):not(:disabled)');
+    if (recBtn) { e.preventDefault(); recBtn.click(); }
+  });
+
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') validatePin();
@@ -5113,12 +5124,12 @@ function renderVoiceRecorder(container, question) {
   const recordBtn = document.createElement('button');
   recordBtn.type = 'button';
   recordBtn.className = 'btn voice-record-btn';
-  recordBtn.textContent = '🎙️ Record';
+  recordBtn.innerHTML = '🎙️ Record <kbd>R</kbd>';
 
   const stopBtn = document.createElement('button');
   stopBtn.type = 'button';
   stopBtn.className = 'btn voice-record-stop-btn hidden';
-  stopBtn.textContent = '⏹ Stop';
+  stopBtn.innerHTML = '⏹ Stop <kbd>R</kbd>';
 
   const timerEl = document.createElement('div');
   timerEl.className = 'voice-record-status hidden';
