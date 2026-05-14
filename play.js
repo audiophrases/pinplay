@@ -2480,7 +2480,7 @@ function renderJoinQuestion(question) {
     const showReplay = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
     replayQuestionAudioBtn.classList.toggle('hidden', !showReplay);
     replayQuestionAudioBtn.disabled = false;
-    replayQuestionAudioBtn.setAttribute('aria-busy', 'false');
+    replayQuestionAudioBtn.classList.remove('audio-playing');
   }
 
   // Store current question for keyboard shortcut
@@ -4492,7 +4492,7 @@ function setAssignmentAudioPlayingUi(playing) {
   _refreshAssignmentRecordBtnsForAudio();
   if (replayQuestionAudioBtn) {
     replayQuestionAudioBtn.disabled = !!playing;
-    replayQuestionAudioBtn.setAttribute('aria-busy', playing ? 'true' : 'false');
+    replayQuestionAudioBtn.classList.toggle('audio-playing', !!playing);
   }
 }
 
