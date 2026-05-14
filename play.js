@@ -64,7 +64,6 @@ const assignmentPrevBtn = document.getElementById('assignmentPrevBtn');
 const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
 const assignmentBannerEl = document.getElementById('assignmentBanner');
-const replayQuestionAudioBtn = document.getElementById('replayQuestionAudioBtn');
 const joinStatusHudEl = document.getElementById('joinStatusHud');
 const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
@@ -142,12 +141,6 @@ function init() {
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
-  if (replayQuestionAudioBtn) replayQuestionAudioBtn.addEventListener('click', () => {
-    const q = live.player.currentQuestion;
-    if (!q || _assignmentAudioPlaying) return;
-    stopAssignmentQuestionAudioPlayback();
-    playAssignmentQuestionAudio(q).catch(() => {});
-  });
 
   // Keyboard nav for assignment mode (arrow keys + space)
   document.addEventListener('keydown', (e) => {
@@ -2479,19 +2472,30 @@ function renderJoinQuestion(question) {
       const promptText = question.prompt || '(No question text)';
       joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
     }
+    const isReplayable = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
     const eq = document.createElement('span');
-    eq.className = 'audio-eq';
-    eq.setAttribute('aria-hidden', 'true');
+    if (isReplayable) {
+      eq.className = 'audio-eq audio-eq-replay';
+      eq.setAttribute('role', 'button');
+      eq.setAttribute('tabindex', '0');
+      eq.title = 'Replay question audio';
+      eq.setAttribute('aria-label', 'Replay question audio');
+      eq.addEventListener('click', () => {
+        const q = live.player.currentQuestion;
+        if (!q) return;
+        stopAssignmentQuestionAudioPlayback();
+        playAssignmentQuestionAudio(q).catch(() => {});
+      });
+      eq.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); eq.click(); }
+      });
+    } else {
+      eq.className = 'audio-eq';
+      eq.setAttribute('aria-hidden', 'true');
+    }
     eq.innerHTML = '<span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="emoji">🎧</span>';
     joinPromptEl.append(' ', eq);
     joinPromptEl.classList.remove('audio-playing');
-  }
-
-  if (replayQuestionAudioBtn) {
-    const showReplay = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
-    replayQuestionAudioBtn.classList.toggle('hidden', !showReplay);
-    replayQuestionAudioBtn.disabled = false;
-    replayQuestionAudioBtn.classList.remove('audio-playing');
   }
 
   // Store current question for keyboard shortcut
@@ -4501,10 +4505,6 @@ function setAssignmentAudioPlayingUi(playing) {
   _assignmentAudioPlaying = !!playing;
   if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
   _refreshAssignmentRecordBtnsForAudio();
-  if (replayQuestionAudioBtn) {
-    replayQuestionAudioBtn.disabled = !!playing;
-    replayQuestionAudioBtn.classList.toggle('audio-playing', !!playing);
-  }
 }
 
 // Hide just the visual bars (used to fade them out ~0.7s before audio ends
