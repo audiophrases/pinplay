@@ -64,6 +64,7 @@ const assignmentPrevBtn = document.getElementById('assignmentPrevBtn');
 const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
 const assignmentBannerEl = document.getElementById('assignmentBanner');
+const replayQuestionAudioBtn = document.getElementById('replayQuestionAudioBtn');
 const joinStatusHudEl = document.getElementById('joinStatusHud');
 const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
@@ -141,6 +142,12 @@ function init() {
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
+  if (replayQuestionAudioBtn) replayQuestionAudioBtn.addEventListener('click', () => {
+    const q = live.player.currentQuestion;
+    if (!q || _assignmentAudioPlaying) return;
+    stopAssignmentQuestionAudioPlayback();
+    playAssignmentQuestionAudio(q).catch(() => {});
+  });
 
   // Keyboard nav for assignment mode (arrow keys + space)
   document.addEventListener('keydown', (e) => {
@@ -2469,6 +2476,13 @@ function renderJoinQuestion(question) {
     joinPromptEl.classList.remove('audio-playing');
   }
 
+  if (replayQuestionAudioBtn) {
+    const showReplay = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
+    replayQuestionAudioBtn.classList.toggle('hidden', !showReplay);
+    replayQuestionAudioBtn.disabled = false;
+    replayQuestionAudioBtn.setAttribute('aria-busy', 'false');
+  }
+
   // Store current question for keyboard shortcut
   live.player.currentQuestion = question;
 
@@ -4476,6 +4490,10 @@ function setAssignmentAudioPlayingUi(playing) {
   _assignmentAudioPlaying = !!playing;
   if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
   _refreshAssignmentRecordBtnsForAudio();
+  if (replayQuestionAudioBtn) {
+    replayQuestionAudioBtn.disabled = !!playing;
+    replayQuestionAudioBtn.setAttribute('aria-busy', playing ? 'true' : 'false');
+  }
 }
 
 // Hide just the visual bars (used to fade them out ~0.7s before audio ends

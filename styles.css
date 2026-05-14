@@ -131,6 +131,13 @@ h3 {
 .mute-music-btn:active { transform: scale(0.9); }
 .mute-music-btn[aria-pressed="true"] { opacity: 0.55; }
 
+#replayQuestionAudioBtn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+#replayQuestionAudioBtn[aria-busy="true"] { animation: replay-btn-pulse 1s ease-in-out infinite; }
+@keyframes replay-btn-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
 /* Buttons & Inputs */
 .btn {
   border: 1px solid var(--line);
