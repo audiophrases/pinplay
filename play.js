@@ -224,8 +224,8 @@ function markAnswerDirty() {
   if (fbMode === 'instant') return;
   if (live.player.assignment.dirtyAnswer) return;
   live.player.assignment.dirtyAnswer = true;
-  if (joinSubmitBtn && joinSubmitBtn.textContent === 'Continue') {
-    joinSubmitBtn.textContent = 'Save answer';
+  if (joinSubmitBtn && joinSubmitBtn.textContent.startsWith('Continue')) {
+    joinSubmitBtn.innerHTML = 'Save answer <kbd>\u21b5</kbd>';
   }
 }
 
@@ -1098,7 +1098,7 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
-  if (joinSubmitBtn) joinSubmitBtn.textContent = 'Save answer';
+  if (joinSubmitBtn) joinSubmitBtn.innerHTML = 'Save answer <kbd>\u21b5</kbd>';
   if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
   // Show attempt number info
@@ -2218,10 +2218,10 @@ function renderPlayerState(state) {
       && !assignmentSubmitted;
 
     if (isContinueMode) {
-      joinSubmitBtn.textContent = live.player.assignment.pendingComplete ? 'Finish quiz' : 'Continue';
+      joinSubmitBtn.innerHTML = live.player.assignment.pendingComplete ? 'Finish quiz <kbd>\u21b5</kbd>' : 'Continue <kbd>\u21b5</kbd>';
       joinSubmitBtn.disabled = false;
     } else {
-      joinSubmitBtn.textContent = isAssignment ? 'Save answer' : 'Submit';
+      joinSubmitBtn.innerHTML = isAssignment ? 'Save answer <kbd>\u21b5</kbd>' : 'Submit';
       joinSubmitBtn.disabled = shouldDisable;
     }
 
@@ -3231,7 +3231,7 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer() {
   try {
-    if (joinSubmitBtn && (joinSubmitBtn.textContent === 'Continue' || joinSubmitBtn.textContent === 'Finish quiz')) {
+    if (joinSubmitBtn && (joinSubmitBtn.textContent.startsWith('Continue') || joinSubmitBtn.textContent.startsWith('Finish quiz'))) {
       if (live.player.assignment.pendingComplete) {
         live.player.assignment.pendingComplete = false;
         const mapped = mapAssignmentStateToPlayerState();
