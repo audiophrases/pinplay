@@ -6183,6 +6183,8 @@ function renderAssignmentResults(safeCode, data) {
       const total = Number(a?.metrics?.totalQuestions || 0);
       if (!total || Number(a?.metrics?.answeredCount || 0) < total) return false;
     }
+    if (filter === 'notified' && !a?.notifiedAt) return false;
+    if (filter === 'not-notified' && a?.notifiedAt) return false;
     if (classFilter && String(a?._class || '').trim() !== classFilter) return false;
     return true;
   });

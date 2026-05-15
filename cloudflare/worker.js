@@ -2240,6 +2240,10 @@ export class QuizRoom {
           updatedAt: Date.now(),
         };
 
+        // Reset notified state so teacher knows to re-notify the student
+        // about this newly-graded answer.
+        if (attempt.notifiedAt) attempt.notifiedAt = 0;
+
         attempt.updatedAt = Date.now();
         assignment.updatedAt = Date.now();
         assignments[code] = assignment;
