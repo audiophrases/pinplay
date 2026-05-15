@@ -4565,6 +4565,9 @@ const examFocus = {
   listenersAttached: false,
   blurAt: null,
   overlayEl: null,
+  count: 0,
+  countBadgeEl: null,
+  noticeShownForCode: null,
 };
 
 function maybeActivateExamModeFocusTracking() {
@@ -4573,11 +4576,114 @@ function maybeActivateExamModeFocusTracking() {
   const examOn = !!state?.attempt?.assignment?.examMode;
   const open = !state?.attempt?.submitted && !live.player.assignment?.reviewMode;
   if (!examOn || !open) return;
-  if (examFocus.listenersAttached) return;
 
+  // Sync the visible counter with the server-tracked total whenever state arrives
+  // (handles resumed attempts that already accumulated focus losses).
+  const serverCount = Math.max(0, Math.round(Number(state?.attempt?.focusEventsCount || 0)));
+  if (serverCount > examFocus.count) examFocus.count = serverCount;
+  updateExamFocusCountBadge();
+
+  const code = String(live.player.assignment?.code || '').trim();
+  if (code && examFocus.noticeShownForCode !== code) {
+    examFocus.noticeShownForCode = code;
+    showExamFocusStartNotice();
+  }
+
+  if (examFocus.listenersAttached) return;
   document.addEventListener('visibilitychange', onExamFocusVisibilityChange);
   window.addEventListener('blur', onExamFocusBlur);
   examFocus.listenersAttached = true;
+}
+
+function showExamFocusStartNotice() {
+  if (document.getElementById('examFocusStartNotice')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'examFocusStartNotice';
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:99998',
+    'background:rgba(10,12,18,0.65)',
+    'backdrop-filter:blur(3px)',
+    '-webkit-backdrop-filter:blur(3px)',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'padding:20px',
+  ].join(';');
+
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'max-width:460px',
+    'width:100%',
+    'background:rgba(20,24,34,0.97)',
+    'border:1px solid rgba(120,180,255,0.4)',
+    'border-radius:12px',
+    'padding:22px 26px',
+    'color:#fff',
+    'text-align:left',
+    'box-shadow:0 10px 40px rgba(0,0,0,0.5)',
+  ].join(';');
+  card.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+      <span style="font-size:26px; line-height:1;">👀</span>
+      <strong style="font-size:1.1rem;">Please stay on this page</strong>
+    </div>
+    <p style="margin:0 0 10px 0; font-size:0.95rem; line-height:1.45; opacity:0.92;">
+      Your teacher can see if you switch to another tab, window, or app while you answer.
+    </p>
+    <p style="margin:0 0 16px 0; font-size:0.9rem; line-height:1.45; opacity:0.78;">
+      If you leave this page, the quiz will pause and the moment will be recorded on your results.
+      Take your time — but stay here.
+    </p>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" id="examFocusStartOk" class="btn" style="background:#3b82f6; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:600; cursor:pointer;">
+        OK, I'm ready
+      </button>
+    </div>
+  `;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  const dismiss = () => overlay.remove();
+  card.querySelector('#examFocusStartOk')?.addEventListener('click', dismiss);
+  // Escape key also dismisses.
+  document.addEventListener('keydown', function escClose(e) {
+    if (e.key === 'Escape') {
+      dismiss();
+      document.removeEventListener('keydown', escClose);
+    }
+  });
+}
+
+function updateExamFocusCountBadge() {
+  const n = examFocus.count;
+  if (!examFocus.countBadgeEl) {
+    if (n <= 0) return;
+    const badge = document.createElement('div');
+    badge.id = 'examFocusCountBadge';
+    badge.title = "Each time you leave this tab is recorded for your teacher.";
+    badge.style.cssText = [
+      'position:fixed',
+      'top:10px',
+      'right:10px',
+      'z-index:9000',
+      'background:rgba(245,158,11,0.95)',
+      'color:#1f2937',
+      'font-weight:700',
+      'font-size:0.78rem',
+      'padding:4px 10px',
+      'border-radius:999px',
+      'box-shadow:0 2px 8px rgba(0,0,0,0.25)',
+      'pointer-events:auto',
+    ].join(';');
+    document.body.appendChild(badge);
+    examFocus.countBadgeEl = badge;
+  }
+  examFocus.countBadgeEl.textContent = `⚠ Left tab ${n}×`;
+  examFocus.countBadgeEl.style.display = n > 0 ? 'block' : 'none';
 }
 
 function onExamFocusVisibilityChange() {
@@ -4599,14 +4705,25 @@ function handleExamFocusLost() {
   if (examFocus.blurAt != null) return; // already in lost state
 
   examFocus.blurAt = Date.now();
+  examFocus.count = (Number(examFocus.count) || 0) + 1;
+  updateExamFocusCountBadge();
   try { stopAssignmentQuestionAudioPlayback(); } catch { }
   showExamFocusOverlay();
 }
 
 function showExamFocusOverlay() {
+  // The local counter is incremented when we enter the lost-focus state, so the
+  // overlay text reflects the trip the student is currently on.
+  const n = examFocus.count;
+  const timesText = n === 1
+    ? "You've left this page 1 time so far."
+    : `You've left this page ${n} times so far.`;
+
   if (examFocus.overlayEl) {
     examFocus.overlayEl.classList.remove('hidden');
     examFocus.overlayEl.style.display = 'flex';
+    const countEl = examFocus.overlayEl.querySelector('[data-exam-count]');
+    if (countEl) countEl.textContent = timesText;
     return;
   }
   const overlay = document.createElement('div');
@@ -4637,9 +4754,10 @@ function showExamFocusOverlay() {
   ].join(';');
   card.innerHTML = `
     <div style="font-size:34px; line-height:1; margin-bottom:8px;">⚠️</div>
-    <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">Attempt paused</div>
-    <div style="font-size:0.9rem; opacity:0.85; margin-bottom:14px;">You left the tab. Your teacher will see this. Click anywhere to resume.</div>
-    <div style="font-size:0.8rem; opacity:0.6;">Click to resume</div>
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">Quiz paused</div>
+    <div style="font-size:0.9rem; opacity:0.85; margin-bottom:8px;">You left this page. Your teacher will see this on your results.</div>
+    <div data-exam-count style="font-size:0.85rem; opacity:0.95; color:#fbbf24; margin-bottom:14px; font-weight:600;">${timesText}</div>
+    <div style="font-size:0.8rem; opacity:0.6;">Click anywhere to resume</div>
   `;
 
   overlay.appendChild(card);
