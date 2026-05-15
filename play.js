@@ -4907,9 +4907,10 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   const validVariants = variants.map(v => String(v || '').trim()).filter(Boolean);
   if (!validVariants.length) return 1;
 
-  let maxErrors = 1;
+  let minErrors = Infinity;
 
-  // 2. Calculate the required errors for each variant and take the maximum
+  // 2. Calculate the required errors for each variant and take the minimum
+  // (the closest-fit correction — the fewest edits the player must make).
   for (const correctedStr of validVariants) {
     const source = tokenizeWords(prompt).map(normalizeTextAnswer);
     const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
@@ -4965,13 +4966,13 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
       }
     }
 
-    // Track the highest number of mistakes found across all valid sentence variations
-    if (errorIndexes.size > maxErrors) {
-      maxErrors = errorIndexes.size;
+    // Track the smallest number of mistakes across all valid sentence variations
+    if (errorIndexes.size > 0 && errorIndexes.size < minErrors) {
+      minErrors = errorIndexes.size;
     }
   }
 
-  return Math.max(1, maxErrors);
+  return Math.max(1, minErrors === Infinity ? 1 : minErrors);
 }
 
 // Live diff for the student-facing error hunt textarea: returns the number of
