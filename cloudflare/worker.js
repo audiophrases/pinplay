@@ -685,7 +685,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, quiz }),
       }));
     }
 
@@ -1063,6 +1063,7 @@ export default {
       const forward = { code, quiz };
       if (typeof body?.title === 'string') forward.title = String(body.title).slice(0, 120);
       if (typeof body?.randomNames === 'boolean') forward.randomNames = !!body.randomNames;
+      if (typeof body?.examMode === 'boolean') forward.examMode = !!body.examMode;
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/update-quiz', {
@@ -1269,6 +1270,23 @@ export default {
       return withCors(await stub.fetch('https://room/assignments/answer', {
         method: 'POST',
         body: JSON.stringify({ code, attemptId, qIndex: Math.round(qIndex), answer: body?.answer, bet: body?.bet }),
+      }));
+    }
+
+    if (url.pathname === '/api/assignment/focus-event' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const startedAt = Math.round(Number(body?.startedAt || 0));
+      const durationMs = Math.round(Number(body?.durationMs || 0));
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+      if (!Number.isFinite(durationMs) || durationMs < 0) return json({ error: 'durationMs invalid.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/focus-event', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId, startedAt, durationMs }),
       }));
     }
 
@@ -2009,6 +2027,7 @@ export class QuizRoom {
           dueAt: Number(body?.dueAt || 0) > 0 ? Math.round(Number(body?.dueAt || 0)) : null,
           randomNames: !!body?.randomNames,
           feedbackMode: String(body?.feedbackMode || 'none'),
+          examMode: !!body?.examMode,
           active: true,
           quiz,
         };
@@ -2311,6 +2330,39 @@ export class QuizRoom {
         await this.state.storage.put('assignments', assignments);
         this.broadcastTeacherUpdate(code);
         return json({ ok: true });
+      }
+
+      if (url.pathname === '/assignments/focus-event' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        const startedAtRaw = Math.round(Number(body?.startedAt || 0));
+        const durationMs = Math.max(0, Math.min(24 * 60 * 60 * 1000, Math.round(Number(body?.durationMs || 0))));
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+        const assignments = await loadAssignmentsMap(this.state.storage);
+        const assignment = assignments?.[code] || null;
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const attempt = assignment.attempts?.[attemptId] || null;
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        if (attempt.submitted) return json({ ok: true, ignored: 'submitted' });
+
+        attempt.focusEvents = Array.isArray(attempt.focusEvents) ? attempt.focusEvents : [];
+        // Cap to avoid storage abuse; oldest events drop off.
+        if (attempt.focusEvents.length >= 500) attempt.focusEvents.shift();
+        attempt.focusEvents.push({
+          startedAt: Number.isFinite(startedAtRaw) && startedAtRaw > 0 ? startedAtRaw : Date.now() - durationMs,
+          durationMs,
+        });
+        attempt.updatedAt = Date.now();
+        assignment.updatedAt = attempt.updatedAt;
+        assignments[code] = assignment;
+        await this.state.storage.put('assignments', assignments);
+
+        return json({ ok: true, count: attempt.focusEvents.length });
       }
 
       if (url.pathname === '/assignments/answer' && request.method === 'POST') {
@@ -2840,6 +2892,10 @@ export class QuizRoom {
             assignment.randomNames = nextRandom;
             randomNamesChanged = true;
           }
+        }
+
+        if (typeof body?.examMode === 'boolean') {
+          assignment.examMode = !!body.examMode;
         }
 
         assignment.updatedAt = now;
@@ -4972,6 +5028,9 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     }).filter(Boolean);
   }
 
+  const focusEvents = Array.isArray(attempt?.focusEvents) ? attempt.focusEvents : [];
+  const focusEventsTotalMs = focusEvents.reduce((sum, e) => sum + Math.max(0, Number(e?.durationMs || 0)), 0);
+
   return {
     id: sanitizeAssignmentAttemptId(attempt?.id),
     code: sanitizeAssignmentCode(assignment?.code),
@@ -4987,6 +5046,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
     answersWithCorrectness,
+    focusEventsCount: focusEvents.length,
+    focusEventsTotalMs,
   };
 }
 
@@ -5069,6 +5130,8 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     notifiedAt: Number(attempt?.notifiedAt || 0) || null,
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
+    focusEventsCount: full.focusEventsCount,
+    focusEventsTotalMs: full.focusEventsTotalMs,
   };
 }
 
@@ -5143,6 +5206,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     dueAt: Number(assignment.dueAt || 0) > 0 ? Math.round(Number(assignment.dueAt || 0)) : null,
     randomNames: !!assignment.randomNames,
     feedbackMode: assignment.feedbackMode || 'none',
+    examMode: !!assignment.examMode,
     active: !!assignment.active,
     archived: !!assignment.archived,
     quizTitle: String(assignment.quiz?.title || ''),

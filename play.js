@@ -756,6 +756,7 @@ async function loadAssignmentState() {
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   renderInstantFeedbackFromState();
+  maybeActivateExamModeFocusTracking();
 }
 
 // Load and display previous attempts for a student (disabled: requested removal of history panel)
@@ -4552,6 +4553,119 @@ function stopAssignmentQuestionAudioPlayback() {
   } catch { }
 
   setAssignmentAudioPlayingUi(false);
+}
+
+// --- Exam mode: focus-loss tracking ---------------------------------------
+// Detects when the student leaves the tab/window during an open attempt of an
+// exam-mode assignment. Pauses audio + dims the page, requires an explicit
+// click to resume, and logs the event server-side so the teacher can see how
+// often (and how long) the student was away during the attempt.
+
+const examFocus = {
+  listenersAttached: false,
+  blurAt: null,
+  overlayEl: null,
+};
+
+function maybeActivateExamModeFocusTracking() {
+  if (live.player.mode !== 'assignment') return;
+  const state = live.player.assignment?.state;
+  const examOn = !!state?.attempt?.assignment?.examMode;
+  const open = !state?.attempt?.submitted && !live.player.assignment?.reviewMode;
+  if (!examOn || !open) return;
+  if (examFocus.listenersAttached) return;
+
+  document.addEventListener('visibilitychange', onExamFocusVisibilityChange);
+  window.addEventListener('blur', onExamFocusBlur);
+  examFocus.listenersAttached = true;
+}
+
+function onExamFocusVisibilityChange() {
+  if (document.hidden) handleExamFocusLost();
+}
+
+function onExamFocusBlur() {
+  // Some browsers fire blur without hidden (e.g. dev tools focus). Treat as lost too.
+  handleExamFocusLost();
+}
+
+function handleExamFocusLost() {
+  // Ignore once student has submitted, entered review, or switched into a
+  // non-exam-mode assignment in the same browser session.
+  const state = live.player.assignment?.state;
+  if (!state) return;
+  if (!state?.attempt?.assignment?.examMode) return;
+  if (state?.attempt?.submitted || live.player.assignment?.reviewMode) return;
+  if (examFocus.blurAt != null) return; // already in lost state
+
+  examFocus.blurAt = Date.now();
+  try { stopAssignmentQuestionAudioPlayback(); } catch { }
+  showExamFocusOverlay();
+}
+
+function showExamFocusOverlay() {
+  if (examFocus.overlayEl) {
+    examFocus.overlayEl.classList.remove('hidden');
+    examFocus.overlayEl.style.display = 'flex';
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.id = 'examFocusOverlay';
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:99999',
+    'background:rgba(10,12,18,0.78)',
+    'backdrop-filter:blur(4px)',
+    '-webkit-backdrop-filter:blur(4px)',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'cursor:pointer',
+  ].join(';');
+
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'max-width:420px',
+    'background:rgba(20,24,34,0.95)',
+    'border:1px solid rgba(255,200,80,0.5)',
+    'border-radius:12px',
+    'padding:20px 24px',
+    'color:#fff',
+    'text-align:center',
+    'box-shadow:0 10px 40px rgba(0,0,0,0.5)',
+  ].join(';');
+  card.innerHTML = `
+    <div style="font-size:34px; line-height:1; margin-bottom:8px;">⚠️</div>
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">Attempt paused</div>
+    <div style="font-size:0.9rem; opacity:0.85; margin-bottom:14px;">You left the tab. Your teacher will see this. Click anywhere to resume.</div>
+    <div style="font-size:0.8rem; opacity:0.6;">Click to resume</div>
+  `;
+
+  overlay.appendChild(card);
+  overlay.addEventListener('click', resumeFromExamFocusOverlay);
+  document.body.appendChild(overlay);
+  examFocus.overlayEl = overlay;
+}
+
+function resumeFromExamFocusOverlay() {
+  const startedAt = examFocus.blurAt;
+  examFocus.blurAt = null;
+  if (examFocus.overlayEl) {
+    examFocus.overlayEl.classList.add('hidden');
+    examFocus.overlayEl.style.display = 'none';
+  }
+  if (!startedAt) return;
+
+  const durationMs = Math.max(0, Date.now() - startedAt);
+  const code = String(live.player.assignment?.code || '').trim();
+  const attemptId = String(live.player.assignment?.attemptId || '').trim();
+  if (!code || !attemptId) return;
+
+  api('/api/assignment/focus-event', {
+    method: 'POST',
+    body: { code, attemptId, startedAt, durationMs },
+  }).catch((err) => console.warn('focus-event log failed:', err?.message));
 }
 
 async function playAssignmentQuestionAudio(question, opts = {}) {

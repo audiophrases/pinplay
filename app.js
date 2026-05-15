@@ -512,6 +512,7 @@ const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const assignmentInstantFeedbackBtn = document.getElementById('assignmentInstantFeedbackBtn');
+const assignmentExamModeBtn = document.getElementById('assignmentExamModeBtn');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const toggleArchivedAssignmentsBtn = document.getElementById('toggleArchivedAssignmentsBtn');
@@ -635,6 +636,7 @@ let assignmentResultsCache = null;
 const notifySelection = { code: '', ids: new Set() };
 const NOTIFY_TEMPLATE_KEY = 'pinplay.notifyTemplate.v4';
 let assignmentFeedbackMode = 'instant'; // 'none', 'instant', 'end'
+let assignmentExamMode = false;
 let applyTargetAssignmentCode = ''; // set by "Open Quiz" on an assignment row; target for "Apply to Assignment"
 let applyTargetAssignmentTitle = '';
 
@@ -4144,6 +4146,7 @@ function bindLiveEvents() {
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
   if (assignmentInstantFeedbackBtn) assignmentInstantFeedbackBtn.addEventListener('click', toggleInstantFeedbackMode);
+  if (assignmentExamModeBtn) assignmentExamModeBtn.addEventListener('click', toggleAssignmentExamMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
@@ -6301,10 +6304,15 @@ function renderAssignmentResults(safeCode, data) {
     const classBadge = a?._class
       ? `<span style="background:rgba(0,0,0,0.07); color:var(--text,#333); border-radius:10px; padding:2px 8px; font-size:0.7rem; font-weight:600;" title="Class">${escapeHtml(String(a._class))}</span>`
       : '';
+    const focusCount = Number(a?.focusEventsCount || 0);
+    const focusMs = Number(a?.focusEventsTotalMs || 0);
+    const focusBadge = focusCount > 0
+      ? `<span style="background:#f59e0b; color:#1f2937; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Student left the tab during this attempt (${focusCount} time${focusCount === 1 ? '' : 's'}, ~${formatFocusDuration(focusMs)} total)">⚠ LEFT TAB ${focusCount}× · ${formatFocusDuration(focusMs)}</span>`
+      : '';
 
     const nameWrap = document.createElement('span');
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${notifiedBadge}`;
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -6921,6 +6929,14 @@ function buildAssignmentListItem(a) {
   return li;
 }
 
+function toggleAssignmentExamMode() {
+  assignmentExamMode = !assignmentExamMode;
+  if (!assignmentExamModeBtn) return;
+  assignmentExamModeBtn.textContent = assignmentExamMode ? 'Exam mode: on' : 'Exam mode: off';
+  assignmentExamModeBtn.classList.toggle('active', assignmentExamMode);
+  assignmentExamModeBtn.setAttribute('aria-pressed', assignmentExamMode ? 'true' : 'false');
+}
+
 async function toggleInstantFeedbackMode() {
   // Cycle through three modes: none → instant → end → none
   const modes = ['none', 'instant', 'end'];
@@ -6983,6 +6999,7 @@ async function createAssignmentFromCurrentQuiz() {
         dueAt,
         randomNames: randomNamesEnabled,
         feedbackMode: assignmentFeedbackMode,
+        examMode: assignmentExamMode,
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -7086,6 +7103,14 @@ async function openAssignmentInBuilder(code, titleHint) {
     setRandomNamesToggleState(!!data.assignment.randomNames);
   }
 
+  // Sync the Exam-mode toggle so editing preserves the flag round-trip.
+  if (assignmentExamModeBtn) {
+    assignmentExamMode = !!data?.assignment?.examMode;
+    assignmentExamModeBtn.textContent = assignmentExamMode ? 'Exam mode: on' : 'Exam mode: off';
+    assignmentExamModeBtn.classList.toggle('active', assignmentExamMode);
+    assignmentExamModeBtn.setAttribute('aria-pressed', assignmentExamMode ? 'true' : 'false');
+  }
+
   setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
   if (builderSettingsToggleEl && builderSettingsBodyEl) {
@@ -7127,6 +7152,7 @@ async function applyQuizToAssignment() {
         quiz: normalizeQuizForLive(quiz),
         title: String(quiz.title || '').trim(),
         randomNames: isRandomNamesEnabled(),
+        examMode: assignmentExamMode,
       },
     });
 
@@ -10434,6 +10460,7 @@ async function launchStudentPreviewAssignment() {
         dueAt: null,
         randomNames: true,
         feedbackMode: assignmentFeedbackMode,
+        examMode: assignmentExamMode,
         quiz: payload,
       },
     });
@@ -13199,6 +13226,14 @@ function escapeHtml(str) {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : min));
+}
+
+function formatFocusDuration(ms) {
+  const total = Math.max(0, Math.round(Number(ms || 0) / 1000));
+  if (total < 60) return `${total}s`;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return s ? `${m}m${s}s` : `${m}m`;
 }
 
 function round(n, d = 0) {
