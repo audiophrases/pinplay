@@ -4015,7 +4015,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
 
-  const text = await res.text();
+  const text = (await res.text()).replaceAll('https://pinplay-api.eugenime.workers.dev', 'https://api.pinplay.win');
   let data = {};
   if (text) {
     try {
