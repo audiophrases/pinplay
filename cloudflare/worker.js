@@ -1130,6 +1130,10 @@ export default {
       const assignment = getData?.assignment || null;
       if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
+      // Kick off email lookup in parallel with password verify — both hit the
+      // same slow Apps Script bridge, no need to do them sequentially.
+      const emailKeyPromise = resolveEmailKey(env, username);
+
       if (assignment.randomNames === false) {
         if (!password) return json({ error: 'Password required.' }, 401);
         if (!username) return json({ error: 'Username required.' }, 400);
@@ -1137,7 +1141,7 @@ export default {
         if (!verify.ok) return json({ error: verify.error || 'Unauthorized.' }, verify.status || 401);
       }
 
-      const { emailKey } = await resolveEmailKey(env, username);
+      const { emailKey } = await emailKeyPromise;
       const primaryKey = emailKey || usernameKey;
       const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
 
@@ -1165,6 +1169,10 @@ export default {
       if (!getRes.ok) return withCors(getRes);
       const getData = await getRes.json();
       const assignment = getData?.assignment || null;
+
+      // Kick off email lookup in parallel with password verify — both hit the
+      // same slow Apps Script bridge, no need to do them sequentially.
+      const emailKeyPromise = resolveEmailKey(env, studentName);
 
       if (assignment && assignment.randomNames === false) {
         if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
@@ -1222,7 +1230,7 @@ export default {
 
       // Resolve email-derived studentKey for stable identity across username
       // changes and to distinguish students with the same username.
-      const { emailKey } = await resolveEmailKey(env, studentName);
+      const { emailKey } = await emailKeyPromise;
       const primaryKey = emailKey || studentKey;
       const legacyKey = (emailKey && studentKey && studentKey !== emailKey) ? studentKey : '';
 
