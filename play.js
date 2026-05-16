@@ -4715,15 +4715,15 @@ function showExamFocusOverlay() {
   // The local counter is incremented when we enter the lost-focus state, so the
   // overlay text reflects the trip the student is currently on.
   const n = examFocus.count;
-  const timesText = n === 1
-    ? "You've left this page 1 time so far."
-    : `You've left this page ${n} times so far.`;
+  const numHtml = `<span style="color:#f87171; font-size:1.15em; font-weight:800;">${n}</span>`;
+  const suffix = n === 1 ? 'time' : 'times';
+  const timesHtml = `You've left this page ${numHtml} ${suffix} so far.`;
 
   if (examFocus.overlayEl) {
     examFocus.overlayEl.classList.remove('hidden');
     examFocus.overlayEl.style.display = 'flex';
     const countEl = examFocus.overlayEl.querySelector('[data-exam-count]');
-    if (countEl) countEl.textContent = timesText;
+    if (countEl) countEl.innerHTML = timesHtml;
     return;
   }
   const overlay = document.createElement('div');
@@ -4756,7 +4756,7 @@ function showExamFocusOverlay() {
     <div style="font-size:34px; line-height:1; margin-bottom:8px;">⚠️</div>
     <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">Quiz paused</div>
     <div style="font-size:0.9rem; opacity:0.85; margin-bottom:8px;">You left this page. Your teacher will see this on your results.</div>
-    <div data-exam-count style="font-size:0.85rem; opacity:0.95; color:#fbbf24; margin-bottom:14px; font-weight:600;">${timesText}</div>
+    <div data-exam-count style="font-size:0.85rem; opacity:0.95; color:#fbbf24; margin-bottom:14px; font-weight:600;">${timesHtml}</div>
     <div style="font-size:0.8rem; opacity:0.6;">Click anywhere to resume</div>
   `;
 
