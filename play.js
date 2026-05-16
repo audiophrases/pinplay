@@ -4573,6 +4573,7 @@ const examFocus = {
   count: 0,
   countBadgeEl: null,
   noticeShownForCode: null,
+  noticePromise: null,
 };
 
 function maybeActivateExamModeFocusTracking() {
@@ -4602,9 +4603,23 @@ async function maybeShowExamModeNoticeBeforeRender() {
   if (state?.attempt?.submitted || live.player.assignment?.reviewMode) return;
 
   const code = String(live.player.assignment?.code || '').trim();
-  if (!code || examFocus.noticeShownForCode === code) return;
+  if (!code) return;
+
+  // If a notice is currently on screen, every concurrent caller must wait on
+  // the same dismissal promise — otherwise the 5s polling loop short-circuits
+  // past the gate and triggers a render + audio behind the still-open dialog.
+  if (examFocus.noticePromise) {
+    await examFocus.noticePromise;
+    return;
+  }
+
+  if (examFocus.noticeShownForCode === code) return; // already dismissed earlier
+
   examFocus.noticeShownForCode = code;
-  await showExamFocusStartNotice();
+  examFocus.noticePromise = showExamFocusStartNotice().finally(() => {
+    examFocus.noticePromise = null;
+  });
+  await examFocus.noticePromise;
 }
 
 function showExamFocusStartNotice() {
