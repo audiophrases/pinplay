@@ -753,6 +753,11 @@ async function loadAssignmentState() {
     live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
   }
 
+  // Gate rendering on the exam-mode notice so question audio + ambient music
+  // don't start playing in the background while the student is still reading
+  // the "stay on this page" warning.
+  await maybeShowExamModeNoticeBeforeRender();
+
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   renderInstantFeedbackFromState();
@@ -4583,20 +4588,28 @@ function maybeActivateExamModeFocusTracking() {
   if (serverCount > examFocus.count) examFocus.count = serverCount;
   updateExamFocusCountBadge();
 
-  const code = String(live.player.assignment?.code || '').trim();
-  if (code && examFocus.noticeShownForCode !== code) {
-    examFocus.noticeShownForCode = code;
-    showExamFocusStartNotice();
-  }
-
   if (examFocus.listenersAttached) return;
   document.addEventListener('visibilitychange', onExamFocusVisibilityChange);
   window.addEventListener('blur', onExamFocusBlur);
   examFocus.listenersAttached = true;
 }
 
+async function maybeShowExamModeNoticeBeforeRender() {
+  if (live.player.mode !== 'assignment') return;
+  const state = live.player.assignment?.state;
+  const examOn = !!state?.attempt?.assignment?.examMode;
+  if (!examOn) return;
+  if (state?.attempt?.submitted || live.player.assignment?.reviewMode) return;
+
+  const code = String(live.player.assignment?.code || '').trim();
+  if (!code || examFocus.noticeShownForCode === code) return;
+  examFocus.noticeShownForCode = code;
+  await showExamFocusStartNotice();
+}
+
 function showExamFocusStartNotice() {
-  if (document.getElementById('examFocusStartNotice')) return;
+  return new Promise((resolve) => {
+    if (document.getElementById('examFocusStartNotice')) { resolve(); return; }
 
   const overlay = document.createElement('div');
   overlay.id = 'examFocusStartNotice';
