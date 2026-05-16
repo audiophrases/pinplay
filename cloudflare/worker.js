@@ -1094,7 +1094,7 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!usernameKey && !username) return json({ error: 'Student key or username required.' }, 400);
 
-      const { emailKey } = await resolveEmailKey(env, username);
+      const { emailKey } = await lookupAndVerifyStudent(env, username, null);
       const primaryKey = emailKey || usernameKey;
       const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
 
@@ -1130,18 +1130,20 @@ export default {
       const assignment = getData?.assignment || null;
       if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
-      // Kick off email lookup in parallel with password verify — both hit the
-      // same slow Apps Script bridge, no need to do them sequentially.
-      const emailKeyPromise = resolveEmailKey(env, username);
-
-      if (assignment.randomNames === false) {
+      const passwordRequired = assignment.randomNames === false;
+      if (passwordRequired) {
         if (!password) return json({ error: 'Password required.' }, 401);
         if (!username) return json({ error: 'Username required.' }, 400);
-        const verify = await verifyStudentLogin(env, username, password, code);
-        if (!verify.ok) return json({ error: verify.error || 'Unauthorized.' }, verify.status || 401);
       }
 
-      const { emailKey } = await emailKeyPromise;
+      // Single Apps Script call: resolve email and (when required) verify the
+      // password in the same round trip.
+      const lookup = await lookupAndVerifyStudent(env, username, passwordRequired ? password : null);
+      if (passwordRequired && lookup.passwordOk !== true) {
+        return json({ error: 'Invalid username or password.' }, 401);
+      }
+
+      const emailKey = lookup.emailKey;
       const primaryKey = emailKey || usernameKey;
       const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
 
@@ -1170,67 +1172,20 @@ export default {
       const getData = await getRes.json();
       const assignment = getData?.assignment || null;
 
-      // Kick off email lookup in parallel with password verify — both hit the
-      // same slow Apps Script bridge, no need to do them sequentially.
-      const emailKeyPromise = resolveEmailKey(env, studentName);
-
-      if (assignment && assignment.randomNames === false) {
-        if (!password) return withCors(json({ error: 'Username and password are required.' }, 401));
-
-        const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
-        const verifySecret = String(env.STUDENT_LOGIN_VERIFY_SECRET || '').trim();
-        if (!verifyUrl) return withCors(json({ error: 'Login verification is not configured.' }, 501));
-
-        try {
-          const verifyHeaders = { 'Content-Type': 'application/json' };
-          if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
-
-          // Try original name and lowercase variant (same as live mode)
-          const verifyNames = [studentName];
-          const lowerName = sanitizeName ? sanitizeName(studentName).toLowerCase() : studentName.toLowerCase();
-          if (lowerName && !verifyNames.includes(lowerName)) {
-            verifyNames.push(lowerName);
-          }
-
-          let verified = false;
-          const overrideUser = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
-          const overridePass = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
-          if (overrideUser && overridePass && studentName === overrideUser && password === overridePass) {
-            verified = true;
-          }
-
-          for (const candidateName of verifyNames) {
-            if (verified) break;
-            const vRes = await fetch(verifyUrl, {
-              method: 'POST',
-              headers: verifyHeaders,
-              redirect: 'follow',
-              body: JSON.stringify({ username: candidateName, password, pin: code, secret: verifySecret }),
-            });
-            const vTxt = await vRes.text();
-            let parsed = {};
-            try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
-
-            console.log('LOGIN_VERIFY:', { url: verifyUrl, username: candidateName, status: vRes.status, ok: vRes.ok, response: vTxt.slice(0, 200) });
-
-            const success = vRes.ok && parsed && parsed.ok === true;
-            if (success) {
-              verified = true;
-              break;
-            }
-          }
-
-          if (!verified) {
-            return withCors(json({ error: 'Invalid username or password.' }, 401));
-          }
-        } catch {
-          return withCors(json({ error: 'Login verification service unavailable.' }, 502));
-        }
+      const passwordRequired = !!(assignment && assignment.randomNames === false);
+      if (passwordRequired && !password) {
+        return withCors(json({ error: 'Username and password are required.' }, 401));
       }
 
-      // Resolve email-derived studentKey for stable identity across username
-      // changes and to distinguish students with the same username.
-      const { emailKey } = await emailKeyPromise;
+      // Single Apps Script call: resolve email and (when required) verify the
+      // password in the same round trip. Email-derived studentKey gives stable
+      // identity across username changes and disambiguates same-username students.
+      const lookup = await lookupAndVerifyStudent(env, studentName, passwordRequired ? password : null);
+      if (passwordRequired && lookup.passwordOk !== true) {
+        return withCors(json({ error: 'Invalid username or password.' }, 401));
+      }
+
+      const emailKey = lookup.emailKey;
       const primaryKey = emailKey || studentKey;
       const legacyKey = (emailKey && studentKey && studentKey !== emailKey) ? studentKey : '';
 
@@ -4825,71 +4780,110 @@ function makeStudentKeyFromEmail(email) {
   return base ? `usr_${base}`.slice(0, 96) : '';
 }
 
-// Looks up the student's email by username via the roster bridge.
-// Returns { email, emailKey } — both empty strings if lookup fails or
-// the bridge isn't configured. Safe to call optimistically.
-// Verifies a student's password against the configured login verify service.
-// Returns { ok: true } on success, or { ok: false, status, error } on failure.
-// Mirrors the verification block in /api/assignment/start.
-async function verifyStudentLogin(env, studentName, password, code) {
-  const verifyUrl = String(env.STUDENT_LOGIN_VERIFY_URL || '').trim();
-  const verifySecret = String(env.STUDENT_LOGIN_VERIFY_SECRET || '').trim();
-  if (!verifyUrl) return { ok: false, status: 501, error: 'Login verification is not configured.' };
+// Isolate-scoped cache mapping lowercase username -> roster email. Survives
+// across requests within a warm worker isolate; cold isolates re-fetch.
+const STUDENT_EMAIL_CACHE = new Map();
+const STUDENT_EMAIL_TTL_MS = 6 * 60 * 60 * 1000;
 
-  const overrideUser = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
-  const overridePass = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
-  if (overrideUser && overridePass && studentName === overrideUser && password === overridePass) {
-    return { ok: true };
+function cachedRosterEmail(username) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return null;
+  const entry = STUDENT_EMAIL_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    STUDENT_EMAIL_CACHE.delete(key);
+    return null;
   }
-
-  const verifyNames = [studentName];
-  const lowerName = sanitizeName(studentName).toLowerCase();
-  if (lowerName && !verifyNames.includes(lowerName)) verifyNames.push(lowerName);
-
-  const verifyHeaders = { 'Content-Type': 'application/json' };
-  if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
-
-  try {
-    for (const candidateName of verifyNames) {
-      const vRes = await fetch(verifyUrl, {
-        method: 'POST',
-        headers: verifyHeaders,
-        redirect: 'follow',
-        body: JSON.stringify({ username: candidateName, password, pin: code, secret: verifySecret }),
-      });
-      const vTxt = await vRes.text();
-      let parsed = {};
-      try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
-      if (vRes.ok && parsed && parsed.ok === true) return { ok: true };
-    }
-    return { ok: false, status: 401, error: 'Invalid username or password.' };
-  } catch {
-    return { ok: false, status: 502, error: 'Login verification service unavailable.' };
-  }
+  return entry.email;
 }
 
-async function resolveEmailKey(env, username) {
+function rememberRosterEmail(username, email) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return;
+  STUDENT_EMAIL_CACHE.set(key, {
+    email: String(email || ''),
+    expiresAt: Date.now() + STUDENT_EMAIL_TTL_MS,
+  });
+}
+
+// Merged roster lookup + (optional) password verify in a single Apps Script
+// round trip. Pass password=null/'' for lookup-only (uses cache). Pass a
+// non-empty password to also verify against the roster sheet — the bridge
+// returns email and passwordOk in one call, replacing the older two-call
+// (verify + resolve) flow that dominated student-login latency.
+//
+// Returns { email, emailKey, passwordOk } where passwordOk is null when no
+// password was supplied, true/false otherwise.
+async function lookupAndVerifyStudent(env, username, password) {
   const name = String(username || '').trim();
-  if (!name) return { email: '', emailKey: '' };
+  const wantsVerify = typeof password === 'string' && password.length > 0;
+  if (!name) return { email: '', emailKey: '', passwordOk: wantsVerify ? false : null };
+
+  // Test-account override (skip Apps Script entirely when both match).
+  let forceVerified = false;
+  if (wantsVerify) {
+    const ou = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
+    const op = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
+    if (ou && op && name === ou && password === op) forceVerified = true;
+  }
+
+  // Cache hit short-circuits the Apps Script call for lookup-only or
+  // override-verified requests.
+  if (!wantsVerify || forceVerified) {
+    const cachedEmail = cachedRosterEmail(name);
+    if (cachedEmail !== null) {
+      return {
+        email: cachedEmail,
+        emailKey: makeStudentKeyFromEmail(cachedEmail),
+        passwordOk: forceVerified ? true : null,
+      };
+    }
+  }
+
   const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
   const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
-  if (!lookupUrl) return { email: '', emailKey: '' };
+  if (!lookupUrl) {
+    return {
+      email: '',
+      emailKey: '',
+      passwordOk: forceVerified ? true : (wantsVerify ? false : null),
+    };
+  }
+
+  const reqBody = { usernames: [name], secret: lookupSecret };
+  if (wantsVerify && !forceVerified) reqBody.password = password;
+
   try {
     const res = await fetch(lookupUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       redirect: 'follow',
-      body: JSON.stringify({ usernames: [name], secret: lookupSecret }),
+      body: JSON.stringify(reqBody),
     });
     const text = await res.text();
     let parsed = {};
     try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
-    if (!res.ok || !parsed?.ok) return { email: '', emailKey: '' };
-    const r = (Array.isArray(parsed.results) ? parsed.results : [])[0];
-    const email = String(r?.email || '').trim().toLowerCase();
-    return { email, emailKey: makeStudentKeyFromEmail(email) };
+    if (!res.ok || !parsed?.ok) {
+      return {
+        email: '',
+        emailKey: '',
+        passwordOk: forceVerified ? true : (wantsVerify ? false : null),
+      };
+    }
+    const r = (Array.isArray(parsed.results) ? parsed.results : [])[0] || {};
+    const email = String(r.email || '').trim().toLowerCase();
+    rememberRosterEmail(name, email);
+    return {
+      email,
+      emailKey: makeStudentKeyFromEmail(email),
+      passwordOk: forceVerified ? true : (wantsVerify ? (r.passwordOk === true) : null),
+    };
   } catch {
-    return { email: '', emailKey: '' };
+    return {
+      email: '',
+      emailKey: '',
+      passwordOk: forceVerified ? true : (wantsVerify ? false : null),
+    };
   }
 }
 
