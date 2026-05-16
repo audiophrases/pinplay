@@ -4630,12 +4630,8 @@ function showExamFocusStartNotice() {
       <span style="font-size:26px; line-height:1;">👀</span>
       <strong style="font-size:1.1rem;">Please stay on this page</strong>
     </div>
-    <p style="margin:0 0 10px 0; font-size:0.95rem; line-height:1.45; opacity:0.92;">
-      Your teacher can see if you switch to another tab, window, or app while you answer.
-    </p>
-    <p style="margin:0 0 16px 0; font-size:0.9rem; line-height:1.45; opacity:0.78;">
-      If you leave this page, the quiz will pause and the moment will be recorded on your results.
-      Take your time — but stay here.
+    <p style="margin:0 0 16px 0; font-size:0.95rem; line-height:1.45; opacity:0.92;">
+      Your teacher can see if you leave this page.
     </p>
     <div style="display:flex; justify-content:flex-end;">
       <button type="button" id="examFocusStartOk" class="btn" style="background:#3b82f6; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:600; cursor:pointer;">
