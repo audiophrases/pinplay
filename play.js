@@ -4653,17 +4653,18 @@ function showExamFocusStartNotice() {
     </div>
   `;
 
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
 
-  const dismiss = () => overlay.remove();
-  card.querySelector('#examFocusStartOk')?.addEventListener('click', dismiss);
-  // Escape key also dismisses.
-  document.addEventListener('keydown', function escClose(e) {
-    if (e.key === 'Escape') {
-      dismiss();
-      document.removeEventListener('keydown', escClose);
-    }
+    const dismiss = () => { overlay.remove(); resolve(); };
+    card.querySelector('#examFocusStartOk')?.addEventListener('click', dismiss);
+    // Escape key also dismisses.
+    document.addEventListener('keydown', function escClose(e) {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', escClose);
+        dismiss();
+      }
+    });
   });
 }
 
