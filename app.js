@@ -5435,6 +5435,7 @@ async function enterGradeByStudentMode(code) {
     });
     assignmentGradingListEl.appendChild(li);
   });
+  assignmentGradingSummaryEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function openStudentGradingFocusModal(code, attemptId, studentName) {
@@ -5891,6 +5892,7 @@ async function enterGradeByQuestionMode(code) {
 
   const questions = Array.isArray(data?.questions) ? data.questions : [];
   const teacherGraded = questions.filter((q) => q?.teacherGraded);
+  teacherGraded.sort((a, b) => Number(b.pendingCount || 0) - Number(a.pendingCount || 0));
   const submitted = Number(data?.submittedAttempts || 0);
   const title = String(data?.assignment?.title || safeCode);
 
@@ -5949,6 +5951,7 @@ async function enterGradeByQuestionMode(code) {
     });
     assignmentGradingListEl.appendChild(li);
   });
+  assignmentGradingSummaryEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function enterQuestionGradingFocus(code, qIndex) {
