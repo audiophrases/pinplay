@@ -5372,10 +5372,12 @@ async function enterGradeByStudentMode(code) {
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   const title = String(data?.assignment?.title || safeCode);
 
-  // Include submitted attempts AND unsubmitted ones that have pending teacher grades,
-  // so this list matches the assignment card's "X to grade" counter and the results view.
+  // Include submitted attempts AND unsubmitted ones that have any answered teacher-graded
+  // question (whether pending or already graded), so teachers can grade/review in-progress
+  // quizzes and notify students before they submit.
   const gradable = attempts.filter(
-    (a) => a?.submitted || Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0
+    (a) => a?.submitted
+      || (Number(a?.metrics?.pendingTeacherGradeCount || 0) + Number(a?.metrics?.teacherGradedCount || 0)) > 0
   );
   gradable.sort((a, b) => {
     const pa = Number(b?.metrics?.pendingTeacherGradeCount || 0);
@@ -5386,11 +5388,18 @@ async function enterGradeByStudentMode(code) {
 
   const totalPending = gradable.reduce((s, a) => s + Number(a?.metrics?.pendingTeacherGradeCount || 0), 0);
   const submittedCount = gradable.filter((a) => a?.submitted).length;
+  const inProgressCount = gradable.filter((a) => !a?.submitted).length;
 
   if (assignmentGradingSummaryEl) {
-    assignmentGradingSummaryEl.textContent = gradable.length
-      ? `${title} · Per-student grading · ${submittedCount} submitted attempt${submittedCount === 1 ? '' : 's'} · ${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'} · Pick a student below.`
-      : `${title} · No submitted attempts yet.`;
+    if (!gradable.length) {
+      assignmentGradingSummaryEl.textContent = `${title} · No gradable attempts yet.`;
+    } else {
+      const parts = [];
+      if (submittedCount) parts.push(`${submittedCount} submitted`);
+      if (inProgressCount) parts.push(`${inProgressCount} in progress`);
+      parts.push(`${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'}`);
+      assignmentGradingSummaryEl.textContent = `${title} · Per-student grading · ${parts.join(' · ')} · Pick a student below.`;
+    }
   }
 
   if (!assignmentGradingListEl) return;
