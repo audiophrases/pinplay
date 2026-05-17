@@ -5372,8 +5372,11 @@ async function enterGradeByStudentMode(code) {
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   const title = String(data?.assignment?.title || safeCode);
 
-  // Only show submitted attempts that have at least one teacher-graded answer
-  const gradable = attempts.filter((a) => a?.submitted);
+  // Include submitted attempts AND unsubmitted ones that have pending teacher grades,
+  // so this list matches the assignment card's "X to grade" counter and the results view.
+  const gradable = attempts.filter(
+    (a) => a?.submitted || Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0
+  );
   gradable.sort((a, b) => {
     const pa = Number(b?.metrics?.pendingTeacherGradeCount || 0);
     const pb = Number(a?.metrics?.pendingTeacherGradeCount || 0);
@@ -5382,10 +5385,11 @@ async function enterGradeByStudentMode(code) {
   });
 
   const totalPending = gradable.reduce((s, a) => s + Number(a?.metrics?.pendingTeacherGradeCount || 0), 0);
+  const submittedCount = gradable.filter((a) => a?.submitted).length;
 
   if (assignmentGradingSummaryEl) {
     assignmentGradingSummaryEl.textContent = gradable.length
-      ? `${title} · Per-student grading · ${gradable.length} submitted attempt${gradable.length === 1 ? '' : 's'} · ${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'} · Pick a student below.`
+      ? `${title} · Per-student grading · ${submittedCount} submitted attempt${submittedCount === 1 ? '' : 's'} · ${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'} · Pick a student below.`
       : `${title} · No submitted attempts yet.`;
   }
 
@@ -5413,7 +5417,11 @@ async function enterGradeByStudentMode(code) {
     const badges = [];
     badges.push(`${answered}/${total} answered`);
     badges.push(`<span style="color:${pending > 0 ? '#b45309' : '#15803d'}">${pending} pending teacher grade${pending === 1 ? '' : 's'}</span>`);
-    if (a?.submittedAt) badges.push(`Submitted ${new Date(a.submittedAt).toLocaleString()}`);
+    if (a?.submittedAt) {
+      badges.push(`Submitted ${new Date(a.submittedAt).toLocaleString()}`);
+    } else {
+      badges.push('<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:700;">IN PROGRESS</span>');
+    }
     counts.innerHTML = badges.join(' · ');
 
     const actionRow = document.createElement('div');

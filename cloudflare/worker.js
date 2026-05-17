@@ -2480,7 +2480,9 @@ export class QuizRoom {
           let pendingCount = 0;
           let withFeedbackCount = 0;
 
-          submittedAttempts.forEach((a) => {
+          // Use all attempts (not just submitted) so pending counts match the assignment
+          // card's "X to grade" counter and the results view.
+          attempts.forEach((a) => {
             const item = a?.answersByQ?.[String(qIndex)];
             if (!item) return;
             answeredCount += 1;
@@ -2533,10 +2535,22 @@ export class QuizRoom {
         if (!question) return json({ error: 'Question not found.' }, 404);
 
         const attempts = assignment.attempts && typeof assignment.attempts === 'object' ? Object.values(assignment.attempts) : [];
-        const submitted = attempts.filter((a) => a && a.submitted);
-        submitted.sort((a, b) => Number(a?.submittedAt || 0) - Number(b?.submittedAt || 0));
+        // Include unsubmitted attempts that have answered this question so the teacher
+        // can grade in-progress work (matching what the assignment card's "X to grade"
+        // counter and the results view show).
+        const gradable = attempts.filter((a) => a && a?.answersByQ?.[String(qIndex)] !== undefined);
+        gradable.sort((a, b) => {
+          // Ungraded first, then submitted before in-progress, then by submission time.
+          const aPending = !(a?.answersByQ?.[String(qIndex)]?.teacherGrade?.graded) ? 1 : 0;
+          const bPending = !(b?.answersByQ?.[String(qIndex)]?.teacherGrade?.graded) ? 1 : 0;
+          if (aPending !== bPending) return bPending - aPending;
+          const aSubmitted = a?.submitted ? 1 : 0;
+          const bSubmitted = b?.submitted ? 1 : 0;
+          if (aSubmitted !== bSubmitted) return bSubmitted - aSubmitted;
+          return Number(a?.submittedAt || 0) - Number(b?.submittedAt || 0);
+        });
 
-        const items = submitted
+        const items = gradable
           .map((a) => {
             const item = a?.answersByQ?.[String(qIndex)];
             if (!item) return null;
@@ -2545,6 +2559,7 @@ export class QuizRoom {
               attemptId: sanitizeAssignmentAttemptId(a?.id),
               studentName: sanitizeName(a?.studentName || 'Student'),
               studentKey: sanitizeAssignmentStudentKey(a?.studentKey),
+              submitted: !!a.submitted,
               submittedAt: Number(a?.submittedAt || 0) || null,
               answer: item.answer ?? null,
               answerText: summarizeHistoryAnswer(question, item.answer),
