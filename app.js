@@ -6207,7 +6207,14 @@ function renderAssignmentResults(safeCode, data) {
       if (!total || Number(a?.metrics?.answeredCount || 0) < total) return false;
     }
     if (filter === 'notified' && !a?.notifiedAt) return false;
-    if (filter === 'not-notified' && a?.notifiedAt) return false;
+    if (filter === 'not-notified') {
+      // Exclude already-notified attempts.
+      if (a?.notifiedAt) return false;
+      // Only show attempts that have something worth notifying about:
+      // submitted attempts OR in-progress attempts where the teacher has graded at least one answer.
+      const hasGrades = a?.submitted || Number(a?.metrics?.teacherGradedCount || 0) > 0;
+      if (!hasGrades) return false;
+    }
     if (classFilter && String(a?._class || '').trim() !== classFilter) return false;
     return true;
   });
