@@ -4430,16 +4430,20 @@ most. Don't pad. Don't praise.
 
 ## How to read the pack
 
-- \`questions[]\` — what students are answering. Use \`prompt\` and
-  \`expectedAnswer\` to decide what's correct.
-  - **If \`expectedAnswer\` is \`null\` and the question has a
-    \`media.image\`, the expected answer is the text shown in the image.**
-    This is common for read-aloud / pronunciation tasks where students see
-    a line on screen and read it back. Read the image yourself (you can see
-    it) and treat what you read as the reference text.
-  - **If \`expectedAnswer\` is \`null\` and \`media.audioText\` is set**, the
-    expected answer is typically that text (the question audio was a TTS
-    reading of it).
+- \`questions[]\` — what students are answering. Decide what's correct from
+  the available signals in this order of preference:
+  - \`accepted\` — array of valid answers. If present and non-null, the
+    student's answer is correct if it matches **any** entry (compare
+    case- and punctuation-insensitive; minor spelling/spacing variants OK).
+  - \`media.image\` — when \`accepted\` is null and there's an image, the
+    expected answer is the text shown in the image. Common for read-aloud
+    / pronunciation tasks where students see a line on screen and read it
+    back. Read the image yourself and treat its text as the reference.
+  - \`media.audioText\` — when \`accepted\` is null and \`audioText\` is set,
+    the expected answer is typically that text (the question audio was a
+    TTS reading of it).
+  - Otherwise, fall back to judging by \`prompt\` alone — and be liberal
+    with \`needs_review\` if you're unsure.
 - \`attempts[].answers[]\` — one student's answer to one question.
   - \`text\` — typed answer, may be empty.
   - \`audio\` — relative path to a recording. **Listen to it.** Do not grade
@@ -4452,6 +4456,12 @@ most. Don't pad. Don't praise.
   - \`audio\` — relative path to a question audio file. Open it.
   - \`audioText\` — inline text that was read aloud by TTS to the students;
     treat this as if you had heard the audio.
+  - \`video\` — \`{ provider, url, embedUrl, startAt, endAt }\` when the
+    question shows a video (YouTube/Vimeo/direct). The student watched
+    from \`startAt\` to \`endAt\` (seconds; \`endAt\` may be \`null\` meaning
+    to the end). If you can open the URL, do; otherwise note that you
+    couldn't and lean toward \`needs_review\` for questions that depend on
+    video content you can't see.
 
 ## If you can't natively open audio
 
