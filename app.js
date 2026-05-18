@@ -4432,13 +4432,33 @@ most. Don't pad. Don't praise.
 
 - \`questions[]\` — what students are answering. Use \`prompt\` and
   \`expectedAnswer\` to decide what's correct.
+  - **If \`expectedAnswer\` is \`null\` and the question has a
+    \`media.image\`, the expected answer is the text shown in the image.**
+    This is common for read-aloud / pronunciation tasks where students see
+    a line on screen and read it back. Read the image yourself (you can see
+    it) and treat what you read as the reference text.
+  - **If \`expectedAnswer\` is \`null\` and \`media.audioText\` is set**, the
+    expected answer is typically that text (the question audio was a TTS
+    reading of it).
 - \`attempts[].answers[]\` — one student's answer to one question.
   - \`text\` — typed answer, may be empty.
   - \`audio\` — relative path to a recording. **Listen to it.** Do not grade
     voice answers from \`transcript\` alone; the transcript was auto-generated
     and is often wrong on pronunciation.
   - \`transcript\` — best-effort transcript. Hint, not truth.
-- \`questions[].media.image\` / \`media.audio\` — open these when present.
+- \`questions[].media\`:
+  - \`image\` — relative path to a question image (e.g. the line students
+    read). Open it.
+  - \`audio\` — relative path to a question audio file. Open it.
+  - \`audioText\` — inline text that was read aloud by TTS to the students;
+    treat this as if you had heard the audio.
+
+## If you can't natively open audio
+
+If your environment can't play \`.webm\` / \`.mp4\` audio directly (e.g. a
+terminal-only agent), transcribe locally with whisper or any STT tool
+before grading. Do **not** fall back to the auto-generated \`transcript\` —
+it's known to be sparse and wrong on pronunciation tasks.
 
 ## Scoring
 
@@ -4571,8 +4591,9 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     expectedAnswer: String(item?.expectedAnswer || ''),
     questionLanguage: String(item?.language || ''),
     answerLanguage: String(item?.answerLanguage || ''),
-    questionImageUrl: String(item?.questionImageUrl || item?.imageUrl || ''),
-    questionAudioUrl: String(item?.questionAudioUrl || ''),
+    questionImageUrl: String(item?.imageData || item?.questionImageUrl || item?.imageUrl || ''),
+    questionAudioUrl: String(item?.audioMode || '') === 'file' ? String(item?.audioData || '') : '',
+    questionAudioText: String(item?.audioMode || '') === 'file' ? '' : String(item?.audioText || ''),
     attemptId,
     studentName,
     answerText: String(item?.answerText || ''),
@@ -4635,8 +4656,10 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
         language: question.language,
         answerLanguage: question.answerLanguage,
         qId: question.id,
-        questionImageUrl: question.imageUrl || '',
-        questionAudioUrl: question.audioUrl || '',
+        imageData: question.imageData || '',
+        audioData: question.audioData || '',
+        audioMode: question.audioMode || '',
+        audioText: question.audioText || '',
         teacherGraded: true,
       };
       const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
@@ -4706,7 +4729,11 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       expectedAnswer: e.expectedAnswer || null,
       language: e.questionLanguage || null,
       answerLanguage: e.answerLanguage || null,
-      media: { image: null, audio: null },
+      media: {
+        image: null,
+        audio: null,
+        audioText: e.questionAudioText || null,
+      },
     });
   });
 
