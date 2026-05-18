@@ -2590,6 +2590,9 @@ export class QuizRoom {
             audioText: String(question?.audioText || ''),
             audioData: String(question?.audioData || ''),
             language: String(question?.language || ''),
+            answerLanguage: String(question?.answerLanguage || ''),
+            accepted: Array.isArray(question?.accepted) ? question.accepted.map((s) => String(s)).slice(0, 50) : [],
+            media: normalizeQuestionMediaForGrading(question?.media),
           },
           items,
         });
@@ -4742,6 +4745,23 @@ function makePin() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function normalizeQuestionMediaForGrading(rawMedia) {
+  if (!rawMedia || typeof rawMedia !== 'object') return null;
+  const kind = String(rawMedia.kind || '');
+  if (kind !== 'video') return null;
+  const url = String(rawMedia.url || '').slice(0, 2000);
+  const embedUrl = String(rawMedia.embedUrl || '').slice(0, 2000);
+  if (!url && !embedUrl) return null;
+  return {
+    kind: 'video',
+    provider: String(rawMedia.provider || ''),
+    url,
+    embedUrl,
+    startAt: Number(rawMedia.startAt || 0) || 0,
+    endAt: rawMedia.endAt == null || rawMedia.endAt === '' ? null : Number(rawMedia.endAt),
+  };
+}
+
 async function verifyCreatePassword(env, password, request, opts = {}) {
   const skipRateLimit = !!opts.skipRateLimit;
   const ip = request ? (request.headers.get('CF-Connecting-IP') || 'unknown') : null;
@@ -5185,6 +5205,9 @@ function buildTeacherGradingItems(assignment, attempt) {
         audioText: String(question?.audioText || ''),
         audioData: String(question?.audioData || ''),
         language: String(question?.language || ''),
+        answerLanguage: String(question?.answerLanguage || ''),
+        accepted: Array.isArray(question?.accepted) ? question.accepted.map((s) => String(s)).slice(0, 50) : [],
+        media: normalizeQuestionMediaForGrading(question?.media),
         grade: grade && typeof grade === 'object'
           ? {
             graded: !!grade.graded,
