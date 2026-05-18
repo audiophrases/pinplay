@@ -5348,9 +5348,11 @@ function _startVoiceRecordSilentSR(lang) {
     };
     rec.onerror = () => { /* silent: collection is best-effort */ };
     rec.onend = () => {
-      // Auto-restart if MediaRecorder is still going (Chrome occasionally
-      // ends recognition mid-utterance with continuous=true).
-      if (_voiceRecordSRActive) start();
+      // Auto-restart if MediaRecorder is still going. Chrome ends recognition
+      // on silence even with continuous=true, and an immediate start() can
+      // throw InvalidStateError — schedule on a microtask with a small delay.
+      _voiceRecordSR = null;
+      if (_voiceRecordSRActive) setTimeout(start, 150);
     };
 
     try {
@@ -5358,6 +5360,7 @@ function _startVoiceRecordSilentSR(lang) {
       _voiceRecordSR = rec;
     } catch (_) {
       _voiceRecordSR = null;
+      if (_voiceRecordSRActive) setTimeout(start, 300);
     }
   };
 
@@ -5732,6 +5735,11 @@ function renderVoiceTextRecognizer(container, question) {
 
   let finalTranscript = hidden.value || '';
   let interimTranscript = '';
+  // True while the student has the mic open. Only flips to false when they
+  // tap Stop — silence-induced onend events trigger an auto-restart instead
+  // of ending the session.
+  let _userListening = false;
+  let _fatalError = false;
 
   const renderTranscript = () => {
     const final = finalTranscript.trim();
@@ -5740,17 +5748,20 @@ function renderVoiceTextRecognizer(container, question) {
     transcriptEl.innerHTML = `“<strong>${escapeHtml(final)}</strong>${interim ? ` <span class="muted">${escapeHtml(interim)}</span>` : ''}”`;
   };
 
-  micBtn.addEventListener('click', () => {
-    if (_voiceTextRecognition) return;
-    finalTranscript = '';
-    interimTranscript = '';
-    hidden.value = '';
-    renderTranscript();
+  const finalizeUI = () => {
+    micBtn.classList.remove('hidden');
+    stopBtn.classList.add('hidden');
+    micBtn.textContent = finalTranscript ? '🎤 Re-record' : '🎤 Tap to speak';
+    if (finalTranscript) statusEl.textContent = 'Saved. Tap Submit to grade.';
+    if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
+  };
 
+  const startRecognition = () => {
+    if (!_userListening) return;
     const rec = new SR();
     rec.lang = lang;
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = true;
     rec.maxAlternatives = 1;
 
     rec.onresult = (e) => {
@@ -5769,42 +5780,84 @@ function renderVoiceTextRecognizer(container, question) {
 
     rec.onerror = (e) => {
       const err = String(e?.error || 'unknown');
-      const msg = err === 'not-allowed' || err === 'service-not-allowed'
-        ? 'Microphone access denied. Check browser permissions.'
-        : err === 'no-speech'
-        ? 'Didn’t catch that. Tap and try again.'
-        : `Recognition error: ${err}`;
-      statusEl.textContent = msg;
+      // Permission / hardware errors are fatal — surface them and stop.
+      if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
+        _fatalError = true;
+        _userListening = false;
+        statusEl.textContent = err === 'audio-capture'
+          ? 'No microphone detected. Check your device.'
+          : 'Microphone access denied. Check browser permissions.';
+        return;
+      }
+      // 'no-speech' / 'aborted' / network blips are transient — let onend
+      // auto-restart silently.
     };
 
     rec.onend = () => {
       _voiceTextRecognition = null;
-      micBtn.classList.remove('hidden');
-      stopBtn.classList.add('hidden');
-      micBtn.textContent = finalTranscript ? '🎤 Re-record' : '🎤 Tap to speak';
-      if (finalTranscript) statusEl.textContent = 'Saved. Tap Submit to grade.';
-      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
+      if (_userListening && !_fatalError) {
+        // Browser ended on silence; keep listening as long as the student
+        // hasn't tapped Stop.
+        setTimeout(() => {
+          if (_userListening && !_fatalError) {
+            try { startRecognition(); } catch (_) { _userListening = false; finalizeUI(); }
+          } else {
+            finalizeUI();
+          }
+        }, 150);
+      } else {
+        finalizeUI();
+      }
     };
-
-    // Pause assignment ambient so it doesn't bleed into recognition.
-    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
 
     try {
       rec.start();
       _voiceTextRecognition = rec;
-      micBtn.classList.add('hidden');
-      stopBtn.classList.remove('hidden');
-      statusEl.textContent = 'Listening…';
     } catch (err) {
-      statusEl.textContent = `Could not start mic: ${err?.message || err}`;
+      // Most often an InvalidStateError from a too-fast restart — retry once.
       _voiceTextRecognition = null;
-      if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
+      setTimeout(() => {
+        if (_userListening && !_fatalError) {
+          try {
+            const r2 = new SR();
+            r2.lang = lang; r2.interimResults = true; r2.continuous = true; r2.maxAlternatives = 1;
+            r2.onresult = rec.onresult; r2.onerror = rec.onerror; r2.onend = rec.onend;
+            r2.start();
+            _voiceTextRecognition = r2;
+          } catch (err2) {
+            _userListening = false;
+            statusEl.textContent = `Could not start mic: ${err2?.message || err2}`;
+            finalizeUI();
+          }
+        }
+      }, 300);
     }
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (_voiceTextRecognition || _userListening) return;
+    finalTranscript = '';
+    interimTranscript = '';
+    hidden.value = '';
+    renderTranscript();
+    _userListening = true;
+    _fatalError = false;
+
+    // Pause assignment ambient so it doesn't bleed into recognition.
+    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
+
+    micBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+    statusEl.textContent = 'Listening…';
+    startRecognition();
   });
 
   stopBtn.addEventListener('click', () => {
+    _userListening = false;
     if (_voiceTextRecognition) {
       try { _voiceTextRecognition.stop(); } catch (_) { }
+    } else {
+      finalizeUI();
     }
   });
 }
