@@ -4936,10 +4936,13 @@ async function openAiGradePackPicker(code) {
     ? assignmentResultsCache.data.attempts
     : [];
   const studentOptions = attempts
-    .map((a) => ({
-      attemptId: String(a?.attemptId || ''),
-      label: `${String(a?.studentName || a?.attemptId || '(unknown)')}${a?._class ? ` · ${a._class}` : ''}${a?.submitted ? '' : ' · in progress'}`,
-    }))
+    .map((a) => {
+      const attemptId = String(a?.id || a?.attemptId || '');
+      return {
+        attemptId,
+        label: `${String(a?.studentName || attemptId || '(unknown)')}${a?._class ? ` · ${a._class}` : ''}${a?.submitted ? '' : ' · in progress'}`,
+      };
+    })
     .filter((o) => o.attemptId);
 
   let questionOptions = [];
@@ -4966,32 +4969,41 @@ async function openAiGradePackPicker(code) {
   modal.id = 'aiGradePackPickerModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
-    <div role="dialog" aria-modal="true" aria-label="Grade with AI" style="background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:480px;width:calc(100% - 32px);box-shadow:0 12px 40px rgba(0,0,0,0.25);">
-      <h3 style="margin:0 0 12px 0;">Grade with AI · ${escapeHtml(safeCode)}</h3>
-      <p class="small muted" style="margin:0 0 12px 0;">Choose what to include in the pack.</p>
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+    <style>
+      #aiGradePackPickerModal .agp-dialog { background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:480px;width:calc(100% - 32px);box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
+      #aiGradePackPickerModal h3 { margin:0 0 12px 0; }
+      #aiGradePackPickerModal p { margin:0 0 12px 0; }
+      #aiGradePackPickerModal .agp-row { display:flex;align-items:center;gap:8px;padding:6px 0;margin:0;font-weight:normal; }
+      #aiGradePackPickerModal .agp-row input[type="radio"] { width:auto;margin:0;flex:none; }
+      #aiGradePackPickerModal select { width:calc(100% - 26px);margin:4px 0 8px 26px;display:block;font-weight:normal; }
+      #aiGradePackPickerModal .agp-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:16px; }
+    </style>
+    <div role="dialog" aria-modal="true" aria-label="Grade with AI" class="agp-dialog">
+      <h3>Grade with AI · ${escapeHtml(safeCode)}</h3>
+      <p class="small muted">Choose what to include in the pack.</p>
+      <label class="agp-row">
         <input type="radio" name="aiGradePackScope" value="assignment" checked />
         <span>All teacher-graded answers in this assignment</span>
       </label>
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+      <label class="agp-row">
         <input type="radio" name="aiGradePackScope" value="attempt" ${studentOptions.length ? '' : 'disabled'} />
         <span>One student</span>
       </label>
-      <select id="aiGradePackPickStudent" style="width:100%;margin:4px 0 8px 26px;max-width:calc(100% - 26px);" ${studentOptions.length ? '' : 'disabled'}>
+      <select id="aiGradePackPickStudent" ${studentOptions.length ? '' : 'disabled'}>
         ${studentOptions.length
           ? studentOptions.map((o) => `<option value="${escapeHtml(o.attemptId)}">${escapeHtml(o.label)}</option>`).join('')
           : '<option>(no attempts loaded — open View results first)</option>'}
       </select>
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+      <label class="agp-row">
         <input type="radio" name="aiGradePackScope" value="question" ${questionOptions.length ? '' : 'disabled'} />
         <span>One question</span>
       </label>
-      <select id="aiGradePackPickQuestion" style="width:100%;margin:4px 0 8px 26px;max-width:calc(100% - 26px);" ${questionOptions.length ? '' : 'disabled'}>
+      <select id="aiGradePackPickQuestion" ${questionOptions.length ? '' : 'disabled'}>
         ${questionOptions.length
           ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
           : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
       </select>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <div class="agp-actions">
         <button class="btn" type="button" data-ai-pack-cancel>Cancel</button>
         <button class="btn primary" type="button" data-ai-pack-confirm>Build pack</button>
       </div>
