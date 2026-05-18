@@ -4424,52 +4424,56 @@ You are grading short student answers from a language-learning quiz. Read
 \`data.json\` and the files in \`media/\`, then return one JSON object with a
 result for every (attemptId, qIndex) pair in \`attempts[].answers\`.
 
+**Approach: less is more.** Correct answers get full points and no comment.
+Wrong or partial answers get a short, specific correction — one sentence at
+most. Don't pad. Don't praise.
+
 ## How to read the pack
 
-- \`questions[]\` — each item the students are answering. Use \`prompt\`,
-  \`expectedAnswer\`, and \`rubric\` to decide what's correct.
+- \`questions[]\` — what students are answering. Use \`prompt\` and
+  \`expectedAnswer\` to decide what's correct.
 - \`attempts[].answers[]\` — one student's answer to one question.
   - \`text\` — typed answer, may be empty.
   - \`audio\` — relative path to a recording. **Listen to it.** Do not grade
     voice answers from \`transcript\` alone; the transcript was auto-generated
-    and is often wrong, especially for pronunciation tasks.
-  - \`transcript\` — best-effort transcript. Treat as a hint, not truth.
-- \`questions[].media.image\` / \`media.audio\` — open these when present; the
-  question may depend on them (e.g. "describe this picture").
+    and is often wrong on pronunciation.
+  - \`transcript\` — best-effort transcript. Hint, not truth.
+- \`questions[].media.image\` / \`media.audio\` — open these when present.
 
-## Scoring rules
+## Scoring
 
 - Points scale is **0 to \`maxPoints\`** for each question. \`maxPoints\` is
   usually 1000 — return integer points in that range, not 0–100.
-- Penalize meaning errors. Do not penalize minor spelling, punctuation, or
-  capitalization unless the \`rubric\` explicitly says to.
-- If \`rubric\` is present, follow it over your own judgment.
-- For \`speaking\` / \`voice_record\` questions, weight pronunciation and
-  fluency as the rubric dictates; if no rubric, weight comprehensibility
-  over accent.
-- If the student's answer is in the wrong language, set
-  \`flags: ["language_mismatch"]\` and verdict \`wrong\` unless the question
-  asked for that language.
+- Default to extremes: full points if correct, 0 if wrong. Use partial
+  scores only when the student got real partial credit (half the answer
+  right, or the right idea with one clear mistake).
+- Penalize meaning errors. Ignore minor spelling, punctuation, and
+  capitalization.
+- For \`speaking\` / \`voice_record\`: weight comprehensibility over accent.
+- Wrong language → \`verdict: "wrong"\`, \`flags: ["language_mismatch"]\`,
+  unless the question asked for that language.
 
 ## When to use \`needs_review\`
 
 Use \`verdict: "needs_review"\` (and \`points: 0\`) when:
 - Audio is unintelligible or cut off.
 - The answer is off-topic in a way you can't confidently score.
-- The question depends on an image/audio file you couldn't open.
-- Your confidence would be below 0.5.
+- Question depends on media you couldn't open.
+- Confidence would be below 0.5.
 
-These rows will be **skipped on import** and surfaced to the teacher for
-manual grading — so be liberal with \`needs_review\` rather than guessing.
+These rows are **skipped on import** and surfaced to the teacher for manual
+grading — be liberal with \`needs_review\` rather than guessing.
 
-## Feedback style
+## Feedback style — terse
 
-- \`correction\` is shown to the student. Write it in the student's language
+- \`correction\` is shown to the student. Write in the student's language
   (see \`assignment.language\` and per-question \`answerLanguage\` when set).
-  Keep it to one sentence. Quote the student's own wording when pointing out
-  a mistake. If the answer is correct, a short affirmation is fine.
-- \`rationale\` is for the teacher only. Write it in English, one sentence,
-  explaining how you arrived at the score.
+  - **Correct answer:** leave \`correction\` empty (\`""\`).
+  - **Wrong or partial:** one short sentence with the fix. No preamble,
+    no encouragement. Quote the student's wording when pointing out a
+    mistake.
+- \`rationale\` is for the teacher only. English, one short sentence
+  explaining the score. Leave \`""\` for correct answers.
 
 ## Output
 
@@ -4565,7 +4569,6 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     maxPoints: Math.max(0, Math.round(Number(item?.maxPoints || 1000))),
     prompt: String(item?.prompt || ''),
     expectedAnswer: String(item?.expectedAnswer || ''),
-    rubric: String(item?.rubric || ''),
     questionLanguage: String(item?.language || ''),
     answerLanguage: String(item?.answerLanguage || ''),
     questionImageUrl: String(item?.questionImageUrl || item?.imageUrl || ''),
@@ -4629,7 +4632,6 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
         maxPoints: question.maxPoints,
         prompt: question.prompt,
         expectedAnswer: question.expectedAnswer,
-        rubric: question.rubric,
         language: question.language,
         answerLanguage: question.answerLanguage,
         qId: question.id,
@@ -4671,7 +4673,6 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
           maxPoints: question.maxPoints,
           prompt: question.prompt,
           expectedAnswer: question.expectedAnswer,
-          rubric: question.rubric,
           language: question.language,
           answerLanguage: question.answerLanguage,
           qId: question.id,
@@ -4703,7 +4704,6 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       maxPoints: e.maxPoints,
       prompt: e.prompt,
       expectedAnswer: e.expectedAnswer || null,
-      rubric: e.rubric || null,
       language: e.questionLanguage || null,
       answerLanguage: e.answerLanguage || null,
       media: { image: null, audio: null },
