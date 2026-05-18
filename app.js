@@ -4432,22 +4432,18 @@ most. Don't pad. Don't praise.
 
 - \`questions[]\` — what students are answering. Decide what's correct from
   the available signals in this order of preference:
-  - \`accepted\` — array of valid answers. If present and non-null, the
-    student's answer is correct if it matches **any** entry (compare
-    case- and punctuation-insensitive; minor spelling/spacing variants OK).
-  - \`media.image\` — when \`accepted\` is null and there's an image, the
-    expected answer is the text shown in the image. Common for read-aloud
-    / pronunciation tasks where students see a line on screen and read it
-    back. Read the image yourself and treat its text as the reference.
-  - \`media.audioText\` — when \`accepted\` is null and \`audioText\` is set,
-    the expected answer is typically that text (the question audio was a
-    TTS reading of it).
+  - \`media.image\` — when there's an image, the expected answer is often
+    the text shown in the image. Common for read-aloud / pronunciation
+    tasks where students see a line on screen and read it back. Read the
+    image yourself and treat its text as the reference.
+  - \`media.audioText\` — when \`audioText\` is set, the expected answer is
+    typically that text (the question audio was a TTS reading of it).
   - Otherwise, fall back to judging by \`prompt\` alone — and be liberal
     with \`needs_review\` if you're unsure.
 - \`questions[].type\` — question type. Teacher-graded packs contain:
   - \`open\` — free-form typed response (long-form). Grade on content.
-  - \`text\` — short typed answer (no \`accepted\` list, so teacher/AI must
-    judge). Often a single word or short phrase.
+  - \`text\` — short typed answer the teacher chose to grade manually.
+    Often a single word or short phrase.
   - \`image_open\` — student uploaded an image as their answer (see
     \`answers[].image\`). Read the image and judge against \`prompt\`.
   - \`speaking\` — student spoke into the mic; the browser auto-transcribed
@@ -4610,7 +4606,6 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     qType: String(item?.qType || ''),
     maxPoints: Math.max(0, Math.round(Number(item?.maxPoints || 1000))),
     prompt: String(item?.prompt || ''),
-    accepted: Array.isArray(item?.accepted) ? item.accepted.map((s) => String(s)).filter(Boolean) : [],
     video: item?.media && typeof item.media === 'object' && item.media.kind === 'video'
       ? {
           provider: String(item.media.provider || ''),
@@ -4683,7 +4678,6 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
         qType: question.qType,
         maxPoints: question.maxPoints,
         prompt: question.prompt,
-        accepted: question.accepted,
         media: question.media,
         language: question.language,
         answerLanguage: question.answerLanguage,
@@ -4727,7 +4721,6 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
           qType: question.qType,
           maxPoints: question.maxPoints,
           prompt: question.prompt,
-          accepted: question.accepted,
           media: question.media,
           language: question.language,
           answerLanguage: question.answerLanguage,
@@ -4761,7 +4754,6 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       type: e.qType,
       maxPoints: e.maxPoints,
       prompt: e.prompt,
-      accepted: e.accepted && e.accepted.length ? e.accepted : null,
       language: e.questionLanguage || null,
       answerLanguage: e.answerLanguage || null,
       media: {

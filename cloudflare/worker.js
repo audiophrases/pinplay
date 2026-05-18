@@ -2591,7 +2591,6 @@ export class QuizRoom {
             audioData: String(question?.audioData || ''),
             language: String(question?.language || ''),
             answerLanguage: String(question?.answerLanguage || ''),
-            accepted: Array.isArray(question?.accepted) ? question.accepted.map((s) => String(s)).slice(0, 50) : [],
             media: normalizeQuestionMediaForGrading(question?.media),
           },
           items,
@@ -5206,7 +5205,6 @@ function buildTeacherGradingItems(assignment, attempt) {
         audioData: String(question?.audioData || ''),
         language: String(question?.language || ''),
         answerLanguage: String(question?.answerLanguage || ''),
-        accepted: Array.isArray(question?.accepted) ? question.accepted.map((s) => String(s)).slice(0, 50) : [],
         media: normalizeQuestionMediaForGrading(question?.media),
         grade: grade && typeof grade === 'object'
           ? {
