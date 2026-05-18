@@ -240,17 +240,26 @@
 
   // ---------- modal state ----------
 
+  const SEARCH_FIELDS = [
+    { value: '',               label: 'Anywhere' },
+    { value: 'question_text',  label: 'Question text' },
+    { value: 'correct_answer', label: 'Answer' },
+    { value: 'options',        label: 'Options' },
+    { value: 'explanation',    label: 'Explanation' },
+  ];
+
   const state = {
     facets: null,
     filters: { source: '', level: '', skill_type: '', topic: '', question_type: '' },
     query: '',
+    searchField: '',
     minQuality: -1,
     limit: PAGE_SIZE,
     offset: 0,
     results: [],
     total: 0,
     selected: new Map(),    // id → row
-    focused: null,          // currently previewed row (or { quiz, questions } when whole-quiz selected)
+    focused: null,          // currently previewed row
     loading: false,
     error: '',
   };
@@ -445,6 +454,22 @@
 
   function buildSearchBar() {
     const wrap = el('div', { class: 'bank-search-bar' });
+
+    const fieldSel = el('select', {
+      id: 'bankSearchField',
+      title: 'Restrict the text search to a specific column',
+      onChange: (e) => {
+        state.searchField = e.target.value;
+        state.offset = 0;
+        if (state.query) runSearch();
+      },
+    });
+    for (const f of SEARCH_FIELDS) {
+      fieldSel.appendChild(el('option', { value: f.value }, f.label));
+    }
+    fieldSel.value = state.searchField;
+    wrap.appendChild(el('label', { class: 'bank-search-field-label' }, 'Search in', fieldSel));
+
     const input = el('input', {
       id: 'bankSearchInput',
       type: 'text',
@@ -511,6 +536,7 @@
     state.loading = true;
     const params = {
       q: state.query || undefined,
+      field: state.searchField || undefined,
       source: state.filters.source || undefined,
       level: state.filters.level || undefined,
       skill_type: state.filters.skill_type || undefined,

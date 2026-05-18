@@ -3797,21 +3797,28 @@ body.review-mode-active #joinSubmission {
 .bank-error { color: #b91c1c; }
 
 .bank-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.6rem;
-  align-items: flex-start;
+  align-items: start;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   cursor: pointer;
   background: var(--card);
   transition: background 0.1s ease, border-color 0.1s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 .bank-row:hover { background: #f8f9ff; }
 .bank-row.focused { border-color: var(--primary); background: #f0f4ff; }
 .bank-row.selected { background: #ecfdf5; border-color: #10b981; }
 .bank-row input[type="checkbox"] { margin-top: 0.25rem; }
-.bank-row-body { flex: 1; min-width: 0; }
+.bank-row-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 .bank-row-meta {
   display: flex;
   gap: 0.3rem;
@@ -3822,7 +3829,8 @@ body.review-mode-active #joinSubmission {
   font-size: 0.92rem;
   color: var(--text);
   line-height: 1.35;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .bank-badge {
   display: inline-block;
