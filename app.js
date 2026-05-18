@@ -6849,14 +6849,6 @@ function buildAssignmentListItem(a) {
   const row = document.createElement('div');
   row.className = 'row gap top-space';
 
-  const copyCodeBtn = document.createElement('button');
-  copyCodeBtn.className = 'btn';
-  copyCodeBtn.textContent = 'Copy code';
-  copyCodeBtn.addEventListener('click', async () => {
-    const ok = await copyTextSmart(code);
-    if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied code: ${code}` : 'Copy failed';
-  });
-
   const copyLinkBtn = document.createElement('button');
   copyLinkBtn.className = 'btn';
   copyLinkBtn.textContent = 'Copy link';
@@ -6951,7 +6943,7 @@ function buildAssignmentListItem(a) {
     }
   });
 
-  row.append(copyCodeBtn, copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, archiveBtn, deleteBtn);
+  row.append(copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, archiveBtn, deleteBtn);
   li.append(title, meta, row);
   return li;
 }
