@@ -3778,6 +3778,19 @@ body.review-mode-active #joinSubmission {
   flex: 1;
   font-size: 0.95rem;
   padding: 0.4rem 0.6rem;
+  min-width: 0;
+}
+.bank-search-field-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  color: var(--muted);
+  gap: 0.15rem;
+  flex: 0 0 auto;
+}
+.bank-search-field-label select {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
 }
 
 .bank-results {
