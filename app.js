@@ -530,6 +530,7 @@ const assignmentGradingSummaryEl = document.getElementById('assignmentGradingSum
 const assignmentGradingListEl = document.getElementById('assignmentGradingList');
 const gradeByQuestionBtnEl = document.getElementById('gradeByQuestionBtn');
 const gradeByStudentBtnEl = document.getElementById('gradeByStudentBtn');
+const aiGradePackAssignmentBtnEl = document.getElementById('aiGradePackAssignmentBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
