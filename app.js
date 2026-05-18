@@ -5238,16 +5238,22 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${body}</td>`;
   };
 
+  rows.forEach((r) => {
+    if (r.bucket === 'apply') r.included = true;
+    else if (r.bucket === 'skip') r.included = false;
+    else r.included = false;
+  });
+
   const tableRows = sorted.map((r, idx) => {
     const lowConf = r.confidence < 0.6 && r.bucket === 'apply';
     const bgs = { apply: '#fff', skip: '#fffbe6', rejected: '#fef2f2' };
     const bg = r.isOverwrite ? '#eff6ff' : (bgs[r.bucket] || '#fff');
-    const statusLabel = r.bucket === 'rejected'
-      ? `✗ rejected: ${escapeHtml(r.rejectionReason)}`
+    const editableDisabled = r.bucket === 'rejected';
+    const statusCell = r.bucket === 'rejected'
+      ? `<div style="color:#dc2626;">✗ rejected</div><div class="small muted">${escapeHtml(r.rejectionReason)}</div>`
       : r.bucket === 'skip'
-        ? '⏸ needs review (skip)'
+        ? `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;cursor:pointer;"><input type="checkbox" data-include-row style="width:auto;margin:0;" /><span>Include in apply</span></label><div class="small muted" style="margin-top:4px;">⏸ AI said needs_review</div>`
         : r.isOverwrite ? '↻ overwrite existing' : '✓ apply';
-    const editableDisabled = r.bucket !== 'apply';
     return `
       <tr data-row-idx="${idx}" style="background:${bg};${lowConf ? 'outline:2px solid #f59e0b;outline-offset:-2px;' : ''}">
         ${escTd(r.studentName || r.attemptId)}
@@ -5264,26 +5270,24 @@ function aiGradeImportRenderPreview(modal, response, rows) {
           ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
           ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
         </td>
-        ${escTd(statusLabel)}
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${statusCell}</td>
       </tr>
     `;
   }).join('');
 
-  const overwriteCheckbox = overwrite.length
-    ? `<label style="display:flex;gap:6px;align-items:center;margin:6px 0;font-weight:normal;"><input type="checkbox" data-confirm-overwrite style="width:auto;"/><span>I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
+  const hasAnyOverwrite = overwrite.length > 0;
+  const overwriteCheckbox = hasAnyOverwrite
+    ? `<label style="display:flex;gap:6px;align-items:center;margin:6px 0;font-weight:normal;"><input type="checkbox" data-confirm-overwrite style="width:auto;"/><span data-overwrite-label>I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
     : '';
 
   const body = modal.querySelector('[data-import-body]');
   body.innerHTML = `
     <div style="margin-bottom:12px;">
       <strong>Preview</strong> · ${escapeHtml(String(response.assignmentCode))} · ${rows.length} result${rows.length === 1 ? '' : 's'}
-      <div class="small muted" style="margin-top:4px;">
-        ✓ ${apply.length} will be applied
-        ${overwrite.length ? ` · ↻ ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}` : ''}
-        ${skip.length ? ` · ⏸ ${skip.length} skipped (needs_review)` : ''}
-        ${rejected.length ? ` · ✗ ${rejected.length} rejected` : ''}
+      <div class="small muted" style="margin-top:4px;" data-summary-line>
+        <!-- filled by updateSummary() -->
       </div>
-      <div class="small muted">Rows with confidence &lt; 0.60 are highlighted. Edit points or correction inline before applying.</div>
+      <div class="small muted">Rows with confidence &lt; 0.60 are highlighted. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you check "Include in apply".</div>
     </div>
     <div style="max-height:50vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
@@ -5306,25 +5310,73 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     <div data-import-progress class="small muted" style="margin-top:8px;"></div>
     <div class="agp-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
       <button class="btn" type="button" data-import-cancel>Cancel</button>
-      ${apply.length ? `<button class="btn primary" type="button" data-import-apply-safe>Apply ${apply.length} grade${apply.length === 1 ? '' : 's'}</button>` : ''}
-      ${overwrite.length ? `<button class="btn" type="button" data-import-apply-all>Apply ${apply.length + overwrite.length} incl. overwrites</button>` : ''}
+      <button class="btn primary" type="button" data-import-apply-safe>Apply</button>
+      ${hasAnyOverwrite ? `<button class="btn" type="button" data-import-apply-all>Apply incl. overwrites</button>` : ''}
     </div>
   `;
+
+  const summaryEl = body.querySelector('[data-summary-line]');
+  const safeBtn = body.querySelector('[data-import-apply-safe]');
+  const allBtn = body.querySelector('[data-import-apply-all]');
+  const overwriteLabel = body.querySelector('[data-overwrite-label]');
+  function updateSummary() {
+    const includedNonOverwrite = rows.filter((r) => r.included && r.bucket !== 'rejected' && !r.isOverwrite);
+    const includedOverwrite = rows.filter((r) => r.included && r.bucket !== 'rejected' && r.isOverwrite);
+    const promoted = rows.filter((r) => r.bucket === 'skip' && r.included);
+    const skippedStill = rows.filter((r) => r.bucket === 'skip' && !r.included);
+    const parts = [];
+    parts.push(`✓ ${includedNonOverwrite.length} will be applied`);
+    if (includedOverwrite.length) parts.push(`↻ ${includedOverwrite.length} overwrite${includedOverwrite.length === 1 ? '' : 's'}`);
+    if (promoted.length) parts.push(`⤴ ${promoted.length} promoted from needs_review`);
+    if (skippedStill.length) parts.push(`⏸ ${skippedStill.length} still skipped`);
+    if (rejected.length) parts.push(`✗ ${rejected.length} rejected`);
+    if (summaryEl) summaryEl.textContent = parts.join(' · ');
+    if (safeBtn) {
+      const n = includedNonOverwrite.length;
+      safeBtn.textContent = `Apply ${n} grade${n === 1 ? '' : 's'}`;
+      safeBtn.disabled = n === 0;
+    }
+    if (allBtn) {
+      const total = includedNonOverwrite.length + includedOverwrite.length;
+      allBtn.textContent = `Apply ${total} incl. overwrites`;
+      allBtn.disabled = total === 0;
+    }
+    if (overwriteLabel) {
+      overwriteLabel.textContent = `I have reviewed the ${includedOverwrite.length} overwrite${includedOverwrite.length === 1 ? '' : 's'}`;
+    }
+  }
 
   body.querySelectorAll('tr[data-row-idx]').forEach((tr) => {
     const rowIdx = Number(tr.dataset.rowIdx);
     const row = sorted[rowIdx];
-    if (!row || row.bucket !== 'apply') return;
+    if (!row || row.bucket === 'rejected') return;
     const pointsInput = tr.querySelector('[data-edit-points]');
     const corrInput = tr.querySelector('[data-edit-correction]');
+    const includeCb = tr.querySelector('[data-include-row]');
+    const autoInclude = () => {
+      if (row.bucket === 'skip' && includeCb && !includeCb.checked) {
+        includeCb.checked = true;
+        row.included = true;
+        updateSummary();
+      }
+    };
     pointsInput?.addEventListener('input', () => {
       const v = Math.round(Number(pointsInput.value || 0));
       row.points = Math.min(Math.max(v, 0), row.maxPoints);
+      autoInclude();
     });
-    corrInput?.addEventListener('input', () => { row.correction = String(corrInput.value || ''); });
+    corrInput?.addEventListener('input', () => {
+      row.correction = String(corrInput.value || '');
+      autoInclude();
+    });
+    includeCb?.addEventListener('change', () => {
+      row.included = !!includeCb.checked;
+      updateSummary();
+    });
   });
+  updateSummary();
 
-  return { apply, overwrite, skip, rejected };
+  return { apply, overwrite, skip, rejected, allRows: rows };
 }
 
 async function aiGradeImportApply(modal, code, rowsToApply) {
@@ -5435,13 +5487,19 @@ function openAiGradeImport(code) {
     const buckets = aiGradeImportRenderPreview(modal, parsed, rows);
 
     modal.querySelector('[data-import-cancel]')?.addEventListener('click', close);
+    const collectIncluded = (withOverwrite) => buckets.allRows.filter((r) => {
+      if (r.bucket === 'rejected') return false;
+      if (!r.included) return false;
+      if (r.isOverwrite && !withOverwrite) return false;
+      return true;
+    });
     modal.querySelector('[data-import-apply-safe]')?.addEventListener('click', async () => {
-      await aiGradeImportApply(modal, safeCode, buckets.apply);
+      await aiGradeImportApply(modal, safeCode, collectIncluded(false));
     });
     modal.querySelector('[data-import-apply-all]')?.addEventListener('click', async () => {
       const cb = modal.querySelector('[data-confirm-overwrite]');
       if (cb && !cb.checked) { cb.focus(); cb.scrollIntoView({ block: 'center' }); return; }
-      await aiGradeImportApply(modal, safeCode, [...buckets.apply, ...buckets.overwrite]);
+      await aiGradeImportApply(modal, safeCode, collectIncluded(true));
     });
   });
 
