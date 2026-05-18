@@ -531,7 +531,6 @@ const assignmentGradingListEl = document.getElementById('assignmentGradingList')
 const gradeByQuestionBtnEl = document.getElementById('gradeByQuestionBtn');
 const gradeByStudentBtnEl = document.getElementById('gradeByStudentBtn');
 const aiGradePackAssignmentBtnEl = document.getElementById('aiGradePackAssignmentBtn');
-const aiGradeImportBtnEl = document.getElementById('aiGradeImportBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -4203,14 +4202,6 @@ function bindLiveEvents() {
     }
     openAiGradePackPicker(code);
   });
-  if (aiGradeImportBtnEl) aiGradeImportBtnEl.addEventListener('click', () => {
-    const code = assignmentResultsCache?.code;
-    if (!code) {
-      aiGradePackToast('Open View results on an assignment first.', true);
-      return;
-    }
-    openAiGradeImport(code);
-  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -5016,6 +5007,9 @@ async function openAiGradePackPicker(code) {
         <button class="btn" type="button" data-ai-pack-cancel>Cancel</button>
         <button class="btn primary" type="button" data-ai-pack-confirm>Build pack</button>
       </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0 12px;" />
+      <div class="small muted" style="margin-bottom:8px;">Already have an AI response?</div>
+      <button class="btn" type="button" data-ai-pack-import style="width:100%;">Import AI grades →</button>
     </div>
   `;
   document.body.appendChild(modal);
@@ -5059,6 +5053,10 @@ async function openAiGradePackPicker(code) {
     runAiGradePack(args);
   }
   modal.querySelector('[data-ai-pack-confirm]').addEventListener('click', confirm);
+  modal.querySelector('[data-ai-pack-import]')?.addEventListener('click', () => {
+    close();
+    openAiGradeImport(safeCode);
+  });
   document.addEventListener('keydown', onKey, true);
 }
 
@@ -5112,6 +5110,7 @@ async function aiGradeImportLoadContext(safeCode) {
 
   const currentGrades = new Map();
   const studentNames = new Map();
+  const answerData = new Map();
   gradeData.forEach((data, i) => {
     if (!data) return;
     const qi = teacherQIndexes[i];
@@ -5126,10 +5125,19 @@ async function aiGradeImportLoadContext(safeCode) {
         correction: String(it?.grade?.correction || ''),
       });
       if (it?.studentName) studentNames.set(attemptId, String(it.studentName));
+      const ans = it?.answer && typeof it.answer === 'object' ? it.answer : null;
+      answerData.set(key, {
+        qType: String(data?.question?.qType || ''),
+        answerText: String(it?.answerText || ''),
+        audioUrl: String(ans?.audioUrl || ''),
+        transcript: String(ans?.transcript || ''),
+        durationMs: Number(ans?.durationMs || 0) || null,
+        imageUrl: String(ans?.imageUrl || ''),
+      });
     });
   });
 
-  return { questionMap, currentGrades, studentNames };
+  return { questionMap, currentGrades, studentNames, answerData };
 }
 
 function aiGradeImportBucketRow(result, ctx) {
@@ -5166,6 +5174,7 @@ function aiGradeImportBucketRow(result, ctx) {
   const current = ctx.currentGrades.get(`${row.attemptId}::${row.qIndex}`);
   if (!current) { row.bucket = 'rejected'; row.rejectionReason = 'attempt not found for this question'; return row; }
   if (current.graded) row.isOverwrite = true;
+  row.answer = ctx.answerData.get(`${row.attemptId}::${row.qIndex}`) || null;
 
   if (row.verdict === 'needs_review') { row.bucket = 'skip'; return row; }
   if (!['correct', 'partial', 'wrong'].includes(row.verdict)) {
@@ -5202,6 +5211,33 @@ function aiGradeImportRenderPreview(modal, response, rows) {
 
   const escTd = (s) => `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${escapeHtml(String(s == null ? '' : s))}</td>`;
 
+  const renderAnswerCell = (r) => {
+    const a = r.answer;
+    if (!a) return '<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;color:#9ca3af;font-style:italic;font-size:0.8rem;">(no answer)</td>';
+    const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+    const resolve = (url) => {
+      const raw = String(url || '');
+      if (!raw) return '';
+      if (raw.startsWith('http') || raw.startsWith('data:')) return raw;
+      return `${base}/api/media/${raw}`;
+    };
+    let body = '';
+    if (a.qType === 'voice_record' && a.audioUrl) {
+      const dur = a.durationMs ? ` <span class="small muted">(${Math.round(a.durationMs / 1000)}s)</span>` : '';
+      const transcript = a.transcript
+        ? `<div class="small muted" style="margin-top:4px;max-width:260px;word-break:break-word;"><em>${escapeHtml(a.transcript)}</em></div>`
+        : '';
+      body = `<audio controls preload="none" src="${escapeHtml(resolve(a.audioUrl))}" style="height:30px;max-width:240px;"></audio>${dur}${transcript}`;
+    } else if (a.qType === 'image_open' && a.imageUrl) {
+      body = `<a href="${escapeHtml(resolve(a.imageUrl))}" target="_blank" rel="noopener"><img src="${escapeHtml(resolve(a.imageUrl))}" alt="answer" style="max-height:80px;max-width:160px;border-radius:4px;display:block;" /></a>`;
+    } else {
+      const text = a.answerText || '(blank)';
+      const truncated = text.length > 300 ? text.slice(0, 300) + '…' : text;
+      body = `<div style="max-width:260px;word-break:break-word;font-size:0.85rem;">${escapeHtml(truncated)}</div>`;
+    }
+    return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${body}</td>`;
+  };
+
   const tableRows = sorted.map((r, idx) => {
     const lowConf = r.confidence < 0.6 && r.bucket === 'apply';
     const bgs = { apply: '#fff', skip: '#fffbe6', rejected: '#fef2f2' };
@@ -5216,6 +5252,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       <tr data-row-idx="${idx}" style="background:${bg};${lowConf ? 'outline:2px solid #f59e0b;outline-offset:-2px;' : ''}">
         ${escTd(r.studentName || r.attemptId)}
         ${escTd(`Q${r.qIndex + 1}`)}
+        ${renderAnswerCell(r)}
         <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
           <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:80px;" ${editableDisabled ? 'disabled' : ''}/>
           <div class="small muted">/ ${r.maxPoints}</div>
@@ -5254,6 +5291,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
           <tr>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Q</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Points</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Verdict</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Conf</th>
