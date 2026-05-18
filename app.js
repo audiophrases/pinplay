@@ -4699,8 +4699,10 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
           language: question.language,
           answerLanguage: question.answerLanguage,
           qId: question.id,
-          questionImageUrl: question.imageUrl || '',
-          questionAudioUrl: question.audioUrl || '',
+          imageData: question.imageData || '',
+          audioData: question.audioData || '',
+          audioMode: question.audioMode || '',
+          audioText: question.audioText || '',
           teacherGraded: true,
         };
         const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
@@ -4786,7 +4788,7 @@ async function aiGradePackCollectMedia({ entries, data }) {
   function queue(url, kind, ownerKey, assignFn) {
     if (!url) return;
     const resolved = aiGradePackResolveMediaUrl(url);
-    if (!resolved || resolved.startsWith('data:')) return;
+    if (!resolved) return;
     const key = `${kind}::${resolved}`;
     if (seen.has(key)) {
       fetches.push(Promise.resolve({ assignFn, file: seen.get(key), missing: false }));
