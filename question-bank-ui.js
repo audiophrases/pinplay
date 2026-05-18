@@ -336,6 +336,7 @@
 
   let modalEl = null;
   let searchDebounce = 0;
+  let searchSeq = 0;
 
   // ---------- modal builders ----------
 
@@ -618,7 +619,7 @@
   }
 
   async function runSearch() {
-    if (state.loading) return;
+    const mySeq = ++searchSeq;
     state.loading = true;
     const params = {
       q: state.query || undefined,
@@ -640,6 +641,7 @@
     }
     try {
       const data = await bankFetch('/search', params);
+      if (mySeq !== searchSeq) return;  // a newer search superseded this one
       if (state.offset === 0) {
         state.results = data.results || [];
       } else {
@@ -648,6 +650,7 @@
       state.total = data.total || 0;
       renderResults();
     } catch (err) {
+      if (mySeq !== searchSeq) return;
       if (err.message === 'UNAUTHORIZED') {
         bridgeCfg.secret = '';
         renderConnectView();
@@ -655,7 +658,7 @@
       }
       showError(err.message);
     } finally {
-      state.loading = false;
+      if (mySeq === searchSeq) state.loading = false;
     }
   }
 
