@@ -10,6 +10,10 @@ uploads/
 .env*
 !.env.example
 
+# Python caches (question-bank/ local tooling)
+__pycache__/
+*.pyc
+
 # Secrets (never commit)
 ~/.pinplay-secrets.json
 *.secrets.json
@@ -25,6 +29,8 @@ node_modules/
 node_modules/**
 cloudflare/
 cloudflare/**
+question-bank/
+question-bank/**
 tests/
 tests/**
 *.cmd
