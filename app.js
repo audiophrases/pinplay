@@ -4200,7 +4200,7 @@ function bindLiveEvents() {
       aiGradePackToast('Open View results on an assignment first.', true);
       return;
     }
-    runAiGradePack({ scope: 'assignment', code });
+    openAiGradePackPicker(code);
   });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
@@ -4924,6 +4924,121 @@ async function runAiGradePack(args) {
   }
 }
 
+async function openAiGradePackPicker(code) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) return;
+
+  document.getElementById('aiGradePackPickerModal')?.remove();
+
+  const attempts = Array.isArray(assignmentResultsCache?.data?.attempts)
+    ? assignmentResultsCache.data.attempts
+    : [];
+  const studentOptions = attempts
+    .map((a) => ({
+      attemptId: String(a?.attemptId || ''),
+      label: `${String(a?.studentName || a?.attemptId || '(unknown)')}${a?._class ? ` · ${a._class}` : ''}${a?.submitted ? '' : ' · in progress'}`,
+    }))
+    .filter((o) => o.attemptId);
+
+  let questionOptions = [];
+  let questionLoadError = '';
+  try {
+    if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+    const overview = await api('/api/assignments/grading-overview', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: safeCode },
+    });
+    const qs = Array.isArray(overview?.questions) ? overview.questions : [];
+    questionOptions = qs
+      .map((q, idx) => ({ q, idx: Number.isFinite(Number(q?.qIndex)) ? Number(q.qIndex) : idx }))
+      .filter(({ q }) => q && q.teacherGraded)
+      .map(({ q, idx }) => ({
+        qIndex: idx,
+        label: `Q${idx + 1} · ${String(q?.qType || 'question')}${q?.pendingCount ? ` · ${q.pendingCount} pending` : ''}`,
+      }));
+  } catch (err) {
+    questionLoadError = String(err?.message || err);
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'aiGradePackPickerModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div role="dialog" aria-modal="true" aria-label="Grade with AI" style="background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:480px;width:calc(100% - 32px);box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+      <h3 style="margin:0 0 12px 0;">Grade with AI · ${escapeHtml(safeCode)}</h3>
+      <p class="small muted" style="margin:0 0 12px 0;">Choose what to include in the pack.</p>
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+        <input type="radio" name="aiGradePackScope" value="assignment" checked />
+        <span>All teacher-graded answers in this assignment</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+        <input type="radio" name="aiGradePackScope" value="attempt" ${studentOptions.length ? '' : 'disabled'} />
+        <span>One student</span>
+      </label>
+      <select id="aiGradePackPickStudent" style="width:100%;margin:4px 0 8px 26px;max-width:calc(100% - 26px);" ${studentOptions.length ? '' : 'disabled'}>
+        ${studentOptions.length
+          ? studentOptions.map((o) => `<option value="${escapeHtml(o.attemptId)}">${escapeHtml(o.label)}</option>`).join('')
+          : '<option>(no attempts loaded — open View results first)</option>'}
+      </select>
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+        <input type="radio" name="aiGradePackScope" value="question" ${questionOptions.length ? '' : 'disabled'} />
+        <span>One question</span>
+      </label>
+      <select id="aiGradePackPickQuestion" style="width:100%;margin:4px 0 8px 26px;max-width:calc(100% - 26px);" ${questionOptions.length ? '' : 'disabled'}>
+        ${questionOptions.length
+          ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
+          : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
+      </select>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn" type="button" data-ai-pack-cancel>Cancel</button>
+        <button class="btn primary" type="button" data-ai-pack-confirm>Build pack</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const studentSelect = modal.querySelector('#aiGradePackPickStudent');
+  const questionSelect = modal.querySelector('#aiGradePackPickQuestion');
+  modal.querySelectorAll('input[name="aiGradePackScope"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (radio.value === 'attempt' && studentSelect && !studentSelect.disabled) studentSelect.focus();
+      if (radio.value === 'question' && questionSelect && !questionSelect.disabled) questionSelect.focus();
+    });
+  });
+  studentSelect?.addEventListener('focus', () => {
+    const r = modal.querySelector('input[name="aiGradePackScope"][value="attempt"]');
+    if (r && !r.disabled) r.checked = true;
+  });
+  questionSelect?.addEventListener('focus', () => {
+    const r = modal.querySelector('input[name="aiGradePackScope"][value="question"]');
+    if (r && !r.disabled) r.checked = true;
+  });
+
+  function close() { modal.remove(); document.removeEventListener('keydown', onKey, true); }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    else if (e.key === 'Enter' && !(e.target instanceof HTMLSelectElement)) { e.stopPropagation(); confirm(); }
+  }
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.querySelector('[data-ai-pack-cancel]').addEventListener('click', close);
+
+  function confirm() {
+    const scope = String(modal.querySelector('input[name="aiGradePackScope"]:checked')?.value || 'assignment');
+    const args = { scope, code: safeCode };
+    if (scope === 'attempt') {
+      args.attemptId = String(studentSelect?.value || '');
+      if (!args.attemptId) { aiGradePackToast('Pick a student first.', true); return; }
+    } else if (scope === 'question') {
+      args.qIndex = Number(questionSelect?.value);
+      if (!Number.isFinite(args.qIndex)) { aiGradePackToast('Pick a question first.', true); return; }
+    }
+    close();
+    runAiGradePack(args);
+  }
+  modal.querySelector('[data-ai-pack-confirm]').addEventListener('click', confirm);
+  document.addEventListener('keydown', onKey, true);
+}
+
 async function reopenAssignmentAttempt(code, attemptId) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   await api('/api/assignments/reopen-attempt', {
@@ -5009,7 +5124,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       const aiBtn = document.createElement('button');
       aiBtn.className = 'btn';
       aiBtn.type = 'button';
-      aiBtn.textContent = `🤖 AI grade pack (this student, ${teacherGradedCount} answer${teacherGradedCount === 1 ? '' : 's'})`;
+      aiBtn.textContent = `Grade with AI (this student, ${teacherGradedCount} answer${teacherGradedCount === 1 ? '' : 's'})`;
       aiBtn.title = 'Build a ZIP + prompt to grade this student’s teacher-graded answers with an AI';
       aiBtn.addEventListener('click', () => {
         runAiGradePack({ scope: 'attempt', code: safeCode, attemptId: safeAttemptId });
@@ -5644,7 +5759,7 @@ function renderGradingFocusItem() {
         <div class="small muted">Student ${current + 1} of ${items.length} · ${gradedCount} graded · ${pendingCount} pending · max ${maxPoints} pts</div>
       </div>
       <div class="row gap">
-        <button class="btn" data-ai-grade-pack-question title="Build a ZIP + prompt to grade this question for all students with an AI">🤖 AI grade pack</button>
+        <button class="btn" data-ai-grade-pack-question title="Build a ZIP + prompt to grade this question for all students with an AI">Grade with AI</button>
         <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
       </div>
     </div>
