@@ -4588,7 +4588,16 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     qType: String(item?.qType || ''),
     maxPoints: Math.max(0, Math.round(Number(item?.maxPoints || 1000))),
     prompt: String(item?.prompt || ''),
-    expectedAnswer: String(item?.expectedAnswer || ''),
+    accepted: Array.isArray(item?.accepted) ? item.accepted.map((s) => String(s)).filter(Boolean) : [],
+    video: item?.media && typeof item.media === 'object' && item.media.kind === 'video'
+      ? {
+          provider: String(item.media.provider || ''),
+          url: String(item.media.url || ''),
+          embedUrl: String(item.media.embedUrl || ''),
+          startAt: Number(item.media.startAt || 0) || 0,
+          endAt: item.media.endAt == null ? null : Number(item.media.endAt),
+        }
+      : null,
     questionLanguage: String(item?.language || ''),
     answerLanguage: String(item?.answerLanguage || ''),
     questionImageUrl: String(item?.imageData || item?.questionImageUrl || item?.imageUrl || ''),
@@ -4652,7 +4661,8 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
         qType: question.qType,
         maxPoints: question.maxPoints,
         prompt: question.prompt,
-        expectedAnswer: question.expectedAnswer,
+        accepted: question.accepted,
+        media: question.media,
         language: question.language,
         answerLanguage: question.answerLanguage,
         qId: question.id,
@@ -4695,7 +4705,8 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
           qType: question.qType,
           maxPoints: question.maxPoints,
           prompt: question.prompt,
-          expectedAnswer: question.expectedAnswer,
+          accepted: question.accepted,
+          media: question.media,
           language: question.language,
           answerLanguage: question.answerLanguage,
           qId: question.id,
@@ -4728,13 +4739,14 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       type: e.qType,
       maxPoints: e.maxPoints,
       prompt: e.prompt,
-      expectedAnswer: e.expectedAnswer || null,
+      accepted: e.accepted && e.accepted.length ? e.accepted : null,
       language: e.questionLanguage || null,
       answerLanguage: e.answerLanguage || null,
       media: {
         image: null,
         audio: null,
         audioText: e.questionAudioText || null,
+        video: e.video || null,
       },
     });
   });
