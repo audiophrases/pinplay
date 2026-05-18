@@ -207,9 +207,10 @@
     }
 
     if (type === 'open_ended' || type === 'open') {
-      const q = window.makeOpenQuestion ? window.makeOpenQuestion() : null;
+      const q = window.makeTextQuestion ? window.makeTextQuestion() : null;
       if (!q) return null;
       q.prompt = stem;
+      q.accepted = corrects.length ? corrects.slice(0, 8) : ['', '', ''];
       attachMedia(q, row); return q;
     }
 
@@ -787,7 +788,7 @@
       multiple_select_quiz: 'multi',
       true_false: 'tf',
       fill_blank: 'context_gap',
-      open_ended: 'open',
+      open_ended: 'text',
       jumble: 'puzzle',
       slider: 'slider',
       survey: 'mcq (poll)',
