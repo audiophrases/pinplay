@@ -142,6 +142,19 @@ function init() {
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
 
+  // Friction-level anti-cheat for all modes: block copy / cut / paste /
+  // right-click inside the quiz UI. Trivially bypassable via devtools — paired
+  // with exam-mode focus-loss tracking for real visibility.
+  const blockInQuizUi = (e) => {
+    if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+    if (e.target instanceof Node && joinQuestionWrap.contains(e.target)) {
+      e.preventDefault();
+    }
+  };
+  ['copy', 'cut', 'paste', 'contextmenu'].forEach((evt) => {
+    document.addEventListener(evt, blockInQuizUi);
+  });
+
   // Keyboard nav for assignment mode (arrow keys + space)
   document.addEventListener('keydown', (e) => {
     if (live.player.mode !== 'assignment') return;

@@ -945,6 +945,19 @@ body.question-active .join-title-row {
   background-position: center !important;
   background-repeat: no-repeat !important;
   transform: none !important;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable selection inside text inputs/areas so students can edit what they
+   type. Paste is still blocked at the event level (see play.js). */
+#joinQuestionWrap input,
+#joinQuestionWrap textarea,
+#joinQuestionWrap [contenteditable="true"] {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 /* TOP STICKY SECTION: Header Row */
