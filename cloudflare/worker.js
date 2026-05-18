@@ -735,7 +735,7 @@ export default {
       if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
       if (!Number.isFinite(points)) return json({ error: 'points required.' }, 400);
 
-      const ok = await verifyCreatePassword(env, password, request);
+      const ok = await verifyCreatePassword(env, password, request, { skipRateLimit: true });
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -4742,10 +4742,11 @@ function makePin() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-async function verifyCreatePassword(env, password, request) {
+async function verifyCreatePassword(env, password, request, opts = {}) {
+  const skipRateLimit = !!opts.skipRateLimit;
   const ip = request ? (request.headers.get('CF-Connecting-IP') || 'unknown') : null;
 
-  if (env.AUTH_RL && ip) {
+  if (!skipRateLimit && env.AUTH_RL && ip) {
     try {
       const { success } = await env.AUTH_RL.limit({ key: `auth:${ip}` });
       if (!success) return false;
@@ -4758,7 +4759,7 @@ async function verifyCreatePassword(env, password, request) {
   const digest = await sha256Hex(raw);
   const ok = digest === hash;
 
-  if (!ok && env.AUTH_RL && ip) {
+  if (!ok && !skipRateLimit && env.AUTH_RL && ip) {
     try {
       await Promise.all([0, 1, 2, 3].map(() => env.AUTH_RL.limit({ key: `auth:${ip}` })));
     } catch (_) { /* fail open */ }
