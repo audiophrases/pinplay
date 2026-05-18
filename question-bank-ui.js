@@ -442,9 +442,12 @@
       onClick: () => {
         for (const k of Object.keys(state.filters)) state.filters[k] = '';
         state.query = '';
+        state.searchField = '';
         state.offset = 0;
         const q = modalEl.querySelector('#bankSearchInput');
         if (q) q.value = '';
+        const fs = modalEl.querySelector('#bankSearchField');
+        if (fs) fs.value = '';
         Array.from(rail.querySelectorAll('select')).forEach((s) => { s.value = ''; });
         runSearch();
       },
