@@ -98,6 +98,25 @@
     return [s];
   }
 
+  const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i;
+
+  function classifyMedia(url) {
+    if (!url) return 'none';
+    return AUDIO_EXT_RE.test(url) ? 'audio' : 'image';
+  }
+
+  function attachMedia(q, row) {
+    const url = (row.media_url || '').trim();
+    if (!url) return;
+    if (classifyMedia(url) === 'audio') {
+      q.audioMode = 'url';
+      q.audioData = url;
+      q.audioEnabled = true;
+    } else if (q.type !== 'pin') {
+      q.imageData = url;
+    }
+  }
+
   function bankToPinPlay(row) {
     const stem = (row.question_text || '').trim();
     const opts = parseOptions(row.options);
@@ -119,7 +138,7 @@
       }
       if (!marked && answers.length) answers[0].correct = true;
       q.answers = answers;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'multiple_select_quiz') {
@@ -134,7 +153,7 @@
       }
       if (!answers.some((a) => a.correct) && answers.length) answers[0].correct = true;
       q.answers = answers;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'true_false' || type === 'tf') {
@@ -147,7 +166,7 @@
         { text: 'True', correct: trueWord },
         { text: 'False', correct: !trueWord },
       ];
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'fill_blank') {
@@ -155,14 +174,14 @@
       if (!q) return null;
       q.prompt = stem || 'Complete the sentence:';
       q.gaps = corrects.length ? corrects : [''];
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'open_ended' || type === 'open') {
       const q = window.makeOpenQuestion ? window.makeOpenQuestion() : null;
       if (!q) return null;
       q.prompt = stem;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'jumble' || type === 'puzzle') {
@@ -171,7 +190,7 @@
       q.prompt = stem || 'Put the items in the correct order:';
       const items = corrects.length ? corrects : opts;
       q.items = items.length ? items : ['', '', ''];
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'slider') {
@@ -180,7 +199,7 @@
       q.prompt = stem;
       const num = parseFloat(corrects[0] || '');
       if (Number.isFinite(num)) q.target = num;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'survey') {
@@ -193,7 +212,7 @@
         : [{ text: '', correct: true }, { text: '', correct: true }];
       q.isPoll = true;
       q.points = 0;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     if (type === 'word_cloud') {
@@ -203,7 +222,7 @@
       q.accepted = [];
       q.isPoll = true;
       q.points = 0;
-      return q;
+      attachMedia(q, row); return q;
     }
 
     return null;
@@ -611,6 +630,10 @@
       meta.appendChild(el('span', { class: 'bank-badge bank-badge-' + (row.question_type || 'unk') }, row.question_type || '?'));
       if (row.level) meta.appendChild(el('span', { class: 'bank-badge bank-badge-level' }, row.level));
       if (row.source) meta.appendChild(el('span', { class: 'bank-badge bank-badge-source' }, row.source));
+      if (row.media_url) {
+        const kind = classifyMedia(row.media_url);
+        meta.appendChild(el('span', { class: 'bank-badge bank-badge-media', title: row.media_url }, kind === 'audio' ? '🔊' : '🖼'));
+      }
       const stem = el('div', { class: 'bank-row-stem' }, truncate(row.question_text || '(no stem)', 180));
       li.appendChild(cb);
       const right = el('div', { class: 'bank-row-body' });
@@ -643,6 +666,24 @@
       el('strong', {}, row.quiz_title || '(untitled)'),
       el('span', { class: 'small muted' }, ` · ${row.source || '?'} · ${row.level || '–'} · ${row.skill_type || '–'} · ${row.topic || '–'}`),
     ));
+
+    if (row.media_url) {
+      const kind = classifyMedia(row.media_url);
+      if (kind === 'image') {
+        const img = el('img', {
+          class: 'bank-preview-media',
+          src: row.media_url,
+          alt: 'Question media',
+          loading: 'lazy',
+        });
+        img.addEventListener('error', () => { img.style.display = 'none'; });
+        pane.appendChild(img);
+      } else if (kind === 'audio') {
+        const audio = el('audio', { class: 'bank-preview-media', controls: 'true', src: row.media_url });
+        pane.appendChild(audio);
+      }
+    }
+
     pane.appendChild(el('div', { class: 'bank-preview-stem' }, row.question_text || '(no stem)'));
 
     if (opts.length) {

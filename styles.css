@@ -3856,6 +3856,22 @@ body.review-mode-active #joinSubmission {
 }
 .bank-badge-level { background: #fef3c7; color: #92400e; }
 .bank-badge-source { background: #dbeafe; color: #1e40af; }
+.bank-badge-media { background: #f3e8ff; color: #6b21a8; }
+
+.bank-preview-media {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 0.4rem;
+  border: 1px solid var(--line);
+  align-self: flex-start;
+  object-fit: contain;
+  background: #fafafa;
+}
+audio.bank-preview-media {
+  width: 100%;
+  max-height: none;
+  border: none;
+}
 
 .bank-load-more {
   align-self: center;
