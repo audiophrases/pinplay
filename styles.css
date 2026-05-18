@@ -3917,6 +3917,13 @@ audio.bank-preview-media {
   border-top: 1px solid var(--line);
 }
 .bank-preview-mapping { font-style: italic; }
+.bank-preview-warning {
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.4rem;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
 .bank-preview-actions { margin-top: auto; padding-top: 0.5rem; }
 
 .bank-footer {

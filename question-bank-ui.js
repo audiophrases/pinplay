@@ -296,9 +296,18 @@
     { value: 'explanation',    label: 'Explanation' },
   ];
 
+  const MEDIA_OPTIONS = [
+    { value: '',      label: 'Any (no filter)' },
+    { value: 'image', label: 'Has image' },
+    { value: 'audio', label: 'Has audio' },
+    { value: 'any',   label: 'Has any media' },
+    { value: 'none',  label: 'No media' },
+  ];
+
   const state = {
     facets: null,
     filters: { source: '', level: '', skill_type: '', topic: '', question_type: '' },
+    hasMedia: '',
     query: '',
     searchField: '',
     minQuality: -1,
@@ -485,10 +494,23 @@
       rail.appendChild(el('label', {}, f.label, sel));
     }
 
+    const mediaSel = el('select', {
+      id: 'bankMediaFilter',
+      onChange: (e) => {
+        state.hasMedia = e.target.value;
+        state.offset = 0;
+        runSearch();
+      },
+    });
+    for (const o of MEDIA_OPTIONS) mediaSel.appendChild(el('option', { value: o.value }, o.label));
+    mediaSel.value = state.hasMedia || '';
+    rail.appendChild(el('label', {}, 'Media', mediaSel));
+
     const clear = el('button', {
       class: 'btn bank-clear',
       onClick: () => {
         for (const k of Object.keys(state.filters)) state.filters[k] = '';
+        state.hasMedia = '';
         state.query = '';
         state.searchField = '';
         state.offset = 0;
@@ -593,6 +615,7 @@
       skill_type: state.filters.skill_type || undefined,
       topic: state.filters.topic || undefined,
       question_type: state.filters.question_type || undefined,
+      has_media: state.hasMedia || undefined,
       min_quality: state.minQuality,
       limit: state.limit,
       offset: state.offset,
@@ -737,6 +760,11 @@
     }
 
     if (row.explanation) pane.appendChild(el('div', { class: 'bank-preview-explain small muted' }, stripHtml(row.explanation)));
+
+    if (String(row.question_type || '').toLowerCase() === 'slider' && !corrects.length) {
+      pane.appendChild(el('div', { class: 'bank-preview-warning small' },
+        '⚠ Slider has no stored target value (scraper limitation). Import will use defaults (min 0, max 100, target 50) — set the actual range/target in the builder after importing.'));
+    }
 
     const mappingType = mappedTypeLabel(row.question_type);
     pane.appendChild(el('div', { class: 'bank-preview-mapping small muted' }, `Imports as PinPlay type: ${mappingType}`));
