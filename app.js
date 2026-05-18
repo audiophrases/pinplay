@@ -4194,6 +4194,14 @@ function bindLiveEvents() {
       if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-student error: ${err.message}`;
     });
   });
+  if (aiGradePackAssignmentBtnEl) aiGradePackAssignmentBtnEl.addEventListener('click', () => {
+    const code = assignmentResultsCache?.code;
+    if (!code) {
+      aiGradePackToast('Open View results on an assignment first.', true);
+      return;
+    }
+    runAiGradePack({ scope: 'assignment', code });
+  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -4404,6 +4412,491 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
   });
 }
 
+// ---------------------------------------------------------------------------
+// "Grade with AI" pack builder
+// ---------------------------------------------------------------------------
+
+const AI_GRADE_PACK_SIZE_WARN_BYTES = 25 * 1024 * 1024;
+
+const AI_GRADE_PROMPT_TEMPLATE = `# Grading task
+
+You are grading short student answers from a language-learning quiz. Read
+\`data.json\` and the files in \`media/\`, then return one JSON object with a
+result for every (attemptId, qIndex) pair in \`attempts[].answers\`.
+
+## How to read the pack
+
+- \`questions[]\` — each item the students are answering. Use \`prompt\`,
+  \`expectedAnswer\`, and \`rubric\` to decide what's correct.
+- \`attempts[].answers[]\` — one student's answer to one question.
+  - \`text\` — typed answer, may be empty.
+  - \`audio\` — relative path to a recording. **Listen to it.** Do not grade
+    voice answers from \`transcript\` alone; the transcript was auto-generated
+    and is often wrong, especially for pronunciation tasks.
+  - \`transcript\` — best-effort transcript. Treat as a hint, not truth.
+- \`questions[].media.image\` / \`media.audio\` — open these when present; the
+  question may depend on them (e.g. "describe this picture").
+
+## Scoring rules
+
+- Points scale is **0 to \`maxPoints\`** for each question. \`maxPoints\` is
+  usually 1000 — return integer points in that range, not 0–100.
+- Penalize meaning errors. Do not penalize minor spelling, punctuation, or
+  capitalization unless the \`rubric\` explicitly says to.
+- If \`rubric\` is present, follow it over your own judgment.
+- For \`speaking\` / \`voice_record\` questions, weight pronunciation and
+  fluency as the rubric dictates; if no rubric, weight comprehensibility
+  over accent.
+- If the student's answer is in the wrong language, set
+  \`flags: ["language_mismatch"]\` and verdict \`wrong\` unless the question
+  asked for that language.
+
+## When to use \`needs_review\`
+
+Use \`verdict: "needs_review"\` (and \`points: 0\`) when:
+- Audio is unintelligible or cut off.
+- The answer is off-topic in a way you can't confidently score.
+- The question depends on an image/audio file you couldn't open.
+- Your confidence would be below 0.5.
+
+These rows will be **skipped on import** and surfaced to the teacher for
+manual grading — so be liberal with \`needs_review\` rather than guessing.
+
+## Feedback style
+
+- \`correction\` is shown to the student. Write it in the student's language
+  (see \`assignment.language\` and per-question \`answerLanguage\` when set).
+  Keep it to one sentence. Quote the student's own wording when pointing out
+  a mistake. If the answer is correct, a short affirmation is fine.
+- \`rationale\` is for the teacher only. Write it in English, one sentence,
+  explaining how you arrived at the score.
+
+## Output
+
+Return **exactly one fenced JSON block** matching this schema and nothing
+else — no preamble, no closing remarks:
+
+\`\`\`json
+{
+  "version": 1,
+  "assignmentCode": "<copy from data.json>",
+  "results": [
+    {
+      "attemptId": "<from data.json>",
+      "qIndex": <number, from data.json>,
+      "qId": "<from data.json — must match the question at that qIndex>",
+      "points": <integer, 0..maxPoints>,
+      "verdict": "correct" | "partial" | "wrong" | "needs_review",
+      "confidence": <number, 0..1>,
+      "correction": "<student-facing, in their language>",
+      "rationale": "<teacher-facing, English, one sentence>",
+      "flags": []
+    }
+  ]
+}
+\`\`\`
+
+Valid \`flags\` values: \`audio_unclear\`, \`off_topic\`, \`language_mismatch\`, \`media_missing\`.
+
+## Hard rules
+
+- Never invent \`attemptId\`, \`qIndex\`, or \`qId\`. Copy them verbatim from
+  \`data.json\`. If \`qId\` and \`qIndex\` disagree with the pack, omit that row.
+- One result per (attemptId, qIndex) pair. No duplicates, no extras.
+- If \`data.json\` has 30 answers, \`results\` must have 30 entries (some may
+  be \`needs_review\`). Do not skip rows silently.
+- Do not include any prose outside the JSON block.
+`;
+
+function aiGradePackResolveMediaUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:')) return raw;
+  const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+  return `${base}/api/media/${raw}`;
+}
+
+function aiGradePackExtensionFor(contentType, fallbackUrl) {
+  const ct = String(contentType || '').toLowerCase();
+  if (ct.includes('webm')) return 'webm';
+  if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('aac')) return 'mp4';
+  if (ct.includes('mpeg') || ct.includes('mp3')) return 'mp3';
+  if (ct.includes('ogg')) return 'ogg';
+  if (ct.includes('wav')) return 'wav';
+  if (ct.includes('png')) return 'png';
+  if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
+  if (ct.includes('gif')) return 'gif';
+  if (ct.includes('webp')) return 'webp';
+  const url = String(fallbackUrl || '').toLowerCase();
+  const m = url.match(/\.([a-z0-9]{2,5})(?:\?|$)/);
+  if (m) return m[1];
+  return 'bin';
+}
+
+async function aiGradePackFetchMedia(url) {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const ext = aiGradePackExtensionFor(blob.type || resp.headers.get('content-type'), url);
+    return { blob, ext, size: blob.size };
+  } catch (err) {
+    return null;
+  }
+}
+
+function aiGradePackSafeId(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60);
+}
+
+function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) {
+  if (!item || item.teacherGraded === false) return null;
+  const qIndex = Number(item?.qIndex);
+  if (!Number.isFinite(qIndex)) return null;
+  const attemptId = String(item?.attemptId || fallbackAttemptId || '');
+  if (!attemptId) return null;
+  const studentName = String(item?.studentName || fallbackStudentName || '');
+  const answer = item?.answer && typeof item.answer === 'object' ? item.answer : null;
+  const grade = item?.grade && typeof item.grade === 'object' ? item.grade : null;
+  return {
+    qIndex,
+    qId: String(item?.qId || item?.question?.id || ''),
+    qType: String(item?.qType || ''),
+    maxPoints: Math.max(0, Math.round(Number(item?.maxPoints || 1000))),
+    prompt: String(item?.prompt || ''),
+    expectedAnswer: String(item?.expectedAnswer || ''),
+    rubric: String(item?.rubric || ''),
+    questionLanguage: String(item?.language || ''),
+    answerLanguage: String(item?.answerLanguage || ''),
+    questionImageUrl: String(item?.questionImageUrl || item?.imageUrl || ''),
+    questionAudioUrl: String(item?.questionAudioUrl || ''),
+    attemptId,
+    studentName,
+    answerText: String(item?.answerText || ''),
+    answerAudioUrl: String(answer?.audioUrl || ''),
+    answerImageUrl: String(answer?.imageUrl || ''),
+    answerTranscript: String(answer?.transcript || ''),
+    answerDurationMs: Number(answer?.durationMs || 0) || null,
+    submittedAt: item?.submittedAt || null,
+    currentGrade: grade
+      ? {
+          graded: !!grade.graded,
+          pointsAwarded: Number(grade.pointsAwarded || 0),
+          correction: String(grade.correction || ''),
+        }
+      : null,
+  };
+}
+
+async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) throw new Error('Missing assignment code.');
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  const entries = [];
+  const meta = { code: safeCode };
+
+  if (scope === 'attempt') {
+    const safeAttempt = String(attemptId || '').trim();
+    if (!safeAttempt) throw new Error('Missing attemptId.');
+    const data = await api('/api/assignments/attempt', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: safeCode, attemptId: safeAttempt },
+    });
+    const items = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
+    const studentName = String(data?.studentName || data?.attempt?.studentName || '');
+    items.forEach((it) => {
+      if (!it?.teacherGraded) return;
+      const entry = aiGradePackEntryFromItem(it, safeAttempt, studentName);
+      if (entry) entries.push(entry);
+    });
+    meta.title = String(data?.assignment?.title || data?.title || '');
+    meta.language = String(data?.assignment?.language || '');
+  } else if (scope === 'question') {
+    const qi = Number(qIndex);
+    if (!Number.isFinite(qi)) throw new Error('Missing qIndex.');
+    const data = await api('/api/assignments/question-grading', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: safeCode, qIndex: qi },
+    });
+    const question = data?.question || {};
+    if (!question.teacherGraded) throw new Error(`Q${qi + 1} is auto-graded — no AI grading needed.`);
+    const items = Array.isArray(data?.items) ? data.items : [];
+    items.forEach((it) => {
+      const merged = {
+        ...it,
+        qIndex: qi,
+        qType: question.qType,
+        maxPoints: question.maxPoints,
+        prompt: question.prompt,
+        expectedAnswer: question.expectedAnswer,
+        rubric: question.rubric,
+        language: question.language,
+        answerLanguage: question.answerLanguage,
+        qId: question.id,
+        questionImageUrl: question.imageUrl || '',
+        questionAudioUrl: question.audioUrl || '',
+        teacherGraded: true,
+      };
+      const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
+      if (entry) entries.push(entry);
+    });
+    meta.title = String(data?.assignment?.title || '');
+    meta.language = String(data?.assignment?.language || question.language || '');
+  } else if (scope === 'assignment') {
+    const overview = await api('/api/assignments/grading-overview', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: safeCode },
+    });
+    const questions = Array.isArray(overview?.questions) ? overview.questions : [];
+    const teacherQs = questions
+      .map((q, idx) => ({ q, idx: Number.isFinite(Number(q?.qIndex)) ? Number(q.qIndex) : idx }))
+      .filter(({ q }) => q && q.teacherGraded);
+    if (!teacherQs.length) throw new Error('No teacher-graded questions in this assignment.');
+    const responses = await Promise.all(
+      teacherQs.map(({ idx }) => api('/api/assignments/question-grading', {
+        method: 'POST',
+        body: { password: createSessionPassword, code: safeCode, qIndex: idx },
+      }).catch(() => null))
+    );
+    responses.forEach((data, i) => {
+      if (!data) return;
+      const qi = teacherQs[i].idx;
+      const question = data?.question || {};
+      const items = Array.isArray(data?.items) ? data.items : [];
+      items.forEach((it) => {
+        const merged = {
+          ...it,
+          qIndex: qi,
+          qType: question.qType,
+          maxPoints: question.maxPoints,
+          prompt: question.prompt,
+          expectedAnswer: question.expectedAnswer,
+          rubric: question.rubric,
+          language: question.language,
+          answerLanguage: question.answerLanguage,
+          qId: question.id,
+          questionImageUrl: question.imageUrl || '',
+          questionAudioUrl: question.audioUrl || '',
+          teacherGraded: true,
+        };
+        const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
+        if (entry) entries.push(entry);
+      });
+    });
+    meta.title = String(overview?.assignment?.title || '');
+    meta.language = String(overview?.assignment?.language || '');
+  } else {
+    throw new Error(`Unknown scope: ${scope}`);
+  }
+
+  return { entries, meta };
+}
+
+function aiGradePackBuildData({ entries, meta, scope }) {
+  const questionsMap = new Map();
+  entries.forEach((e) => {
+    if (questionsMap.has(e.qIndex)) return;
+    questionsMap.set(e.qIndex, {
+      qIndex: e.qIndex,
+      id: e.qId || null,
+      type: e.qType,
+      maxPoints: e.maxPoints,
+      prompt: e.prompt,
+      expectedAnswer: e.expectedAnswer || null,
+      rubric: e.rubric || null,
+      language: e.questionLanguage || null,
+      answerLanguage: e.answerLanguage || null,
+      media: { image: null, audio: null },
+    });
+  });
+
+  const attemptsMap = new Map();
+  entries.forEach((e) => {
+    if (!attemptsMap.has(e.attemptId)) {
+      attemptsMap.set(e.attemptId, {
+        attemptId: e.attemptId,
+        studentDisplayName: e.studentName || null,
+        answers: [],
+      });
+    }
+    attemptsMap.get(e.attemptId).answers.push({
+      qIndex: e.qIndex,
+      qId: e.qId || null,
+      text: e.answerText || '',
+      audio: null,
+      image: null,
+      transcript: e.answerTranscript || '',
+      durationMs: e.answerDurationMs,
+      submittedAt: e.submittedAt,
+      currentGrade: e.currentGrade,
+    });
+  });
+
+  const data = {
+    version: 1,
+    assignment: {
+      code: meta.code,
+      title: meta.title || null,
+      language: meta.language || null,
+    },
+    scope,
+    questions: [...questionsMap.values()].sort((a, b) => a.qIndex - b.qIndex),
+    attempts: [...attemptsMap.values()],
+    instructions: {
+      pointsScale: '0..maxPoints (typically 0..1000)',
+      feedbackLanguage: "Use the student's language (assignment.language or question.answerLanguage when present).",
+      correctionStyle: "One short sentence. Quote the student's wording when correcting.",
+    },
+  };
+
+  return data;
+}
+
+async function aiGradePackCollectMedia({ entries, data }) {
+  const fetches = [];
+  const seen = new Map();
+
+  function queue(url, kind, ownerKey, assignFn) {
+    if (!url) return;
+    const resolved = aiGradePackResolveMediaUrl(url);
+    if (!resolved || resolved.startsWith('data:')) return;
+    const key = `${kind}::${resolved}`;
+    if (seen.has(key)) {
+      fetches.push(Promise.resolve({ assignFn, file: seen.get(key), missing: false }));
+      return;
+    }
+    const promise = aiGradePackFetchMedia(resolved).then((res) => {
+      if (!res) {
+        seen.set(key, null);
+        return { assignFn, file: null, missing: true };
+      }
+      const safeOwner = aiGradePackSafeId(ownerKey);
+      const safeKind = kind === 'questionImage' || kind === 'answerImage' ? 'img' : 'aud';
+      const idx = seen.size;
+      const path = `media/${safeKind}-${safeOwner}-${idx}.${res.ext}`;
+      const file = { path, blob: res.blob, size: res.size };
+      seen.set(key, file);
+      return { assignFn, file, missing: false };
+    });
+    fetches.push(promise);
+  }
+
+  data.questions.forEach((q) => {
+    const original = entries.find((e) => e.qIndex === q.qIndex);
+    if (!original) return;
+    if (original.questionImageUrl) {
+      queue(original.questionImageUrl, 'questionImage', `q${q.qIndex}`, (path) => { q.media.image = path; });
+    }
+    if (original.questionAudioUrl) {
+      queue(original.questionAudioUrl, 'questionAudio', `q${q.qIndex}`, (path) => { q.media.audio = path; });
+    }
+  });
+
+  data.attempts.forEach((att) => {
+    att.answers.forEach((ans) => {
+      const original = entries.find((e) => e.attemptId === att.attemptId && e.qIndex === ans.qIndex);
+      if (!original) return;
+      if (original.answerAudioUrl) {
+        queue(original.answerAudioUrl, 'answerAudio', `${att.attemptId}-q${ans.qIndex}`, (path) => { ans.audio = path; });
+      }
+      if (original.answerImageUrl) {
+        queue(original.answerImageUrl, 'answerImage', `${att.attemptId}-q${ans.qIndex}`, (path) => { ans.image = path; });
+      }
+    });
+  });
+
+  const results = await Promise.all(fetches);
+  const filesByPath = new Map();
+  let totalSize = 0;
+  results.forEach(({ assignFn, file, missing }) => {
+    if (missing || !file) return;
+    assignFn(file.path);
+    if (!filesByPath.has(file.path)) {
+      filesByPath.set(file.path, file.blob);
+      totalSize += file.size || 0;
+    }
+  });
+
+  return { files: filesByPath, totalSize };
+}
+
+function aiGradePackDownloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function aiGradePackToast(msg, isError = false) {
+  if (assignmentGradingSummaryEl) {
+    assignmentGradingSummaryEl.textContent = (isError ? '⚠️ ' : '') + msg;
+  }
+}
+
+async function buildAiGradePack({ scope, code, attemptId, qIndex }) {
+  if (typeof window === 'undefined' || !window.JSZip) {
+    throw new Error('JSZip not loaded — check that the CDN script tag is present in index.html.');
+  }
+
+  aiGradePackToast('Building AI grade pack — loading answers…');
+  const { entries, meta } = await aiGradePackLoadEntries({ scope, code, attemptId, qIndex });
+  if (!entries.length) throw new Error('Nothing to grade in this scope.');
+
+  aiGradePackToast(`Building AI grade pack — fetching media for ${entries.length} answer${entries.length === 1 ? '' : 's'}…`);
+  const data = aiGradePackBuildData({ entries, meta, scope });
+  const { files, totalSize } = await aiGradePackCollectMedia({ entries, data });
+
+  if (totalSize > AI_GRADE_PACK_SIZE_WARN_BYTES) {
+    const sizeMb = (totalSize / (1024 * 1024)).toFixed(1);
+    const proceed = confirm(
+      `This pack will be ~${sizeMb} MB. ChatGPT may reject files over 25 MB — Claude/Gemini accept more. Continue?`
+    );
+    if (!proceed) {
+      aiGradePackToast('AI grade pack cancelled.');
+      return null;
+    }
+  }
+
+  aiGradePackToast('Building AI grade pack — zipping…');
+  const zip = new window.JSZip();
+  zip.file('prompt.md', AI_GRADE_PROMPT_TEMPLATE);
+  zip.file('data.json', JSON.stringify(data, null, 2));
+  files.forEach((blob, path) => { zip.file(path, blob); });
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const fname = `ai-grade-${meta.code}-${scope}-${ts}.zip`;
+  aiGradePackDownloadBlob(zipBlob, fname);
+
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(AI_GRADE_PROMPT_TEMPLATE);
+    copied = true;
+  } catch (err) {
+    copied = false;
+  }
+
+  const finalMb = (zipBlob.size / (1024 * 1024)).toFixed(2);
+  aiGradePackToast(
+    `AI grade pack ready (${finalMb} MB, ${entries.length} answer${entries.length === 1 ? '' : 's'}). ` +
+    (copied ? 'Prompt copied to clipboard. ' : 'Prompt is also inside the ZIP as prompt.md. ') +
+    'Drop the ZIP into ChatGPT/Claude/Gemini and paste the prompt.'
+  );
+  return { filename: fname, size: zipBlob.size, entryCount: entries.length };
+}
+
+async function runAiGradePack(args) {
+  try {
+    await buildAiGradePack(args);
+  } catch (err) {
+    aiGradePackToast(`AI grade pack failed: ${err.message}`, true);
+  }
+}
+
 async function reopenAssignmentAttempt(code, attemptId) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   await api('/api/assignments/reopen-attempt', {
@@ -4480,6 +4973,22 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       li.textContent = 'No submitted answers yet.';
       assignmentGradingListEl.appendChild(li);
       return;
+    }
+
+    const teacherGradedCount = items.filter((it) => it?.teacherGraded).length;
+    if (teacherGradedCount > 0) {
+      const headerLi = document.createElement('li');
+      headerLi.style.listStyle = 'none';
+      const aiBtn = document.createElement('button');
+      aiBtn.className = 'btn';
+      aiBtn.type = 'button';
+      aiBtn.textContent = `🤖 AI grade pack (this student, ${teacherGradedCount} answer${teacherGradedCount === 1 ? '' : 's'})`;
+      aiBtn.title = 'Build a ZIP + prompt to grade this student’s teacher-graded answers with an AI';
+      aiBtn.addEventListener('click', () => {
+        runAiGradePack({ scope: 'attempt', code: safeCode, attemptId: safeAttemptId });
+      });
+      headerLi.appendChild(aiBtn);
+      assignmentGradingListEl.appendChild(headerLi);
     }
 
     items.forEach((it) => {
@@ -5107,7 +5616,10 @@ function renderGradingFocusItem() {
         <strong>Q${qIndex + 1} · ${icon} ${escapeHtml(qType)}</strong>
         <div class="small muted">Student ${current + 1} of ${items.length} · ${gradedCount} graded · ${pendingCount} pending · max ${maxPoints} pts</div>
       </div>
-      <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
+      <div class="row gap">
+        <button class="btn" data-ai-grade-pack-question title="Build a ZIP + prompt to grade this question for all students with an AI">🤖 AI grade pack</button>
+        <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
+      </div>
     </div>
     <div class="grading-focus-prompt">${escapeHtml(String(question?.prompt || '') || '(no prompt)')}</div>
     ${gradingMediaDetailsHtml(question)}
@@ -5292,6 +5804,12 @@ function renderGradingFocusItem() {
 
   wireGradingMediaTts(content);
   content.querySelector('[data-close-focus]').addEventListener('click', closeGradingFocusModal);
+  const aiPackBtn = content.querySelector('[data-ai-grade-pack-question]');
+  if (aiPackBtn) {
+    aiPackBtn.addEventListener('click', () => {
+      runAiGradePack({ scope: 'question', code: gradingFocusState.code, qIndex: gradingFocusState.qIndex });
+    });
+  }
   content.querySelector('[data-mark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' }));
   content.querySelector('[data-mark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
   content.querySelector('[data-skip]').addEventListener('click', () => moveGradingFocusTo(current + 1));
