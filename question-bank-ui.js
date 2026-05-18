@@ -48,7 +48,7 @@
     }
   }
 
-  async function bankFetch(path, params) {
+  async function bankFetch(path, params, opts = {}) {
     const url = new URL(bridgeCfg.url + path);
     if (params) {
       for (const [k, v] of Object.entries(params)) {
@@ -56,9 +56,15 @@
         url.searchParams.set(k, String(v));
       }
     }
-    const r = await fetch(url.toString(), {
+    const init = {
+      method: opts.method || 'GET',
       headers: { Authorization: `Bearer ${bridgeCfg.secret}` },
-    });
+    };
+    if (opts.body !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(opts.body);
+    }
+    const r = await fetch(url.toString(), init);
     if (r.status === 401) throw new Error('UNAUTHORIZED');
     if (!r.ok) {
       let detail = '';
@@ -66,6 +72,10 @@
       throw new Error(`HTTP ${r.status} ${detail}`);
     }
     return r.json();
+  }
+
+  function bankPatch(path, body) {
+    return bankFetch(path, null, { method: 'PATCH', body });
   }
 
   // ---------- bank row → PinPlay question mapping ----------
@@ -318,6 +328,8 @@
     total: 0,
     selected: new Map(),    // id → row
     focused: null,          // currently previewed row
+    editing: false,         // true when editing the focused question
+    editDraft: null,        // {question_text, options_lines, correct_answer, explanation, media_url}
     loading: false,
     error: '',
   };
@@ -664,6 +676,10 @@
         class: 'bank-row' + (isSel ? ' selected' : '') + (isFocused ? ' focused' : ''),
         onClick: (e) => {
           if (e.target.tagName === 'INPUT') return;
+          if (state.focused?.id !== row.id) {
+            state.editing = false;
+            state.editDraft = null;
+          }
           state.focused = row;
           renderResults();
           renderPreview();
@@ -709,6 +725,10 @@
     pane.innerHTML = '';
     if (!state.focused) {
       pane.appendChild(el('p', { class: 'small muted' }, 'Click a row to preview.'));
+      return;
+    }
+    if (state.editing) {
+      renderEditForm(pane);
       return;
     }
     const row = state.focused;
@@ -780,6 +800,149 @@
       onClick: () => importWholeQuiz(row.quiz_id, row.quiz_title),
     }, '+ Add all from this source quiz'));
     pane.appendChild(actions);
+
+    const editRow = el('div', { class: 'bank-preview-edit-row row gap' });
+    editRow.appendChild(el('button', {
+      class: 'btn',
+      title: 'Edit this question in the bank',
+      onClick: () => beginEdit(row),
+    }, '✎ Edit'));
+    const qStar = Number(row.quality || 0);
+    editRow.appendChild(el('button', {
+      class: 'btn' + (qStar > 0 ? ' bank-quality-on' : ''),
+      title: qStar > 0 ? 'Starred — click to unstar' : 'Star this question (push it to the top of search)',
+      onClick: () => setQuality(row, qStar > 0 ? 0 : 1),
+    }, qStar > 0 ? '★ Starred' : '☆ Star'));
+    editRow.appendChild(el('button', {
+      class: 'btn' + (qStar < 0 ? ' bank-quality-off' : ''),
+      title: qStar < 0 ? 'Hidden — click to unhide' : 'Hide this question from default search results',
+      onClick: () => setQuality(row, qStar < 0 ? 0 : -1),
+    }, qStar < 0 ? '🚫 Hidden' : 'Hide'));
+    editRow.appendChild(el('button', {
+      class: 'btn bank-danger',
+      title: 'Soft-delete (recoverable). Removes from search; FTS index updates automatically.',
+      onClick: () => softDelete(row),
+    }, '🗑 Delete'));
+    pane.appendChild(editRow);
+  }
+
+  function beginEdit(row) {
+    state.editing = true;
+    state.editDraft = {
+      question_text: row.question_text || '',
+      options_lines: parseOptions(row.options).join('\n'),
+      correct_answer: row.correct_answer || '',
+      explanation: row.explanation || '',
+      media_url: row.media_url || '',
+    };
+    renderPreview();
+  }
+
+  function renderEditForm(pane) {
+    const row = state.focused;
+    const d = state.editDraft;
+
+    pane.appendChild(el('div', { class: 'bank-preview-meta' },
+      el('strong', {}, row.quiz_title || '(untitled)'),
+      el('span', { class: 'small muted' }, ` · editing question #${row.id}`),
+    ));
+
+    const stemTA = el('textarea', { rows: 4, class: 'bank-edit-input' });
+    stemTA.value = d.question_text;
+    stemTA.addEventListener('input', () => { d.question_text = stemTA.value; });
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Question text', stemTA));
+
+    const optsTA = el('textarea', { rows: 4, class: 'bank-edit-input', placeholder: 'One option per line' });
+    optsTA.value = d.options_lines;
+    optsTA.addEventListener('input', () => { d.options_lines = optsTA.value; });
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Options (one per line)', optsTA));
+
+    const ansTA = el('textarea', { rows: 2, class: 'bank-edit-input', placeholder: 'For multiple correct answers: one per line' });
+    ansTA.value = d.correct_answer;
+    ansTA.addEventListener('input', () => { d.correct_answer = ansTA.value; });
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Correct answer', ansTA));
+
+    const explTA = el('textarea', { rows: 2, class: 'bank-edit-input' });
+    explTA.value = d.explanation;
+    explTA.addEventListener('input', () => { d.explanation = explTA.value; });
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Explanation (optional)', explTA));
+
+    const mediaInput = el('input', { type: 'text', class: 'bank-edit-input', placeholder: 'https://… or empty to clear' });
+    mediaInput.value = d.media_url;
+    mediaInput.addEventListener('input', () => { d.media_url = mediaInput.value; });
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Media URL', mediaInput));
+
+    const actions = el('div', { class: 'bank-preview-actions row gap' });
+    actions.appendChild(el('button', { class: 'btn primary', onClick: () => saveEdit(row) }, '💾 Save'));
+    actions.appendChild(el('button', { class: 'btn', onClick: () => { state.editing = false; state.editDraft = null; renderPreview(); } }, 'Cancel'));
+    pane.appendChild(actions);
+  }
+
+  function _optionsLinesToBlob(lines) {
+    const arr = String(lines || '').split('\n').map((t) => t.trim()).filter(Boolean);
+    return arr.length ? JSON.stringify(arr) : '';
+  }
+
+  async function saveEdit(row) {
+    const d = state.editDraft;
+    const patch = {
+      question_text: d.question_text.trim(),
+      options: _optionsLinesToBlob(d.options_lines),
+      correct_answer: d.correct_answer.trim(),
+      explanation: d.explanation.trim(),
+      media_url: d.media_url.trim(),
+    };
+    try {
+      const resp = await bankPatch(`/question/${row.id}`, patch);
+      _mergeUpdatedQuestion(resp.question);
+      state.editing = false;
+      state.editDraft = null;
+      renderResults();
+      renderPreview();
+      flashOk('Saved.');
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    }
+  }
+
+  function _mergeUpdatedQuestion(updated) {
+    if (!updated) return;
+    const idx = state.results.findIndex((r) => r.id === updated.id);
+    if (idx >= 0) {
+      state.results[idx] = { ...state.results[idx], ...updated };
+      if (state.focused && state.focused.id === updated.id) state.focused = state.results[idx];
+    } else if (state.focused && state.focused.id === updated.id) {
+      state.focused = { ...state.focused, ...updated };
+    }
+  }
+
+  async function setQuality(row, quality) {
+    try {
+      const resp = await bankPatch(`/question/${row.id}`, { quality });
+      _mergeUpdatedQuestion(resp.question);
+      renderResults();
+      renderPreview();
+      flashOk(quality > 0 ? 'Starred.' : quality < 0 ? 'Hidden from default search.' : 'Quality reset.');
+    } catch (err) {
+      alert('Update failed: ' + err.message);
+    }
+  }
+
+  async function softDelete(row) {
+    if (!confirm(`Soft-delete question #${row.id}?\n\nIt'll be hidden from search but the row is kept (recoverable later).`)) return;
+    try {
+      await bankPatch(`/question/${row.id}`, { deleted: true });
+      state.results = state.results.filter((r) => r.id !== row.id);
+      state.total = Math.max(0, state.total - 1);
+      state.focused = null;
+      state.editing = false;
+      state.editDraft = null;
+      renderResults();
+      renderPreview();
+      flashOk('Question soft-deleted.');
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
   }
 
   function mappedTypeLabel(bankType) {
