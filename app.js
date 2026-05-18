@@ -4442,13 +4442,6 @@ most. Don't pad. Don't praise.
     with \`needs_review\` if you're unsure.
 - \`questions[].type\` — question type. Teacher-graded packs contain:
   - \`open\` — free-form typed response (long-form). Grade on content.
-  - \`text\` — short typed answer the teacher chose to grade manually.
-    Often a single word or short phrase.
-  - \`image_open\` — student uploaded an image as their answer (see
-    \`answers[].image\`). Read the image and judge against \`prompt\`.
-  - \`speaking\` — student spoke into the mic; the browser auto-transcribed
-    via Web Speech API. The \`text\` field already contains that transcript;
-    no \`audio\` file is included for this type.
   - \`voice_record\` — student recorded audio (see \`answers[].audio\`).
     Listen and grade. \`transcript\` is auto-generated and unreliable.
 - \`attempts[].answers[]\` — one student's answer to one question.
@@ -4456,7 +4449,6 @@ most. Don't pad. Don't praise.
   - \`audio\` — relative path to a recording (voice_record only). **Listen
     to it.** Do not grade from \`transcript\` alone; the transcript was
     auto-generated and is often wrong on pronunciation.
-  - \`image\` — relative path to a student-uploaded image (image_open only).
   - \`transcript\` — best-effort transcript. Hint, not truth.
 - \`questions[].media\`:
   - \`image\` — relative path to a question image (e.g. the line students
