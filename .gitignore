@@ -19,6 +19,7 @@ __pycache__/
 *.secrets.json
 .env
 cloudflare/restore-secrets.local.cmd
+question-bank/.bridge.secret
 
 # Assets Deployment Ignores
 .git/
