@@ -98,6 +98,35 @@
     return [s];
   }
 
+  const SAFE_PREVIEW_TAGS = new Set(['B', 'I', 'U', 'SUP', 'SUB', 'BR', 'EM', 'STRONG']);
+
+  function stripHtml(html) {
+    if (!html) return '';
+    const doc = new DOMParser().parseFromString(`<div>${String(html)}</div>`, 'text/html');
+    return (doc.body.firstChild?.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function sanitizeHtmlPreview(html) {
+    if (!html) return '';
+    const doc = new DOMParser().parseFromString(`<div>${String(html)}</div>`, 'text/html');
+    const root = doc.body.firstChild;
+    if (!root) return '';
+    function clean(node) {
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType !== 1) continue;
+        if (!SAFE_PREVIEW_TAGS.has(child.tagName)) {
+          while (child.firstChild) node.insertBefore(child.firstChild, child);
+          node.removeChild(child);
+        } else {
+          while (child.attributes.length) child.removeAttribute(child.attributes[0].name);
+          clean(child);
+        }
+      }
+    }
+    clean(root);
+    return root.innerHTML;
+  }
+
   const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i;
 
   function classifyMedia(url) {
@@ -118,9 +147,9 @@
   }
 
   function bankToPinPlay(row) {
-    const stem = (row.question_text || '').trim();
-    const opts = parseOptions(row.options);
-    const corrects = parseCorrectAnswer(row.correct_answer, opts);
+    const stem = stripHtml(row.question_text || '');
+    const opts = parseOptions(row.options).map(stripHtml);
+    const corrects = parseCorrectAnswer(row.correct_answer, opts).map(stripHtml);
     const type = String(row.question_type || '').toLowerCase();
 
     if (type === 'quiz' || type === 'multiple_choice') {
@@ -634,7 +663,7 @@
         const kind = classifyMedia(row.media_url);
         meta.appendChild(el('span', { class: 'bank-badge bank-badge-media', title: row.media_url }, kind === 'audio' ? '🔊' : '🖼'));
       }
-      const stem = el('div', { class: 'bank-row-stem' }, truncate(row.question_text || '(no stem)', 180));
+      const stem = el('div', { class: 'bank-row-stem' }, truncate(stripHtml(row.question_text) || '(no stem)', 180));
       li.appendChild(cb);
       const right = el('div', { class: 'bank-row-body' });
       right.appendChild(meta);
@@ -684,20 +713,30 @@
       }
     }
 
-    pane.appendChild(el('div', { class: 'bank-preview-stem' }, row.question_text || '(no stem)'));
+    const stemEl = el('div', { class: 'bank-preview-stem' });
+    stemEl.innerHTML = sanitizeHtmlPreview(row.question_text) || '(no stem)';
+    pane.appendChild(stemEl);
 
     if (opts.length) {
       const ol = el('ol', { class: 'bank-preview-opts' });
       for (const o of opts) {
-        const isCorrect = corrects.some((c) => c && o && c.trim().toLowerCase() === o.trim().toLowerCase());
-        ol.appendChild(el('li', { class: isCorrect ? 'is-correct' : '' }, o + (isCorrect ? '  ✓' : '')));
+        const isCorrect = corrects.some((c) => {
+          const cs = stripHtml(c).toLowerCase();
+          const os = stripHtml(o).toLowerCase();
+          return cs && os && cs === os;
+        });
+        const li = el('li', { class: isCorrect ? 'is-correct' : '' });
+        li.innerHTML = sanitizeHtmlPreview(o) + (isCorrect ? '  ✓' : '');
+        ol.appendChild(li);
       }
       pane.appendChild(ol);
     } else if (corrects.length) {
-      pane.appendChild(el('div', { class: 'bank-preview-answer' }, 'Answer: ' + corrects.join(' · ')));
+      const ansEl = el('div', { class: 'bank-preview-answer' });
+      ansEl.innerHTML = 'Answer: ' + corrects.map((c) => sanitizeHtmlPreview(c)).join(' · ');
+      pane.appendChild(ansEl);
     }
 
-    if (row.explanation) pane.appendChild(el('div', { class: 'bank-preview-explain small muted' }, row.explanation));
+    if (row.explanation) pane.appendChild(el('div', { class: 'bank-preview-explain small muted' }, stripHtml(row.explanation)));
 
     const mappingType = mappedTypeLabel(row.question_type);
     pane.appendChild(el('div', { class: 'bank-preview-mapping small muted' }, `Imports as PinPlay type: ${mappingType}`));
