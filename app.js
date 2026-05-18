@@ -531,6 +531,7 @@ const assignmentGradingListEl = document.getElementById('assignmentGradingList')
 const gradeByQuestionBtnEl = document.getElementById('gradeByQuestionBtn');
 const gradeByStudentBtnEl = document.getElementById('gradeByStudentBtn');
 const aiGradePackAssignmentBtnEl = document.getElementById('aiGradePackAssignmentBtn');
+const aiGradeImportBtnEl = document.getElementById('aiGradeImportBtn');
 const livePinEl = document.getElementById('livePin');
 const livePhaseEl = document.getElementById('livePhase');
 const liveProgressEl = document.getElementById('liveProgress');
@@ -4202,6 +4203,14 @@ function bindLiveEvents() {
     }
     openAiGradePackPicker(code);
   });
+  if (aiGradeImportBtnEl) aiGradeImportBtnEl.addEventListener('click', () => {
+    const code = assignmentResultsCache?.code;
+    if (!code) {
+      aiGradePackToast('Open View results on an assignment first.', true);
+      return;
+    }
+    openAiGradeImport(code);
+  });
   if (hostJoinPinEl) {
     hostJoinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinLiveGameAsHostByPin();
@@ -5050,6 +5059,354 @@ async function openAiGradePackPicker(code) {
     runAiGradePack(args);
   }
   modal.querySelector('[data-ai-pack-confirm]').addEventListener('click', confirm);
+  document.addEventListener('keydown', onKey, true);
+}
+
+// ---------------------------------------------------------------------------
+// AI grade response — import path
+// ---------------------------------------------------------------------------
+
+function aiGradeImportParse(raw) {
+  let text = String(raw || '').trim();
+  if (!text) throw new Error('Empty input.');
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) text = fenced[1].trim();
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`JSON parse failed: ${err.message}`);
+  }
+  if (!obj || typeof obj !== 'object') throw new Error('Top-level value is not an object.');
+  if (Number(obj.version) !== 1) throw new Error(`Unsupported version: ${obj.version}.`);
+  if (!Array.isArray(obj.results) || !obj.results.length) throw new Error('No results array.');
+  return obj;
+}
+
+async function aiGradeImportLoadContext(safeCode) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  const overview = await api('/api/assignments/grading-overview', {
+    method: 'POST',
+    body: { password: createSessionPassword, code: safeCode },
+  });
+  const questions = Array.isArray(overview?.questions) ? overview.questions : [];
+  const questionMap = new Map();
+  questions.forEach((q, idx) => {
+    const qi = Number.isFinite(Number(q?.qIndex)) ? Number(q.qIndex) : idx;
+    questionMap.set(qi, {
+      qIndex: qi,
+      qId: String(q?.id || ''),
+      qType: String(q?.qType || ''),
+      maxPoints: Math.max(0, Math.round(Number(q?.maxPoints || 1000))),
+      teacherGraded: !!q?.teacherGraded,
+    });
+  });
+
+  const teacherQIndexes = [...questionMap.values()].filter((q) => q.teacherGraded).map((q) => q.qIndex);
+  const gradeData = await Promise.all(
+    teacherQIndexes.map((qi) => api('/api/assignments/question-grading', {
+      method: 'POST',
+      body: { password: createSessionPassword, code: safeCode, qIndex: qi },
+    }).catch(() => null))
+  );
+
+  const currentGrades = new Map();
+  const studentNames = new Map();
+  gradeData.forEach((data, i) => {
+    if (!data) return;
+    const qi = teacherQIndexes[i];
+    const items = Array.isArray(data?.items) ? data.items : [];
+    items.forEach((it) => {
+      const attemptId = String(it?.attemptId || '');
+      if (!attemptId) return;
+      const key = `${attemptId}::${qi}`;
+      currentGrades.set(key, {
+        graded: !!it?.grade?.graded,
+        pointsAwarded: Number(it?.grade?.pointsAwarded || 0),
+        correction: String(it?.grade?.correction || ''),
+      });
+      if (it?.studentName) studentNames.set(attemptId, String(it.studentName));
+    });
+  });
+
+  return { questionMap, currentGrades, studentNames };
+}
+
+function aiGradeImportBucketRow(result, ctx) {
+  const row = {
+    attemptId: String(result?.attemptId || ''),
+    qIndex: Number(result?.qIndex),
+    qId: result?.qId == null ? null : String(result.qId),
+    points: Math.round(Number(result?.points || 0)),
+    verdict: String(result?.verdict || ''),
+    confidence: Number(result?.confidence || 0),
+    correction: String(result?.correction || ''),
+    rationale: String(result?.rationale || ''),
+    flags: Array.isArray(result?.flags) ? result.flags.map(String) : [],
+    studentName: '',
+    maxPoints: 1000,
+    bucket: 'apply',
+    rejectionReason: '',
+    isOverwrite: false,
+  };
+
+  if (!row.attemptId) { row.bucket = 'rejected'; row.rejectionReason = 'missing attemptId'; return row; }
+  if (!Number.isFinite(row.qIndex)) { row.bucket = 'rejected'; row.rejectionReason = 'missing qIndex'; return row; }
+
+  const question = ctx.questionMap.get(row.qIndex);
+  if (!question) { row.bucket = 'rejected'; row.rejectionReason = `qIndex ${row.qIndex} not in this assignment`; return row; }
+  if (!question.teacherGraded) { row.bucket = 'rejected'; row.rejectionReason = `Q${row.qIndex + 1} is auto-graded`; return row; }
+  row.maxPoints = question.maxPoints;
+  row.studentName = ctx.studentNames.get(row.attemptId) || '';
+
+  if (row.qId && question.qId && row.qId !== question.qId) {
+    row.bucket = 'rejected'; row.rejectionReason = `qId mismatch (expected ${question.qId}, got ${row.qId})`; return row;
+  }
+
+  const current = ctx.currentGrades.get(`${row.attemptId}::${row.qIndex}`);
+  if (!current) { row.bucket = 'rejected'; row.rejectionReason = 'attempt not found for this question'; return row; }
+  if (current.graded) row.isOverwrite = true;
+
+  if (row.verdict === 'needs_review') { row.bucket = 'skip'; return row; }
+  if (!['correct', 'partial', 'wrong'].includes(row.verdict)) {
+    row.bucket = 'rejected'; row.rejectionReason = `unknown verdict: ${row.verdict}`; return row;
+  }
+  if (row.points < 0 || row.points > row.maxPoints) {
+    row.bucket = 'rejected'; row.rejectionReason = `points ${row.points} out of range 0..${row.maxPoints}`; return row;
+  }
+  return row;
+}
+
+function aiGradeImportDedupe(rows) {
+  const byKey = new Map();
+  rows.forEach((r) => {
+    const key = `${r.attemptId}::${r.qIndex}`;
+    const existing = byKey.get(key);
+    if (!existing || r.confidence > existing.confidence) byKey.set(key, r);
+  });
+  return [...byKey.values()];
+}
+
+function aiGradeImportRenderPreview(modal, response, rows) {
+  const apply = rows.filter((r) => r.bucket === 'apply' && !r.isOverwrite);
+  const overwrite = rows.filter((r) => r.bucket === 'apply' && r.isOverwrite);
+  const skip = rows.filter((r) => r.bucket === 'skip');
+  const rejected = rows.filter((r) => r.bucket === 'rejected');
+
+  const sortFn = (a, b) => {
+    if (a.bucket === 'rejected' && b.bucket !== 'rejected') return -1;
+    if (b.bucket === 'rejected' && a.bucket !== 'rejected') return 1;
+    return a.confidence - b.confidence;
+  };
+  const sorted = [...rows].sort(sortFn);
+
+  const escTd = (s) => `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${escapeHtml(String(s == null ? '' : s))}</td>`;
+
+  const tableRows = sorted.map((r, idx) => {
+    const lowConf = r.confidence < 0.6 && r.bucket === 'apply';
+    const bgs = { apply: '#fff', skip: '#fffbe6', rejected: '#fef2f2' };
+    const bg = r.isOverwrite ? '#eff6ff' : (bgs[r.bucket] || '#fff');
+    const statusLabel = r.bucket === 'rejected'
+      ? `✗ rejected: ${escapeHtml(r.rejectionReason)}`
+      : r.bucket === 'skip'
+        ? '⏸ needs review (skip)'
+        : r.isOverwrite ? '↻ overwrite existing' : '✓ apply';
+    const editableDisabled = r.bucket !== 'apply';
+    return `
+      <tr data-row-idx="${idx}" style="background:${bg};${lowConf ? 'outline:2px solid #f59e0b;outline-offset:-2px;' : ''}">
+        ${escTd(r.studentName || r.attemptId)}
+        ${escTd(`Q${r.qIndex + 1}`)}
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+          <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:80px;" ${editableDisabled ? 'disabled' : ''}/>
+          <div class="small muted">/ ${r.maxPoints}</div>
+        </td>
+        ${escTd(r.verdict)}
+        ${escTd(r.confidence.toFixed(2))}
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+          <textarea data-edit-correction rows="2" style="width:100%;min-width:220px;" ${editableDisabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
+          ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
+          ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
+        </td>
+        ${escTd(statusLabel)}
+      </tr>
+    `;
+  }).join('');
+
+  const overwriteCheckbox = overwrite.length
+    ? `<label style="display:flex;gap:6px;align-items:center;margin:6px 0;font-weight:normal;"><input type="checkbox" data-confirm-overwrite style="width:auto;"/><span>I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
+    : '';
+
+  const body = modal.querySelector('[data-import-body]');
+  body.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <strong>Preview</strong> · ${escapeHtml(String(response.assignmentCode))} · ${rows.length} result${rows.length === 1 ? '' : 's'}
+      <div class="small muted" style="margin-top:4px;">
+        ✓ ${apply.length} will be applied
+        ${overwrite.length ? ` · ↻ ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}` : ''}
+        ${skip.length ? ` · ⏸ ${skip.length} skipped (needs_review)` : ''}
+        ${rejected.length ? ` · ✗ ${rejected.length} rejected` : ''}
+      </div>
+      <div class="small muted">Rows with confidence &lt; 0.60 are highlighted. Edit points or correction inline before applying.</div>
+    </div>
+    <div style="max-height:50vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead style="position:sticky;top:0;background:#f9fafb;">
+          <tr>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Q</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Points</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Verdict</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Conf</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / rationale</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Status</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+    ${overwriteCheckbox}
+    <div data-import-progress class="small muted" style="margin-top:8px;"></div>
+    <div class="agp-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" type="button" data-import-cancel>Cancel</button>
+      ${apply.length ? `<button class="btn primary" type="button" data-import-apply-safe>Apply ${apply.length} grade${apply.length === 1 ? '' : 's'}</button>` : ''}
+      ${overwrite.length ? `<button class="btn" type="button" data-import-apply-all>Apply ${apply.length + overwrite.length} incl. overwrites</button>` : ''}
+    </div>
+  `;
+
+  body.querySelectorAll('tr[data-row-idx]').forEach((tr) => {
+    const rowIdx = Number(tr.dataset.rowIdx);
+    const row = sorted[rowIdx];
+    if (!row || row.bucket !== 'apply') return;
+    const pointsInput = tr.querySelector('[data-edit-points]');
+    const corrInput = tr.querySelector('[data-edit-correction]');
+    pointsInput?.addEventListener('input', () => {
+      const v = Math.round(Number(pointsInput.value || 0));
+      row.points = Math.min(Math.max(v, 0), row.maxPoints);
+    });
+    corrInput?.addEventListener('input', () => { row.correction = String(corrInput.value || ''); });
+  });
+
+  return { apply, overwrite, skip, rejected };
+}
+
+async function aiGradeImportApply(modal, code, rowsToApply) {
+  const progressEl = modal.querySelector('[data-import-progress]');
+  modal.querySelector('[data-import-apply-safe]')?.setAttribute('disabled', 'true');
+  modal.querySelector('[data-import-apply-all]')?.setAttribute('disabled', 'true');
+  let done = 0;
+  let failed = 0;
+  const failures = [];
+  for (const row of rowsToApply) {
+    progressEl.textContent = `Applying ${done + 1} of ${rowsToApply.length}…`;
+    try {
+      await gradeAssignmentQuestion(code, row.attemptId, row.qIndex, row.points, row.correction, '');
+      done += 1;
+    } catch (err) {
+      failed += 1;
+      failures.push(`${row.studentName || row.attemptId} · Q${row.qIndex + 1}: ${err.message}`);
+    }
+  }
+  progressEl.innerHTML = `<strong>Done.</strong> ${done} applied${failed ? `, ${failed} failed` : ''}.${failures.length ? `<details style="margin-top:6px;"><summary>Show failures</summary><pre style="white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(failures.join('\n'))}</pre></details>` : ''}`;
+  if (assignmentResultsCache?.code === code) {
+    try { await fetchAssignmentResults(code); } catch {}
+  }
+}
+
+function openAiGradeImport(code) {
+  const safeCode = String(code || '').trim().toUpperCase();
+  if (!safeCode) return;
+
+  document.getElementById('aiGradeImportModal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'aiGradeImportModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <style>
+      #aiGradeImportModal .agi-dialog { background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
+      #aiGradeImportModal h3 { margin:0 0 12px 0; }
+      #aiGradeImportModal textarea { width:100%;min-height:180px;font:13px monospace;font-weight:normal; }
+      #aiGradeImportModal .agi-drop { border:2px dashed #cbd5e1;border-radius:8px;padding:12px;margin-bottom:8px;background:#f8fafc; }
+      #aiGradeImportModal .agi-drop.over { border-color:#3b82f6;background:#eff6ff; }
+      #aiGradeImportModal .agi-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:12px; }
+    </style>
+    <div role="dialog" aria-modal="true" aria-label="Import AI grades" class="agi-dialog">
+      <h3>Import AI grades · ${escapeHtml(safeCode)}</h3>
+      <div data-import-body>
+        <p class="small muted">Paste the AI's JSON response, or drop a .json/.txt file. The fenced ${'```json'} block is auto-extracted.</p>
+        <div class="agi-drop" data-drop>
+          <textarea data-import-input placeholder='Paste here, e.g. { "version": 1, "assignmentCode": "${escapeHtml(safeCode)}", "results": [...] }'></textarea>
+        </div>
+        <div data-import-error class="small" style="color:#dc2626;min-height:1.2em;"></div>
+        <div class="agi-actions">
+          <button class="btn" type="button" data-import-cancel>Cancel</button>
+          <button class="btn primary" type="button" data-import-parse>Parse &amp; preview</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  function close() { modal.remove(); document.removeEventListener('keydown', onKey, true); }
+  function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target.matches('[data-import-cancel]')) close();
+  });
+
+  const drop = modal.querySelector('[data-drop]');
+  const textarea = modal.querySelector('[data-import-input]');
+  const errEl = modal.querySelector('[data-import-error]');
+  textarea?.focus();
+
+  ['dragenter', 'dragover'].forEach((evt) => drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((evt) => drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', async (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    try {
+      textarea.value = await file.text();
+    } catch (err) {
+      errEl.textContent = `Could not read file: ${err.message}`;
+    }
+  });
+
+  modal.querySelector('[data-import-parse]').addEventListener('click', async () => {
+    errEl.textContent = '';
+    let parsed;
+    try {
+      parsed = aiGradeImportParse(textarea.value);
+    } catch (err) {
+      errEl.textContent = err.message;
+      return;
+    }
+    if (String(parsed.assignmentCode || '').toUpperCase() !== safeCode) {
+      errEl.textContent = `assignmentCode "${parsed.assignmentCode}" does not match current assignment ${safeCode}. Open the right assignment first.`;
+      return;
+    }
+    errEl.textContent = 'Loading current grades for cross-check…';
+    let ctx;
+    try {
+      ctx = await aiGradeImportLoadContext(safeCode);
+    } catch (err) {
+      errEl.textContent = `Could not load context: ${err.message}`;
+      return;
+    }
+    const rawRows = parsed.results.map((r) => aiGradeImportBucketRow(r, ctx));
+    const rows = aiGradeImportDedupe(rawRows);
+    const buckets = aiGradeImportRenderPreview(modal, parsed, rows);
+
+    modal.querySelector('[data-import-cancel]')?.addEventListener('click', close);
+    modal.querySelector('[data-import-apply-safe]')?.addEventListener('click', async () => {
+      await aiGradeImportApply(modal, safeCode, buckets.apply);
+    });
+    modal.querySelector('[data-import-apply-all]')?.addEventListener('click', async () => {
+      const cb = modal.querySelector('[data-confirm-overwrite]');
+      if (cb && !cb.checked) { cb.focus(); cb.scrollIntoView({ block: 'center' }); return; }
+      await aiGradeImportApply(modal, safeCode, [...buckets.apply, ...buckets.overwrite]);
+    });
+  });
+
   document.addEventListener('keydown', onKey, true);
 }
 
