@@ -2585,6 +2585,11 @@ export class QuizRoom {
             prompt: String(question?.prompt || ''),
             maxPoints: Math.max(0, Math.round(Number(question?.points || 1000))),
             teacherGraded: isAssignmentTeacherGradedQuestion(question),
+            imageData: String(question?.imageData || ''),
+            audioMode: String(question?.audioMode || ''),
+            audioText: String(question?.audioText || ''),
+            audioData: String(question?.audioData || ''),
+            language: String(question?.language || ''),
           },
           items,
         });
@@ -5174,6 +5179,11 @@ function buildTeacherGradingItems(assignment, attempt) {
         answer: item?.answer ?? null,
         answerText: summarizeHistoryAnswer(question, item?.answer),
         maxPoints,
+        imageData: String(question?.imageData || ''),
+        audioMode: String(question?.audioMode || ''),
+        audioText: String(question?.audioText || ''),
+        audioData: String(question?.audioData || ''),
+        language: String(question?.language || ''),
         grade: grade && typeof grade === 'object'
           ? {
             graded: !!grade.graded,

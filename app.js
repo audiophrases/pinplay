@@ -4861,6 +4861,64 @@ function computeWordDiff(original, edited) {
   return out.join(' ');
 }
 
+function gradingMediaDetailsHtml(media) {
+  if (!media || typeof media !== 'object') return '';
+  const imageData = String(media.imageData || '').trim();
+  const audioMode = String(media.audioMode || '').trim();
+  const audioData = String(media.audioData || '').trim();
+  const audioText = String(media.audioText || '').trim();
+  const hasFileAudio = audioMode === 'file' && !!audioData;
+  const hasTtsAudio = !hasFileAudio && !!audioText;
+  if (!imageData && !hasFileAudio && !hasTtsAudio) return '';
+
+  let imgHtml = '';
+  if (imageData) {
+    let imgSrc = imageData;
+    if (!imgSrc.startsWith('http') && !imgSrc.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      imgSrc = `${base}/api/media/${imgSrc}`;
+    }
+    imgHtml = `<div class="top-space"><img src="${escapeHtml(imgSrc)}" alt="Question image" style="max-width:100%;max-height:280px;border-radius:8px;display:block;" /></div>`;
+  }
+
+  let audioHtml = '';
+  if (hasFileAudio) {
+    let audSrc = audioData;
+    if (!audSrc.startsWith('http') && !audSrc.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      audSrc = `${base}/api/media/${audSrc}`;
+    }
+    audioHtml = `<div class="top-space"><audio controls preload="none" src="${escapeHtml(audSrc)}" style="width:100%;max-width:360px;"></audio></div>`;
+  } else if (hasTtsAudio) {
+    const lang = String(media.language || 'en-US');
+    audioHtml = `<div class="top-space row gap" style="align-items:center;flex-wrap:wrap;">
+        <button type="button" class="btn" data-grading-tts-play data-tts-text="${escapeHtml(audioText)}" data-tts-lang="${escapeHtml(lang)}">🔊 Play TTS</button>
+        <span class="small muted" style="white-space:pre-wrap;">${escapeHtml(audioText)}</span>
+      </div>`;
+  }
+
+  const labelParts = [];
+  if (imageData) labelParts.push('🖼️ Image');
+  if (hasFileAudio || hasTtsAudio) labelParts.push('🔊 Audio');
+  const label = labelParts.join(' · ');
+
+  return `<details class="grading-focus-media">
+      <summary>${label} (click to view)</summary>
+      ${imgHtml}${audioHtml}
+    </details>`;
+}
+
+function wireGradingMediaTts(root) {
+  if (!root) return;
+  const btn = root.querySelector('[data-grading-tts-play]');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const text = btn.getAttribute('data-tts-text') || '';
+    const lang = btn.getAttribute('data-tts-lang') || 'en-US';
+    speakText(text, lang);
+  });
+}
+
 const gradingFocusState = {
   active: false,
   code: '',
@@ -5051,6 +5109,7 @@ function renderGradingFocusItem() {
       <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
     </div>
     <div class="grading-focus-prompt">${escapeHtml(String(question?.prompt || '') || '(no prompt)')}</div>
+    ${gradingMediaDetailsHtml(question)}
     <div class="grading-focus-body">
       <div class="grading-focus-student-name">${escapeHtml(String(it?.studentName || 'Student'))} ${pendingBadge}</div>
       <div class="small muted">${escapeHtml(submittedAt)}</div>
@@ -5230,6 +5289,7 @@ function renderGradingFocusItem() {
     });
   }
 
+  wireGradingMediaTts(content);
   content.querySelector('[data-close-focus]').addEventListener('click', closeGradingFocusModal);
   content.querySelector('[data-mark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' }));
   content.querySelector('[data-mark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
@@ -5627,6 +5687,7 @@ function renderStudentGradingFocusItem() {
       <strong>Q${Number(it?.qIndex || 0) + 1} · ${icon} ${escapeHtml(qType)}</strong> · max ${maxPoints} pts
       <div class="small muted" style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(String(it?.prompt || '') || '(no prompt)')}</div>
     </div>
+    ${gradingMediaDetailsHtml(it)}
     <div class="grading-focus-body">
       <div class="grading-focus-student-name">${pendingBadge}</div>
       <div>${answerHtml}</div>
@@ -5805,6 +5866,7 @@ function renderStudentGradingFocusItem() {
     });
   }
 
+  wireGradingMediaTts(content);
   content.querySelector('[data-close-sfocus]').addEventListener('click', closeStudentGradingFocusModal);
   content.querySelector('[data-smark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: maxPoints, defaultCorrection: 'Correct!' }));
   content.querySelector('[data-smark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
