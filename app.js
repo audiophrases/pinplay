@@ -4527,10 +4527,10 @@ back to the teacher with a meta-comment.
   restyle for taste.
 - When the student wrote almost nothing useful (blank, single period,
   one unrelated word), write what a good answer to the prompt would
-  look like and put it in \`correctedText\` anyway. The client app will
-  detect that the diff is too noisy and render your text as a plain
-  model answer — that handling is automatic; you don't need to manage
-  it.
+  look like and put it in \`correctedText\` anyway. The app always
+  renders the word-by-word diff regardless of how different the texts
+  are — even a near-total rewrite is useful, because the student sees
+  exactly what they wrote vs. what they should have written.
 - If the answer is fully correct, leave \`correctedText\` as \`""\`.
 - Leave \`correction\` as \`""\` for \`open\` questions. The corrected text
   IS the feedback. Only use \`correction\` for non-\`open\` questions, or
@@ -5264,10 +5264,6 @@ function aiGradeImportResolveCorrection(row) {
   const studentText = String(row?.answer?.answerText || '').trim();
   const correctedText = String(row?.correctedText || '').trim();
   if (aiGradeImportIsTextDiffType(row?.qType) && correctedText && correctedText !== studentText && studentText) {
-    const ratio = aiGradeImportEditRatio(studentText, correctedText);
-    if (ratio > 0.7) {
-      return correctedText;
-    }
     return CORRECTION_DIFF_PREFIX + computeWordDiff(studentText, correctedText);
   }
   return String(row?.correction || '');
@@ -5478,11 +5474,6 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       const correctedText = String(row.correctedText || '').trim();
       if (!studentText || !correctedText || studentText === correctedText) {
         diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
-        return;
-      }
-      const ratio = aiGradeImportEditRatio(studentText, correctedText);
-      if (ratio > 0.7) {
-        diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(too many edits — falling back to plain comment)</span><div style="margin-top:4px;">${escapeHtml(correctedText)}</div>`;
         return;
       }
       diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(studentText, correctedText));
