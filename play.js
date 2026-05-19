@@ -2931,6 +2931,13 @@ function renderJoinQuestion(question) {
 
       ta.addEventListener('input', updateErrorHuntUI);
       updateErrorHuntUI();
+
+      const autosizeEh = () => {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+      };
+      ta.addEventListener('input', autosizeEh);
+      requestAnimationFrame(autosizeEh);
     } else if (question.type === 'speaking') {
       // No instruction text as requested
     } else if (question.type === 'voice_record') {
@@ -2945,6 +2952,7 @@ function renderJoinQuestion(question) {
       input.className = 'join-answer-input';
       input.maxLength = isOpenAnswer ? 500 : 120;
       input.placeholder = 'Type your answer';
+      if (isOpenAnswer) input.rows = 3;
 
       // --- NEW: Pre-fill answer if available ---
       const state = live.player.assignment.state;
@@ -2962,6 +2970,15 @@ function renderJoinQuestion(question) {
       row.className = 'join-answer-inline-row';
       row.appendChild(input);
       joinAnswersEl.appendChild(row);
+
+      if (isOpenAnswer) {
+        const autosize = () => {
+          input.style.height = 'auto';
+          input.style.height = input.scrollHeight + 'px';
+        };
+        input.addEventListener('input', autosize);
+        requestAnimationFrame(autosize);
+      }
     }
     appendRiskBetBar();
     appendReactionBar();
