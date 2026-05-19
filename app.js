@@ -5342,18 +5342,12 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     if (isOpen && studentText) {
       const initialCorrected = r.correctedText && r.correctedText.trim() ? r.correctedText : studentText;
       return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-        <div class="small muted" style="margin-bottom:2px;">Corrected text (edit to refine diff):</div>
-        <textarea data-edit-corrected data-autosize rows="1" style="width:100%;min-width:240px;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
-        <div class="small muted" style="margin-top:6px;">Student will see:</div>
-        <div data-diff-preview style="margin-top:2px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
-        ${r.rationale ? `<div class="small muted" style="margin-top:6px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
-        ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
+        <textarea data-edit-corrected data-autosize rows="1" placeholder="Corrected text" style="width:100%;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
+        <div data-diff-preview style="margin-top:4px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
       </td>`;
     }
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-      <textarea data-edit-correction data-autosize rows="1" style="width:100%;min-width:220px;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
-      ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
-      ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
+      <textarea data-edit-correction data-autosize rows="1" placeholder="Correction (optional)" style="width:100%;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
     </td>`;
   };
 
@@ -5370,26 +5364,40 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const editableDisabled = r.bucket === 'rejected';
     const checked = r.included ? 'checked' : '';
     const subLabel = r.bucket === 'skip'
-      ? '<div class="small muted" style="margin-top:4px;">⏸ AI said needs_review</div>'
+      ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">⏸ needs_review</div>'
       : r.isOverwrite
-        ? '<div class="small muted" style="margin-top:4px;">↻ overwrites existing grade</div>'
+        ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">↻ overwrites</div>'
         : '';
-    const statusCell = r.bucket === 'rejected'
-      ? `<div style="color:#dc2626;">✗ rejected</div><div class="small muted">${escapeHtml(r.rejectionReason)}</div>`
+    const applyCell = r.bucket === 'rejected'
+      ? `<div style="color:#dc2626;font-weight:600;">✗</div><div class="small muted" style="font-size:0.7rem;">${escapeHtml(r.rejectionReason)}</div>`
       : `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;cursor:pointer;"><input type="checkbox" data-include-row ${checked} style="width:auto;margin:0;" /><span>Apply</span></label>${subLabel}`;
+
+    const tooltipParts = [
+      `Verdict: ${r.verdict}`,
+      `Confidence: ${r.confidence.toFixed(2)}`,
+    ];
+    if (r.rationale) tooltipParts.push(`\nRationale: ${r.rationale}`);
+    if (r.flags?.length) tooltipParts.push(`Flags: ${r.flags.join(', ')}`);
+    const tooltip = tooltipParts.join('\n').replace(/"/g, '&quot;');
+    const whoCell = `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+      <div style="font-weight:600;">${escapeHtml(r.studentName || r.attemptId)}</div>
+      <div class="small muted" style="margin-top:2px;">Q${r.qIndex + 1}</div>
+      <div style="margin-top:4px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+        <span class="agi-verdict ${escapeHtml(r.verdict)}">${escapeHtml(r.verdict)}</span>
+        <span class="agi-info-icon" title="${tooltip}">i</span>
+      </div>
+    </td>`;
+
     return `
       <tr data-row-idx="${idx}" style="background:${bg};${lowConf ? 'outline:2px solid #f59e0b;outline-offset:-2px;' : ''}">
-        ${escTd(r.studentName || r.attemptId)}
-        ${escTd(`Q${r.qIndex + 1}`)}
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${applyCell}</td>
+        ${whoCell}
         ${renderAnswerCell(r)}
         <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-          <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:80px;" ${editableDisabled ? 'disabled' : ''}/>
-          <div class="small muted">/ ${r.maxPoints}</div>
+          <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:64px;" ${editableDisabled ? 'disabled' : ''}/>
+          <div class="small muted" style="font-size:0.7rem;">/ ${r.maxPoints}</div>
         </td>
-        ${escTd(r.verdict)}
-        ${escTd(r.confidence.toFixed(2))}
         ${renderCorrectionCell(r, editableDisabled)}
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${statusCell}</td>
       </tr>
     `;
   }).join('');
@@ -5411,25 +5419,19 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     <div style="max-height:50vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
       <table class="agi-preview">
         <colgroup>
-          <col class="col-student" />
-          <col class="col-q" />
+          <col class="col-apply" />
+          <col class="col-who" />
           <col class="col-answer" />
           <col class="col-points" />
-          <col class="col-verdict" />
-          <col class="col-conf" />
           <col />
-          <col class="col-status" />
         </colgroup>
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Q</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Apply?</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Who · Q</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Points</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Verdict</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Conf</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / rationale</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Apply?</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / diff</th>
           </tr>
         </thead>
         <tbody>${tableRows}</tbody>
@@ -5575,14 +5577,18 @@ function openAiGradeImport(code) {
       #aiGradeImportModal .agi-drop.over { border-color:#3b82f6;background:#eff6ff; }
       #aiGradeImportModal .agi-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:12px; }
       #aiGradeImportModal table.agi-preview { width:100%;border-collapse:collapse;font-size:0.85rem;table-layout:fixed; }
-      #aiGradeImportModal table.agi-preview col.col-student { width:110px; }
-      #aiGradeImportModal table.agi-preview col.col-q { width:40px; }
-      #aiGradeImportModal table.agi-preview col.col-answer { width:240px; }
-      #aiGradeImportModal table.agi-preview col.col-points { width:90px; }
-      #aiGradeImportModal table.agi-preview col.col-verdict { width:75px; }
-      #aiGradeImportModal table.agi-preview col.col-conf { width:55px; }
-      #aiGradeImportModal table.agi-preview col.col-status { width:130px; }
+      #aiGradeImportModal table.agi-preview col.col-apply { width:80px; }
+      #aiGradeImportModal table.agi-preview col.col-who { width:130px; }
+      #aiGradeImportModal table.agi-preview col.col-answer { width:260px; }
+      #aiGradeImportModal table.agi-preview col.col-points { width:80px; }
       #aiGradeImportModal table.agi-preview td { word-break:break-word; }
+      #aiGradeImportModal .agi-info-icon { display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e5e7eb;color:#374151;font-size:0.7rem;cursor:help;margin-left:4px;font-weight:600;font-style:normal; }
+      #aiGradeImportModal .agi-info-icon:hover { background:#cbd5e1; }
+      #aiGradeImportModal .agi-verdict { display:inline-block;border-radius:10px;padding:1px 6px;font-size:0.7rem;font-weight:600;margin-top:2px; }
+      #aiGradeImportModal .agi-verdict.correct { background:#dcfce7;color:#166534; }
+      #aiGradeImportModal .agi-verdict.partial { background:#fef3c7;color:#92400e; }
+      #aiGradeImportModal .agi-verdict.wrong { background:#fee2e2;color:#991b1b; }
+      #aiGradeImportModal .agi-verdict.needs_review { background:#e0e7ff;color:#3730a3; }
     </style>
     <div role="dialog" aria-modal="true" aria-label="Import AI grades" class="agi-dialog">
       <h3>Import AI grades · ${escapeHtml(safeCode)}</h3>
