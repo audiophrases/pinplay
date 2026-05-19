@@ -151,7 +151,7 @@
       q.audioMode = 'url';
       q.audioData = url;
       q.audioEnabled = true;
-    } else if (q.type !== 'pin') {
+    } else {
       q.imageData = url;
     }
   }
@@ -250,6 +250,36 @@
       q.answers = opts.length
         ? opts.map((t) => ({ text: t, correct: true }))
         : [{ text: '', correct: true }, { text: '', correct: true }];
+      q.isPoll = true;
+      q.points = 0;
+      attachMedia(q, row); return q;
+    }
+
+    if (type === 'pin_it' || type === 'drop_pin' || type === 'pin') {
+      const q = window.makePinQuestion ? window.makePinQuestion() : null;
+      if (!q) return null;
+      q.prompt = stem;
+      q.zones = [];
+      attachMedia(q, row); return q;
+    }
+
+    if (type === 'multiple_select_poll') {
+      const q = window.makeMultiQuestion ? window.makeMultiQuestion() : null;
+      if (!q) return null;
+      q.prompt = stem;
+      q.answers = opts.length
+        ? opts.map((t) => ({ text: t, correct: true }))
+        : [{ text: '', correct: true }, { text: '', correct: true }];
+      q.isPoll = true;
+      q.points = 0;
+      attachMedia(q, row); return q;
+    }
+
+    if (type === 'feedback') {
+      const q = window.makeTextQuestion ? window.makeTextQuestion() : null;
+      if (!q) return null;
+      q.prompt = stem || 'How did this lesson go?';
+      q.accepted = [];
       q.isPoll = true;
       q.points = 0;
       attachMedia(q, row); return q;
@@ -785,9 +815,17 @@
 
     if (row.explanation) pane.appendChild(el('div', { class: 'bank-preview-explain small muted' }, stripHtml(row.explanation)));
 
-    if (String(row.question_type || '').toLowerCase() === 'slider' && !corrects.length) {
+    const rtype = String(row.question_type || '').toLowerCase();
+    if (rtype === 'slider' && !corrects.length) {
       pane.appendChild(el('div', { class: 'bank-preview-warning small' },
         '⚠ Slider has no stored target value (scraper limitation). Import will use defaults (min 0, max 100, target 50) — set the actual range/target in the builder after importing.'));
+    }
+    if ((rtype === 'pin_it' || rtype === 'drop_pin') && !row.media_url) {
+      pane.appendChild(el('div', { class: 'bank-preview-warning small' },
+        '⚠ Pin question has no image stored. Import will create an empty pin question — add an image and hot-spots in the builder after importing.'));
+    } else if (rtype === 'pin_it' || rtype === 'drop_pin') {
+      pane.appendChild(el('div', { class: 'bank-preview-warning small' },
+        '⚠ Pin question has no stored hot-spot zones (scraper limitation). Image will import; you need to set the click zones in the builder after importing.'));
     }
 
     const mappingType = mappedTypeLabel(row.question_type);
@@ -959,6 +997,10 @@
       slider: 'slider',
       survey: 'mcq (poll)',
       word_cloud: 'text (poll)',
+      pin_it: 'pin (image needed; zones manual)',
+      drop_pin: 'pin (image needed; zones manual)',
+      multiple_select_poll: 'multi (poll)',
+      feedback: 'text (poll)',
     };
     return map[String(bankType || '').toLowerCase()] || '(no mapping — will be skipped)';
   }
