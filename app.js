@@ -5445,11 +5445,16 @@ function openAiGradeImport(code) {
     <div role="dialog" aria-modal="true" aria-label="Import AI grades" class="agi-dialog">
       <h3>Import AI grades · ${escapeHtml(safeCode)}</h3>
       <div data-import-body>
-        <p class="small muted">Paste the AI's JSON response, or drop a .json/.txt file. The fenced ${'```json'} block is auto-extracted.</p>
+        <p class="small muted">Paste the AI's JSON response, drop a .json/.txt file, or pick one. The fenced ${'```json'} block is auto-extracted.</p>
         <div class="agi-drop" data-drop>
           <textarea data-import-input placeholder='Paste here, e.g. { "version": 1, "assignmentCode": "${escapeHtml(safeCode)}", "results": [...] }'></textarea>
         </div>
-        <div data-import-error class="small" style="color:#dc2626;min-height:1.2em;"></div>
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">
+          <button class="btn" type="button" data-import-pick>Choose file…</button>
+          <input type="file" data-import-file accept=".json,.txt,application/json,text/plain" style="display:none;" />
+          <span class="small muted" data-import-file-name></span>
+        </div>
+        <div data-import-error class="small" style="color:#dc2626;min-height:1.2em;margin-top:6px;"></div>
         <div class="agi-actions">
           <button class="btn" type="button" data-import-cancel>Cancel</button>
           <button class="btn primary" type="button" data-import-parse>Parse &amp; preview</button>
@@ -5473,15 +5478,21 @@ function openAiGradeImport(code) {
 
   ['dragenter', 'dragover'].forEach((evt) => drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((evt) => drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', async (e) => {
-    const file = e.dataTransfer?.files?.[0];
+  const fileInput = modal.querySelector('[data-import-file]');
+  const fileNameEl = modal.querySelector('[data-import-file-name]');
+  async function loadFile(file) {
     if (!file) return;
     try {
       textarea.value = await file.text();
+      if (fileNameEl) fileNameEl.textContent = file.name;
+      errEl.textContent = '';
     } catch (err) {
       errEl.textContent = `Could not read file: ${err.message}`;
     }
-  });
+  }
+  modal.querySelector('[data-import-pick]')?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => loadFile(fileInput.files?.[0]));
+  drop.addEventListener('drop', (e) => loadFile(e.dataTransfer?.files?.[0]));
 
   modal.querySelector('[data-import-parse]').addEventListener('click', async () => {
     errEl.textContent = '';
