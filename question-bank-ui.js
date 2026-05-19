@@ -397,7 +397,17 @@
 
   function buildModal() {
     const overlay = el('div', { id: 'bankModal', class: 'bank-modal' });
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    // Only close on backdrop click if BOTH mousedown and mouseup happened on the
+    // backdrop. A drag-select that starts inside the modal and ends over the
+    // backdrop would otherwise fire a `click` with target === overlay.
+    let pressedOnBackdrop = false;
+    overlay.addEventListener('mousedown', (e) => {
+      pressedOnBackdrop = (e.target === overlay);
+    });
+    overlay.addEventListener('mouseup', (e) => {
+      if (pressedOnBackdrop && e.target === overlay) closeModal();
+      pressedOnBackdrop = false;
+    });
     const content = el('div', { class: 'bank-modal-content' });
     overlay.appendChild(content);
     return overlay;
