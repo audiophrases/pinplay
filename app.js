@@ -8245,6 +8245,8 @@ function buildAssignmentListItem(a) {
     ? 'Restore to the main list'
     : 'Hide from the main list (assignment stays open and active)';
   archiveBtn.addEventListener('click', async () => {
+    const scroller = document.scrollingElement || document.documentElement;
+    const savedScrollTop = scroller ? scroller.scrollTop : 0;
     try {
       archiveBtn.disabled = true;
       await setAssignmentArchived(code, !a?.archived);
@@ -8252,6 +8254,10 @@ function buildAssignmentListItem(a) {
         ? `Assignment ${code} archived.`
         : `Assignment ${code} unarchived.`;
       await refreshAssignmentsList();
+      if (scroller) scroller.scrollTop = savedScrollTop;
+      requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = savedScrollTop;
+      });
     } catch (err) {
       if (assignmentStatusEl) assignmentStatusEl.textContent = `Archive error: ${err.message}`;
     } finally {
