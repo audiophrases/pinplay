@@ -4509,6 +4509,24 @@ grading — be liberal with \`needs_review\` rather than guessing.
 - \`rationale\` is for the teacher only. English, one short sentence
   explaining the score. Leave \`""\` for correct answers.
 
+### \`open\` questions — return a corrected version, not just a comment
+
+For \`open\` (typed long-form) answers the student will see a **red/green
+visual diff** between their original text and your corrected version,
+rendered word-by-word. Return your corrected version in \`correctedText\`.
+
+- Make **minimal edits**. Keep as much of the student's original wording
+  as you can — only change what is actually wrong (grammar, vocabulary,
+  spelling, missing words). Do not paraphrase or restyle for taste.
+- If the answer is fully correct, leave \`correctedText\` as \`""\`.
+- If the answer needs heavy rewriting (more than half the words would
+  change), put a normal short comment in \`correction\` instead and leave
+  \`correctedText\` empty — a noisy diff doesn't help the student.
+- For \`open\` questions, prefer \`correctedText\` over \`correction\` —
+  don't fill both. The diff is the feedback.
+- For non-\`open\` questions (e.g. \`voice_record\`), always leave
+  \`correctedText\` as \`""\`. The visual diff only applies to typed text.
+
 ## Output
 
 Return **exactly one fenced JSON block** matching this schema and nothing
@@ -4527,6 +4545,7 @@ else — no preamble, no closing remarks:
       "verdict": "correct" | "partial" | "wrong" | "needs_review",
       "confidence": <number, 0..1>,
       "correction": "<student-facing, in their language>",
+      "correctedText": "<for open questions: minimally-edited corrected version of the student's text; '' otherwise>",
       "rationale": "<teacher-facing, English, one sentence>",
       "flags": []
     }
@@ -5171,10 +5190,12 @@ function aiGradeImportBucketRow(result, ctx) {
     verdict: String(result?.verdict || ''),
     confidence: Number(result?.confidence || 0),
     correction: String(result?.correction || ''),
+    correctedText: String(result?.correctedText || ''),
     rationale: String(result?.rationale || ''),
     flags: Array.isArray(result?.flags) ? result.flags.map(String) : [],
     studentName: '',
     maxPoints: 1000,
+    qType: '',
     bucket: 'apply',
     rejectionReason: '',
     isOverwrite: false,
@@ -5187,6 +5208,7 @@ function aiGradeImportBucketRow(result, ctx) {
   if (!question) { row.bucket = 'rejected'; row.rejectionReason = `qIndex ${row.qIndex} not in this assignment`; return row; }
   if (!question.teacherGraded) { row.bucket = 'rejected'; row.rejectionReason = `Q${row.qIndex + 1} is auto-graded`; return row; }
   row.maxPoints = question.maxPoints;
+  row.qType = question.qType;
   row.studentName = ctx.studentNames.get(row.attemptId) || '';
 
   if (row.qId && question.qId && row.qId !== question.qId) {
@@ -5206,6 +5228,37 @@ function aiGradeImportBucketRow(result, ctx) {
     row.bucket = 'rejected'; row.rejectionReason = `points ${row.points} out of range 0..${row.maxPoints}`; return row;
   }
   return row;
+}
+
+function aiGradeImportIsTextDiffType(qType) {
+  return qType === 'open' || qType === 'text';
+}
+
+function aiGradeImportEditRatio(original, edited) {
+  const a = String(original || '').match(/\S+/g) || [];
+  const b = String(edited || '').match(/\S+/g) || [];
+  if (!a.length && !b.length) return 0;
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
+    dp[i + 1][j + 1] = a[i] === b[j] ? dp[i][j] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  }
+  const same = dp[m][n];
+  const total = Math.max(m, n) || 1;
+  return 1 - (same / total);
+}
+
+function aiGradeImportResolveCorrection(row) {
+  const studentText = String(row?.answer?.answerText || '').trim();
+  const correctedText = String(row?.correctedText || '').trim();
+  if (aiGradeImportIsTextDiffType(row?.qType) && correctedText && correctedText !== studentText && studentText) {
+    const ratio = aiGradeImportEditRatio(studentText, correctedText);
+    if (ratio > 0.7) {
+      return correctedText;
+    }
+    return CORRECTION_DIFF_PREFIX + computeWordDiff(studentText, correctedText);
+  }
+  return String(row?.correction || '');
 }
 
 function aiGradeImportDedupe(rows) {
@@ -5266,6 +5319,27 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     else r.included = false;
   });
 
+  const renderCorrectionCell = (r, disabled) => {
+    const isOpen = aiGradeImportIsTextDiffType(r.qType);
+    const studentText = String(r?.answer?.answerText || '').trim();
+    if (isOpen && studentText) {
+      const initialCorrected = r.correctedText && r.correctedText.trim() ? r.correctedText : studentText;
+      return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+        <div class="small muted" style="margin-bottom:2px;">Corrected text (edit to refine diff):</div>
+        <textarea data-edit-corrected rows="3" style="width:100%;min-width:240px;font:13px monospace;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
+        <div class="small muted" style="margin-top:6px;">Student will see:</div>
+        <div data-diff-preview style="margin-top:2px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
+        ${r.rationale ? `<div class="small muted" style="margin-top:6px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
+        ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
+      </td>`;
+    }
+    return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+      <textarea data-edit-correction rows="2" style="width:100%;min-width:220px;" ${disabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
+      ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
+      ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
+    </td>`;
+  };
+
   const tableRows = sorted.map((r, idx) => {
     const lowConf = r.confidence < 0.6 && r.bucket === 'apply';
     const bgs = { apply: '#fff', skip: '#fffbe6', rejected: '#fef2f2' };
@@ -5287,11 +5361,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         </td>
         ${escTd(r.verdict)}
         ${escTd(r.confidence.toFixed(2))}
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-          <textarea data-edit-correction rows="2" style="width:100%;min-width:220px;" ${editableDisabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
-          ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
-          ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
-        </td>
+        ${renderCorrectionCell(r, editableDisabled)}
         <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${statusCell}</td>
       </tr>
     `;
@@ -5374,6 +5444,8 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     if (!row || row.bucket === 'rejected') return;
     const pointsInput = tr.querySelector('[data-edit-points]');
     const corrInput = tr.querySelector('[data-edit-correction]');
+    const correctedInput = tr.querySelector('[data-edit-corrected]');
+    const diffPreviewEl = tr.querySelector('[data-diff-preview]');
     const includeCb = tr.querySelector('[data-include-row]');
     const autoInclude = () => {
       if (row.bucket === 'skip' && includeCb && !includeCb.checked) {
@@ -5382,6 +5454,25 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         updateSummary();
       }
     };
+    const renderDiff = () => {
+      if (!diffPreviewEl) return;
+      const studentText = String(row?.answer?.answerText || '').trim();
+      const correctedText = String(row.correctedText || '').trim();
+      if (!studentText || !correctedText || studentText === correctedText) {
+        diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+        return;
+      }
+      const ratio = aiGradeImportEditRatio(studentText, correctedText);
+      if (ratio > 0.7) {
+        diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(too many edits — falling back to plain comment)</span><div style="margin-top:4px;">${escapeHtml(correctedText)}</div>`;
+        return;
+      }
+      diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(studentText, correctedText));
+    };
+    if (correctedInput) {
+      row.correctedText = String(correctedInput.value || '');
+      renderDiff();
+    }
     pointsInput?.addEventListener('input', () => {
       const v = Math.round(Number(pointsInput.value || 0));
       row.points = Math.min(Math.max(v, 0), row.maxPoints);
@@ -5389,6 +5480,11 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     });
     corrInput?.addEventListener('input', () => {
       row.correction = String(corrInput.value || '');
+      autoInclude();
+    });
+    correctedInput?.addEventListener('input', () => {
+      row.correctedText = String(correctedInput.value || '');
+      renderDiff();
       autoInclude();
     });
     includeCb?.addEventListener('change', () => {
@@ -5411,7 +5507,8 @@ async function aiGradeImportApply(modal, code, rowsToApply) {
   for (const row of rowsToApply) {
     progressEl.textContent = `Applying ${done + 1} of ${rowsToApply.length}…`;
     try {
-      await gradeAssignmentQuestion(code, row.attemptId, row.qIndex, row.points, row.correction, '');
+      const correctionValue = aiGradeImportResolveCorrection(row);
+      await gradeAssignmentQuestion(code, row.attemptId, row.qIndex, row.points, correctionValue, '');
       done += 1;
     } catch (err) {
       failed += 1;
