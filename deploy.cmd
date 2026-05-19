@@ -1,7 +1,7 @@
 @echo off
 if not exist _site mkdir _site
 echo Preparing Assets (staging _site)...
-robocopy . _site /S /XD .git .wrangler node_modules cloudflare tests _site /XF *.cmd *.bat *.log *.jsonc *.toml *.md .gitignore .wranglerignore > nul
+robocopy . _site /S /XD .git .wrangler node_modules cloudflare tests _site question-bank /XF *.cmd *.bat *.log *.jsonc *.toml *.md .gitignore .wranglerignore > nul
 
 echo.
 echo Deploying Assets (pinplay-cdn)...
