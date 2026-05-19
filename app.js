@@ -5359,11 +5359,15 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const bgs = { apply: '#fff', skip: '#fffbe6', rejected: '#fef2f2' };
     const bg = r.isOverwrite ? '#eff6ff' : (bgs[r.bucket] || '#fff');
     const editableDisabled = r.bucket === 'rejected';
+    const checked = r.included ? 'checked' : '';
+    const subLabel = r.bucket === 'skip'
+      ? '<div class="small muted" style="margin-top:4px;">⏸ AI said needs_review</div>'
+      : r.isOverwrite
+        ? '<div class="small muted" style="margin-top:4px;">↻ overwrites existing grade</div>'
+        : '';
     const statusCell = r.bucket === 'rejected'
       ? `<div style="color:#dc2626;">✗ rejected</div><div class="small muted">${escapeHtml(r.rejectionReason)}</div>`
-      : r.bucket === 'skip'
-        ? `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;cursor:pointer;"><input type="checkbox" data-include-row style="width:auto;margin:0;" /><span>Include in apply</span></label><div class="small muted" style="margin-top:4px;">⏸ AI said needs_review</div>`
-        : r.isOverwrite ? '↻ overwrite existing' : '✓ apply';
+      : `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;cursor:pointer;"><input type="checkbox" data-include-row ${checked} style="width:auto;margin:0;" /><span>Apply</span></label>${subLabel}`;
     return `
       <tr data-row-idx="${idx}" style="background:${bg};${lowConf ? 'outline:2px solid #f59e0b;outline-offset:-2px;' : ''}">
         ${escTd(r.studentName || r.attemptId)}
@@ -5396,7 +5400,17 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       <div class="small muted">Rows with confidence &lt; 0.60 are highlighted. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you check "Include in apply".</div>
     </div>
     <div style="max-height:50vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
-      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      <table class="agi-preview">
+        <colgroup>
+          <col class="col-student" />
+          <col class="col-q" />
+          <col class="col-answer" />
+          <col class="col-points" />
+          <col class="col-verdict" />
+          <col class="col-conf" />
+          <col />
+          <col class="col-status" />
+        </colgroup>
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student</th>
@@ -5406,7 +5420,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Verdict</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Conf</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / rationale</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Status</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Apply?</th>
           </tr>
         </thead>
         <tbody>${tableRows}</tbody>
@@ -5544,12 +5558,22 @@ function openAiGradeImport(code) {
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
   modal.innerHTML = `
     <style>
-      #aiGradeImportModal .agi-dialog { background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
+      #aiGradeImportModal .agi-dialog { background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:1200px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
       #aiGradeImportModal h3 { margin:0 0 12px 0; }
       #aiGradeImportModal textarea { width:100%;min-height:180px;font:13px monospace;font-weight:normal; }
+      #aiGradeImportModal textarea[data-autosize] { min-height:0;font:inherit; }
       #aiGradeImportModal .agi-drop { border:2px dashed #cbd5e1;border-radius:8px;padding:12px;margin-bottom:8px;background:#f8fafc; }
       #aiGradeImportModal .agi-drop.over { border-color:#3b82f6;background:#eff6ff; }
       #aiGradeImportModal .agi-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:12px; }
+      #aiGradeImportModal table.agi-preview { width:100%;border-collapse:collapse;font-size:0.85rem;table-layout:fixed; }
+      #aiGradeImportModal table.agi-preview col.col-student { width:110px; }
+      #aiGradeImportModal table.agi-preview col.col-q { width:40px; }
+      #aiGradeImportModal table.agi-preview col.col-answer { width:240px; }
+      #aiGradeImportModal table.agi-preview col.col-points { width:90px; }
+      #aiGradeImportModal table.agi-preview col.col-verdict { width:75px; }
+      #aiGradeImportModal table.agi-preview col.col-conf { width:55px; }
+      #aiGradeImportModal table.agi-preview col.col-status { width:130px; }
+      #aiGradeImportModal table.agi-preview td { word-break:break-word; }
     </style>
     <div role="dialog" aria-modal="true" aria-label="Import AI grades" class="agi-dialog">
       <h3>Import AI grades · ${escapeHtml(safeCode)}</h3>
