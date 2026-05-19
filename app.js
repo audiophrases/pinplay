@@ -4511,19 +4511,31 @@ grading — be liberal with \`needs_review\` rather than guessing.
 
 ### \`open\` questions — return a corrected version, not just a comment
 
-For \`open\` (typed long-form) answers the student will see a **red/green
-visual diff** between their original text and your corrected version,
-rendered word-by-word. Return your corrected version in \`correctedText\`.
+For \`open\` (typed long-form) answers, **you must always return a
+\`correctedText\`** unless the answer is already perfect. The student
+will see a red/green visual diff between their original text and your
+corrected version. The diff is the feedback — don't bounce the work
+back to the teacher with a meta-comment.
 
-- Make **minimal edits**. Keep as much of the student's original wording
-  as you can — only change what is actually wrong (grammar, vocabulary,
-  spelling, missing words). Do not paraphrase or restyle for taste.
+- **Always fill \`correctedText\` for \`open\` questions.** Do not leave it
+  empty as a way to flag "needs heavy rewriting." Write the corrected
+  version even when the student's answer is short, off-topic, or barely
+  intelligible — produce a complete, correct answer to the prompt.
+- Make **minimal edits when possible**. Keep as much of the student's
+  original wording as you can — only change what is actually wrong
+  (grammar, vocabulary, spelling, missing words). Don't paraphrase or
+  restyle for taste.
+- When the student wrote almost nothing useful (blank, single period,
+  one unrelated word), write what a good answer to the prompt would
+  look like and put it in \`correctedText\` anyway. The client app will
+  detect that the diff is too noisy and render your text as a plain
+  model answer — that handling is automatic; you don't need to manage
+  it.
 - If the answer is fully correct, leave \`correctedText\` as \`""\`.
-- If the answer needs heavy rewriting (more than half the words would
-  change), put a normal short comment in \`correction\` instead and leave
-  \`correctedText\` empty — a noisy diff doesn't help the student.
-- For \`open\` questions, prefer \`correctedText\` over \`correction\` —
-  don't fill both. The diff is the feedback.
+- Leave \`correction\` as \`""\` for \`open\` questions. The corrected text
+  IS the feedback. Only use \`correction\` for non-\`open\` questions, or
+  when you genuinely have no source material to work with at all
+  (truly empty answer field).
 - For non-\`open\` questions (e.g. \`voice_record\`), always leave
   \`correctedText\` as \`""\`. The visual diff only applies to typed text.
 
@@ -5326,7 +5338,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       const initialCorrected = r.correctedText && r.correctedText.trim() ? r.correctedText : studentText;
       return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
         <div class="small muted" style="margin-bottom:2px;">Corrected text (edit to refine diff):</div>
-        <textarea data-edit-corrected rows="3" style="width:100%;min-width:240px;font:13px monospace;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
+        <textarea data-edit-corrected data-autosize rows="1" style="width:100%;min-width:240px;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
         <div class="small muted" style="margin-top:6px;">Student will see:</div>
         <div data-diff-preview style="margin-top:2px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
         ${r.rationale ? `<div class="small muted" style="margin-top:6px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
@@ -5334,10 +5346,16 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       </td>`;
     }
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-      <textarea data-edit-correction rows="2" style="width:100%;min-width:220px;" ${disabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
+      <textarea data-edit-correction data-autosize rows="1" style="width:100%;min-width:220px;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(r.correction)}</textarea>
       ${r.rationale ? `<div class="small muted" style="margin-top:4px;"><em>${escapeHtml(r.rationale)}</em></div>` : ''}
       ${r.flags?.length ? `<div class="small" style="margin-top:4px;color:#92400e;">flags: ${r.flags.map(escapeHtml).join(', ')}</div>` : ''}
     </td>`;
+  };
+
+  const autosize = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight + 2) + 'px';
   };
 
   const tableRows = sorted.map((r, idx) => {
@@ -5473,6 +5491,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       row.correctedText = String(correctedInput.value || '');
       renderDiff();
     }
+    tr.querySelectorAll('textarea[data-autosize]').forEach((el) => autosize(el));
     pointsInput?.addEventListener('input', () => {
       const v = Math.round(Number(pointsInput.value || 0));
       row.points = Math.min(Math.max(v, 0), row.maxPoints);
@@ -5480,10 +5499,12 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     });
     corrInput?.addEventListener('input', () => {
       row.correction = String(corrInput.value || '');
+      autosize(corrInput);
       autoInclude();
     });
     correctedInput?.addEventListener('input', () => {
       row.correctedText = String(correctedInput.value || '');
+      autosize(correctedInput);
       renderDiff();
       autoInclude();
     });
