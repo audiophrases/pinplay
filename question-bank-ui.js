@@ -452,8 +452,12 @@
         }
         await bankFetch('/facets');
         saveBridgeConfig(bridgeCfg);
+        bridgeAvailable = true;
         status.textContent = `Connected. ${ping.questions} questions in bank.`;
         status.className = 'small bank-connect-status bank-ok';
+        if (!backfilledThisSession) {
+          backfillFromPinPlay({ status: (m) => console.info('[bank][sync]', m) });
+        }
         setTimeout(enterSearchMode, 400);
       } catch (err) {
         bridgeCfg = previous;
@@ -1176,9 +1180,15 @@
       if (status) status('Bank sync skipped — teacher password not entered yet.', 'muted');
       return;
     }
+    // bridgeAvailable can be a stale `false` from page-load if the user started
+    // the bridge after the create page loaded. Re-ping to confirm before bailing.
     if (!bridgeAvailable) {
-      if (status) status('Bank sync skipped — bridge not reachable.', 'bad');
-      return;
+      const ping = await pingBridge();
+      if (!ping || !ping.ok) {
+        if (status) status('Bank sync skipped — bridge not reachable.', 'bad');
+        return;
+      }
+      bridgeAvailable = true;
     }
     backfillInFlight = true;
 
