@@ -798,10 +798,19 @@ function collectTeacherFeedbackItems(state) {
     const grade = answer?.teacherGrade;
     if (grade?.graded && (grade?.correction || grade?.correctionAudioKey)) {
       const promptText = String(question.prompt || `Question ${idx + 1}`);
+      const rawAnswer = answer?.answer;
       items.push({
         qIndex: idx,
-        question: promptText.length > 120 ? `${promptText.slice(0, 120)}…` : promptText,
-        studentAnswer: typeof answer?.answer === 'string' ? answer.answer : '',
+        question: promptText,
+        questionType: String(question.type || ''),
+        questionImage: question.imageData || '',
+        questionAudioData: question.audioData || '',
+        questionAudioMode: question.audioMode || '',
+        questionAudioText: question.audioText || '',
+        questionAudioLang: question.language || '',
+        questionMedia: question.media || null,
+        studentAnswer: typeof rawAnswer === 'string' ? rawAnswer : '',
+        studentAnswerRaw: rawAnswer,
         correction: grade.correction || '',
         correctionAudioKey: grade.correctionAudioKey || '',
         gradedAt: grade.gradedAt,
@@ -891,6 +900,71 @@ function dismissTeacherFeedbackOverlay() {
   if (!existing) return;
   if (existing._tfOnKey) document.removeEventListener('keydown', existing._tfOnKey);
   existing.remove();
+}
+
+function resolveMediaSrc(key, base) {
+  const src = String(key || '');
+  if (!src) return '';
+  if (src.startsWith('http') || src.startsWith('data:')) return src;
+  return `${base}/api/media/${src}`;
+}
+
+function buildTfStudentAnswerHtml(item, base) {
+  const raw = item.studentAnswerRaw;
+  if (raw == null || raw === '') return '';
+
+  let inner = '';
+  if (item.questionType === 'voice_record' && raw && typeof raw === 'object' && raw.audioUrl) {
+    const src = resolveMediaSrc(raw.audioUrl, base);
+    const transcript = String(raw.transcript || '').trim();
+    inner = `
+      <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
+      ${transcript ? `<div class="tf-answer-text">${escapeHtml(transcript)}</div>` : ''}
+    `;
+  } else if (item.questionType === 'speaking') {
+    inner = `<div class="tf-answer-text tf-answer-muted">🗣️ Spoke aloud — no recording captured for this answer type.</div>`;
+  } else if (typeof raw === 'string' && raw.trim()) {
+    inner = `<div class="tf-answer-text">${escapeHtml(raw)}</div>`;
+  } else if (typeof raw === 'object') {
+    inner = `<pre class="tf-answer-text tf-answer-pre">${escapeHtml(JSON.stringify(raw, null, 2))}</pre>`;
+  } else {
+    return '';
+  }
+
+  return `
+    <details class="tf-collapse" open>
+      <summary>📨 Your answer</summary>
+      <div class="tf-collapse-body">${inner}</div>
+    </details>`;
+}
+
+function buildTfQuestionMediaHtml(item, base) {
+  const parts = [];
+
+  if (item.questionImage) {
+    const src = resolveMediaSrc(item.questionImage, base);
+    parts.push(`<img class="tf-q-image" src="${escapeHtml(src)}" alt="Question image" />`);
+  }
+
+  if (item.questionAudioMode === 'file' && item.questionAudioData) {
+    const src = resolveMediaSrc(item.questionAudioData, base);
+    parts.push(`<audio controls preload="metadata" src="${escapeHtml(src)}"></audio>`);
+  } else if (item.questionAudioText) {
+    parts.push(`<div class="tf-q-audio-text">🔊 <em>${escapeHtml(item.questionAudioText)}</em></div>`);
+  }
+
+  const videoCfg = assignmentVideoEmbedConfig(item.questionMedia);
+  if (videoCfg && videoCfg.src) {
+    parts.push(`<iframe class="tf-q-video" src="${escapeHtml(videoCfg.src)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`);
+  }
+
+  if (parts.length === 0) return '';
+
+  return `
+    <details class="tf-collapse">
+      <summary>🎞️ Question media</summary>
+      <div class="tf-collapse-body tf-q-media-body">${parts.join('')}</div>
+    </details>`;
 }
 
 // Modal that walks the student through every question with teacher commentary
@@ -986,9 +1060,14 @@ function showTeacherFeedbackOverlay(items) {
         <div class="tf-correction-text">${buildCorrectionDiffHtml(corrText, item.studentAnswer || '')}</div>
       </div>` : '';
 
+    const studentAnswerHtml = buildTfStudentAnswerHtml(item, base);
+    const questionMediaHtml = buildTfQuestionMediaHtml(item, base);
+
     body.innerHTML = `
       <div class="tf-q-tag">Q${item.qIndex + 1}</div>
       <div class="tf-q-prompt">${escapeHtml(promptText)}</div>
+      ${questionMediaHtml}
+      ${studentAnswerHtml}
       ${corrHtml}
       ${audioHtml}
     `;

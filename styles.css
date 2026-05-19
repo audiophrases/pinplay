@@ -2689,6 +2689,109 @@ button.review-retake-attempt-row:active {
   height: 36px;
 }
 
+/* Collapsible "Your answer" and "Question media" sections — kept compact so the
+   teacher's correction stays the focal point but a tap reveals the original
+   prompt media or the student's own submission. */
+.tf-collapse {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafbfc;
+  overflow: hidden;
+}
+
+.tf-collapse > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  -webkit-user-select: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tf-collapse > summary::-webkit-details-marker { display: none; }
+
+.tf-collapse > summary::after {
+  content: '▾';
+  margin-left: auto;
+  font-size: 0.75rem;
+  transition: transform 0.15s ease;
+}
+
+.tf-collapse:not([open]) > summary::after {
+  transform: rotate(-90deg);
+}
+
+.tf-collapse > summary:hover {
+  color: var(--text);
+  background: #f1f3f5;
+}
+
+.tf-collapse-body {
+  padding: 0.6rem 0.8rem 0.75rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tf-collapse-body audio {
+  width: 100%;
+  height: 36px;
+}
+
+.tf-answer-text {
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tf-answer-muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.tf-answer-pre {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.tf-q-media-body img.tf-q-image {
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+.tf-q-audio-text {
+  font-size: 0.9rem;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+
+.tf-q-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+  background: #000;
+}
+
 .tf-footer {
   display: grid;
   grid-template-columns: 1fr 1.2fr 1fr;
