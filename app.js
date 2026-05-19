@@ -15525,4 +15525,10 @@ function setupImageLightbox() {
 
 
 
+// Small accessor used by question-bank-ui.js so the bank sync can authenticate
+// against /api/assignments/* and /api/quizzes endpoints.
+window.pinplayInternals = {
+  getCreateSessionPassword: () => createSessionPassword,
+};
+
 init();

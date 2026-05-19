@@ -502,8 +502,24 @@
   }
 
   function buildHeader() {
+    const syncBtn = el('button', {
+      class: 'btn bank-sync',
+      title: 'Pull every PinPlay assignment + cloud-saved quiz into the bank (re-ingests known ones too)',
+      onClick: async () => {
+        syncBtn.disabled = true;
+        const origText = syncBtn.textContent;
+        syncBtn.textContent = '⏳';
+        const result = await backfillFromPinPlay({ force: true, status: (m) => flashOk(m) });
+        syncBtn.disabled = false;
+        syncBtn.textContent = origText;
+        if (!result && !_getPassword()) {
+          flashOk('Unlock teacher access first, then try Sync again.');
+        }
+      },
+    }, '🔄 Sync');
     return el('div', { class: 'bank-header' },
       el('h2', { class: 'bank-title' }, '🔍 Question bank'),
+      syncBtn,
       el('button', {
         class: 'btn bank-reconnect',
         title: 'Change bridge URL or secret',
@@ -1123,6 +1139,136 @@
     return base;
   }
 
+  // ---------- backfill: pull assignments + cloud quizzes from PinPlay → bank ----------
+
+  let backfilledThisSession = false;
+  let backfillInFlight = false;
+
+  function _getPassword() {
+    return (window.pinplayInternals && window.pinplayInternals.getCreateSessionPassword && window.pinplayInternals.getCreateSessionPassword()) || '';
+  }
+
+  function _getBackendUrl() {
+    if (typeof window.loadBackendUrl === 'function') {
+      return window.loadBackendUrl() || 'https://api.pinplay.win';
+    }
+    return 'https://api.pinplay.win';
+  }
+
+  async function _ingestPinPlayQuiz(sourceId, quizObj) {
+    if (!quizObj || !Array.isArray(quizObj.questions) || !quizObj.questions.length) return null;
+    const payload = {
+      assignment_code: String(sourceId),
+      title: quizObj.title || '',
+      level: quizObj.level || '',
+      skill_type: quizObj.skillType || '',
+      topic: quizObj.topic || '',
+      questions: quizObj.questions.map(pinPlayToBank).filter(Boolean),
+    };
+    if (!payload.questions.length) return null;
+    return bankFetch('/ingest', null, { method: 'POST', body: payload });
+  }
+
+  async function backfillFromPinPlay({ force = false, status = null } = {}) {
+    if (backfillInFlight) return;
+    const password = _getPassword();
+    if (!password) {
+      if (status) status('Bank sync skipped — teacher password not entered yet.', 'muted');
+      return;
+    }
+    if (!bridgeAvailable) {
+      if (status) status('Bank sync skipped — bridge not reachable.', 'bad');
+      return;
+    }
+    backfillInFlight = true;
+
+    let known = new Set();
+    if (!force) {
+      try {
+        const r = await bankFetch('/known-codes', { source: 'pinplay' });
+        known = new Set((r.codes || []).map(String));
+      } catch (err) {
+        if (status) status(`Couldn't read known codes: ${err.message}`, 'bad');
+        backfillInFlight = false;
+        return;
+      }
+    }
+
+    const stats = { assignments: { tried: 0, ingested: 0, errors: 0 },
+                    cloud:       { tried: 0, ingested: 0, errors: 0 } };
+    if (status) status('Listing PinPlay assignments…', 'muted');
+
+    // 1. Assignments
+    try {
+      const data = await window.api('/api/assignments/list', {
+        method: 'POST',
+        body: { password, limit: 500 },
+      });
+      const list = Array.isArray(data?.assignments) ? data.assignments : [];
+      for (const a of list) {
+        const code = String(a?.code || '').trim();
+        if (!code || (a?.className === '__preview__')) continue;
+        if (!force && known.has(code)) continue;
+        stats.assignments.tried++;
+        try {
+          const qd = await window.api('/api/assignments/get-quiz', {
+            method: 'POST',
+            body: { password, code },
+          });
+          const result = await _ingestPinPlayQuiz(code, qd?.quiz);
+          if (result) stats.assignments.ingested++;
+        } catch {
+          stats.assignments.errors++;
+        }
+      }
+    } catch (err) {
+      if (status) status(`Couldn't list assignments: ${err.message}`, 'bad');
+    }
+
+    if (status) status('Listing cloud-saved quizzes…', 'muted');
+
+    // 2. Cloud-saved quizzes (R2)
+    try {
+      const data = await window.api('/api/quizzes', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      const list = Array.isArray(data?.quizzes) ? data.quizzes : [];
+      const base = _getBackendUrl();
+      for (const cq of list) {
+        const key = String(cq?.key || '').trim();
+        if (!key) continue;
+        const r2Id = key.replace(/^quizzes\//, '').replace(/\.json$/, '');
+        if (!r2Id) continue;
+        if (!force && known.has(r2Id)) continue;
+        stats.cloud.tried++;
+        try {
+          const res = await fetch(`${base}/api/media/${key}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const loaded = await res.json();
+          const result = await _ingestPinPlayQuiz(r2Id, loaded);
+          if (result) stats.cloud.ingested++;
+        } catch {
+          stats.cloud.errors++;
+        }
+      }
+    } catch (err) {
+      if (status) status(`Couldn't list cloud quizzes: ${err.message}`, 'bad');
+    }
+
+    backfilledThisSession = true;
+    backfillInFlight = false;
+
+    const summary =
+      `Synced: ${stats.assignments.ingested} assignment(s)` +
+      ` + ${stats.cloud.ingested} cloud quiz(zes)` +
+      ((stats.assignments.errors + stats.cloud.errors)
+        ? ` · ${stats.assignments.errors + stats.cloud.errors} skipped (errors)` : '');
+    if (status) status(summary, 'ok');
+    console.info('[bank] backfill complete:', stats);
+    return stats;
+  }
+
   async function ingestQuiz(detail) {
     if (!detail || !detail.source_id || !detail.quiz) return;
     if (!bridgeCfg.secret) return;  // user hasn't connected to bank yet
@@ -1162,8 +1308,13 @@
   let bridgeAvailable = false;
 
   async function refreshBridgeAvailability() {
+    const wasAvailable = bridgeAvailable;
     const ping = await pingBridge();
     bridgeAvailable = !!(ping && ping.ok);
+    if (bridgeAvailable && !wasAvailable && !backfilledThisSession) {
+      // Fire-and-forget once-per-session backfill on first successful ping.
+      backfillFromPinPlay({ status: (m, kind) => console.info('[bank][sync]', kind || '', m) });
+    }
     return bridgeAvailable;
   }
 

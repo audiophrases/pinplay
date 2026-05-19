@@ -333,6 +333,24 @@ def _apply_patch(table: str, row_id: int, patch_dump: dict, editable: set[str]) 
     return dict(row)
 
 
+@app.get("/known-codes")
+async def known_codes(
+    source: str = Query(default="pinplay", description="filter by quiz source"),
+    authorization: str | None = Header(default=None),
+):
+    """Return the set of source_id values already ingested for the given source.
+    Used by the frontend backfill to skip already-known assignments/quizzes."""
+    require_auth(authorization)
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT source_id FROM quizzes "
+            "WHERE source = ? AND source_id IS NOT NULL AND TRIM(source_id) <> '' "
+            "  AND COALESCE(deleted_at, '') = ''",
+            (source,),
+        ).fetchall()
+    return {"source": source, "codes": [r[0] for r in rows]}
+
+
 @app.patch("/question/{question_id}")
 async def patch_question(
     question_id: int,
