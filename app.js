@@ -4512,30 +4512,39 @@ grading — be liberal with \`needs_review\` rather than guessing.
 ### \`open\` questions — return a corrected version, not just a comment
 
 For \`open\` (typed long-form) answers, **you must always return a
-\`correctedText\`** unless the answer is already perfect. The student
+\`correctedText\`** unless the answer is already polished. The student
 will see a red/green visual diff between their original text and your
 corrected version. The diff is the feedback — don't bounce the work
 back to the teacher with a meta-comment.
 
-- **Always fill \`correctedText\` for \`open\` questions.** Do not leave it
-  empty as a way to flag "needs heavy rewriting." Write the corrected
-  version even when the student's answer is short, off-topic, or barely
-  intelligible — produce a complete, correct answer to the prompt.
-- Make **minimal edits when possible**. Keep as much of the student's
-  original wording as you can — only change what is actually wrong
-  (grammar, vocabulary, spelling, missing words). Don't paraphrase or
-  restyle for taste.
+**\`points\` and \`correctedText\` are independent.** \`points\` measures
+**content correctness** (did the student answer the question?).
+\`correctedText\` is about **language quality** (spelling, grammar,
+natural phrasing). A student can get full points for content and still
+need spelling/grammar fixes — fill in \`correctedText\` in that case
+too. Conversely a student can get partial points for incomplete content
+but write their incomplete answer in perfect English.
+
+- **Always fill \`correctedText\` for \`open\` questions** if **any** of
+  these are true in the student's text:
+  - Spelling errors (e.g. "stuidents" → "students")
+  - Grammar mistakes (verb tense, agreement, article use)
+  - Awkward or unnatural phrasing a native speaker wouldn't use
+  - Missing punctuation or capitalization that hurts readability
+  - Incomplete content — write what a complete answer would say
+- Make **minimal edits**. Keep the student's original wording wherever
+  possible — only change what is actually wrong. Don't paraphrase
+  correct sentences just to make them sound more like you would write
+  them. Style preferences are not corrections.
 - When the student wrote almost nothing useful (blank, single period,
   one unrelated word), write what a good answer to the prompt would
-  look like and put it in \`correctedText\` anyway. The app always
-  renders the word-by-word diff regardless of how different the texts
-  are — even a near-total rewrite is useful, because the student sees
+  look like in \`correctedText\` anyway. The app always renders the
+  word-by-word diff, even for near-total rewrites — the student sees
   exactly what they wrote vs. what they should have written.
-- If the answer is fully correct, leave \`correctedText\` as \`""\`.
+- Only leave \`correctedText\` as \`""\` if the student's text is **fully
+  polished** — content correct AND no spelling/grammar/phrasing issues.
 - Leave \`correction\` as \`""\` for \`open\` questions. The corrected text
-  IS the feedback. Only use \`correction\` for non-\`open\` questions, or
-  when you genuinely have no source material to work with at all
-  (truly empty answer field).
+  IS the feedback. Only use \`correction\` for non-\`open\` questions.
 - For non-\`open\` questions (e.g. \`voice_record\`), always leave
   \`correctedText\` as \`""\`. The visual diff only applies to typed text.
 
