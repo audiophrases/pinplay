@@ -5558,15 +5558,17 @@ function openAiGradeImport(code) {
         <div class="agi-drop" data-drop>
           <textarea data-import-input placeholder='Paste here, e.g. { "version": 1, "assignmentCode": "${escapeHtml(safeCode)}", "results": [...] }'></textarea>
         </div>
-        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">
-          <button class="btn" type="button" data-import-pick>Choose file…</button>
-          <input type="file" data-import-file accept=".json,.txt,application/json,text/plain" style="display:none;" />
-          <span class="small muted" data-import-file-name></span>
-        </div>
         <div data-import-error class="small" style="color:#dc2626;min-height:1.2em;margin-top:6px;"></div>
-        <div class="agi-actions">
-          <button class="btn" type="button" data-import-cancel>Cancel</button>
-          <button class="btn primary" type="button" data-import-parse>Parse &amp; preview</button>
+        <div class="agi-actions" style="justify-content:space-between;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn" type="button" data-import-pick>Choose file…</button>
+            <input type="file" data-import-file accept=".json,.txt,application/json,text/plain" style="display:none;" />
+            <span class="small muted" data-import-file-name></span>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" type="button" data-import-cancel>Cancel</button>
+            <button class="btn primary" type="button" data-import-parse>Parse &amp; preview</button>
+          </div>
         </div>
       </div>
     </div>
