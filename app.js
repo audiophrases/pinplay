@@ -3756,6 +3756,10 @@ async function saveQuizToCloud() {
     quiz._lastCloudHash = payloadHash;
 
     setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
+
+    window.dispatchEvent(new CustomEvent('pinplay:quiz-persisted', {
+      detail: { source_id: quizId, quiz },
+    }));
   } catch (err) {
     setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
   }
@@ -8238,6 +8242,11 @@ async function createAssignmentFromCurrentQuiz() {
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = `${msg} · Link: ${link}`;
     setStatus(hostStatusEl, msg, 'ok');
+
+    window.dispatchEvent(new CustomEvent('pinplay:quiz-persisted', {
+      detail: { source_id: code, quiz },
+    }));
+
     await refreshAssignmentsList();
   } catch (err) {
     if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment error: ${err.message}`;

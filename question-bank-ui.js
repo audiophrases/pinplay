@@ -1064,6 +1064,79 @@
 
   // ---------- bootstrap ----------
 
+  // ---------- PinPlay → bank reverse mapping (P3 ingest) ----------
+
+  function pinPlayToBank(q) {
+    if (!q || typeof q !== 'object') return null;
+    const t = String(q.type || '').toLowerCase();
+    const stem = String(q.prompt || '').trim();
+    if (!stem) return null;
+
+    const media = String(q.imageData || q.audioData || '').trim();
+    const base = {
+      pinplay_question_id: String(q.id || ''),
+      question_text: stem,
+      question_type: t,
+      options: null,
+      correct_answer: null,
+      explanation: '',
+      media_url: media,
+      pinplay_data: null,
+    };
+
+    if (t === 'mcq' || t === 'multi' || t === 'tf' || t === 'audio') {
+      const answers = Array.isArray(q.answers) ? q.answers : [];
+      base.options = answers.map((a) => String(a?.text || ''));
+      const correct = answers.filter((a) => a?.correct).map((a) => String(a?.text || ''));
+      base.correct_answer = correct.length === 1 ? correct[0] : correct;
+    } else if (t === 'text' || t === 'voice_text') {
+      const accepted = Array.isArray(q.accepted) ? q.accepted.filter(Boolean) : [];
+      base.correct_answer = accepted.length === 1 ? accepted[0] : accepted;
+    } else if (t === 'context_gap') {
+      base.correct_answer = Array.isArray(q.gaps) ? q.gaps.filter(Boolean) : [];
+    } else if (t === 'puzzle') {
+      base.options = Array.isArray(q.items) ? q.items : [];
+      base.correct_answer = base.options;
+    } else if (t === 'slider') {
+      base.correct_answer = q.target != null ? String(q.target) : '';
+      base.pinplay_data = { min: q.min, max: q.max, target: q.target, margin: q.margin, unit: q.unit };
+    } else if (t === 'pin') {
+      base.pinplay_data = { zones: q.zones || [], pinMode: q.pinMode };
+    } else if (t === 'match_pairs') {
+      base.pinplay_data = { pairs: q.pairs || [] };
+    } else if (t === 'error_hunt') {
+      base.pinplay_data = { corrected: q.corrected, correctedVariants: q.correctedVariants };
+    }
+    // For 'open', 'speaking', 'voice_record', 'image_open': stem + media is all we need.
+
+    if (q.isPoll) base.pinplay_data = Object.assign({}, base.pinplay_data, { isPoll: true });
+    return base;
+  }
+
+  async function ingestQuiz(detail) {
+    if (!detail || !detail.source_id || !detail.quiz) return;
+    if (!bridgeCfg.secret) return;  // user hasn't connected to bank yet
+    const quiz = detail.quiz;
+    const questions = (quiz.questions || []).map(pinPlayToBank).filter(Boolean);
+    if (!questions.length) return;
+
+    const payload = {
+      assignment_code: String(detail.source_id),
+      title: quiz.title || '',
+      level: quiz.level || '',
+      skill_type: quiz.skillType || '',
+      topic: quiz.topic || '',
+      questions,
+    };
+    try {
+      const resp = await bankFetch('/ingest', null, { method: 'POST', body: payload });
+      // Silent unless the user has the modal open and wants to see it.
+      console.info(`[bank] ingest ${detail.source_id}:`, resp);
+    } catch (err) {
+      console.warn('[bank] ingest failed:', err && err.message);
+    }
+  }
+
   async function showOrHideButton() {
     const btn = document.getElementById('bankSearchBtn');
     if (!btn) return;
@@ -1076,10 +1149,22 @@
     }
   }
 
+  let bridgeAvailable = false;
+
+  async function refreshBridgeAvailability() {
+    const ping = await pingBridge();
+    bridgeAvailable = !!(ping && ping.ok);
+    return bridgeAvailable;
+  }
+
   function bootstrap() {
     const btn = document.getElementById('bankSearchBtn');
     if (btn) btn.addEventListener('click', openModal);
     showOrHideButton();
+    window.addEventListener('pinplay:quiz-persisted', (e) => {
+      if (bridgeAvailable) ingestQuiz(e.detail);
+    });
+    refreshBridgeAvailability();
   }
 
   if (document.readyState === 'loading') {
