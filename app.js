@@ -881,6 +881,13 @@ function bindCollapsibleSections() {
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+
+  if (assignmentSectionToggleEl && assignmentSectionBodyEl) {
+    assignmentSectionToggleEl.addEventListener('click', () => {
+      const justExpanded = !assignmentSectionBodyEl.classList.contains('hidden');
+      if (justExpanded) refreshAssignmentsList();
+    });
+  }
 }
 
 function bindSectionToggle(triggerEl, bodyEl, options = {}) {
