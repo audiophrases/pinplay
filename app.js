@@ -5623,6 +5623,7 @@ function openAiGradeImport(code) {
 
   function close() { modal.remove(); document.removeEventListener('keydown', onKey, true); }
   function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+  document.addEventListener('keydown', onKey, true);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
   modal.addEventListener('click', (e) => {
     if (e.target.matches('[data-import-cancel]')) close();
