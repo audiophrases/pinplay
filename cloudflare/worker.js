@@ -4979,6 +4979,11 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     if (!question) return;
 
     answeredCount += 1;
+    if (question.isPoll) {
+      autoGradedCount += 1;
+      return;
+    }
+
     if (isAssignmentTeacherGradedQuestion(question)) {
       const grade = item?.teacherGrade;
       if (grade?.graded) {
@@ -4989,11 +4994,6 @@ function evaluateAssignmentAttempt(assignment, attempt) {
       } else {
         pendingTeacherGradeCount += 1;
       }
-      return;
-    }
-
-    if (question.isPoll) {
-      autoGradedCount += 1;
       return;
     }
 
@@ -5147,6 +5147,7 @@ function summarizePendingGrading(assignment) {
       const qIndex = Number(idxRaw);
       const question = questions[qIndex];
       if (!question) return;
+      if (question.isPoll) return;
       if (!isAssignmentTeacherGradedQuestion(question)) return;
       if (item?.teacherGrade?.graded) return;
       pendingGradingCount += 1;
