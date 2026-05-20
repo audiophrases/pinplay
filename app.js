@@ -5455,8 +5455,8 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         </colgroup>
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Apply?</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Who · Q</th>
+            <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply? <span class="small muted" style="font-weight:normal;">⇅</span></th>
+            <th data-toggle-sort style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to sort by Question; click again to sort by Student">Who · Q <span data-sort-indicator class="small muted" style="font-weight:normal;"></span></th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Points</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / diff</th>
@@ -5508,6 +5508,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
   body.querySelectorAll('tr[data-row-idx]').forEach((tr) => {
     const rowIdx = Number(tr.dataset.rowIdx);
     const row = sorted[rowIdx];
+    tr.__rowData = row;
     if (!row || row.bucket === 'rejected') return;
     const pointsInput = tr.querySelector('[data-edit-points]');
     const corrInput = tr.querySelector('[data-edit-correction]');
@@ -5558,6 +5559,34 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     });
   });
   updateSummary();
+
+  const toggleHeader = body.querySelector('[data-toggle-apply]');
+  toggleHeader?.addEventListener('click', () => {
+    const toggleable = rows.filter((r) => r.bucket !== 'rejected');
+    if (!toggleable.length) return;
+    const anyUnchecked = toggleable.some((r) => !r.included);
+    const newState = anyUnchecked;
+    toggleable.forEach((r) => { r.included = newState; });
+    body.querySelectorAll('[data-include-row]').forEach((cb) => { cb.checked = newState; });
+    updateSummary();
+  });
+
+  let sortMode = 'default';
+  const sortIndicator = body.querySelector('[data-sort-indicator]');
+  const sortHeader = body.querySelector('[data-toggle-sort]');
+  sortHeader?.addEventListener('click', () => {
+    sortMode = sortMode === 'question' ? 'student' : 'question';
+    if (sortIndicator) sortIndicator.textContent = sortMode === 'question' ? '↓ Q' : '↓ name';
+    const sortFns = {
+      question: (a, b) => a.qIndex - b.qIndex || (a.studentName || a.attemptId || '').localeCompare(b.studentName || b.attemptId || ''),
+      student: (a, b) => (a.studentName || a.attemptId || '').localeCompare(b.studentName || b.attemptId || '') || a.qIndex - b.qIndex,
+    };
+    const tbody = body.querySelector('tbody');
+    if (!tbody) return;
+    const trs = [...tbody.querySelectorAll('tr[data-row-idx]')];
+    trs.sort((a, b) => sortFns[sortMode](a.__rowData, b.__rowData));
+    trs.forEach((tr) => tbody.appendChild(tr));
+  });
 
   return { apply, overwrite, skip, rejected, allRows: rows };
 }
