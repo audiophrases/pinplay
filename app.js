@@ -5693,8 +5693,6 @@ function openAiGradeImport(code) {
       await aiGradeImportApply(modal, safeCode, collectIncluded(true));
     });
   });
-
-  document.addEventListener('keydown', onKey, true);
 }
 
 async function reopenAssignmentAttempt(code, attemptId) {
