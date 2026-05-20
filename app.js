@@ -6154,6 +6154,14 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
 // ============================================================================
 const CORRECTION_DIFF_PREFIX = '§§DIFF§§';
 
+function reconstructCorrectedFromDiff(diffBody) {
+  return String(diffBody || '')
+    .replace(/\[-[\s\S]+?-\]\s?/g, '')
+    .replace(/\{\+([\s\S]+?)\+\}/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function computeWordDiff(original, edited) {
   const a = String(original || '').match(/\S+/g) || [];
   const b = String(edited || '').match(/\S+/g) || [];
@@ -6423,8 +6431,16 @@ function renderGradingFocusItem() {
   const initialAudioKey = String(grade?.correctionAudioKey || '');
   const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
   const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
-  const preloadedAnswer = !initialCorrection && studentAnswerText ? studentAnswerText : '';
-  const correctionFieldValue = initialCorrection || preloadedAnswer;
+  const hasStoredDiff = initialCorrection.startsWith(CORRECTION_DIFF_PREFIX);
+  const reconstructedCorrection = hasStoredDiff
+    ? reconstructCorrectedFromDiff(initialCorrection.slice(CORRECTION_DIFF_PREFIX.length))
+    : '';
+  const preloadedAnswer = isTextAnswer && studentAnswerText && (hasStoredDiff || !initialCorrection)
+    ? studentAnswerText
+    : '';
+  const correctionFieldValue = hasStoredDiff
+    ? reconstructedCorrection
+    : (initialCorrection || preloadedAnswer);
   const correctionPlaceholder = preloadedAnswer
     ? 'Edit the answer to show corrections (red→green diff)'
     : 'Correction (optional)';
@@ -6461,6 +6477,7 @@ function renderGradingFocusItem() {
         <button class="btn primary" data-save-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
       </div>
       <textarea class="grading-focus-correction-textarea" rows="3" placeholder="${escapeHtml(correctionPlaceholder)}" data-grade-correction-input>${escapeHtml(correctionFieldValue)}</textarea>
+      <div data-grade-diff-preview style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.9rem;line-height:1.4;min-height:1.4em;display:${preloadedAnswer ? 'block' : 'none'};"></div>
     </div>
     <div data-audio-preview class="top-space" style="display:${initialAudioKey ? 'block' : 'none'};"></div>
     <div class="grading-focus-nav">
@@ -6492,6 +6509,26 @@ function renderGradingFocusItem() {
   const saveBtn = content.querySelector('[data-save-grade]');
   const pointsEl = content.querySelector('[data-grade-points-input]');
   const correctionEl = content.querySelector('[data-grade-correction-input]');
+  const diffPreviewEl = content.querySelector('[data-grade-diff-preview]');
+
+  function renderCorrectionDiffPreview() {
+    if (!diffPreviewEl) return;
+    if (!preloadedAnswer) {
+      diffPreviewEl.style.display = 'none';
+      diffPreviewEl.innerHTML = '';
+      return;
+    }
+    const edited = String(correctionEl?.value || '').trim();
+    if (!edited || edited === preloadedAnswer) {
+      diffPreviewEl.style.display = 'block';
+      diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+      return;
+    }
+    diffPreviewEl.style.display = 'block';
+    diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(preloadedAnswer, edited));
+  }
+  renderCorrectionDiffPreview();
+  correctionEl?.addEventListener('input', renderCorrectionDiffPreview);
 
   function renderAudioPreview() {
     if (!currentAudioKey) {
@@ -7007,8 +7044,16 @@ function renderStudentGradingFocusItem() {
   const initialAudioKey = String(grade?.correctionAudioKey || '');
   const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
   const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
-  const preloadedAnswer = !initialCorrection && studentAnswerText ? studentAnswerText : '';
-  const correctionFieldValue = initialCorrection || preloadedAnswer;
+  const hasStoredDiff = initialCorrection.startsWith(CORRECTION_DIFF_PREFIX);
+  const reconstructedCorrection = hasStoredDiff
+    ? reconstructCorrectedFromDiff(initialCorrection.slice(CORRECTION_DIFF_PREFIX.length))
+    : '';
+  const preloadedAnswer = isTextAnswer && studentAnswerText && (hasStoredDiff || !initialCorrection)
+    ? studentAnswerText
+    : '';
+  const correctionFieldValue = hasStoredDiff
+    ? reconstructedCorrection
+    : (initialCorrection || preloadedAnswer);
   const correctionPlaceholder = preloadedAnswer
     ? 'Edit the answer to show corrections (red→green diff)'
     : 'Correction (optional)';
@@ -7044,6 +7089,7 @@ function renderStudentGradingFocusItem() {
         <button class="btn primary" data-ssave-grade title="Save & next (Enter)">${graded ? 'Update' : 'Save'} ↵</button>
       </div>
       <textarea class="grading-focus-correction-textarea" rows="3" placeholder="${escapeHtml(correctionPlaceholder)}" data-sgrade-correction-input>${escapeHtml(correctionFieldValue)}</textarea>
+      <div data-sgrade-diff-preview style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.9rem;line-height:1.4;min-height:1.4em;display:${preloadedAnswer ? 'block' : 'none'};"></div>
     </div>
     <div data-saudio-preview class="top-space" style="display:${initialAudioKey ? 'block' : 'none'};"></div>
     <div class="grading-focus-nav">
@@ -7075,6 +7121,26 @@ function renderStudentGradingFocusItem() {
   const saveBtn = content.querySelector('[data-ssave-grade]');
   const pointsEl = content.querySelector('[data-sgrade-points-input]');
   const correctionEl = content.querySelector('[data-sgrade-correction-input]');
+  const diffPreviewEl = content.querySelector('[data-sgrade-diff-preview]');
+
+  function renderCorrectionDiffPreview() {
+    if (!diffPreviewEl) return;
+    if (!preloadedAnswer) {
+      diffPreviewEl.style.display = 'none';
+      diffPreviewEl.innerHTML = '';
+      return;
+    }
+    const edited = String(correctionEl?.value || '').trim();
+    if (!edited || edited === preloadedAnswer) {
+      diffPreviewEl.style.display = 'block';
+      diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+      return;
+    }
+    diffPreviewEl.style.display = 'block';
+    diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(preloadedAnswer, edited));
+  }
+  renderCorrectionDiffPreview();
+  correctionEl?.addEventListener('input', renderCorrectionDiffPreview);
 
   function renderAudioPreview() {
     if (!currentAudioKey) {
