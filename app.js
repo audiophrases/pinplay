@@ -4929,13 +4929,28 @@ function aiGradePackDownloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function aiGradePackBuildFinalPrompt(teacherNote) {
+  const note = String(teacherNote || '').trim();
+  if (!note) return AI_GRADE_PROMPT_TEMPLATE;
+  return `# Teacher's special instructions
+
+${note}
+
+**These instructions take priority over the default rules below.** If they
+conflict, follow what the teacher said.
+
+---
+
+${AI_GRADE_PROMPT_TEMPLATE}`;
+}
+
 function aiGradePackToast(msg, isError = false) {
   if (assignmentGradingSummaryEl) {
     assignmentGradingSummaryEl.textContent = (isError ? '⚠️ ' : '') + msg;
   }
 }
 
-async function buildAiGradePack({ scope, code, attemptId, qIndex }) {
+async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote }) {
   if (typeof window === 'undefined' || !window.JSZip) {
     throw new Error('JSZip not loaded — check that the CDN script tag is present in index.html.');
   }
@@ -4960,8 +4975,9 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex }) {
   }
 
   aiGradePackToast('Building AI grade pack — zipping…');
+  const finalPrompt = aiGradePackBuildFinalPrompt(teacherNote);
   const zip = new window.JSZip();
-  zip.file('prompt.md', AI_GRADE_PROMPT_TEMPLATE);
+  zip.file('prompt.md', finalPrompt);
   zip.file('data.json', JSON.stringify(data, null, 2));
   files.forEach((blob, path) => { zip.file(path, blob); });
   const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
@@ -4972,7 +4988,7 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex }) {
 
   let copied = false;
   try {
-    await navigator.clipboard.writeText(AI_GRADE_PROMPT_TEMPLATE);
+    await navigator.clipboard.writeText(finalPrompt);
     copied = true;
   } catch (err) {
     copied = false;
@@ -5050,6 +5066,10 @@ async function openAiGradePackPicker(code) {
     <div role="dialog" aria-modal="true" aria-label="Grade with AI" class="agp-dialog">
       <h3>Grade with AI · ${escapeHtml(safeCode)}</h3>
       <p class="small muted">Choose what to include in the pack.</p>
+      <div style="margin:4px 0 12px;">
+        <label class="small muted" style="display:block;margin-bottom:2px;font-weight:normal;">Special grading instructions for the AI (optional)</label>
+        <textarea id="aiGradePackTeacherNote" rows="2" placeholder="e.g. Focus on verb tenses. Ignore minor punctuation. Use British spelling. Praise creative ideas." style="width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical;"></textarea>
+      </div>
       <label class="agp-row">
         <input type="radio" name="aiGradePackScope" value="assignment" checked />
         <span>All teacher-graded answers in this assignment</span>
@@ -5118,6 +5138,7 @@ async function openAiGradePackPicker(code) {
       args.qIndex = Number(questionSelect?.value);
       if (!Number.isFinite(args.qIndex)) { aiGradePackToast('Pick a question first.', true); return; }
     }
+    args.teacherNote = String(modal.querySelector('#aiGradePackTeacherNote')?.value || '').trim();
     close();
     runAiGradePack(args);
   }
