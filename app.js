@@ -8097,6 +8097,13 @@ async function fetchAssignmentResults(code) {
     assignmentResultsCache = { code: safeCode, data };
     renderAssignmentResults(safeCode, data);
     enrichAssignmentAttemptsWithClass(safeCode, data).catch(() => {});
+
+    const scrollTarget = assignmentResultsSummaryEl?.parentElement || assignmentResultsSummaryEl;
+    if (scrollTarget) {
+      requestAnimationFrame(() => {
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   } catch (err) {
     if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Results error: ${err.message}`;
   }
