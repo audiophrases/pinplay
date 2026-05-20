@@ -5352,8 +5352,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       body = `<a href="${escapeHtml(resolve(a.imageUrl))}" target="_blank" rel="noopener"><img src="${escapeHtml(resolve(a.imageUrl))}" alt="answer" style="max-height:80px;max-width:160px;border-radius:4px;display:block;" /></a>`;
     } else {
       const text = a.answerText || '(blank)';
-      const truncated = text.length > 300 ? text.slice(0, 300) + '…' : text;
-      body = `<div style="max-width:260px;word-break:break-word;font-size:0.85rem;">${escapeHtml(truncated)}</div>`;
+      body = `<div style="word-break:break-word;font-size:0.85rem;white-space:pre-wrap;">${escapeHtml(text)}</div>`;
     }
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${body}</td>`;
   };
@@ -11134,10 +11133,10 @@ function escapeHtmlText(s) {
 function renderStructuredCorrectionDiff(text) {
   const safe = escapeHtmlText(text);
   return safe
-    .replace(/\[-([\s\S]+?)-\]\s*\{\+([\s\S]+?)\+\}/g, (_, a, b) =>
+    .replace(/\[-((?:(?!-\])[\s\S])+?)-\]\s*\{\+((?:(?!\+\})[\s\S])+?)\+\}/g, (_, a, b) =>
       `<span class="diff-del">${a}</span> <span class="diff-arrow">&rarr;</span> <span class="diff-ins">${b}</span>`)
-    .replace(/\[-([\s\S]+?)-\]/g, (_, a) => `<span class="diff-del">${a}</span>`)
-    .replace(/\{\+([\s\S]+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
+    .replace(/\[-((?:(?!-\])[\s\S])+?)-\]/g, (_, a) => `<span class="diff-del">${a}</span>`)
+    .replace(/\{\+((?:(?!\+\})[\s\S])+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
 }
 
 function buildCorrectionDiffHtml(correction, original) {
