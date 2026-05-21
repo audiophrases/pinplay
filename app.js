@@ -5398,9 +5398,15 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       : r.isOverwrite
         ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">↻ overwrites</div>'
         : '';
+    const pointsBlock = r.bucket === 'rejected'
+      ? `<div class="small muted" style="font-size:0.7rem;margin-top:4px;">— / ${r.maxPoints}</div>`
+      : `<div style="display:flex;align-items:baseline;gap:4px;margin-top:4px;">
+           <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:60px;" ${editableDisabled ? 'disabled' : ''}/>
+           <span class="small muted" style="font-size:0.7rem;">/ ${r.maxPoints}</span>
+         </div>`;
     const applyCell = r.bucket === 'rejected'
-      ? `<div style="color:#dc2626;font-weight:600;">✗</div><div class="small muted" style="font-size:0.7rem;">${escapeHtml(r.rejectionReason)}</div>`
-      : `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;cursor:pointer;"><input type="checkbox" data-include-row ${checked} style="width:auto;margin:0;" /><span>Apply</span></label>${subLabel}`;
+      ? `<div style="color:#dc2626;font-weight:600;">✗</div><div class="small muted" style="font-size:0.7rem;">${escapeHtml(r.rejectionReason)}</div>${pointsBlock}`
+      : `<input type="checkbox" data-include-row ${checked} title="Apply this row" style="width:16px;height:16px;margin:0;cursor:pointer;" />${pointsBlock}${subLabel}`;
 
     const tooltipParts = [
       `Verdict: ${r.verdict}`,
@@ -5430,10 +5436,6 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">${applyCell}</td>
         ${whoCell}
         ${renderAnswerCell(r)}
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
-          <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:64px;" ${editableDisabled ? 'disabled' : ''}/>
-          <div class="small muted" style="font-size:0.7rem;">/ ${r.maxPoints}</div>
-        </td>
         ${renderCorrectionCell(r, editableDisabled)}
       </tr>
     `;
@@ -5441,45 +5443,44 @@ function aiGradeImportRenderPreview(modal, response, rows) {
 
   const hasAnyOverwrite = overwrite.length > 0;
   const overwriteCheckbox = hasAnyOverwrite
-    ? `<label style="display:flex;gap:6px;align-items:center;margin:6px 0;font-weight:normal;"><input type="checkbox" data-confirm-overwrite style="width:auto;"/><span data-overwrite-label>I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
-    : '';
+    ? `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;margin:0;"><input type="checkbox" data-confirm-overwrite style="width:auto;margin:0;"/><span data-overwrite-label class="small">I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
+    : '<span></span>';
 
   const body = modal.querySelector('[data-import-body]');
   body.innerHTML = `
-    <div style="margin-bottom:12px;">
-      <strong>Preview</strong> · ${escapeHtml(String(response.assignmentCode))} · ${rows.length} result${rows.length === 1 ? '' : 's'}
-      <div class="small muted" style="margin-top:4px;" data-summary-line>
-        <!-- filled by updateSummary() -->
-      </div>
-      <div class="small muted">Rows with confidence &lt; 0.60 are highlighted. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you check "Include in apply".</div>
+    <div style="margin-bottom:8px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;">
+      <strong>${escapeHtml(String(response.assignmentCode))}</strong>
+      <span class="small muted">${rows.length} result${rows.length === 1 ? '' : 's'}</span>
+      <span class="small muted" data-summary-line></span>
+      <span class="small muted" title="Rows with confidence < 0.60 have an amber outline. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you tick their Apply box.">ⓘ hint</span>
     </div>
-    <div style="max-height:50vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
+    <div style="max-height:68vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
       <table class="agi-preview">
         <colgroup>
           <col class="col-apply" />
           <col class="col-who" />
           <col class="col-answer" />
-          <col class="col-points" />
           <col />
         </colgroup>
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
-            <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply? <span class="small muted" style="font-weight:normal;">⇅</span></th>
+            <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply? · Pts <span class="small muted" style="font-weight:normal;">⇅</span></th>
             <th data-toggle-sort style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to sort by Question; click again to sort by Student">Who · Q <span data-sort-indicator class="small muted" style="font-weight:normal;"></span></th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Points</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / diff</th>
           </tr>
         </thead>
         <tbody>${tableRows}</tbody>
       </table>
     </div>
-    ${overwriteCheckbox}
-    <div data-import-progress class="small muted" style="margin-top:8px;"></div>
-    <div class="agp-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
-      <button class="btn" type="button" data-import-cancel>Cancel</button>
-      <button class="btn primary" type="button" data-import-apply-safe>Apply</button>
-      ${hasAnyOverwrite ? `<button class="btn" type="button" data-import-apply-all>Apply incl. overwrites</button>` : ''}
+    <div data-import-progress class="small muted" style="margin-top:6px;"></div>
+    <div class="agp-actions" style="display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:12px;">${overwriteCheckbox}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" type="button" data-import-cancel>Cancel</button>
+        <button class="btn primary" type="button" data-import-apply-safe>Apply</button>
+        ${hasAnyOverwrite ? `<button class="btn" type="button" data-import-apply-all>Apply incl. overwrites</button>` : ''}
+      </div>
     </div>
   `;
 
@@ -5643,10 +5644,9 @@ function openAiGradeImport(code) {
       #aiGradeImportModal .agi-drop.over { border-color:#3b82f6;background:#eff6ff; }
       #aiGradeImportModal .agi-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:12px; }
       #aiGradeImportModal table.agi-preview { width:100%;border-collapse:collapse;font-size:0.85rem;table-layout:fixed; }
-      #aiGradeImportModal table.agi-preview col.col-apply { width:80px; }
+      #aiGradeImportModal table.agi-preview col.col-apply { width:96px; }
       #aiGradeImportModal table.agi-preview col.col-who { width:200px; }
-      #aiGradeImportModal table.agi-preview col.col-answer { width:260px; }
-      #aiGradeImportModal table.agi-preview col.col-points { width:80px; }
+      #aiGradeImportModal table.agi-preview col.col-answer { width:240px; }
       #aiGradeImportModal table.agi-preview td { word-break:break-word; }
       #aiGradeImportModal .agi-info-icon { display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e5e7eb;color:#374151;font-size:0.7rem;cursor:help;margin-left:4px;font-weight:600;font-style:normal; }
       #aiGradeImportModal .agi-info-icon:hover { background:#cbd5e1; }
