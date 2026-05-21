@@ -105,7 +105,7 @@ const BLOCKED_NICK_PATTERNS = [
 const ALLOWED_REACTIONS = new Set([
   '👍', '👏', '🔥', '😂', '🤯', '🙌', '☕', '😮', '🤔', '👀', '🧠', '❤️', '😅', '😎', '🫶', '6️⃣', '7️⃣'
 ]);
-const MAX_ROOM_EVENTS = 4000;
+const MAX_ROOM_EVENTS = 300;
 const ASSIGNMENTS_DO_NAME = '__assignments_registry__';
 
 export default {
@@ -2947,7 +2947,7 @@ export class QuizRoom {
       if (!room) return json({ error: 'Room not found.' }, 404);
 
       if (Date.now() - room.updatedAt > ROOM_TTL_MS) {
-        await this.state.storage.delete('room');
+        await this.#deleteRoom();
         return json({ error: 'Room expired.' }, 410);
       }
 
@@ -3722,12 +3722,126 @@ export class QuizRoom {
     }
   }
 
+  // Room storage layout
+  // -------------------
+  // The room used to live under a single 'room' key. With many players and
+  // questions that blob crossed the 128 KB Durable Object value cap. It is
+  // now split across keys, each one safely small:
+  //   r:meta            → pin, hostToken, dates, phase flags, settings, players
+  //   r:quiz            → quiz (large, rarely changes — diffed on save)
+  //   r:events          → eventLog (capped, frequently appended)
+  //   r:resp:<qIndex>   → one question's player responses
+  //   r:locks:<qIndex>  → one question's score locks
+  //   r:react:<qIndex>  → one question's reactions
+  // A non-enumerable __snapshot on the returned room records per-key JSON so
+  // #setRoom can skip writing slices that didn't change.
+
   async #getRoom() {
-    return (await this.state.storage.get('room')) || null;
+    await this.#migrateLegacyRoom();
+    const entries = await this.state.storage.list({ prefix: 'r:' });
+    if (!entries.has('r:meta')) return null;
+
+    const meta = entries.get('r:meta');
+    const quiz = entries.get('r:quiz') || { questions: [] };
+    const events = entries.get('r:events');
+
+    const responsesByQuestion = {};
+    const scoreLocksByQuestion = {};
+    const reactionsByQuestion = {};
+    const snapshot = new Map();
+    snapshot.set('r:quiz', JSON.stringify(quiz));
+
+    for (const [key, value] of entries) {
+      if (key.startsWith('r:resp:')) {
+        responsesByQuestion[key.slice('r:resp:'.length)] = value;
+        snapshot.set(key, JSON.stringify(value));
+      } else if (key.startsWith('r:locks:')) {
+        scoreLocksByQuestion[key.slice('r:locks:'.length)] = value;
+        snapshot.set(key, JSON.stringify(value));
+      } else if (key.startsWith('r:react:')) {
+        reactionsByQuestion[key.slice('r:react:'.length)] = value;
+        snapshot.set(key, JSON.stringify(value));
+      }
+    }
+
+    const room = {
+      ...meta,
+      quiz,
+      eventLog: Array.isArray(events) ? events : [],
+      responsesByQuestion,
+      scoreLocksByQuestion,
+      reactionsByQuestion,
+    };
+    Object.defineProperty(room, '__snapshot', {
+      value: snapshot,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+    return room;
   }
 
   async #setRoom(room) {
-    await this.state.storage.put('room', room);
+    if (!room || typeof room !== 'object') return;
+    const { quiz, eventLog, responsesByQuestion, scoreLocksByQuestion, reactionsByQuestion, ...meta } = room;
+    const storage = this.state.storage;
+    const snap = room.__snapshot instanceof Map ? room.__snapshot : new Map();
+    const writes = [
+      storage.put('r:meta', meta),
+      storage.put('r:events', Array.isArray(eventLog) ? eventLog : []),
+    ];
+
+    const quizValue = quiz || { questions: [] };
+    const quizJson = JSON.stringify(quizValue);
+    if (snap.get('r:quiz') !== quizJson) {
+      writes.push(storage.put('r:quiz', quizValue));
+      snap.set('r:quiz', quizJson);
+    }
+
+    const writeSlice = (prefix, obj) => {
+      const cur = (obj && typeof obj === 'object') ? obj : {};
+      const seen = new Set();
+      for (const [k, v] of Object.entries(cur)) {
+        const fullKey = `${prefix}${k}`;
+        seen.add(fullKey);
+        const next = JSON.stringify(v);
+        if (snap.get(fullKey) !== next) {
+          writes.push(storage.put(fullKey, v));
+          snap.set(fullKey, next);
+        }
+      }
+      // Slices that existed last load but no longer do must be deleted.
+      for (const key of [...snap.keys()]) {
+        if (key.startsWith(prefix) && !seen.has(key)) {
+          writes.push(storage.delete(key));
+          snap.delete(key);
+        }
+      }
+    };
+    writeSlice('r:resp:', responsesByQuestion);
+    writeSlice('r:locks:', scoreLocksByQuestion);
+    writeSlice('r:react:', reactionsByQuestion);
+
+    await Promise.all(writes);
+  }
+
+  async #migrateLegacyRoom() {
+    if (this.legacyRoomMigrated) return;
+    const legacy = await this.state.storage.get('room');
+    if (!legacy || typeof legacy !== 'object') {
+      this.legacyRoomMigrated = true;
+      return;
+    }
+    await this.#setRoom(legacy);
+    await this.state.storage.delete('room');
+    this.legacyRoomMigrated = true;
+  }
+
+  async #deleteRoom() {
+    const entries = await this.state.storage.list({ prefix: 'r:' });
+    const keys = [...entries.keys()];
+    keys.push('room'); // best-effort cleanup of the legacy key
+    if (keys.length) await this.state.storage.delete(keys);
   }
 }
 
