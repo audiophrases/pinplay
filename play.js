@@ -1780,10 +1780,12 @@ function renderInstantFeedbackFromState() {
   });
 
   // --- Score summary header ---
-  const correctCount = rows.filter((r) => r.status === 'correct').length;
   const pendingCount = rows.filter((r) => r.status === 'pending').length;
-  const totalCount = rows.length;
   const totalPoints = rows.reduce((sum, r) => sum + Number(r.points || 0), 0);
+  const earnablePoints = rows
+    .filter((r) => r.status !== 'pending')
+    .reduce((sum, r) => sum + Number(r.q?.points || 0), 0);
+  const percent = earnablePoints > 0 ? Math.round((totalPoints / earnablePoints) * 100) : 0;
 
   const header = document.createElement('div');
   header.className = 'assignment-results-header';
@@ -1796,7 +1798,7 @@ function renderInstantFeedbackFromState() {
   const scoreSummary = document.createElement('div');
   scoreSummary.className = 'assignment-results-score';
   const pendingTxt = pendingCount > 0 ? ` · ${pendingCount} pending ⏳` : '';
-  scoreSummary.textContent = `${correctCount}/${totalCount} correct${pendingTxt} · ${totalPoints} points`;
+  scoreSummary.textContent = `${percent}% · ${totalPoints.toLocaleString()} pts${pendingTxt}`;
   header.appendChild(scoreSummary);
 
   panel.appendChild(header);
