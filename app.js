@@ -348,7 +348,7 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "error_hunt": {
     "name": "Error Hunting",
-    "rules": "CRITICAL: The 'prompt' field MUST ONLY contain the sentence with errors — no instructions, labels, or prefixes (e.g. never write 'Fix this: ...'). The app scores by word-level diff between prompt and corrected; extra words break scoring. Students tap wrong tokens. 'corrected' must be the full fixed sentence.",
+    "rules": "CRITICAL: The 'prompt' field MUST ONLY contain the sentence with errors — no instructions, labels, or prefixes (e.g. never write 'Fix this: ...'). The app scores by word-level diff between prompt and corrected; extra words break scoring. Students tap wrong tokens. 'corrected' must be the full fixed sentence. If multiple corrections are valid, list each full sentence in 'correctedVariants'.",
     "constraints": { "maxTokens": 40 },
     "pedagogicalUses": ["Editing and proofreading routines.", "Metalinguistic awareness tasks."],
     "ttsStrategy": "audioText can read the incorrect sentence to trigger listening-for-errors.",
