@@ -1995,9 +1995,7 @@ export class QuizRoom {
           quiz,
         };
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        assignments[assignment.code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAssignmentBase(this.state.storage, assignment.code, assignment);
 
         return json({
           ok: true,
@@ -2144,8 +2142,8 @@ export class QuizRoom {
 
         assignment.attempts[attempt.id] = attempt;
         assignment.updatedAt = now;
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attempt.id, attempt);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, alreadyStarted: false, attempt: publicAssignmentAttempt(assignment, attempt) }, 201);
       }
@@ -2228,8 +2226,8 @@ export class QuizRoom {
 
         attempt.updatedAt = Date.now();
         assignment.updatedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
       }
@@ -2289,8 +2287,7 @@ export class QuizRoom {
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         attempt.reviewedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
         this.broadcastTeacherUpdate(code);
         return json({ ok: true });
       }
@@ -2322,8 +2319,7 @@ export class QuizRoom {
         });
         attempt.updatedAt = Date.now();
         assignment.updatedAt = attempt.updatedAt;
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
 
         return json({ ok: true, count: attempt.focusEvents.length });
       }
@@ -2370,8 +2366,8 @@ export class QuizRoom {
         attempt.updatedAt = now;
 
         assignment.updatedAt = now;
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         const includeAnswers = assignment.feedbackMode === 'instant';
         return json({
@@ -2428,8 +2424,8 @@ export class QuizRoom {
         attempt.updatedAt = attempt.submittedAt;
         assignment.updatedAt = attempt.submittedAt;
 
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted;
         return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
@@ -2455,8 +2451,8 @@ export class QuizRoom {
         attempt.updatedAt = Date.now();
         assignment.updatedAt = attempt.updatedAt;
 
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
       }
@@ -2613,8 +2609,8 @@ export class QuizRoom {
 
         delete assignment.attempts[attemptId];
         assignment.updatedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await deleteAttemptKey(this.state.storage, code, attemptId);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, deleted: attemptId });
       }
@@ -2645,8 +2641,8 @@ export class QuizRoom {
 
         delete assignment.attempts[attemptId];
         assignment.updatedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await deleteAttemptKey(this.state.storage, code, attemptId);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, deleted: attemptId });
       }
@@ -2678,8 +2674,10 @@ export class QuizRoom {
         if (!notified.length) return json({ error: 'No matching attempts.' }, 404);
 
         assignment.updatedAt = now;
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        for (const attemptId of notified) {
+          await saveAttempt(this.state.storage, code, attemptId, assignment.attempts[attemptId]);
+        }
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, notifiedAt: now, notified });
       }
@@ -2712,10 +2710,11 @@ export class QuizRoom {
         const plan = [];
         let totalAttempts = 0;
         let appliedCount = 0;
+        const changedAttempts = [];
 
         Object.entries(assignments || {}).forEach(([code, assignment]) => {
           const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-          Object.values(attempts).forEach((a) => {
+          Object.entries(attempts).forEach(([attemptId, a]) => {
             totalAttempts += 1;
             const nameKey = String(a?.studentName || '').trim().toLowerCase();
             if (!nameKey) return;
@@ -2737,12 +2736,15 @@ export class QuizRoom {
               a.studentKey = newKey;
               a.updatedAt = Date.now();
               appliedCount += 1;
+              changedAttempts.push({ code, attemptId, attempt: a });
             }
           });
         });
 
-        if (!dryRun && appliedCount > 0) {
-          await this.state.storage.put('assignments', assignments);
+        if (!dryRun && changedAttempts.length > 0) {
+          for (const { code, attemptId, attempt } of changedAttempts) {
+            await saveAttempt(this.state.storage, code, attemptId, attempt);
+          }
         }
 
         return json({ ok: true, dryRun, totalAttempts, plannedCount: plan.length, appliedCount, plan });
@@ -2759,8 +2761,7 @@ export class QuizRoom {
 
         assignment.active = !!body?.active;
         assignment.updatedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
       }
@@ -2776,8 +2777,7 @@ export class QuizRoom {
 
         assignment.archived = !!body?.archived;
         assignment.updatedAt = Date.now();
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
       }
@@ -2791,8 +2791,7 @@ export class QuizRoom {
         const assignment = assignments?.[code] || null;
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
-        delete assignments[code];
-        await this.state.storage.put('assignments', assignments);
+        await deleteAssignmentKeys(this.state.storage, code);
 
         return json({ ok: true, deleted: code });
       }
@@ -2884,8 +2883,7 @@ export class QuizRoom {
         }
 
         assignment.updatedAt = now;
-        assignments[code] = assignment;
-        await this.state.storage.put('assignments', assignments);
+        await saveAssignmentFull(this.state.storage, code, assignment);
 
         return json({
           ok: true,
@@ -5222,10 +5220,81 @@ function buildTeacherGradingItems(assignment, attempt) {
     .sort((a, b) => Number(a.qIndex || 0) - Number(b.qIndex || 0));
 }
 
+// Storage layout
+// --------------
+// Each assignment is split across multiple keys so no single value approaches
+// the Durable Object 128 KB cap:
+//   a:<code>             → assignment metadata + quiz (no attempts)
+//   a:<code>:t:<attemptId> → one attempt (answers, grades, focus events…)
+// The legacy single-blob `assignments` key (everything under one row) is
+// migrated on first read and then removed.
+
 async function loadAssignmentsMap(storage) {
-  const map = await storage.get('assignments');
-  if (!map || typeof map !== 'object') return {};
+  await migrateLegacyAssignmentsBlob(storage);
+
+  const entries = await storage.list({ prefix: 'a:' });
+  const map = {};
+  for (const [key, value] of entries) {
+    const rest = key.slice(2);
+    const sep = rest.indexOf(':t:');
+    if (sep === -1) {
+      const code = rest;
+      const existingAttempts = (map[code] && map[code].attempts) || {};
+      map[code] = { ...(value || {}), attempts: existingAttempts };
+    } else {
+      const code = rest.slice(0, sep);
+      const attemptId = rest.slice(sep + 3);
+      if (!map[code]) map[code] = { attempts: {} };
+      if (!map[code].attempts) map[code].attempts = {};
+      map[code].attempts[attemptId] = value;
+    }
+  }
   return map;
+}
+
+async function migrateLegacyAssignmentsBlob(storage) {
+  const legacy = await storage.get('assignments');
+  if (!legacy || typeof legacy !== 'object') return;
+  for (const [code, assignment] of Object.entries(legacy)) {
+    if (!assignment || typeof assignment !== 'object') continue;
+    const attempts = (assignment.attempts && typeof assignment.attempts === 'object') ? assignment.attempts : {};
+    await saveAssignmentBase(storage, code, assignment);
+    for (const [attemptId, attempt] of Object.entries(attempts)) {
+      await saveAttempt(storage, code, attemptId, attempt);
+    }
+  }
+  await storage.delete('assignments');
+}
+
+async function saveAssignmentBase(storage, code, assignment) {
+  const base = { ...(assignment || {}) };
+  delete base.attempts;
+  await storage.put(`a:${code}`, base);
+}
+
+async function saveAttempt(storage, code, attemptId, attempt) {
+  await storage.put(`a:${code}:t:${attemptId}`, attempt);
+}
+
+async function saveAssignmentFull(storage, code, assignment) {
+  await saveAssignmentBase(storage, code, assignment);
+  const attempts = (assignment && assignment.attempts && typeof assignment.attempts === 'object') ? assignment.attempts : {};
+  for (const [attemptId, attempt] of Object.entries(attempts)) {
+    await saveAttempt(storage, code, attemptId, attempt);
+  }
+}
+
+async function deleteAttemptKey(storage, code, attemptId) {
+  await storage.delete(`a:${code}:t:${attemptId}`);
+}
+
+async function deleteAssignmentKeys(storage, code) {
+  const entries = await storage.list({ prefix: `a:${code}` });
+  const toDelete = [];
+  for (const key of entries.keys()) {
+    if (key === `a:${code}` || key.startsWith(`a:${code}:`)) toDelete.push(key);
+  }
+  if (toDelete.length) await storage.delete(toDelete);
 }
 
 async function nextAssignmentCode(storage) {
