@@ -5204,6 +5204,8 @@ async function aiGradeImportLoadContext(safeCode) {
   gradeData.forEach((data, i) => {
     if (!data) return;
     const qi = teacherQIndexes[i];
+    const qInfo = questionMap.get(qi);
+    if (qInfo) qInfo.prompt = String(data?.question?.prompt || '');
     const items = Array.isArray(data?.items) ? data.items : [];
     items.forEach((it) => {
       const attemptId = String(it?.attemptId || '');
@@ -5258,6 +5260,7 @@ function aiGradeImportBucketRow(result, ctx) {
   if (!question.teacherGraded) { row.bucket = 'rejected'; row.rejectionReason = `Q${row.qIndex + 1} is auto-graded`; return row; }
   row.maxPoints = question.maxPoints;
   row.qType = question.qType;
+  row.qPrompt = String(question.prompt || '');
   row.studentName = ctx.studentNames.get(row.attemptId) || '';
 
   if (row.qId && question.qId && row.qId !== question.qId) {
@@ -5406,9 +5409,16 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     if (r.rationale) tooltipParts.push(`\nRationale: ${r.rationale}`);
     if (r.flags?.length) tooltipParts.push(`Flags: ${r.flags.join(', ')}`);
     const tooltip = tooltipParts.join('\n').replace(/"/g, '&quot;');
+    const promptText = String(r.qPrompt || '').trim();
+    const promptShort = promptText.length > 140 ? promptText.slice(0, 140) + '…' : promptText;
+    const promptTooltip = promptText.replace(/"/g, '&quot;');
+    const promptBlock = promptText
+      ? `<div class="small muted" style="margin-top:4px;font-style:italic;line-height:1.3;" title="${promptTooltip}">${escapeHtml(promptShort)}</div>`
+      : '';
     const whoCell = `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
       <div style="font-weight:600;">${escapeHtml(r.studentName || r.attemptId)}</div>
       <div class="small muted" style="margin-top:2px;">Q${r.qIndex + 1}</div>
+      ${promptBlock}
       <div style="margin-top:4px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
         <span class="agi-verdict ${escapeHtml(r.verdict)}">${escapeHtml(r.verdict)}</span>
         <span class="agi-info-icon" title="${tooltip}">i</span>
@@ -5634,7 +5644,7 @@ function openAiGradeImport(code) {
       #aiGradeImportModal .agi-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:12px; }
       #aiGradeImportModal table.agi-preview { width:100%;border-collapse:collapse;font-size:0.85rem;table-layout:fixed; }
       #aiGradeImportModal table.agi-preview col.col-apply { width:80px; }
-      #aiGradeImportModal table.agi-preview col.col-who { width:130px; }
+      #aiGradeImportModal table.agi-preview col.col-who { width:200px; }
       #aiGradeImportModal table.agi-preview col.col-answer { width:260px; }
       #aiGradeImportModal table.agi-preview col.col-points { width:80px; }
       #aiGradeImportModal table.agi-preview td { word-break:break-word; }
