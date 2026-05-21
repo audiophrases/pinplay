@@ -5399,10 +5399,10 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">↻ overwrites</div>'
         : '';
     const pointsBlock = r.bucket === 'rejected'
-      ? `<div class="small muted" style="font-size:0.7rem;margin-top:4px;">— / ${r.maxPoints}</div>`
-      : `<div style="display:flex;align-items:baseline;gap:4px;margin-top:4px;">
-           <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:60px;" ${editableDisabled ? 'disabled' : ''}/>
-           <span class="small muted" style="font-size:0.7rem;">/ ${r.maxPoints}</span>
+      ? `<div class="small muted" style="font-size:0.75rem;margin-top:4px;">— / ${r.maxPoints}</div>`
+      : `<div style="margin-top:4px;">
+           <input type="number" data-edit-points min="0" max="${r.maxPoints}" value="${r.points}" style="width:64px;display:block;" ${editableDisabled ? 'disabled' : ''}/>
+           <div class="small muted" style="font-size:0.75rem;margin-top:1px;">/ ${r.maxPoints}</div>
          </div>`;
     const applyCell = r.bucket === 'rejected'
       ? `<div style="color:#dc2626;font-weight:600;">✗</div><div class="small muted" style="font-size:0.7rem;">${escapeHtml(r.rejectionReason)}</div>${pointsBlock}`
@@ -5419,7 +5419,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const promptShort = promptText.length > 140 ? promptText.slice(0, 140) + '…' : promptText;
     const promptTooltip = promptText.replace(/"/g, '&quot;');
     const promptBlock = promptText
-      ? `<div class="small muted" style="margin-top:4px;font-style:italic;line-height:1.3;" title="${promptTooltip}">${escapeHtml(promptShort)}</div>`
+      ? `<div class="muted" style="margin-top:4px;font-style:italic;line-height:1.35;font-size:0.92rem;" title="${promptTooltip}">${escapeHtml(promptShort)}</div>`
       : '';
     const whoCell = `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
       <div style="font-weight:600;">${escapeHtml(r.studentName || r.attemptId)}</div>
@@ -5464,7 +5464,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         </colgroup>
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
-            <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply? · Pts <span class="small muted" style="font-weight:normal;">⇅</span></th>
+            <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply</th>
             <th data-toggle-sort style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to sort by Question; click again to sort by Student">Who · Q <span data-sort-indicator class="small muted" style="font-weight:normal;"></span></th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / diff</th>
