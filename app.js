@@ -330,7 +330,7 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "context_gap": {
     "name": "Gap Fill (Fill in Blank)",
-    "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order.",
+    "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order. For multiple acceptable answers in one gap, separate with a comma (e.g. 'dreamed, dreamt').",
     "constraints": { "maxGaps": 10, "maxTextLength": 120 },
     "pedagogicalUses": ["Grammar and syntax practice in context.", "Focused vocabulary retrieval in sentences."],
     "ttsStrategy": "audioText can read sentence with pauses where blanks appear.",
