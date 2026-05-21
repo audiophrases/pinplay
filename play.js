@@ -137,7 +137,7 @@ function init() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
   if (rerollNameBtn) rerollNameBtn.addEventListener('click', rerollRandomName);
-  if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', finalizeAssignmentAttempt);
+  if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', handleFinalizeClick);
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
@@ -1592,7 +1592,7 @@ function exitAssignmentReviewMode(code, checkData) {
   }
 }
 
-async function finalizeAssignmentAttempt() {
+async function finalizeAssignmentAttempt({ force = false } = {}) {
   try {
     if (live.player.mode !== 'assignment') return;
     const code = String(live.player.assignment.code || '').trim();
@@ -1604,7 +1604,7 @@ async function finalizeAssignmentAttempt() {
     if (joinFinalizeBtn) joinFinalizeBtn.disabled = true;
     const data = await api('/api/assignment/submit', {
       method: 'POST',
-      body: { code, attemptId },
+      body: { code, attemptId, force: !!force },
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
@@ -1622,6 +1622,95 @@ async function finalizeAssignmentAttempt() {
   } finally {
     if (joinFinalizeBtn) joinFinalizeBtn.disabled = false;
   }
+}
+
+function handleFinalizeClick() {
+  if (live.player.mode !== 'assignment') return;
+  const state = live.player.assignment.state;
+  const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
+  const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
+  const blanks = [];
+  for (let i = 0; i < total; i += 1) if (!answered.has(i)) blanks.push(i);
+  // Instant mode lets students submit with any subset; deferred modes require
+  // a deliberate confirmation when blanks remain.
+  const requiresConfirm = state?.attempt?.assignment?.feedbackMode !== 'instant' && blanks.length > 0;
+  if (!requiresConfirm) {
+    finalizeAssignmentAttempt().catch(() => { });
+    return;
+  }
+  showUnansweredConfirmModal(blanks);
+}
+
+function showUnansweredConfirmModal(blankIndexes) {
+  const existing = document.getElementById('unansweredConfirmModal');
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'unansweredConfirmModal';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--card-bg, #fff);color:var(--text, #111);border-radius:12px;max-width:480px;width:100%;padding:1.25rem 1.25rem 1rem;box-shadow:0 18px 50px rgba(0,0,0,0.35);max-height:90vh;overflow:auto;';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:0.4rem;';
+  title.textContent = `${blankIndexes.length} question${blankIndexes.length === 1 ? '' : 's'} still blank`;
+  panel.appendChild(title);
+
+  const body = document.createElement('div');
+  body.style.cssText = 'font-size:0.95rem;line-height:1.4;margin-bottom:0.75rem;';
+  body.textContent = 'These questions will be marked as blank (0 points). Tap a number to go back and answer it, or submit anyway.';
+  panel.appendChild(body);
+
+  const chipsWrap = document.createElement('div');
+  chipsWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:1rem;';
+  blankIndexes.forEach((qIndex) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.textContent = `Q${qIndex + 1}`;
+    chip.style.cssText = 'border:1px solid var(--border, #d0d0d8);background:var(--surface, #f5f5fa);color:inherit;border-radius:999px;padding:0.25rem 0.65rem;font-size:0.85rem;font-weight:600;cursor:pointer;';
+    chip.addEventListener('click', () => {
+      backdrop.remove();
+      jumpToAssignmentQuestion(qIndex);
+    });
+    chipsWrap.appendChild(chip);
+  });
+  panel.appendChild(chipsWrap);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn';
+  cancelBtn.textContent = 'Go back and answer';
+  cancelBtn.addEventListener('click', () => {
+    backdrop.remove();
+    if (blankIndexes.length > 0) jumpToAssignmentQuestion(blankIndexes[0]);
+  });
+  actions.appendChild(cancelBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'button';
+  submitBtn.className = 'btn primary';
+  submitBtn.textContent = `Submit with ${blankIndexes.length} blank${blankIndexes.length === 1 ? '' : 's'}`;
+  submitBtn.addEventListener('click', () => {
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    finalizeAssignmentAttempt({ force: true })
+      .catch(() => { })
+      .finally(() => { backdrop.remove(); });
+  });
+  actions.appendChild(submitBtn);
+
+  panel.appendChild(actions);
+  backdrop.appendChild(panel);
+
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) backdrop.remove();
+  });
+
+  document.body.appendChild(backdrop);
 }
 
 function hideAssignmentCompleteMessage() {
@@ -2354,20 +2443,19 @@ function renderPlayerState(state) {
   if (joinFinalizeBtn) {
     const showFinalize = live.player.mode === 'assignment';
     joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
-    // For non-instant feedback, require all questions answered before allowing submit
-    // (matches the server-side gate). Instant mode keeps the legacy "any answer ok" rule.
+    // The button stays enabled even with unanswered questions — clicking it
+    // opens a confirmation listing the blanks. The server still validates,
+    // and on confirm we pass force:true to bypass the UNANSWERED_REMAINING gate.
     const totalForGate = Number(state.totalQuestions || 0);
     const answeredForGate = Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.length : 0;
     const remainingForGate = Math.max(0, totalForGate - answeredForGate);
-    const requiresAllAnswered = state.feedbackMode !== 'instant' && totalForGate > 0;
-    const blockedByUnanswered = requiresAllAnswered && remainingForGate > 0;
-    joinFinalizeBtn.disabled = assignmentSubmitted || blockedByUnanswered;
+    joinFinalizeBtn.disabled = !!assignmentSubmitted;
     if (assignmentSubmitted) {
       joinFinalizeBtn.textContent = 'Assignment submitted';
       joinFinalizeBtn.title = '';
-    } else if (blockedByUnanswered) {
+    } else if (remainingForGate > 0) {
       joinFinalizeBtn.textContent = `Submit · ${remainingForGate} unanswered`;
-      joinFinalizeBtn.title = `Answer all ${totalForGate} questions before submitting.`;
+      joinFinalizeBtn.title = `${remainingForGate} of ${totalForGate} questions are blank. You'll be asked to confirm before submitting.`;
     } else {
       joinFinalizeBtn.textContent = 'Submit assignment';
       joinFinalizeBtn.title = '';

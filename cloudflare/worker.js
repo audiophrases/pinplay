@@ -1271,13 +1271,14 @@ export default {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
       const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const force = !!body?.force;
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/submit', {
         method: 'POST',
-        body: JSON.stringify({ code, attemptId }),
+        body: JSON.stringify({ code, attemptId, force }),
       }));
     }
 
@@ -2404,8 +2405,10 @@ export class QuizRoom {
           return json({ error: 'Answer at least one question before submitting.' }, 409);
         }
         // Deferred-feedback assignments are global exercises: require every question
-        // answered before the student finalizes. Instant mode keeps the legacy ≥1 rule.
-        if (String(assignment.feedbackMode || 'none') !== 'instant') {
+        // answered before the student finalizes — UNLESS the client passes
+        // `force: true`, signalling the student knowingly confirmed they're leaving
+        // some blank. Instant mode keeps the legacy ≥1 rule.
+        if (String(assignment.feedbackMode || 'none') !== 'instant' && !body?.force) {
           const totalQuestions = Math.max(0, Math.round(Number(assignment.totalQuestions
             || (Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions.length : 0))));
           if (totalQuestions > 0 && Number(metrics.answeredCount || 0) < totalQuestions) {
