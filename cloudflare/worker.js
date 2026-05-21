@@ -3612,7 +3612,7 @@ export class QuizRoom {
             lock.awardedAt = Date.now();
             room.scoreLocksByQuestion[qIndex][playerId] = lock;
           } else if (question.type === 'context_gap' && Number(verdict.partialScore || 0) > 0 && Number(verdict.partialTotal || 0) > 0) {
-            const proportional = Math.round(basePoints * (verdict.partialScore / verdict.partialTotal));
+            const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
             pointsAwarded = proportional + applyBetScore(basePoints, 0, false, bet);
           } else {
             // FIX: Actually apply the penalty math for incorrect answers!
@@ -5005,7 +5005,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
       correctCount += 1;
       autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
     } else if (question.type === 'context_gap' && Number(verdict?.partialScore || 0) > 0 && Number(verdict?.partialTotal || 0) > 0) {
-      const proportional = Math.round(basePoints * (verdict.partialScore / verdict.partialTotal));
+      const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
       autoScore += proportional + applyBetScore(basePoints, 0, false, item?.bet);
     } else {
       autoScore += applyBetScore(basePoints, 0, false, item?.bet); // <-- FIXED: Uses bet penalty
@@ -5049,7 +5049,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
         const partialScore = Number(verdict?.partialScore || 0);
         const partialTotal = Number(verdict?.partialTotal || 0);
         if (partialScore > 0 && partialTotal > 0) {
-          points = Math.round(basePoints * (partialScore / partialTotal));
+          points = Math.floor(basePoints * (partialScore / partialTotal));
         }
       }
       return {

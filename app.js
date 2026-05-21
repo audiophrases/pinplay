@@ -12571,7 +12571,7 @@ function bindSoloEvents() {
       soloGame.score += pts;
       setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
     } else if (q.type === 'context_gap' && Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
-      const proportional = Math.round(basePoints * (result.partialScore / result.partialTotal));
+      const proportional = Math.floor(basePoints * (result.partialScore / result.partialTotal));
       const betPenalty = live.player.selectedBet === 3 ? Math.round(basePoints * 0.4) : 0;
       pts = proportional - betPenalty;
       soloGame.score += pts;
