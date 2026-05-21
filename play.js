@@ -496,11 +496,18 @@ function makeAssignmentStudentKey(name) {
   return base ? `usr_${base}`.slice(0, 96) : '';
 }
 
-function deriveAssignmentCurrentIndex(state) {
+function deriveAssignmentCurrentIndex(state, fromIndex = 0) {
   const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
   if (total <= 0) return 0;
   const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
-  for (let i = 0; i < total; i += 1) {
+  const start = Math.max(0, Math.min(Number(fromIndex) || 0, total - 1));
+  // Prefer the next unanswered at or after `start` (keeps forward momentum
+  // after the student deliberately skipped earlier blanks with the arrow keys).
+  for (let i = start; i < total; i += 1) {
+    if (!answered.has(i)) return i;
+  }
+  // Only after reaching the end do we wrap back to fill in any skipped blanks.
+  for (let i = 0; i < start; i += 1) {
     if (!answered.has(i)) return i;
   }
   return total - 1;
@@ -758,8 +765,12 @@ async function loadAssignmentState() {
   live.player.assignment.state = data;
 
   const total = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
-  const autoIdx = deriveAssignmentCurrentIndex(data);
-  if (live.player.assignment.forceAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
+  const isAutoAdvance = !!live.player.assignment.forceAutoAdvance;
+  // On post-save advance, search forward from the question we just answered so the
+  // student progresses sequentially. On first load (no currentIndex yet) start from 0.
+  const searchFrom = isAutoAdvance ? (Number(live.player.assignment.currentIndex || 0) + 1) : 0;
+  const autoIdx = deriveAssignmentCurrentIndex(data, searchFrom);
+  if (isAutoAdvance || !Number.isFinite(Number(live.player.assignment.currentIndex))) {
     live.player.assignment.currentIndex = autoIdx;
     live.player.assignment.forceAutoAdvance = false;
   } else {
