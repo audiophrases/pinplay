@@ -485,6 +485,8 @@ const gameControlsSectionToggleEl = document.getElementById('gameControlsSection
 const gameControlsCardBodyEl = document.getElementById('gameControlsCardBody');
 const assignmentSectionToggleEl = document.getElementById('assignmentSectionToggle');
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
+const workspacesSectionToggleEl = document.getElementById('workspacesSectionToggle');
+const workspacesCardBodyEl = document.getElementById('workspacesCardBody');
 
 // Create-side auth
 const createAuthCard = document.getElementById('createAuthCard');
@@ -923,6 +925,7 @@ function getTeacherCollapsibleSectionPairs() {
     [liveScreenSectionToggleEl, liveScreenCardBodyEl],
     [gameControlsSectionToggleEl, gameControlsCardBodyEl],
     [assignmentSectionToggleEl, assignmentSectionBodyEl],
+    [workspacesSectionToggleEl, workspacesCardBodyEl],
   ].filter(([triggerEl, bodyEl]) => !!triggerEl && !!bodyEl);
 }
 
@@ -951,6 +954,7 @@ function bindCollapsibleSections() {
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+  bindSectionToggle(workspacesSectionToggleEl, workspacesCardBodyEl, { defaultCollapsed: true, keyboard: true });
 
   if (assignmentSectionToggleEl && assignmentSectionBodyEl) {
     assignmentSectionToggleEl.addEventListener('click', () => {
@@ -12158,29 +12162,23 @@ function initWorkspacesAdmin() {
   workspacesAdminInited = true;
 
   const card = document.getElementById('workspacesCard');
-  const toggle = document.getElementById('workspacesSectionToggle');
-  const body = document.getElementById('workspacesCardBody');
+  const toggle = workspacesSectionToggleEl;
+  const body = workspacesCardBodyEl;
   const createBtn = document.getElementById('createWorkspaceBtn');
   const refreshBtn = document.getElementById('refreshWorkspacesBtn');
   if (!card || !toggle || !body) return;
 
-  const setExpanded = async (expanded) => {
-    if (expanded) {
-      if (!await ensureOwnerPassword('Enter teacher password to view guest workspaces:')) return;
-      body.classList.remove('hidden');
-      toggle.setAttribute('aria-expanded', 'true');
-      renderWorkspaces();
-    } else {
-      body.classList.add('hidden');
-      toggle.setAttribute('aria-expanded', 'false');
-    }
-  };
-
+  // The collapse/expand mechanics are handled by bindSectionToggle in
+  // bindCollapsibleSections() (same as Quiz builder / Live screen / Game
+  // controls), so the global 'C' keyboard shortcut covers this panel too.
+  // Here we just hook the click event to ALSO ensure the owner password is
+  // in memory and render the list when the user opens the panel.
   toggle.addEventListener('click', () => {
-    setExpanded(body.classList.contains('hidden'));
-  });
-  toggle.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(body.classList.contains('hidden')); }
+    const justExpanded = !body.classList.contains('hidden');
+    if (!justExpanded) return;
+    ensureOwnerPassword('Enter teacher password to view guest workspaces:').then((ok) => {
+      if (ok) renderWorkspaces();
+    });
   });
 
   if (createBtn) createBtn.addEventListener('click', createWorkspaceFromForm);
