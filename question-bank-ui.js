@@ -1152,6 +1152,11 @@
   // Sync button bypasses this throttle.
   const BACKFILL_LAST_RUN_KEY = 'pinplay.bank.lastBackfillAt';
   const BACKFILL_AUTO_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12h
+  // Per-quiz timestamp cache so we only re-fetch quizzes that actually changed
+  // since the last successful ingest. Saves N x /assignments/get-quiz row reads
+  // per backfill when nothing has been edited (the common case). Also fixes
+  // the historical "bank never refreshes a known code" staleness bug.
+  const BACKFILL_KNOWN_TS_KEY = 'pinplay.bank.knownTimestamps.v1';
   let backfilledThisSession = false;
   let backfillInFlight = false;
 
@@ -1166,6 +1171,18 @@
   }
   function _shouldAutoBackfill() {
     return Date.now() - _readLastBackfillAt() > BACKFILL_AUTO_THROTTLE_MS;
+  }
+
+  function _readKnownTimestamps() {
+    try {
+      const raw = localStorage.getItem(BACKFILL_KNOWN_TS_KEY);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === 'object' ? obj : {};
+    } catch { return {}; }
+  }
+  function _writeKnownTimestamps(map) {
+    try { localStorage.setItem(BACKFILL_KNOWN_TS_KEY, JSON.stringify(map || {})); } catch { /* */ }
   }
 
   function _getPassword() {
@@ -1224,8 +1241,9 @@
       }
     }
 
-    const stats = { assignments: { tried: 0, ingested: 0, errors: 0 },
-                    cloud:       { tried: 0, ingested: 0, errors: 0 } };
+    const stats = { assignments: { tried: 0, ingested: 0, errors: 0, skipped: 0 },
+                    cloud:       { tried: 0, ingested: 0, errors: 0, skipped: 0 } };
+    const knownTs = force ? {} : _readKnownTimestamps();
     if (status) status('Listing PinPlay assignments…', 'muted');
 
     // 1. Assignments
@@ -1238,7 +1256,17 @@
       for (const a of list) {
         const code = String(a?.code || '').trim();
         if (!code || (a?.className === '__preview__')) continue;
-        if (!force && known.has(code)) continue;
+        // Skip when the bank has an at-least-as-fresh copy. `updatedAt` on
+        // the assignment ticks whenever the teacher edits the quiz, students
+        // answer, or grading happens. We compare against the timestamp we
+        // saved after the last successful ingest.
+        const serverTs = Number(a?.updatedAt || 0) || 0;
+        const cacheKey = `a:${code}`;
+        const knownAtTs = Number(knownTs[cacheKey] || 0) || 0;
+        if (!force && known.has(code) && serverTs && knownAtTs >= serverTs) {
+          stats.assignments.skipped++;
+          continue;
+        }
         stats.assignments.tried++;
         try {
           const qd = await window.api('/api/assignments/get-quiz', {
@@ -1246,7 +1274,10 @@
             body: { password, code },
           });
           const result = await _ingestPinPlayQuiz(code, qd?.quiz);
-          if (result) stats.assignments.ingested++;
+          if (result) {
+            stats.assignments.ingested++;
+            if (serverTs) knownTs[cacheKey] = serverTs;
+          }
         } catch {
           stats.assignments.errors++;
         }
@@ -1270,14 +1301,25 @@
         if (!key) continue;
         const r2Id = key.replace(/^quizzes\//, '').replace(/\.json$/, '');
         if (!r2Id) continue;
-        if (!force && known.has(r2Id)) continue;
+        // Cloud quizzes have an R2 `uploaded` timestamp that only changes on
+        // re-upload — perfect skip signal.
+        const uploadedTs = cq?.uploaded ? new Date(cq.uploaded).getTime() : 0;
+        const cacheKey = `c:${r2Id}`;
+        const knownUpTs = Number(knownTs[cacheKey] || 0) || 0;
+        if (!force && known.has(r2Id) && uploadedTs && knownUpTs >= uploadedTs) {
+          stats.cloud.skipped++;
+          continue;
+        }
         stats.cloud.tried++;
         try {
           const res = await fetch(`${base}/api/media/${key}`);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const loaded = await res.json();
           const result = await _ingestPinPlayQuiz(r2Id, loaded);
-          if (result) stats.cloud.ingested++;
+          if (result) {
+            stats.cloud.ingested++;
+            if (uploadedTs) knownTs[cacheKey] = uploadedTs;
+          }
         } catch {
           stats.cloud.errors++;
         }
@@ -1289,10 +1331,13 @@
     backfilledThisSession = true;
     backfillInFlight = false;
     _writeLastBackfillAt(Date.now());
+    _writeKnownTimestamps(knownTs);
 
+    const skippedTotal = stats.assignments.skipped + stats.cloud.skipped;
     const summary =
       `Synced: ${stats.assignments.ingested} assignment(s)` +
       ` + ${stats.cloud.ingested} cloud quiz(zes)` +
+      (skippedTotal ? ` · ${skippedTotal} unchanged (skipped)` : '') +
       ((stats.assignments.errors + stats.cloud.errors)
         ? ` · ${stats.assignments.errors + stats.cloud.errors} skipped (errors)` : '');
     if (status) status(summary, 'ok');
