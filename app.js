@@ -487,6 +487,8 @@ const assignmentSectionToggleEl = document.getElementById('assignmentSectionTogg
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 const workspacesSectionToggleEl = document.getElementById('workspacesSectionToggle');
 const workspacesCardBodyEl = document.getElementById('workspacesCardBody');
+const builderMaintenanceToggleEl = document.getElementById('builderMaintenanceToggle');
+const builderMaintenanceBodyEl = document.getElementById('builderMaintenanceBody');
 
 // Create-side auth
 const createAuthCard = document.getElementById('createAuthCard');
@@ -951,6 +953,7 @@ function bindCollapsibleSections() {
   bindSectionToggle(builderSettingsToggleEl, builderSettingsBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(builderTypesToggleEl, builderTypesBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(builderQuestionsToggleEl, builderQuestionsBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(builderMaintenanceToggleEl, builderMaintenanceBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
@@ -12196,7 +12199,7 @@ function initWorkspacesAdmin() {
 async function purgeOrphanMedia() {
   if (!await ensureOwnerPassword('Enter teacher password to purge orphan media:')) return;
   if (!window.confirm('Delete every R2 media folder (assign-*/, preview-*/) that no current assignment references?\n\nThis cleans up leaked media from past deletions. It will NOT touch any active assignment, cloud-saved quiz, or guest workspace.\n\nCannot be undone.')) return;
-  const statusEl = document.getElementById('workspaceStatus');
+  const statusEl = document.getElementById('maintenanceStatus');
   const btn = document.getElementById('purgeOrphanMediaBtn');
   if (btn) { btn.disabled = true; btn.textContent = '🗑️ Purging…'; }
   setStatus(statusEl, 'Scanning for orphan media (this may take a few seconds)…', 'ok');
@@ -12220,7 +12223,7 @@ async function purgeOrphanMedia() {
 async function purgePreviewBacklog() {
   if (!await ensureOwnerPassword('Enter teacher password to purge previews:')) return;
   if (!window.confirm('Delete ALL leftover __preview__ assignments?\n\nThis cleans up orphaned Student Preview records that never got auto-deleted (e.g. when the parent tab was closed). It does NOT touch real assignments.')) return;
-  const statusEl = document.getElementById('workspaceStatus');
+  const statusEl = document.getElementById('maintenanceStatus');
   const btn = document.getElementById('purgePreviewsBtn');
   if (btn) { btn.disabled = true; btn.textContent = '🧹 Purging…'; }
   setStatus(statusEl, 'Purging preview backlog…', 'ok');

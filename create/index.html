@@ -38,8 +38,6 @@
                 <input id="workspaceExpiresInput" type="number" min="1" max="365" placeholder="Expires in days (blank = never)" style="max-width:240px;" />
                 <button id="createWorkspaceBtn" class="btn primary">+ Create workspace</button>
                 <button id="refreshWorkspacesBtn" class="btn">Refresh</button>
-                <button id="purgePreviewsBtn" class="btn" title="Delete all leftover __preview__ assignments AND their R2 media folders.">🧹 Purge preview backlog</button>
-                <button id="purgeOrphanMediaBtn" class="btn" title="Delete every assign-*/ or preview-*/ R2 folder that no current assignment references. Cleans up media leaked by historic delete bugs.">🗑️ Purge orphan media</button>
               </div>
               <p id="workspaceStatus" class="small muted top-space"></p>
               <ul id="workspaceList" class="workspaces-list top-space"></ul>
@@ -280,6 +278,20 @@
                   <div id="questionList" class="question-list"></div>
                 </div>
               </div>
+
+              <div class="builder-section owner-only">
+                <button id="builderMaintenanceToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span>🧹 Storage maintenance</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="builderMaintenanceBody" class="section-collapsible-body hidden">
+                  <div class="row gap top-space">
+                    <button id="purgePreviewsBtn" class="btn" type="button" title="Delete all leftover __preview__ assignments AND their R2 media folders.">🧹 Purge preview backlog</button>
+                    <button id="purgeOrphanMediaBtn" class="btn" type="button" title="Delete every assign-*/ or preview-*/ R2 folder that no current assignment references. Cleans up media leaked by historic delete bugs.">🗑️ Purge orphan media</button>
+                  </div>
+                  <p id="maintenanceStatus" class="small muted top-space"></p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -470,7 +482,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../app.js?v=20260522-ckey"></script>
+    <script src="../app.js?v=20260522-maint"></script>
     <script src="../question-bank-ui.js?v=20260522-throttle"></script>
   </body>
 </html>
