@@ -4113,3 +4113,62 @@ textarea.bank-edit-input { min-height: 2.5rem; }
   .bank-filters { flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--line); }
   .bank-preview { border-left: none; border-top: 1px solid var(--line); }
 }
+
+/* ---------- Guest creator mode ---------- */
+body.guest-mode .owner-only { display: none !important; }
+body:not(.guest-mode) .guest-only { display: none !important; }
+
+.guest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+/* Workspaces admin tile */
+.workspaces-list { margin: 0; padding: 0; list-style: none; }
+.workspaces-list li {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: var(--panel, #fff);
+}
+.workspace-row-top { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+.workspace-label { font-weight: 600; font-size: 1rem; }
+.workspace-meta { color: #6b7280; font-size: 0.85rem; }
+.workspace-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.workspace-invite-link {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  background: #f3f4f6;
+  border-radius: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+.workspace-quizzes-sub {
+  margin: 0.5rem 0 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--primary, #2563eb);
+  background: #f9fafb;
+  border-radius: 0 0.4rem 0.4rem 0;
+  font-size: 0.85rem;
+}
+.workspace-quizzes-sub ul { margin: 0; padding-left: 1.2rem; }
+.workspace-expired { opacity: 0.65; }
+.workspace-expired .workspace-label::after {
+  content: ' (expired)';
+  color: #b91c1c;
+  font-weight: normal;
+  font-size: 0.8rem;
+}
+

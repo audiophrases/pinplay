@@ -9,7 +9,7 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>🎯 PinPlay</h1>
+      <h1>🎯 PinPlay<span id="guestBadge" class="guest-badge guest-only">Guest creator</span></h1>
     </header>
 
     <main class="container">
@@ -27,6 +27,29 @@
         </div>
 
         <div id="createWorkspace" class="hidden">
+          <!-- Guest workspaces admin (owner only) -->
+          <div class="card owner-only" id="workspacesCard">
+            <h2 id="workspacesSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              👥 Guest workspaces <span class="collapse-chevron" aria-hidden="true">▸</span>
+            </h2>
+            <div id="workspacesCardBody" class="hidden">
+              <div class="row gap top-space">
+                <input id="workspaceLabelInput" type="text" placeholder="Label (e.g. Maria, Spring 2026)" maxlength="80" style="min-width:240px;" />
+                <input id="workspaceExpiresInput" type="number" min="1" max="365" placeholder="Expires in days (blank = never)" style="max-width:240px;" />
+                <button id="createWorkspaceBtn" class="btn primary">+ Create workspace</button>
+                <button id="refreshWorkspacesBtn" class="btn">Refresh</button>
+              </div>
+              <p id="workspaceStatus" class="small muted top-space"></p>
+              <ul id="workspaceList" class="workspaces-list top-space"></ul>
+            </div>
+          </div>
+
+          <!-- Guest-only banner -->
+          <div class="card guest-only" id="guestBanner">
+            <strong>🎨 Guest creator workspace</strong>
+            <p class="small muted" style="margin:0.5rem 0 0;">You can build, save and preview quizzes. Saved quizzes stay private to this workspace until the teacher copies them or revokes access.</p>
+          </div>
+
           <div class="card" id="builderCard">
             <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
               Quiz builder <span class="collapse-chevron" aria-hidden="true">▸</span>
@@ -146,7 +169,7 @@
                 </button>
                 <div id="builderSettingsBody" class="section-collapsible-body hidden">
                   <div class="row gap quiz-actions" id="builderActionRow">
-                    <button id="hostApplyBuilderBtn" class="btn">Apply live</button>
+                    <button id="hostApplyBuilderBtn" class="btn owner-only">Apply live</button>
                     <button id="applyAssignmentBtn" class="btn" style="display:none">Apply to Assignment</button>
                     <button id="openLocalBtn" class="btn">Open</button>
                     <button id="saveBtn" class="btn">Save</button>
@@ -258,7 +281,7 @@
             </div>
           </div>
 
-          <div class="card project-screen" id="hostQuestionCard">
+          <div class="card project-screen owner-only" id="hostQuestionCard">
             
             <!-- Pop-up Scoreboard Modal -->
             <div id="projectorScoreboardSection" class="scoreboard-modal">
@@ -320,18 +343,18 @@
             </h2>
             <div id="gameControlsCardBody" class="hidden">
             <div class="row gap top-space" id="hostActionRow">
-              <button id="randomNamesToggle" class="btn" type="button">Login</button>
-              <button id="createLiveBtn" class="btn primary">Live Pin</button>
-              <button id="hostRefreshBtn" class="btn">Refresh</button>
-              <button id="hostStartBtn" class="btn success">Start</button>
-              <button id="hostPrevBtn" class="btn">←</button>
-              <button id="hostNextBtn" class="btn">→</button>
+              <button id="randomNamesToggle" class="btn owner-only" type="button">Login</button>
+              <button id="createLiveBtn" class="btn primary owner-only">Live Pin</button>
+              <button id="hostRefreshBtn" class="btn owner-only">Refresh</button>
+              <button id="hostStartBtn" class="btn success owner-only">Start</button>
+              <button id="hostPrevBtn" class="btn owner-only">←</button>
+              <button id="hostNextBtn" class="btn owner-only">→</button>
               <button id="studentPreviewBtn" class="btn">🧑‍🎓 Preview</button>
-              <button id="livePreviewBtn" class="btn">▶ Live Preview</button>
-              <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" />
-              <button id="hostJoinBtn" class="btn">Join as host</button>
+              <button id="livePreviewBtn" class="btn owner-only">▶ Live Preview</button>
+              <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" class="owner-only" />
+              <button id="hostJoinBtn" class="btn owner-only">Join as host</button>
             </div>
-            <div class="top-space assignment-section" id="assignmentSection">
+            <div class="top-space assignment-section owner-only" id="assignmentSection">
               <button id="assignmentSectionToggle" class="section-toggle-btn" type="button" aria-expanded="false">
                 <span>Assignments</span>
                 <span class="collapse-chevron" aria-hidden="true">▸</span>
@@ -391,7 +414,7 @@
             </div>
 
 
-            <div class="host-live-status-grid">
+            <div class="host-live-status-grid owner-only">
               <div class="status-card pin-highlight" title="Current session PIN">
                 <span class="status-label">PIN</span>
                 <span id="livePin" class="status-value">—</span>
@@ -410,32 +433,32 @@
               </div>
             </div>
 
-            <div id="liveReactions" class="reactions-pop" aria-live="polite"></div>
+            <div id="liveReactions" class="reactions-pop owner-only" aria-live="polite"></div>
             <p id="hostStatus" class="feedback"></p>
 
-            <div class="host-section-header">
+            <div class="host-section-header owner-only">
               <h3>👥 <span id="hostPlayersTitle">Players</span></h3>
               <span class="host-section-count" id="hostPlayersCount">0</span>
             </div>
-            <ul id="hostPlayers" class="list"></ul>
+            <ul id="hostPlayers" class="list owner-only"></ul>
 
-            <div class="host-section-header">
+            <div class="host-section-header owner-only">
               <h3>📜 Answer history (teacher only)</h3>
             </div>
-            <ul id="hostAnswerHistory" class="list"></ul>
+            <ul id="hostAnswerHistory" class="list owner-only"></ul>
 
-            <div class="host-section-header">
+            <div class="host-section-header owner-only">
               <h3>📊 Student performance snapshot</h3>
               <div class="row gap">
                 <button id="hostAttemptsRefreshBtn" class="btn">Refresh</button>
                 <button id="hostAttemptsExportBtn" class="btn">Export CSV</button>
               </div>
             </div>
-            <div class="row gap top-space">
+            <div class="row gap top-space owner-only">
               <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
             </div>
-            <p id="hostAttemptsSummary" class="small muted">No attempt snapshot loaded yet.</p>
-            <ul id="hostAttemptsList" class="list"></ul>
+            <p id="hostAttemptsSummary" class="small muted owner-only">No attempt snapshot loaded yet.</p>
+            <ul id="hostAttemptsList" class="list owner-only"></ul>
             </div>
             </div>
           </div>
@@ -445,7 +468,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../app.js?v=20260503-1400"></script>
+    <script src="../app.js?v=20260522-guest1"></script>
     <script src="../question-bank-ui.js?v=20260519-1410"></script>
   </body>
 </html>

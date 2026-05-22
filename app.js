@@ -3,6 +3,12 @@ const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
 const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
+const CREATOR_TOKEN_KEY = 'pinplay.creatorToken';
+
+// Set to 'guest' once an invite-link token is in use; null otherwise. Mutated
+// at boot by setupCreateAccess() before any cloud-save / preview call runs.
+let creatorRole = null;
+let creatorWsid = null;
 const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
 const TEMPLATE_ALL_13_TYPES = {
@@ -773,6 +779,62 @@ function pingEdgeTtsBridgeWarmup() {
 function setupCreateAccess() {
   let pendingDeadAcute = false;
 
+  // ---- Invite-link landing ----
+  // If URL has ?invite=<token>, stash it in localStorage and strip the URL
+  // so the token isn't part of subsequent navigation/bookmarks.
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get('invite');
+    if (inviteToken) {
+      localStorage.setItem(CREATOR_TOKEN_KEY, inviteToken);
+      params.delete('invite');
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    }
+  } catch { /* localStorage / URL parsing should not block boot */ }
+
+  // ---- Guest token boot path ----
+  const storedToken = (() => {
+    try { return localStorage.getItem(CREATOR_TOKEN_KEY) || ''; } catch { return ''; }
+  })();
+  if (storedToken) {
+    const tryGuestBoot = async () => {
+      try {
+        const result = await api('/api/create/auth', {
+          method: 'POST',
+          body: { password: storedToken },
+        });
+        if (result?.role !== 'guest') throw new Error('Token did not resolve as guest.');
+        creatorRole = 'guest';
+        creatorWsid = result.wsid || null;
+        createSessionPassword = storedToken;
+        sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
+        document.body.classList.add('guest-mode');
+        if (createWorkspace) createWorkspace.classList.remove('hidden');
+        if (createAuthCard) createAuthCard.classList.add('hidden');
+        // Auto-expand Game controls so the Preview button is reachable
+        // (everything else inside it is hidden by .guest-mode CSS).
+        const gcBody = document.getElementById('gameControlsCardBody');
+        const gcToggle = document.getElementById('gameControlsSectionToggle');
+        if (gcBody) gcBody.classList.remove('hidden');
+        if (gcToggle) gcToggle.setAttribute('aria-expanded', 'true');
+      } catch (err) {
+        // Token rejected or workspace revoked — wipe local copy, fall back to password card
+        try { localStorage.removeItem(CREATOR_TOKEN_KEY); } catch { /* */ }
+        sessionStorage.removeItem(CREATE_UNLOCK_KEY);
+        document.body.classList.remove('guest-mode');
+        if (createWorkspace) createWorkspace.classList.add('hidden');
+        if (createAuthCard) {
+          createAuthCard.classList.remove('hidden');
+          setStatus(createAuthStatusEl, 'Guest access expired or revoked. Sign in to continue.', 'bad');
+        }
+      }
+    };
+    tryGuestBoot();
+    return; // skip password flow
+  }
+
   const unlock = async () => {
     try {
       let value = String(createPasswordEl?.value || '');
@@ -789,17 +851,21 @@ function setupCreateAccess() {
       if (unlockCreateBtn) unlockCreateBtn.disabled = true;
       setStatus(createAuthStatusEl, 'Checking password…', 'ok');
 
-      await api('/api/create/auth', {
+      const authResult = await api('/api/create/auth', {
         method: 'POST',
         body: { password: value },
       });
 
       createSessionPassword = value;
+      creatorRole = authResult?.role || 'owner';
+      creatorWsid = authResult?.wsid || null;
       sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
       if (createWorkspace) createWorkspace.classList.remove('hidden');
       if (createAuthCard) createAuthCard.classList.add('hidden');
       setStatus(createAuthStatusEl, 'Unlocked ✅', 'ok');
       if (createPasswordEl) createPasswordEl.value = '';
+      // Owner: initialize the guest-workspaces admin tile lazily on first expand.
+      if (creatorRole === 'owner') initWorkspacesAdmin();
     } catch (err) {
       setStatus(createAuthStatusEl, err?.message || 'Wrong password', 'bad');
     } finally {
@@ -810,6 +876,9 @@ function setupCreateAccess() {
   if (sessionStorage.getItem(CREATE_UNLOCK_KEY) === '1') {
     if (createWorkspace) createWorkspace.classList.remove('hidden');
     if (createAuthCard) createAuthCard.classList.add('hidden');
+    // No token → owner session. Wire admin tile.
+    creatorRole = 'owner';
+    initWorkspacesAdmin();
     return;
   }
 
@@ -3733,7 +3802,9 @@ async function openQuizFromCloud() {
         // The quiz JSON is stored directly (not wrapped)
         validateImportedQuiz(loadedQuiz);
         quiz = loadedQuiz;
-        quiz._r2QuizId = quizKey.replace('quizzes/', '').replace('.json', '');
+        // Extract just the basename: handles both `quizzes/<pin>.json` and
+        // `workspaces/<wsid>/quizzes/<pin>.json` for guests.
+        quiz._r2QuizId = quizKey.split('/').pop().replace(/\.json$/, '');
         setApplyAssignmentTarget('', '');
         collapseAllQuestions(quiz);
         renderBuilder();
@@ -11975,7 +12046,9 @@ function cleanupPreviewPoll() {
   const oldCode = previewPoll.code;
   previewPoll = null;
   if (oldCode && createSessionPassword) {
-    api('/api/assignments/delete', {
+    // /api/preview/cleanup works for both owner and guest, and refuses to
+    // delete anything that isn't a __preview__ assignment.
+    api('/api/preview/cleanup', {
       method: 'POST',
       body: { password: createSessionPassword, code: oldCode },
     }).then(() => {
@@ -12015,14 +12088,14 @@ async function launchStudentPreviewAssignment() {
     await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false });
 
     const payload = normalizeQuizForLive(quiz);
-    const data = await api('/api/assignments/create', {
+    // /api/preview/create works for both owner and guest. Server forces
+    // className='__preview__' and (for guests) scopes media to the workspace
+    // prefix so deletion of the workspace cleans it up too.
+    const data = await api('/api/preview/create', {
       method: 'POST',
       body: {
         password: createSessionPassword,
         title: `[Preview] ${quiz.title}`,
-        className: '__preview__',
-        attemptsLimit: 0,
-        dueAt: null,
         randomNames: true,
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
@@ -12054,6 +12127,212 @@ async function launchStudentPreviewAssignment() {
   } finally {
     const btn = document.getElementById('studentPreviewBtn');
     if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
+  }
+}
+
+// ---------- Guest workspaces admin (owner only) ----------
+let workspacesAdminInited = false;
+
+function initWorkspacesAdmin() {
+  if (workspacesAdminInited) return;
+  workspacesAdminInited = true;
+
+  const card = document.getElementById('workspacesCard');
+  const toggle = document.getElementById('workspacesSectionToggle');
+  const body = document.getElementById('workspacesCardBody');
+  const createBtn = document.getElementById('createWorkspaceBtn');
+  const refreshBtn = document.getElementById('refreshWorkspacesBtn');
+  if (!card || !toggle || !body) return;
+
+  const setExpanded = (expanded) => {
+    if (expanded) {
+      body.classList.remove('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+      renderWorkspaces();
+    } else {
+      body.classList.add('hidden');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  };
+
+  toggle.addEventListener('click', () => {
+    setExpanded(body.classList.contains('hidden'));
+  });
+  toggle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(body.classList.contains('hidden')); }
+  });
+
+  if (createBtn) createBtn.addEventListener('click', createWorkspaceFromForm);
+  if (refreshBtn) refreshBtn.addEventListener('click', renderWorkspaces);
+}
+
+async function createWorkspaceFromForm() {
+  const labelEl = document.getElementById('workspaceLabelInput');
+  const expiresEl = document.getElementById('workspaceExpiresInput');
+  const statusEl = document.getElementById('workspaceStatus');
+  const label = String(labelEl?.value || '').trim();
+  if (!label) {
+    setStatus(statusEl, 'Add a label first (e.g. the guest\'s name).', 'bad');
+    return;
+  }
+  const expiresInDays = Number(expiresEl?.value);
+  const body = { password: createSessionPassword, label };
+  if (Number.isFinite(expiresInDays) && expiresInDays > 0) body.expiresInDays = expiresInDays;
+
+  setStatus(statusEl, 'Creating workspace…', 'ok');
+  try {
+    const data = await api('/api/admin/workspaces', { method: 'POST', body });
+    setStatus(statusEl, `Created "${data.label}". Invite link is below — copy and send it to your guest.`, 'ok');
+    if (labelEl) labelEl.value = '';
+    if (expiresEl) expiresEl.value = '';
+    await renderWorkspaces({ highlightWsid: data.wsid, freshInviteUrl: data.inviteUrl });
+  } catch (err) {
+    setStatus(statusEl, `Create failed: ${err?.message || err}`, 'bad');
+  }
+}
+
+async function renderWorkspaces(opts = {}) {
+  const listEl = document.getElementById('workspaceList');
+  const statusEl = document.getElementById('workspaceStatus');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  try {
+    const data = await api('/api/admin/workspaces', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${createSessionPassword}` },
+    });
+    const workspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
+    if (!workspaces.length) {
+      listEl.innerHTML = '<li class="small muted" style="border:none; background:none;">No guest workspaces yet. Create one above to share an invite link.</li>';
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    for (const ws of workspaces) {
+      const li = document.createElement('li');
+      const expired = ws.expiresAt && ws.expiresAt < now;
+      if (expired) li.classList.add('workspace-expired');
+
+      const created = ws.createdAt ? new Date(ws.createdAt * 1000).toLocaleDateString() : '?';
+      const expires = ws.expiresAt ? new Date(ws.expiresAt * 1000).toLocaleDateString() : 'never';
+
+      const top = document.createElement('div');
+      top.className = 'workspace-row-top';
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'workspace-label';
+      labelSpan.textContent = ws.label || ws.wsid;
+      const metaSpan = document.createElement('span');
+      metaSpan.className = 'workspace-meta';
+      metaSpan.textContent = `· ${ws.quizCount || 0} quizzes · created ${created} · expires ${expires}`;
+      top.append(labelSpan, metaSpan);
+      li.appendChild(top);
+
+      // Fresh invite link (only shown right after creation; tokens aren't re-derivable later).
+      if (opts.highlightWsid === ws.wsid && opts.freshInviteUrl) {
+        const link = document.createElement('code');
+        link.className = 'workspace-invite-link';
+        link.textContent = opts.freshInviteUrl;
+        li.appendChild(link);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'workspace-actions';
+
+      if (opts.highlightWsid === ws.wsid && opts.freshInviteUrl) {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn primary';
+        copyBtn.textContent = '📋 Copy invite link';
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(opts.freshInviteUrl);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy invite link'; }, 1500);
+          } catch {
+            setStatus(statusEl, 'Copy failed — select the link manually.', 'bad');
+          }
+        });
+        actions.appendChild(copyBtn);
+      }
+
+      const viewBtn = document.createElement('button');
+      viewBtn.className = 'btn';
+      viewBtn.textContent = ws.quizCount > 0 ? `🗂 View ${ws.quizCount} quizzes` : '🗂 View quizzes';
+      viewBtn.addEventListener('click', () => loadWorkspaceQuizzes(ws.wsid, li, viewBtn));
+      actions.appendChild(viewBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn';
+      delBtn.style.color = '#b91c1c';
+      delBtn.textContent = '🗑 Terminate';
+      delBtn.title = 'Wipes the workspace, all its quizzes/media, and invalidates the invite link.';
+      delBtn.addEventListener('click', () => deleteWorkspace(ws));
+      actions.appendChild(delBtn);
+
+      li.appendChild(actions);
+      listEl.appendChild(li);
+    }
+  } catch (err) {
+    setStatus(statusEl, `Load failed: ${err?.message || err}`, 'bad');
+  }
+}
+
+async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
+  // Toggle: if a sub-list already exists, collapse it.
+  const existing = liEl.querySelector('.workspace-quizzes-sub');
+  if (existing) { existing.remove(); return; }
+  btnEl.disabled = true;
+  try {
+    const data = await api(`/api/admin/workspaces/${encodeURIComponent(wsid)}/quizzes`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${createSessionPassword}` },
+    });
+    const quizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
+    const wrap = document.createElement('div');
+    wrap.className = 'workspace-quizzes-sub';
+    if (!quizzes.length) {
+      wrap.textContent = 'No quizzes saved in this workspace yet.';
+    } else {
+      const ul = document.createElement('ul');
+      for (const q of quizzes) {
+        const item = document.createElement('li');
+        const title = q.title || q.pin || '(untitled)';
+        const qcount = q.questionCount ? ` · ${q.questionCount} Q` : '';
+        const size = q.size ? ` · ${(q.size / 1024).toFixed(0)} KB` : '';
+        item.textContent = `${title}${qcount}${size}`;
+        ul.appendChild(item);
+      }
+      wrap.appendChild(ul);
+    }
+    liEl.appendChild(wrap);
+  } catch (err) {
+    const errBox = document.createElement('div');
+    errBox.className = 'workspace-quizzes-sub';
+    errBox.style.color = '#b91c1c';
+    errBox.textContent = `Failed to load: ${err?.message || err}`;
+    liEl.appendChild(errBox);
+  } finally {
+    btnEl.disabled = false;
+  }
+}
+
+async function deleteWorkspace(ws) {
+  const label = ws.label || ws.wsid;
+  const qcount = ws.quizCount || 0;
+  const msg = qcount > 0
+    ? `Terminate workspace "${label}"?\n\nThis will permanently delete ${qcount} quiz(zes) AND all their media. The invite link will stop working immediately.\n\nThis cannot be undone.`
+    : `Terminate workspace "${label}"?\n\nThe invite link will stop working immediately.`;
+  if (!window.confirm(msg)) return;
+
+  const statusEl = document.getElementById('workspaceStatus');
+  setStatus(statusEl, `Terminating "${label}"…`, 'ok');
+  try {
+    const data = await api(`/api/admin/workspaces/${encodeURIComponent(ws.wsid)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${createSessionPassword}` },
+    });
+    setStatus(statusEl, `Terminated "${label}" (${data.deleted || 0} keys removed).`, 'ok');
+    await renderWorkspaces();
+  } catch (err) {
+    setStatus(statusEl, `Terminate failed: ${err?.message || err}`, 'bad');
   }
 }
 
