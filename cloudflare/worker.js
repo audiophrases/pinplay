@@ -2438,6 +2438,17 @@ export default {
 export class QuizRoom {
   constructor(state) {
     this.state = state;
+    // In-memory cache of the live-room object. DOs are single-threaded per
+    // instance and stay warm between requests, so we can return the cached
+    // room without re-listing storage rows on every poll. Invariants:
+    //   - Loaded once on first read (`#getRoom`).
+    //   - Refreshed in place after every successful `#setRoom` write.
+    //   - Cleared on `#deleteRoom`.
+    //   - When the DO hibernates, the instance is destroyed; the next
+    //     request constructs a fresh one and pays the load cost again
+    //     (acceptable: hibernation only happens after idle periods).
+    // Live-game polling went from ~48 row reads per poll to 0 after warm-up.
+    this.roomCache = null;
   }
 
   async fetch(request) {
@@ -2638,12 +2649,14 @@ export class QuizRoom {
         const studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        let attempts = Object.values(assignment.attempts || {});
+        assignment.attempts = attemptsByKey;
+        let attempts = Object.values(attemptsByKey);
 
         // Filter by studentKey if provided (student-facing request)
         if (studentKey) {
@@ -2675,12 +2688,11 @@ export class QuizRoom {
         if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
         if (!Number.isFinite(pointsRaw)) return json({ error: 'points required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         const question = assignment.quiz?.questions?.[qIndex];
@@ -2924,12 +2936,11 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         attempt.submitted = false;
@@ -2947,12 +2958,14 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         const questions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
-        const attempts = assignment.attempts && typeof assignment.attempts === 'object' ? Object.values(assignment.attempts) : [];
+        const attempts = Object.values(attemptsByKey);
         const submittedAttempts = attempts.filter((a) => a && a.submitted);
 
         const overview = questions.map((q, qIndex) => {
@@ -3008,15 +3021,17 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         const questions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
         const question = questions[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
 
-        const attempts = assignment.attempts && typeof assignment.attempts === 'object' ? Object.values(assignment.attempts) : [];
+        const attempts = Object.values(attemptsByKey);
         // Include unsubmitted attempts that have answered this question so the teacher
         // can grade in-progress work (matching what the assignment card's "X to grade"
         // counter and the results view show).
@@ -3086,14 +3101,13 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        if (!assignment.attempts[attemptId]) return json({ error: 'Attempt not found.' }, 404);
-
-        delete assignment.attempts[attemptId];
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3112,12 +3126,11 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
         if (!studentKey && !legacyStudentKey) return json({ error: 'Student key required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts[attemptId];
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
@@ -3125,7 +3138,6 @@ export class QuizRoom {
           return json({ error: 'This attempt does not belong to you.' }, 403);
         }
 
-        delete assignment.attempts[attemptId];
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3142,27 +3154,29 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptIds.length) return json({ error: 'attemptIds required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Single-row reads for the base + only the specific attempts being
+        // notified, in parallel. Previously this scanned the whole table.
+        const assignment = await this.state.storage.get(`a:${code}`);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+        const fetched = await Promise.all(
+          attemptIds.map((id) => this.state.storage.get(`a:${code}:t:${id}`).then((v) => [id, v]))
+        );
         const now = Date.now();
         const notified = [];
-        attemptIds.forEach((attemptId) => {
-          const attempt = assignment.attempts[attemptId];
-          if (!attempt) return;
+        const updates = [];
+        for (const [attemptId, attempt] of fetched) {
+          if (!attempt) continue;
           attempt.notifiedAt = now;
           attempt.updatedAt = now;
           notified.push(attemptId);
-        });
+          updates.push(saveAttempt(this.state.storage, code, attemptId, attempt));
+        }
 
         if (!notified.length) return json({ error: 'No matching attempts.' }, 404);
 
         assignment.updatedAt = now;
-        for (const attemptId of notified) {
-          await saveAttempt(this.state.storage, code, attemptId, assignment.attempts[attemptId]);
-        }
+        await Promise.all(updates);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, notifiedAt: now, notified });
@@ -3241,8 +3255,7 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const assignment = await this.state.storage.get(`a:${code}`);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.active = !!body?.active;
@@ -3257,8 +3270,7 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const assignment = await this.state.storage.get(`a:${code}`);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.archived = !!body?.archived;
@@ -3329,9 +3341,14 @@ export class QuizRoom {
         const quiz = normalizeQuiz(body?.quiz || {});
         if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Need base + this code's attempts (to remap answer indexes when
+        // question order changes). Scoped instead of full-table scan.
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        assignment.attempts = attemptsByKey;
 
         const oldQuestions = Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions : [];
         const oldIndexToId = new Map();
@@ -4252,6 +4269,7 @@ export class QuizRoom {
   // #setRoom can skip writing slices that didn't change.
 
   async #getRoom() {
+    if (this.roomCache) return this.roomCache;
     await this.#migrateLegacyRoom();
     const entries = await this.state.storage.list({ prefix: 'r:' });
     if (!entries.has('r:meta')) return null;
@@ -4293,6 +4311,7 @@ export class QuizRoom {
       configurable: true,
       writable: true,
     });
+    this.roomCache = room;
     return room;
   }
 
@@ -4338,6 +4357,8 @@ export class QuizRoom {
     writeSlice('r:react:', reactionsByQuestion);
 
     await Promise.all(writes);
+    // Keep the in-memory cache aligned with what we just persisted.
+    this.roomCache = room;
   }
 
   async #migrateLegacyRoom() {
@@ -4357,6 +4378,7 @@ export class QuizRoom {
     const keys = [...entries.keys()];
     keys.push('room'); // best-effort cleanup of the legacy key
     if (keys.length) await this.state.storage.delete(keys);
+    this.roomCache = null;
   }
 }
 
