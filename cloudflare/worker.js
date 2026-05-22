@@ -906,10 +906,28 @@ export default {
       if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      const doResp = await stub.fetch('https://room/assignments/purge-previews', {
-        method: 'POST',
-      });
+      let doResp;
+      let doDeletedPreviews = 0;
+      let doDeletedRows = 0;
+      let doErrorDetail = '';
+      try {
+        doResp = await stub.fetch('https://room/assignments/purge-previews', {
+          method: 'POST',
+        });
+        if (doResp.ok) {
+          const dd = await doResp.json();
+          doDeletedPreviews = dd?.deletedPreviews || 0;
+          doDeletedRows = dd?.deletedRows || 0;
+        } else {
+          try { doErrorDetail = (await doResp.json())?.error || `HTTP ${doResp.status}`; } catch { doErrorDetail = `HTTP ${doResp.status}`; }
+        }
+      } catch (err) {
+        doErrorDetail = String(err?.message || err);
+      }
 
+      // Even if the DO part failed (quota exhausted, etc.) we can still try
+      // the R2 part — preview-*/ folders are safe to wipe regardless because
+      // they're never referenced by anything live.
       let r2Folders = 0;
       let r2Rows = 0;
       if (env.QUIZ_MEDIA) {
@@ -934,16 +952,17 @@ export default {
         } catch { /* */ }
       }
 
-      // Merge DO response with R2 stats.
-      let doData = {};
-      try { doData = await doResp.json(); } catch { /* */ }
+      // Surface a clear, partial-success picture. If the DO part failed
+      // (e.g. quota exhausted), the R2 part still ran and we report it.
+      const ok = !doErrorDetail;
       return json({
-        ok: true,
-        deletedPreviews: doData?.deletedPreviews || 0,
-        deletedRows: doData?.deletedRows || 0,
+        ok,
+        deletedPreviews: doDeletedPreviews,
+        deletedRows: doDeletedRows,
         r2Folders,
         r2Rows,
-      }, doResp.status);
+        ...(doErrorDetail ? { doError: doErrorDetail } : {}),
+      }, ok ? 200 : 207); // 207 Multi-Status = partial success
     }
 
     // Owner-only: purge root-level `assign-*/` and `preview-*/` R2 folders
@@ -960,26 +979,51 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
 
       // Step 1: enumerate all live assignment codes.
-      let codes = [];
+      // SAFETY-CRITICAL: if this fails we MUST abort. Treating "we couldn't
+      // build the alive set" as "everything is orphan" would delete live
+      // assignment media. Past versions of this code had that bug.
+      let listResp;
       try {
-        const listResp = await stub.fetch('https://room/assignments/list?limit=500', { method: 'GET' });
-        if (listResp.ok) {
-          const ld = await listResp.json();
-          codes = (ld?.assignments || []).map((a) => a?.code).filter(Boolean);
-        }
-      } catch { /* */ }
+        listResp = await stub.fetch('https://room/assignments/list?limit=500', { method: 'GET' });
+      } catch (err) {
+        return json({ error: `Could not reach assignments DO: ${err?.message || err}. Aborting purge to be safe.` }, 503);
+      }
+      if (!listResp.ok) {
+        let detail = '';
+        try { detail = (await listResp.json())?.error || ''; } catch { /* */ }
+        return json({
+          error: `Could not load live assignments list (HTTP ${listResp.status}${detail ? `: ${detail}` : ''}). Aborting purge to avoid deleting live media. Retry after the DO row-read quota resets (UTC midnight).`,
+        }, 503);
+      }
+      const ld = await listResp.json();
+      const codes = (ld?.assignments || []).map((a) => a?.code).filter(Boolean);
 
       // Step 2: build the alive-prefix set by reading each assignment's quiz
       // JSON (each call is now O(1) thanks to the single-row /assignments/get-quiz).
       const alivePrefixes = new Set();
+      let getQuizFailures = 0;
       for (const code of codes) {
         try {
           const qResp = await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, { method: 'GET' });
           if (qResp.ok) {
             const data = await qResp.json();
             for (const p of extractMediaPrefixesFromQuiz(data?.quiz)) alivePrefixes.add(p);
+          } else {
+            getQuizFailures += 1;
           }
-        } catch { /* */ }
+        } catch {
+          getQuizFailures += 1;
+        }
+      }
+      // Second safety gate: if even one get-quiz failed we can't trust the alive
+      // set. Better to surface the issue than silently delete media that might
+      // still be referenced.
+      if (getQuizFailures > 0) {
+        return json({
+          error: `Could not load ${getQuizFailures} of ${codes.length} assignment quizzes (DO error or quota). Aborting to avoid deleting live media. Retry later.`,
+          liveAssignments: codes.length,
+          getQuizFailures,
+        }, 503);
       }
 
       // Step 3: enumerate root-level assign-*/ and preview-*/ folders and

@@ -12213,7 +12213,9 @@ async function purgeOrphanMedia() {
     console.log('[purge-orphan-media]', data);
     window.alert(`🗑️ Orphan media purge done.\n\nLive assignments scanned: ${data.liveAssignments || 0}\nAlive R2 prefixes: ${data.alivePrefixes || 0}\nFolders deleted: ${data.deletedFolders || 0}\nObjects deleted: ${data.deletedRows || 0}\n\n(If "Folders deleted" is 0, it means every assign-*/ folder is still referenced by a current assignment — no leaks to clean. The 24h average storage metric on the R2 dashboard lags real state by hours.)`);
   } catch (err) {
-    setStatus(statusEl, `Orphan purge failed: ${err?.message || err}`, 'bad');
+    const msg = err?.message || String(err);
+    setStatus(statusEl, `Orphan purge aborted: ${msg}`, 'bad');
+    window.alert(`⚠️ Orphan purge aborted (nothing was deleted).\n\n${msg}\n\nThis usually means the Durable Objects daily row-read quota is exhausted — the purge needs to load all live assignments to know what's safe to delete. Retry after UTC midnight when the quota resets.`);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🗑️ Purge orphan media'; }
   }
@@ -12233,10 +12235,15 @@ async function purgePreviewBacklog() {
     });
     const doMsg = `${data.deletedPreviews || 0} preview record(s) / ${data.deletedRows || 0} DO row(s)`;
     const r2Msg = `${data.r2Folders || 0} R2 folder(s) / ${data.r2Rows || 0} R2 object(s)`;
-    const summary = `Purged ${doMsg}; cleaned ${r2Msg}.`;
-    setStatus(statusEl, summary, 'ok');
     console.log('[purge-previews]', data);
-    window.alert(`🧹 Preview backlog purged.\n\n${doMsg}\n${r2Msg}\n\n(R2 dashboard "Storage" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)`);
+    if (data.doError) {
+      // DO part failed (most likely quota exhausted); R2 part may have run.
+      setStatus(statusEl, `Partial: DO purge failed (${data.doError}). R2 cleaned ${r2Msg}.`, 'bad');
+      window.alert(`⚠️ Partial purge.\n\nDurable Objects purge FAILED:\n  ${data.doError}\n\nR2 cleanup ran: ${r2Msg}\n\nThe DO part needs DO row reads, which are blocked when the daily quota is exhausted. Retry after UTC midnight.`);
+    } else {
+      setStatus(statusEl, `Purged ${doMsg}; cleaned ${r2Msg}.`, 'ok');
+      window.alert(`🧹 Preview backlog purged.\n\n${doMsg}\n${r2Msg}\n\n(R2 dashboard "Storage" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)`);
+    }
   } catch (err) {
     setStatus(statusEl, `Purge failed: ${err?.message || err}`, 'bad');
   } finally {
