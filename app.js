@@ -12191,6 +12191,32 @@ function initWorkspacesAdmin() {
   });
   const purgeBtn = document.getElementById('purgePreviewsBtn');
   if (purgeBtn) purgeBtn.addEventListener('click', purgePreviewBacklog);
+  const orphanBtn = document.getElementById('purgeOrphanMediaBtn');
+  if (orphanBtn) orphanBtn.addEventListener('click', purgeOrphanMedia);
+}
+
+async function purgeOrphanMedia() {
+  if (!await ensureOwnerPassword('Enter teacher password to purge orphan media:')) return;
+  if (!window.confirm('Delete every R2 media folder (assign-*/, preview-*/) that no current assignment references?\n\nThis cleans up leaked media from past deletions. It will NOT touch any active assignment, cloud-saved quiz, or guest workspace.\n\nCannot be undone.')) return;
+  const statusEl = document.getElementById('workspaceStatus');
+  const btn = document.getElementById('purgeOrphanMediaBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '🗑️ Purging…'; }
+  setStatus(statusEl, 'Scanning for orphan media (this may take a few seconds)…', 'ok');
+  try {
+    const data = await api('/api/admin/r2-orphans/purge', {
+      method: 'POST',
+      body: { password: createSessionPassword },
+    });
+    setStatus(
+      statusEl,
+      `Scanned ${data.liveAssignments || 0} live assignments. Deleted ${data.deletedFolders || 0} orphan folder(s) / ${data.deletedRows || 0} R2 object(s).`,
+      'ok'
+    );
+  } catch (err) {
+    setStatus(statusEl, `Orphan purge failed: ${err?.message || err}`, 'bad');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Purge orphan media'; }
+  }
 }
 
 async function purgePreviewBacklog() {
@@ -12205,7 +12231,9 @@ async function purgePreviewBacklog() {
       method: 'POST',
       body: { password: createSessionPassword },
     });
-    setStatus(statusEl, `Purged ${data.deletedPreviews || 0} preview record(s), freed ${data.deletedRows || 0} DO row(s).`, 'ok');
+    const doMsg = `${data.deletedPreviews || 0} preview record(s) / ${data.deletedRows || 0} DO row(s)`;
+    const r2Msg = `${data.r2Folders || 0} R2 folder(s) / ${data.r2Rows || 0} R2 object(s)`;
+    setStatus(statusEl, `Purged ${doMsg}; cleaned ${r2Msg}.`, 'ok');
   } catch (err) {
     setStatus(statusEl, `Purge failed: ${err?.message || err}`, 'bad');
   } finally {

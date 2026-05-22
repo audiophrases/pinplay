@@ -897,19 +897,119 @@ export default {
     // Owner-only: purge all leftover preview assignments in one shot.
     // Useful for cleaning up after a free-tier DO quota incident — the
     // backlog of `__preview__` assignments multiplies the cost of every
-    // assignments-related DO call until they're cleaned up.
+    // assignments-related DO call until they're cleaned up. Also wipes
+    // every preview-* R2 folder (root-level and workspace-scoped) so
+    // orphan media doesn't keep growing.
     if (url.pathname === '/api/admin/previews/purge' && request.method === 'POST') {
       const body = await safeJson(request);
       const auth = await resolveAuth(env, request, body);
       if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      return withCors(await stub.fetch('https://room/assignments/purge-previews', {
+      const doResp = await stub.fetch('https://room/assignments/purge-previews', {
         method: 'POST',
-      }));
+      });
+
+      let r2Folders = 0;
+      let r2Rows = 0;
+      if (env.QUIZ_MEDIA) {
+        // Enumerate root-level preview-* folders.
+        try {
+          const rootListed = await env.QUIZ_MEDIA.list({ prefix: 'preview-', delimiter: '/', limit: 1000 });
+          for (const p of rootListed.delimitedPrefixes || []) {
+            r2Rows += await deleteR2Prefix(env.QUIZ_MEDIA, p.replace(/\/$/, ''));
+            r2Folders += 1;
+          }
+        } catch { /* */ }
+        // Enumerate workspace-scoped previews: workspaces/<wsid>/preview-*/
+        try {
+          const wsListed = await env.QUIZ_MEDIA.list({ prefix: 'workspaces/', delimiter: '/', limit: 1000 });
+          for (const wsPrefix of wsListed.delimitedPrefixes || []) {
+            const previewsListed = await env.QUIZ_MEDIA.list({ prefix: `${wsPrefix}preview-`, delimiter: '/', limit: 1000 });
+            for (const p of previewsListed.delimitedPrefixes || []) {
+              r2Rows += await deleteR2Prefix(env.QUIZ_MEDIA, p.replace(/\/$/, ''));
+              r2Folders += 1;
+            }
+          }
+        } catch { /* */ }
+      }
+
+      // Merge DO response with R2 stats.
+      let doData = {};
+      try { doData = await doResp.json(); } catch { /* */ }
+      return json({
+        ok: true,
+        deletedPreviews: doData?.deletedPreviews || 0,
+        deletedRows: doData?.deletedRows || 0,
+        r2Folders,
+        r2Rows,
+      }, doResp.status);
+    }
+
+    // Owner-only: purge root-level `assign-*/` and `preview-*/` R2 folders
+    // that are no longer referenced by any current assignment. These are
+    // the leftover media folders from the historical bug where
+    // `/api/assignments/delete` never cleaned up R2. One-shot operation;
+    // safe to run repeatedly.
+    if (url.pathname === '/api/admin/r2-orphans/purge' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+
+      // Step 1: enumerate all live assignment codes.
+      let codes = [];
+      try {
+        const listResp = await stub.fetch('https://room/assignments/list?limit=500', { method: 'GET' });
+        if (listResp.ok) {
+          const ld = await listResp.json();
+          codes = (ld?.assignments || []).map((a) => a?.code).filter(Boolean);
+        }
+      } catch { /* */ }
+
+      // Step 2: build the alive-prefix set by reading each assignment's quiz
+      // JSON (each call is now O(1) thanks to the single-row /assignments/get-quiz).
+      const alivePrefixes = new Set();
+      for (const code of codes) {
+        try {
+          const qResp = await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, { method: 'GET' });
+          if (qResp.ok) {
+            const data = await qResp.json();
+            for (const p of extractMediaPrefixesFromQuiz(data?.quiz)) alivePrefixes.add(p);
+          }
+        } catch { /* */ }
+      }
+
+      // Step 3: enumerate root-level assign-*/ and preview-*/ folders and
+      // delete those not in the alive set.
+      let deletedFolders = 0;
+      let deletedRows = 0;
+      for (const rootPrefix of ['assign-', 'preview-']) {
+        try {
+          const listed = await env.QUIZ_MEDIA.list({ prefix: rootPrefix, delimiter: '/', limit: 1000 });
+          for (const p of listed.delimitedPrefixes || []) {
+            const folder = p.replace(/\/$/, '');
+            if (alivePrefixes.has(folder)) continue;
+            deletedRows += await deleteR2Prefix(env.QUIZ_MEDIA, folder);
+            deletedFolders += 1;
+          }
+        } catch { /* */ }
+      }
+
+      return json({
+        ok: true,
+        liveAssignments: codes.length,
+        alivePrefixes: alivePrefixes.size,
+        deletedFolders,
+        deletedRows,
+      });
     }
 
     // Cleanup a preview assignment. Only deletes if className is __preview__
-    // so a guest cannot use this to remove real assignments.
+    // so a guest cannot use this to remove real assignments. Also wipes
+    // the R2 media folder created for that preview.
     if (url.pathname === '/api/preview/cleanup' && request.method === 'POST') {
       const body = await safeJson(request);
       const auth = await resolveAuth(env, request, body);
@@ -919,7 +1019,10 @@ export default {
       if (!code) return json({ error: 'Assignment code required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+      // Use /assignments/get-quiz which returns the raw quiz so we can also
+      // mine media URLs for R2 cleanup. /assignments/get's publicQuestion
+      // pipeline may strip the fields we need.
+      const getRes = await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, { method: 'GET' });
       if (!getRes.ok) return withCors(getRes);
       let data = {};
       try { data = await getRes.json(); } catch { /* */ }
@@ -928,10 +1031,20 @@ export default {
         return json({ error: 'Not a preview assignment.' }, 403);
       }
 
-      return withCors(await stub.fetch('https://room/assignments/delete', {
+      const mediaPrefixes = env.QUIZ_MEDIA
+        ? extractMediaPrefixesFromQuiz(data?.quiz)
+        : new Set();
+
+      const deleteResp = await stub.fetch('https://room/assignments/delete', {
         method: 'POST',
         body: JSON.stringify({ code }),
-      }));
+      });
+      if (deleteResp.ok && env.QUIZ_MEDIA) {
+        for (const prefix of mediaPrefixes) {
+          try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
+        }
+      }
+      return withCors(deleteResp);
     }
 
     if (url.pathname === '/api/assignments/create' && request.method === 'POST') {
@@ -1184,10 +1297,32 @@ export default {
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      return withCors(await stub.fetch('https://room/assignments/delete', {
+
+      // Best-effort: read quiz JSON FIRST so we know which R2 prefixes to
+      // clean up after deleting the DO record. Historically the delete
+      // flow only removed the DO record and let media accumulate in R2.
+      let mediaPrefixes = new Set();
+      if (env.QUIZ_MEDIA) {
+        try {
+          const qResp = await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, { method: 'GET' });
+          if (qResp.ok) {
+            const data = await qResp.json();
+            mediaPrefixes = extractMediaPrefixesFromQuiz(data?.quiz);
+          }
+        } catch { /* fall through; DO delete still runs */ }
+      }
+
+      const deleteResp = await stub.fetch('https://room/assignments/delete', {
         method: 'POST',
         body: JSON.stringify({ code }),
-      }));
+      });
+
+      if (deleteResp.ok && env.QUIZ_MEDIA) {
+        for (const prefix of mediaPrefixes) {
+          try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
+        }
+      }
+      return withCors(deleteResp);
     }
 
     if (url.pathname === '/api/assignments/mark-notified' && request.method === 'POST') {
@@ -5356,6 +5491,50 @@ function mediaPrefixFor(auth) {
   if (!auth) return null;
   if (auth.role === 'owner') return ''; // owner can write any top-level key
   return `workspaces/${auth.wsid}/`;
+}
+
+// Extract R2 media prefixes referenced by a quiz JSON, by scraping the
+// /api/media/<key> URLs that we stamp into question fields at creation time.
+// Used by the delete/cleanup flows so R2 media doesn't leak when DO records
+// go away.
+function extractMediaPrefixesFromQuiz(quiz) {
+  const prefixes = new Set();
+  const questions = quiz?.questions;
+  if (!Array.isArray(questions)) return prefixes;
+  // Matches `/api/media/<prefix>/` where prefix is either:
+  //   <assign-...> or <preview-...>          (owner-created, root-level)
+  //   workspaces/<wsid>/<preview-...>         (guest-created previews)
+  //   <quiz-...>                              (cloud-saved quizzes' media)
+  //   workspaces/<wsid>/<quiz-...>            (workspace-scoped quizzes)
+  const URL_RE = /\/api\/media\/((?:workspaces\/[A-Za-z0-9_-]+\/)?(?:assign|preview|quiz)-[A-Za-z0-9_.-]+)\//g;
+  for (const q of questions) {
+    for (const field of ['audioData', 'imageData', 'audio', 'image', 'audioUrl', 'imageUrl']) {
+      const val = q?.[field];
+      if (typeof val !== 'string') continue;
+      URL_RE.lastIndex = 0;
+      let m;
+      while ((m = URL_RE.exec(val)) !== null) prefixes.add(m[1]);
+    }
+  }
+  return prefixes;
+}
+
+// Delete every object under an R2 prefix. Returns the count.
+async function deleteR2Prefix(bucket, prefix) {
+  if (!prefix) return 0;
+  const safePrefix = String(prefix).endsWith('/') ? String(prefix) : `${prefix}/`;
+  let cursor;
+  let count = 0;
+  while (true) {
+    const listed = await bucket.list({ prefix: safePrefix, limit: 1000, cursor });
+    for (const obj of listed.objects || []) {
+      await bucket.delete(obj.key);
+      count += 1;
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return count;
 }
 
 function sanitizePin(pin) {

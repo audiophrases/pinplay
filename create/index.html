@@ -38,7 +38,8 @@
                 <input id="workspaceExpiresInput" type="number" min="1" max="365" placeholder="Expires in days (blank = never)" style="max-width:240px;" />
                 <button id="createWorkspaceBtn" class="btn primary">+ Create workspace</button>
                 <button id="refreshWorkspacesBtn" class="btn">Refresh</button>
-                <button id="purgePreviewsBtn" class="btn" title="Delete all leftover __preview__ assignments. Use after a Durable Objects quota incident to free up rows.">🧹 Purge preview backlog</button>
+                <button id="purgePreviewsBtn" class="btn" title="Delete all leftover __preview__ assignments AND their R2 media folders.">🧹 Purge preview backlog</button>
+                <button id="purgeOrphanMediaBtn" class="btn" title="Delete every assign-*/ or preview-*/ R2 folder that no current assignment references. Cleans up media leaked by historic delete bugs.">🗑️ Purge orphan media</button>
               </div>
               <p id="workspaceStatus" class="small muted top-space"></p>
               <ul id="workspaceList" class="workspaces-list top-space"></ul>
@@ -469,7 +470,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../app.js?v=20260522-guest4"></script>
+    <script src="../app.js?v=20260522-orphan"></script>
     <script src="../question-bank-ui.js?v=20260522-throttle"></script>
   </body>
 </html>
