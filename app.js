@@ -12133,6 +12133,26 @@ async function launchStudentPreviewAssignment() {
 // ---------- Guest workspaces admin (owner only) ----------
 let workspacesAdminInited = false;
 
+// On page reload `sessionStorage` may say we're unlocked but the module-level
+// `createSessionPassword` was wiped. Any owner-only API call would 401 without
+// a prompt. This helper prompts (and verifies) on demand, mirroring the pattern
+// other owner features use.
+async function ensureOwnerPassword(reason) {
+  if (createSessionPassword) return true;
+  const pwd = await customPasswordPrompt(reason || 'Enter teacher password:');
+  if (!pwd) return false;
+  try {
+    const result = await api('/api/create/auth', { method: 'POST', body: { password: pwd } });
+    if (result?.role !== 'owner') return false;
+    createSessionPassword = pwd;
+    creatorRole = 'owner';
+    sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function initWorkspacesAdmin() {
   if (workspacesAdminInited) return;
   workspacesAdminInited = true;
@@ -12144,8 +12164,9 @@ function initWorkspacesAdmin() {
   const refreshBtn = document.getElementById('refreshWorkspacesBtn');
   if (!card || !toggle || !body) return;
 
-  const setExpanded = (expanded) => {
+  const setExpanded = async (expanded) => {
     if (expanded) {
+      if (!await ensureOwnerPassword('Enter teacher password to view guest workspaces:')) return;
       body.classList.remove('hidden');
       toggle.setAttribute('aria-expanded', 'true');
       renderWorkspaces();
@@ -12163,10 +12184,15 @@ function initWorkspacesAdmin() {
   });
 
   if (createBtn) createBtn.addEventListener('click', createWorkspaceFromForm);
-  if (refreshBtn) refreshBtn.addEventListener('click', renderWorkspaces);
+  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+    ensureOwnerPassword('Enter teacher password to refresh workspaces:').then((ok) => {
+      if (ok) renderWorkspaces();
+    });
+  });
 }
 
 async function createWorkspaceFromForm() {
+  if (!await ensureOwnerPassword('Enter teacher password to create workspace:')) return;
   const labelEl = document.getElementById('workspaceLabelInput');
   const expiresEl = document.getElementById('workspaceExpiresInput');
   const statusEl = document.getElementById('workspaceStatus');
@@ -12327,10 +12353,26 @@ async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
       const ul = document.createElement('ul');
       for (const q of quizzes) {
         const item = document.createElement('li');
+        item.style.display = 'flex';
+        item.style.gap = '0.5rem';
+        item.style.alignItems = 'center';
+        item.style.flexWrap = 'wrap';
+
         const title = q.title || q.pin || '(untitled)';
         const qcount = q.questionCount ? ` · ${q.questionCount} Q` : '';
         const size = q.size ? ` · ${(q.size / 1024).toFixed(0)} KB` : '';
-        item.textContent = `${title}${qcount}${size}`;
+        const text = document.createElement('span');
+        text.textContent = `${title}${qcount}${size}`;
+        text.style.flex = '1 1 auto';
+        item.appendChild(text);
+
+        const openBtn = document.createElement('button');
+        openBtn.className = 'btn small';
+        openBtn.textContent = '📂 Open';
+        openBtn.title = 'Loads this quiz into your builder. Media URLs still point to the guest workspace — if you want a fully owned copy, ☁️ Save it after opening and re-upload its media.';
+        openBtn.addEventListener('click', () => openWorkspaceQuiz(q.key));
+        item.appendChild(openBtn);
+
         ul.appendChild(item);
       }
       wrap.appendChild(ul);
@@ -12344,6 +12386,32 @@ async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
     liEl.appendChild(errBox);
   } finally {
     btnEl.disabled = false;
+  }
+}
+
+async function openWorkspaceQuiz(quizKey) {
+  // Load a guest workspace quiz into the owner's builder. The R2 key is the
+  // full path (workspaces/<wsid>/quizzes/<pin>.json); /api/media/<key> is a
+  // public read-by-key route, so no auth is needed for the fetch itself.
+  if (!await ensureOwnerPassword('Enter teacher password:')) return;
+  try {
+    const base = loadBackendUrl() || 'https://api.pinplay.win';
+    setStatus(hostStatusEl, '☁️ Loading guest quiz…', 'ok');
+    const res = await fetch(`${base}/api/media/${quizKey}`);
+    if (!res.ok) throw new Error('Failed to load quiz from workspace');
+    const loadedQuiz = await res.json();
+    validateImportedQuiz(loadedQuiz);
+    quiz = loadedQuiz;
+    // Strip workspace prefix so ☁️ Save lands in the owner's own library.
+    quiz._r2QuizId = quizKey.split('/').pop().replace(/\.json$/, '');
+    delete quiz._lastCloudHash; // force re-save next ☁️ Save
+    setApplyAssignmentTarget('', '');
+    collapseAllQuestions(quiz);
+    renderBuilder();
+    saveQuiz(quiz);
+    setStatus(hostStatusEl, `✅ Loaded guest quiz: ${quiz.title || quiz._r2QuizId}. Media still lives in their workspace.`, 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, `Open failed: ${err?.message || err}`, 'bad');
   }
 }
 
