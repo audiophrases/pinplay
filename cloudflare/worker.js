@@ -894,6 +894,20 @@ export default {
       return json({ ok: true, wsid, deleted });
     }
 
+    // Owner-only: purge all leftover preview assignments in one shot.
+    // Useful for cleaning up after a free-tier DO quota incident — the
+    // backlog of `__preview__` assignments multiplies the cost of every
+    // assignments-related DO call until they're cleaned up.
+    if (url.pathname === '/api/admin/previews/purge' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/purge-previews', {
+        method: 'POST',
+      }));
+    }
+
     // Cleanup a preview assignment. Only deletes if className is __preview__
     // so a guest cannot use this to remove real assignments.
     if (url.pathname === '/api/preview/cleanup' && request.method === 'POST') {
@@ -2302,8 +2316,10 @@ export class QuizRoom {
       if (url.pathname === '/assignments/get' && request.method === 'GET') {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Single-row read by code (was loadAssignmentsMap which scans all
+        // assignment + attempt rows; that cost was the main DO row-read
+        // burner on the preview hot-path).
+        const assignment = await this.state.storage.get(`a:${code}`);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         // Note: no `active` check — closed assignments must still be loadable so
         // students can reach review mode for past attempts (teacher feedback).
@@ -3071,20 +3087,49 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
-        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        // Single-row existence check (was full-map load).
+        const exists = await this.state.storage.get(`a:${code}`);
+        if (!exists) return json({ error: 'Assignment not found.' }, 404);
 
         await deleteAssignmentKeys(this.state.storage, code);
 
         return json({ ok: true, deleted: code });
       }
 
+      // One-shot purge of __preview__ assignments. Owner-triggered cleanup
+      // for leftover preview records (parent tab was closed before the
+      // cleanup poll fired, etc.). One big read, then clean state.
+      if (url.pathname === '/assignments/purge-previews' && request.method === 'POST') {
+        const entries = await this.state.storage.list({ prefix: 'a:' });
+        const previewCodes = new Set();
+        for (const [key, value] of entries) {
+          // Match base rows only (no `:t:` segment) where className is __preview__
+          const rest = key.slice(2);
+          if (rest.includes(':t:')) continue;
+          if (value && typeof value === 'object' && value.className === '__preview__') {
+            previewCodes.add(rest);
+          }
+        }
+        let deletedCodes = 0;
+        let deletedRows = 0;
+        for (const code of previewCodes) {
+          // deleteAssignmentKeys uses a scoped list — only this code's rows.
+          const before = (await this.state.storage.list({ prefix: `a:${code}` }));
+          deletedRows += before.size;
+          await deleteAssignmentKeys(this.state.storage, code);
+          deletedCodes += 1;
+        }
+        return json({ ok: true, deletedPreviews: deletedCodes, deletedRows });
+      }
+
       if (url.pathname === '/assignments/get-quiz' && request.method === 'GET') {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Single-row read by code (was loadAssignmentsMap). This endpoint is
+        // hit in a tight loop by the question-bank backfill — turning it from
+        // O(all rows) into O(1) is the difference between "fine" and
+        // "exhausts the daily DO row-read quota in one page load".
+        const assignment = await this.state.storage.get(`a:${code}`);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         const meta = publicAssignment(assignment, { includeQuiz: false });
         return json({ ok: true, assignment: meta, quiz: assignment.quiz || null });
@@ -5820,15 +5865,19 @@ async function deleteAssignmentKeys(storage, code) {
 }
 
 async function nextAssignmentCode(storage) {
-  const assignments = await loadAssignmentsMap(storage);
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+  // 6-char random codes have 32^6 ≈ 1 billion combinations. Collisions are
+  // vanishingly unlikely until you have millions of assignments, so a single
+  // storage.get() per candidate is a fine collision check — and a massive
+  // improvement over loading every assignment + attempt row.
   for (let tries = 0; tries < 40; tries += 1) {
     let code = '';
     for (let i = 0; i < 6; i += 1) {
       code += alphabet[Math.floor(Math.random() * alphabet.length)];
     }
-    if (!assignments[code]) return code;
+    const existing = await storage.get(`a:${code}`);
+    if (!existing) return code;
   }
 
   return sanitizeAssignmentCode(randomId('A').slice(-6));

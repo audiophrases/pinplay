@@ -12189,6 +12189,28 @@ function initWorkspacesAdmin() {
       if (ok) renderWorkspaces();
     });
   });
+  const purgeBtn = document.getElementById('purgePreviewsBtn');
+  if (purgeBtn) purgeBtn.addEventListener('click', purgePreviewBacklog);
+}
+
+async function purgePreviewBacklog() {
+  if (!await ensureOwnerPassword('Enter teacher password to purge previews:')) return;
+  if (!window.confirm('Delete ALL leftover __preview__ assignments?\n\nThis cleans up orphaned Student Preview records that never got auto-deleted (e.g. when the parent tab was closed). It does NOT touch real assignments.')) return;
+  const statusEl = document.getElementById('workspaceStatus');
+  const btn = document.getElementById('purgePreviewsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '🧹 Purging…'; }
+  setStatus(statusEl, 'Purging preview backlog…', 'ok');
+  try {
+    const data = await api('/api/admin/previews/purge', {
+      method: 'POST',
+      body: { password: createSessionPassword },
+    });
+    setStatus(statusEl, `Purged ${data.deletedPreviews || 0} preview record(s), freed ${data.deletedRows || 0} DO row(s).`, 'ok');
+  } catch (err) {
+    setStatus(statusEl, `Purge failed: ${err?.message || err}`, 'bad');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧹 Purge preview backlog'; }
+  }
 }
 
 async function createWorkspaceFromForm() {

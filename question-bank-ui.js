@@ -455,7 +455,7 @@
         bridgeAvailable = true;
         status.textContent = `Connected. ${ping.questions} questions in bank.`;
         status.className = 'small bank-connect-status bank-ok';
-        if (!backfilledThisSession) {
+        if (!backfilledThisSession && _shouldAutoBackfill()) {
           backfillFromPinPlay({ status: (m) => console.info('[bank][sync]', m) });
         }
         setTimeout(enterSearchMode, 400);
@@ -1145,8 +1145,28 @@
 
   // ---------- backfill: pull assignments + cloud quizzes from PinPlay → bank ----------
 
+  // Backfill cost note: /api/assignments/list + N x /api/assignments/get-quiz
+  // can be expensive on the worker side (each call read DO rows). We throttle
+  // the auto-fire to once per BACKFILL_AUTO_THROTTLE_MS so a normal teaching
+  // day with many page reloads doesn't burn the daily DO quota. The manual
+  // Sync button bypasses this throttle.
+  const BACKFILL_LAST_RUN_KEY = 'pinplay.bank.lastBackfillAt';
+  const BACKFILL_AUTO_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12h
   let backfilledThisSession = false;
   let backfillInFlight = false;
+
+  function _readLastBackfillAt() {
+    try {
+      const v = Number(localStorage.getItem(BACKFILL_LAST_RUN_KEY) || 0);
+      return Number.isFinite(v) ? v : 0;
+    } catch { return 0; }
+  }
+  function _writeLastBackfillAt(ts) {
+    try { localStorage.setItem(BACKFILL_LAST_RUN_KEY, String(ts || Date.now())); } catch { /* */ }
+  }
+  function _shouldAutoBackfill() {
+    return Date.now() - _readLastBackfillAt() > BACKFILL_AUTO_THROTTLE_MS;
+  }
 
   function _getPassword() {
     return (window.pinplayInternals && window.pinplayInternals.getCreateSessionPassword && window.pinplayInternals.getCreateSessionPassword()) || '';
@@ -1268,6 +1288,7 @@
 
     backfilledThisSession = true;
     backfillInFlight = false;
+    _writeLastBackfillAt(Date.now());
 
     const summary =
       `Synced: ${stats.assignments.ingested} assignment(s)` +
@@ -1321,8 +1342,10 @@
     const wasAvailable = bridgeAvailable;
     const ping = await pingBridge();
     bridgeAvailable = !!(ping && ping.ok);
-    if (bridgeAvailable && !wasAvailable && !backfilledThisSession) {
-      // Fire-and-forget once-per-session backfill on first successful ping.
+    if (bridgeAvailable && !wasAvailable && !backfilledThisSession && _shouldAutoBackfill()) {
+      // Fire-and-forget backfill on first successful ping. Throttled to
+      // once per BACKFILL_AUTO_THROTTLE_MS across page reloads (via
+      // localStorage) to avoid burning DO quota on every refresh.
       backfillFromPinPlay({ status: (m, kind) => console.info('[bank][sync]', kind || '', m) });
     }
     return bridgeAvailable;
