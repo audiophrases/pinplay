@@ -2471,12 +2471,17 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Need the assignment base + ALL attempts for this code (to find the
+        // student's attempts and count toward attemptsLimit). The scoped list
+        // reads only `a:<code>:t:*` rows, not the whole assignments table.
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const allAttempts = Object.values(assignment.attempts || {});
+        assignment.attempts = attemptsByKey;
+        const allAttempts = Object.values(attemptsByKey);
         const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
         const studentAttempts = allAttempts.filter((a) => matchKeys.has(String(a?.studentKey || '')));
         const submittedAttempts = studentAttempts.filter((a) => !!a?.submitted);
@@ -2536,8 +2541,11 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Need base + this code's attempts (for attemptsLimit and resume check).
+        const [assignment, attemptsByKey] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          loadAttemptsForCode(this.state.storage, code),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
 
@@ -2546,8 +2554,8 @@ export class QuizRoom {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempts = Object.values(assignment.attempts || {});
+        assignment.attempts = attemptsByKey;
+        const attempts = Object.values(attemptsByKey);
         const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
 
         const existingOpen = attempts.find((a) => matchKeys.has(String(a?.studentKey || '')) && !a?.submitted);
@@ -2671,12 +2679,14 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Two single-row reads instead of loadAssignmentsMap (which scanned
+        // every assignment + every attempt row). This endpoint is polled by
+        // students during a quiz, so the savings compound heavily.
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         const includeAnswers = assignment.feedbackMode === 'instant' || (assignment.feedbackMode !== 'none' && !!attempt.submitted);
@@ -2689,12 +2699,11 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         return json({
@@ -2711,12 +2720,11 @@ export class QuizRoom {
         const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
         if (!code || !attemptId) return json({ error: 'Missing required fields.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
-        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
+        // No need to load the full assignment — we only need to verify it
+        // exists and then update one attempt row.
+        const exists = await this.state.storage.get(`a:${code}`);
+        if (!exists) return json({ error: 'Assignment not found.' }, 404);
+        const attempt = await this.state.storage.get(`a:${code}:t:${attemptId}`);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
         attempt.reviewedAt = Date.now();
@@ -2734,12 +2742,10 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
-        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
+        // Hot path during exam mode: fires on every tab focus/blur. Has to
+        // be cheap. Single-row attempt read; no need to touch the assignment
+        // base at all here (we don't validate any base field).
+        const attempt = await this.state.storage.get(`a:${code}:t:${attemptId}`);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
         if (attempt.submitted) return json({ ok: true, ignored: 'submitted' });
 
@@ -2751,7 +2757,8 @@ export class QuizRoom {
           durationMs,
         });
         attempt.updatedAt = Date.now();
-        assignment.updatedAt = attempt.updatedAt;
+        // Intentionally NOT updating assignment.updatedAt here — focus events
+        // are high-frequency and don't warrant a full base-row write each time.
         await saveAttempt(this.state.storage, code, attemptId, attempt);
 
         return json({ ok: true, count: attempt.focusEvents.length });
@@ -2766,8 +2773,11 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
         if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        // Per-question hot path. Two single-row reads instead of full table scan.
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
 
@@ -2776,8 +2786,6 @@ export class QuizRoom {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
 
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
         if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
 
@@ -2819,16 +2827,15 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const assignment = assignments?.[code] || null;
+        const [assignment, attempt] = await Promise.all([
+          this.state.storage.get(`a:${code}`),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
         if (Number(assignment.dueAt || 0) > 0 && Date.now() > Number(assignment.dueAt)) {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
-
-        assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
-        const attempt = assignment.attempts?.[attemptId] || null;
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
         if (attempt.submitted) return json({ ok: true, alreadySubmitted: true, attempt: publicAssignmentAttempt(assignment, attempt) });
 
@@ -6020,6 +6027,21 @@ async function saveAssignmentBase(storage, code, assignment) {
 
 async function saveAttempt(storage, code, attemptId, attempt) {
   await storage.put(`a:${code}:t:${attemptId}`, attempt);
+}
+
+// Scoped list — reads only `a:<code>:t:<*>` rows, NOT the whole table.
+// Used in place of loadAssignmentsMap when a route needs all attempts for
+// one specific assignment (was the second-biggest DO row-read offender after
+// loadAssignmentsMap itself).
+async function loadAttemptsForCode(storage, code) {
+  const prefix = `a:${code}:t:`;
+  const entries = await storage.list({ prefix });
+  const out = {};
+  for (const [key, value] of entries) {
+    const id = key.slice(prefix.length);
+    if (id && value) out[id] = value;
+  }
+  return out;
 }
 
 async function saveAssignmentFull(storage, code, assignment) {
