@@ -12208,11 +12208,10 @@ async function purgeOrphanMedia() {
       method: 'POST',
       body: { password: createSessionPassword },
     });
-    setStatus(
-      statusEl,
-      `Scanned ${data.liveAssignments || 0} live assignments. Deleted ${data.deletedFolders || 0} orphan folder(s) / ${data.deletedRows || 0} R2 object(s).`,
-      'ok'
-    );
+    const summary = `Scanned ${data.liveAssignments || 0} live assignments. Deleted ${data.deletedFolders || 0} orphan folder(s) / ${data.deletedRows || 0} R2 object(s).`;
+    setStatus(statusEl, summary, 'ok');
+    console.log('[purge-orphan-media]', data);
+    window.alert(`🗑️ Orphan media purge done.\n\nLive assignments scanned: ${data.liveAssignments || 0}\nAlive R2 prefixes: ${data.alivePrefixes || 0}\nFolders deleted: ${data.deletedFolders || 0}\nObjects deleted: ${data.deletedRows || 0}\n\n(If "Folders deleted" is 0, it means every assign-*/ folder is still referenced by a current assignment — no leaks to clean. The 24h average storage metric on the R2 dashboard lags real state by hours.)`);
   } catch (err) {
     setStatus(statusEl, `Orphan purge failed: ${err?.message || err}`, 'bad');
   } finally {
@@ -12234,7 +12233,10 @@ async function purgePreviewBacklog() {
     });
     const doMsg = `${data.deletedPreviews || 0} preview record(s) / ${data.deletedRows || 0} DO row(s)`;
     const r2Msg = `${data.r2Folders || 0} R2 folder(s) / ${data.r2Rows || 0} R2 object(s)`;
-    setStatus(statusEl, `Purged ${doMsg}; cleaned ${r2Msg}.`, 'ok');
+    const summary = `Purged ${doMsg}; cleaned ${r2Msg}.`;
+    setStatus(statusEl, summary, 'ok');
+    console.log('[purge-previews]', data);
+    window.alert(`🧹 Preview backlog purged.\n\n${doMsg}\n${r2Msg}\n\n(R2 dashboard "Storage" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)`);
   } catch (err) {
     setStatus(statusEl, `Purge failed: ${err?.message || err}`, 'bad');
   } finally {
