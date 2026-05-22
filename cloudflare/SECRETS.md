@@ -11,6 +11,7 @@
 | `STUDENT_LOGIN_VERIFY_URL` | Student login verification endpoint |
 | `STUDENT_ROSTER_LOOKUP_SECRET` | Roster email-lookup auth (notify flow) |
 | `STUDENT_ROSTER_LOOKUP_URL` | Roster email-lookup endpoint (notify flow) |
+| `CREATOR_SIGNING_KEY` | HMAC key for signing guest creator workspace tokens (e.g. `openssl rand -hex 32`) |
 
 ## Check secrets (IMPORTANT: use --name flag!)
 

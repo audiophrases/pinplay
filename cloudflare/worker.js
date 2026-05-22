@@ -767,7 +767,7 @@ export default {
           const metaObj = await env.QUIZ_MEDIA.get(`workspaces/${wsid}/_meta.json`);
           if (metaObj) {
             const parsed = await metaObj.json();
-            meta = { wsid, ...parsed, wsid };
+            meta = { ...parsed, wsid };
           }
         } catch { /* skip */ }
         // Count quizzes
