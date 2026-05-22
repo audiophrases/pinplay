@@ -185,20 +185,20 @@ export default {
 
     // List quizzes stored in R2
     if (url.pathname === '/api/quizzes' && request.method === 'GET') {
-      const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token, request);
-      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
+      const auth = await resolveAuth(env, request);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+      const prefix = quizPrefixFor(auth);
       try {
-        // List quiz JSONs stored in R2 (prefix filter to be safe across jurisdictions)
-        const listed = await env.QUIZ_MEDIA.list({ limit: 1000, prefix: 'quizzes/' });
+        // List quiz JSONs stored in R2, scoped to caller's workspace (or owner root)
+        const listed = await env.QUIZ_MEDIA.list({ limit: 1000, prefix });
         const quizzes = (listed.objects || [])
           .filter(obj => obj.key.endsWith('.json'))
           .map(obj => ({
             key: obj.key,
-            pin: obj.key.replace('quizzes/', '').replace('.json', ''),
+            pin: obj.key.replace(prefix, '').replace('.json', ''),
             size: obj.size,
             uploaded: obj.uploaded,
-            title: obj.key.replace('quizzes/', '').replace('.json', '')
+            title: obj.key.replace(prefix, '').replace('.json', '')
           }));
         // Fetch titles from quiz data
         for (const q of quizzes) {
@@ -226,23 +226,30 @@ export default {
 
     // Delete quiz JSON and associated media prefix from R2
     if (url.pathname.startsWith('/api/quizzes/') && request.method === 'DELETE') {
-      const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token, request);
-      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
+      const auth = await resolveAuth(env, request);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+      const quizPrefix = quizPrefixFor(auth);
+      const mediaPrefix = mediaPrefixFor(auth);
       try {
         const raw = url.pathname.replace('/api/quizzes/', '');
         if (!raw) return json({ error: 'quiz key required' }, 400);
-        let key = raw.startsWith('quizzes/') ? raw : `quizzes/${raw}`;
-        if (key.startsWith('quizzes/quizzes/')) key = key.replace(/^quizzes\//, '');
-        if (!key.endsWith('.json')) key = `${key}.json`;
-        const quizId = key.replace('quizzes/', '').replace('.json', '');
+        // Normalize: strip any leading prefix variant so we end up with just quizId
+        let bare = raw;
+        if (bare.startsWith(quizPrefix)) bare = bare.slice(quizPrefix.length);
+        else if (bare.startsWith('quizzes/')) bare = bare.slice('quizzes/'.length);
+        if (bare.endsWith('.json')) bare = bare.slice(0, -5);
+        const quizId = bare;
+        if (!quizId || quizId.includes('/')) {
+          return json({ error: 'invalid quiz key' }, 400);
+        }
+        const key = `${quizPrefix}${quizId}.json`;
 
         // Delete the quiz JSON
         await env.QUIZ_MEDIA.delete(key);
 
-        // Delete associated media under quizId/
+        // Delete associated media under <mediaPrefix><quizId>/
         let deletedMedia = 0;
-        const listed = await env.QUIZ_MEDIA.list({ prefix: `${quizId}/`, limit: 1000 });
+        const listed = await env.QUIZ_MEDIA.list({ prefix: `${mediaPrefix}${quizId}/`, limit: 1000 });
         for (const obj of listed.objects || []) {
           await env.QUIZ_MEDIA.delete(obj.key);
           deletedMedia += 1;
@@ -256,15 +263,19 @@ export default {
 
     // Upload quiz JSON to R2
     if (url.pathname === '/api/quizzes/upload' && request.method === 'POST') {
-      const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token, request);
-      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
+      const auth = await resolveAuth(env, request);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+      const prefix = quizPrefixFor(auth);
       try {
         const body = await safeJson(request);
-        const quizId = body?.quizId || `quiz-${Date.now()}`;
-        const key = `quizzes/${quizId}.json`;
+        const rawId = String(body?.quizId || `quiz-${Date.now()}`);
+        // Reject path-traversal attempts in quizId
+        if (rawId.includes('/') || rawId.includes('..') || !/^[A-Za-z0-9_.-]{1,80}$/.test(rawId)) {
+          return json({ error: 'invalid quizId' }, 400);
+        }
+        const key = `${prefix}${rawId}.json`;
         await env.QUIZ_MEDIA.put(key, JSON.stringify(body.quiz || body), { httpMetadata: { contentType: 'application/json' } });
-        return json({ ok: true, key, quizId });
+        return json({ ok: true, key, quizId: rawId });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
@@ -272,9 +283,8 @@ export default {
 
     // Upload quiz media to R2 (authenticated)
     if (url.pathname === '/api/media/upload' && request.method === 'POST') {
-      const token = readBearer(request);
-      const authOk = await verifyCreatePassword(env, token, request);
-      if (!authOk) return json({ error: 'Unauthorized.' }, 401);
+      const auth = await resolveAuth(env, request);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
       const contentType = request.headers.get('content-type') || '';
       if (!contentType.includes('multipart/form-data')) {
         return json({ error: 'Use multipart/form-data' }, 400);
@@ -282,12 +292,20 @@ export default {
       try {
         const formData = await request.formData();
         const file = formData.get('file');
-        const path = formData.get('path');
-        if (!file || !path) return json({ error: 'Missing file or path' }, 400);
-        await env.QUIZ_MEDIA.put(path, file.stream(), {
+        const rawPath = String(formData.get('path') || '');
+        if (!file || !rawPath) return json({ error: 'Missing file or path' }, 400);
+        if (rawPath.includes('..')) return json({ error: 'Invalid upload path.' }, 400);
+        // Guests are confined to their workspace prefix
+        if (auth.role === 'guest') {
+          const required = `workspaces/${auth.wsid}/`;
+          if (!rawPath.startsWith(required)) {
+            return json({ error: 'Upload path must be inside your workspace.' }, 403);
+          }
+        }
+        await env.QUIZ_MEDIA.put(rawPath, file.stream(), {
           httpMetadata: { contentType: file.type }
         });
-        return json({ ok: true, path, size: file.size });
+        return json({ ok: true, path: rawPath, size: file.size });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
@@ -631,12 +649,228 @@ export default {
 
     if (url.pathname === '/api/create/auth' && request.method === 'POST') {
       const body = await safeJson(request);
-      const password = String(body?.password || '');
-      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!String(body?.password || '').trim() && !readBearer(request)) {
+        return json({ error: 'Password required.' }, 400);
+      }
+      const auth = await resolveAuth(env, request, body);
+      if (!auth) return json({ error: 'Wrong password.' }, 401);
+      if (auth.role === 'guest') {
+        return json({ ok: true, role: 'guest', wsid: auth.wsid }, 200);
+      }
+      return json({ ok: true, role: 'owner' }, 200);
+    }
 
-      const ok = await verifyCreatePassword(env, password, request);
-      if (!ok) return json({ error: 'Wrong password.' }, 401);
-      return json({ ok: true }, 200);
+    // Student preview: wraps assignment-create with className locked to
+    // __preview__. Accepts owner or guest. Guest media goes under the
+    // workspace prefix so it's covered by workspace deletion.
+    if (url.pathname === '/api/preview/create' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+
+      let quiz = normalizeQuiz(body?.quiz || {});
+      if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+      // Extract base64 media to R2 (same as /api/assignments/create) but use
+      // workspace-scoped prefix for guests.
+      if (env.QUIZ_MEDIA) {
+        const mediaPrefix = mediaPrefixFor(auth);
+        const quizId = `preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        quiz = JSON.parse(JSON.stringify(quiz));
+        for (const q of quiz.questions || []) {
+          for (const field of ['audioData', 'imageData']) {
+            const val = q[field];
+            if (val && typeof val === 'string' && val.startsWith('data:')) {
+              const match = val.match(/^data:([^;]+);base64,(.+)$/);
+              if (match) {
+                const mime = match[1];
+                const binaryStr = atob(match[2]);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
+                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
+                    : mime.includes('png') ? '.png' : '.bin';
+                const key = `${mediaPrefix}${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
+                await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
+                q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
+                q.audioMode = field === 'audioData' ? 'file' : q.audioMode;
+              }
+            }
+          }
+        }
+      }
+
+      const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Preview';
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          className: '__preview__',
+          attemptsLimit: 0,
+          dueAt: null,
+          randomNames: !!body?.randomNames,
+          feedbackMode: String(body?.feedbackMode || 'none'),
+          examMode: !!body?.examMode,
+          quiz,
+        }),
+      }));
+    }
+
+    // ---------- Guest workspace admin (owner only) ----------
+    // Creates a signed invite token tied to a fresh workspace folder.
+    if (url.pathname === '/api/admin/workspaces' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+      if (!String(env.CREATOR_SIGNING_KEY || '').trim()) {
+        return json({ error: 'CREATOR_SIGNING_KEY not configured on worker.' }, 501);
+      }
+
+      const label = String(body?.label || '').trim().slice(0, 80) || 'Guest';
+      const expiresInDays = Number(body?.expiresInDays);
+      const now = Math.floor(Date.now() / 1000);
+      const exp = Number.isFinite(expiresInDays) && expiresInDays > 0
+        ? now + Math.round(expiresInDays * 86400)
+        : 0;
+
+      const wsid = makeWorkspaceId();
+      const meta = { wsid, label, createdAt: now, expiresAt: exp || null };
+      await env.QUIZ_MEDIA.put(`workspaces/${wsid}/_meta.json`, JSON.stringify(meta), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+
+      const token = await signGuestToken(env, { wsid, exp });
+      const base = String(env.BUILDER_BASE_URL || 'https://audiophrases.github.io/pinplay/create/');
+      const inviteUrl = `${base}${base.includes('?') ? '&' : '?'}invite=${encodeURIComponent(token)}`;
+
+      return json({ ok: true, wsid, label, token, inviteUrl, createdAt: now, expiresAt: exp || null }, 201);
+    }
+
+    // List all guest workspaces (owner only).
+    if (url.pathname === '/api/admin/workspaces' && request.method === 'GET') {
+      const auth = await resolveAuth(env, request);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+
+      const listed = await env.QUIZ_MEDIA.list({ prefix: 'workspaces/', limit: 1000 });
+      const wsids = new Set();
+      for (const obj of listed.objects || []) {
+        const parts = obj.key.split('/');
+        if (parts.length >= 2 && parts[1]) wsids.add(parts[1]);
+      }
+      const workspaces = [];
+      for (const wsid of wsids) {
+        let meta = { wsid, label: wsid, createdAt: null, expiresAt: null };
+        try {
+          const metaObj = await env.QUIZ_MEDIA.get(`workspaces/${wsid}/_meta.json`);
+          if (metaObj) {
+            const parsed = await metaObj.json();
+            meta = { wsid, ...parsed, wsid };
+          }
+        } catch { /* skip */ }
+        // Count quizzes
+        let quizCount = 0;
+        try {
+          const q = await env.QUIZ_MEDIA.list({ prefix: `workspaces/${wsid}/quizzes/`, limit: 1000 });
+          quizCount = (q.objects || []).filter(o => o.key.endsWith('.json')).length;
+        } catch { /* skip */ }
+        meta.quizCount = quizCount;
+        workspaces.push(meta);
+      }
+      workspaces.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return json({ workspaces });
+    }
+
+    // List quizzes in a specific workspace (owner only).
+    if (url.pathname.startsWith('/api/admin/workspaces/') && url.pathname.endsWith('/quizzes') && request.method === 'GET') {
+      const auth = await resolveAuth(env, request);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+
+      const wsid = sanitizeWorkspaceId(
+        url.pathname.replace('/api/admin/workspaces/', '').replace('/quizzes', '')
+      );
+      if (!wsid) return json({ error: 'invalid wsid' }, 400);
+
+      const prefix = `workspaces/${wsid}/quizzes/`;
+      const listed = await env.QUIZ_MEDIA.list({ prefix, limit: 1000 });
+      const quizzes = (listed.objects || [])
+        .filter(obj => obj.key.endsWith('.json'))
+        .map(obj => ({
+          key: obj.key,
+          pin: obj.key.replace(prefix, '').replace('.json', ''),
+          size: obj.size,
+          uploaded: obj.uploaded,
+          title: obj.key.replace(prefix, '').replace('.json', ''),
+        }));
+      for (const q of quizzes) {
+        try {
+          const obj = await env.QUIZ_MEDIA.get(q.key);
+          if (obj) {
+            const data = await obj.json();
+            if (data?.title) q.title = data.title;
+            if (data?.questions?.length) q.questionCount = data.questions.length;
+          }
+        } catch { /* skip */ }
+      }
+      quizzes.sort((a, b) => {
+        const ta = a.uploaded ? new Date(a.uploaded).getTime() : 0;
+        const tb = b.uploaded ? new Date(b.uploaded).getTime() : 0;
+        return tb - ta;
+      });
+      return json({ wsid, quizzes });
+    }
+
+    // Terminate a guest workspace: wipes all keys under its prefix.
+    // The signed token instantly becomes invalid because _meta.json is gone.
+    if (url.pathname.startsWith('/api/admin/workspaces/') && request.method === 'DELETE') {
+      const auth = await resolveAuth(env, request);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+
+      const wsid = sanitizeWorkspaceId(url.pathname.replace('/api/admin/workspaces/', ''));
+      if (!wsid) return json({ error: 'invalid wsid' }, 400);
+
+      let deleted = 0;
+      let cursor;
+      while (true) {
+        const listed = await env.QUIZ_MEDIA.list({ prefix: `workspaces/${wsid}/`, limit: 1000, cursor });
+        for (const obj of listed.objects || []) {
+          await env.QUIZ_MEDIA.delete(obj.key);
+          deleted += 1;
+        }
+        if (!listed.truncated) break;
+        cursor = listed.cursor;
+      }
+      return json({ ok: true, wsid, deleted });
+    }
+
+    // Cleanup a preview assignment. Only deletes if className is __preview__
+    // so a guest cannot use this to remove real assignments.
+    if (url.pathname === '/api/preview/cleanup' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+      if (!getRes.ok) return withCors(getRes);
+      let data = {};
+      try { data = await getRes.json(); } catch { /* */ }
+      const className = String(data?.assignment?.className || '');
+      if (className !== '__preview__') {
+        return json({ error: 'Not a preview assignment.' }, 403);
+      }
+
+      return withCors(await stub.fetch('https://room/assignments/delete', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      }));
     }
 
     if (url.pathname === '/api/assignments/create' && request.method === 'POST') {
@@ -4906,6 +5140,130 @@ async function sha256Hex(input) {
   const data = new TextEncoder().encode(String(input || ''));
   const digest = await crypto.subtle.digest('SHA-256', data);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------- Guest workspace auth (signed tokens) ----------
+// A guest token is `<payloadB64url>.<sigB64url>` where payload is
+// JSON `{wsid, exp}` and sig is HMAC-SHA256 over the payload using
+// env.CREATOR_SIGNING_KEY. Revocation = delete workspaces/<wsid>/_meta.json
+// (resolveAuth re-checks existence on every request).
+function b64urlEncodeBytes(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function b64urlDecodeBytes(str) {
+  const s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const bin = atob(s + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function hmacSignBytes(secret, data) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(secret || '')),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(data || '')));
+  return new Uint8Array(sig);
+}
+
+function constantTimeEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function signGuestToken(env, payload) {
+  const secret = String(env.CREATOR_SIGNING_KEY || '').trim();
+  if (!secret) throw new Error('CREATOR_SIGNING_KEY not configured.');
+  const payloadJson = JSON.stringify(payload);
+  const payloadB64 = b64urlEncodeBytes(new TextEncoder().encode(payloadJson));
+  const sig = await hmacSignBytes(secret, payloadB64);
+  return `${payloadB64}.${b64urlEncodeBytes(sig)}`;
+}
+
+async function verifyGuestToken(env, token) {
+  const secret = String(env.CREATOR_SIGNING_KEY || '').trim();
+  if (!secret || !token) return null;
+  const parts = String(token).split('.');
+  if (parts.length !== 2) return null;
+  const [payloadB64, sigB64] = parts;
+  try {
+    const sigBytes = b64urlDecodeBytes(sigB64);
+    const expected = await hmacSignBytes(secret, payloadB64);
+    if (!constantTimeEqual(expected, sigBytes)) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecodeBytes(payloadB64)));
+    if (!payload || typeof payload !== 'object') return null;
+    if (typeof payload.wsid !== 'string' || !/^[A-Za-z0-9_-]{8,32}$/.test(payload.wsid)) return null;
+    if (payload.exp && Date.now() / 1000 > Number(payload.exp)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeWorkspaceId(value) {
+  const v = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{8,32}$/.test(v) ? v : '';
+}
+
+function makeWorkspaceId() {
+  const bytes = new Uint8Array(9); // 12 chars b64url
+  crypto.getRandomValues(bytes);
+  return b64urlEncodeBytes(bytes);
+}
+
+// Resolves request credentials to one of:
+//   { role: 'owner' }                  - owner password matched
+//   { role: 'guest', wsid }            - valid signed guest token, workspace exists
+//   null                               - 401
+// Accepts credential from Authorization: Bearer OR body.password (caller passes body).
+async function resolveAuth(env, request, body = null, opts = {}) {
+  const bearer = readBearer(request);
+  const candidates = [];
+  if (bearer) candidates.push(bearer);
+  if (body && typeof body === 'object') {
+    const bodyPwd = String(body.password || '').trim();
+    if (bodyPwd && bodyPwd !== bearer) candidates.push(bodyPwd);
+  }
+  if (!candidates.length) return null;
+
+  // Try guest token first (cheap, no rate limit).
+  for (const cred of candidates) {
+    const guest = await verifyGuestToken(env, cred);
+    if (guest) {
+      if (!env.QUIZ_MEDIA) return null;
+      const meta = await env.QUIZ_MEDIA.head(`workspaces/${guest.wsid}/_meta.json`);
+      if (!meta) return null; // workspace revoked/deleted
+      return { role: 'guest', wsid: guest.wsid };
+    }
+  }
+  // Then owner password (rate-limited unless opted out).
+  for (const cred of candidates) {
+    const ok = await verifyCreatePassword(env, cred, request, opts);
+    if (ok) return { role: 'owner' };
+  }
+  return null;
+}
+
+function quizPrefixFor(auth) {
+  if (!auth) return null;
+  if (auth.role === 'owner') return 'quizzes/';
+  return `workspaces/${auth.wsid}/quizzes/`;
+}
+
+function mediaPrefixFor(auth) {
+  if (!auth) return null;
+  if (auth.role === 'owner') return ''; // owner can write any top-level key
+  return `workspaces/${auth.wsid}/`;
 }
 
 function sanitizePin(pin) {
