@@ -612,6 +612,7 @@ let soloGame = null;
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
+let builderAudioRecorder = null;
 const edgeTtsBlobUrlCache = new Map();
 let previewPoll = null;
 let previewMode = {
@@ -1634,6 +1635,21 @@ function bindBuilderEvents() {
       const q = quiz.questions[idx];
       if (!q || !hasQuestionAudio(q)) return;
       playQuestionAudio(q);
+    }
+
+    const recordAudioBtn = e.target.closest('[data-record-audio]');
+    if (recordAudioBtn) {
+      const idx = Number(recordAudioBtn.dataset.recordAudio);
+      const q = quiz.questions[idx];
+      if (!q) return;
+      await startBuilderAudioRecording(idx, q);
+      return;
+    }
+
+    const stopRecordAudioBtn = e.target.closest('[data-stop-record-audio]');
+    if (stopRecordAudioBtn) {
+      stopBuilderAudioRecording();
+      return;
     }
 
     const videoPreviewBtn = e.target.closest('[data-video-preview-clip]');
@@ -2944,6 +2960,14 @@ function buildAudioSettingsMarkup(idx, q) {
         <div style="min-width:220px;">
           <label>Audio file</label>
           <input data-audio-upload="${idx}" type="file" accept="audio/*" />
+        </div>
+        <div style="min-width:200px;">
+          <label>Record voice</label>
+          <div class="row gap">
+            <button type="button" class="btn" data-record-audio="${idx}">🎙 Record</button>
+            <button type="button" class="btn" data-stop-record-audio="${idx}" hidden>■ Stop</button>
+            <span class="small" data-record-timer="${idx}" style="align-self:center;"></span>
+          </div>
         </div>
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
@@ -15740,6 +15764,95 @@ function fileToDataUrl(file) {
     reader.onerror = () => reject(reader.error || new Error('Read error'));
     reader.readAsDataURL(file);
   });
+}
+
+const BUILDER_AUDIO_MAX_SEC = 120;
+
+async function startBuilderAudioRecording(idx, q) {
+  if (builderAudioRecorder) {
+    stopBuilderAudioRecording();
+    return;
+  }
+  const recordBtn = questionListEl.querySelector(`[data-record-audio="${idx}"]`);
+  const stopBtn = questionListEl.querySelector(`[data-stop-record-audio="${idx}"]`);
+  const timerEl = questionListEl.querySelector(`[data-record-timer="${idx}"]`);
+  if (!recordBtn || !stopBtn || !timerEl) return;
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    const n = err?.name || '';
+    if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
+      alert('Microphone access denied. Allow the mic in your browser settings and try again.');
+    } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
+      alert('No microphone found. Connect a mic and try again.');
+    } else if (n === 'NotReadableError' || n === 'TrackStartError') {
+      alert('Microphone is in use by another app. Close it and try again.');
+    } else {
+      alert(`Mic error: ${err?.message || err}`);
+    }
+    return;
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  const chunks = [];
+  const startTime = Date.now();
+
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+  recorder.onstop = async () => {
+    if (builderAudioRecorder?.timerId) clearInterval(builderAudioRecorder.timerId);
+    stream.getTracks().forEach((t) => t.stop());
+    const wasRecorder = builderAudioRecorder;
+    builderAudioRecorder = null;
+    if (!wasRecorder || wasRecorder.cancelled) return;
+
+    const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+    if (!blob.size) return;
+    try {
+      const file = new File([blob], `recording.${blob.type.includes('mp4') ? 'm4a' : 'webm'}`, { type: blob.type });
+      const dataUrl = await fileToDataUrl(file);
+      syncQuizFromUI();
+      q.audioData = dataUrl;
+      q.audioMode = 'file';
+      q.audioEnabled = true;
+      q._ttsGenerated = false;
+      q._userAudioUploaded = true;
+      renderBuilder();
+    } catch (err) {
+      alert(`Recording save failed: ${err.message}`);
+    }
+  };
+
+  recorder.start(1000);
+
+  recordBtn.hidden = true;
+  stopBtn.hidden = false;
+  timerEl.textContent = '0:00';
+
+  const timerId = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    timerEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    if (elapsed >= BUILDER_AUDIO_MAX_SEC && recorder.state === 'recording') {
+      recorder.stop();
+    }
+  }, 250);
+
+  builderAudioRecorder = { recorder, stream, timerId, idx, cancelled: false };
+}
+
+function stopBuilderAudioRecording() {
+  if (!builderAudioRecorder) return;
+  const { recorder } = builderAudioRecorder;
+  if (recorder.state === 'recording') {
+    recorder.stop();
+  }
 }
 
 const IMAGE_MAX_DIMENSION = 800;
