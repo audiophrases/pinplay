@@ -5273,7 +5273,7 @@ function aiGradeImportParse(raw) {
   return obj;
 }
 
-async function aiGradeImportLoadContext(safeCode) {
+async function aiGradeImportLoadContext(safeCode, qIndexesNeeded) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   const overview = await api('/api/assignments/grading-overview', {
     method: 'POST',
@@ -5292,7 +5292,10 @@ async function aiGradeImportLoadContext(safeCode) {
     });
   });
 
-  const teacherQIndexes = [...questionMap.values()].filter((q) => q.teacherGraded).map((q) => q.qIndex);
+  const allTeacherQIndexes = [...questionMap.values()].filter((q) => q.teacherGraded).map((q) => q.qIndex);
+  const teacherQIndexes = qIndexesNeeded instanceof Set
+    ? allTeacherQIndexes.filter((qi) => qIndexesNeeded.has(qi))
+    : allTeacherQIndexes;
   const gradeData = await Promise.all(
     teacherQIndexes.map((qi) => api('/api/assignments/question-grading', {
       method: 'POST',
@@ -5826,10 +5829,13 @@ function openAiGradeImport(code) {
       errEl.textContent = `assignmentCode "${parsed.assignmentCode}" does not match current assignment ${safeCode}. Open the right assignment first.`;
       return;
     }
-    errEl.textContent = 'Loading current grades for cross-check…';
+    const qIndexesNeeded = new Set(
+      parsed.results.map((r) => Number(r?.qIndex)).filter((n) => Number.isFinite(n))
+    );
+    errEl.textContent = `Loading current grades for cross-check (${qIndexesNeeded.size} question${qIndexesNeeded.size === 1 ? '' : 's'})…`;
     let ctx;
     try {
-      ctx = await aiGradeImportLoadContext(safeCode);
+      ctx = await aiGradeImportLoadContext(safeCode, qIndexesNeeded);
     } catch (err) {
       errEl.textContent = `Could not load context: ${err.message}`;
       return;
