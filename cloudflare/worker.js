@@ -736,14 +736,17 @@ export default {
         : 0;
 
       const wsid = makeWorkspaceId();
-      const meta = { wsid, label, createdAt: now, expiresAt: exp || null };
-      await env.QUIZ_MEDIA.put(`workspaces/${wsid}/_meta.json`, JSON.stringify(meta), {
-        httpMetadata: { contentType: 'application/json' },
-      });
-
       const token = await signGuestToken(env, { wsid, exp });
       const base = String(env.BUILDER_BASE_URL || 'https://audiophrases.github.io/pinplay/create/');
       const inviteUrl = `${base}${base.includes('?') ? '&' : '?'}invite=${encodeURIComponent(token)}`;
+
+      // Persist the current invite token so the owner can re-copy it later
+      // (HMAC tokens aren't recoverable from wsid alone). Stored in the
+      // owner-only meta file; never served to guests.
+      const meta = { wsid, label, createdAt: now, expiresAt: exp || null, inviteToken: token };
+      await env.QUIZ_MEDIA.put(`workspaces/${wsid}/_meta.json`, JSON.stringify(meta), {
+        httpMetadata: { contentType: 'application/json' },
+      });
 
       return json({ ok: true, wsid, label, token, inviteUrl, createdAt: now, expiresAt: exp || null }, 201);
     }
@@ -760,6 +763,7 @@ export default {
         const parts = obj.key.split('/');
         if (parts.length >= 2 && parts[1]) wsids.add(parts[1]);
       }
+      const base = String(env.BUILDER_BASE_URL || 'https://audiophrases.github.io/pinplay/create/');
       const workspaces = [];
       for (const wsid of wsids) {
         let meta = { wsid, label: wsid, createdAt: null, expiresAt: null };
@@ -770,6 +774,15 @@ export default {
             meta = { ...parsed, wsid };
           }
         } catch { /* skip */ }
+        // Build invite URL from stored token. Old workspaces created before
+        // PR 3 won't have inviteToken — those get null and the UI will
+        // prompt the owner to regenerate.
+        if (meta.inviteToken) {
+          meta.inviteUrl = `${base}${base.includes('?') ? '&' : '?'}invite=${encodeURIComponent(meta.inviteToken)}`;
+        } else {
+          meta.inviteUrl = null;
+        }
+        delete meta.inviteToken; // don't ship the raw token to the admin UI
         // Count quizzes
         let quizCount = 0;
         try {
@@ -821,6 +834,40 @@ export default {
         return tb - ta;
       });
       return json({ wsid, quizzes });
+    }
+
+    // Regenerate the invite link for an existing workspace. Preserves the
+    // existing expiry from _meta.json. The previous token remains technically
+    // valid until its exp (HMAC tokens can't be invalidated without a
+    // deny-list), but the stored copy is replaced so the admin UI surfaces
+    // only the new one.
+    if (url.pathname.startsWith('/api/admin/workspaces/') && url.pathname.endsWith('/regenerate') && request.method === 'POST') {
+      const auth = await resolveAuth(env, request);
+      if (!auth || auth.role !== 'owner') return json({ error: 'Owner auth required.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'R2 binding missing.' }, 501);
+
+      const wsid = sanitizeWorkspaceId(
+        url.pathname.replace('/api/admin/workspaces/', '').replace('/regenerate', '')
+      );
+      if (!wsid) return json({ error: 'invalid wsid' }, 400);
+
+      const metaObj = await env.QUIZ_MEDIA.get(`workspaces/${wsid}/_meta.json`);
+      if (!metaObj) return json({ error: 'Workspace not found.' }, 404);
+      let meta;
+      try { meta = await metaObj.json(); } catch { meta = {}; }
+
+      const exp = Number(meta.expiresAt || 0) || 0;
+      const token = await signGuestToken(env, { wsid, exp });
+      const base = String(env.BUILDER_BASE_URL || 'https://audiophrases.github.io/pinplay/create/');
+      const inviteUrl = `${base}${base.includes('?') ? '&' : '?'}invite=${encodeURIComponent(token)}`;
+
+      meta.wsid = wsid;
+      meta.inviteToken = token;
+      await env.QUIZ_MEDIA.put(`workspaces/${wsid}/_meta.json`, JSON.stringify(meta), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+
+      return json({ ok: true, wsid, token, inviteUrl, expiresAt: exp || null });
     }
 
     // Terminate a guest workspace: wipes all keys under its prefix.

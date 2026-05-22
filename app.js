@@ -12208,70 +12208,103 @@ async function renderWorkspaces(opts = {}) {
     }
     const now = Math.floor(Date.now() / 1000);
     for (const ws of workspaces) {
-      const li = document.createElement('li');
-      const expired = ws.expiresAt && ws.expiresAt < now;
-      if (expired) li.classList.add('workspace-expired');
-
-      const created = ws.createdAt ? new Date(ws.createdAt * 1000).toLocaleDateString() : '?';
-      const expires = ws.expiresAt ? new Date(ws.expiresAt * 1000).toLocaleDateString() : 'never';
-
-      const top = document.createElement('div');
-      top.className = 'workspace-row-top';
-      const labelSpan = document.createElement('span');
-      labelSpan.className = 'workspace-label';
-      labelSpan.textContent = ws.label || ws.wsid;
-      const metaSpan = document.createElement('span');
-      metaSpan.className = 'workspace-meta';
-      metaSpan.textContent = `· ${ws.quizCount || 0} quizzes · created ${created} · expires ${expires}`;
-      top.append(labelSpan, metaSpan);
-      li.appendChild(top);
-
-      // Fresh invite link (only shown right after creation; tokens aren't re-derivable later).
-      if (opts.highlightWsid === ws.wsid && opts.freshInviteUrl) {
-        const link = document.createElement('code');
-        link.className = 'workspace-invite-link';
-        link.textContent = opts.freshInviteUrl;
-        li.appendChild(link);
-      }
-
-      const actions = document.createElement('div');
-      actions.className = 'workspace-actions';
-
-      if (opts.highlightWsid === ws.wsid && opts.freshInviteUrl) {
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn primary';
-        copyBtn.textContent = '📋 Copy invite link';
-        copyBtn.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(opts.freshInviteUrl);
-            copyBtn.textContent = '✅ Copied!';
-            setTimeout(() => { copyBtn.textContent = '📋 Copy invite link'; }, 1500);
-          } catch {
-            setStatus(statusEl, 'Copy failed — select the link manually.', 'bad');
-          }
-        });
-        actions.appendChild(copyBtn);
-      }
-
-      const viewBtn = document.createElement('button');
-      viewBtn.className = 'btn';
-      viewBtn.textContent = ws.quizCount > 0 ? `🗂 View ${ws.quizCount} quizzes` : '🗂 View quizzes';
-      viewBtn.addEventListener('click', () => loadWorkspaceQuizzes(ws.wsid, li, viewBtn));
-      actions.appendChild(viewBtn);
-
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn';
-      delBtn.style.color = '#b91c1c';
-      delBtn.textContent = '🗑 Terminate';
-      delBtn.title = 'Wipes the workspace, all its quizzes/media, and invalidates the invite link.';
-      delBtn.addEventListener('click', () => deleteWorkspace(ws));
-      actions.appendChild(delBtn);
-
-      li.appendChild(actions);
-      listEl.appendChild(li);
+      // If this is the workspace we just created/regenerated, prefer the fresh
+      // URL from opts (in case the listing is racing the R2 write).
+      const inviteUrl = (opts.highlightWsid === ws.wsid && opts.freshInviteUrl) || ws.inviteUrl || '';
+      renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl);
     }
   } catch (err) {
     setStatus(statusEl, `Load failed: ${err?.message || err}`, 'bad');
+  }
+}
+
+function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
+  const li = document.createElement('li');
+  const expired = ws.expiresAt && ws.expiresAt < now;
+  if (expired) li.classList.add('workspace-expired');
+
+  const created = ws.createdAt ? new Date(ws.createdAt * 1000).toLocaleDateString() : '?';
+  const expires = ws.expiresAt ? new Date(ws.expiresAt * 1000).toLocaleDateString() : 'never';
+
+  const top = document.createElement('div');
+  top.className = 'workspace-row-top';
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'workspace-label';
+  labelSpan.textContent = ws.label || ws.wsid;
+  const metaSpan = document.createElement('span');
+  metaSpan.className = 'workspace-meta';
+  metaSpan.textContent = `· ${ws.quizCount || 0} quizzes · created ${created} · expires ${expires}`;
+  top.append(labelSpan, metaSpan);
+  li.appendChild(top);
+
+  if (inviteUrl) {
+    const link = document.createElement('code');
+    link.className = 'workspace-invite-link';
+    link.textContent = inviteUrl;
+    li.appendChild(link);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'small muted top-space';
+    placeholder.textContent = 'No invite link stored (workspace created before re-retrievable links). Use Regenerate to mint a fresh one.';
+    li.appendChild(placeholder);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'workspace-actions';
+
+  if (inviteUrl) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn primary';
+    copyBtn.textContent = '📋 Copy invite link';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(() => { copyBtn.textContent = '📋 Copy invite link'; }, 1500);
+      } catch {
+        setStatus(statusEl, 'Copy failed — select the link manually.', 'bad');
+      }
+    });
+    actions.appendChild(copyBtn);
+  }
+
+  const regenBtn = document.createElement('button');
+  regenBtn.className = 'btn';
+  regenBtn.textContent = '🔄 Regenerate link';
+  regenBtn.title = 'Mint a new invite link. The previous one will continue to work until it expires.';
+  regenBtn.addEventListener('click', () => regenerateWorkspaceLink(ws));
+  actions.appendChild(regenBtn);
+
+  const viewBtn = document.createElement('button');
+  viewBtn.className = 'btn';
+  viewBtn.textContent = ws.quizCount > 0 ? `🗂 View ${ws.quizCount} quizzes` : '🗂 View quizzes';
+  viewBtn.addEventListener('click', () => loadWorkspaceQuizzes(ws.wsid, li, viewBtn));
+  actions.appendChild(viewBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'btn';
+  delBtn.style.color = '#b91c1c';
+  delBtn.textContent = '🗑 Terminate';
+  delBtn.title = 'Wipes the workspace, all its quizzes/media, and invalidates the invite link.';
+  delBtn.addEventListener('click', () => deleteWorkspace(ws));
+  actions.appendChild(delBtn);
+
+  li.appendChild(actions);
+  listEl.appendChild(li);
+}
+
+async function regenerateWorkspaceLink(ws) {
+  const statusEl = document.getElementById('workspaceStatus');
+  setStatus(statusEl, `Regenerating link for "${ws.label || ws.wsid}"…`, 'ok');
+  try {
+    const data = await api(`/api/admin/workspaces/${encodeURIComponent(ws.wsid)}/regenerate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${createSessionPassword}` },
+    });
+    setStatus(statusEl, `New invite link minted for "${ws.label || ws.wsid}".`, 'ok');
+    await renderWorkspaces({ highlightWsid: ws.wsid, freshInviteUrl: data.inviteUrl });
+  } catch (err) {
+    setStatus(statusEl, `Regenerate failed: ${err?.message || err}`, 'bad');
   }
 }
 
