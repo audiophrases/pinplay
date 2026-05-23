@@ -363,12 +363,12 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "puzzle": {
     "name": "Puzzle (Reorder)",
-    "rules": "Unordered list of words or items that students must drag into the correct order.",
-    "constraints": { "maxItems": 12 },
+    "rules": "Unordered list of words or items that students must drag into the correct order. MUST have at least 3 items — fewer than 3 makes the reorder trivial and the question is dropped on import. If the target answer is only 1–2 tokens (e.g. a two-word place name), use 'text' type instead of 'puzzle'.",
+    "constraints": { "minItems": 3, "maxItems": 12 },
     "pedagogicalUses": ["Sentence structure and sequencing.", "Process/order understanding."],
     "ttsStrategy": "audioText may preview intended final sentence before reconstruction.",
     "differentiationTips": ["Use fewer chunks with punctuation scaffolds first.", "Remove punctuation cues for advanced challenge."],
-    "commonPitfalls": ["Items can form multiple valid sequences unintentionally.", "Too many tiny tokens create noise."]
+    "commonPitfalls": ["Fewer than 3 items (silently dropped on import).", "Items can form multiple valid sequences unintentionally.", "Too many tiny tokens create noise."]
   },
   "slider": {
     "name": "Numeric Slider",
