@@ -1,0 +1,310 @@
+{
+  "version": 3,
+  "title": "Welcome to PinPlay — Question type showcase",
+  "questions": [
+    {
+      "id": "showcase-mcq",
+      "type": "mcq",
+      "prompt": "💡 Tip — MCQ (single choice): Best for fast concept checks, vocab, dates and formulas. Write one clearly correct option and 3 plausible distractors so guessing is risky but the answer is unambiguous.\n\nQ: Which planet in our solar system is the largest?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "Jupiter", "correct": true },
+        { "text": "Saturn", "correct": false },
+        { "text": "Neptune", "correct": false },
+        { "text": "Earth", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-multi",
+      "type": "multi",
+      "prompt": "💡 Tip — Multiple-select: Use when two or more answers are correct. Make the instruction explicit (e.g. \"select all that apply\") so students don't stop after the first match.\n\nQ: Which of these are prime numbers? Select all that apply.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "2", "correct": true },
+        { "text": "9", "correct": false },
+        { "text": "11", "correct": true },
+        { "text": "15", "correct": false },
+        { "text": "17", "correct": true }
+      ]
+    },
+    {
+      "id": "showcase-tf",
+      "type": "tf",
+      "prompt": "💡 Tip — True/False: Great for crisp factual claims. Avoid words like \"sometimes\" or \"usually\" — ambiguity turns T/F into a coin flip.\n\nQ: True or False — Light travels faster than sound.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "True", "correct": true },
+        { "text": "False", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-text-auto",
+      "type": "text",
+      "prompt": "💡 Tip — Typed answer (auto-graded): List every accepted spelling and synonym. Matching is case-insensitive and trims whitespace, but it's still literal — a missing accent or a typo will mark wrong unless you add it.\n\nQ: What is the chemical symbol for gold?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "accepted": ["Au", "au", "", ""]
+    },
+    {
+      "id": "showcase-text-teacher",
+      "type": "text",
+      "prompt": "💡 Tip — Typed answer (teacher-graded): Leave the accepted list empty and the same question becomes a short-answer task you grade by hand after the quiz. Use this when you want one short sentence per student that you'll read.\n\nQ: In one sentence, what makes a good study habit?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "accepted": ["", "", "", ""]
+    },
+    {
+      "id": "showcase-open",
+      "type": "open",
+      "prompt": "💡 Tip — Open response: Always teacher-graded. After the quiz you can award points, write corrections each student sees, and tag the best answers as \"model answers\" to project to the class.\n\nQ: Describe one experiment you would run if you could spend a day on Mars.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": ""
+    },
+    {
+      "id": "showcase-context-gap",
+      "type": "context_gap",
+      "prompt": "💡 Tip — Context gap (fill-in-the-blank): Use ____ in the prompt for each blank. The gaps list below maps in order — comma-separated values in one gap accept synonyms (e.g. \"big, large\").\n\nQ: The Amazon rainforest lies mostly in the country of ____, and is often called the planet's ____.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "gaps": [
+        "Brazil",
+        "lungs"
+      ]
+    },
+    {
+      "id": "showcase-match-pairs",
+      "type": "match_pairs",
+      "prompt": "💡 Tip — Match pairs: Perfect for vocab, capitals, formulas, dates — anything associative. Keep both columns parallel in style so the matching logic isn't given away by formatting.\n\nQ: Match each country with its capital city.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "pairs": [
+        { "left": "Japan", "right": "Tokyo" },
+        { "left": "Australia", "right": "Canberra" },
+        { "left": "Canada", "right": "Ottawa" },
+        { "left": "Egypt", "right": "Cairo" }
+      ]
+    },
+    {
+      "id": "showcase-error-hunt",
+      "type": "error_hunt",
+      "prompt": "💡 Tip — Error hunt: Students tap each wrong word, then rewrite the sentence. Set requiredErrors to how many mistakes you expect them to catch. Great for grammar diagnostics and discussion.\n\nQ: Find and fix the mistakes in this sentence.\n\n\"She don't likes pizza on Fridays.\"",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "corrected": "She doesn't like pizza on Fridays.",
+      "requiredErrors": 2
+    },
+    {
+      "id": "showcase-puzzle",
+      "type": "puzzle",
+      "prompt": "💡 Tip — Word puzzle: Students reorder shuffled tokens. Keep the item count between 4 and 9 so it stays readable on phones. Works for sentences, formulas, or timelines.\n\nQ: Put the words in the right order to form a famous Neil Armstrong line.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "items": [
+        "One",
+        "small",
+        "step",
+        "for",
+        "man"
+      ]
+    },
+    {
+      "id": "showcase-slider",
+      "type": "slider",
+      "prompt": "💡 Tip — Slider estimate: Use for any \"guess the number\" — years, distances, percentages. The margin (none / low / medium / high / maximum) sets how close the answer must be to count.\n\nQ: In what year did humans first land on the Moon?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "min": 1900,
+      "max": 2000,
+      "target": 1969,
+      "margin": "low",
+      "unit": ""
+    },
+    {
+      "id": "showcase-pin",
+      "type": "pin",
+      "prompt": "💡 Tip — Pin the image: Students tap a spot on your picture. Replace this placeholder with a real image (upload, paste from clipboard, or search the web). Use pinMode \"all\" to require every zone, or \"any\" if hitting one is enough.\n\nQ: Pin the correct location on the image.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
+      "zone": { "x": 50, "y": 50, "r": 15 },
+      "zones": [
+        { "x": 50, "y": 50, "r": 15 }
+      ],
+      "pinMode": "any"
+    },
+    {
+      "id": "showcase-audio",
+      "type": "audio",
+      "prompt": "💡 Tip — Audio question: Plays a short clip before the student answers. Use TTS (instant, pick the voice and language) or upload your own recording. Keep clips short and clean for classroom acoustics.\n\nQ: Listen carefully — which animal is mentioned?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "The quick brown fox jumps over the lazy dog.",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "Fox", "correct": true },
+        { "text": "Cat", "correct": false },
+        { "text": "Wolf", "correct": false },
+        { "text": "Rabbit", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-speaking",
+      "type": "speaking",
+      "prompt": "💡 Tip — Speaking: Records the student's voice for the time limit you set (15–30s is usually right). Best for small classes where you'll listen back. Works on most modern phones and laptops.\n\nQ: In 20 seconds, introduce yourself and say one thing you enjoyed learning recently.",
+      "points": 1000,
+      "timeLimit": 20,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": ""
+    },
+    {
+      "id": "showcase-poll",
+      "type": "mcq",
+      "prompt": "💡 Tip — Poll mode (isPoll: true): Turns any MCQ into an anonymous vote with no scoring and no correct answer. Use it for warm-ups, confidence checks, or quick opinion gathers at any point in the lesson.\n\nQ: How are you feeling about today's lesson so far?",
+      "points": 0,
+      "timeLimit": 0,
+      "isPoll": true,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "🔥 Loving it", "correct": false },
+        { "text": "🙂 Going well", "correct": false },
+        { "text": "😐 A bit lost", "correct": false },
+        { "text": "😴 Bring coffee", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-image",
+      "type": "mcq",
+      "prompt": "💡 Tip — Image on any question: Every type can have a picture. Upload from your computer, paste from clipboard (Ctrl+V), or search the web from inside the builder. The placeholder below would normally be a clear, high-contrast image.\n\nQ: Looking at the image, which continent is shown?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "imageData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZQx8AAAAASUVORK5CYII=",
+      "answers": [
+        { "text": "Africa", "correct": true },
+        { "text": "Europe", "correct": false },
+        { "text": "Antarctica", "correct": false },
+        { "text": "South America", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-video",
+      "type": "mcq",
+      "prompt": "💡 Tip — Video clip: Paste a YouTube, Vimeo or direct video URL and set start/end seconds to trim to the exact moment. The clip plays inline with the question, before students answer.\n\nQ: After watching the clip, where is the person filming?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "media": {
+        "kind": "video",
+        "provider": "youtube",
+        "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        "startAt": 0,
+        "endAt": 19
+      },
+      "answers": [
+        { "text": "At the zoo", "correct": true },
+        { "text": "At a museum", "correct": false },
+        { "text": "At the beach", "correct": false },
+        { "text": "In a classroom", "correct": false }
+      ]
+    },
+    {
+      "id": "showcase-timer",
+      "type": "mcq",
+      "prompt": "💡 Tip — Timer (timeLimit in seconds): Set 0 for no timer (default — best for most classroom learning). Use a positive value to add retrieval pressure. This question has a 15-second timer to demo the feel.\n\nQ: Quick! What is 7 × 8?",
+      "points": 1000,
+      "timeLimit": 15,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "answers": [
+        { "text": "56", "correct": true },
+        { "text": "54", "correct": false },
+        { "text": "63", "correct": false },
+        { "text": "49", "correct": false }
+      ]
+    }
+  ]
+}
