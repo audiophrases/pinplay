@@ -1386,6 +1386,7 @@ function bindBuilderEvents() {
 
     let totalAppended = 0;
     const errors = [];
+    const allConversions = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -1407,6 +1408,16 @@ function bindBuilderEvents() {
             next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
           }
           return next;
+        });
+
+        // Salvage questions that would be silently dropped at save/publish time
+        // (e.g. puzzle with <3 items). Convert to a valid type and report to teacher.
+        parsed.questions = parsed.questions.map((q) => {
+          const { question, conversion } = salvageQuestionForImport(q);
+          if (conversion) {
+            allConversions.push({ ...conversion, file: file.name });
+          }
+          return question;
         });
 
         if (mode === 'append' || (mode === 'replace' && i > 0)) {
@@ -1449,6 +1460,10 @@ function bindBuilderEvents() {
     }
     if (errors.length) {
       label += `\n\nFailed files:\n${errors.join('\n')}`;
+    }
+    if (allConversions.length) {
+      const lines = allConversions.map((c) => `• ${c.id || '(no id)'}: ${c.from} → ${c.to} (${c.reason})`);
+      label += `\n\n${allConversions.length} question(s) auto-converted to a valid type to avoid silent loss. Review and edit in the builder:\n${lines.join('\n')}`;
     }
     if (savedOk) {
       alert(label);
@@ -14871,6 +14886,73 @@ function normalizeTimeLimitValue(value, type) {
 function validateImportedQuiz(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid JSON root.');
   if (!Array.isArray(data.questions)) throw new Error('Missing questions array.');
+}
+
+// Mirrors the drop conditions inside normalizeQuizForLive (e.g. puzzle items < 3,
+// context_gap with no gaps, mcq with <2 answers). Returns either the original
+// question untouched, or a salvaged copy converted to a valid type so the teacher
+// doesn't silently lose data on the first save/publish.
+function salvageQuestionForImport(q) {
+  if (!q || typeof q !== 'object') return { question: q, conversion: null };
+
+  const toTextFallback = (extraAccepted = [], reason) => {
+    const accepted = Array.from(new Set(
+      [...extraAccepted, ...(Array.isArray(q.accepted) ? q.accepted : [])]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean)
+    ));
+    const next = { ...q, type: 'text', accepted };
+    delete next.items;
+    delete next.gaps;
+    delete next.pairs;
+    delete next.answers;
+    delete next.zones;
+    delete next.zone;
+    delete next.corrected;
+    delete next.correctedVariants;
+    delete next.requiredErrors;
+    return { question: next, conversion: { id: q.id, from: q.type, to: 'text', reason } };
+  };
+
+  if (q.type === 'puzzle') {
+    const items = (Array.isArray(q.items) ? q.items : []).map((x) => String(x || '').trim()).filter(Boolean);
+    if (items.length < 3) {
+      const joined = items.join(' ');
+      return toTextFallback(joined ? [joined, joined.toLowerCase()] : [], `puzzle needs ≥3 items (had ${items.length})`);
+    }
+  }
+
+  if (q.type === 'context_gap') {
+    const gaps = (Array.isArray(q.gaps) ? q.gaps : []).map((x) => String(x || '').trim()).filter(Boolean);
+    if (gaps.length < 1) {
+      return toTextFallback([], 'context_gap needs ≥1 gap');
+    }
+  }
+
+  if (['mcq', 'multi', 'audio'].includes(q.type)) {
+    const answers = (Array.isArray(q.answers) ? q.answers : []).filter((a) => String(a?.text || '').trim());
+    if (answers.length < 2) {
+      const correct = answers.find((a) => a?.correct) || answers[0];
+      const seed = correct ? [String(correct.text)] : [];
+      return toTextFallback(seed, `${q.type} needs ≥2 answer options (had ${answers.length})`);
+    }
+  }
+
+  if (q.type === 'match_pairs') {
+    const pairs = (Array.isArray(q.pairs) ? q.pairs : []).filter((p) => String(p?.left || '').trim() && String(p?.right || '').trim());
+    if (pairs.length < 2) {
+      return toTextFallback([], `match_pairs needs ≥2 pairs (had ${pairs.length})`);
+    }
+  }
+
+  if (q.type === 'error_hunt') {
+    const variants = getCorrectedVariantsList(q.corrected, q.correctedVariants);
+    if (!variants.length) {
+      return toTextFallback([], 'error_hunt needs a corrected sentence');
+    }
+  }
+
+  return { question: q, conversion: null };
 }
 
 function normalizeTextAnswer(text) {
