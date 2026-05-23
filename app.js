@@ -5557,7 +5557,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       <strong>${escapeHtml(String(response.assignmentCode))}</strong>
       <span class="small muted">${rows.length} result${rows.length === 1 ? '' : 's'}</span>
       <span class="small muted" data-summary-line></span>
-      <span class="small muted" title="Rows with confidence < 0.60 have an amber outline. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you tick their Apply box.">ⓘ hint</span>
+      <span class="small muted" title="Rows with confidence < 0.60 have an amber outline. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you tick their Apply box. Shift-click an Apply box to range-select between it and your last click.">ⓘ hint</span>
     </div>
     <div style="max-height:68vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
       <table class="agi-preview">
@@ -5620,6 +5620,34 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     }
   }
 
+  let lastIncludeAnchor = null;
+  const handleIncludeShiftClick = (e, cb) => {
+    if (!e.shiftKey || !lastIncludeAnchor || lastIncludeAnchor === cb || !lastIncludeAnchor.isConnected) {
+      lastIncludeAnchor = cb;
+      return;
+    }
+    const tbody = body.querySelector('tbody');
+    if (!tbody) { lastIncludeAnchor = cb; return; }
+    const allCbs = [...tbody.querySelectorAll('[data-include-row]')];
+    const aIdx = allCbs.indexOf(lastIncludeAnchor);
+    const bIdx = allCbs.indexOf(cb);
+    if (aIdx < 0 || bIdx < 0) { lastIncludeAnchor = cb; return; }
+    const [lo, hi] = aIdx < bIdx ? [aIdx, bIdx] : [bIdx, aIdx];
+    const newState = cb.checked;
+    for (let i = lo; i <= hi; i++) {
+      const otherCb = allCbs[i];
+      if (otherCb === cb) continue;
+      if (otherCb.checked !== newState) {
+        otherCb.checked = newState;
+        const otherTr = otherCb.closest('tr[data-row-idx]');
+        const otherRow = otherTr?.__rowData;
+        if (otherRow) otherRow.included = newState;
+      }
+    }
+    updateSummary();
+    lastIncludeAnchor = cb;
+  };
+
   body.querySelectorAll('tr[data-row-idx]').forEach((tr) => {
     const rowIdx = Number(tr.dataset.rowIdx);
     const row = sorted[rowIdx];
@@ -5668,6 +5696,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       renderDiff();
       autoInclude();
     });
+    includeCb?.addEventListener('click', (e) => handleIncludeShiftClick(e, includeCb));
     includeCb?.addEventListener('change', () => {
       row.included = !!includeCb.checked;
       updateSummary();
