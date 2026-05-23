@@ -2479,6 +2479,8 @@ export class QuizRoom {
           examMode: !!body?.examMode,
           active: true,
           quiz,
+          pendingGradingCount: 0,
+          pendingAttemptsCount: 0,
         };
 
         await saveAssignmentBase(this.state.storage, assignment.code, assignment);
@@ -2491,16 +2493,69 @@ export class QuizRoom {
 
       if (url.pathname === '/assignments/list' && request.method === 'GET') {
         const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50)));
-        const assignments = await loadAssignmentsMap(this.state.storage);
-        const list = Object.values(assignments || {})
-          .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
-          .slice(0, limit)
-          .map((a) => {
-            const pub = publicAssignment(a, { includeQuiz: false });
-            const pending = summarizePendingGrading(a);
-            return pub ? { ...pub, ...pending } : pub;
-          });
-        return json({ ok: true, assignments: list });
+
+        // Read ONLY base rows (`ab:<code>`). Attempt rows live under the
+        // separate `a:` prefix and are not scanned here. This is what makes
+        // the dashboard cheap regardless of attempt count.
+        await migrateLegacyAssignmentsBlob(this.state.storage);
+        const baseEntries = await this.state.storage.list({ prefix: 'ab:' });
+        const bases = [];
+        for (const [, value] of baseEntries) {
+          if (value && typeof value === 'object') bases.push({ value, fromLegacy: false, legacyKey: null });
+        }
+
+        // Pick up any legacy `a:<code>` base rows that haven't migrated yet.
+        // Skip the `:t:` attempt rows in this prefix.
+        const seenCodes = new Set(bases.map((b) => String(b.value?.code || '')));
+        const aEntries = await this.state.storage.list({ prefix: 'a:' });
+        for (const [key, value] of aEntries) {
+          const rest = key.slice(2);
+          if (rest.includes(':t:')) continue;
+          if (value && typeof value === 'object' && !seenCodes.has(rest)) {
+            bases.push({ value, fromLegacy: true, legacyKey: key });
+            seenCodes.add(rest);
+          }
+        }
+
+        // Sort newest-first, cap to limit BEFORE any per-assignment work so
+        // backfill cost stays bounded.
+        bases.sort((a, b) => Number(b.value?.createdAt || 0) - Number(a.value?.createdAt || 0));
+        const top = bases.slice(0, limit);
+
+        // For each row in the top slice:
+        //   * If counts are missing (pre-feature row OR legacy `a:<code>`
+        //     row), scoped-load that one code's attempts, recompute, persist
+        //     to `ab:<code>`. One-time cost per assignment.
+        //   * If from legacy `a:<code>`, delete the legacy key after we've
+        //     written the new one. (`loadAssignmentBase`-style migration,
+        //     but we batch the recompute with it.)
+        // Rows NOT in the top slice are intentionally left alone — they'll
+        // get backfilled the next time they bubble up. Never migrate a
+        // legacy row without also backfilling, or stale 0-counts would be
+        // cached forever.
+        const out = [];
+        for (const { value: base, fromLegacy, legacyKey } of top) {
+          const code = String(base?.code || (fromLegacy && legacyKey ? legacyKey.slice(2) : ''));
+          let assignment = base;
+          const needsBackfill = fromLegacy
+            || !Number.isFinite(Number(base?.pendingGradingCount))
+            || !Number.isFinite(Number(base?.pendingAttemptsCount));
+          if (code && needsBackfill) {
+            const attemptsByKey = await loadAttemptsForCode(this.state.storage, code);
+            assignment = { ...base, attempts: attemptsByKey };
+            recomputeAssignmentPending(assignment);
+            delete assignment.attempts;
+            await saveAssignmentBase(this.state.storage, code, assignment);
+            if (fromLegacy && legacyKey) {
+              await this.state.storage.delete(legacyKey);
+            }
+          }
+          const pub = publicAssignment(assignment, { includeQuiz: false });
+          const pending = summarizePendingGrading(assignment);
+          if (pub) out.push({ ...pub, ...pending });
+        }
+
+        return json({ ok: true, assignments: out });
       }
 
       if (url.pathname === '/assignments/get' && request.method === 'GET') {
@@ -2509,7 +2564,7 @@ export class QuizRoom {
         // Single-row read by code (was loadAssignmentsMap which scans all
         // assignment + attempt rows; that cost was the main DO row-read
         // burner on the preview hot-path).
-        const assignment = await this.state.storage.get(`a:${code}`);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         // Note: no `active` check — closed assignments must still be loadable so
         // students can reach review mode for past attempts (teacher feedback).
@@ -2530,7 +2585,7 @@ export class QuizRoom {
         // student's attempts and count toward attemptsLimit). The scoped list
         // reads only `a:<code>:t:*` rows, not the whole assignments table.
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2598,7 +2653,7 @@ export class QuizRoom {
 
         // Need base + this code's attempts (for attemptsLimit and resume check).
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2650,7 +2705,7 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2689,7 +2744,7 @@ export class QuizRoom {
         if (!Number.isFinite(pointsRaw)) return json({ error: 'points required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2703,6 +2758,9 @@ export class QuizRoom {
 
         const maxPoints = Math.max(0, Math.round(Number(question?.points || 1000)));
         const pointsAwarded = Math.max(0, Math.min(maxPoints, Math.round(pointsRaw)));
+
+        await ensurePendingCounts(this.state.storage, code, assignment);
+        const prevPending = computeAttemptPending(assignment, attempt);
 
         attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
         attempt.answersByQ[String(qIndex)] = {
@@ -2722,6 +2780,7 @@ export class QuizRoom {
         if (attempt.notifiedAt) attempt.notifiedAt = 0;
 
         attempt.updatedAt = Date.now();
+        applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
         assignment.updatedAt = Date.now();
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -2739,7 +2798,7 @@ export class QuizRoom {
         // every assignment + every attempt row). This endpoint is polled by
         // students during a quiz, so the savings compound heavily.
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2756,7 +2815,7 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2778,7 +2837,7 @@ export class QuizRoom {
 
         // No need to load the full assignment — we only need to verify it
         // exists and then update one attempt row.
-        const exists = await this.state.storage.get(`a:${code}`);
+        const exists = await loadAssignmentBase(this.state.storage, code);
         if (!exists) return json({ error: 'Assignment not found.' }, 404);
         const attempt = await this.state.storage.get(`a:${code}:t:${attemptId}`);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
@@ -2831,7 +2890,7 @@ export class QuizRoom {
 
         // Per-question hot path. Two single-row reads instead of full table scan.
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2848,6 +2907,15 @@ export class QuizRoom {
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
 
+        // One-time backfill if this is a legacy row whose cached pending
+        // counts haven't been seeded yet. Subsequent writes hit the fast path.
+        await ensurePendingCounts(this.state.storage, code, assignment);
+
+        // Snapshot pending state BEFORE mutating answersByQ. Re-answering a
+        // teacher-graded question resets `teacherGrade` to null below, so a
+        // previously-graded answer can flip back to pending.
+        const prevPending = computeAttemptPending(assignment, attempt);
+
         const safeAnswer = sanitizeAssignmentAnswer(question, body?.answer);
         attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
         attempt.answersByQ[String(qIndex)] = {
@@ -2862,6 +2930,7 @@ export class QuizRoom {
         attempt.autoScore = metrics.autoScore;
         attempt.updatedAt = now;
 
+        applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
         assignment.updatedAt = now;
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -2884,7 +2953,7 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2937,7 +3006,7 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -2959,7 +3028,7 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -3022,7 +3091,7 @@ export class QuizRoom {
         if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
 
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -3102,12 +3171,14 @@ export class QuizRoom {
         if (!attemptId) return json({ error: 'attemptId required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
+        await ensurePendingCounts(this.state.storage, code, assignment);
+        applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3127,7 +3198,7 @@ export class QuizRoom {
         if (!studentKey && !legacyStudentKey) return json({ error: 'Student key required.' }, 400);
 
         const [assignment, attempt] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -3138,6 +3209,8 @@ export class QuizRoom {
           return json({ error: 'This attempt does not belong to you.' }, 403);
         }
 
+        await ensurePendingCounts(this.state.storage, code, assignment);
+        applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3156,7 +3229,7 @@ export class QuizRoom {
 
         // Single-row reads for the base + only the specific attempts being
         // notified, in parallel. Previously this scanned the whole table.
-        const assignment = await this.state.storage.get(`a:${code}`);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         const fetched = await Promise.all(
@@ -3255,7 +3328,7 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignment = await this.state.storage.get(`a:${code}`);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.active = !!body?.active;
@@ -3270,7 +3343,7 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
-        const assignment = await this.state.storage.get(`a:${code}`);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
         assignment.archived = !!body?.archived;
@@ -3286,7 +3359,7 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
 
         // Single-row existence check (was full-map load).
-        const exists = await this.state.storage.get(`a:${code}`);
+        const exists = await loadAssignmentBase(this.state.storage, code);
         if (!exists) return json({ error: 'Assignment not found.' }, 404);
 
         await deleteAssignmentKeys(this.state.storage, code);
@@ -3298,22 +3371,34 @@ export class QuizRoom {
       // for leftover preview records (parent tab was closed before the
       // cleanup poll fired, etc.). One big read, then clean state.
       if (url.pathname === '/assignments/purge-previews' && request.method === 'POST') {
-        const entries = await this.state.storage.list({ prefix: 'a:' });
         const previewCodes = new Set();
-        for (const [key, value] of entries) {
-          // Match base rows only (no `:t:` segment) where className is __preview__
+
+        // New-layout base rows.
+        const newBases = await this.state.storage.list({ prefix: 'ab:' });
+        for (const [key, value] of newBases) {
+          if (value && typeof value === 'object' && value.className === '__preview__') {
+            previewCodes.add(key.slice(3));
+          }
+        }
+        // Legacy `a:<code>` base rows that haven't migrated yet.
+        const aEntries = await this.state.storage.list({ prefix: 'a:' });
+        for (const [key, value] of aEntries) {
           const rest = key.slice(2);
           if (rest.includes(':t:')) continue;
           if (value && typeof value === 'object' && value.className === '__preview__') {
             previewCodes.add(rest);
           }
         }
+
         let deletedCodes = 0;
         let deletedRows = 0;
         for (const code of previewCodes) {
-          // deleteAssignmentKeys uses a scoped list — only this code's rows.
-          const before = (await this.state.storage.list({ prefix: `a:${code}` }));
-          deletedRows += before.size;
+          // Count rows that will go (base + every attempt) BEFORE deleting,
+          // covering both layouts.
+          const baseRow = await this.state.storage.get(`ab:${code}`);
+          const legacyBaseRow = await this.state.storage.get(`a:${code}`);
+          const attemptScan = await this.state.storage.list({ prefix: `a:${code}:t:` });
+          deletedRows += (baseRow ? 1 : 0) + (legacyBaseRow ? 1 : 0) + attemptScan.size;
           await deleteAssignmentKeys(this.state.storage, code);
           deletedCodes += 1;
         }
@@ -3327,7 +3412,7 @@ export class QuizRoom {
         // hit in a tight loop by the question-bank backfill — turning it from
         // O(all rows) into O(1) is the difference between "fine" and
         // "exhausts the daily DO row-read quota in one page load".
-        const assignment = await this.state.storage.get(`a:${code}`);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         const meta = publicAssignment(assignment, { includeQuiz: false });
         return json({ ok: true, assignment: meta, quiz: assignment.quiz || null });
@@ -3344,7 +3429,7 @@ export class QuizRoom {
         // Need base + this code's attempts (to remap answer indexes when
         // question order changes). Scoped instead of full-table scan.
         const [assignment, attemptsByKey] = await Promise.all([
-          this.state.storage.get(`a:${code}`),
+          loadAssignmentBase(this.state.storage, code),
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
@@ -3414,6 +3499,11 @@ export class QuizRoom {
           assignment.examMode = !!body.examMode;
         }
 
+        // Question set just changed — `pendingGradingCount` and
+        // `pendingAttemptsCount` need a full recompute because previously
+        // pending answers may now point at non-teacher-graded questions (or
+        // dropped entirely). All attempts are already in memory.
+        recomputeAssignmentPending(assignment);
         assignment.updatedAt = now;
         await saveAssignmentFull(this.state.storage, code, assignment);
 
@@ -5951,6 +6041,22 @@ function summarizeTeacherActivity(assignment, attempt) {
 }
 
 function summarizePendingGrading(assignment) {
+  // Fast path: counts are cached on the base row and kept fresh by the
+  // delta helpers at every write site. Used by `/assignments/list` so the
+  // dashboard never has to read attempt rows.
+  if (
+    assignment
+    && Number.isFinite(Number(assignment.pendingGradingCount))
+    && Number.isFinite(Number(assignment.pendingAttemptsCount))
+  ) {
+    return {
+      pendingGradingCount: Number(assignment.pendingGradingCount) || 0,
+      pendingAttemptsCount: Number(assignment.pendingAttemptsCount) || 0,
+    };
+  }
+
+  // Slow path: full scan when attempts are already in memory (admin
+  // endpoints and the lazy-backfill path).
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
   const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
 
@@ -6042,24 +6148,58 @@ function buildTeacherGradingItems(assignment, attempt) {
 // Storage layout
 // --------------
 // Each assignment is split across multiple keys so no single value approaches
-// the Durable Object 128 KB cap:
-//   a:<code>             → assignment metadata + quiz (no attempts)
+// the Durable Object 128 KB cap, AND so the teacher dashboard can list
+// assignments without reading every attempt row:
+//   ab:<code>             → assignment metadata + quiz + cached pending counts
 //   a:<code>:t:<attemptId> → one attempt (answers, grades, focus events…)
-// The legacy single-blob `assignments` key (everything under one row) is
-// migrated on first read and then removed.
+// Separate base/attempt prefixes are what make `/assignments/list` cheap:
+// `list({prefix:'ab:'})` returns only base rows.
+// Legacy layouts handled by lazy migration:
+//   * `assignments` (single-blob) → split on first read.
+//   * `a:<code>`    (old base key) → relocated to `ab:<code>` on first read.
+
+async function loadAssignmentBase(storage, code) {
+  const fresh = await storage.get(`ab:${code}`);
+  if (fresh) return fresh;
+  // Legacy fallback: previous layout stored the base at `a:<code>`. Migrate
+  // on first sighting so the next read is a clean hit.
+  const legacy = await storage.get(`a:${code}`);
+  if (!legacy) return null;
+  const moved = { ...legacy };
+  delete moved.attempts;
+  await storage.put(`ab:${code}`, moved);
+  await storage.delete(`a:${code}`);
+  return moved;
+}
 
 async function loadAssignmentsMap(storage) {
   await migrateLegacyAssignmentsBlob(storage);
 
-  const entries = await storage.list({ prefix: 'a:' });
   const map = {};
-  for (const [key, value] of entries) {
+
+  // New-layout base rows.
+  const bases = await storage.list({ prefix: 'ab:' });
+  for (const [key, value] of bases) {
+    const code = key.slice(3);
+    map[code] = { ...(value || {}), attempts: {} };
+  }
+
+  // Attempts + any legacy bases that haven't been migrated yet. (`ab:` is a
+  // separate prefix and is NOT included in this list.)
+  const aPrefix = await storage.list({ prefix: 'a:' });
+  const legacyBaseMigrations = [];
+  for (const [key, value] of aPrefix) {
     const rest = key.slice(2);
     const sep = rest.indexOf(':t:');
     if (sep === -1) {
       const code = rest;
-      const existingAttempts = (map[code] && map[code].attempts) || {};
-      map[code] = { ...(value || {}), attempts: existingAttempts };
+      if (!map[code]) {
+        // Legacy base — adopt it AND schedule migration to `ab:<code>`.
+        map[code] = { ...(value || {}), attempts: {} };
+        legacyBaseMigrations.push({ code, value });
+      }
+      // else: new-style base already exists; the `a:<code>` row is stale
+      // leftover from a half-finished migration — drop it.
     } else {
       const code = rest.slice(0, sep);
       const attemptId = rest.slice(sep + 3);
@@ -6068,6 +6208,14 @@ async function loadAssignmentsMap(storage) {
       map[code].attempts[attemptId] = value;
     }
   }
+
+  for (const { code, value } of legacyBaseMigrations) {
+    const moved = { ...(value || {}) };
+    delete moved.attempts;
+    await storage.put(`ab:${code}`, moved);
+    await storage.delete(`a:${code}`);
+  }
+
   return map;
 }
 
@@ -6077,7 +6225,11 @@ async function migrateLegacyAssignmentsBlob(storage) {
   for (const [code, assignment] of Object.entries(legacy)) {
     if (!assignment || typeof assignment !== 'object') continue;
     const attempts = (assignment.attempts && typeof assignment.attempts === 'object') ? assignment.attempts : {};
-    await saveAssignmentBase(storage, code, assignment);
+    // Seed cached pending counts from the legacy blob so the first /list
+    // call after migration is correct without a second backfill pass.
+    const seeded = { ...assignment, attempts };
+    recomputeAssignmentPending(seeded);
+    await saveAssignmentBase(storage, code, seeded);
     for (const [attemptId, attempt] of Object.entries(attempts)) {
       await saveAttempt(storage, code, attemptId, attempt);
     }
@@ -6088,7 +6240,32 @@ async function migrateLegacyAssignmentsBlob(storage) {
 async function saveAssignmentBase(storage, code, assignment) {
   const base = { ...(assignment || {}) };
   delete base.attempts;
-  await storage.put(`a:${code}`, base);
+  // Intentionally do NOT default pendingGradingCount/pendingAttemptsCount
+  // here. If they're undefined, this is a legacy row that hasn't been
+  // backfilled yet — defaulting to 0 would silently overwrite real pending
+  // items. Backfill happens explicitly in `/assignments/list` and via
+  // `ensurePendingCounts` before applyPendingDelta at write sites that
+  // mutate grading state.
+  await storage.put(`ab:${code}`, base);
+}
+
+// Ensures cached pending counts are present on `assignment` before a delta
+// is applied. For rows that already have valid counts this is a no-op. For
+// legacy rows (no cached counts) this performs the one-time per-assignment
+// attempt scan and writes the result back onto `assignment` in place — the
+// caller's subsequent `saveAssignmentBase` then persists it.
+async function ensurePendingCounts(storage, code, assignment) {
+  if (!assignment) return assignment;
+  if (
+    Number.isFinite(Number(assignment.pendingGradingCount))
+    && Number.isFinite(Number(assignment.pendingAttemptsCount))
+  ) return assignment;
+  const attemptsByKey = await loadAttemptsForCode(storage, code);
+  const seeded = { ...assignment, attempts: attemptsByKey };
+  recomputeAssignmentPending(seeded);
+  assignment.pendingGradingCount = seeded.pendingGradingCount;
+  assignment.pendingAttemptsCount = seeded.pendingAttemptsCount;
+  return assignment;
 }
 
 async function saveAttempt(storage, code, attemptId, attempt) {
@@ -6123,9 +6300,14 @@ async function deleteAttemptKey(storage, code, attemptId) {
 }
 
 async function deleteAssignmentKeys(storage, code) {
-  const entries = await storage.list({ prefix: `a:${code}` });
+  // Wipe both new-layout (`ab:<code>`) and any legacy base row (`a:<code>`),
+  // plus every attempt row. Two scoped lists; both are O(rows-for-this-code).
   const toDelete = [];
-  for (const key of entries.keys()) {
+  const baseKey = `ab:${code}`;
+  const baseRow = await storage.get(baseKey);
+  if (baseRow !== undefined && baseRow !== null) toDelete.push(baseKey);
+  const aPrefixEntries = await storage.list({ prefix: `a:${code}` });
+  for (const key of aPrefixEntries.keys()) {
     if (key === `a:${code}` || key.startsWith(`a:${code}:`)) toDelete.push(key);
   }
   if (toDelete.length) await storage.delete(toDelete);
@@ -6143,11 +6325,69 @@ async function nextAssignmentCode(storage) {
     for (let i = 0; i < 6; i += 1) {
       code += alphabet[Math.floor(Math.random() * alphabet.length)];
     }
-    const existing = await storage.get(`a:${code}`);
-    if (!existing) return code;
+    // Collision must check both the new base location and any unmigrated
+    // legacy row at `a:<code>`. Two single-row gets per attempt; the loop
+    // typically exits on the first try.
+    const newHit = await storage.get(`ab:${code}`);
+    if (newHit) continue;
+    const legacyHit = await storage.get(`a:${code}`);
+    if (!legacyHit) return code;
   }
 
   return sanitizeAssignmentCode(randomId('A').slice(-6));
+}
+
+// Returns pending-grading stats for ONE attempt, given the assignment's
+// current quiz definition. Used to compute deltas at write sites and to
+// recompute the cached totals on the base row.
+function computeAttemptPending(assignment, attempt) {
+  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
+  const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+  let pendingCount = 0;
+  for (const [idxRaw, item] of Object.entries(answers)) {
+    const qIndex = Number(idxRaw);
+    const question = questions[qIndex];
+    if (!question) continue;
+    if (question.isPoll) continue;
+    if (!isAssignmentTeacherGradedQuestion(question)) continue;
+    if (item?.teacherGrade?.graded) continue;
+    pendingCount += 1;
+  }
+  return { pendingCount, hasPending: pendingCount > 0 };
+}
+
+// Mutates `assignment.pendingGradingCount` / `pendingAttemptsCount` in place
+// by applying the delta between prevPending and nextPending. Callers must
+// snapshot prevPending BEFORE mutating the attempt, then compute nextPending
+// AFTER, then pass both here. Clamped at zero so any accumulated drift can
+// only ever undercount, never go negative.
+function applyPendingDelta(assignment, prevPending, nextPending) {
+  const prev = prevPending || { pendingCount: 0, hasPending: false };
+  const next = nextPending || { pendingCount: 0, hasPending: false };
+  const curCount = Number(assignment.pendingGradingCount) || 0;
+  const curAtt = Number(assignment.pendingAttemptsCount) || 0;
+  assignment.pendingGradingCount = Math.max(0, curCount + (next.pendingCount - prev.pendingCount));
+  assignment.pendingAttemptsCount = Math.max(
+    0,
+    curAtt + ((next.hasPending ? 1 : 0) - (prev.hasPending ? 1 : 0)),
+  );
+}
+
+// Full recompute from a complete `assignment.attempts` map. Used by:
+//   * `/assignments/update-quiz` (which already loads every attempt)
+//   * Lazy backfill on `/assignments/list` for rows missing cached counts
+//   * Legacy-blob migration seeding
+function recomputeAssignmentPending(assignment) {
+  const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
+  let total = 0;
+  let attemptsWithPending = 0;
+  for (const attempt of Object.values(attempts)) {
+    const { pendingCount, hasPending } = computeAttemptPending(assignment, attempt);
+    total += pendingCount;
+    if (hasPending) attemptsWithPending += 1;
+  }
+  assignment.pendingGradingCount = total;
+  assignment.pendingAttemptsCount = attemptsWithPending;
 }
 
 function publicAssignment(assignment, { includeQuiz = false } = {}) {
