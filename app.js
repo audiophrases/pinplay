@@ -1010,6 +1010,7 @@ function addQuestionToBuilder(question) {
     if (typeof question.gifKeyword !== 'string') question.gifKeyword = '';
     if (typeof question.videoKeyword !== 'string') question.videoKeyword = '';
     if (typeof question.videoProviderPreference !== 'string') question.videoProviderPreference = '';
+    if (typeof question.readingText !== 'string') question.readingText = '';
   }
   quiz.questions.push(question);
   pendingScrollQuestionIndex = quiz.questions.length - 1;
@@ -2162,6 +2163,7 @@ function renderBuilder() {
     const hasAudio = supportsQuestionAudio(q.type) && !!(q.audioText || q.audioData);
     const hasImage = q.type !== 'pin' && !!(q.imageData || (q.imageKeyword || '').trim() || (q.gifKeyword || '').trim());
     const hasVideo = !!((q.media?.url || '').trim());
+    const hasReading = q.type !== 'pin' && !!String(q.readingText || '').trim();
 
     const header = `
       <div class="question-header" data-toggle-question-header="${idx}" data-drag-question="${idx}" draggable="true" title="Click to collapse/expand · Drag header to reorder">
@@ -2488,15 +2490,23 @@ function renderBuilder() {
     // --- Media toggle buttons ---
     const showAudioBtn = supportsQuestionAudio(q.type);
     const showImageBtn = q.type !== 'pin';
+    const showReadingBtn = q.type !== 'pin';
 
     let mediaSection = `<div class="media-toggles top-space">`;
     if (showAudioBtn) {
       mediaSection += `<button type="button" class="btn media-toggle-btn${hasAudio ? ' media-active' : ''}${q.mediaExpand.audio ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="audio" title="TTS Audio">🔊</button>`;
     }
     if (showImageBtn) {
-      mediaSection += `<button type="button" class="btn media-toggle-btn${hasImage ? ' media-active' : ''}${q.mediaExpand.image ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="image" title="Image">🖼️</button>`;
+      const imgDisabled = hasReading;
+      const imgTitle = imgDisabled ? 'Image — clear the reading text first to use an image' : 'Image';
+      mediaSection += `<button type="button" class="btn media-toggle-btn${hasImage ? ' media-active' : ''}${q.mediaExpand.image ? ' media-expanded' : ''}${imgDisabled ? ' media-disabled' : ''}" data-toggle-media="${idx}" data-media-type="image" title="${imgTitle}"${imgDisabled ? ' disabled' : ''}>🖼️</button>`;
     }
     mediaSection += `<button type="button" class="btn media-toggle-btn${hasVideo ? ' media-active' : ''}${q.mediaExpand.video ? ' media-expanded' : ''}" data-toggle-media="${idx}" data-media-type="video" title="Video">🎬</button>`;
+    if (showReadingBtn) {
+      const readDisabled = hasImage;
+      const readTitle = readDisabled ? 'Reading text — clear the image / GIF keyword first to add a reading passage' : 'Reading text (centered passage instead of an image)';
+      mediaSection += `<button type="button" class="btn media-toggle-btn${hasReading ? ' media-active' : ''}${q.mediaExpand.readingText ? ' media-expanded' : ''}${readDisabled ? ' media-disabled' : ''}" data-toggle-media="${idx}" data-media-type="readingText" title="${readTitle}"${readDisabled ? ' disabled' : ''}>📖</button>`;
+    }
     mediaSection += `</div>`;
 
     // Audio section (collapsible)
@@ -2518,6 +2528,20 @@ function renderBuilder() {
           <label class="top-space">GIF keyword (auto-search GIFs on save)</label>
           <input data-q="${idx}" data-field="gifKeyword" type="text" maxlength="140" value="${escapeHtml(q.gifKeyword || '')}" placeholder="e.g. happy dance, surprised cat, applause" />
           ${q.imageData ? `<div class="pin-preview question-image-preview"><img src="${q.imageData}" alt="Question image" data-zoomable="1" /></div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    // Reading-text section (collapsible, non-pin only)
+    if (showReadingBtn) {
+      const readingChars = String(q.readingText || '').length;
+      const counterClass = readingChars > 9000 ? 'reading-counter near-limit' : 'reading-counter';
+      mediaSection += `<div class="media-section-wrap" style="display:${q.mediaExpand.readingText ? '' : 'none'}">
+        <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+          <label>Reading passage (centered, scrollable; replaces image)</label>
+          <textarea data-q="${idx}" data-field="readingText" maxlength="10000" rows="6" placeholder="Paste the reading-comprehension passage students should read before answering. Up to 10,000 characters.">${escapeHtml(q.readingText || '')}</textarea>
+          <div class="${counterClass}" data-reading-counter="${idx}">${readingChars} / 10,000 chars</div>
+          <p class="small">When set, the passage appears centered (in place of any image) and students can scroll it but can't select or copy. Image and GIF inputs are disabled until you clear this field.</p>
         </div>
       </div>`;
     }
@@ -3252,6 +3276,17 @@ function syncQuizFromUI() {
     if (gifKeywordEl) q.gifKeyword = String(gifKeywordEl.value || '').trim().slice(0, 140);
     const videoKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoKeyword"]`);
     if (videoKeywordEl) q.videoKeyword = String(videoKeywordEl.value || '').trim().slice(0, 140);
+    const readingTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="readingText"]`);
+    if (readingTextEl) {
+      q.readingText = String(readingTextEl.value || '').slice(0, 10000);
+      const counterEl = questionListEl.querySelector(`[data-reading-counter="${idx}"]`);
+      if (counterEl) {
+        const len = q.readingText.length;
+        counterEl.textContent = `${len} / 10,000 chars`;
+        counterEl.classList.toggle('near-limit', len > 9000);
+      }
+    }
+    if (q.type === 'pin') q.readingText = '';
     const videoProviderPreferenceEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoProviderPreference"]`);
     q.videoProviderPreference = ['youtube', 'vimeo', 'direct'].includes(String(videoProviderPreferenceEl?.value || ''))
       ? String(videoProviderPreferenceEl.value)
@@ -10354,10 +10389,17 @@ function renderHostQuestion(state) {
 
   const hostMediaCfg = toVideoEmbedConfig(question.media || {});
   const hasHostVideo = normalizeQuestionMedia(question.media).kind === 'video' && !!hostMediaCfg.src;
-  const hasSharedImage = !hasHostVideo && question.type !== 'pin' && !!question.imageData;
+  const hostReadingText = question.type !== 'pin' ? String(question.readingText || '') : '';
+  const hasHostReading = !!hostReadingText.trim();
+  const hasSharedImage = !hasHostReading && !hasHostVideo && question.type !== 'pin' && !!question.imageData;
   hostQuestionAnswersEl.classList.toggle('has-question-image', hasSharedImage);
 
-  if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  if (hasHostReading) {
+    const readingBlock = document.createElement('div');
+    readingBlock.className = 'reading-text-block reading-text-host';
+    readingBlock.textContent = hostReadingText;
+    hostQuestionAnswersEl.appendChild(readingBlock);
+  } else if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -14288,6 +14330,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   // Auto-fill missing images for questions with imageKeyword set
   const missingVideo = questions.filter((q) => {
     if (!q || q.type === 'pin') return false;
+    if (String(q.readingText || '').trim()) return false;
     if (normalizeQuestionMedia(q.media).kind === 'video') return false;
     return !!String(q.videoKeyword || '').trim();
   }).length;
@@ -14309,7 +14352,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     }
   }
 
-  const missingImages = questions.filter(q => q && !q.imageData && (q.imageKeyword || q.gifKeyword) && normalizeQuestionMedia(q.media).kind !== 'video').length;
+  const missingImages = questions.filter(q => q && !q.imageData && !String(q.readingText || '').trim() && (q.imageKeyword || q.gifKeyword) && normalizeQuestionMedia(q.media).kind !== 'video').length;
   if (missingImages > 0) {
     setProgress(`🔍 Auto-searching images for ${missingImages} question(s)...`);
     const result = await autoFillImages(quiz, ({ index, total, status }) => {
@@ -14571,6 +14614,7 @@ async function autoFillImages(quizData, onProgress) {
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (!q || q.imageData || normalizeQuestionMedia(q.media).kind === 'video') { skipped++; continue; }
+    if (String(q.readingText || '').trim()) { skipped++; continue; }
 
     // GIF path takes priority: store GIPHY CDN URL directly in imageData (no resize, animation preserved)
     const gifQuery = String(q.gifKeyword || '').trim().slice(0, 140);
@@ -14672,6 +14716,7 @@ async function autoFillVideos(quizData, onProgress) {
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
     if (!q || q.type === 'pin') { skipped += 1; continue; }
+    if (String(q.readingText || '').trim()) { skipped += 1; continue; }
     if (normalizeQuestionMedia(q.media).kind === 'video') { skipped += 1; continue; }
 
     const keyword = String(q.videoKeyword || '').trim().slice(0, 140);

@@ -2710,10 +2710,16 @@ function renderJoinQuestion(question) {
 
   const preVideoCfg = assignmentVideoEmbedConfig(question.media);
   const hasQuestionVideo = live.player.mode === 'assignment' && preVideoCfg.kind === 'video' && !!preVideoCfg.src;
-  const hasSharedImage = !hasQuestionVideo && question.type !== 'pin' && !!question.imageData;
-  const hasAnyImage = !hasQuestionVideo && !!question.imageData;
+  const readingText = question.type !== 'pin' ? String(question.readingText || '') : '';
+  const hasReadingText = !!readingText.trim();
+  const hasSharedImage = !hasReadingText && !hasQuestionVideo && question.type !== 'pin' && !!question.imageData;
+  const hasAnyImage = !hasReadingText && !hasQuestionVideo && !!question.imageData;
   joinAnswersEl.classList.toggle('has-question-image', hasSharedImage);
-  if (joinPromptEl) joinPromptEl.classList.toggle('with-image', hasAnyImage);
+  joinAnswersEl.classList.toggle('has-question-reading', hasReadingText);
+  if (joinPromptEl) {
+    joinPromptEl.classList.toggle('with-image', hasAnyImage);
+    joinPromptEl.classList.toggle('with-reading', hasReadingText);
+  }
 
   // Clear background first
   if (joinQuestionWrap) {
@@ -2721,13 +2727,15 @@ function renderJoinQuestion(question) {
     joinQuestionWrap.style.backgroundSize = 'contain';
     joinQuestionWrap.style.backgroundPosition = 'center';
     joinQuestionWrap.style.backgroundRepeat = 'no-repeat';
+    const oldReading = joinQuestionWrap.querySelector('.reading-text-block');
+    if (oldReading) oldReading.remove();
   }
   const interactiveOverlay = document.getElementById('joinQuestionInteractive');
   // Make the bottom bar see-through when navigating questions from Final Results so
   // the question summary behind it stays readable for every question type.
   const isReviewingResults = !!live.player.assignment?.reviewMode
     || !!live.player.assignment?.state?.attempt?.submitted;
-  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || isReviewingResults);
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || hasReadingText || isReviewingResults);
 
   if (hasAnyImage) {
     let imgSrc = question.imageData;
@@ -2740,6 +2748,18 @@ function renderJoinQuestion(question) {
         joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
       }
     }
+  }
+
+  if (hasReadingText && joinQuestionWrap) {
+    const readingBlock = document.createElement('div');
+    readingBlock.className = 'reading-text-block';
+    readingBlock.textContent = readingText;
+    // Block selection, drag, and context menus on the reading text — these
+    // would let students extract the passage for translation / AI help.
+    readingBlock.addEventListener('selectstart', (e) => e.preventDefault());
+    readingBlock.addEventListener('dragstart', (e) => e.preventDefault());
+    readingBlock.addEventListener('contextmenu', (e) => e.preventDefault());
+    joinQuestionWrap.insertBefore(readingBlock, interactiveOverlay || null);
   }
 
   if (question.isPoll) {
