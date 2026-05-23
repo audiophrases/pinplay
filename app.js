@@ -1426,9 +1426,9 @@ function bindBuilderEvents() {
             quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
           }
         } else {
-          // First file in replace mode
+          // First file in replace mode. Keep any active assignment binding —
+          // replacing questions is a valid edit the user may want to Apply back.
           quiz = parsed;
-          setApplyAssignmentTarget('', '');
         }
         totalAppended += parsed.questions.length;
       } catch (err) {
