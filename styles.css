@@ -18,6 +18,13 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Reserve scrollbar space so viewport width never changes when content height
+     crosses the page-scrollbar threshold — otherwise the centered #joinHeaderRow
+     visibly jerks sideways as scrollbar gutters appear/disappear. */
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   font-family: Inter, Segoe UI, system-ui, -apple-system, sans-serif;
@@ -985,7 +992,6 @@ body.question-active .join-title-row {
   justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
-  overflow-x: auto;
   gap: 15px;
   background: #ffffff;
   border-bottom: 1px solid #eeeeee;
