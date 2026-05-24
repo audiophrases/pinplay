@@ -3770,11 +3770,14 @@ function openLocalLibraryDialog(opts = {}) {
   const items = loadQuizLibrary().slice().reverse();
   showQuizManagerDialog({
     title: 'Local quizzes',
-    items: items.map((item) => ({
-      id: item.id,
-      raw: item,
-      label: `${item.name} — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`,
-    })),
+    items: items.map((item) => {
+      const qc = Array.isArray(item.quiz?.questions) ? item.quiz.questions.length : 0;
+      return {
+        id: item.id,
+        raw: item,
+        label: `${item.name} (${qc} Q) — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`,
+      };
+    }),
     onOpen: async (item) => {
       const chosen = item.raw;
       validateImportedQuiz(chosen.quiz);
