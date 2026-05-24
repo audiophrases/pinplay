@@ -636,7 +636,7 @@ function renderReviewNavigator() {
     } else if (auto) {
       const partialScore = Number(auto.partialScore || 0);
       const partialTotal = Number(auto.partialTotal || 0);
-      const isPartial = !auto.correct && questions[qIndex]?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+      const isPartial = !auto.correct && isPartialCreditType(questions[qIndex]?.type) && partialScore > 0 && partialTotal > 0;
       statusClass = auto.correct ? 'correct' : (isPartial ? 'partial' : 'wrong');
       badge = auto.correct ? '✓' : (isPartial ? '◐' : '✗');
     } else if (!ans) {
@@ -1862,7 +1862,7 @@ function renderInstantFeedbackFromState() {
     if (auto) {
       const partialScore = Number(auto.partialScore || 0);
       const partialTotal = Number(auto.partialTotal || 0);
-      const isPartial = !auto.correct && q.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+      const isPartial = !auto.correct && isPartialCreditType(q.type) && partialScore > 0 && partialTotal > 0;
       return {
         qIndex,
         q,
@@ -2541,10 +2541,10 @@ function renderPlayerState(state) {
           // Highlight items: green for correct, red for student's wrong answer
           const partialScore = Number(rr.partialScore || 0);
           const partialTotal = Number(rr.partialTotal || 0);
-          const isPartial = !rr.correct && state.question?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+          const isPartial = !rr.correct && isPartialCreditType(state.question?.type) && partialScore > 0 && partialTotal > 0;
           const resultText = rr.correct
             ? '✅ Correct'
-            : (isPartial ? `⚠️ Partial · ${partialScore}/${partialTotal} gaps` : '❌ Incorrect');
+            : (isPartial ? `⚠️ ${partialCreditLabel(state.question?.type, partialScore, partialTotal)}` : '❌ Incorrect');
           const pts = Number(rr.pointsAwarded || 0);
 
           // FIX: Show negative deductions properly
@@ -3590,10 +3590,10 @@ async function submitLiveAnswer() {
       const pts = Number(data.pointsAwarded || 0);
       const partialScore = Number(data.partialScore || 0);
       const partialTotal = Number(data.partialTotal || 0);
-      const isPartial = !data.correct && question?.type === 'context_gap' && partialScore > 0 && partialTotal > 0;
+      const isPartial = !data.correct && isPartialCreditType(question?.type) && partialScore > 0 && partialTotal > 0;
       const resultText = data.correct
         ? '✅ Correct'
-        : (isPartial ? `⚠️ Partial · ${partialScore}/${partialTotal} gaps` : '❌ Incorrect');
+        : (isPartial ? `⚠️ ${partialCreditLabel(question?.type, partialScore, partialTotal)}` : '❌ Incorrect');
       let pointsText = '';
       if (pts > 0) pointsText = ` · +${pts} points`;
       else if (pts < 0) pointsText = ` · ${pts} points`;
@@ -5412,6 +5412,20 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function formatPartialScore(n) {
+  const x = Number(n) || 0;
+  return Number.isInteger(x) ? String(x) : x.toFixed(1);
+}
+
+function partialCreditLabel(qType, partialScore, partialTotal) {
+  if (qType === 'context_gap') return `Partial · ${formatPartialScore(partialScore)}/${partialTotal} gaps`;
+  return `Partial · half credit (diacritic)`;
+}
+
+function isPartialCreditType(qType) {
+  return qType === 'context_gap' || qType === 'text' || qType === 'voice_text';
 }
 
 // Removed mergeJoinTokens as it caused inconsistent error counting and behavior.
