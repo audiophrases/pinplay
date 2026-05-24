@@ -170,14 +170,16 @@ function init() {
     }
   });
 
-  // Enter advances when the submit button is in Continue/Finish mode. The joinAnswersEl
-  // handler only fires while focus is inside an answer input — after instant-feedback save
-  // the input is disabled and focus drops to <body>, so we need a document-level fallback.
-  // Also: if a voice recording is in progress, Enter stops it (takes priority over advance).
+  // Enter routing for assignment mode. The joinAnswersEl input handler only fires while
+  // focus is inside a text input/select; for puzzles, voice questions, and post-save flow
+  // focus lives on buttons or <body>, so we need a document-level fallback that mirrors
+  // whatever submitLiveAnswer would do when the submit button is clicked.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+    // Let Enter insert newlines in textareas.
+    if (e.target instanceof HTMLElement && e.target.tagName === 'TEXTAREA') return;
 
     // Priority 1: stop an active voice recording (voice_record OR voice_text).
     const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled), .voice-text-stop-btn:not(.hidden):not(:disabled)');
@@ -187,12 +189,14 @@ function init() {
       return;
     }
 
-    // Priority 2: advance when the submit button is in Continue/Finish mode.
+    // Priority 2: trigger the submit button (Save / Continue / Finish — submitLiveAnswer
+    // picks the right action from the current label).
     if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
-    const txt = String(joinSubmitBtn.textContent || '');
-    if (!txt.startsWith('Continue') && !txt.startsWith('Finish quiz')) return;
-    // Don't double-fire if joinAnswersEl's own handler already caught it.
-    if (e.target instanceof Node && joinAnswersEl && joinAnswersEl.contains(e.target)) return;
+    // Don't double-fire if joinAnswersEl's own input handler already caught it.
+    if (e.target instanceof Node && joinAnswersEl && joinAnswersEl.contains(e.target)) {
+      const tag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'select') return;
+    }
     e.preventDefault();
     submitLiveAnswer();
   });
