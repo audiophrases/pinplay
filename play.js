@@ -2602,7 +2602,19 @@ function renderPlayerState(state) {
 
   renderJoinReveal();
   scheduleJoinAdaptiveFit();
+  suppressAnswerInputSuggestions();
   autofocusFirstAnswerInput(state);
+}
+
+function suppressAnswerInputSuggestions() {
+  // Stop the browser from offering previously-typed answers as autocomplete suggestions
+  // (and from underlining "misspelled" words, which surfaces a similar suggestion popup).
+  if (!joinAnswersEl) return;
+  joinAnswersEl.querySelectorAll('input[type="text"], textarea').forEach((el) => {
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('spellcheck', 'false');
+  });
 }
 
 function autofocusFirstAnswerInput(state) {
