@@ -173,10 +173,21 @@ function init() {
   // Enter advances when the submit button is in Continue/Finish mode. The joinAnswersEl
   // handler only fires while focus is inside an answer input — after instant-feedback save
   // the input is disabled and focus drops to <body>, so we need a document-level fallback.
+  // Also: if a voice recording is in progress, Enter stops it (takes priority over advance).
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+
+    // Priority 1: stop an active voice recording.
+    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled)');
+    if (stopBtn) {
+      e.preventDefault();
+      stopBtn.click();
+      return;
+    }
+
+    // Priority 2: advance when the submit button is in Continue/Finish mode.
     if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
     const txt = String(joinSubmitBtn.textContent || '');
     if (!txt.startsWith('Continue') && !txt.startsWith('Finish quiz')) return;
@@ -2591,6 +2602,26 @@ function renderPlayerState(state) {
 
   renderJoinReveal();
   scheduleJoinAdaptiveFit();
+  autofocusFirstAnswerInput(state);
+}
+
+function autofocusFirstAnswerInput(state) {
+  // Only on a fresh question — re-renders for the same index shouldn't steal focus
+  // from wherever the student already put it (e.g. Continue button after save).
+  const idx = Number(state?.currentIndex);
+  if (!Number.isFinite(idx)) return;
+  if (live.player.autofocusedQuestionIndex === idx) return;
+  live.player.autofocusedQuestionIndex = idx;
+
+  // Skip if the question is already answered/closed — focus belongs on Continue, not input.
+  if (state?.answeredCurrent || state?.questionClosed) return;
+  if (live.player.assignment.reviewMode) return;
+  if (!joinAnswersEl) return;
+
+  const input = joinAnswersEl.querySelector('input[type="text"]:not(:disabled), textarea:not(:disabled)');
+  if (input && typeof input.focus === 'function') {
+    input.focus({ preventScroll: true });
+  }
 }
 
 function scheduleJoinAdaptiveFit() {
