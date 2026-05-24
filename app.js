@@ -5601,14 +5601,19 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     ? `<label style="display:flex;gap:6px;align-items:center;font-weight:normal;margin:0;"><input type="checkbox" data-confirm-overwrite style="width:auto;margin:0;"/><span data-overwrite-label class="small">I have reviewed the ${overwrite.length} overwrite${overwrite.length === 1 ? '' : 's'}</span></label>`
     : '<span></span>';
 
+  const titleEl = modal.querySelector('h3');
+  if (titleEl) {
+    titleEl.style.cssText = 'margin:0 0 12px 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;';
+    titleEl.innerHTML = `
+      <span>Import AI grades · ${escapeHtml(String(response.assignmentCode))}</span>
+      <span class="small muted" style="font-weight:normal;">${rows.length} result${rows.length === 1 ? '' : 's'}</span>
+      <span class="small muted" data-summary-line style="font-weight:normal;"></span>
+      <span class="small muted" title="Rows with confidence < 0.60 have an amber outline. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you tick their Apply box. Shift-click an Apply box to range-select between it and your last click." style="font-weight:normal;">ⓘ hint</span>
+    `;
+  }
+
   const body = modal.querySelector('[data-import-body]');
   body.innerHTML = `
-    <div style="margin-bottom:8px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;">
-      <strong>${escapeHtml(String(response.assignmentCode))}</strong>
-      <span class="small muted">${rows.length} result${rows.length === 1 ? '' : 's'}</span>
-      <span class="small muted" data-summary-line></span>
-      <span class="small muted" title="Rows with confidence < 0.60 have an amber outline. Edit points or correction inline before applying. needs_review rows become editable and join the batch when you tick their Apply box. Shift-click an Apply box to range-select between it and your last click.">ⓘ hint</span>
-    </div>
     <div style="max-height:68vh;overflow:auto;border:1px solid #ddd;border-radius:6px;">
       <table class="agi-preview">
         <colgroup>
@@ -5639,7 +5644,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     </div>
   `;
 
-  const summaryEl = body.querySelector('[data-summary-line]');
+  const summaryEl = modal.querySelector('[data-summary-line]');
   const safeBtn = body.querySelector('[data-import-apply-safe]');
   const allBtn = body.querySelector('[data-import-apply-all]');
   const overwriteLabel = body.querySelector('[data-overwrite-label]');
