@@ -4781,7 +4781,7 @@ function startQuestion(room, index) {
   return true;
 }
 
-function publicQuestion(question) {
+function publicQuestion(question, { includeAnswerKey = false } = {}) {
   if (!question) return null;
 
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
@@ -4791,7 +4791,9 @@ function publicQuestion(question) {
       points: question.points,
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
-      answers: (question.answers || []).map((a) => ({ text: a.text })),
+      answers: (question.answers || []).map((a) => (
+        includeAnswerKey ? { text: a.text, correct: !!a.correct } : { text: a.text }
+      )),
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
@@ -4813,6 +4815,11 @@ function publicQuestion(question) {
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
       requiredErrors: question.type === 'error_hunt' ? countErrorHuntRequiredTokens(question.prompt, question.corrected) : undefined,
+      accepted: includeAnswerKey && (question.type === 'text' || question.type === 'voice_text') ? (question.accepted || []) : undefined,
+      gaps: includeAnswerKey && question.type === 'context_gap' ? (question.gaps || []) : undefined,
+      pairs: includeAnswerKey && question.type === 'match_pairs' ? (question.pairs || []).map((p) => ({ left: String(p.left || ''), right: String(p.right || '') })) : undefined,
+      corrected: includeAnswerKey && question.type === 'error_hunt' ? String(question.corrected || '') : undefined,
+      correctedVariants: includeAnswerKey && question.type === 'error_hunt' && Array.isArray(question.correctedVariants) ? question.correctedVariants : undefined,
       ...publicAudioPayload(question),
     };
   }
@@ -4826,6 +4833,7 @@ function publicQuestion(question) {
       isPoll: !!question.isPoll,
       length: (question.items || []).length,
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
+      items: includeAnswerKey ? (question.items || []) : undefined,
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
@@ -4843,6 +4851,7 @@ function publicQuestion(question) {
       max: question.max,
       margin: question.margin,
       unit: question.unit || '',
+      target: includeAnswerKey ? question.target : undefined,
       imageData: String(question.imageData || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
@@ -6033,7 +6042,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     submittedAt: Number(attempt?.submittedAt || 0) || null,
     reviewedAt: Number(attempt?.reviewedAt || 0) || null,
     selfCorrectedAt: Number(attempt?.selfCorrectedAt || 0) || null,
-    assignment: publicAssignment(assignment, { includeQuiz: true }),
+    assignment: publicAssignment(assignment, { includeQuiz: true, includeAnswerKey: includeAnswers }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
@@ -6434,7 +6443,7 @@ function recomputeAssignmentPending(assignment) {
   assignment.pendingAttemptsCount = attemptsWithPending;
 }
 
-function publicAssignment(assignment, { includeQuiz = false } = {}) {
+function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = false } = {}) {
   if (!assignment || typeof assignment !== 'object') return null;
   const base = {
     id: String(assignment.id || ''),
@@ -6457,7 +6466,7 @@ function publicAssignment(assignment, { includeQuiz = false } = {}) {
     const quiz = normalizeQuiz(assignment.quiz || {});
     base.quiz = {
       title: String(quiz?.title || ''),
-      questions: Array.isArray(quiz?.questions) ? quiz.questions.map((q) => publicQuestion(q)) : [],
+      questions: Array.isArray(quiz?.questions) ? quiz.questions.map((q) => publicQuestion(q, { includeAnswerKey })) : [],
     };
   }
   return base;
