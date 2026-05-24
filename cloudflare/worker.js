@@ -5215,6 +5215,23 @@ function stripDiacritics(text) {
   return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+// Hide accepted-answer variants that differ only in case or diacritics — the grader
+// already treats those as equivalent, so showing "Figueres | figueres" to the student
+// just leaks the matching aliases. Keeps genuine alternates like "color | colour".
+function dedupeAcceptedForDisplay(accepted) {
+  const seen = new Set();
+  const out = [];
+  (accepted || []).forEach((raw) => {
+    const v = String(raw || '').trim();
+    if (!v) return;
+    const key = stripDiacritics(normalizeTextAnswer(v));
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  });
+  return out;
+}
+
 function parseAcceptedGapOptions(value) {
   return String(value || '')
     .split(',')
@@ -6687,11 +6704,11 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'text') {
     if (isTeacherGradedTextQuestion(question)) return 'Teacher-graded typed answer';
-    return (question.accepted || []).filter(Boolean).join(' | ');
+    return dedupeAcceptedForDisplay(question.accepted).join(' | ');
   }
 
   if (question.type === 'voice_text') {
-    return (question.accepted || []).filter(Boolean).join(' | ');
+    return dedupeAcceptedForDisplay(question.accepted).join(' | ');
   }
 
   if (question.type === 'context_gap') {

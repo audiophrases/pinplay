@@ -2472,7 +2472,10 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     stopJoinTimer();
-    if (joinTimerEl) joinTimerEl.textContent = 'Time: 0s';
+    if (joinTimerEl) {
+      const hasLimit = Number(state?.question?.timeLimit) > 0;
+      joinTimerEl.textContent = hasLimit ? 'Time: 0s' : 'Time: No limit';
+    }
   } else {
     startJoinTimer(state);
   }
