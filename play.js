@@ -2080,18 +2080,50 @@ function renderInstantFeedbackFromState() {
 // Gated to assignments with feedbackMode in {instant, end}.
 // ============================================================
 
-const SELF_CORRECTING_TYPES = new Set(['mcq', 'tf', 'multi', 'text', 'voice_text']);
+const SELF_CORRECTING_TYPES = new Set([
+  'mcq', 'tf', 'multi', 'audio',
+  'text', 'voice_text',
+  'context_gap', 'error_hunt',
+  'slider', 'puzzle', 'match_pairs',
+]);
 
 function isSelfCorrectingQuestion(question) {
   if (!question || !question.type) return false;
-  if (!SELF_CORRECTING_TYPES.has(question.type)) return false;
-  if (question.type === 'text' || question.type === 'voice_text') {
+  if (question.isPoll) return false; // polls have no correct answer
+  const t = question.type;
+  if (!SELF_CORRECTING_TYPES.has(t)) return false;
+  if (t === 'text' || t === 'voice_text') {
     const accepted = (question.accepted || []).map((s) => String(s || '').trim()).filter(Boolean);
     return accepted.length > 0;
   }
-  if (question.type === 'mcq' || question.type === 'tf' || question.type === 'multi') {
+  if (t === 'mcq' || t === 'tf' || t === 'multi' || t === 'audio') {
     const answers = Array.isArray(question.answers) ? question.answers : [];
     return answers.some((a) => a && a.correct === true);
+  }
+  if (t === 'context_gap') {
+    const gaps = (question.gaps || []).map((g) => String(g || '').trim()).filter(Boolean);
+    return gaps.length > 0;
+  }
+  if (t === 'error_hunt') {
+    const variants = [question.corrected, ...(Array.isArray(question.correctedVariants) ? question.correctedVariants : [])]
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
+    return variants.length > 0;
+  }
+  if (t === 'slider') {
+    return Number.isFinite(Number(question.target))
+      && Number.isFinite(Number(question.min))
+      && Number.isFinite(Number(question.max))
+      && Number(question.max) > Number(question.min);
+  }
+  if (t === 'puzzle') {
+    const items = Array.isArray(question.items) ? question.items.filter((x) => String(x || '').trim()) : [];
+    return items.length > 0;
+  }
+  if (t === 'match_pairs') {
+    const pairs = (Array.isArray(question.pairs) ? question.pairs : [])
+      .filter((p) => String(p?.left || '').trim() && String(p?.right || '').trim());
+    return pairs.length > 0;
   }
   return false;
 }
@@ -2119,7 +2151,7 @@ function getRetakeEligibleIndexes(state) {
 function gradeSelfCorrectAnswer(question, userAnswer) {
   if (!question) return false;
   const t = question.type;
-  if (t === 'mcq' || t === 'tf') {
+  if (t === 'mcq' || t === 'tf' || t === 'audio') {
     const i = Number(userAnswer);
     const answers = Array.isArray(question.answers) ? question.answers : [];
     return !!(answers[i] && answers[i].correct === true);
@@ -2137,10 +2169,70 @@ function gradeSelfCorrectAnswer(question, userAnswer) {
   if (t === 'text' || t === 'voice_text') {
     const normalized = normalizeTextAnswer(userAnswer);
     if (!normalized) return false;
-    const accepted = (question.accepted || []).map((s) => normalizeTextAnswer(s)).filter(Boolean);
-    return accepted.includes(normalized);
+    const accepted = (question.accepted || []).map((s) => normalizeTextAnswer(s));
+    // Expand "or" alternatives, mirroring server logic.
+    const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
+    return expanded.includes(normalized);
+  }
+  if (t === 'context_gap') {
+    const gaps = Array.isArray(question.gaps) ? question.gaps : [];
+    const expected = gaps.map((g) => {
+      const opts = String(g || '').split(',').map((x) => normalizeTextAnswer(x)).filter(Boolean);
+      return opts.length ? opts : [normalizeTextAnswer(g)];
+    }).filter((opts) => opts.some(Boolean));
+    const guess = Array.isArray(userAnswer) ? userAnswer.map(normalizeTextAnswer) : [];
+    if (guess.length !== expected.length) return false;
+    return guess.every((g, i) => g && expected[i].includes(g));
+  }
+  if (t === 'error_hunt') {
+    const variants = [question.corrected, ...(Array.isArray(question.correctedVariants) ? question.correctedVariants : [])]
+      .map((s) => normalizeTextAnswer(s))
+      .filter(Boolean);
+    const guess = normalizeTextAnswer(userAnswer);
+    if (!guess) return false;
+    return variants.includes(guess);
+  }
+  if (t === 'slider') {
+    const value = Number(userAnswer);
+    if (!Number.isFinite(value)) return false;
+    const min = Number(question.min);
+    const max = Number(question.max);
+    const target = Number(question.target);
+    const range = Math.max(0, max - min);
+    const marginMap = { none: 0, low: 0.05, medium: 0.1, high: 0.2, maximum: 1 };
+    const tol = range * (marginMap[question.margin] ?? marginMap.medium);
+    return Math.abs(value - target) <= tol;
+  }
+  if (t === 'puzzle') {
+    const guess = Array.isArray(userAnswer) ? userAnswer.map(normalizeTextAnswer) : [];
+    const expected = (question.items || []).map(normalizeTextAnswer);
+    if (!guess.length || guess.length !== expected.length) return false;
+    return guess.every((g, i) => g === expected[i]);
+  }
+  if (t === 'match_pairs') {
+    const pairs = Array.isArray(question.pairs) ? question.pairs : [];
+    if (!Array.isArray(userAnswer) || userAnswer.length !== pairs.length) return false;
+    const expected = new Map();
+    pairs.forEach((p) => {
+      expected.set(normalizeTextAnswer(p?.left), normalizeTextAnswer(p?.right));
+    });
+    for (const u of userAnswer) {
+      const left = normalizeTextAnswer(u?.left);
+      const right = normalizeTextAnswer(u?.right);
+      if (!right) return false;
+      if (expected.get(left) !== right) return false;
+    }
+    return true;
   }
   return false;
+}
+
+function shuffleRetakeArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 function retakeStorageKey(attemptId) {
@@ -2313,9 +2405,14 @@ function openRetakeLoop(state) {
     prompt.textContent = String(q.prompt || `Question ${currentQIndex + 1}`);
     qArea.appendChild(prompt);
 
-    if (q.type === 'mcq' || q.type === 'tf') renderChoiceInput(q, false);
+    if (q.type === 'mcq' || q.type === 'tf' || q.type === 'audio') renderChoiceInput(q, false);
     else if (q.type === 'multi') renderChoiceInput(q, true);
     else if (q.type === 'text' || q.type === 'voice_text') renderTextInput(q);
+    else if (q.type === 'context_gap') renderContextGapInput(q);
+    else if (q.type === 'error_hunt') renderErrorHuntInput(q);
+    else if (q.type === 'slider') renderSliderInput(q);
+    else if (q.type === 'puzzle') renderPuzzleInput(q);
+    else if (q.type === 'match_pairs') renderMatchPairsInput(q);
   }
 
   function renderChoiceInput(q, multi) {
@@ -2382,6 +2479,223 @@ function openRetakeLoop(state) {
     });
     qArea.appendChild(form);
     setTimeout(() => input.focus(), 20);
+  }
+
+  function renderContextGapInput(q) {
+    const gaps = Array.isArray(q.gaps) ? q.gaps : [];
+    const form = document.createElement('form');
+    form.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
+    const inputs = [];
+    gaps.forEach((_g, i) => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;';
+      const tag = document.createElement('span');
+      tag.style.cssText = 'min-width:4.5em;font-weight:600;opacity:0.7;font-size:0.85rem;';
+      tag.textContent = `Gap ${i + 1}`;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.style.cssText = 'flex:1;padding:0.5rem 0.7rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
+      row.append(tag, input);
+      form.appendChild(row);
+      inputs.push(input);
+    });
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    submitBtn.style.cssText = 'margin-top:0.5rem;';
+    form.appendChild(submitBtn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submit(inputs.map((inp) => inp.value));
+    });
+    qArea.appendChild(form);
+    setTimeout(() => inputs[0]?.focus(), 20);
+  }
+
+  function renderErrorHuntInput(q) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:0.8rem;opacity:0.65;margin-bottom:0.5rem;';
+    hint.textContent = 'Rewrite the sentence with the errors fixed.';
+    qArea.appendChild(hint);
+
+    const form = document.createElement('form');
+    form.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
+    const input = document.createElement('textarea');
+    input.rows = 2;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Rewrite the corrected sentence';
+    input.style.cssText = 'padding:0.6rem 0.8rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;resize:vertical;';
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    form.append(input, submitBtn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (!val) return;
+      submit(val);
+    });
+    qArea.appendChild(form);
+    setTimeout(() => input.focus(), 20);
+  }
+
+  function renderSliderInput(q) {
+    const min = Number(q.min);
+    const max = Number(q.max);
+    const unit = String(q.unit || '');
+    const initial = Math.round((min + max) / 2);
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.6rem;';
+
+    const valueDisplay = document.createElement('div');
+    valueDisplay.style.cssText = 'text-align:center;font-size:1.6rem;font-weight:700;';
+    valueDisplay.textContent = unit ? `${initial} ${unit}` : String(initial);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(min);
+    slider.max = String(max);
+    slider.value = String(initial);
+    slider.style.cssText = 'width:100%;';
+    slider.addEventListener('input', () => {
+      valueDisplay.textContent = unit ? `${slider.value} ${unit}` : String(slider.value);
+    });
+
+    const range = document.createElement('div');
+    range.style.cssText = 'display:flex;justify-content:space-between;font-size:0.8rem;opacity:0.6;';
+    const minLabel = document.createElement('span');
+    minLabel.textContent = String(min);
+    const maxLabel = document.createElement('span');
+    maxLabel.textContent = String(max);
+    range.append(minLabel, maxLabel);
+
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    submitBtn.addEventListener('click', () => submit(Number(slider.value)));
+
+    wrap.append(valueDisplay, slider, range, submitBtn);
+    qArea.appendChild(wrap);
+  }
+
+  function renderPuzzleInput(q) {
+    const items = Array.isArray(q.items) ? q.items.map(String) : [];
+    if (!items.length) return;
+    // Each shuffled slot keeps its index so duplicates don't collide.
+    const shuffled = shuffleRetakeArray(items.map((token, i) => ({ token, slotId: i })));
+    const usedSlotIds = [];
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.75rem;';
+
+    const orderedZone = document.createElement('div');
+    orderedZone.style.cssText = 'min-height:3rem;padding:0.5rem;border:2px dashed rgba(0,0,0,0.2);border-radius:8px;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;';
+
+    const availableZone = document.createElement('div');
+    availableZone.style.cssText = 'padding:0.25rem 0;display:flex;flex-wrap:wrap;gap:0.4rem;';
+
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    submitBtn.addEventListener('click', () => {
+      submit(usedSlotIds.map((id) => shuffled.find((s) => s.slotId === id).token));
+    });
+
+    function renderTokens() {
+      orderedZone.innerHTML = '';
+      if (!usedSlotIds.length) {
+        const ph = document.createElement('span');
+        ph.style.cssText = 'opacity:0.5;font-size:0.85rem;';
+        ph.textContent = 'Tap words below in order…';
+        orderedZone.appendChild(ph);
+      }
+      usedSlotIds.forEach((slotId, pos) => {
+        const slot = shuffled.find((s) => s.slotId === slotId);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+        btn.style.cssText = 'background:#3b82f6;color:white;';
+        btn.textContent = slot.token;
+        btn.title = 'Tap to remove';
+        btn.addEventListener('click', () => {
+          usedSlotIds.splice(pos, 1);
+          renderTokens();
+        });
+        orderedZone.appendChild(btn);
+      });
+
+      availableZone.innerHTML = '';
+      shuffled.forEach((slot) => {
+        if (usedSlotIds.includes(slot.slotId)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+        btn.style.cssText = 'background:rgba(0,0,0,0.05);';
+        btn.textContent = slot.token;
+        btn.addEventListener('click', () => {
+          usedSlotIds.push(slot.slotId);
+          renderTokens();
+        });
+        availableZone.appendChild(btn);
+      });
+    }
+
+    wrap.append(orderedZone, availableZone, submitBtn);
+    qArea.appendChild(wrap);
+    renderTokens();
+  }
+
+  function renderMatchPairsInput(q) {
+    const pairs = Array.isArray(q.pairs) ? q.pairs : [];
+    if (!pairs.length) return;
+    const shuffledRights = shuffleRetakeArray(pairs.map((p) => String(p?.right || '')));
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
+    const selects = [];
+    pairs.forEach((p) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;';
+      const leftLabel = document.createElement('span');
+      leftLabel.style.cssText = 'flex:1;font-weight:600;';
+      leftLabel.textContent = String(p?.left || '');
+      const arrow = document.createElement('span');
+      arrow.textContent = '➜';
+      arrow.style.cssText = 'opacity:0.5;';
+      const select = document.createElement('select');
+      select.style.cssText = 'flex:1;padding:0.5rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '—';
+      select.appendChild(placeholder);
+      shuffledRights.forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        select.appendChild(opt);
+      });
+      row.append(leftLabel, arrow, select);
+      wrap.appendChild(row);
+      selects.push(select);
+    });
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    submitBtn.style.cssText = 'margin-top:0.5rem;';
+    submitBtn.addEventListener('click', () => {
+      submit(selects.map((s, i) => ({ left: pairs[i]?.left || '', right: s.value })));
+    });
+    wrap.appendChild(submitBtn);
+    qArea.appendChild(wrap);
   }
 
   function submit(userAnswer) {
