@@ -179,8 +179,8 @@ function init() {
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
 
-    // Priority 1: stop an active voice recording.
-    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled)');
+    // Priority 1: stop an active voice recording (voice_record OR voice_text).
+    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled), .voice-text-stop-btn:not(.hidden):not(:disabled)');
     if (stopBtn) {
       e.preventDefault();
       stopBtn.click();
@@ -212,9 +212,9 @@ function init() {
     if (e.key !== 'r' && e.key !== 'R') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled)');
+    const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled), .voice-text-stop-btn:not(.hidden):not(:disabled)');
     if (stopBtn) { e.preventDefault(); stopBtn.click(); return; }
-    const recBtn = document.querySelector('.voice-record-btn:not(.hidden):not(:disabled)');
+    const recBtn = document.querySelector('.voice-record-btn:not(.hidden):not(:disabled), .voice-text-mic-btn:not(.hidden):not(:disabled)');
     if (recBtn) { e.preventDefault(); recBtn.click(); }
   });
 
