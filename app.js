@@ -13148,13 +13148,16 @@ function bindSoloEvents() {
       pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
       soloGame.score += pts;
       setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
-    } else if (q.type === 'context_gap' && Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
+    } else if (Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
       const proportional = Math.floor(basePoints * (result.partialScore / result.partialTotal));
       const betPenalty = live.player.selectedBet === 3 ? Math.round(basePoints * 0.4) : 0;
       pts = proportional - betPenalty;
       soloGame.score += pts;
       const sign = pts >= 0 ? `+${pts}` : `${pts}`;
-      setStatus(feedbackEl, `Partial · ${result.partialScore}/${result.partialTotal} gaps · ${sign} pts · ${result.hint || ''}`.trim(), pts >= 0 ? 'ok' : 'bad');
+      const label = q.type === 'context_gap'
+        ? `Partial · ${formatPartialScore(result.partialScore)}/${result.partialTotal} gaps`
+        : `Partial · half credit (diacritic)`;
+      setStatus(feedbackEl, `${label} · ${sign} pts · ${result.hint || ''}`.trim(), pts >= 0 ? 'ok' : 'bad');
     } else {
       pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
       soloGame.score += pts;
@@ -15031,6 +15034,11 @@ function stripDiacritics(text) {
   return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+function formatPartialScore(n) {
+  const x = Number(n) || 0;
+  return Number.isInteger(x) ? String(x) : x.toFixed(1);
+}
+
 function parseAcceptedGapOptions(value) {
   return String(value || '')
     .split(',')
@@ -15062,7 +15070,14 @@ function gradeContextGap(guessRaw, gaps) {
   let score = 0;
   for (let i = 0; i < total; i++) {
     const g = guess[i] || '';
-    if (g && expected[i].includes(g)) score++;
+    if (!g) continue;
+    if (expected[i].includes(g)) {
+      score += 1;
+    } else {
+      const gLoose = stripDiacritics(g);
+      const expectedLoose = expected[i].map(stripDiacritics);
+      if (gLoose && expectedLoose.includes(gLoose)) score += 0.5;
+    }
   }
   return { correct: score === total, score, total };
 }
