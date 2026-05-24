@@ -1752,38 +1752,17 @@ function showSkipAnswerModal() {
   backdrop.id = 'skipAnswerModal';
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
 
-  const panel = document.createElement('div');
-  panel.style.cssText = 'background:var(--card-bg, #fff);color:var(--text, #111);border-radius:12px;max-width:360px;width:100%;padding:1.25rem;box-shadow:0 18px 50px rgba(0,0,0,0.35);';
-
-  const title = document.createElement('div');
-  title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:1rem;text-align:center;';
-  title.textContent = 'Show answer?';
-  panel.appendChild(title);
-
-  const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;';
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.className = 'btn';
-  cancelBtn.textContent = 'Cancel';
-  cancelBtn.addEventListener('click', () => { closeModal(); });
-  actions.appendChild(cancelBtn);
-
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
   confirmBtn.className = 'btn primary';
-  confirmBtn.textContent = 'Show answer';
+  confirmBtn.textContent = 'Show answer?';
+  confirmBtn.style.cssText = 'font-size:1rem;padding:0.75rem 1.5rem;';
   confirmBtn.addEventListener('click', () => {
     confirmBtn.disabled = true;
-    cancelBtn.disabled = true;
     closeModal();
     submitLiveAnswer({ allowEmpty: true }).catch(() => { });
   });
-  actions.appendChild(confirmBtn);
-
-  panel.appendChild(actions);
-  backdrop.appendChild(panel);
+  backdrop.appendChild(confirmBtn);
 
   function closeModal() {
     document.removeEventListener('keydown', onKey, true);
