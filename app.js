@@ -8021,6 +8021,9 @@ function renderAssignmentResults(safeCode, data) {
     });
 
     const reviewedBadge = a?.reviewedAt ? `<span style="background:#3b82f6; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Student has reviewed feedback">REVIEWED</span>` : '';
+    const selfCorrectedBadge = a?.selfCorrectedAt
+      ? `<span style="background:#8b5cf6; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Student retook and corrected every auto-graded mistake from this attempt (${new Date(Number(a.selfCorrectedAt)).toLocaleString()})">SELF-CORRECTED</span>`
+      : '';
     const notifiedBadge = a?.notifiedAt
       ? `<span style="background:#10b981; color:white; border-radius:12px; padding:2px 8px; font-size:0.7rem; font-weight:bold;" title="Notified ${new Date(Number(a.notifiedAt)).toLocaleString()}">NOTIFIED</span>`
       : '';
@@ -8035,7 +8038,7 @@ function renderAssignmentResults(safeCode, data) {
 
     const nameWrap = document.createElement('span');
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${notifiedBadge}${focusBadge}`;
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';

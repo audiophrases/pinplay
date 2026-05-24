@@ -2075,10 +2075,389 @@ function renderInstantFeedbackFromState() {
 
   listWrap.appendChild(list);
   panel.appendChild(listWrap);
+
+  // --- Self-correct retake row (only for instant/end feedback) ---
+  renderRetakeRow(panel, state);
+
   wrap.appendChild(panel);
 }
 
+// ============================================================
+// Retake Loop — pedagogical-only review of wrong/skipped answers.
+// State lives in localStorage; exactly one POST fires on completion.
+// Gated to assignments with feedbackMode in {instant, end}.
+// ============================================================
 
+const SELF_CORRECTING_TYPES = new Set(['mcq', 'tf', 'multi', 'text', 'voice_text']);
+
+function isSelfCorrectingQuestion(question) {
+  if (!question || !question.type) return false;
+  if (!SELF_CORRECTING_TYPES.has(question.type)) return false;
+  if (question.type === 'text' || question.type === 'voice_text') {
+    const accepted = (question.accepted || []).map((s) => String(s || '').trim()).filter(Boolean);
+    return accepted.length > 0;
+  }
+  if (question.type === 'mcq' || question.type === 'tf' || question.type === 'multi') {
+    const answers = Array.isArray(question.answers) ? question.answers : [];
+    return answers.some((a) => a && a.correct === true);
+  }
+  return false;
+}
+
+function getRetakeEligibleIndexes(state) {
+  const attempt = state?.attempt;
+  const questions = Array.isArray(attempt?.assignment?.quiz?.questions) ? attempt.assignment.quiz.questions : [];
+  if (!questions.length) return [];
+  const autoByQ = new Map();
+  (Array.isArray(attempt?.answersWithCorrectness) ? attempt.answersWithCorrectness : []).forEach((a) => {
+    if (a && Number.isFinite(Number(a.qIndex))) autoByQ.set(Number(a.qIndex), a);
+  });
+  const answeredSet = new Set((Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : []).map(Number));
+  const eligible = [];
+  questions.forEach((q, idx) => {
+    if (!isSelfCorrectingQuestion(q)) return;
+    const auto = autoByQ.get(idx);
+    const isSkipped = !answeredSet.has(idx);
+    const isWrong = auto && auto.correct === false;
+    if (isSkipped || isWrong) eligible.push(idx);
+  });
+  return eligible;
+}
+
+function gradeSelfCorrectAnswer(question, userAnswer) {
+  if (!question) return false;
+  const t = question.type;
+  if (t === 'mcq' || t === 'tf') {
+    const i = Number(userAnswer);
+    const answers = Array.isArray(question.answers) ? question.answers : [];
+    return !!(answers[i] && answers[i].correct === true);
+  }
+  if (t === 'multi') {
+    const picked = new Set((Array.isArray(userAnswer) ? userAnswer : []).map(Number));
+    const answers = Array.isArray(question.answers) ? question.answers : [];
+    const correctSet = new Set(
+      answers.map((a, i) => (a && a.correct ? i : -1)).filter((i) => i >= 0),
+    );
+    if (picked.size !== correctSet.size) return false;
+    for (const i of picked) if (!correctSet.has(i)) return false;
+    return picked.size > 0;
+  }
+  if (t === 'text' || t === 'voice_text') {
+    const normalized = normalizeTextAnswer(userAnswer);
+    if (!normalized) return false;
+    const accepted = (question.accepted || []).map((s) => normalizeTextAnswer(s)).filter(Boolean);
+    return accepted.includes(normalized);
+  }
+  return false;
+}
+
+function retakeStorageKey(attemptId) {
+  return `pinplay.retake.${attemptId}`;
+}
+
+function loadRetakeProgress(attemptId) {
+  try {
+    const raw = localStorage.getItem(retakeStorageKey(attemptId));
+    if (!raw) return { cleared: [] };
+    const data = JSON.parse(raw);
+    return { cleared: Array.isArray(data?.cleared) ? data.cleared.map(Number).filter(Number.isFinite) : [] };
+  } catch { return { cleared: [] }; }
+}
+
+function saveRetakeProgress(attemptId, data) {
+  try {
+    localStorage.setItem(retakeStorageKey(attemptId), JSON.stringify({ cleared: data.cleared }));
+  } catch { /* localStorage full / disabled — silently no-op */ }
+}
+
+function clearRetakeProgress(attemptId) {
+  try { localStorage.removeItem(retakeStorageKey(attemptId)); } catch {}
+}
+
+function renderRetakeRow(panel, state) {
+  const attempt = state?.attempt;
+  const feedbackMode = attempt?.assignment?.feedbackMode || 'none';
+  if (feedbackMode !== 'instant' && feedbackMode !== 'end') return;
+  if (!attempt?.submitted) return;
+
+  const eligible = getRetakeEligibleIndexes(state);
+  const attemptId = String(attempt?.id || '').trim();
+  if (!attemptId) return;
+
+  const alreadyServerSelfCorrected = Number(attempt?.selfCorrectedAt || 0) > 0;
+
+  // Hide entirely if there's nothing retakeable AND the badge isn't earned.
+  if (!eligible.length && !alreadyServerSelfCorrected) return;
+
+  const row = document.createElement('div');
+  row.style.cssText = 'margin-top:0.75rem;display:flex;align-items:center;justify-content:center;';
+
+  if (alreadyServerSelfCorrected) {
+    const pill = document.createElement('div');
+    pill.style.cssText = 'background:#8b5cf6;color:white;border-radius:999px;padding:0.35rem 0.9rem;font-weight:700;font-size:0.85rem;';
+    pill.textContent = '✓ Self-corrected';
+    pill.title = 'You retook and corrected every retakeable mistake from this attempt.';
+    row.appendChild(pill);
+    panel.appendChild(row);
+    return;
+  }
+
+  const progress = loadRetakeProgress(attemptId);
+  const clearedSet = new Set(progress.cleared.filter((i) => eligible.includes(i)));
+  const remaining = eligible.length - clearedSet.size;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn primary';
+  btn.style.cssText = 'padding:0.5rem 1rem;font-weight:600;';
+  if (remaining === 0) {
+    btn.textContent = '🎯 Finish self-correct';
+    btn.title = 'Submit completion to your teacher';
+  } else {
+    btn.textContent = `🔄 Self-correct (${remaining} of ${eligible.length} left)`;
+    btn.title = 'Retake the questions you got wrong or skipped';
+  }
+  btn.addEventListener('click', () => openRetakeLoop(state));
+  row.appendChild(btn);
+  panel.appendChild(row);
+}
+
+function dismissRetakeLoopModal() {
+  const existing = document.getElementById('retakeLoopOverlay');
+  if (existing) existing.remove();
+}
+
+function openRetakeLoop(state) {
+  const attempt = state?.attempt;
+  const attemptId = String(attempt?.id || live.player.assignment?.attemptId || '').trim();
+  const code = String(attempt?.assignment?.code || live.player.assignment?.code || '').trim();
+  if (!attemptId || !code) return;
+
+  const questions = Array.isArray(attempt?.assignment?.quiz?.questions) ? attempt.assignment.quiz.questions : [];
+  const eligible = getRetakeEligibleIndexes(state);
+  if (!eligible.length) return;
+
+  const progress = loadRetakeProgress(attemptId);
+  const cleared = new Set(progress.cleared.filter((i) => eligible.includes(i)));
+  let queue = eligible.filter((i) => !cleared.has(i));
+
+  dismissRetakeLoopModal();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'retakeLoopOverlay';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--card-bg,#fff);color:var(--text,#111);border-radius:14px;max-width:560px;width:100%;padding:1.25rem 1.25rem 1rem;box-shadow:0 18px 50px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.5rem;';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1.05rem;font-weight:700;';
+  title.textContent = '🔄 Self-correct';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'btn';
+  closeBtn.title = 'Close (progress saved on this device)';
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'min-width:auto;padding:0.25rem 0.55rem;';
+  closeBtn.addEventListener('click', () => closeLoop());
+  header.append(title, closeBtn);
+  panel.appendChild(header);
+
+  const subtitle = document.createElement('div');
+  subtitle.style.cssText = 'font-size:0.8rem;opacity:0.7;margin-bottom:0.75rem;';
+  subtitle.textContent = 'Retake the questions you got wrong or skipped. Original score is unchanged.';
+  panel.appendChild(subtitle);
+
+  const progressBar = document.createElement('div');
+  progressBar.style.cssText = 'display:flex;gap:4px;margin-bottom:1rem;';
+  panel.appendChild(progressBar);
+
+  const qArea = document.createElement('div');
+  panel.appendChild(qArea);
+
+  const feedbackLine = document.createElement('div');
+  feedbackLine.style.cssText = 'min-height:1.5em;margin:0.75rem 0;font-weight:600;text-align:center;';
+  panel.appendChild(feedbackLine);
+
+  backdrop.appendChild(panel);
+  document.body.appendChild(backdrop);
+
+  let currentQIndex = queue[0];
+  renderCurrent();
+
+  function renderProgressBar() {
+    progressBar.innerHTML = '';
+    eligible.forEach((i) => {
+      const chip = document.createElement('div');
+      const isCleared = cleared.has(i);
+      const isCurrent = i === currentQIndex && !isCleared;
+      chip.style.cssText = `flex:1;height:6px;border-radius:3px;background:${isCleared ? '#10b981' : isCurrent ? '#3b82f6' : 'rgba(0,0,0,0.15)'};`;
+      progressBar.appendChild(chip);
+    });
+  }
+
+  function renderCurrent() {
+    feedbackLine.textContent = '';
+    feedbackLine.style.color = '';
+    renderProgressBar();
+    qArea.innerHTML = '';
+    if (!queue.length) {
+      showCompletion();
+      return;
+    }
+    currentQIndex = queue[0];
+    const q = questions[currentQIndex];
+    if (!q) { queue.shift(); renderCurrent(); return; }
+
+    const counter = document.createElement('div');
+    counter.style.cssText = 'font-size:0.8rem;opacity:0.7;margin-bottom:0.5rem;';
+    counter.textContent = `Question ${currentQIndex + 1} · ${cleared.size + 1} of ${eligible.length}`;
+    qArea.appendChild(counter);
+
+    const prompt = document.createElement('div');
+    prompt.style.cssText = 'font-size:1rem;font-weight:600;margin-bottom:1rem;white-space:pre-wrap;';
+    prompt.textContent = String(q.prompt || `Question ${currentQIndex + 1}`);
+    qArea.appendChild(prompt);
+
+    if (q.type === 'mcq' || q.type === 'tf') renderChoiceInput(q, false);
+    else if (q.type === 'multi') renderChoiceInput(q, true);
+    else if (q.type === 'text' || q.type === 'voice_text') renderTextInput(q);
+  }
+
+  function renderChoiceInput(q, multi) {
+    const answers = Array.isArray(q.answers) ? q.answers : [];
+    const picked = new Set();
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
+    answers.forEach((a, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.style.cssText = 'text-align:left;padding:0.6rem 0.8rem;white-space:normal;';
+      btn.textContent = String(a?.text || '');
+      btn.addEventListener('click', () => {
+        if (multi) {
+          if (picked.has(i)) {
+            picked.delete(i);
+            btn.style.outline = '';
+            btn.style.background = '';
+          } else {
+            picked.add(i);
+            btn.style.outline = '2px solid #3b82f6';
+            btn.style.background = 'rgba(59,130,246,0.1)';
+          }
+        } else {
+          submit(i);
+        }
+      });
+      list.appendChild(btn);
+    });
+    qArea.appendChild(list);
+
+    if (multi) {
+      const submitBtn = document.createElement('button');
+      submitBtn.type = 'button';
+      submitBtn.className = 'btn primary';
+      submitBtn.textContent = 'Submit';
+      submitBtn.style.cssText = 'margin-top:0.75rem;width:100%;';
+      submitBtn.addEventListener('click', () => submit([...picked]));
+      qArea.appendChild(submitBtn);
+    }
+  }
+
+  function renderTextInput(q) {
+    const form = document.createElement('form');
+    form.style.cssText = 'display:flex;gap:0.5rem;';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Type your answer';
+    input.style.cssText = 'flex:1;padding:0.6rem 0.8rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit';
+    form.append(input, submitBtn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (!val) return;
+      submit(val);
+    });
+    qArea.appendChild(form);
+    setTimeout(() => input.focus(), 20);
+  }
+
+  function submit(userAnswer) {
+    const q = questions[currentQIndex];
+    const ok = gradeSelfCorrectAnswer(q, userAnswer);
+    if (ok) {
+      feedbackLine.style.color = '#10b981';
+      feedbackLine.textContent = '✓ Correct!';
+      cleared.add(currentQIndex);
+      queue.shift();
+      saveRetakeProgress(attemptId, { cleared: [...cleared] });
+      setTimeout(() => renderCurrent(), 600);
+    } else {
+      feedbackLine.style.color = '#ef4444';
+      feedbackLine.textContent = '✗ Not quite — try again';
+    }
+  }
+
+  function showCompletion() {
+    qArea.innerHTML = '';
+    feedbackLine.textContent = '';
+    progressBar.innerHTML = '';
+    eligible.forEach(() => {
+      const chip = document.createElement('div');
+      chip.style.cssText = 'flex:1;height:6px;border-radius:3px;background:#10b981;';
+      progressBar.appendChild(chip);
+    });
+
+    const celebration = document.createElement('div');
+    celebration.style.cssText = 'text-align:center;padding:1.5rem 0;';
+    celebration.innerHTML = '<div style="font-size:3rem;margin-bottom:0.5rem;">🎉</div><div style="font-size:1.2rem;font-weight:700;margin-bottom:0.25rem;">Self-corrected!</div><div style="font-size:0.9rem;opacity:0.75;">You corrected every retakeable mistake from this attempt.</div>';
+    qArea.appendChild(celebration);
+
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'btn primary';
+    doneBtn.textContent = 'Done';
+    doneBtn.style.cssText = 'width:100%;margin-top:0.5rem;';
+    doneBtn.addEventListener('click', () => {
+      backdrop.remove();
+      renderInstantFeedbackFromState();
+    });
+    qArea.appendChild(doneBtn);
+
+    finishRetakeLoop({ code, attemptId });
+  }
+
+  function closeLoop() {
+    backdrop.remove();
+    renderInstantFeedbackFromState();
+  }
+}
+
+async function finishRetakeLoop({ code, attemptId }) {
+  try {
+    const data = await api('/api/assignment/mark-self-corrected', {
+      method: 'POST',
+      body: { code, attemptId },
+    });
+    const attempt = live.player.assignment?.state?.attempt;
+    const ts = Number(data?.selfCorrectedAt || 0);
+    if (attempt && ts > 0) attempt.selfCorrectedAt = ts;
+    clearRetakeProgress(attemptId);
+  } catch (err) {
+    // Keep localStorage so the next visit can retry the POST.
+    console.warn('mark-self-corrected failed:', err);
+  }
+}
 
 async function pollPlayerState() {
   if (live.player.mode !== 'live') return;

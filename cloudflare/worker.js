@@ -1677,6 +1677,20 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignment/mark-self-corrected' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!attemptId) return json({ error: 'attemptId required.' }, 400);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/mark-self-corrected', {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/submit' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -2551,6 +2565,7 @@ export class QuizRoom {
               submittedAt: Number(a?.submittedAt || 0) || null,
               startedAt: Number(a?.startedAt || 0) || null,
               reviewedAt: Number(a?.reviewedAt || 0) || null,
+              selfCorrectedAt: Number(a?.selfCorrectedAt || 0) || null,
               teacherGradedCount: teacherActivity.gradedCount,
               teacherFeedbackCount: teacherActivity.feedbackCount,
               lastTeacherActivityAt: teacherActivity.lastTeacherActivityAt,
@@ -2782,6 +2797,28 @@ export class QuizRoom {
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         this.broadcastTeacherUpdate(code);
         return json({ ok: true });
+      }
+
+      if (url.pathname === '/assignments/mark-self-corrected' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        if (!code || !attemptId) return json({ error: 'Missing required fields.' }, 400);
+
+        const exists = await loadAssignmentBase(this.state.storage, code);
+        if (!exists) return json({ error: 'Assignment not found.' }, 404);
+        const attempt = await this.state.storage.get(`a:${code}:t:${attemptId}`);
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+
+        // Idempotent: once set, the badge is permanent — no second write.
+        if (Number(attempt.selfCorrectedAt || 0) > 0) {
+          return json({ ok: true, alreadySet: true, selfCorrectedAt: attempt.selfCorrectedAt });
+        }
+
+        attempt.selfCorrectedAt = Date.now();
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        this.broadcastTeacherUpdate(code);
+        return json({ ok: true, selfCorrectedAt: attempt.selfCorrectedAt });
       }
 
       if (url.pathname === '/assignments/focus-event' && request.method === 'POST') {
@@ -5995,6 +6032,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     submitted: !!attempt?.submitted,
     submittedAt: Number(attempt?.submittedAt || 0) || null,
     reviewedAt: Number(attempt?.reviewedAt || 0) || null,
+    selfCorrectedAt: Number(attempt?.selfCorrectedAt || 0) || null,
     assignment: publicAssignment(assignment, { includeQuiz: true }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
@@ -6098,6 +6136,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     submitted: full.submitted,
     submittedAt: full.submittedAt,
     reviewedAt: full.reviewedAt,
+    selfCorrectedAt: full.selfCorrectedAt,
     notifiedAt: Number(attempt?.notifiedAt || 0) || null,
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
