@@ -170,6 +170,22 @@ function init() {
     }
   });
 
+  // Enter advances when the submit button is in Continue/Finish mode. The joinAnswersEl
+  // handler only fires while focus is inside an answer input — after instant-feedback save
+  // the input is disabled and focus drops to <body>, so we need a document-level fallback.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    if (live.player.mode !== 'assignment') return;
+    if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+    if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
+    const txt = String(joinSubmitBtn.textContent || '');
+    if (!txt.startsWith('Continue') && !txt.startsWith('Finish quiz')) return;
+    // Don't double-fire if joinAnswersEl's own handler already caught it.
+    if (e.target instanceof Node && joinAnswersEl && joinAnswersEl.contains(e.target)) return;
+    e.preventDefault();
+    submitLiveAnswer();
+  });
+
   // Press 'p' to play question audio
   document.addEventListener('keydown', (e) => {
     if (e.key === 'p' || e.key === 'P') {
