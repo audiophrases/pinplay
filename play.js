@@ -3525,6 +3525,12 @@ async function submitLiveAnswer() {
       setJoinStatusHud('Answer saved ✅', 'ok');
       await loadAssignmentState();
       renderInstantFeedbackFromState();
+      // Re-render replaces the focused input, so focus falls back to <body> and the next
+      // Enter never reaches joinAnswersEl's keydown handler. Move focus to the submit
+      // button so Enter advances to the next question (matches the <kbd>↵</kbd> hint).
+      if (joinSubmitBtn && !joinSubmitBtn.disabled && !joinSubmitBtn.classList.contains('hidden')) {
+        joinSubmitBtn.focus({ preventScroll: true });
+      }
       return;
     }
 
