@@ -12694,7 +12694,14 @@ function evaluatePreviewAnswer(q, answer) {
     const accepted = (q.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     // Expand "or" alternatives: "boss or manager" accepts "boss" or "manager" separately
     const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
-    return { correct: expanded.length ? expanded.includes(guess) : false };
+    if (!expanded.length) return { correct: false };
+    if (expanded.includes(guess)) return { correct: true };
+    const guessLoose = stripDiacritics(guess);
+    const expandedLoose = expanded.map(stripDiacritics);
+    if (guess && expandedLoose.includes(guessLoose)) {
+      return { correct: false, partialScore: 0.5, partialTotal: 1 };
+    }
+    return { correct: false };
   }
   if (q.type === 'open' || q.type === 'image_open' || q.type === 'speaking' || q.type === 'voice_record') return { correct: false, graded: false };
   if (q.type === 'context_gap') {
@@ -13543,7 +13550,14 @@ function evaluateSoloQuestion(q) {
     const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
 
     if (!accepted.length) return { correct: false, hint: 'No accepted answers set.' };
-    return { correct: expanded.includes(guess), hint: `Accepted: ${expanded.slice(0, 3).join(' / ')}` };
+    const hint = `Accepted: ${expanded.slice(0, 3).join(' / ')}`;
+    if (expanded.includes(guess)) return { correct: true, hint };
+    const guessLoose = stripDiacritics(guess);
+    const expandedLoose = expanded.map(stripDiacritics);
+    if (guess && expandedLoose.includes(guessLoose)) {
+      return { correct: false, partialScore: 0.5, partialTotal: 1, hint };
+    }
+    return { correct: false, hint };
   }
 
   if (q.type === 'open' || q.type === 'image_open') {
@@ -15011,6 +15025,10 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function stripDiacritics(text) {
+  return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
 function parseAcceptedGapOptions(value) {

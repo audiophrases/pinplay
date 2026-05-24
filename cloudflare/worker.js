@@ -4167,7 +4167,7 @@ export class QuizRoom {
             lock.awardedPoints = pointsAwarded;
             lock.awardedAt = Date.now();
             room.scoreLocksByQuestion[qIndex][playerId] = lock;
-          } else if (question.type === 'context_gap' && Number(verdict.partialScore || 0) > 0 && Number(verdict.partialTotal || 0) > 0) {
+          } else if (Number(verdict.partialScore || 0) > 0 && Number(verdict.partialTotal || 0) > 0) {
             const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
             pointsAwarded = proportional + applyBetScore(basePoints, 0, false, bet);
           } else {
@@ -4902,7 +4902,14 @@ function evaluate(question, answer) {
     const accepted = (question.accepted || []).map(normalizeTextAnswer).filter(Boolean);
     // Expand "or" alternatives: "boss or manager" accepts "boss" or "manager" separately
     const expanded = accepted.flatMap((a) => a.split(' or ').map((s) => s.trim()).filter(Boolean));
-    return { correct: expanded.includes(guess) };
+    if (expanded.includes(guess)) return { correct: true };
+    // Diacritic-only mistake (e.g. "â" instead of "á"): half credit
+    const guessLoose = stripDiacritics(guess);
+    const expandedLoose = expanded.map(stripDiacritics);
+    if (guess && expandedLoose.includes(guessLoose)) {
+      return { correct: false, partialScore: 0.5, partialTotal: 1 };
+    }
+    return { correct: false };
   }
 
   if (question.type === 'context_gap') {
@@ -5204,6 +5211,10 @@ function normalizeTextAnswer(text) {
     .trim();
 }
 
+function stripDiacritics(text) {
+  return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function parseAcceptedGapOptions(value) {
   return String(value || '')
     .split(',')
@@ -5235,7 +5246,15 @@ function gradeContextGap(answer, gaps) {
   let score = 0;
   for (let i = 0; i < total; i++) {
     const g = guess[i] || '';
-    if (g && expected[i].includes(g)) score++;
+    if (!g) continue;
+    if (expected[i].includes(g)) {
+      score += 1;
+    } else {
+      // Diacritic-only mistake on this gap: half credit
+      const gLoose = stripDiacritics(g);
+      const expectedLoose = expected[i].map(stripDiacritics);
+      if (gLoose && expectedLoose.includes(gLoose)) score += 0.5;
+    }
   }
   return { correct: score === total, score, total };
 }
@@ -5880,7 +5899,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     if (verdict?.correct) {
       correctCount += 1;
       autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
-    } else if (question.type === 'context_gap' && Number(verdict?.partialScore || 0) > 0 && Number(verdict?.partialTotal || 0) > 0) {
+    } else if (Number(verdict?.partialScore || 0) > 0 && Number(verdict?.partialTotal || 0) > 0) {
       const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
       autoScore += proportional + applyBetScore(basePoints, 0, false, item?.bet);
     } else {
@@ -5921,7 +5940,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
       const verdict = evaluate(question, item?.answer);
       const basePoints = Number(question?.points || 0);
       let points = verdict?.correct ? basePoints : 0;
-      if (!verdict?.correct && question.type === 'context_gap') {
+      if (!verdict?.correct) {
         const partialScore = Number(verdict?.partialScore || 0);
         const partialTotal = Number(verdict?.partialTotal || 0);
         if (partialScore > 0 && partialTotal > 0) {
