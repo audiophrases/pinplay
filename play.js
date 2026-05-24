@@ -1914,6 +1914,11 @@ function renderInstantFeedbackFromState() {
   if (!wrap) return;
 
   const existing = document.getElementById('assignmentResultsPanel');
+  // Preserve the question-summary list's scroll position so the 5s polling
+  // re-render doesn't yank the student back to Q1 after they scroll down.
+  const prevListScrollTop = existing
+    ? existing.querySelector('.assignment-results-list-wrap')?.scrollTop || 0
+    : 0;
   if (existing) existing.remove();
 
   const panel = document.createElement('div');
@@ -2084,6 +2089,10 @@ function renderInstantFeedbackFromState() {
   renderRetakeRow(panel, state);
 
   wrap.appendChild(panel);
+
+  if (prevListScrollTop > 0 && !listCollapsed) {
+    listWrap.scrollTop = prevListScrollTop;
+  }
 }
 
 // ============================================================
