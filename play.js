@@ -2699,13 +2699,9 @@ function renderJoinQuestion(question) {
         const q = live.player.currentQuestion;
         if (!q) return;
         stopAssignmentQuestionAudioPlayback();
-        playAssignmentQuestionAudio(q).then((played) => {
+        playAssignmentQuestionAudio(q, { preserveAmbient: true }).then((played) => {
           if (!played) return;
-          const s = live.player.assignment.state;
-          const attempt = s?.attempt;
-          if (live.player.mode !== 'assignment') return;
-          if (!attempt || attempt.submitted) return;
-          playAssignmentSfx('answering');
+          resumeAssignmentAnsweringAmbient();
         }).catch(() => {});
       });
       eq.addEventListener('keydown', (e) => {
@@ -5074,7 +5070,11 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
   if (!hasAssignmentQuestionAudio(question)) return false;
 
   const audioKey = String(opts?.audioKey || '');
-  stopAllAssignmentAmbient();
+  if (opts?.preserveAmbient) {
+    pauseAssignmentAnsweringAmbient();
+  } else {
+    stopAllAssignmentAmbient();
+  }
   stopAssignmentQuestionAudioPlayback();
 
   const playAudioEl = (audioEl) => new Promise((resolve) => {
