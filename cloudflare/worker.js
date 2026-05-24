@@ -378,32 +378,7 @@ export default {
       }
 
       // Auto-extract base64 media to R2 if QUIZ_MEDIA binding exists
-      if (env.QUIZ_MEDIA) {
-        const quizId = `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        quiz = JSON.parse(JSON.stringify(quiz)); // deep clone
-
-        for (const q of quiz.questions || []) {
-          for (const field of ['audioData', 'imageData']) {
-            const val = q[field];
-            if (val && typeof val === 'string' && val.startsWith('data:')) {
-              const match = val.match(/^data:([^;]+);base64,(.+)$/);
-              if (match) {
-                const mime = match[1];
-                const binaryStr = atob(match[2]);
-                const bytes = new Uint8Array(binaryStr.length);
-                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
-                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
-                    : mime.includes('png') ? '.png' : '.bin';
-                const key = `${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
-                await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
-                q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
-                q.audioMode = field === 'audioData' ? 'file' : q.audioMode;
-              }
-            }
-          }
-        }
-      }
+      quiz = await extractBase64MediaToR2(quiz, env, `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
 
       for (let i = 0; i < 15; i++) {
         const pin = makePin();
@@ -673,32 +648,8 @@ export default {
 
       // Extract base64 media to R2 (same as /api/assignments/create) but use
       // workspace-scoped prefix for guests.
-      if (env.QUIZ_MEDIA) {
-        const mediaPrefix = mediaPrefixFor(auth);
-        const quizId = `preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        quiz = JSON.parse(JSON.stringify(quiz));
-        for (const q of quiz.questions || []) {
-          for (const field of ['audioData', 'imageData']) {
-            const val = q[field];
-            if (val && typeof val === 'string' && val.startsWith('data:')) {
-              const match = val.match(/^data:([^;]+);base64,(.+)$/);
-              if (match) {
-                const mime = match[1];
-                const binaryStr = atob(match[2]);
-                const bytes = new Uint8Array(binaryStr.length);
-                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
-                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
-                    : mime.includes('png') ? '.png' : '.bin';
-                const key = `${mediaPrefix}${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
-                await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
-                q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
-                q.audioMode = field === 'audioData' ? 'file' : q.audioMode;
-              }
-            }
-          }
-        }
-      }
+      const mediaPrefix = mediaPrefixFor(auth);
+      quiz = await extractBase64MediaToR2(quiz, env, `${mediaPrefix}preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
 
       const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Preview';
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -1102,31 +1053,7 @@ export default {
       if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
 
       // Auto-extract base64 media to R2 before storing in Durable Object to avoid SQLITE_TOOBIG
-      if (env.QUIZ_MEDIA) {
-        const quizId = `assign-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        quiz = JSON.parse(JSON.stringify(quiz)); // deep clone
-        for (const q of quiz.questions || []) {
-          for (const field of ['audioData', 'imageData']) {
-            const val = q[field];
-            if (val && typeof val === 'string' && val.startsWith('data:')) {
-              const match = val.match(/^data:([^;]+);base64,(.+)$/);
-              if (match) {
-                const mime = match[1];
-                const binaryStr = atob(match[2]);
-                const bytes = new Uint8Array(binaryStr.length);
-                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-                const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
-                  : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
-                    : mime.includes('png') ? '.png' : '.bin';
-                const key = `${quizId}/${field === 'audioData' ? 'audio' : 'images'}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
-                await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
-                q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
-                q.audioMode = field === 'audioData' ? 'file' : q.audioMode;
-              }
-            }
-          }
-        }
-      }
+      quiz = await extractBase64MediaToR2(quiz, env, `assign-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
 
       const title = String(body?.title || quiz.title || '').trim().slice(0, 120) || 'Assignment';
       const className = sanitizeClassName(body?.className);
@@ -1531,8 +1458,17 @@ export default {
       const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
-      const quiz = normalizeQuiz(body?.quiz || {});
+      let quiz = normalizeQuiz(body?.quiz || {});
       if (!quiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
+
+      // Safety net: extract any leftover base64 media to R2 before sending to the DO.
+      // The client-side ensureQuizMediaReady() should have already done this, but if any
+      // of its per-image /api/media/upload calls silently failed (rate-limit, network blip),
+      // data: URLs would otherwise reach the DO row — risking SQLITE_TOOBIG and breaking
+      // cross-browser playback. Mirrors the same loop in /api/assignments/create.
+      if (env.QUIZ_MEDIA) {
+        quiz = await extractBase64MediaToR2(quiz, env, `assign-${code}-${Date.now().toString(36)}`);
+      }
 
       const forward = { code, quiz };
       if (typeof body?.title === 'string') forward.title = String(body.title).slice(0, 120);
@@ -5678,6 +5614,41 @@ function extractMediaPrefixesFromQuiz(quiz) {
     }
   }
   return prefixes;
+}
+
+// Walk a quiz, find any `data:` URLs in audioData/imageData, put them to R2 under
+// `<prefix>/{audio|images}/<qid>.<ext>`, and rewrite the field to the public
+// /api/media/<key> URL. Returns a deep-cloned, rewritten quiz. Safe to call on
+// quizzes that have no base64 left (it's a no-op per field).
+// Used by /api/assignments/create and /api/assignments/update-quiz so neither
+// endpoint can let raw data URLs reach the Durable Object row.
+async function extractBase64MediaToR2(quiz, env, prefix) {
+  if (!env?.QUIZ_MEDIA || !quiz?.questions?.length) return quiz;
+  const out = JSON.parse(JSON.stringify(quiz));
+  for (const q of out.questions) {
+    for (const field of ['audioData', 'imageData']) {
+      const val = q[field];
+      if (!val || typeof val !== 'string' || !val.startsWith('data:')) continue;
+      const match = val.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) continue;
+      const mime = match[1];
+      const binaryStr = atob(match[2]);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+      const ext = mime.includes('mpeg') || mime.includes('mp3') ? '.mp3'
+        : mime.includes('jpeg') || mime.includes('jpg') ? '.jpg'
+        : mime.includes('png') ? '.png'
+        : mime.includes('webp') ? '.webp'
+        : mime.includes('gif') ? '.gif'
+        : '.bin';
+      const slot = field === 'audioData' ? 'audio' : 'images';
+      const key = `${prefix}/${slot}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
+      await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
+      q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
+      if (field === 'audioData') q.audioMode = 'file';
+    }
+  }
+  return out;
 }
 
 // Delete every object under an R2 prefix. Returns the count.
