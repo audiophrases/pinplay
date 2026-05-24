@@ -2683,7 +2683,14 @@ function renderJoinQuestion(question) {
         const q = live.player.currentQuestion;
         if (!q) return;
         stopAssignmentQuestionAudioPlayback();
-        playAssignmentQuestionAudio(q).catch(() => {});
+        playAssignmentQuestionAudio(q).then((played) => {
+          if (!played) return;
+          const s = live.player.assignment.state;
+          const attempt = s?.attempt;
+          if (live.player.mode !== 'assignment') return;
+          if (!attempt || attempt.submitted) return;
+          playAssignmentSfx('answering');
+        }).catch(() => {});
       });
       eq.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); eq.click(); }
