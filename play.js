@@ -1740,6 +1740,69 @@ function showUnansweredConfirmModal(blankIndexes) {
   document.body.appendChild(backdrop);
 }
 
+function showSkipAnswerModal() {
+  const existing = document.getElementById('skipAnswerModal');
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'skipAnswerModal';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--card-bg, #fff);color:var(--text, #111);border-radius:12px;max-width:360px;width:100%;padding:1.25rem;box-shadow:0 18px 50px rgba(0,0,0,0.35);';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:1rem;text-align:center;';
+  title.textContent = 'Show answer?';
+  panel.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => { closeModal(); });
+  actions.appendChild(cancelBtn);
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn primary';
+  confirmBtn.textContent = 'Show answer';
+  confirmBtn.addEventListener('click', () => {
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    closeModal();
+    submitLiveAnswer({ allowEmpty: true }).catch(() => { });
+  });
+  actions.appendChild(confirmBtn);
+
+  panel.appendChild(actions);
+  backdrop.appendChild(panel);
+
+  function closeModal() {
+    document.removeEventListener('keydown', onKey, true);
+    backdrop.remove();
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeModal();
+    }
+  }
+  document.addEventListener('keydown', onKey, true);
+
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeModal();
+  });
+
+  document.body.appendChild(backdrop);
+  confirmBtn.focus({ preventScroll: true });
+}
+
 function hideAssignmentCompleteMessage() {
   const existing = document.getElementById('assignmentCompleteMessage');
   if (existing) existing.remove();
@@ -3527,7 +3590,7 @@ async function sendReaction(emoji) {
   }
 }
 
-async function submitLiveAnswer() {
+async function submitLiveAnswer(opts = {}) {
   try {
     if (joinSubmitBtn && (joinSubmitBtn.textContent.startsWith('Continue') || joinSubmitBtn.textContent.startsWith('Finish quiz'))) {
       if (live.player.assignment.pendingComplete) {
@@ -3541,7 +3604,16 @@ async function submitLiveAnswer() {
     }
 
     const answer = readJoinAnswer();
-    if (answer === null || answer === '') throw new Error('Choose/type an answer first.');
+    if (answer === null || answer === '') {
+      const isAssignment = live.player.mode === 'assignment';
+      const isInstant = String(live.player.assignment?.state?.attempt?.assignment?.feedbackMode || '') === 'instant';
+      const isPoll = !!live.player.currentQuestion?.isPoll;
+      if (isAssignment && isInstant && !isPoll && !opts.allowEmpty) {
+        showSkipAnswerModal();
+        return;
+      }
+      if (!opts.allowEmpty) throw new Error('Choose/type an answer first.');
+    }
 
     if (live.player.mode === 'assignment') {
       const code = String(live.player.assignment.code || '').trim();
