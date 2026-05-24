@@ -3724,6 +3724,44 @@ body.review-mode-active #joinSubmission {
   line-height: 1.4;
 }
 
+/* Red-tinted reveal when the student got it wrong. The neutral purple is reserved for
+   states where verdict is unknown (live mode pre-reveal, deferred review). */
+.student-answer-reveal--bad {
+  background: #fff1f2;
+  border-color: #fecaca;
+  color: #991b1b;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.08);
+}
+.student-answer-reveal--bad .student-answer-reveal-title {
+  color: #b91c1c;
+}
+
+/* Color the answer surface itself so the verdict lives where the student interacted —
+   matches the green/red treatment already used for MCQ option rows. */
+.join-answer-input.correct-highlight {
+  border-color: var(--ok) !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+}
+.join-answer-input.incorrect-highlight {
+  border-color: var(--bad) !important;
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
+.puzzle-selected.correct-highlight {
+  outline: 2px solid var(--ok);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+  background: rgba(19, 138, 54, 0.06);
+}
+.puzzle-selected.incorrect-highlight {
+  outline: 2px solid var(--bad);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+  background: rgba(220, 38, 38, 0.06);
+}
+
 @keyframes revealFadeIn {
   from {
     opacity: 0;

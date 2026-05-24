@@ -2545,6 +2545,26 @@ function renderPlayerState(state) {
       return;
     }
 
+    // Verdict for the current question. Prefer per-question record (assignment instant + review),
+    // fall back to the last in-session value (live mode after immediate reveal).
+    let verdict = null;
+    const awcArr = state?.attempt?.answersWithCorrectness;
+    if (Array.isArray(awcArr)) {
+      const qIdx = Number(state?.currentIndex);
+      const entry = awcArr.find((a) => Number(a?.qIndex) === qIdx);
+      if (entry && typeof entry.correct === 'boolean') verdict = entry.correct;
+    }
+    if (verdict === null && typeof live?.player?.lastAnswerCorrect === 'boolean') {
+      verdict = live.player.lastAnswerCorrect;
+    }
+
+    // When the student got it right, the answer surface itself carries the green signal —
+    // showing a "Correct Answer: …" box on top would be redundant. Suppress entirely.
+    if (verdict === true) {
+      if (revealEl) revealEl.remove();
+      return;
+    }
+
     let correctText = String(state.correctAnswer || '').trim();
 
     if (!correctText) {
@@ -2583,6 +2603,10 @@ function renderPlayerState(state) {
         wrap.appendChild(revealEl);
       }
     }
+
+    // Red-tint when we know the student was wrong; stay neutral when verdict is unknown
+    // (e.g. live mode pre-reveal, deferred-feedback review without per-Q correctness).
+    revealEl.classList.toggle('student-answer-reveal--bad', verdict === false);
 
     // Only update DOM if text actually changed
     const contentEl = revealEl.querySelector('.student-answer-reveal-content');
@@ -4116,10 +4140,11 @@ async function submitLiveAnswer(opts = {}) {
         joinAnswersEl.style.pointerEvents = 'none';
       }
 
-      // Show correct-answer text reveal box for text-based question types
+      // Show correct-answer text reveal box for text-based question types — skip entirely
+      // when the student got it right (answer surface already carries the green signal).
       const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
       const correctText = String(data.correctAnswer || '').trim();
-      if (needsReveal && correctText) {
+      if (needsReveal && correctText && !data.correct) {
         const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
         if (wrap) {
           let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
@@ -4140,6 +4165,7 @@ async function submitLiveAnswer(opts = {}) {
               wrap.appendChild(revealEl);
             }
           }
+          revealEl.classList.add('student-answer-reveal--bad');
           const contentEl = revealEl.querySelector('.student-answer-reveal-content');
           if (contentEl && contentEl.textContent !== correctText) {
             contentEl.textContent = correctText;
@@ -4824,9 +4850,26 @@ function highlightAnswerItems(isCorrect, state) {
   const question = state?.question;
   if (!question) return;
 
+  // Cache verdict so renderJoinReveal can read it without re-deriving (covers live mode,
+  // where state.attempt.answersWithCorrectness isn't populated on the synthetic state).
+  if (typeof isCorrect === 'boolean') {
+    live.player.lastAnswerCorrect = isCorrect;
+  }
+
   // MCQ / TF / Multi-select
   if (['mcq', 'tf', 'multi'].includes(question.type)) {
     highlightChoiceAnswers(question, state.correctAnswer);
+    return;
+  }
+
+  // Text / Voice text: color the input surface so the verdict lives where the student typed.
+  if (question.type === 'text' || question.type === 'voice_text') {
+    const input = document.getElementById('joinTextAnswer');
+    if (input) {
+      input.classList.remove('correct-highlight', 'incorrect-highlight');
+      if (isCorrect === true) input.classList.add('correct-highlight');
+      else if (isCorrect === false) input.classList.add('incorrect-highlight');
+    }
     return;
   }
 
@@ -4842,7 +4885,6 @@ function highlightAnswerItems(isCorrect, state) {
     return;
   }
 
-  // Context gap
   // Context gap
   if (question.type === 'context_gap') {
     highlightContextGap(question);
@@ -4861,9 +4903,9 @@ function highlightAnswerItems(isCorrect, state) {
     return;
   }
 
-  // Puzzle: highlight items in correct/incorrect positions
+  // Puzzle: color the assembled row based on the overall verdict (per-token data isn't available).
   if (question.type === 'puzzle') {
-    highlightPuzzle(question);
+    highlightPuzzle(question, isCorrect);
     return;
   }
 }
@@ -4936,45 +4978,16 @@ function highlightMatchPairs(question) {
   });
 }
 
-// Error hunt: highlight selected tokens
+// Error hunt: color the rewrite textarea by verdict. The correct-answer panel is owned by
+// renderJoinReveal — don't create a second reveal element here.
 function highlightErrorHunt(question, isCorrect) {
   const ta = document.getElementById('joinErrorHuntRewrite');
-  if (ta) {
-    ta.disabled = true;
-    ta.classList.add('join-answer-locked');
-  }
-
-  if (isCorrect === false) {
-    const correctText = question.corrected || '';
-    if (!correctText) return;
-
-    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-    if (wrap) {
-      let revealEl = wrap.querySelector('.student-answer-reveal[data-join-correct-reveal="1"]');
-      if (revealEl) revealEl.remove();
-
-      revealEl = document.createElement('div');
-      revealEl.className = 'student-answer-reveal';
-      revealEl.dataset.joinCorrectReveal = '1';
-
-      const title = document.createElement('div');
-      title.className = 'student-answer-reveal-title';
-      title.textContent = 'Correct Answer';
-      revealEl.appendChild(title);
-
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'student-answer-reveal-content';
-      contentDiv.textContent = correctText;
-      revealEl.appendChild(contentDiv);
-
-      const submissionBox = document.getElementById('joinSubmission');
-      if (wrap.id === 'joinQuestionInteractive' && submissionBox) {
-        wrap.insertBefore(revealEl, submissionBox);
-      } else {
-        wrap.appendChild(revealEl);
-      }
-    }
-  }
+  if (!ta) return;
+  ta.disabled = true;
+  ta.classList.add('join-answer-locked');
+  ta.classList.remove('correct-highlight', 'incorrect-highlight');
+  if (isCorrect === true) ta.classList.add('correct-highlight');
+  else if (isCorrect === false) ta.classList.add('incorrect-highlight');
 }
 
 // Slider: show correct value with visual indicator
@@ -5031,9 +5044,14 @@ function highlightContextGap(question) {
   });
 }
 
-function highlightPuzzle(question) {
-  // Puzzle answer buttons are intentionally not highlighted per request.
-  // The correct/incorrect status is shown via HUD and correct answer reveal.
+function highlightPuzzle(question, isCorrect) {
+  // Color the assembled token row as a single unit. Per-token coloring would mislead —
+  // a wrong order doesn't mean any individual token is wrong.
+  const selected = document.querySelector('.puzzle-selected');
+  if (!selected) return;
+  selected.classList.remove('correct-highlight', 'incorrect-highlight');
+  if (isCorrect === true) selected.classList.add('correct-highlight');
+  else if (isCorrect === false) selected.classList.add('incorrect-highlight');
 }
 
 function setStatus(el, text, mode = '') {
