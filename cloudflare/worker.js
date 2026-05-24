@@ -5504,22 +5504,20 @@ async function verifyCreatePassword(env, password, request, opts = {}) {
   const skipRateLimit = !!opts.skipRateLimit;
   const ip = request ? (request.headers.get('CF-Connecting-IP') || 'unknown') : null;
 
-  if (!skipRateLimit && env.AUTH_RL && ip) {
-    try {
-      const { success } = await env.AUTH_RL.limit({ key: `auth:${ip}` });
-      if (!success) return false;
-    } catch (_) { /* fail open if RL binding errors */ }
-  }
-
   const raw = String(password || '').trim().normalize('NFC');
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
   const digest = await sha256Hex(raw);
   const ok = digest === hash;
 
+  // Only count FAILED attempts toward the brute-force budget. Successful
+  // verifies are free so legitimate batch flows (e.g. publishing a quiz
+  // with 40+ images, each a separate /api/media/upload call) don't burn
+  // the 50/min/IP pool. Brute-force throughput is unchanged: each failure
+  // still costs 5 slots → 10 bad attempts/min max.
   if (!ok && !skipRateLimit && env.AUTH_RL && ip) {
     try {
-      await Promise.all([0, 1, 2, 3].map(() => env.AUTH_RL.limit({ key: `auth:${ip}` })));
+      await Promise.all([0, 1, 2, 3, 4].map(() => env.AUTH_RL.limit({ key: `auth:${ip}` })));
     } catch (_) { /* fail open */ }
   }
 
