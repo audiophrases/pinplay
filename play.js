@@ -5181,7 +5181,13 @@ function initAssignmentSfx() {
       new Audio('music/answering10.mp3'),
       new Audio('music/answering11.mp3'),
     ];
-    Object.values(assignmentAmbient).flat().forEach(a => { if (a) a.volume = 0.7; });
+    Object.values(assignmentAmbient).flat().forEach(a => {
+      if (!a) return;
+      a.volume = 0.7;
+      a.addEventListener('play', updateMuteMusicPlayingState);
+      a.addEventListener('pause', updateMuteMusicPlayingState);
+      a.addEventListener('ended', updateMuteMusicPlayingState);
+    });
   } catch { }
 }
 
@@ -5703,10 +5709,34 @@ let assignmentMusicMuted = (() => {
 
 function refreshMuteMusicBtnUi() {
   if (!muteMusicBtn) return;
-  muteMusicBtn.textContent = assignmentMusicMuted ? '🔇' : '🎵';
+  const emoji = assignmentMusicMuted ? '🔇' : '🎵';
+  muteMusicBtn.innerHTML =
+    '<span class="audio-eq audio-eq-inline">' +
+      '<span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>' +
+      `<span class="emoji">${emoji}</span>` +
+    '</span>';
   muteMusicBtn.setAttribute('aria-pressed', assignmentMusicMuted ? 'true' : 'false');
   muteMusicBtn.title = assignmentMusicMuted ? 'Unmute music' : 'Mute music';
   muteMusicBtn.setAttribute('aria-label', muteMusicBtn.title);
+  updateMuteMusicPlayingState();
+}
+
+// Toggle the pulsing-rings effect on the mute button so it visually identifies
+// itself as the control for the currently-playing ambient track, mirroring the
+// 🎧 indicator next to question audio.
+function updateMuteMusicPlayingState() {
+  if (!muteMusicBtn) return;
+  if (assignmentMusicMuted) {
+    muteMusicBtn.classList.remove('audio-playing');
+    return;
+  }
+  const tracks = [
+    assignmentAmbient.hall,
+    assignmentAmbient.final,
+    ...(assignmentAmbient.answering || []),
+  ];
+  const anyPlaying = tracks.some((a) => a && !a.paused && !a.ended);
+  muteMusicBtn.classList.toggle('audio-playing', anyPlaying);
 }
 
 function setAssignmentMusicMuted(muted) {
