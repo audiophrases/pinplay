@@ -2547,11 +2547,24 @@ async function handleRetakeSubmit() {
     correctAnswerText: clientCorrectAnswerText(question),
   };
 
-  setJoinStatusHud(correct ? '✅ Correct' : '❌ Not quite — try again', correct ? 'ok' : 'bad');
-
   live.player.renderKey = null; // force the reveal panel + locked inputs to mount
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
+
+  // Assert the reveal directly. renderPlayerState's questionClosed branch
+  // doesn't always fire in deferred-feedback states (the original quiz was
+  // end-mode, so paths assume "no immediate reveal"). For retake we always
+  // want instant feedback — so reassert the verdict, highlight the correct
+  // answer, and lock the inputs ourselves. Pure DOM; zero server cost.
+  const verdictText = correct ? '✅ Correct' : '❌ Not quite — try again';
+  setJoinStatusHud(verdictText, correct ? 'ok' : 'bad');
+  if (mapped) highlightAnswerItems(correct, mapped);
+  if (joinAnswersEl) {
+    joinAnswersEl.querySelectorAll('input, select, textarea').forEach((el) => {
+      el.disabled = true;
+    });
+    joinAnswersEl.style.pointerEvents = 'none';
+  }
 }
 
 function advanceRetake(wasCorrect) {
