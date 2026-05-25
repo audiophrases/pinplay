@@ -6374,7 +6374,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   saveBtn.addEventListener('click', async () => {
     try {
       saveBtn.disabled = true;
-      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), String(correctionInput.value || ''), currentAudioKey);
+      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
       saveBtn.textContent = 'Update grade';
       if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(qIndex) + 1} · ${attemptId}.`;
       if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
@@ -6387,6 +6387,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
 
   row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
   wrap.appendChild(row);
+  wrap.appendChild(diffSetup.diffPreview);
   wrap.appendChild(previewWrap);
   return wrap;
 }
@@ -7900,6 +7901,8 @@ async function enterQuestionGradingFocus(code, qIndex) {
       qIndex: Number(qIndex),
       maxPoints,
       initialGrade: it.grade,
+      studentText: it.answerText,
+      qType: question.qType,
       onSavedRefresh: async () => {
         const nextItem = items[itemIndex + 1] || null;
         const focusAttemptId = String(nextItem?.attemptId || it?.attemptId || '');
