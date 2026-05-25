@@ -4923,6 +4923,9 @@ function publicAudioPayload(question) {
 
 function evaluate(question, answer) {
   if (!question) return { correct: false };
+  // Blank/skipped answer ("Show answer?" in instant mode posts null). Without this,
+  // Number(null) === 0 silently marked the first option as correct for mcq/tf/audio.
+  if (answer === null || answer === undefined || answer === '') return { correct: false };
 
   if (['mcq', 'tf', 'audio'].includes(question.type)) {
     const selected = Number(answer);
