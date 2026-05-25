@@ -1785,7 +1785,11 @@ function showUnansweredConfirmModal(blankIndexes) {
   document.body.appendChild(backdrop);
 }
 
-function showSkipAnswerModal() {
+// leaveBlank=false (instant feedback): "Show answer?" — saves empty so the
+// question locks and reveals. leaveBlank=true (deferred/exam): "Leave blank?" —
+// client-side advance only, no save, no server roundtrip. Question stays in the
+// blank set via answeredQIndexes for the finalize confirmation.
+function showSkipAnswerModal({ leaveBlank = false } = {}) {
   const existing = document.getElementById('skipAnswerModal');
   if (existing) existing.remove();
 
@@ -1813,12 +1817,16 @@ function showSkipAnswerModal() {
     'border:none',
     'cursor:pointer',
   ].join(';');
-  confirmBtn.textContent = 'Show answer?';
+  confirmBtn.textContent = leaveBlank ? 'Leave blank?' : 'Show answer?';
   const accept = () => {
     if (confirmBtn.disabled) return;
     confirmBtn.disabled = true;
     closeModal();
-    submitLiveAnswer({ allowEmpty: true }).catch(() => { });
+    if (leaveBlank) {
+      moveAssignmentIndex(1);
+    } else {
+      submitLiveAnswer({ allowEmpty: true }).catch(() => { });
+    }
   };
   confirmBtn.addEventListener('click', accept);
   backdrop.appendChild(confirmBtn);
@@ -4182,8 +4190,10 @@ async function submitLiveAnswer(opts = {}) {
       const isAssignment = live.player.mode === 'assignment';
       const isInstant = String(live.player.assignment?.state?.attempt?.assignment?.feedbackMode || '') === 'instant';
       const isPoll = !!live.player.currentQuestion?.isPoll;
-      if (isAssignment && isInstant && !isPoll && !opts.allowEmpty) {
-        showSkipAnswerModal();
+      if (isAssignment && !isPoll && !opts.allowEmpty) {
+        // Instant → "Show answer?" (saves empty + reveals).
+        // Deferred/exam → "Leave blank?" (advance only, finalize confirms blanks).
+        showSkipAnswerModal({ leaveBlank: !isInstant });
         return;
       }
       if (!opts.allowEmpty) throw new Error('Choose/type an answer first.');
