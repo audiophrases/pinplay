@@ -112,6 +112,7 @@ const live = {
         cleared: [],            // qIndexes already cleared in this loop
         previousIndex: 0,       // currentIndex to restore on exit
         currentResult: null,    // { correct, correctAnswerText } for the current question after submit
+        wasReviewMode: false,   // was the student in review mode when they entered retake
       },
     },
   },
@@ -2251,10 +2252,12 @@ function gradeSelfCorrectAnswer(question, userAnswer) {
     return guess.every((g, i) => g && expected[i].includes(g));
   }
   if (t === 'error_hunt') {
+    // readJoinAnswer returns { rewrite, selectedTokens } — extract the rewrite text.
+    const rewriteText = (userAnswer && typeof userAnswer === 'object') ? userAnswer.rewrite : userAnswer;
     const variants = [question.corrected, ...(Array.isArray(question.correctedVariants) ? question.correctedVariants : [])]
       .map((s) => normalizeTextAnswer(s))
       .filter(Boolean);
-    const guess = normalizeTextAnswer(userAnswer);
+    const guess = normalizeTextAnswer(rewriteText);
     if (!guess) return false;
     return variants.includes(guess);
   }
@@ -2276,19 +2279,13 @@ function gradeSelfCorrectAnswer(question, userAnswer) {
     return guess.every((g, i) => g === expected[i]);
   }
   if (t === 'match_pairs') {
+    // readJoinAnswer returns an array of right-value strings, one per pairs[i].left
+    // (lefts are rendered in the original pairs order, rights are shuffled options).
     const pairs = Array.isArray(question.pairs) ? question.pairs : [];
     if (!Array.isArray(userAnswer) || userAnswer.length !== pairs.length) return false;
-    const expected = new Map();
-    pairs.forEach((p) => {
-      expected.set(normalizeTextAnswer(p?.left), normalizeTextAnswer(p?.right));
-    });
-    for (const u of userAnswer) {
-      const left = normalizeTextAnswer(u?.left);
-      const right = normalizeTextAnswer(u?.right);
-      if (!right) return false;
-      if (expected.get(left) !== right) return false;
-    }
-    return true;
+    return pairs.every((p, i) =>
+      normalizeTextAnswer(p?.right) === normalizeTextAnswer(userAnswer[i]),
+    );
   }
   return false;
 }
@@ -2475,6 +2472,11 @@ function enterRetakeMode(state) {
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
   if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
 
+  // Unlock inputs: review mode disables them by design, but retake needs them
+  // editable. Save the prior flag so exitRetakeMode can restore it.
+  retake.wasReviewMode = !!live.player.assignment.reviewMode;
+  live.player.assignment.reviewMode = false;
+
   // Suppress the "all answered → submit assignment" panel. Without this, the
   // existing end-of-quiz screen fires because the student already answered
   // every question during the original attempt — retake doesn't change that.
@@ -2498,9 +2500,20 @@ function exitRetakeMode() {
   live.player.assignment.bypassAllAnsweredScreen = false;
   live.player.assignment.currentIndex = Number(retake.previousIndex || 0);
 
+  // Restore review-mode UI if we entered from it (re-lock inputs, hide submit,
+  // bring back the navigator). Otherwise we leave the student in an editable
+  // post-submit state, which is confusing.
+  if (retake.wasReviewMode) {
+    live.player.assignment.reviewMode = true;
+    if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.classList.add('hidden'); }
+    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
+  }
+  retake.wasReviewMode = false;
+
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
   renderInstantFeedbackFromState();
+  if (live.player.assignment.reviewMode) renderReviewNavigator();
 }
 
 async function handleRetakeSubmit() {
