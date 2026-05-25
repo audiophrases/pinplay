@@ -1683,6 +1683,10 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
       title: 'Assignment submitted 🎉',
       submitted: true,
     });
+    if (!assignmentFinalPlayed) {
+      playAssignmentSfx('final');
+      assignmentFinalPlayed = true;
+    }
     await loadAssignmentState();
     renderInstantFeedbackFromState();
   } catch (err) {
