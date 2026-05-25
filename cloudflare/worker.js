@@ -3125,6 +3125,7 @@ export class QuizRoom {
             maxPoints: Math.max(0, Math.round(Number(question?.points || 1000))),
             teacherGraded: isAssignmentTeacherGradedQuestion(question),
             imageData: String(question?.imageData || ''),
+            readingText: String(question?.readingText || ''),
             audioMode: String(question?.audioMode || ''),
             audioText: String(question?.audioText || ''),
             audioData: String(question?.audioData || ''),
@@ -4795,6 +4796,7 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
         includeAnswerKey ? { text: a.text, correct: !!a.correct } : { text: a.text }
       )),
       imageData: String(question.imageData || '') || undefined,
+      readingText: String(question.readingText || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
@@ -4808,6 +4810,7 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       timeLimit: question.timeLimit,
       isPoll: !!question.isPoll,
       imageData: String(question.imageData || '') || undefined,
+      readingText: String(question.readingText || '') || undefined,
       media: publicQuestionMediaPayload(question),
       language: question.type === 'voice_text' ? String(question.language || 'en-US-Wave') : undefined,
       answerLanguage: (question.type === 'voice_text' || question.type === 'voice_record') ? String(question.answerLanguage || '') : undefined,
@@ -4835,6 +4838,7 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       options: stableShuffle(question.items || [], question.id || question.prompt || 'puzzle'),
       items: includeAnswerKey ? (question.items || []) : undefined,
       imageData: String(question.imageData || '') || undefined,
+      readingText: String(question.readingText || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
@@ -4853,6 +4857,7 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       unit: question.unit || '',
       target: includeAnswerKey ? question.target : undefined,
       imageData: String(question.imageData || '') || undefined,
+      readingText: String(question.readingText || '') || undefined,
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
@@ -5048,6 +5053,7 @@ function normalizeQuiz(quiz) {
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       imageData: String(q.imageData || ''),
+      readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
     };
 
@@ -6180,6 +6186,7 @@ function buildTeacherGradingItems(assignment, attempt) {
         answerText: summarizeHistoryAnswer(question, item?.answer),
         maxPoints,
         imageData: String(question?.imageData || ''),
+        readingText: String(question?.readingText || ''),
         audioMode: String(question?.audioMode || ''),
         audioText: String(question?.audioText || ''),
         audioData: String(question?.audioData || ''),
