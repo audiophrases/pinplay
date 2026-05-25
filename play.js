@@ -2451,6 +2451,12 @@ function enterRetakeMode(state) {
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
   if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
 
+  // Suppress the "all answered → submit assignment" panel. Without this, the
+  // existing end-of-quiz screen fires because the student already answered
+  // every question during the original attempt — retake doesn't change that.
+  live.player.assignment.bypassAllAnsweredScreen = true;
+  live.player.assignment.pendingComplete = false;
+
   live.player.assignment.currentIndex = queue[0];
   renderRetakeHeader();
   const mapped = mapAssignmentStateToPlayerState();
@@ -2464,6 +2470,8 @@ function exitRetakeMode() {
   document.getElementById('retakeHeader')?.remove();
   document.body.classList.remove('retake-mode-active');
 
+  // Restore the all-answered screen behavior for the normal review flow.
+  live.player.assignment.bypassAllAnsweredScreen = false;
   live.player.assignment.currentIndex = Number(retake.previousIndex || 0);
 
   const mapped = mapAssignmentStateToPlayerState();
