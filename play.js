@@ -45,6 +45,17 @@ function seededShuffleIndices(length, seed) {
   return indices;
 }
 
+// Force the press-down animation to be visible regardless of input mode.
+// CSS :active fires for the held duration of mouse-down (fine) but only ~50–100ms
+// on Enter/Space activation (too brief to render), and not at all for .click().
+// Toggling .pp-pressed for 120ms on any click guarantees the user sees it press.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('.pp-press-btn');
+  if (!btn || btn.disabled) return;
+  btn.classList.add('pp-pressed');
+  setTimeout(() => btn.classList.remove('pp-pressed'), 120);
+});
+
 // Returns the display order of question.answers indexes.
 // - T/F is locked to authored order (students expect True before False).
 // - Assignment mode mixes the attemptId so each student sees their own order.

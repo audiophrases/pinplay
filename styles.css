@@ -1495,7 +1495,11 @@ body.question-active .join-title-row {
   box-shadow: 0 4px 0 var(--pp-press-shadow);
   transition: transform 0.1s, box-shadow 0.1s;
 }
-.pp-press-btn:active:not(:disabled) {
+/* :active alone is too brief on Enter/keyboard activation (browsers hold it for
+   ~50–100ms, the same order as the transition). A delegated click handler
+   toggles .pp-pressed for ~120ms so the press animation is always visible. */
+.pp-press-btn:active:not(:disabled),
+.pp-press-btn.pp-pressed:not(:disabled) {
   transform: translateY(4px);
   box-shadow: 0 0 0 var(--pp-press-shadow);
 }
