@@ -563,11 +563,27 @@ function moveAssignmentIndex(delta) {
   const total = Number(live.player.assignment.state?.attempt?.assignment?.totalQuestions || live.player.assignment.state?.attempt?.assignment?.quiz?.questions?.length || 0);
   if (total <= 0) return;
   const step = Number(delta || 0);
-  const requested = Number(live.player.assignment.currentIndex || 0) + step;
+  const currentIdx = Number(live.player.assignment.currentIndex || 0);
+  const requested = currentIdx + step;
   // If the student advances past the last question while editing answers, drop the
   // bypass so the End-of-quiz screen reappears on the next render.
   if (step > 0 && requested >= total && live.player.assignment.bypassAllAnsweredScreen) {
     live.player.assignment.bypassAllAnsweredScreen = false;
+  }
+  // Stepping past the last question with blanks elsewhere → wrap to the next
+  // unanswered question. Without this, the student clamps in place and CONTINUE
+  // appears to do nothing (End-of-quiz screen needs all answered to show).
+  if (step > 0 && requested >= total) {
+    const answered = new Set(Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
+      ? live.player.assignment.state.attempt.answeredQIndexes.map(Number) : []);
+    let hasOtherBlanks = false;
+    for (let i = 0; i < total; i += 1) {
+      if (i !== currentIdx && !answered.has(i)) { hasOtherBlanks = true; break; }
+    }
+    if (hasOtherBlanks) {
+      moveAssignmentToNextUnanswered();
+      return;
+    }
   }
   live.player.assignment.currentIndex = clampAssignmentIndex(requested, total);
   const mapped = mapAssignmentStateToPlayerState();
