@@ -616,7 +616,11 @@ function moveAssignmentIndex(delta) {
   //   without needing a persistent "Submit · N unanswered" button.
   // The modal re-opens on every subsequent CONTINUE-past-last even if previously
   // dismissed, so there's always a reliable path to submit.
-  if (step > 0 && requested >= total) {
+  // After submission (including review mode), navigation should be free — never
+  // prompt the unanswered modal again, since the attempt is already finalized.
+  const isSubmitted = !!live.player.assignment.state?.attempt?.submitted
+    || !!live.player.assignment.reviewMode;
+  if (step > 0 && requested >= total && !isSubmitted) {
     const answered = new Set(Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
       ? live.player.assignment.state.attempt.answeredQIndexes.map(Number) : []);
     const blanks = [];
@@ -1990,6 +1994,7 @@ function renderInstantFeedbackFromState() {
   // is in the retake loop (they're focused on one wrong question at a time).
   if (live.player.assignment?.retake?.active) {
     document.getElementById('assignmentResultsPanel')?.remove();
+    document.body.classList.remove('post-submit-summary');
     return;
   }
   const state = live.player.assignment.state;
@@ -2010,6 +2015,12 @@ function renderInstantFeedbackFromState() {
     const anyAnswered = autoAnswers.length > 0 || Object.keys(rawAnswersByQ).length > 0;
     shouldShowFeedback = !!attempt?.submitted && anyAnswered;
   }
+
+  // Once submitted and not in active reviewMode, hide the question UI so the
+  // results panel can use the full middle area. ReviewMode keeps the question
+  // visible because that's the per-question review experience.
+  const isReviewMode = !!live.player.assignment?.reviewMode;
+  document.body.classList.toggle('post-submit-summary', shouldShowFeedback && !isReviewMode);
 
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
 
