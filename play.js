@@ -2489,6 +2489,7 @@ function enterRetakeMode(state) {
 
   live.player.assignment.currentIndex = queue[0];
   renderRetakeHeader();
+  live.player.renderKey = null; // force fresh DOM mount
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 }
@@ -2548,6 +2549,7 @@ async function handleRetakeSubmit() {
 
   setJoinStatusHud(correct ? '✅ Correct' : '❌ Not quite — try again', correct ? 'ok' : 'bad');
 
+  live.player.renderKey = null; // force the reveal panel + locked inputs to mount
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 }
@@ -2582,6 +2584,10 @@ function advanceRetake(wasCorrect) {
   const next = uncleared.find((i) => i > currentIdx) ?? uncleared[0];
   live.player.assignment.currentIndex = next;
   renderRetakeHeader();
+  // Force fresh DOM mount. Without this, when the loop wraps back to the same
+  // question (or even to a different one where the renderKey happens to match),
+  // stateful inputs like voice_text recorders stay frozen in their prior state.
+  live.player.renderKey = null;
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 }
