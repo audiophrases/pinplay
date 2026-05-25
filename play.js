@@ -1741,6 +1741,8 @@ function showUnansweredConfirmModal(blankIndexes) {
   const existing = document.getElementById('unansweredConfirmModal');
   if (existing) existing.remove();
 
+  const questions = live.player.assignment.state?.attempt?.assignment?.quiz?.questions || [];
+
   const backdrop = document.createElement('div');
   backdrop.id = 'unansweredConfirmModal';
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
@@ -1749,22 +1751,21 @@ function showUnansweredConfirmModal(blankIndexes) {
   panel.style.cssText = 'background:var(--card-bg, #fff);color:var(--text, #111);border-radius:12px;max-width:480px;width:100%;padding:1.25rem 1.25rem 1rem;box-shadow:0 18px 50px rgba(0,0,0,0.35);max-height:90vh;overflow:auto;';
 
   const title = document.createElement('div');
-  title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:0.4rem;';
-  title.textContent = `${blankIndexes.length} question${blankIndexes.length === 1 ? '' : 's'} still blank`;
+  title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:0.75rem;';
+  title.textContent = 'Submit assignment with unanswered questions:';
   panel.appendChild(title);
 
-  const body = document.createElement('div');
-  body.style.cssText = 'font-size:0.95rem;line-height:1.4;margin-bottom:0.75rem;';
-  body.textContent = 'These questions will be marked as blank (0 points). Tap a number to go back and answer it, or submit anyway.';
-  panel.appendChild(body);
-
   const chipsWrap = document.createElement('div');
-  chipsWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:1rem;';
+  chipsWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem;';
   blankIndexes.forEach((qIndex) => {
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.textContent = `Q${qIndex + 1}`;
-    chip.style.cssText = 'border:1px solid var(--border, #d0d0d8);background:var(--surface, #f5f5fa);color:inherit;border-radius:999px;padding:0.25rem 0.65rem;font-size:0.85rem;font-weight:600;cursor:pointer;';
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.35rem;border:1px solid var(--border, #d0d0d8);background:var(--surface, #f5f5fa);color:inherit;border-radius:999px;padding:0.3rem 0.75rem;font-size:0.9rem;font-weight:600;cursor:pointer;';
+    const iconEl = document.createElement('span');
+    iconEl.textContent = questionTypeIcon(questions[qIndex]?.type);
+    const numEl = document.createElement('span');
+    numEl.textContent = `Q${qIndex + 1}`;
+    chip.append(iconEl, numEl);
     chip.addEventListener('click', () => {
       backdrop.remove();
       jumpToAssignmentQuestion(qIndex);
@@ -1774,25 +1775,14 @@ function showUnansweredConfirmModal(blankIndexes) {
   panel.appendChild(chipsWrap);
 
   const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;';
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.className = 'btn';
-  cancelBtn.textContent = 'Go back and answer';
-  cancelBtn.addEventListener('click', () => {
-    backdrop.remove();
-    if (blankIndexes.length > 0) jumpToAssignmentQuestion(blankIndexes[0]);
-  });
-  actions.appendChild(cancelBtn);
+  actions.style.cssText = 'display:flex;justify-content:flex-end;';
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'button';
   submitBtn.className = 'btn primary';
-  submitBtn.textContent = `Submit with ${blankIndexes.length} blank${blankIndexes.length === 1 ? '' : 's'}`;
+  submitBtn.textContent = 'OK';
   submitBtn.addEventListener('click', () => {
     submitBtn.disabled = true;
-    cancelBtn.disabled = true;
     finalizeAssignmentAttempt({ force: true })
       .catch(() => { })
       .finally(() => { backdrop.remove(); });
