@@ -104,6 +104,10 @@ const live = {
       pendingComplete: false,
       resultsListCollapsed: false,
       bypassAllAnsweredScreen: false,
+      // Flipped once the student first tries to step past the last question.
+      // Gates the deferred-mode "Submit · N unanswered" button so it only appears
+      // after they've made it through the assignment once.
+      hasReachedEnd: false,
       dirtyAnswer: false,
       // Self-correct retake loop state. Pure client-side until completion.
       retake: {
@@ -574,6 +578,9 @@ function moveAssignmentIndex(delta) {
   // unanswered question. Without this, the student clamps in place and CONTINUE
   // appears to do nothing (End-of-quiz screen needs all answered to show).
   if (step > 0 && requested >= total) {
+    // Record that they've made it through the assignment at least once — gates
+    // the deferred-mode "Submit · N unanswered" button.
+    live.player.assignment.hasReachedEnd = true;
     const answered = new Set(Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
       ? live.player.assignment.state.attempt.answeredQIndexes.map(Number) : []);
     let hasOtherBlanks = false;
@@ -1657,6 +1664,7 @@ function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.resultsListCollapsed = false;
   live.player.assignment.pendingComplete = false;
   live.player.assignment.bypassAllAnsweredScreen = false;
+  live.player.assignment.hasReachedEnd = false;
 
   // Re-show submit button
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
@@ -3123,7 +3131,16 @@ function renderPlayerState(state) {
   }
 
   if (joinFinalizeBtn) {
-    const showFinalize = live.player.mode === 'assignment';
+    // Instant mode never needs this button — every save advances and the
+    // End-of-quiz screen fires naturally once all questions are saved.
+    // Deferred (end/none) shows it only after the student has reached the
+    // last question once, so they get an explicit escape hatch for blanks
+    // without being tempted to submit prematurely.
+    const isAssignment = live.player.mode === 'assignment';
+    const isInstantMode = state.feedbackMode === 'instant';
+    const showFinalize = isAssignment
+      && !isInstantMode
+      && !!live.player.assignment.hasReachedEnd;
     joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
     // The button stays enabled even with unanswered questions — clicking it
     // opens a confirmation listing the blanks. The server still validates,
