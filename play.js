@@ -3222,8 +3222,8 @@ function renderPlayerState(state) {
 
           // FIX: Show negative deductions properly
           let pointsText = '';
-          if (pts > 0) pointsText = ` · +${pts} points`;
-          else if (pts < 0) pointsText = ` · ${pts} points`;
+          if (pts > 0) pointsText = ` +${pts} points`;
+          else if (pts < 0) pointsText = ` ${pts} points`;
 
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
@@ -4313,8 +4313,8 @@ async function submitLiveAnswer(opts = {}) {
         ? '✅ Correct'
         : (isPartial ? `⚠️ ${partialCreditLabel(question?.type, partialScore, partialTotal)}` : '❌ Incorrect');
       let pointsText = '';
-      if (pts > 0) pointsText = ` · +${pts} points`;
-      else if (pts < 0) pointsText = ` · ${pts} points`;
+      if (pts > 0) pointsText = ` +${pts} points`;
+      else if (pts < 0) pointsText = ` ${pts} points`;
       let feedback = `${resultText}${pointsText}`;
       if (question?.type === 'error_hunt' && data.correctAnswer) {
         feedback += ` · Correct: ${data.correctAnswer}`;
