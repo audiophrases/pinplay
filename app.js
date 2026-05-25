@@ -4881,16 +4881,21 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
     });
     meta.title = String(data?.assignment?.title || '');
     meta.language = String(data?.assignment?.language || question.language || '');
-  } else if (scope === 'assignment') {
+  } else if (scope === 'assignment' || scope === 'pending') {
     const overview = await api('/api/assignments/grading-overview', {
       method: 'POST',
       body: { password: createSessionPassword, code: safeCode },
     });
     const questions = Array.isArray(overview?.questions) ? overview.questions : [];
-    const teacherQs = questions
+    let teacherQs = questions
       .map((q, idx) => ({ q, idx: Number.isFinite(Number(q?.qIndex)) ? Number(q.qIndex) : idx }))
       .filter(({ q }) => q && q.teacherGraded);
     if (!teacherQs.length) throw new Error('No teacher-graded questions in this assignment.');
+    const pendingOnly = scope === 'pending';
+    if (pendingOnly) {
+      teacherQs = teacherQs.filter(({ q }) => Number(q?.pendingCount || 0) > 0);
+      if (!teacherQs.length) throw new Error('No pending teacher-graded answers — everything is already graded.');
+    }
     const responses = await Promise.all(
       teacherQs.map(({ idx }) => api('/api/assignments/question-grading', {
         method: 'POST',
@@ -4903,6 +4908,7 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
       const question = data?.question || {};
       const items = Array.isArray(data?.items) ? data.items : [];
       items.forEach((it) => {
+        if (pendingOnly && it?.grade?.graded) return;
         const merged = {
           ...it,
           qIndex: qi,
@@ -4923,6 +4929,9 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
         if (entry) entries.push(entry);
       });
     });
+    if (pendingOnly && !entries.length) {
+      throw new Error('No pending answers found — looks like everything got graded between the overview and the fetch.');
+    }
     meta.title = String(overview?.assignment?.title || '');
     meta.language = String(overview?.assignment?.language || '');
   } else {
