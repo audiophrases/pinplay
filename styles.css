@@ -1488,6 +1488,18 @@ body.question-active .join-title-row {
   /* Pushes away from answers */
 }
 
+/* Duolingo-style lifted primary button with press-down animation.
+   Set --pp-press-shadow to control the darker bottom-shadow color. */
+.pp-press-btn {
+  --pp-press-shadow: #4f4ce0;
+  box-shadow: 0 4px 0 var(--pp-press-shadow);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.pp-press-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--pp-press-shadow);
+}
+
 #joinSubmitBtn {
   width: fit-content;
   /* Hugs the text instead of forcing 100% width */
@@ -1504,14 +1516,7 @@ body.question-active .join-title-row {
   text-transform: uppercase;
   letter-spacing: 1px;
   border: none;
-  box-shadow: 0 4px 0 #4f4ce0;
   cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.1s;
-}
-
-#joinSubmitBtn:active {
-  transform: translateY(4px);
-  box-shadow: 0 0 0 #4f4ce0;
 }
 
 #joinSubmitBtn:disabled {

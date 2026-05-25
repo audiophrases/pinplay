@@ -1795,8 +1795,10 @@ function showSkipAnswerModal() {
 
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
+  confirmBtn.className = 'pp-press-btn';
   // Red palette signals this is the wrong-answer path (giving up / revealing).
   confirmBtn.style.cssText = [
+    '--pp-press-shadow:#b91c1c',
     'width:fit-content',
     'min-width:200px',
     'padding:0 40px',
@@ -1809,22 +1811,9 @@ function showSkipAnswerModal() {
     'text-transform:uppercase',
     'letter-spacing:1px',
     'border:none',
-    'box-shadow:0 4px 0 #b91c1c',
     'cursor:pointer',
-    'transition:transform 0.1s, box-shadow 0.1s',
   ].join(';');
   confirmBtn.textContent = 'Show answer?';
-  // Inline styles outrank CSS :active, so wire press animation manually.
-  const setPressed = (pressed) => {
-    confirmBtn.style.transform = pressed ? 'translateY(4px)' : '';
-    confirmBtn.style.boxShadow = pressed ? '0 0 0 #b91c1c' : '0 4px 0 #b91c1c';
-  };
-  confirmBtn.addEventListener('mousedown', () => setPressed(true));
-  confirmBtn.addEventListener('mouseup', () => setPressed(false));
-  confirmBtn.addEventListener('mouseleave', () => setPressed(false));
-  confirmBtn.addEventListener('touchstart', () => setPressed(true), { passive: true });
-  confirmBtn.addEventListener('touchend', () => setPressed(false));
-  confirmBtn.addEventListener('touchcancel', () => setPressed(false));
   const accept = () => {
     if (confirmBtn.disabled) return;
     confirmBtn.disabled = true;
