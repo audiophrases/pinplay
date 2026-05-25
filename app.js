@@ -6106,6 +6106,12 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         correctionInput.value = String(it?.grade?.correction || '');
         correctionInput.style.maxWidth = '320px';
 
+        const diffSetup = inlineCorrectionDiffSetup({
+          correctionInput,
+          studentText: it?.answerText,
+          qType: it?.qType,
+        });
+
         let currentAudioKey = String(it?.grade?.correctionAudioKey || '');
         const audioStatus = document.createElement('span');
         audioStatus.className = 'small muted';
@@ -6203,7 +6209,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         saveBtn.addEventListener('click', async () => {
           try {
             saveBtn.disabled = true;
-            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), String(correctionInput.value || ''), currentAudioKey);
+            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
             if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${safeAttemptId}.`;
             await fetchAssignmentResults(safeCode);
             await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
@@ -6216,6 +6222,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
 
         row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
         li.appendChild(row);
+        li.appendChild(diffSetup.diffPreview);
         li.appendChild(previewWrap);
       }
 
@@ -6250,7 +6257,7 @@ function focusQuestionGradingAnswer(attemptId) {
   }
 }
 
-function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, onSavedRefresh }) {
+function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, onSavedRefresh, studentText, qType }) {
   const wrap = document.createDocumentFragment();
   const row = document.createElement('div');
   row.className = 'row gap top-space';
@@ -6273,6 +6280,8 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   correctionInput.value = String(initialGrade?.correction || '');
   correctionInput.style.maxWidth = '320px';
   correctionInput.dataset.gradeCorrectionInput = '1';
+
+  const diffSetup = inlineCorrectionDiffSetup({ correctionInput, studentText, qType });
 
   let currentAudioKey = String(initialGrade?.correctionAudioKey || '');
   const audioStatus = document.createElement('span');
@@ -6393,6 +6402,47 @@ function reconstructCorrectedFromDiff(diffBody) {
     .replace(/\{\+([\s\S]+?)\+\}/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function inlineCorrectionDiffSetup({ correctionInput, studentText, qType }) {
+  const isTextDiff = qType === 'open' || qType === 'text';
+  const studentAnswer = isTextDiff ? String(studentText || '').trim() : '';
+  const initial = String(correctionInput.value || '');
+  const hasStoredDiff = initial.startsWith(CORRECTION_DIFF_PREFIX);
+  if (hasStoredDiff && studentAnswer) {
+    correctionInput.value = reconstructCorrectedFromDiff(initial.slice(CORRECTION_DIFF_PREFIX.length));
+  }
+  const preloadedAnswer = studentAnswer && (hasStoredDiff || !initial) ? studentAnswer : '';
+  const diffPreview = document.createElement('div');
+  diffPreview.className = 'top-space';
+  diffPreview.style.cssText = 'padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.9rem;line-height:1.4;min-height:1.4em;';
+  diffPreview.style.display = preloadedAnswer ? 'block' : 'none';
+  const render = () => {
+    if (!preloadedAnswer) {
+      diffPreview.style.display = 'none';
+      diffPreview.innerHTML = '';
+      return;
+    }
+    const edited = String(correctionInput.value || '').trim();
+    if (!edited || edited === preloadedAnswer) {
+      diffPreview.style.display = 'block';
+      diffPreview.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+      return;
+    }
+    diffPreview.style.display = 'block';
+    diffPreview.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(preloadedAnswer, edited));
+  };
+  render();
+  correctionInput.addEventListener('input', render);
+  const finalize = (rawValue) => {
+    const v = String(rawValue ?? correctionInput.value ?? '');
+    if (preloadedAnswer) {
+      if (v === preloadedAnswer || !v.trim()) return v.trim() ? v : '';
+      return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+    }
+    return v;
+  };
+  return { diffPreview, finalize, render };
 }
 
 function computeWordDiff(original, edited) {
