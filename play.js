@@ -5562,7 +5562,26 @@ function maybeActivateExamModeFocusTracking() {
   if (examFocus.listenersAttached) return;
   document.addEventListener('visibilitychange', onExamFocusVisibilityChange);
   window.addEventListener('blur', onExamFocusBlur);
+  document.addEventListener('fullscreenchange', onExamFullscreenChange);
   examFocus.listenersAttached = true;
+}
+
+function onExamFullscreenChange() {
+  // Only treat exits as a focus-loss event — entering fullscreen is fine.
+  if (document.fullscreenElement) return;
+  handleExamFocusLost();
+}
+
+function requestExamFullscreen() {
+  // Best-effort: must be called from a user-gesture handler. Silently no-ops on
+  // platforms that block the request (iOS Safari, some embedded webviews).
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    if (!req) return;
+    const p = req.call(el);
+    if (p && typeof p.catch === 'function') p.catch(() => { });
+  } catch { }
 }
 
 async function maybeShowExamModeNoticeBeforeRender() {
@@ -5642,8 +5661,12 @@ function showExamFocusStartNotice() {
     document.body.appendChild(overlay);
 
     const dismiss = () => { overlay.remove(); resolve(); };
-    card.querySelector('#examFocusStartOk')?.addEventListener('click', dismiss);
-    // Escape key also dismisses.
+    card.querySelector('#examFocusStartOk')?.addEventListener('click', () => {
+      // Button click is a user gesture — fullscreen request is allowed here.
+      requestExamFullscreen();
+      dismiss();
+    });
+    // Escape key also dismisses (but cannot trigger fullscreen — Esc *exits* it).
     document.addEventListener('keydown', function escClose(e) {
       if (e.key === 'Escape') {
         document.removeEventListener('keydown', escClose);
@@ -5762,6 +5785,10 @@ function showExamFocusOverlay() {
 }
 
 function resumeFromExamFocusOverlay() {
+  // The click is a user gesture, so this is our chance to put the page back
+  // into fullscreen if the student exited it.
+  if (!document.fullscreenElement) requestExamFullscreen();
+
   const startedAt = examFocus.blurAt;
   examFocus.blurAt = null;
   if (examFocus.overlayEl) {
