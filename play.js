@@ -1795,14 +1795,13 @@ function showSkipAnswerModal() {
 
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
-  // Mirror #joinSubmitBtn styling (the SAVE ANSWER button) so this feels like
-  // the same primary action surfaced in a modal.
+  // Red palette signals this is the wrong-answer path (giving up / revealing).
   confirmBtn.style.cssText = [
     'width:fit-content',
     'min-width:200px',
     'padding:0 40px',
     'height:54px',
-    'background:#605dff',
+    'background:#ef4444',
     'color:#fff',
     'border-radius:12px',
     'font-weight:800',
@@ -1810,10 +1809,22 @@ function showSkipAnswerModal() {
     'text-transform:uppercase',
     'letter-spacing:1px',
     'border:none',
-    'box-shadow:0 4px 0 #4f4ce0',
+    'box-shadow:0 4px 0 #b91c1c',
     'cursor:pointer',
+    'transition:transform 0.1s, box-shadow 0.1s',
   ].join(';');
   confirmBtn.textContent = 'Show answer?';
+  // Inline styles outrank CSS :active, so wire press animation manually.
+  const setPressed = (pressed) => {
+    confirmBtn.style.transform = pressed ? 'translateY(4px)' : '';
+    confirmBtn.style.boxShadow = pressed ? '0 0 0 #b91c1c' : '0 4px 0 #b91c1c';
+  };
+  confirmBtn.addEventListener('mousedown', () => setPressed(true));
+  confirmBtn.addEventListener('mouseup', () => setPressed(false));
+  confirmBtn.addEventListener('mouseleave', () => setPressed(false));
+  confirmBtn.addEventListener('touchstart', () => setPressed(true), { passive: true });
+  confirmBtn.addEventListener('touchend', () => setPressed(false));
+  confirmBtn.addEventListener('touchcancel', () => setPressed(false));
   const accept = () => {
     if (confirmBtn.disabled) return;
     confirmBtn.disabled = true;
