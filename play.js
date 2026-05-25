@@ -2004,10 +2004,11 @@ function renderInstantFeedbackFromState() {
   let shouldShowFeedback = false;
 
   if (feedbackMode !== 'none') {
-    const totalQuestions = Number(assignment?.totalQuestions || assignment?.quiz?.questions?.length || 0);
-    const answeredCount = Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes.length : 0;
+    // Once the assignment is submitted, show feedback on whatever was answered.
+    // Blanks are valid via the submit-with-unanswered flow, so a partial attempt
+    // still deserves the end-of-quiz review for the questions that were answered.
     const anyAnswered = autoAnswers.length > 0 || Object.keys(rawAnswersByQ).length > 0;
-    shouldShowFeedback = !!attempt?.submitted && anyAnswered && answeredCount >= totalQuestions;
+    shouldShowFeedback = !!attempt?.submitted && anyAnswered;
   }
 
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
