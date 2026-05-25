@@ -1790,14 +1790,32 @@ function showSkipAnswerModal() {
 
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
-  confirmBtn.className = 'btn primary';
+  // Mirror #joinSubmitBtn styling (the SAVE ANSWER button) so this feels like
+  // the same primary action surfaced in a modal.
+  confirmBtn.style.cssText = [
+    'width:fit-content',
+    'min-width:200px',
+    'padding:0 40px',
+    'height:54px',
+    'background:#605dff',
+    'color:#fff',
+    'border-radius:12px',
+    'font-weight:800',
+    'font-size:1.15rem',
+    'text-transform:uppercase',
+    'letter-spacing:1px',
+    'border:none',
+    'box-shadow:0 4px 0 #4f4ce0',
+    'cursor:pointer',
+  ].join(';');
   confirmBtn.textContent = 'Show answer?';
-  confirmBtn.style.cssText = 'font-size:1rem;padding:0.75rem 1.5rem;';
-  confirmBtn.addEventListener('click', () => {
+  const accept = () => {
+    if (confirmBtn.disabled) return;
     confirmBtn.disabled = true;
     closeModal();
     submitLiveAnswer({ allowEmpty: true }).catch(() => { });
-  });
+  };
+  confirmBtn.addEventListener('click', accept);
   backdrop.appendChild(confirmBtn);
 
   function closeModal() {
@@ -1810,6 +1828,12 @@ function showSkipAnswerModal() {
       e.preventDefault();
       e.stopPropagation();
       closeModal();
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      accept();
     }
   }
   document.addEventListener('keydown', onKey, true);
