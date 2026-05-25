@@ -2,7 +2,6 @@ const STORAGE_KEY = 'pinplay.quiz.v1';
 const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
-const CREATE_UNLOCK_KEY = 'pinplay.create.unlocked.v1';
 const CREATOR_TOKEN_KEY = 'pinplay.creatorToken';
 
 // Set to 'guest' once an invite-link token is in use; null otherwise. Mutated
@@ -813,7 +812,6 @@ function setupCreateAccess() {
         creatorRole = 'guest';
         creatorWsid = result.wsid || null;
         createSessionPassword = storedToken;
-        sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
         document.body.classList.add('guest-mode');
         if (createWorkspace) createWorkspace.classList.remove('hidden');
         if (createAuthCard) createAuthCard.classList.add('hidden');
@@ -826,7 +824,6 @@ function setupCreateAccess() {
       } catch (err) {
         // Token rejected or workspace revoked — wipe local copy, fall back to password card
         try { localStorage.removeItem(CREATOR_TOKEN_KEY); } catch { /* */ }
-        sessionStorage.removeItem(CREATE_UNLOCK_KEY);
         document.body.classList.remove('guest-mode');
         if (createWorkspace) createWorkspace.classList.add('hidden');
         if (createAuthCard) {
@@ -863,7 +860,6 @@ function setupCreateAccess() {
       createSessionPassword = value;
       creatorRole = authResult?.role || 'owner';
       creatorWsid = authResult?.wsid || null;
-      sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
       if (createWorkspace) createWorkspace.classList.remove('hidden');
       if (createAuthCard) createAuthCard.classList.add('hidden');
       setStatus(createAuthStatusEl, 'Unlocked ✅', 'ok');
@@ -877,15 +873,9 @@ function setupCreateAccess() {
     }
   };
 
-  if (sessionStorage.getItem(CREATE_UNLOCK_KEY) === '1') {
-    if (createWorkspace) createWorkspace.classList.remove('hidden');
-    if (createAuthCard) createAuthCard.classList.add('hidden');
-    // No token → owner session. Wire admin tile.
-    creatorRole = 'owner';
-    initWorkspacesAdmin();
-    return;
-  }
-
+  // Always require password on every page load/refresh. Persisting an "unlocked"
+  // flag in sessionStorage was confusing: the flag survived reloads but the
+  // in-memory password did not, so owner actions would silently re-prompt later.
   if (createWorkspace) createWorkspace.classList.add('hidden');
   if (createAuthCard) createAuthCard.classList.remove('hidden');
   if (unlockCreateBtn) unlockCreateBtn.addEventListener('click', unlock);
@@ -12337,10 +12327,9 @@ async function launchStudentPreviewAssignment() {
 // ---------- Guest workspaces admin (owner only) ----------
 let workspacesAdminInited = false;
 
-// On page reload `sessionStorage` may say we're unlocked but the module-level
-// `createSessionPassword` was wiped. Any owner-only API call would 401 without
-// a prompt. This helper prompts (and verifies) on demand, mirroring the pattern
-// other owner features use.
+// Defensive fallback: every page load now forces the password prompt, so the
+// in-memory password is normally set before any owner action runs. This helper
+// only fires if a caller somehow runs before unlock — kept as a safety net.
 async function ensureOwnerPassword(reason) {
   if (createSessionPassword) return true;
   const pwd = await customPasswordPrompt(reason || 'Enter teacher password:');
@@ -12350,7 +12339,6 @@ async function ensureOwnerPassword(reason) {
     if (result?.role !== 'owner') return false;
     createSessionPassword = pwd;
     creatorRole = 'owner';
-    sessionStorage.setItem(CREATE_UNLOCK_KEY, '1');
     return true;
   } catch {
     return false;
