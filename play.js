@@ -98,7 +98,6 @@ const joinScoreEl = document.getElementById('joinScore');
 const joinPromptEl = document.getElementById('joinPrompt');
 const joinAnswersEl = document.getElementById('joinAnswers');
 const joinSubmitBtn = document.getElementById('joinSubmitBtn');
-const joinFinalizeBtn = document.getElementById('joinFinalizeBtn');
 const assignmentPrevBtn = document.getElementById('assignmentPrevBtn');
 const assignmentNextBtn = document.getElementById('assignmentNextBtn');
 const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingBtn');
@@ -189,7 +188,6 @@ function init() {
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
   if (rerollNameBtn) rerollNameBtn.addEventListener('click', rerollRandomName);
-  if (joinFinalizeBtn) joinFinalizeBtn.addEventListener('click', handleFinalizeClick);
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
   if (assignmentNextBtn) assignmentNextBtn.addEventListener('click', () => moveAssignmentIndex(1));
   if (assignmentNextPendingBtn) assignmentNextPendingBtn.addEventListener('click', moveAssignmentToNextUnanswered);
@@ -475,7 +473,6 @@ async function validatePin() {
     }
 
     if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
-    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
     setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
@@ -613,21 +610,37 @@ function moveAssignmentIndex(delta) {
   if (step > 0 && requested >= total && live.player.assignment.bypassAllAnsweredScreen) {
     live.player.assignment.bypassAllAnsweredScreen = false;
   }
-  // Stepping past the last question with blanks elsewhere → wrap to the next
-  // unanswered question. Without this, the student clamps in place and CONTINUE
-  // appears to do nothing (End-of-quiz screen needs all answered to show).
+  // Stepping past the last question with blanks remaining:
+  // - First time: wrap to the first other blank (one-time helpful nudge).
+  // - After that: open the submit-or-jump modal so the student can finalize directly,
+  //   without needing a persistent "Submit · N unanswered" button.
+  // The modal re-opens on every subsequent CONTINUE-past-last even if previously
+  // dismissed, so there's always a reliable path to submit.
   if (step > 0 && requested >= total) {
-    // Record that they've made it through the assignment at least once — gates
-    // the deferred-mode "Submit · N unanswered" button.
-    live.player.assignment.hasReachedEnd = true;
     const answered = new Set(Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
       ? live.player.assignment.state.attempt.answeredQIndexes.map(Number) : []);
-    let hasOtherBlanks = false;
-    for (let i = 0; i < total; i += 1) {
-      if (i !== currentIdx && !answered.has(i)) { hasOtherBlanks = true; break; }
-    }
-    if (hasOtherBlanks) {
-      moveAssignmentToNextUnanswered();
+    const blanks = [];
+    for (let i = 0; i < total; i += 1) if (!answered.has(i)) blanks.push(i);
+    if (blanks.length > 0) {
+      const alreadyReachedOnce = !!live.player.assignment.hasReachedEnd;
+      live.player.assignment.hasReachedEnd = true;
+      if (!alreadyReachedOnce) {
+        const firstOtherBlank = blanks.find((i) => i !== currentIdx);
+        if (firstOtherBlank !== undefined) {
+          live.player.assignment.currentIndex = firstOtherBlank;
+          const mapped = mapAssignmentStateToPlayerState();
+          if (mapped) renderPlayerState(mapped);
+          if (live.player.assignment.reviewMode) renderReviewNavigator();
+          return;
+        }
+        // Only the current question is blank — fall through to the modal.
+      }
+      // Clamp in place so the question stays visible behind the dialog.
+      live.player.assignment.currentIndex = clampAssignmentIndex(requested, total);
+      const mapped = mapAssignmentStateToPlayerState();
+      if (mapped) renderPlayerState(mapped);
+      if (live.player.assignment.reviewMode) renderReviewNavigator();
+      showUnansweredConfirmModal(blanks);
       return;
     }
   }
@@ -1338,7 +1351,6 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
   if (joinSubmitBtn) joinSubmitBtn.innerHTML = 'Save answer <kbd>\u21b5</kbd>';
-  if (joinFinalizeBtn) joinFinalizeBtn.classList.remove('hidden');
 
   // Show attempt number info
   if (data?.alreadyStarted) {
@@ -1636,9 +1648,8 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     // Explicit review mode flag
     live.player.assignment.reviewMode = true;
 
-    // Hide submit/finalize — this is read-only
+    // Hide submit — this is read-only
     if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.classList.add('hidden'); }
-    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
 
     // Load the attempt state
     await loadAssignmentState();
@@ -1732,7 +1743,6 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
 
-    if (joinFinalizeBtn) joinFinalizeBtn.disabled = true;
     const data = await api('/api/assignment/submit', {
       method: 'POST',
       body: { code, attemptId, force: !!force },
@@ -1754,26 +1764,7 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     renderInstantFeedbackFromState();
   } catch (err) {
     setJoinStatusHud(String(err?.message || 'Could not submit assignment.'), 'bad');
-  } finally {
-    if (joinFinalizeBtn) joinFinalizeBtn.disabled = false;
   }
-}
-
-function handleFinalizeClick() {
-  if (live.player.mode !== 'assignment') return;
-  const state = live.player.assignment.state;
-  const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
-  const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
-  const blanks = [];
-  for (let i = 0; i < total; i += 1) if (!answered.has(i)) blanks.push(i);
-  // Instant mode lets students submit with any subset; deferred modes require
-  // a deliberate confirmation when blanks remain.
-  const requiresConfirm = state?.attempt?.assignment?.feedbackMode !== 'instant' && blanks.length > 0;
-  if (!requiresConfirm) {
-    finalizeAssignmentAttempt().catch(() => { });
-    return;
-  }
-  showUnansweredConfirmModal(blanks);
 }
 
 function showUnansweredConfirmModal(blankIndexes) {
@@ -2535,7 +2526,6 @@ function enterRetakeMode(state) {
   document.getElementById('reviewNavigator')?.remove();
   document.body.classList.remove('review-mode-active');
   if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
-  if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
 
   // Unlock inputs: review mode disables them by design, but retake needs them
   // editable. Save the prior flag so exitRetakeMode can restore it.
@@ -2572,7 +2562,6 @@ function exitRetakeMode() {
   if (retake.wasReviewMode) {
     live.player.assignment.reviewMode = true;
     if (joinSubmitBtn) { joinSubmitBtn.disabled = true; joinSubmitBtn.classList.add('hidden'); }
-    if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
   }
   retake.wasReviewMode = false;
 
@@ -3157,37 +3146,6 @@ function renderPlayerState(state) {
   const betBtn = document.getElementById('betIndicator');
   if (betBtn) {
     betBtn.disabled = shouldDisable;
-  }
-
-  if (joinFinalizeBtn) {
-    // Instant mode never needs this button — every save advances and the
-    // End-of-quiz screen fires naturally once all questions are saved.
-    // Deferred (end/none) shows it only after the student has reached the
-    // last question once, so they get an explicit escape hatch for blanks
-    // without being tempted to submit prematurely.
-    const isAssignment = live.player.mode === 'assignment';
-    const isInstantMode = state.feedbackMode === 'instant';
-    const showFinalize = isAssignment
-      && !isInstantMode
-      && !!live.player.assignment.hasReachedEnd;
-    joinFinalizeBtn.classList.toggle('hidden', !showFinalize);
-    // The button stays enabled even with unanswered questions — clicking it
-    // opens a confirmation listing the blanks. The server still validates,
-    // and on confirm we pass force:true to bypass the UNANSWERED_REMAINING gate.
-    const totalForGate = Number(state.totalQuestions || 0);
-    const answeredForGate = Array.isArray(state.answeredQIndexes) ? state.answeredQIndexes.length : 0;
-    const remainingForGate = Math.max(0, totalForGate - answeredForGate);
-    joinFinalizeBtn.disabled = !!assignmentSubmitted;
-    if (assignmentSubmitted) {
-      joinFinalizeBtn.textContent = 'Assignment submitted';
-      joinFinalizeBtn.title = '';
-    } else if (remainingForGate > 0) {
-      joinFinalizeBtn.textContent = `Submit · ${remainingForGate} unanswered`;
-      joinFinalizeBtn.title = `${remainingForGate} of ${totalForGate} questions are blank. You'll be asked to confirm before submitting.`;
-    } else {
-      joinFinalizeBtn.textContent = 'Submit assignment';
-      joinFinalizeBtn.title = '';
-    }
   }
 
   if (live.player.mode === 'assignment') {
