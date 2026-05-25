@@ -14176,6 +14176,7 @@ function normalizeQuizForLive(raw) {
       videoKeyword: String(q.videoKeyword || '').trim().slice(0, 140),
       videoProviderPreference: ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || '')) ? String(q.videoProviderPreference) : '',
       imageData: String(q.imageData || ''),
+      readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q.media),
     };
 
