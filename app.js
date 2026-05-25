@@ -5216,7 +5216,11 @@ async function openAiGradePackPicker(code) {
         <textarea id="aiGradePackTeacherNote" rows="2" placeholder="e.g. Focus on verb tenses. Ignore minor punctuation. Use British spelling. Praise creative ideas." style="width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical;"></textarea>
       </div>
       <label class="agp-row">
-        <input type="radio" name="aiGradePackScope" value="assignment" checked />
+        <input type="radio" name="aiGradePackScope" value="pending" checked />
+        <span>All <strong>pending</strong> teacher-graded answers</span>
+      </label>
+      <label class="agp-row">
+        <input type="radio" name="aiGradePackScope" value="assignment" />
         <span>All teacher-graded answers in this assignment</span>
       </label>
       <label class="agp-row">
