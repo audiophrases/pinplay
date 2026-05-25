@@ -105,6 +105,14 @@ const live = {
       resultsListCollapsed: false,
       bypassAllAnsweredScreen: false,
       dirtyAnswer: false,
+      // Self-correct retake loop state. Pure client-side until completion.
+      retake: {
+        active: false,
+        eligible: [],           // qIndexes (original order) eligible for the loop
+        cleared: [],            // qIndexes already cleared in this loop
+        previousIndex: 0,       // currentIndex to restore on exit
+        currentResult: null,    // { correct, correctAnswerText } for the current question after submit
+      },
     },
   },
 };
@@ -764,7 +772,7 @@ function mapAssignmentStateToPlayerState() {
     }
   }
 
-  return {
+  const player = {
     phase: question ? 'question' : 'results',
     pin: assignment.code,
     name: attempt.studentName || live.player.displayName || 'Student',
@@ -785,6 +793,34 @@ function mapAssignmentStateToPlayerState() {
     correctAnswer,
     correctZones: correctZones || undefined,
   };
+
+  // Retake-mode overrides: present the wrong question as a fresh attempt with
+  // instant-feedback reveal, without mutating the underlying attempt record.
+  const retake = live.player.assignment?.retake;
+  if (retake?.active) {
+    player.feedbackMode = 'instant';
+    player.assignmentSubmitted = false;
+    if (retake.currentResult) {
+      player.questionClosed = true;
+      player.questionCloseReason = 'manual_reveal';
+      player.answeredCurrent = true;
+      player.revealedResult = {
+        correct: !!retake.currentResult.correct,
+        pointsAwarded: 0,
+        correction: '',
+        graded: true,
+      };
+      player.correctAnswer = String(retake.currentResult.correctAnswerText || '');
+    } else {
+      player.questionClosed = false;
+      player.questionCloseReason = null;
+      player.answeredCurrent = false;
+      player.revealedResult = null;
+      player.correctAnswer = null;
+    }
+  }
+
+  return player;
 }
 
 async function loadAssignmentState() {
@@ -1869,6 +1905,12 @@ function showAssignmentCompleteMessage(text, opts = {}) {
 }
 
 function renderInstantFeedbackFromState() {
+  // The results panel is a post-submission summary — hide it while the student
+  // is in the retake loop (they're focused on one wrong question at a time).
+  if (live.player.assignment?.retake?.active) {
+    document.getElementById('assignmentResultsPanel')?.remove();
+    return;
+  }
   const state = live.player.assignment.state;
   const attempt = state?.attempt;
   const assignment = attempt?.assignment;
@@ -2301,452 +2343,197 @@ function renderRetakeRow(panel, state) {
     btn.textContent = `🔄 Self-correct (${remaining} of ${eligible.length} left)`;
     btn.title = 'Retake the questions you got wrong or skipped';
   }
-  btn.addEventListener('click', () => openRetakeLoop(state));
+  btn.addEventListener('click', () => enterRetakeMode(state));
   row.appendChild(btn);
   panel.appendChild(row);
 }
 
-function dismissRetakeLoopModal() {
-  const existing = document.getElementById('retakeLoopOverlay');
-  if (existing) existing.remove();
+function clientCorrectAnswerText(question) {
+  if (!question) return '';
+  const t = question.type;
+  if (t === 'mcq' || t === 'tf' || t === 'audio') {
+    const answers = question.answers || [];
+    const idx = answers.findIndex((a) => !!a.correct);
+    if (idx < 0) return '';
+    return `${idx + 1}. ${(answers[idx]?.text || '').trim()}`;
+  }
+  if (t === 'multi') {
+    return (question.answers || [])
+      .map((a, i) => (a.correct ? `${i + 1}. ${a.text}` : null))
+      .filter(Boolean)
+      .join(' | ');
+  }
+  if (t === 'text' || t === 'voice_text') {
+    return (question.accepted || []).map((s) => String(s || '').trim()).filter(Boolean).join(' | ');
+  }
+  if (t === 'context_gap') {
+    return (question.gaps || []).filter(Boolean).join(' | ');
+  }
+  if (t === 'match_pairs') {
+    return (question.pairs || []).map((p) => `${p.left}→${p.right}`).join(' | ');
+  }
+  if (t === 'error_hunt') {
+    return String(question.corrected || '');
+  }
+  if (t === 'puzzle') {
+    return (question.items || []).join(' > ');
+  }
+  if (t === 'slider') {
+    return `${question.target}${question.unit ? ` ${question.unit}` : ''}`;
+  }
+  return '';
 }
 
-function openRetakeLoop(state) {
+function renderRetakeHeader() {
+  const retake = live.player.assignment?.retake;
+  if (!retake?.active) {
+    document.getElementById('retakeHeader')?.remove();
+    document.body.classList.remove('retake-mode-active');
+    return;
+  }
+  document.body.classList.add('retake-mode-active');
+  let header = document.getElementById('retakeHeader');
+  if (!header) {
+    header = document.createElement('div');
+    header.id = 'retakeHeader';
+    header.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:#8b5cf6;color:white;padding:0.5rem 0.85rem;display:flex;align-items:center;gap:0.5rem;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+    document.body.appendChild(header);
+  }
+  const total = retake.eligible.length;
+  const cleared = retake.cleared.length;
+  header.innerHTML = '';
+
+  const label = document.createElement('span');
+  label.style.cssText = 'font-weight:700;font-size:0.9rem;';
+  label.textContent = `🔄 Self-correct · ${cleared}/${total} cleared`;
+
+  const exit = document.createElement('button');
+  exit.type = 'button';
+  exit.style.cssText = 'background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.4);padding:0.25rem 0.7rem;font-size:0.8rem;border-radius:999px;cursor:pointer;';
+  exit.textContent = 'Exit';
+  exit.title = 'Exit retake (progress saved on this device)';
+  exit.addEventListener('click', () => exitRetakeMode());
+
+  header.append(label, exit);
+}
+
+function enterRetakeMode(state) {
   const attempt = state?.attempt;
-  const attemptId = String(attempt?.id || live.player.assignment?.attemptId || '').trim();
+  const attemptId = String(attempt?.id || '').trim();
   const code = String(attempt?.assignment?.code || live.player.assignment?.code || '').trim();
   if (!attemptId || !code) return;
-
-  const questions = Array.isArray(attempt?.assignment?.quiz?.questions) ? attempt.assignment.quiz.questions : [];
   const eligible = getRetakeEligibleIndexes(state);
   if (!eligible.length) return;
 
   const progress = loadRetakeProgress(attemptId);
-  const cleared = new Set(progress.cleared.filter((i) => eligible.includes(i)));
-  let queue = eligible.filter((i) => !cleared.has(i));
+  const cleared = (progress.cleared || []).filter((i) => eligible.includes(i));
+  const queue = eligible.filter((i) => !cleared.includes(i));
 
-  dismissRetakeLoopModal();
-
-  const backdrop = document.createElement('div');
-  backdrop.id = 'retakeLoopOverlay';
-  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
-
-  const panel = document.createElement('div');
-  panel.style.cssText = 'background:var(--card-bg,#fff);color:var(--text,#111);border-radius:14px;max-width:560px;width:100%;padding:1.25rem 1.25rem 1rem;box-shadow:0 18px 50px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;';
-
-  const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.5rem;';
-  const title = document.createElement('div');
-  title.style.cssText = 'font-size:1.05rem;font-weight:700;';
-  title.textContent = '🔄 Self-correct';
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'btn';
-  closeBtn.title = 'Close (progress saved on this device)';
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText = 'min-width:auto;padding:0.25rem 0.55rem;';
-  closeBtn.addEventListener('click', () => closeLoop());
-  header.append(title, closeBtn);
-  panel.appendChild(header);
-
-  const subtitle = document.createElement('div');
-  subtitle.style.cssText = 'font-size:0.8rem;opacity:0.7;margin-bottom:0.75rem;';
-  subtitle.textContent = 'Retake the questions you got wrong or skipped. Original score is unchanged.';
-  panel.appendChild(subtitle);
-
-  const progressBar = document.createElement('div');
-  progressBar.style.cssText = 'display:flex;gap:4px;margin-bottom:1rem;';
-  panel.appendChild(progressBar);
-
-  const qArea = document.createElement('div');
-  panel.appendChild(qArea);
-
-  const feedbackLine = document.createElement('div');
-  feedbackLine.style.cssText = 'min-height:1.5em;margin:0.75rem 0;font-weight:600;text-align:center;';
-  panel.appendChild(feedbackLine);
-
-  backdrop.appendChild(panel);
-  document.body.appendChild(backdrop);
-
-  let currentQIndex = queue[0];
-  renderCurrent();
-
-  function renderProgressBar() {
-    progressBar.innerHTML = '';
-    eligible.forEach((i) => {
-      const chip = document.createElement('div');
-      const isCleared = cleared.has(i);
-      const isCurrent = i === currentQIndex && !isCleared;
-      chip.style.cssText = `flex:1;height:6px;border-radius:3px;background:${isCleared ? '#10b981' : isCurrent ? '#3b82f6' : 'rgba(0,0,0,0.15)'};`;
-      progressBar.appendChild(chip);
-    });
-  }
-
-  function renderCurrent() {
-    feedbackLine.textContent = '';
-    feedbackLine.style.color = '';
-    renderProgressBar();
-    qArea.innerHTML = '';
-    if (!queue.length) {
-      showCompletion();
-      return;
-    }
-    currentQIndex = queue[0];
-    const q = questions[currentQIndex];
-    if (!q) { queue.shift(); renderCurrent(); return; }
-
-    const counter = document.createElement('div');
-    counter.style.cssText = 'font-size:0.8rem;opacity:0.7;margin-bottom:0.5rem;';
-    counter.textContent = `Question ${currentQIndex + 1} · ${cleared.size + 1} of ${eligible.length}`;
-    qArea.appendChild(counter);
-
-    const prompt = document.createElement('div');
-    prompt.style.cssText = 'font-size:1rem;font-weight:600;margin-bottom:1rem;white-space:pre-wrap;';
-    prompt.textContent = String(q.prompt || `Question ${currentQIndex + 1}`);
-    qArea.appendChild(prompt);
-
-    if (q.type === 'mcq' || q.type === 'tf' || q.type === 'audio') renderChoiceInput(q, false);
-    else if (q.type === 'multi') renderChoiceInput(q, true);
-    else if (q.type === 'text' || q.type === 'voice_text') renderTextInput(q);
-    else if (q.type === 'context_gap') renderContextGapInput(q);
-    else if (q.type === 'error_hunt') renderErrorHuntInput(q);
-    else if (q.type === 'slider') renderSliderInput(q);
-    else if (q.type === 'puzzle') renderPuzzleInput(q);
-    else if (q.type === 'match_pairs') renderMatchPairsInput(q);
-  }
-
-  function renderChoiceInput(q, multi) {
-    const answers = Array.isArray(q.answers) ? q.answers : [];
-    const picked = new Set();
-
-    const list = document.createElement('div');
-    list.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
-    answers.forEach((a, i) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn';
-      btn.style.cssText = 'text-align:left;padding:0.6rem 0.8rem;white-space:normal;';
-      btn.textContent = String(a?.text || '');
-      btn.addEventListener('click', () => {
-        if (multi) {
-          if (picked.has(i)) {
-            picked.delete(i);
-            btn.style.outline = '';
-            btn.style.background = '';
-          } else {
-            picked.add(i);
-            btn.style.outline = '2px solid #3b82f6';
-            btn.style.background = 'rgba(59,130,246,0.1)';
-          }
-        } else {
-          submit(i);
-        }
-      });
-      list.appendChild(btn);
-    });
-    qArea.appendChild(list);
-
-    if (multi) {
-      const submitBtn = document.createElement('button');
-      submitBtn.type = 'button';
-      submitBtn.className = 'btn primary';
-      submitBtn.textContent = 'Submit';
-      submitBtn.style.cssText = 'margin-top:0.75rem;width:100%;';
-      submitBtn.addEventListener('click', () => submit([...picked]));
-      qArea.appendChild(submitBtn);
-    }
-  }
-
-  function renderTextInput(q) {
-    const form = document.createElement('form');
-    form.style.cssText = 'display:flex;gap:0.5rem;';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    input.placeholder = 'Type your answer';
-    input.style.cssText = 'flex:1;padding:0.6rem 0.8rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'submit';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    form.append(input, submitBtn);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const val = input.value.trim();
-      if (!val) return;
-      submit(val);
-    });
-    qArea.appendChild(form);
-    setTimeout(() => input.focus(), 20);
-  }
-
-  function renderContextGapInput(q) {
-    const gaps = Array.isArray(q.gaps) ? q.gaps : [];
-    const form = document.createElement('form');
-    form.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
-    const inputs = [];
-    gaps.forEach((_g, i) => {
-      const row = document.createElement('label');
-      row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;';
-      const tag = document.createElement('span');
-      tag.style.cssText = 'min-width:4.5em;font-weight:600;opacity:0.7;font-size:0.85rem;';
-      tag.textContent = `Gap ${i + 1}`;
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.autocomplete = 'off';
-      input.spellcheck = false;
-      input.style.cssText = 'flex:1;padding:0.5rem 0.7rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
-      row.append(tag, input);
-      form.appendChild(row);
-      inputs.push(input);
-    });
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'submit';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    submitBtn.style.cssText = 'margin-top:0.5rem;';
-    form.appendChild(submitBtn);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      submit(inputs.map((inp) => inp.value));
-    });
-    qArea.appendChild(form);
-    setTimeout(() => inputs[0]?.focus(), 20);
-  }
-
-  function renderErrorHuntInput(q) {
-    const hint = document.createElement('div');
-    hint.style.cssText = 'font-size:0.8rem;opacity:0.65;margin-bottom:0.5rem;';
-    hint.textContent = 'Rewrite the sentence with the errors fixed.';
-    qArea.appendChild(hint);
-
-    const form = document.createElement('form');
-    form.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
-    const input = document.createElement('textarea');
-    input.rows = 2;
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    input.placeholder = 'Rewrite the corrected sentence';
-    input.style.cssText = 'padding:0.6rem 0.8rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;resize:vertical;';
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'submit';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    form.append(input, submitBtn);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const val = input.value.trim();
-      if (!val) return;
-      submit(val);
-    });
-    qArea.appendChild(form);
-    setTimeout(() => input.focus(), 20);
-  }
-
-  function renderSliderInput(q) {
-    const min = Number(q.min);
-    const max = Number(q.max);
-    const unit = String(q.unit || '');
-    const initial = Math.round((min + max) / 2);
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.6rem;';
-
-    const valueDisplay = document.createElement('div');
-    valueDisplay.style.cssText = 'text-align:center;font-size:1.6rem;font-weight:700;';
-    valueDisplay.textContent = unit ? `${initial} ${unit}` : String(initial);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.value = String(initial);
-    slider.style.cssText = 'width:100%;';
-    slider.addEventListener('input', () => {
-      valueDisplay.textContent = unit ? `${slider.value} ${unit}` : String(slider.value);
-    });
-
-    const range = document.createElement('div');
-    range.style.cssText = 'display:flex;justify-content:space-between;font-size:0.8rem;opacity:0.6;';
-    const minLabel = document.createElement('span');
-    minLabel.textContent = String(min);
-    const maxLabel = document.createElement('span');
-    maxLabel.textContent = String(max);
-    range.append(minLabel, maxLabel);
-
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'button';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    submitBtn.addEventListener('click', () => submit(Number(slider.value)));
-
-    wrap.append(valueDisplay, slider, range, submitBtn);
-    qArea.appendChild(wrap);
-  }
-
-  function renderPuzzleInput(q) {
-    const items = Array.isArray(q.items) ? q.items.map(String) : [];
-    if (!items.length) return;
-    // Each shuffled slot keeps its index so duplicates don't collide.
-    const shuffled = shuffleRetakeArray(items.map((token, i) => ({ token, slotId: i })));
-    const usedSlotIds = [];
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.75rem;';
-
-    const orderedZone = document.createElement('div');
-    orderedZone.style.cssText = 'min-height:3rem;padding:0.5rem;border:2px dashed rgba(0,0,0,0.2);border-radius:8px;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;';
-
-    const availableZone = document.createElement('div');
-    availableZone.style.cssText = 'padding:0.25rem 0;display:flex;flex-wrap:wrap;gap:0.4rem;';
-
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'button';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    submitBtn.addEventListener('click', () => {
-      submit(usedSlotIds.map((id) => shuffled.find((s) => s.slotId === id).token));
-    });
-
-    function renderTokens() {
-      orderedZone.innerHTML = '';
-      if (!usedSlotIds.length) {
-        const ph = document.createElement('span');
-        ph.style.cssText = 'opacity:0.5;font-size:0.85rem;';
-        ph.textContent = 'Tap words below in order…';
-        orderedZone.appendChild(ph);
-      }
-      usedSlotIds.forEach((slotId, pos) => {
-        const slot = shuffled.find((s) => s.slotId === slotId);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn';
-        btn.style.cssText = 'background:#3b82f6;color:white;';
-        btn.textContent = slot.token;
-        btn.title = 'Tap to remove';
-        btn.addEventListener('click', () => {
-          usedSlotIds.splice(pos, 1);
-          renderTokens();
-        });
-        orderedZone.appendChild(btn);
-      });
-
-      availableZone.innerHTML = '';
-      shuffled.forEach((slot) => {
-        if (usedSlotIds.includes(slot.slotId)) return;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn';
-        btn.style.cssText = 'background:rgba(0,0,0,0.05);';
-        btn.textContent = slot.token;
-        btn.addEventListener('click', () => {
-          usedSlotIds.push(slot.slotId);
-          renderTokens();
-        });
-        availableZone.appendChild(btn);
-      });
-    }
-
-    wrap.append(orderedZone, availableZone, submitBtn);
-    qArea.appendChild(wrap);
-    renderTokens();
-  }
-
-  function renderMatchPairsInput(q) {
-    const pairs = Array.isArray(q.pairs) ? q.pairs : [];
-    if (!pairs.length) return;
-    const shuffledRights = shuffleRetakeArray(pairs.map((p) => String(p?.right || '')));
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:0.5rem;';
-    const selects = [];
-    pairs.forEach((p) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;';
-      const leftLabel = document.createElement('span');
-      leftLabel.style.cssText = 'flex:1;font-weight:600;';
-      leftLabel.textContent = String(p?.left || '');
-      const arrow = document.createElement('span');
-      arrow.textContent = '➜';
-      arrow.style.cssText = 'opacity:0.5;';
-      const select = document.createElement('select');
-      select.style.cssText = 'flex:1;padding:0.5rem;font-size:1rem;border-radius:8px;border:1px solid rgba(0,0,0,0.2);background:var(--input-bg,#fff);color:inherit;';
-      const placeholder = document.createElement('option');
-      placeholder.value = '';
-      placeholder.textContent = '—';
-      select.appendChild(placeholder);
-      shuffledRights.forEach((r) => {
-        const opt = document.createElement('option');
-        opt.value = r;
-        opt.textContent = r;
-        select.appendChild(opt);
-      });
-      row.append(leftLabel, arrow, select);
-      wrap.appendChild(row);
-      selects.push(select);
-    });
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'button';
-    submitBtn.className = 'btn primary';
-    submitBtn.textContent = 'Submit';
-    submitBtn.style.cssText = 'margin-top:0.5rem;';
-    submitBtn.addEventListener('click', () => {
-      submit(selects.map((s, i) => ({ left: pairs[i]?.left || '', right: s.value })));
-    });
-    wrap.appendChild(submitBtn);
-    qArea.appendChild(wrap);
-  }
-
-  function submit(userAnswer) {
-    const q = questions[currentQIndex];
-    const ok = gradeSelfCorrectAnswer(q, userAnswer);
-    if (ok) {
-      feedbackLine.style.color = '#10b981';
-      feedbackLine.textContent = '✓ Correct!';
-      cleared.add(currentQIndex);
-      queue.shift();
-      saveRetakeProgress(attemptId, { cleared: [...cleared] });
-      setTimeout(() => renderCurrent(), 600);
-    } else {
-      feedbackLine.style.color = '#ef4444';
-      feedbackLine.textContent = '✗ Not quite — try again';
-    }
-  }
-
-  function showCompletion() {
-    qArea.innerHTML = '';
-    feedbackLine.textContent = '';
-    progressBar.innerHTML = '';
-    eligible.forEach(() => {
-      const chip = document.createElement('div');
-      chip.style.cssText = 'flex:1;height:6px;border-radius:3px;background:#10b981;';
-      progressBar.appendChild(chip);
-    });
-
-    const celebration = document.createElement('div');
-    celebration.style.cssText = 'text-align:center;padding:1.5rem 0;';
-    celebration.innerHTML = '<div style="font-size:3rem;margin-bottom:0.5rem;">🎉</div><div style="font-size:1.2rem;font-weight:700;margin-bottom:0.25rem;">Self-corrected!</div><div style="font-size:0.9rem;opacity:0.75;">You corrected every retakeable mistake from this attempt.</div>';
-    qArea.appendChild(celebration);
-
-    const doneBtn = document.createElement('button');
-    doneBtn.type = 'button';
-    doneBtn.className = 'btn primary';
-    doneBtn.textContent = 'Done';
-    doneBtn.style.cssText = 'width:100%;margin-top:0.5rem;';
-    doneBtn.addEventListener('click', () => {
-      backdrop.remove();
-      renderInstantFeedbackFromState();
-    });
-    qArea.appendChild(doneBtn);
-
+  if (!queue.length) {
+    // Local progress says everything is cleared but the server flag wasn't set —
+    // finish the loop now.
     finishRetakeLoop({ code, attemptId });
+    return;
   }
 
-  function closeLoop() {
-    backdrop.remove();
-    renderInstantFeedbackFromState();
+  const retake = live.player.assignment.retake;
+  retake.active = true;
+  retake.eligible = eligible.slice();
+  retake.cleared = cleared.slice();
+  retake.previousIndex = Number(live.player.assignment.currentIndex || 0);
+  retake.currentResult = null;
+
+  // Tear down conflicting UI surfaces.
+  document.getElementById('assignmentResultsPanel')?.remove();
+  hideAssignmentCompleteMessage();
+  document.getElementById('reviewNavigator')?.remove();
+  document.body.classList.remove('review-mode-active');
+  if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
+  if (joinFinalizeBtn) joinFinalizeBtn.classList.add('hidden');
+
+  live.player.assignment.currentIndex = queue[0];
+  renderRetakeHeader();
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+}
+
+function exitRetakeMode() {
+  const retake = live.player.assignment.retake;
+  retake.active = false;
+  retake.currentResult = null;
+  document.getElementById('retakeHeader')?.remove();
+  document.body.classList.remove('retake-mode-active');
+
+  live.player.assignment.currentIndex = Number(retake.previousIndex || 0);
+
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+  renderInstantFeedbackFromState();
+}
+
+async function handleRetakeSubmit() {
+  const retake = live.player.assignment?.retake;
+  if (!retake?.active) return;
+
+  // If a result is on-screen, this submit acts as "Continue" — advance the loop.
+  if (retake.currentResult) {
+    advanceRetake(!!retake.currentResult.correct);
+    return;
   }
+
+  const answer = readJoinAnswer();
+  if (answer === null || answer === '') {
+    throw new Error('Choose/type an answer first.');
+  }
+
+  const state = live.player.assignment?.state;
+  const idx = Number(live.player.assignment.currentIndex || 0);
+  const question = state?.attempt?.assignment?.quiz?.questions?.[idx];
+  if (!question) return;
+
+  const correct = gradeSelfCorrectAnswer(question, answer);
+  retake.currentResult = {
+    correct,
+    correctAnswerText: clientCorrectAnswerText(question),
+  };
+
+  setJoinStatusHud(correct ? '✅ Correct' : '❌ Not quite — try again', correct ? 'ok' : 'bad');
+
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+}
+
+function advanceRetake(wasCorrect) {
+  const retake = live.player.assignment?.retake;
+  if (!retake?.active) return;
+
+  const attempt = live.player.assignment?.state?.attempt;
+  const attemptId = String(attempt?.id || '').trim();
+  const code = String(attempt?.assignment?.code || '').trim();
+  const currentIdx = Number(live.player.assignment.currentIndex || 0);
+
+  if (wasCorrect) {
+    if (!retake.cleared.includes(currentIdx)) {
+      retake.cleared.push(currentIdx);
+      if (attemptId) saveRetakeProgress(attemptId, { cleared: retake.cleared });
+    }
+  }
+
+  retake.currentResult = null;
+
+  const next = retake.eligible.find((i) => !retake.cleared.includes(i));
+  if (next == null) {
+    // Loop complete.
+    finishRetakeLoop({ code, attemptId });
+    setJoinStatusHud('🎉 Self-corrected — every retakeable mistake fixed!', 'ok');
+    exitRetakeMode();
+    return;
+  }
+
+  live.player.assignment.currentIndex = next;
+  renderRetakeHeader();
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
 }
 
 async function finishRetakeLoop({ code, attemptId }) {
@@ -4304,6 +4091,12 @@ async function sendReaction(emoji) {
 
 async function submitLiveAnswer(opts = {}) {
   try {
+    // Retake mode short-circuit: all grading is client-side, no server roundtrip.
+    if (live.player.assignment?.retake?.active) {
+      await handleRetakeSubmit();
+      return;
+    }
+
     if (joinSubmitBtn && (joinSubmitBtn.textContent.startsWith('Continue') || joinSubmitBtn.textContent.startsWith('Finish quiz'))) {
       if (live.player.assignment.pendingComplete) {
         live.player.assignment.pendingComplete = false;
