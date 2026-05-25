@@ -3927,6 +3927,7 @@ async function exportCreationPrompt() {
   const images = document.getElementById('promptImages')?.value;
   const audio = document.getElementById('promptAudio')?.value;
   const video = document.getElementById('promptVideo')?.value;
+  const readingText = document.getElementById('promptReadingText')?.value;
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
   const customGoalEl = document.getElementById('promptGoalCustom') instanceof HTMLTextAreaElement ? document.getElementById('promptGoalCustom') : null;
   const goal = goalEl?.value;
@@ -3951,6 +3952,7 @@ async function exportCreationPrompt() {
   cleanRequest.images = images;
   cleanRequest.audio = audio;
   cleanRequest.video = video;
+  cleanRequest.readingText = readingText || 'no';
 
   if (goal === 'custom') {
     if (!customGoalText) {
@@ -4035,6 +4037,9 @@ async function exportCreationPrompt() {
       : undefined,
     readAllQuestionsAloud: cleanRequest.audio === 'some'
       ? "Set true only when broad accessibility/listening repetition is desired."
+      : undefined,
+    readingText: (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
+      ? "Per-question reading passage rendered centered (in place of an image) inside a scrollable card. Text is non-selectable and non-copyable, so it doubles as a soft anti-cheat surface for translation/AI assistance during the quiz. Use the field `readingText` (string, max 10,000 chars per question). Supported on every question type EXCEPT `pin`.\n\nWhen to use: reading-comprehension prompts where students must read a passage of 1-3 paragraphs before answering; cloze/gap-fill where the passage gives context; vocabulary-in-context; error-hunt with a paragraph instead of a one-liner; speaking/voice_record prompts that need a source text to react to.\n\nWhen NOT to use: trivia, math drills, definition recall, or any question that's self-contained in the prompt — adding a passage there is noise, not pedagogy. Skip on `pin` questions (they require an image).\n\nMutually exclusive with imageKeyword, gifKeyword, and imageData on the SAME question. If a question has readingText, leave all three image fields empty. If a question needs a visual instead, leave readingText empty.\n\nLength guidance by level: A1-A2 ≈ 40-100 words; B1 ≈ 100-200 words; B2+ ≈ 200-500 words. Stay under ~1500 words / 10000 chars per question — quizzes with many long passages risk exceeding the storage row limit. For 1000+ word passages, prefer splitting into multiple questions over one giant passage."
       : undefined
   };
 
@@ -4091,6 +4096,21 @@ async function exportCreationPrompt() {
       ? 'If both videoKeyword and media.url are present, keep videoKeyword as source of truth unless the user explicitly asked for a fixed link.'
       : undefined,
     cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
+    cleanRequest.readingText === 'no'
+      ? 'Do NOT include the readingText field on any question.'
+      : undefined,
+    cleanRequest.readingText === 'some'
+      ? 'Use readingText only on questions where a reading passage genuinely adds pedagogical value (comprehension, gap-fill in context, vocab-in-context). Leave it empty on self-contained trivia/recall questions. Never on pin.'
+      : undefined,
+    cleanRequest.readingText === 'all'
+      ? 'Add a readingText passage to every non-pin question. Each passage must be specific to that question (do not reuse the same passage across questions unless the quiz is a multi-question reading where that is the intent).'
+      : undefined,
+    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
+      ? 'readingText is mutually exclusive with imageKeyword, gifKeyword, and imageData on the same question — pick one or the other, never both.'
+      : undefined,
+    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
+      ? 'Keep each readingText under 10,000 characters. For long content, split into multiple questions.'
+      : undefined,
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
   const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
@@ -4103,8 +4123,11 @@ async function exportCreationPrompt() {
     'Keep ids stable and unique.',
     'Prefer short, clear prompt text and concise answer choices.',
     'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.',
-    'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.'
-  ];
+    'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.',
+    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
+      ? 'readingText shape: plain UTF-8 string, no markdown or HTML. Line breaks with \\n are fine and render preserved. When set, do not also set imageData/imageKeyword/gifKeyword on that question.'
+      : undefined
+  ].filter(Boolean);
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
     'Use pedagogically meaningful distractors and progression.',
