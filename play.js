@@ -2520,24 +2520,25 @@ function advanceRetake(wasCorrect) {
   const code = String(attempt?.assignment?.code || '').trim();
   const currentIdx = Number(live.player.assignment.currentIndex || 0);
 
-  if (wasCorrect) {
-    if (!retake.cleared.includes(currentIdx)) {
-      retake.cleared.push(currentIdx);
-      if (attemptId) saveRetakeProgress(attemptId, { cleared: retake.cleared });
-    }
+  if (wasCorrect && !retake.cleared.includes(currentIdx)) {
+    retake.cleared.push(currentIdx);
+    if (attemptId) saveRetakeProgress(attemptId, { cleared: retake.cleared });
   }
 
   retake.currentResult = null;
 
-  const next = retake.eligible.find((i) => !retake.cleared.includes(i));
-  if (next == null) {
-    // Loop complete.
+  // Rotating queue: always advance to the next uncleared (wrap around past the
+  // end). Wrong answers stay in the queue and loop back on the next pass.
+  const uncleared = retake.eligible.filter((i) => !retake.cleared.includes(i));
+  if (!uncleared.length) {
+    // Loop complete — everything cleared.
     finishRetakeLoop({ code, attemptId });
     setJoinStatusHud('🎉 Self-corrected — every retakeable mistake fixed!', 'ok');
     exitRetakeMode();
     return;
   }
 
+  const next = uncleared.find((i) => i > currentIdx) ?? uncleared[0];
   live.player.assignment.currentIndex = next;
   renderRetakeHeader();
   const mapped = mapAssignmentStateToPlayerState();
