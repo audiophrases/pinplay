@@ -8590,7 +8590,17 @@ function buildAssignmentListItem(a) {
   const code = String(a?.code || '').trim();
   const link = buildAssignmentJoinLink(code);
   const li = document.createElement('li');
+  li.classList.add('assignment-item');
   if (a?.archived) li.classList.add('assignment-archived');
+
+  const header = document.createElement('div');
+  header.className = 'assignment-header';
+  header.setAttribute('role', 'button');
+  header.setAttribute('tabindex', '0');
+  header.setAttribute('aria-expanded', 'false');
+
+  const headerText = document.createElement('div');
+  headerText.className = 'assignment-header-text';
 
   const title = document.createElement('div');
   const pendingGrading = Number(a?.pendingGradingCount || 0);
@@ -8608,8 +8618,39 @@ function buildAssignmentListItem(a) {
   const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
   meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${attemptsText} · ${dueText}`;
 
+  headerText.append(title, meta);
+
+  const chevron = document.createElement('span');
+  chevron.className = 'assignment-chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+  chevron.textContent = '▸';
+
+  header.append(headerText, chevron);
+
   const row = document.createElement('div');
-  row.className = 'row gap top-space';
+  row.className = 'row gap assignment-actions';
+
+  const toggleExpand = () => {
+    const wasOpen = li.classList.contains('expanded');
+    if (assignmentListEl) {
+      assignmentListEl.querySelectorAll('.assignment-item.expanded').forEach((el) => {
+        if (el !== li) {
+          el.classList.remove('expanded');
+          const h = el.querySelector('.assignment-header');
+          if (h) h.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+    li.classList.toggle('expanded', !wasOpen);
+    header.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
+  };
+  header.addEventListener('click', toggleExpand);
+  header.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      toggleExpand();
+    }
+  });
 
   const copyLinkBtn = document.createElement('button');
   copyLinkBtn.className = 'btn';
@@ -8712,7 +8753,7 @@ function buildAssignmentListItem(a) {
   });
 
   row.append(copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, archiveBtn, deleteBtn);
-  li.append(title, meta, row);
+  li.append(header, row);
   return li;
 }
 

@@ -2484,6 +2484,67 @@ button.review-retake-attempt-row:active {
   opacity: 0.72;
 }
 
+.assignment-item {
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  margin: 0.35rem 0;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.assignment-item:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(99, 102, 241, 0.07);
+}
+
+.assignment-item.expanded {
+  border-color: rgba(99, 102, 241, 0.55);
+  background: rgba(99, 102, 241, 0.09);
+}
+
+.assignment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.assignment-header:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.assignment-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.assignment-chevron {
+  color: rgba(67, 56, 202, 0.7);
+  font-size: 0.9rem;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.assignment-item.expanded .assignment-chevron {
+  transform: rotate(90deg);
+}
+
+.assignment-actions {
+  display: none;
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(99, 102, 241, 0.25);
+}
+
+.assignment-item.expanded .assignment-actions {
+  display: flex;
+}
+
 #toggleArchivedAssignmentsBtn.has-pending {
   background: rgba(220, 38, 38, 0.12);
   color: #b91c1c;
