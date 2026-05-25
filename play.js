@@ -28,6 +28,34 @@ function questionTypeIcon(type) {
   return QUESTION_TYPE_ICONS[String(type || '').toLowerCase()] || '❓';
 }
 
+// Mirrors app.js (host side). Pass `extra` to vary the shuffle per attempt/student.
+function questionShuffleSeed(question, extra = '') {
+  const str = (question.prompt || '') + (question.id || '') + String(extra || '');
+  return Math.abs([...str].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
+}
+
+function seededShuffleIndices(length, seed) {
+  const indices = Array.from({ length }, (_, i) => i);
+  let sr = seed;
+  for (let s = indices.length - 1; s > 0; s--) {
+    sr = (sr * 16807) % 2147483647;
+    const j = sr % (s + 1);
+    [indices[s], indices[j]] = [indices[j], indices[s]];
+  }
+  return indices;
+}
+
+// Returns the display order of question.answers indexes.
+// - T/F is locked to authored order (students expect True before False).
+// - Assignment mode mixes the attemptId so each student sees their own order.
+// - Live mode uses the shared prompt+id seed so host and students stay in sync.
+function answerDisplayOrder(question) {
+  const length = (question.answers || []).length;
+  if (question.type === 'tf') return Array.from({ length }, (_, i) => i);
+  const attemptId = live.player.mode === 'assignment' ? (live.player.assignment?.attemptId || '') : '';
+  return seededShuffleIndices(length, questionShuffleSeed(question, attemptId));
+}
+
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
@@ -3529,15 +3557,7 @@ function renderJoinQuestion(question) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
-    // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
-    const seed = Math.abs([...((question.prompt || '') + (question.id || ''))].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)) || 1;
-    const indices = question.answers.map((_, i) => i);
-    let sr = seed;
-    for (let s = indices.length - 1; s > 0; s--) {
-      sr = (sr * 16807) % 2147483647;
-      const j = sr % (s + 1);
-      [indices[s], indices[j]] = [indices[j], indices[s]];
-    }
+    const indices = answerDisplayOrder(question);
 
     indices.forEach((origIdx, displayNum) => {
       const a = question.answers[origIdx];

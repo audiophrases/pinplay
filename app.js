@@ -10558,9 +10558,7 @@ function renderHostQuestion(state) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const correctSet = new Set(Array.isArray(question.correctIndexes) ? question.correctIndexes : []);
 
-    // Shuffle answer order for presentation (seeded Fisher-Yates for consistent order across host/student)
-    const seed = questionShuffleSeed(question);
-    const indices = seededShuffleIndices((question.answers || []).length, seed);
+    const indices = answerDisplayOrder(question);
 
     indices.forEach((origIdx, displayNum) => {
       const a = question.answers[origIdx];
@@ -11703,8 +11701,7 @@ function renderJoinQuestion(question) {
   if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
-    const seed = questionShuffleSeed(question);
-    const indices = seededShuffleIndices((question.answers || []).length, seed);
+    const indices = answerDisplayOrder(question);
 
     indices.forEach((origIdx) => {
       const a = question.answers[origIdx];
@@ -13311,8 +13308,7 @@ function renderSoloQuestion() {
   if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
     const isMulti = q.type === 'multi';
 
-    const seed = questionShuffleSeed(q);
-    const indices = seededShuffleIndices((q.answers || []).length, seed);
+    const indices = answerDisplayOrder(q);
 
     indices.forEach((origIdx) => {
       const a = q.answers[origIdx];
@@ -15574,6 +15570,14 @@ function seededShuffleIndices(length, seed) {
     [indices[s], indices[j]] = [indices[j], indices[s]];
   }
   return indices;
+}
+
+// Returns the display order of question.answers indexes.
+// T/F is locked to authored order (students expect True before False).
+function answerDisplayOrder(question) {
+  const length = (question.answers || []).length;
+  if (question.type === 'tf') return Array.from({ length }, (_, i) => i);
+  return seededShuffleIndices(length, questionShuffleSeed(question));
 }
 
 function supportsQuestionAudio(type) {
