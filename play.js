@@ -6907,6 +6907,10 @@ function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
     input.className = 'context-gap-inline-input';
     input.dataset[datasetKey] = String(blankIndex);
     input.readOnly = true;
+    const resize = () => {
+      const len = String(input.value || '').length;
+      input.style.width = len > 5 ? `${len + 2}ch` : '';
+    };
     input.addEventListener('click', () => {
       input.readOnly = false;
       input.focus();
@@ -6914,6 +6918,7 @@ function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
     input.addEventListener('focus', () => {
       input.readOnly = false;
     });
+    input.addEventListener('input', resize);
     input.addEventListener('blur', () => {
       if (!String(input.value || '').trim()) input.readOnly = true;
     });
