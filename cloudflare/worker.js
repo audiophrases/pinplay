@@ -5987,7 +5987,9 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   });
 
   const gradedCount = autoGradedCount + teacherGradedCount;
-  const accuracy = gradedCount > 0 ? round((correctCount / gradedCount) * 100, 1) : null;
+  const gradableTotal = quizQuestions.reduce((n, q) => (q && !q.isPoll ? n + 1 : n), 0);
+  const accuracyDenominator = gradableTotal - pendingTeacherGradeCount;
+  const accuracy = accuracyDenominator > 0 ? round((correctCount / accuracyDenominator) * 100, 1) : null;
 
   return {
     answeredCount,
@@ -6667,15 +6669,19 @@ function buildAttemptSnapshots(room) {
     byKey.set(key, (byKey.get(key) || 0) + 1);
   });
 
+  const gradableTotal = (room?.quiz?.questions || []).reduce((n, q) => (q && !q.isPoll ? n + 1 : n), 0);
   const attempts = [...perStudent.values()]
-    .map((r) => ({
-      ...r,
-      pointsAuto: Math.round(Number(r.pointsAuto || 0)),
-      pointsTeacher: Math.round(Number(r.pointsTeacher || 0)),
-      scoreCurrent: Math.round(Number(r.scoreCurrent || 0)),
-      accuracy: r.answeredCount > 0 ? round((r.correctCount / r.answeredCount) * 100, 1) : null,
-      eventCount: Number(byKey.get(String(r.studentKey || '')) || 0),
-    }))
+    .map((r) => {
+      const denom = gradableTotal - Number(r.pendingTeacherGradeCount || 0);
+      return {
+        ...r,
+        pointsAuto: Math.round(Number(r.pointsAuto || 0)),
+        pointsTeacher: Math.round(Number(r.pointsTeacher || 0)),
+        scoreCurrent: Math.round(Number(r.scoreCurrent || 0)),
+        accuracy: denom > 0 ? round((r.correctCount / denom) * 100, 1) : null,
+        eventCount: Number(byKey.get(String(r.studentKey || '')) || 0),
+      };
+    })
     .sort((a, b) => {
       const c = String(a.className || '').localeCompare(String(b.className || ''));
       if (c !== 0) return c;
