@@ -14199,7 +14199,7 @@ function normalizeQuizForLive(raw) {
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
-      audioEnabled: !!q.audioEnabled || q.type === 'audio',
+      audioEnabled: !!q.audioEnabled,
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1200),
       ttsLanguage: questionTtsLanguage,

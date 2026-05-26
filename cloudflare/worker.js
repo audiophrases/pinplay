@@ -4918,7 +4918,7 @@ function publicQuestionMediaPayload(question) {
 }
 
 function publicAudioPayload(question) {
-  const enabled = !!question?.audioEnabled || question?.type === 'audio';
+  const enabled = !!question?.audioEnabled;
   if (!enabled) return { audioEnabled: false };
   return {
     audioEnabled: true,
@@ -5054,7 +5054,7 @@ function normalizeQuiz(quiz) {
       points: [0, 1000, 2000].includes(Number(q.points)) ? Number(q.points) : 1000,
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
-      audioEnabled: !!q.audioEnabled || q.type === 'audio',
+      audioEnabled: !!q.audioEnabled,
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
       audioText: String(q.audioText || '').slice(0, 1200),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
