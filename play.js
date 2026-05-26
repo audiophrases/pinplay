@@ -1814,6 +1814,10 @@ function showUnansweredConfirmModal(blankIndexes) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.35rem;border:1px solid var(--border, #d0d0d8);background:var(--surface, #f5f5fa);color:inherit;border-radius:999px;padding:0.3rem 0.75rem;font-size:0.9rem;font-weight:600;cursor:pointer;';
+    const promptText = String(questions[qIndex]?.prompt || '').trim();
+    chip.title = promptText
+      ? (promptText.length > 200 ? `${promptText.slice(0, 200)}…` : promptText)
+      : `Question ${qIndex + 1}`;
     const iconEl = document.createElement('span');
     iconEl.textContent = questionTypeIcon(questions[qIndex]?.type);
     const numEl = document.createElement('span');
