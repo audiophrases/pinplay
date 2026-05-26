@@ -141,6 +141,7 @@ const live = {
       forceAutoAdvance: false,
       pendingComplete: false,
       resultsListCollapsed: false,
+      resultsDrawerOpen: true,
       bypassAllAnsweredScreen: false,
       // Flipped once the student first tries to step past the last question.
       // Gates the deferred-mode "Submit · N unanswered" button so it only appears
@@ -1725,6 +1726,7 @@ function exitAssignmentReviewMode(code, checkData) {
   // Remove results panel
   const panel = document.getElementById('assignmentResultsPanel');
   if (panel) panel.remove();
+  document.getElementById('assignmentResultsHandle')?.remove();
 
   // Remove feedback panel
   const fp = document.getElementById('joinFeedbackPanel');
@@ -1735,6 +1737,7 @@ function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.state = null;
   live.player.assignment.currentIndex = 0;
   live.player.assignment.resultsListCollapsed = false;
+  live.player.assignment.resultsDrawerOpen = true;
   live.player.assignment.pendingComplete = false;
   live.player.assignment.bypassAllAnsweredScreen = false;
   live.player.assignment.hasReachedEnd = false;
@@ -2061,6 +2064,11 @@ function renderInstantFeedbackFromState() {
   const panel = document.createElement('div');
   panel.id = 'assignmentResultsPanel';
   panel.className = 'assignment-results';
+  if (isReviewMode) {
+    panel.classList.add('drawer-mode');
+    const drawerOpen = live.player.assignment.resultsDrawerOpen !== false;
+    if (!drawerOpen) panel.classList.add('drawer-closed');
+  }
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
 
@@ -2146,6 +2154,23 @@ function renderInstantFeedbackFromState() {
   header.appendChild(scoreSummary);
 
   panel.appendChild(header);
+
+  // --- Drawer close button (review mode only) ---
+  if (isReviewMode) {
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'assignment-results-close';
+    closeBtn.setAttribute('aria-label', 'Hide question summary');
+    closeBtn.title = 'Hide question summary';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => {
+      live.player.assignment.resultsDrawerOpen = false;
+      panel.classList.add('drawer-closed');
+      const handle = document.getElementById('assignmentResultsHandle');
+      if (handle) handle.classList.remove('hidden');
+    });
+    panel.appendChild(closeBtn);
+  }
 
   // --- Collapsible toggle ---
   const toggleBtn = document.createElement('button');
@@ -2234,6 +2259,26 @@ function renderInstantFeedbackFromState() {
   renderRetakeRow(panel, state);
 
   wrap.appendChild(panel);
+
+  // --- Drawer handle (review mode only): re-opens the drawer when closed. ---
+  document.getElementById('assignmentResultsHandle')?.remove();
+  if (isReviewMode) {
+    const handle = document.createElement('button');
+    handle.id = 'assignmentResultsHandle';
+    handle.type = 'button';
+    handle.className = 'assignment-results-handle';
+    const drawerOpen = live.player.assignment.resultsDrawerOpen !== false;
+    if (drawerOpen) handle.classList.add('hidden');
+    handle.setAttribute('aria-label', 'Show question summary');
+    handle.title = 'Show question summary';
+    handle.innerHTML = `<span>📋</span><span class="handle-count">${rows.length}/${questions.length}</span>`;
+    handle.addEventListener('click', () => {
+      live.player.assignment.resultsDrawerOpen = true;
+      panel.classList.remove('drawer-closed');
+      handle.classList.add('hidden');
+    });
+    document.body.appendChild(handle);
+  }
 
   if (prevListScrollTop > 0 && !listCollapsed) {
     listWrap.scrollTop = prevListScrollTop;
@@ -3570,11 +3615,7 @@ function renderJoinQuestion(question) {
     if (oldReading) oldReading.remove();
   }
   const interactiveOverlay = document.getElementById('joinQuestionInteractive');
-  // Make the bottom bar see-through when navigating questions from Final Results so
-  // the question summary behind it stays readable for every question type.
-  const isReviewingResults = !!live.player.assignment?.reviewMode
-    || !!live.player.assignment?.state?.attempt?.submitted;
-  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || hasReadingText || isReviewingResults);
+  if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || hasReadingText);
 
   if (hasAnyImage) {
     let imgSrc = question.imageData;
