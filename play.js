@@ -5406,7 +5406,7 @@ function cancelPendingAssignmentQuestionAutoplay() {
 }
 
 function supportsAssignmentQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'voice_text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'audio', 'speaking', 'voice_record'].includes(String(type || ''));
+  return ['mcq', 'multi', 'tf', 'text', 'voice_text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'speaking', 'voice_record'].includes(String(type || ''));
 }
 
 function normalizeAssignmentQuestionMedia(rawMedia) {
