@@ -2144,7 +2144,7 @@ textarea.join-answer-input:focus {
      "Final Results" + score header isn't hidden behind them. */
   top: 122px;
   right: 0;
-  width: 380px;
+  width: 760px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 140px);
   margin: 0;
@@ -2229,10 +2229,12 @@ textarea.join-answer-input:focus {
 .assignment-results-header {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  /* Reserve room on the right so "1,000 pts" never slides under the ✕. */
+  padding-right: 2.25rem;
 }
 
 .assignment-results-title {

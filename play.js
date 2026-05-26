@@ -140,7 +140,6 @@ const live = {
       pollingTimer: null,
       forceAutoAdvance: false,
       pendingComplete: false,
-      resultsListCollapsed: false,
       resultsDrawerOpen: true,
       bypassAllAnsweredScreen: false,
       // Flipped once the student first tries to step past the last question.
@@ -1736,7 +1735,6 @@ function exitAssignmentReviewMode(code, checkData) {
   live.player.assignment.attemptId = null;
   live.player.assignment.state = null;
   live.player.assignment.currentIndex = 0;
-  live.player.assignment.resultsListCollapsed = false;
   live.player.assignment.resultsDrawerOpen = true;
   live.player.assignment.pendingComplete = false;
   live.player.assignment.bypassAllAnsweredScreen = false;
@@ -2183,24 +2181,10 @@ function renderInstantFeedbackFromState() {
   });
   panel.appendChild(closeBtn);
 
-  // --- Collapsible toggle ---
-  const toggleBtn = document.createElement('button');
-  toggleBtn.type = 'button';
-  toggleBtn.className = 'assignment-results-toggle';
-  let listCollapsed = !!live.player.assignment.resultsListCollapsed;
-  toggleBtn.innerHTML = `<span class="toggle-arrow">${listCollapsed ? '▸' : '▾'}</span> 📋 Question Summary`;
-  toggleBtn.addEventListener('click', () => {
-    listCollapsed = !listCollapsed;
-    live.player.assignment.resultsListCollapsed = listCollapsed;
-    listWrap.classList.toggle('collapsed', listCollapsed);
-    toggleBtn.querySelector('.toggle-arrow').textContent = listCollapsed ? '▸' : '▾';
-  });
-  panel.appendChild(toggleBtn);
-
   // --- Scrollable, clickable question list ---
   const listWrap = document.createElement('div');
   listWrap.className = 'assignment-results-list-wrap';
-  if (listCollapsed) listWrap.classList.add('collapsed');
+  const listCollapsed = false;
 
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
