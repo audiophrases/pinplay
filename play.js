@@ -2216,7 +2216,7 @@ function renderInstantFeedbackFromState() {
 // ============================================================
 
 const SELF_CORRECTING_TYPES = new Set([
-  'mcq', 'tf', 'multi', 'audio',
+  'mcq', 'tf', 'multi',
   'text', 'voice_text',
   'context_gap', 'error_hunt',
   'slider', 'puzzle', 'match_pairs',
