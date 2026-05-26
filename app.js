@@ -3258,9 +3258,9 @@ function syncQuizFromUI() {
 
       // New rule: no checkbox.
       // TTS is enabled when text exists and language is not 'NONE'; file mode enabled when audioData exists.
-      q.audioEnabled = q.type === 'audio'
-        ? true
-        : (q.audioMode === 'file' ? !!q.audioData : (textLang !== 'NONE' && !!String(q.audioText || '').trim()));
+      q.audioEnabled = q.audioMode === 'file'
+        ? !!q.audioData
+        : (textLang !== 'NONE' && !!String(q.audioText || '').trim());
     }
 
     // Sync imageKeyword from form
@@ -14122,31 +14122,6 @@ function makePuzzleQuestion(opts = {}) {
     audioData: '',
     items: ['', '', ''],
     media: makeDefaultQuestionMedia(),
-  };
-}
-
-function makeAudioQuestion() {
-  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
-  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
-  return {
-    id: crypto.randomUUID(),
-    type: 'audio',
-    prompt: '',
-    audioEnabled: true,
-    audioMode: 'tts',
-    audioText: '',
-    ttsLanguage,
-    language,
-    audioData: '',
-    media: makeDefaultQuestionMedia(),
-    points: 1000,
-    timeLimit: 0,
-    answers: [
-      { text: '', correct: true },
-      { text: '', correct: false },
-      { text: '', correct: false },
-      { text: '', correct: false },
-    ],
   };
 }
 
