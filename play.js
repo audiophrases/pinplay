@@ -6210,6 +6210,13 @@ function normalizeTextAnswer(text) {
     .trim();
 }
 
+// Error hunt needs to detect punctuation-only edits (e.g. removing a comma),
+// so unlike normalizeTextAnswer this keeps punctuation intact and only
+// case-folds and trims surrounding whitespace.
+function normalizeErrorHuntToken(text) {
+  return String(text || '').toLowerCase().trim();
+}
+
 function formatPartialScore(n) {
   const x = Number(n) || 0;
   return Number.isInteger(x) ? String(x) : x.toFixed(1);
@@ -6238,8 +6245,8 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   // 2. Calculate the required errors for each variant and take the minimum
   // (the closest-fit correction — the fewest edits the player must make).
   for (const correctedStr of validVariants) {
-    const source = tokenizeWords(prompt).map(normalizeTextAnswer);
-    const target = tokenizeWords(correctedStr).map(normalizeTextAnswer);
+    const source = tokenizeWords(prompt).map(normalizeErrorHuntToken);
+    const target = tokenizeWords(correctedStr).map(normalizeErrorHuntToken);
 
     if (!source.length || !target.length) continue;
     if (source.join(' ') === target.join(' ')) continue;
@@ -6308,8 +6315,8 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
 function renderErrorHuntDiff(original, current) {
   const srcRaw = tokenizeWords(original);
   const tgtRaw = tokenizeWords(current);
-  const src = srcRaw.map(normalizeTextAnswer);
-  const tgt = tgtRaw.map(normalizeTextAnswer);
+  const src = srcRaw.map(normalizeErrorHuntToken);
+  const tgt = tgtRaw.map(normalizeErrorHuntToken);
   const m = src.length;
   const n = tgt.length;
   if (m === 0 && n === 0) return { editedCount: 0, html: '' };
