@@ -2077,7 +2077,8 @@ function renderInstantFeedbackFromState() {
     .filter((n) => Number.isFinite(n) && questions[n])
     .sort((a, b) => a - b);
 
-  const rows = answeredIndexes.map((qIndex) => {
+  const answeredSet = new Set(answeredIndexes);
+  const answeredRows = answeredIndexes.map((qIndex) => {
     const q = questions[qIndex] || {};
     const rawItem = rawAnswersByQ[String(qIndex)] || {};
     const auto = autoByQ.get(qIndex);
@@ -2118,6 +2119,22 @@ function renderInstantFeedbackFromState() {
       liClass: 'pending',
     };
   });
+
+  // Unanswered non-poll questions count as wrong — surface them in the list as
+  // red rows so the student sees blanks they can fix via Self-correct.
+  const blankRows = questions
+    .map((q, qIndex) => ({ q, qIndex }))
+    .filter(({ q, qIndex }) => q && !q.isPoll && !answeredSet.has(qIndex))
+    .map(({ q, qIndex }) => ({
+      qIndex,
+      q,
+      status: 'blank',
+      statusIcon: '❌',
+      points: 0,
+      liClass: 'bad blank',
+    }));
+
+  const rows = [...answeredRows, ...blankRows].sort((a, b) => a.qIndex - b.qIndex);
 
   // --- Score summary header ---
   // Unanswered non-poll questions count as wrong (added to the denominator with
