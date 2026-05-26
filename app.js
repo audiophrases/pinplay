@@ -16371,9 +16371,13 @@ function shuffleArrayCopy(arr) {
   return out;
 }
 
-function buildPaperQuestionHtml(q, index) {
+function buildPaperQuestionHtml(q, index, showReadingText) {
   const number = index + 1;
   const promptText = String(q.prompt || '').trim() || '(No prompt)';
+  const readingText = q.type !== 'pin' ? String(q.readingText || '').trim() : '';
+  const readingHtml = (showReadingText && readingText)
+    ? `<div class="pdf-reading">${escapeHtml(readingText).replace(/\n/g, '<br>')}</div>`
+    : '';
   // Treat voice-record + speaking as written open-answer on paper.
   const paperType = (q.type === 'voice_record' || q.type === 'speaking') ? 'open' : (q.type === 'voice_text' ? 'text' : q.type);
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -16397,10 +16401,14 @@ function buildPaperQuestionHtml(q, index) {
       break;
     }
     case 'text':
-    case 'open':
-    case 'error_hunt': {
+    case 'open': {
       // Just the prompt — students answer in their notebook. No extra body.
       body = '';
+      break;
+    }
+    case 'error_hunt': {
+      // The prompt is the sentence with errors — students need to know to rewrite it correctly.
+      body = ' <em>(rewrite the sentence, correcting all errors)</em>';
       break;
     }
     case 'context_gap': {
@@ -16446,7 +16454,7 @@ function buildPaperQuestionHtml(q, index) {
     promptHtml = escapeHtml(promptText);
   }
 
-  return `<div class="pdf-q"><span class="pdf-q-num">${number}.</span> <span class="pdf-q-prompt">${promptHtml}</span>${body}</div>`;
+  return `<div class="pdf-q">${readingHtml}<span class="pdf-q-num">${number}.</span> <span class="pdf-q-prompt">${promptHtml}</span>${body}</div>`;
 }
 
 function exportQuizToPdf(quizData) {
@@ -16459,7 +16467,13 @@ function exportQuizToPdf(quizData) {
   const safeTitle = escapeHtml(title);
   // Pin questions require an image to be answerable — skip them on paper.
   const paperQuestions = questions.filter((q) => q.type !== 'pin');
-  const body = paperQuestions.map((q, i) => buildPaperQuestionHtml(q, i)).join('');
+  let lastReading = '';
+  const body = paperQuestions.map((q, i) => {
+    const reading = String(q.readingText || '').trim();
+    const showReading = !!reading && reading !== lastReading;
+    if (reading) lastReading = reading;
+    return buildPaperQuestionHtml(q, i, showReading);
+  }).join('');
 
   const html = `<!doctype html>
 <html lang="en">
@@ -16489,6 +16503,7 @@ function exportQuizToPdf(quizData) {
   .pdf-match-col { display: block; }
   .pdf-puzzle { display: inline; }
   .pdf-chip { display: inline-block; border: 1px solid #999; border-radius: 3px; padding: 0 5px; margin: 1px 2px; font-size: 9.5pt; background: #f7f7f7; }
+  .pdf-reading { display: block; margin: 4px 0 4px; padding: 6px 8px; background: #f6f6f6; border-left: 3px solid #888; font-size: 9.5pt; line-height: 1.35; white-space: normal; font-weight: 400; color: #222; page-break-inside: avoid; }
   em, i { color: #555; font-style: italic; }
   @media print {
     .pdf-print-toolbar { display: none !important; }
