@@ -971,6 +971,8 @@ function collectTeacherFeedbackItems(state) {
         studentAnswerRaw: rawAnswer,
         correction: grade.correction || '',
         correctionAudioKey: grade.correctionAudioKey || '',
+        pointsAwarded: Number(grade.pointsAwarded || 0),
+        pointsPossible: Number(question.points || 0),
         gradedAt: grade.gradedAt,
       });
     }
@@ -1007,6 +1009,11 @@ async function showTeacherFeedback(code, attemptId) {
         if (!src.startsWith('http')) src = `${base}/api/media/${src}`;
         audioHtml = `<div style="margin-top:6px;"><audio controls src="${escapeHtml(src)}" style="height:28px;"></audio></div>`;
       }
+      const earned = Number(item.pointsAwarded || 0);
+      const possible = Number(item.pointsPossible || 0);
+      const scoreColor = earned > 0 ? '#3fb950' : '#f85149';
+      const scoreLabel = possible > 0 ? `${earned} / ${possible} pts` : `${earned} pts`;
+      const scoreBadge = `<span style="background:${scoreColor};color:white;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:bold;margin-left:6px;">${escapeHtml(scoreLabel)}</span>`;
       return `
         <div class="feedback-item" data-q-index="${item.qIndex}" role="button" tabindex="0"
              style="padding:10px 8px;border-bottom:1px solid rgba(63,185,80,0.2);font-size:13px;cursor:pointer;border-radius:6px;transition:background 0.15s;"
@@ -1014,6 +1021,7 @@ async function showTeacherFeedback(code, attemptId) {
           <div style="color:#8b949e;margin-bottom:4px;font-style:italic;">
             <span style="background:#3fb950;color:white;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:bold;margin-right:6px;">Q${item.qIndex + 1}</span>
             "${escapeHtml(item.question)}"
+            ${scoreBadge}
           </div>
           <div style="color:#3fb950; display:flex; flex-direction:column;">
             ${item.correction ? `<span>💬 Teacher: ${buildCorrectionDiffHtml(item.correction, item.studentAnswer || '')}</span>` : ''}
@@ -1221,11 +1229,22 @@ function showTeacherFeedbackOverlay(items) {
     const studentAnswerHtml = buildTfStudentAnswerHtml(item, base);
     const questionMediaHtml = buildTfQuestionMediaHtml(item, base);
 
+    const earned = Number(item.pointsAwarded || 0);
+    const possible = Number(item.pointsPossible || 0);
+    const scoreLabel = possible > 0 ? `${earned} / ${possible}` : `${earned}`;
+    const scoreStatus = earned > 0 ? 'tf-score-positive' : 'tf-score-zero';
+    const scoreHtml = `
+      <div class="tf-row tf-score-row ${scoreStatus}">
+        <div class="tf-row-label">🏅 Score</div>
+        <div class="tf-score-value">${escapeHtml(scoreLabel)} <span class="tf-score-unit">pts</span></div>
+      </div>`;
+
     body.innerHTML = `
       <div class="tf-q-tag">Q${item.qIndex + 1}</div>
       <div class="tf-q-prompt">${escapeHtml(promptText)}</div>
       ${questionMediaHtml}
       ${studentAnswerHtml}
+      ${scoreHtml}
       ${corrHtml}
       ${audioHtml}
     `;

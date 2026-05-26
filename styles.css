@@ -4348,7 +4348,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  font-size: clamp(15px, 1.6vw, 18px);
+  font-size: clamp(17px, 1.8vw, 20px);
   line-height: 1.65;
   color: #111827;
   white-space: pre-wrap;
@@ -4365,7 +4365,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
     top: 110px;
     bottom: 170px;
     padding: 16px 18px;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.55;
   }
 }
@@ -4382,7 +4382,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.6;
   color: #111827;
   white-space: pre-wrap;
