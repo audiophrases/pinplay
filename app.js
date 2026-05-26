@@ -3926,7 +3926,7 @@ async function exportCreationPrompt() {
   const lang = document.getElementById('promptLanguage')?.value.trim();
   const level = document.getElementById('promptLevel')?.value.trim();
   const timeLimit = document.getElementById('promptTimeLimit')?.value;
-  const count = document.getElementById('promptQuestionCount')?.value;
+  const count = document.getElementById('promptQuestionCount')?.value.trim();
   const batchSize = document.getElementById('promptBatchSize')?.value;
   const images = document.getElementById('promptImages')?.value;
   const audio = document.getElementById('promptAudio')?.value;
@@ -3948,7 +3948,10 @@ async function exportCreationPrompt() {
   if (lang) cleanRequest.language = lang;
   if (level) cleanRequest.level = level;
   cleanRequest.timeLimit = Number(timeLimit) || 0;
-  if (count) cleanRequest.questionCount = Number(count);
+  if (count) {
+    const asNum = Number(count);
+    cleanRequest.questionCount = (/^\d+$/.test(count) && Number.isFinite(asNum) && asNum > 0) ? asNum : count;
+  }
   const batchSizeNum = Number(batchSize);
   if (batchSizeNum >= 3) {
     cleanRequest.batchSize = Math.min(100, batchSizeNum);
@@ -4138,9 +4141,22 @@ async function exportCreationPrompt() {
     "Prioritize high-quality 'near-miss' distractors that perfectly challenge students — not too obvious, not too difficult.",
     'Keep language level aligned to request.',
     'Avoid redundant narration and filler text.',
-    cleanRequest.batchSize
-      ? `Create the ${cleanRequest.questionCount || 10} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
-      : `Create the entire ${cleanRequest.questionCount || 10} question quiz in a single batch (one JSON object containing all questions).`
+    (() => {
+      const qc = cleanRequest.questionCount;
+      const isTextualBrief = typeof qc === 'string';
+      const sizingDirective = isTextualBrief
+        ? `Decide the appropriate number of questions yourself based on this brief: "${qc}". Use pedagogical judgment — do not force a specific count.`
+        : null;
+      const numericCount = typeof qc === 'number' ? qc : 10;
+      if (cleanRequest.batchSize) {
+        return isTextualBrief
+          ? `${sizingDirective} Deliver the quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
+          : `Create the ${numericCount} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`;
+      }
+      return isTextualBrief
+        ? `${sizingDirective} Return the entire quiz as a single JSON object containing all questions.`
+        : `Create the entire ${numericCount} question quiz in a single batch (one JSON object containing all questions).`;
+    })()
   ].filter(Boolean);
 
   const promptText = [

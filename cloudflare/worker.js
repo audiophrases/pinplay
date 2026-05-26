@@ -4448,7 +4448,7 @@ export class QuizRoom {
 
 function summarizeHistoryAnswer(question, answer) {
   if (!question) return '(no answer)';
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'tf'].includes(question.type)) {
     const idx = Number(answer);
     return Number.isFinite(idx) ? String(question.answers?.[idx]?.text || `Option ${idx + 1}`) : '(blank)';
   }
@@ -4935,7 +4935,7 @@ function evaluate(question, answer) {
   // Number(null) === 0 silently marked the first option as correct for mcq/tf/audio.
   if (answer === null || answer === undefined || answer === '') return { correct: false };
 
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'tf'].includes(question.type)) {
     const selected = Number(answer);
     if (!Number.isFinite(selected)) return { correct: false };
     const correctIndex = (question.answers || []).findIndex((a) => !!a.correct);
@@ -5064,7 +5064,7 @@ function normalizeQuiz(quiz) {
       media: normalizeQuestionMedia(q),
     };
 
-    if (['mcq', 'multi', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi'].includes(q.type)) {
       const answers = (q.answers || [])
         .slice(0, 10)
         .map((a) => ({ text: String(a.text || '').slice(0, 90), correct: !!a.correct }))
@@ -6708,7 +6708,7 @@ function summarizePoll(question, responses) {
 
   const answers = visible.map((r) => r?.answer);
 
-  if (['mcq', 'tf', 'audio'].includes(question?.type)) {
+  if (['mcq', 'tf'].includes(question?.type)) {
     answers.forEach((a) => {
       const idx = Number(a);
       const txt = Number.isFinite(idx) ? String(question.answers?.[idx]?.text || `Option ${idx + 1}`) : '(blank)';
@@ -6755,7 +6755,7 @@ function summarizePoll(question, responses) {
 function hostCorrectSummary(question) {
   if (!question) return '';
 
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'tf'].includes(question.type)) {
     const idx = (question.answers || []).findIndex((a) => !!a.correct);
     return idx >= 0 ? `${idx + 1}. ${(question.answers[idx]?.text || '').trim()}` : '';
   }
