@@ -1840,6 +1840,19 @@ textarea.join-answer-input:focus {
   text-decoration: line-through;
 }
 
+/* Ensure input-style answer surfaces stay readable when a question has a
+   background image. MCQ-style choice rows already have opaque card styling;
+   form-based answers (text inputs, selects, textareas) inherit transparent
+   defaults and become unreadable against image backdrops. */
+#joinAnswers input[type="text"],
+#joinAnswers input[type="search"],
+#joinAnswers input[type="number"],
+#joinAnswers select,
+#joinAnswers textarea {
+  background: var(--card-bg, #fff);
+  color: var(--text, #111);
+}
+
 /* Context Gap */
 .context-gap-inline {
   display: flex;
