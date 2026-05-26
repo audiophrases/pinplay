@@ -2223,7 +2223,7 @@ function renderInstantFeedbackFromState() {
       li.appendChild(ptsEl);
     }
 
-    const prompt = r.q.prompt ? String(r.q.prompt).slice(0, 55) : `Question ${Number(r.qIndex) + 1}`;
+    const prompt = r.q.prompt ? String(r.q.prompt).slice(0, 140) : `Question ${Number(r.qIndex) + 1}`;
     const promptEl = document.createElement('span');
     promptEl.className = 'result-prompt';
     promptEl.textContent = prompt;
