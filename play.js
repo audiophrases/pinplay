@@ -2910,7 +2910,32 @@ function renderPlayerState(state) {
     const title = document.createElement('div');
     title.className = 'student-answer-reveal-title';
     title.style.color = '#dc2626';
-    title.textContent = 'Teacher Feedback';
+    title.style.display = 'flex';
+    title.style.alignItems = 'center';
+    title.style.justifyContent = 'space-between';
+    title.style.gap = '0.5rem';
+
+    const titleText = document.createElement('span');
+    titleText.textContent = 'Teacher Feedback';
+    title.appendChild(titleText);
+
+    const earnedPts = Number(rrNow?.pointsAwarded || 0);
+    const possiblePts = Number(state?.question?.points || 0);
+    if (Number.isFinite(earnedPts) && (possiblePts > 0 || earnedPts !== 0)) {
+      const scoreBadge = document.createElement('span');
+      const positive = earnedPts > 0;
+      scoreBadge.style.background = positive ? '#3fb950' : '#dc2626';
+      scoreBadge.style.color = 'white';
+      scoreBadge.style.borderRadius = '999px';
+      scoreBadge.style.padding = '2px 10px';
+      scoreBadge.style.fontSize = '0.78rem';
+      scoreBadge.style.fontWeight = '700';
+      scoreBadge.style.letterSpacing = '0.02em';
+      scoreBadge.textContent = possiblePts > 0
+        ? `${earnedPts} / ${possiblePts} pts`
+        : `${earnedPts} pts`;
+      title.appendChild(scoreBadge);
+    }
 
     const content = document.createElement('div');
     content.className = 'student-answer-reveal-content';

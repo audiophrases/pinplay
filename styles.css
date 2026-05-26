@@ -2792,6 +2792,44 @@ button.review-retake-attempt-row:active {
   height: 36px;
 }
 
+.tf-score-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+}
+
+.tf-score-row.tf-score-zero {
+  background: rgba(248, 81, 73, 0.12);
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.tf-score-row.tf-score-zero .tf-row-label {
+  color: #8a1f1a;
+}
+
+.tf-score-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #14532d;
+  letter-spacing: 0.02em;
+}
+
+.tf-score-row.tf-score-zero .tf-score-value {
+  color: #8a1f1a;
+}
+
+.tf-score-unit {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-left: 0.15rem;
+}
+
 /* Collapsible "Your answer" and "Question media" sections — kept compact so the
    teacher's correction stays the focal point but a tap reveals the original
    prompt media or the student's own submission. */
