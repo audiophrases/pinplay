@@ -2504,16 +2504,28 @@ function renderRetakeHeader() {
   if (!header) {
     header = document.createElement('div');
     header.id = 'retakeHeader';
-    header.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:#8b5cf6;color:white;padding:0.5rem 0.85rem;display:flex;align-items:center;gap:0.5rem;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+    header.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;color:white;padding:0.55rem 0.85rem;display:flex;align-items:center;gap:0.5rem;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,0.2);transition:background 180ms ease;';
     document.body.appendChild(header);
   }
   const total = retake.eligible.length;
   const cleared = retake.cleared.length;
+  const result = retake.currentResult;
+
+  // Verdict-aware coloring: flip to green/red after submit, back to purple on advance.
+  // Always-visible (fixed top) banner means the student can't miss the verdict.
+  let bg = '#8b5cf6';
+  let icon = '🔄';
+  let labelText = `Self-correct · ${cleared}/${total} cleared`;
+  if (result) {
+    if (result.correct) { bg = '#10b981'; icon = '✅'; labelText = `Correct! · ${cleared}/${total} cleared`; }
+    else { bg = '#ef4444'; icon = '❌'; labelText = `Not quite · ${cleared}/${total} cleared`; }
+  }
+  header.style.background = bg;
   header.innerHTML = '';
 
   const label = document.createElement('span');
-  label.style.cssText = 'font-weight:700;font-size:0.9rem;';
-  label.textContent = `🔄 Self-correct · ${cleared}/${total} cleared`;
+  label.style.cssText = 'font-weight:700;font-size:0.95rem;';
+  label.textContent = `${icon} ${labelText}`;
 
   const exit = document.createElement('button');
   exit.type = 'button';
@@ -2523,6 +2535,34 @@ function renderRetakeHeader() {
   exit.addEventListener('click', () => exitRetakeMode());
 
   header.append(label, exit);
+}
+
+function renderRetakeVerdictBanner(result) {
+  const wrap = joinQuestionWrap || joinCardEl;
+  if (!wrap) return;
+
+  const existing = wrap.querySelector('[data-retake-verdict="1"]');
+  if (existing) existing.remove();
+  if (!result) return;
+
+  const banner = document.createElement('div');
+  banner.dataset.retakeVerdict = '1';
+  const bg = result.correct ? '#10b981' : '#ef4444';
+  banner.style.cssText = `background:${bg};color:white;padding:0.9rem 1.1rem;border-radius:12px;margin:0.5rem auto 0.75rem;max-width:560px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,0.18);`;
+
+  const headline = document.createElement('div');
+  headline.style.cssText = 'font-size:1.35rem;font-weight:800;';
+  headline.textContent = result.correct ? '✅ Correct!' : '❌ Not quite — try again';
+  banner.appendChild(headline);
+
+  if (!result.correct && result.correctAnswerText) {
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-size:0.95rem;margin-top:0.4rem;opacity:0.95;font-weight:500;';
+    sub.textContent = `Correct answer: ${result.correctAnswerText}`;
+    banner.appendChild(sub);
+  }
+
+  wrap.insertBefore(banner, wrap.firstChild);
 }
 
 function enterRetakeMode(state) {
@@ -2582,6 +2622,7 @@ function exitRetakeMode() {
   retake.currentResult = null;
   document.getElementById('retakeHeader')?.remove();
   document.body.classList.remove('retake-mode-active');
+  renderRetakeVerdictBanner(null);
 
   // Restore the all-answered screen behavior for the normal review flow.
   live.player.assignment.bypassAllAnsweredScreen = false;
@@ -2628,7 +2669,12 @@ async function handleRetakeSubmit() {
     correctAnswerText: clientCorrectAnswerText(question),
   };
 
-  live.player.renderKey = null; // force the reveal panel + locked inputs to mount
+  // Re-render WITHOUT invalidating renderKey. A fresh re-mount would pre-fill
+  // inputs from state.attempt.answersByQ — which holds the ORIGINAL wrong
+  // answer — clobbering the pick the student just made for the retake. Keep
+  // the existing DOM (their just-submitted pick) and layer verdict UI on top.
+  // (renderKey invalidation belongs in advanceRetake/enterRetakeMode where we
+  // actually want a fresh mount on a new question or a wrap-around.)
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
 
@@ -2646,6 +2692,9 @@ async function handleRetakeSubmit() {
     });
     joinAnswersEl.style.pointerEvents = 'none';
   }
+  // Prominent, can't-miss visual feedback for the drill loop.
+  renderRetakeHeader();
+  renderRetakeVerdictBanner(retake.currentResult);
 }
 
 function advanceRetake(wasCorrect) {
@@ -2678,6 +2727,7 @@ function advanceRetake(wasCorrect) {
   const next = uncleared.find((i) => i > currentIdx) ?? uncleared[0];
   live.player.assignment.currentIndex = next;
   renderRetakeHeader();
+  renderRetakeVerdictBanner(null); // clear the verdict banner before the next question
   // Force fresh DOM mount. Without this, when the loop wraps back to the same
   // question (or even to a different one where the renderKey happens to match),
   // stateful inputs like voice_text recorders stay frozen in their prior state.
