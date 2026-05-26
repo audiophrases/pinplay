@@ -2042,11 +2042,10 @@ function renderInstantFeedbackFromState() {
     shouldShowFeedback = !!attempt?.submitted && anyAnswered;
   }
 
-  // Once submitted and not in active reviewMode, hide the question UI so the
-  // results panel can use the full middle area. ReviewMode keeps the question
-  // visible because that's the per-question review experience.
   const isReviewMode = !!live.player.assignment?.reviewMode;
-  document.body.classList.toggle('post-submit-summary', shouldShowFeedback && !isReviewMode);
+  // Legacy hider — the drawer no longer needs the full middle area, so this
+  // class should never be on. Clear it defensively in case anything still set it.
+  document.body.classList.remove('post-submit-summary');
 
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
 
@@ -2063,12 +2062,9 @@ function renderInstantFeedbackFromState() {
 
   const panel = document.createElement('div');
   panel.id = 'assignmentResultsPanel';
-  panel.className = 'assignment-results';
-  if (isReviewMode) {
-    panel.classList.add('drawer-mode');
-    const drawerOpen = live.player.assignment.resultsDrawerOpen !== false;
-    if (!drawerOpen) panel.classList.add('drawer-closed');
-  }
+  panel.className = 'assignment-results drawer-mode';
+  const drawerOpen = live.player.assignment.resultsDrawerOpen !== false;
+  if (!drawerOpen) panel.classList.add('drawer-closed');
 
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
 
@@ -2155,22 +2151,20 @@ function renderInstantFeedbackFromState() {
 
   panel.appendChild(header);
 
-  // --- Drawer close button (review mode only) ---
-  if (isReviewMode) {
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'assignment-results-close';
-    closeBtn.setAttribute('aria-label', 'Hide question summary');
-    closeBtn.title = 'Hide question summary';
-    closeBtn.textContent = '✕';
-    closeBtn.addEventListener('click', () => {
-      live.player.assignment.resultsDrawerOpen = false;
-      panel.classList.add('drawer-closed');
-      const handle = document.getElementById('assignmentResultsHandle');
-      if (handle) handle.classList.remove('hidden');
-    });
-    panel.appendChild(closeBtn);
-  }
+  // --- Drawer close button ---
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'assignment-results-close';
+  closeBtn.setAttribute('aria-label', 'Hide question summary');
+  closeBtn.title = 'Hide question summary';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', () => {
+    live.player.assignment.resultsDrawerOpen = false;
+    panel.classList.add('drawer-closed');
+    const handle = document.getElementById('assignmentResultsHandle');
+    if (handle) handle.classList.remove('hidden');
+  });
+  panel.appendChild(closeBtn);
 
   // --- Collapsible toggle ---
   const toggleBtn = document.createElement('button');
@@ -2260,25 +2254,22 @@ function renderInstantFeedbackFromState() {
 
   wrap.appendChild(panel);
 
-  // --- Drawer handle (review mode only): re-opens the drawer when closed. ---
+  // --- Drawer handle: re-opens the drawer when closed. ---
   document.getElementById('assignmentResultsHandle')?.remove();
-  if (isReviewMode) {
-    const handle = document.createElement('button');
-    handle.id = 'assignmentResultsHandle';
-    handle.type = 'button';
-    handle.className = 'assignment-results-handle';
-    const drawerOpen = live.player.assignment.resultsDrawerOpen !== false;
-    if (drawerOpen) handle.classList.add('hidden');
-    handle.setAttribute('aria-label', 'Show question summary');
-    handle.title = 'Show question summary';
-    handle.innerHTML = `<span>📋</span><span class="handle-count">${rows.length}/${questions.length}</span>`;
-    handle.addEventListener('click', () => {
-      live.player.assignment.resultsDrawerOpen = true;
-      panel.classList.remove('drawer-closed');
-      handle.classList.add('hidden');
-    });
-    document.body.appendChild(handle);
-  }
+  const handle = document.createElement('button');
+  handle.id = 'assignmentResultsHandle';
+  handle.type = 'button';
+  handle.className = 'assignment-results-handle';
+  if (drawerOpen) handle.classList.add('hidden');
+  handle.setAttribute('aria-label', 'Show question summary');
+  handle.title = 'Show question summary';
+  handle.innerHTML = `<span>📋</span><span class="handle-count">${rows.length}/${questions.length}</span>`;
+  handle.addEventListener('click', () => {
+    live.player.assignment.resultsDrawerOpen = true;
+    panel.classList.remove('drawer-closed');
+    handle.classList.add('hidden');
+  });
+  document.body.appendChild(handle);
 
   if (prevListScrollTop > 0 && !listCollapsed) {
     listWrap.scrollTop = prevListScrollTop;

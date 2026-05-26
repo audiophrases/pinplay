@@ -2136,14 +2136,6 @@ textarea.join-answer-input:focus {
   border-radius: 10px;
 }
 
-/* Post-submission summary: hide the question UI so the results panel
-   (and the "Assignment submitted" box) get the full middle area.
-   ReviewMode is excluded — it intentionally shows the question alongside results. */
-body.post-submit-summary #joinPrompt,
-body.post-submit-summary #joinQuestionInteractive {
-  display: none !important;
-}
-
 /* Drawer mode: in review mode the results panel slides in from the right
    over the question, so the question itself can render fully opaque. */
 .assignment-results.drawer-mode {
