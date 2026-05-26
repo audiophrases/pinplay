@@ -325,6 +325,29 @@
       "accepted": ["manzana", "una manzana", "la manzana"],
       "imageKeyword": "red apple",
       "imageData": ""
+    },
+    {
+      "id": "q15-reading-comprehension",
+      "type": "mcq",
+      "prompt": "According to the passage, what is the main reason monarch butterflies migrate south each autumn?",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "NONE",
+      "imageKeyword": "",
+      "videoKeyword": "",
+      "videoProviderPreference": "",
+      "gifKeyword": "",
+      "imageData": "",
+      "readingText": "Each autumn, monarch butterflies travel up to 4,800 km from Canada and the United States to central Mexico. The trigger is not a single weather event but a combination of shorter day length, falling temperatures, and the aging of milkweed — their only larval food plant. The southbound trip takes one super-generation several weeks; the return north is staged across three or four successive generations, none of which ever completes the full round trip.",
+      "answers": [
+        { "text": "Shorter daylight and food-plant decline", "correct": true },
+        { "text": "Predator pressure in northern habitats", "correct": false },
+        { "text": "Shifts in the Earth's magnetic field", "correct": false }
+      ]
     }
   ],
   "language": "en-US-JennyNeural"

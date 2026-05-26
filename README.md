@@ -30,10 +30,11 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - Match pairs (drag-and-drop matching)
 - Error hunt (find and fix errors in text)
 - Puzzle (rearrange pieces)
-- Audio question (per-question audio file or TTS)
 - Slider (numeric range selection)
 - Pin answer (click on image, multiple correct zones supported)
 - Poll mode (anonymous, no points, per-question toggle)
+
+Audio (file upload or Edge TTS) is a per-question feature available on every type above — not a question type of its own.
 
 ### Quiz Builder (`/create/`)
 - Visual builder with inline editing and per-question type icons
@@ -45,6 +46,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
   - On save/export, questions with a keyword and no image are auto-searched (Openverse + Pexels)
   - Leave the keyword empty to skip auto-image for that question
 - GIF support via **GIPHY** integration (per-question GIF keyword + search; requires GIPHY API key)
+- **Reading-text passages** (📖 button per question): paste a passage of up to 10,000 characters that appears centered in place of the image/GIF. Scrollable, non-selectable, non-copyable — designed for reading-comprehension prompts and as a soft anti-cheat surface against translation/AI tools. Mutually exclusive with image/GIF on the same question. Not available on `pin`.
 - Large media (base64 images/audio) auto-extracted into Cloudflare R2 on save to avoid SQLite size limits
 - **Drag-and-drop** files onto question rows; **batch attach** media files across multiple questions
 - Local save via localStorage + JSON import/export (`.json` and `.txt` accepted)
@@ -270,6 +272,20 @@ wrangler deploy
         { "text": "Octopus", "correct": false },
         { "text": "Dog", "correct": true },
         { "text": "Snail", "correct": false }
+      ],
+      "isPoll": false
+    },
+    {
+      "id": "q2",
+      "type": "mcq",
+      "prompt": "According to the passage, what is the main reason for the migration?",
+      "points": 1000,
+      "timeLimit": 0,
+      "readingText": "Each autumn, monarch butterflies travel up to 4,800 km from Canada and the United States to central Mexico. The trigger is not a single weather event but a combination of shorter day length, falling temperatures, and the aging of milkweed — their only food plant. The trip takes one generation of butterflies several weeks; the return north is staged across three or four successive generations.",
+      "answers": [
+        { "text": "Shorter daylight and food-plant decline", "correct": true },
+        { "text": "Predator pressure", "correct": false },
+        { "text": "Magnetic field shifts", "correct": false }
       ],
       "isPoll": false
     }

@@ -996,6 +996,10 @@ function setSectionCollapsed(triggerEl, bodyEl, collapsed) {
 // ---------- Builder ----------
 function addQuestionToBuilder(question) {
   if (question && typeof question === 'object') {
+    // Legacy: 'audio' was once a standalone question type. Audio is now a
+    // per-question feature on every type, so coerce legacy data to mcq (the
+    // same shape — audio fields are preserved).
+    if (question.type === 'audio') question.type = 'mcq';
     if (typeof question.imageKeyword !== 'string') question.imageKeyword = '';
     if (typeof question.gifKeyword !== 'string') question.gifKeyword = '';
     if (typeof question.videoKeyword !== 'string') question.videoKeyword = '';
@@ -2000,7 +2004,7 @@ function bindBuilderEvents() {
       }
     }
 
-    if ((el.dataset.answerIndex != null) && ['mcq', 'multi', 'audio'].includes(q.type)) {
+    if ((el.dataset.answerIndex != null) && ['mcq', 'multi'].includes(q.type)) {
       const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-answer-index]`)];
       const last = fields[fields.length - 1];
       if (el === last && fields.length < 10) {
@@ -2193,7 +2197,7 @@ function renderBuilder() {
 
     let specific = '';
 
-    if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'tf'].includes(q.type)) {
       const isMulti = q.type === 'multi';
       const maxAnswers = q.type === 'tf' ? 2 : 10;
       const baseMin = q.type === 'tf' ? 2 : 3;
@@ -3174,7 +3178,7 @@ function syncQuizFromUI() {
       replaceQuestionImageData(q, '');
     }
 
-    if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi', 'tf'].includes(q.type)) {
       q.answers = q.answers || [];
       const answerSlots = q.type === 'tf' ? 2 : 10;
       while (q.answers.length < answerSlots) q.answers.push({ text: '', correct: false });
@@ -10591,7 +10595,7 @@ function renderHostQuestion(state) {
     return;
   }
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf'].includes(question.type)) {
     const correctSet = new Set(Array.isArray(question.correctIndexes) ? question.correctIndexes : []);
 
     const indices = answerDisplayOrder(question);
@@ -10611,7 +10615,7 @@ function renderHostQuestion(state) {
 
 
 
-    hostQuestionHintEl.textContent = question.type === 'audio' ? 'Audio question.' : '';
+    hostQuestionHintEl.textContent = '';
     return;
   }
 
@@ -11734,7 +11738,7 @@ function renderJoinQuestion(question) {
     joinAnswersEl.appendChild(mediaWrap);
   }
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
     const indices = answerDisplayOrder(question);
@@ -12105,7 +12109,7 @@ function readJoinAnswer() {
   const q = live.player.currentQuestion;
   if (!q) return null;
 
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'tf'].includes(q.type)) {
     const checked = joinAnswersEl.querySelector('input[name="join-answer"]:checked');
     return checked ? Number(checked.value) : null;
   }
@@ -12777,7 +12781,7 @@ function buildPreviewHostQuestion(q) {
     zoneCount: Array.isArray(q.zones) ? q.zones.length : (q.zone ? 1 : 1),
   };
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'multi', 'tf'].includes(q.type)) {
     const answers = (q.answers || []).map((a) => ({ text: String(a.text || ''), isCorrect: !!a.correct }));
     return { ...base, answers, correctIndexes: answers.map((a, i) => (a.isCorrect ? i : null)).filter((x) => x !== null) };
   }
@@ -12800,7 +12804,7 @@ function buildPreviewHostQuestion(q) {
 
 function evaluatePreviewAnswer(q, answer) {
   if (!q) return { correct: false };
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'tf'].includes(q.type)) {
     const selected = Number(answer);
     const correctIndex = (q.answers || []).findIndex((a) => !!a.correct);
     return { correct: Number.isFinite(selected) && selected === correctIndex };
@@ -13039,7 +13043,7 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   }
 
   const ok = player.previewResult === 'correct';
-  if (['mcq', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'tf'].includes(question.type)) {
     const answers = Array.isArray(question.answers) ? question.answers : [];
     const correctIdx = Math.max(0, answers.findIndex((a) => !!a.isCorrect));
     const wrongIdx = Math.max(0, answers.findIndex((a, i) => !a.isCorrect && i !== correctIdx));
@@ -13341,7 +13345,7 @@ function renderSoloQuestion() {
 
   answersEl.innerHTML = '';
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'multi', 'tf'].includes(q.type)) {
     const isMulti = q.type === 'multi';
 
     const indices = answerDisplayOrder(q);
@@ -13643,7 +13647,7 @@ function renderSoloQuestion() {
   }
 }
 function evaluateSoloQuestion(q) {
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'tf'].includes(q.type)) {
     const checked = answersEl.querySelector('input[name="solo-answer"]:checked');
     if (!checked) return { correct: false, hint: 'Select an answer first.' };
 
@@ -14190,6 +14194,9 @@ function normalizeQuizForLive(raw) {
   };
 
   (raw.questions || []).forEach((q) => {
+    // Legacy migration: 'audio' was once a standalone question type. Audio is
+    // now a feature on every type — coerce to mcq before normalizing.
+    if (q && q.type === 'audio') q.type = 'mcq';
     const questionLangSeed = q.ttsLanguage || (q.language ? guessTtsLanguageFromVoice(q.language) : quizTtsLanguage);
     const questionTtsLanguage = normalizeTtsLanguage(questionLangSeed);
     const preferredQuestionVoice = q.language || (questionTtsLanguage === 'OTHER' ? quizVoice : '');
@@ -14220,7 +14227,7 @@ function normalizeQuizForLive(raw) {
       base._ttsVoiceMissing = true;
     }
 
-    if (['mcq', 'multi', 'audio'].includes(q.type)) {
+    if (['mcq', 'multi'].includes(q.type)) {
       const answers = (q.answers || [])
         .slice(0, 10)
         .map((a) => ({ text: String(a.text || '').slice(0, 90), correct: !!a.correct }))
@@ -15117,7 +15124,7 @@ function salvageQuestionForImport(q) {
     }
   }
 
-  if (['mcq', 'multi', 'audio'].includes(q.type)) {
+  if (['mcq', 'multi'].includes(q.type)) {
     const answers = (Array.isArray(q.answers) ? q.answers : []).filter((a) => String(a?.text || '').trim());
     if (answers.length < 2) {
       const correct = answers.find((a) => a?.correct) || answers[0];
@@ -15623,7 +15630,6 @@ function supportsQuestionAudio(type) {
 
 function hasQuestionAudio(question) {
   if (!question) return false;
-  if (question.type === 'audio') return true;
   if (!supportsQuestionAudio(question.type)) return false;
   return !!question.audioEnabled;
 }

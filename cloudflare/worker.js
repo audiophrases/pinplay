@@ -4659,7 +4659,7 @@ function hostQuestionPayload(question) {
   const base = publicQuestion(question);
   if (!base) return null;
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf'].includes(question.type)) {
     const answers = (question.answers || []).map((a) => ({ text: a.text, isCorrect: !!a.correct }));
     const correctIndexes = answers.map((a, idx) => (a.isCorrect ? idx : null)).filter((idx) => idx !== null);
     return {
@@ -4784,8 +4784,11 @@ function startQuestion(room, index) {
 
 function publicQuestion(question, { includeAnswerKey = false } = {}) {
   if (!question) return null;
+  // Legacy: coerce removed-type 'audio' to 'mcq' on read (audio is a feature
+  // on every type now). Lets old stored rows render without re-storing.
+  if (question.type === 'audio') question = { ...question, type: 'mcq' };
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf'].includes(question.type)) {
     return {
       type: question.type,
       prompt: question.prompt,
@@ -5040,6 +5043,10 @@ function normalizeQuiz(quiz) {
   };
 
   (quiz.questions || []).forEach((q) => {
+    // Legacy migration: 'audio' was once a standalone question type. Audio is
+    // now a feature on every type — coerce to mcq (same shape; audio fields
+    // are kept by the per-type branches below).
+    if (q && q.type === 'audio') q.type = 'mcq';
     const base = {
       id: String(q.id || randomId('q_')),
       type: q.type,

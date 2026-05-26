@@ -320,6 +320,26 @@
       ]
     },
     {
+      "id": "showcase-feature-reading",
+      "type": "mcq",
+      "prompt": "💡 Feature — Reading passage (📖): Replace the image with a centered, scrollable passage students must read before answering. Text can't be selected or copied (a soft anti-cheat against translation/AI tools). Mutually exclusive with images/GIFs. Up to 10,000 characters per question — great for reading comprehension, gap-fill in context, or any question where the prompt needs a paragraph of source material.\n\nQ: According to the passage, why do monarch butterflies migrate south each autumn?",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "imageData": "",
+      "readingText": "Each autumn, monarch butterflies travel up to 4,800 km from Canada and the United States to central Mexico, where they cluster in dense colonies on a small number of oyamel fir trees in the mountains of Michoacán.\n\nThe trigger for the journey is not a single weather event but a combination of cues: shorter day length, falling temperatures, and the aging of milkweed — the only plant their caterpillars can eat. As milkweed dies back, breeding stops and the butterflies enter a non-reproductive state that lets them live up to nine months instead of the usual six weeks.\n\nThe southbound trip takes one super-generation of butterflies several weeks of continuous flight. The return north in spring is staged across three or four successive generations, each travelling part of the route before reproducing and dying. No individual butterfly ever completes the round trip — yet each spring, the colonies in Mexico empty out and the monarchs return to the same northern fields their great-great-grandparents left.",
+      "answers": [
+        { "text": "Shorter daylight and the death of their food plant", "correct": true },
+        { "text": "Pressure from predators in the north", "correct": false },
+        { "text": "Shifts in the Earth's magnetic field", "correct": false },
+        { "text": "Competition from other butterfly species", "correct": false }
+      ]
+    },
+    {
       "id": "showcase-feature-timer",
       "type": "mcq",
       "prompt": "💡 Feature — Timer (timeLimit in seconds): Set 0 for no timer (default — best for most classroom learning). Use a positive value to add retrieval pressure. This question has a 15-second timer to demo the feel.\n\nQ: Quick! What is 7 × 8?",

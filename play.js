@@ -2231,7 +2231,7 @@ function isSelfCorrectingQuestion(question) {
     const accepted = (question.accepted || []).map((s) => String(s || '').trim()).filter(Boolean);
     return accepted.length > 0;
   }
-  if (t === 'mcq' || t === 'tf' || t === 'multi' || t === 'audio') {
+  if (t === 'mcq' || t === 'tf' || t === 'multi') {
     const answers = Array.isArray(question.answers) ? question.answers : [];
     return answers.some((a) => a && a.correct === true);
   }
@@ -2286,7 +2286,7 @@ function getRetakeEligibleIndexes(state) {
 function gradeSelfCorrectAnswer(question, userAnswer) {
   if (!question) return false;
   const t = question.type;
-  if (t === 'mcq' || t === 'tf' || t === 'audio') {
+  if (t === 'mcq' || t === 'tf') {
     const i = Number(userAnswer);
     const answers = Array.isArray(question.answers) ? question.answers : [];
     return !!(answers[i] && answers[i].correct === true);
@@ -2440,7 +2440,7 @@ function renderRetakeRow(panel, state) {
 function clientCorrectAnswerText(question) {
   if (!question) return '';
   const t = question.type;
-  if (t === 'mcq' || t === 'tf' || t === 'audio') {
+  if (t === 'mcq' || t === 'tf') {
     const answers = question.answers || [];
     const idx = answers.findIndex((a) => !!a.correct);
     if (idx < 0) return '';
@@ -3535,7 +3535,7 @@ function renderJoinQuestion(question) {
 
   // Remove the old inline image preview logic for generic questions
 
-  if (['mcq', 'multi', 'tf', 'audio'].includes(question.type)) {
+  if (['mcq', 'multi', 'tf'].includes(question.type)) {
     const isMulti = question.type === 'multi';
 
     const indices = answerDisplayOrder(question);
@@ -3586,27 +3586,6 @@ function renderJoinQuestion(question) {
 
 
 
-    if (question.type === 'audio') {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn top-space';
-      btn.textContent = '🔊 Play audio';
-      btn.addEventListener('click', () => {
-        // Prefer pre-recorded audio file if available
-        if (question.audioMode === 'file' && question.audioData) {
-          let audioUrl = question.audioData;
-          if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
-            const base = loadBackendUrl() || 'https://api.pinplay.win';
-            audioUrl = `${base}/api/media/${audioUrl}`;
-          }
-          const audio = new Audio(audioUrl);
-          audio.play().catch(() => speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave'));
-        } else {
-          speakText(question.audioText || question.prompt || '', question.language || 'en-US-Wave');
-        }
-      });
-      joinAnswersEl.appendChild(btn);
-    }
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -4395,7 +4374,7 @@ function readJoinAnswer() {
   const q = live.player.currentQuestion;
   if (!q || !joinAnswersEl) return null;
 
-  if (['mcq', 'tf', 'audio'].includes(q.type)) {
+  if (['mcq', 'tf'].includes(q.type)) {
     const checked = joinAnswersEl.querySelector('input[name="join-answer"]:checked');
     return checked ? Number(checked.value) : null;
   }
@@ -5478,7 +5457,6 @@ function assignmentVideoEmbedConfig(media) {
 
 function hasAssignmentQuestionAudio(question) {
   if (!question) return false;
-  if (question.type === 'audio') return true;
   if (!supportsAssignmentQuestionAudio(question.type)) return false;
   return !!question.audioEnabled;
 }
