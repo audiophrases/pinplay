@@ -2248,44 +2248,11 @@ textarea.join-answer-input:focus {
   color: #6366f1;
 }
 
-.assignment-results-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  background: none;
-  border: none;
-  padding: 0.3rem 0;
-  margin: 0.15rem 0 0.25rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  user-select: none;
-}
-
-.assignment-results-toggle:hover {
-  color: #4338ca;
-}
-
-.toggle-arrow {
-  display: inline-block;
-  transition: transform 0.2s;
-  font-size: 0.9rem;
-}
-
 .assignment-results-list-wrap {
-  max-height: 40vh;
   overflow-y: auto;
   overflow-x: hidden;
-  transition: max-height 0.3s ease, opacity 0.3s ease;
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
-}
-
-.assignment-results-list-wrap.collapsed {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
 }
 
 .assignment-results-list-wrap::-webkit-scrollbar {
