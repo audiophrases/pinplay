@@ -2116,11 +2116,19 @@ function renderInstantFeedbackFromState() {
   });
 
   // --- Score summary header ---
+  // Unanswered non-poll questions count as wrong (added to the denominator with
+  // zero points earned). Polls have no right answer, so they're excluded. Pending
+  // teacher-graded answers are excluded until the teacher grades them.
   const pendingCount = rows.filter((r) => r.status === 'pending').length;
+  const pendingQIndexes = new Set(
+    rows.filter((r) => r.status === 'pending').map((r) => Number(r.qIndex))
+  );
   const totalPoints = rows.reduce((sum, r) => sum + Number(r.points || 0), 0);
-  const earnablePoints = rows
-    .filter((r) => r.status !== 'pending')
-    .reduce((sum, r) => sum + Number(r.q?.points || 0), 0);
+  const earnablePoints = questions.reduce((sum, q, i) => {
+    if (!q || q.isPoll) return sum;
+    if (pendingQIndexes.has(i)) return sum;
+    return sum + Number(q.points || 0);
+  }, 0);
   const percent = earnablePoints > 0 ? Math.round((totalPoints / earnablePoints) * 100) : 0;
 
   const header = document.createElement('div');
