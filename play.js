@@ -3657,7 +3657,15 @@ function renderJoinQuestion(question) {
       v.controls = true;
       v.preload = 'metadata';
       v.className = 'question-video-el';
-      v.addEventListener('loadedmetadata', () => { v.currentTime = videoCfg.startAt || 0; }, { once: true });
+      const vStart = videoCfg.startAt || 0;
+      v.addEventListener('loadedmetadata', () => { v.currentTime = vStart; }, { once: true });
+      // When replaying, snap back into the configured [startAt, endAt] window
+      // if the playhead is outside it (e.g. left at endAt or scrubbed to 0).
+      v.addEventListener('play', () => {
+        if (v.currentTime < vStart || (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt)) {
+          v.currentTime = vStart;
+        }
+      });
       v.addEventListener('timeupdate', () => {
         if (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt) v.pause();
       });
