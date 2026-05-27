@@ -3669,6 +3669,17 @@ function renderJoinQuestion(question) {
         if (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt) v.pause();
       });
       wrap.appendChild(v);
+      // Explicit replay control: restart the configured [startAt, endAt] clip
+      // from the beginning regardless of where the playhead currently sits.
+      const replayBtn = document.createElement('button');
+      replayBtn.type = 'button';
+      replayBtn.className = 'question-video-replay';
+      replayBtn.textContent = '↻ Replay clip';
+      replayBtn.addEventListener('click', () => {
+        v.currentTime = vStart;
+        v.play().catch(() => { });
+      });
+      wrap.appendChild(replayBtn);
     } else {
       const iframe = document.createElement('iframe');
       iframe.src = videoCfg.src;
