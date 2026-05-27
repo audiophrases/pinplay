@@ -1558,13 +1558,20 @@ body.question-active .join-title-row {
 }
 
 #joinCard.question-active .question-video-el {
-  width: min(100%, 760px);
+  /* Fill the fixed video box at a true 16:9 ratio. Width is derived from the
+     available height (viewport minus the 130px/192px insets and ~3rem for the
+     replay button) so the player never overflows, and capped at 1100px on
+     wide screens. An explicit aspect-ratio is required because an <iframe>
+     has no intrinsic size — height:auto alone collapses it. */
+  width: min(100%, 1100px, (100vh - 322px - 3rem) * 16 / 9);
   height: auto;
+  aspect-ratio: 16 / 9;
   min-height: 0;
-  flex: 0 1 auto;
-  max-height: min(40vh, 480px);
+  max-height: none; /* override the base .question-video-el 40vh cap */
+  flex: 0 0 auto;
   object-fit: contain;
-  margin: 0 auto;
+  border-radius: .6rem;
+  margin: 0;
 }
 
 .question-video-replay {
