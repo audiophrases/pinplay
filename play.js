@@ -3444,10 +3444,9 @@ function autofocusFirstAnswerInput(state) {
   if (live.player.assignment.reviewMode) return;
   if (!joinAnswersEl) return;
 
-  const input = joinAnswersEl.querySelector('input[type="text"]:not(:disabled), textarea:not(:disabled)');
-  if (input && typeof input.focus === 'function') {
-    input.focus({ preventScroll: true });
-  }
+  // Autofocus intentionally disabled: the student must click/tap into the answer
+  // field themselves so the cursor doesn't jump into the first input on navigation
+  // or Continue. (Index tracking above is kept harmless in case it's reinstated.)
 }
 
 function scheduleJoinAdaptiveFit() {
