@@ -3755,9 +3755,26 @@ function renderJoinQuestion(question) {
     } else {
       const iframe = document.createElement('iframe');
       iframe.src = videoCfg.src;
+      iframe.allow = 'autoplay; encrypted-media';
       iframe.allowFullscreen = true;
       iframe.className = 'question-video-el';
       wrap.appendChild(iframe);
+      // Enforce the [startAt, endAt] clip + replay across the iframe boundary.
+      const vStart = videoCfg.startAt || 0;
+      let replay = null;
+      if (videoCfg.provider === 'youtube') {
+        replay = setupYouTubeClip(iframe, vStart, videoCfg.endAt);
+      } else if (videoCfg.provider === 'vimeo') {
+        replay = setupVimeoClip(iframe, vStart, videoCfg.endAt);
+      }
+      if (replay) {
+        const replayBtn = document.createElement('button');
+        replayBtn.type = 'button';
+        replayBtn.className = 'question-video-replay';
+        replayBtn.textContent = '↻ Replay clip';
+        replayBtn.addEventListener('click', replay);
+        wrap.appendChild(replayBtn);
+      }
     }
     joinQuestionWrap.insertBefore(wrap, document.getElementById('joinQuestionInteractive') || null);
   }
@@ -5671,6 +5688,10 @@ function assignmentVideoEmbedConfig(media) {
       const e = new URL(`https://www.youtube.com/embed/${id}`);
       if (m.startAt > 0) e.searchParams.set('start', String(Math.floor(m.startAt)));
       if (m.endAt != null) e.searchParams.set('end', String(Math.floor(m.endAt)));
+      // enablejsapi lets us drive seek/play/pause across the iframe boundary
+      // (needed to re-clip on replay; the `start`/`end` params only apply once).
+      e.searchParams.set('enablejsapi', '1');
+      try { e.searchParams.set('origin', window.location.origin); } catch { }
       src = e.toString();
     }
     if (m.provider === 'vimeo' && u.hostname.includes('vimeo.com')) {
@@ -5682,6 +5703,106 @@ function assignmentVideoEmbedConfig(media) {
     }
     return { ...m, src };
   } catch { return { ...m, src: '' }; }
+}
+
+// Drive a YouTube embed across the iframe boundary so the configured
+// [startAt, endAt] clip is honored on every (re)play, not just the first.
+// Returns a replay() that restarts the clip from startAt. Requires the embed
+// URL to carry enablejsapi=1 (see assignmentVideoEmbedConfig).
+function setupYouTubeClip(iframe, startAt, endAt) {
+  const post = (func, args) => {
+    try {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func, args: args || [] }), '*');
+    } catch { }
+  };
+  const subscribe = () => {
+    try { iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { }
+  };
+  iframe.addEventListener('load', subscribe, { once: true });
+  let attempts = 0;
+  const poller = setInterval(() => { subscribe(); if (++attempts >= 10) clearInterval(poller); }, 500);
+
+  let prevState = -1;
+  // Tear down once the iframe leaves the DOM (question changed) so window
+  // message listeners don't accumulate over a session.
+  const guard = setInterval(() => {
+    if (!iframe.isConnected) {
+      window.removeEventListener('message', onMessage);
+      clearInterval(poller); clearInterval(guard);
+    }
+  }, 1000);
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (!e.data || typeof e.data !== 'string') return;
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    const info = msg && msg.info;
+    if (!info || typeof info.playerState !== 'number') return;
+    const t = Number(info.currentTime || 0);
+    const playing = info.playerState === 1;
+    // On a fresh play that starts outside the window (from 0, or replayed
+    // from the end), snap back to startAt; otherwise stop once we hit endAt.
+    if (playing && prevState !== 1 && (t < startAt - 0.3 || (endAt != null && t >= endAt - 0.1))) {
+      post('seekTo', [startAt, true]);
+    } else if (playing && endAt != null && t >= endAt) {
+      post('pauseVideo');
+    }
+    prevState = info.playerState;
+  };
+  window.addEventListener('message', onMessage);
+
+  return function replay() {
+    post('seekTo', [startAt, true]);
+    post('playVideo');
+  };
+}
+
+// Vimeo equivalent. Vimeo's postMessage API uses method/event envelopes and
+// fires timeupdate only while playing, so we track the last seen time and
+// re-clip on the play event.
+function setupVimeoClip(iframe, startAt, endAt) {
+  const post = (method, value) => {
+    try {
+      const payload = { method };
+      if (value !== undefined) payload.value = value;
+      iframe.contentWindow.postMessage(JSON.stringify(payload), '*');
+    } catch { }
+  };
+  const subscribe = () => {
+    ['timeupdate', 'play', 'finish'].forEach((ev) => post('addEventListener', ev));
+    post('setCurrentTime', startAt);
+  };
+  iframe.addEventListener('load', subscribe, { once: true });
+  let attempts = 0;
+  const poller = setInterval(() => { subscribe(); if (++attempts >= 10) clearInterval(poller); }, 500);
+
+  let lastT = startAt;
+  const guard = setInterval(() => {
+    if (!iframe.isConnected) {
+      window.removeEventListener('message', onMessage);
+      clearInterval(poller); clearInterval(guard);
+    }
+  }, 1000);
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (!e.data || typeof e.data !== 'string') return;
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.event === 'timeupdate') {
+      lastT = Number(msg.data && msg.data.seconds || 0);
+      if (endAt != null && lastT >= endAt) post('pause');
+    } else if (msg.event === 'play') {
+      // Replayed from outside the window (e.g. from the end) -> re-clip.
+      if (lastT < startAt - 0.3 || (endAt != null && lastT >= endAt - 0.1)) {
+        post('setCurrentTime', startAt);
+      }
+    }
+  };
+  window.addEventListener('message', onMessage);
+
+  return function replay() {
+    post('setCurrentTime', startAt);
+    post('play');
+  };
 }
 
 function hasAssignmentQuestionAudio(question) {
