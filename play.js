@@ -272,6 +272,21 @@ function init() {
     if (recBtn) { e.preventDefault(); recBtn.click(); }
   });
 
+  // Press 't' / 'T' to jump the cursor into the first blank answer field.
+  // (Autofocus is intentionally off, so this is the keyboard way in.)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 't' && e.key !== 'T') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (live.player.mode !== 'assignment') return;
+    if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const input = firstBlankAnswerInput() || answerTextInputs()[0];
+    if (input) {
+      e.preventDefault();
+      input.focus({ preventScroll: true });
+    }
+  });
+
   if (joinPinEl) {
     joinPinEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') validatePin();
@@ -306,6 +321,12 @@ function init() {
     // submit button flips back from Continue to Save answer (otherwise edits silently lost).
     joinAnswersEl.addEventListener('input', markAnswerDirty);
     joinAnswersEl.addEventListener('change', markAnswerDirty);
+
+    // Keep the 't' hint in sync with focus: hide it while a field is focused,
+    // re-show it on the first blank field once focus leaves.
+    joinAnswersEl.addEventListener('focusin', updateAnswerKeyHint);
+    joinAnswersEl.addEventListener('focusout', () => requestAnimationFrame(updateAnswerKeyHint));
+    joinAnswersEl.addEventListener('input', updateAnswerKeyHint);
   }
 }
 
@@ -3418,6 +3439,7 @@ function renderPlayerState(state) {
   scheduleJoinAdaptiveFit();
   suppressAnswerInputSuggestions();
   autofocusFirstAnswerInput(state);
+  scheduleAnswerKeyHint();
 }
 
 function suppressAnswerInputSuggestions() {
@@ -3447,6 +3469,56 @@ function autofocusFirstAnswerInput(state) {
   // Autofocus intentionally disabled: the student must click/tap into the answer
   // field themselves so the cursor doesn't jump into the first input on navigation
   // or Continue. (Index tracking above is kept harmless in case it's reinstated.)
+}
+
+// All enabled typed-answer fields in the current question, in document order.
+function answerTextInputs() {
+  if (!joinAnswersEl) return [];
+  return Array.from(joinAnswersEl.querySelectorAll(
+    'input[type="text"]:not(:disabled), textarea:not(:disabled)'
+  ));
+}
+
+// First typed-answer field that is still empty, or null if all are filled.
+function firstBlankAnswerInput() {
+  return answerTextInputs().find((f) => !String(f.value || '').trim()) || null;
+}
+
+// Show a subtle grey "t" key hint on the first blank answer field while no text
+// field is focused, signalling that pressing 't' jumps the cursor there. The hint
+// is cleared whenever a field is focused or once every field is filled.
+function updateAnswerKeyHint() {
+  document.querySelectorAll('.answer-key-hint').forEach((n) => n.remove());
+
+  if (!joinAnswersEl) return;
+  if (live.player.mode !== 'assignment') return;
+  if (live.player.assignment?.reviewMode) return;
+  if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
+
+  const active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+  const input = firstBlankAnswerInput();
+  if (!input) return;
+  const parent = input.parentElement;
+  if (!parent) return;
+
+  // Anchor the badge inside the field's own parent so it tracks the input under
+  // any layout (single text box, inline gaps) and the adaptive-fit scale transform.
+  if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+
+  const hint = document.createElement('span');
+  hint.className = 'answer-key-hint';
+  hint.textContent = 't';
+  hint.setAttribute('aria-hidden', 'true');
+  hint.style.left = (input.offsetLeft + input.offsetWidth - 24) + 'px';
+  hint.style.top = (input.offsetTop + 6) + 'px';
+  parent.appendChild(hint);
+}
+
+// Defer past the adaptive-fit rAF so offset metrics are read after layout settles.
+function scheduleAnswerKeyHint() {
+  requestAnimationFrame(() => requestAnimationFrame(updateAnswerKeyHint));
 }
 
 function scheduleJoinAdaptiveFit() {
