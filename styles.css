@@ -1549,18 +1549,47 @@ body.question-active .join-title-row {
   margin: 0 !important;
   width: auto;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: .5rem;
   z-index: 10;
   pointer-events: auto;
 }
 
 #joinCard.question-active .question-video-el {
   width: min(100%, 760px);
-  height: 100%;
+  height: auto;
+  min-height: 0;
+  flex: 0 1 auto;
   max-height: min(40vh, 480px);
   object-fit: contain;
   margin: 0 auto;
+}
+
+.question-video-replay {
+  flex: 0 0 auto;
+  align-self: center;
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 600;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: .35rem .9rem;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.question-video-replay:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.question-video-replay:active {
+  background: #e5e7eb;
 }
 
 #joinCard.question-active[data-qtype="pin"] .pin-preview img {
