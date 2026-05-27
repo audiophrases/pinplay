@@ -3736,10 +3736,14 @@ function renderJoinQuestion(question) {
         if (v.currentTime < vStart || (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt)) {
           v.currentTime = vStart;
         }
+        // Duck the ambient loop while the video plays, like question audio does.
+        pauseAssignmentAnsweringAmbient();
       });
       v.addEventListener('timeupdate', () => {
         if (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt) v.pause();
       });
+      v.addEventListener('pause', () => { resumeAssignmentAnsweringAmbient(); });
+      v.addEventListener('ended', () => { resumeAssignmentAnsweringAmbient(); });
       wrap.appendChild(v);
     } else {
       const iframe = document.createElement('iframe');
@@ -5727,6 +5731,10 @@ function setupYouTubeClip(iframe, startAt, endAt) {
     } else if (playing && endAt != null && t >= endAt) {
       post('pauseVideo');
     }
+    // Duck the ambient loop while the video plays, like question audio does
+    // (playerState 1 = playing, 0 = ended, 2 = paused).
+    if (playing) pauseAssignmentAnsweringAmbient();
+    else if (info.playerState === 0 || info.playerState === 2) resumeAssignmentAnsweringAmbient();
     prevState = info.playerState;
   };
   window.addEventListener('message', onMessage);
@@ -5744,7 +5752,7 @@ function setupVimeoClip(iframe, startAt, endAt) {
     } catch { }
   };
   const subscribe = () => {
-    ['timeupdate', 'play', 'finish'].forEach((ev) => post('addEventListener', ev));
+    ['timeupdate', 'play', 'pause', 'finish'].forEach((ev) => post('addEventListener', ev));
     post('setCurrentTime', startAt);
   };
   iframe.addEventListener('load', subscribe, { once: true });
@@ -5770,6 +5778,10 @@ function setupVimeoClip(iframe, startAt, endAt) {
       if (lastT < startAt - 0.3 || (endAt != null && lastT >= endAt - 0.1)) {
         post('setCurrentTime', startAt);
       }
+      // Duck the ambient loop while the video plays, like question audio does.
+      pauseAssignmentAnsweringAmbient();
+    } else if (msg.event === 'pause' || msg.event === 'finish') {
+      resumeAssignmentAnsweringAmbient();
     }
   };
   window.addEventListener('message', onMessage);
