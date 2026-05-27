@@ -3741,17 +3741,6 @@ function renderJoinQuestion(question) {
         if (videoCfg.endAt != null && v.currentTime >= videoCfg.endAt) v.pause();
       });
       wrap.appendChild(v);
-      // Explicit replay control: restart the configured [startAt, endAt] clip
-      // from the beginning regardless of where the playhead currently sits.
-      const replayBtn = document.createElement('button');
-      replayBtn.type = 'button';
-      replayBtn.className = 'question-video-replay';
-      replayBtn.textContent = '↻ Replay clip';
-      replayBtn.addEventListener('click', () => {
-        v.currentTime = vStart;
-        v.play().catch(() => { });
-      });
-      wrap.appendChild(replayBtn);
     } else {
       const iframe = document.createElement('iframe');
       iframe.src = videoCfg.src;
@@ -3759,21 +3748,13 @@ function renderJoinQuestion(question) {
       iframe.allowFullscreen = true;
       iframe.className = 'question-video-el';
       wrap.appendChild(iframe);
-      // Enforce the [startAt, endAt] clip + replay across the iframe boundary.
+      // Enforce the [startAt, endAt] clip across the iframe boundary so the
+      // configured window is honored on every (re)play, not just the first.
       const vStart = videoCfg.startAt || 0;
-      let replay = null;
       if (videoCfg.provider === 'youtube') {
-        replay = setupYouTubeClip(iframe, vStart, videoCfg.endAt);
+        setupYouTubeClip(iframe, vStart, videoCfg.endAt);
       } else if (videoCfg.provider === 'vimeo') {
-        replay = setupVimeoClip(iframe, vStart, videoCfg.endAt);
-      }
-      if (replay) {
-        const replayBtn = document.createElement('button');
-        replayBtn.type = 'button';
-        replayBtn.className = 'question-video-replay';
-        replayBtn.textContent = '↻ Replay clip';
-        replayBtn.addEventListener('click', replay);
-        wrap.appendChild(replayBtn);
+        setupVimeoClip(iframe, vStart, videoCfg.endAt);
       }
     }
     joinQuestionWrap.insertBefore(wrap, document.getElementById('joinQuestionInteractive') || null);
@@ -5707,8 +5688,7 @@ function assignmentVideoEmbedConfig(media) {
 
 // Drive a YouTube embed across the iframe boundary so the configured
 // [startAt, endAt] clip is honored on every (re)play, not just the first.
-// Returns a replay() that restarts the clip from startAt. Requires the embed
-// URL to carry enablejsapi=1 (see assignmentVideoEmbedConfig).
+// Requires the embed URL to carry enablejsapi=1 (see assignmentVideoEmbedConfig).
 function setupYouTubeClip(iframe, startAt, endAt) {
   const post = (func, args) => {
     try {
@@ -5750,11 +5730,6 @@ function setupYouTubeClip(iframe, startAt, endAt) {
     prevState = info.playerState;
   };
   window.addEventListener('message', onMessage);
-
-  return function replay() {
-    post('seekTo', [startAt, true]);
-    post('playVideo');
-  };
 }
 
 // Vimeo equivalent. Vimeo's postMessage API uses method/event envelopes and
@@ -5798,11 +5773,6 @@ function setupVimeoClip(iframe, startAt, endAt) {
     }
   };
   window.addEventListener('message', onMessage);
-
-  return function replay() {
-    post('setCurrentTime', startAt);
-    post('play');
-  };
 }
 
 function hasAssignmentQuestionAudio(question) {
