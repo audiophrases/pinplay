@@ -3919,7 +3919,7 @@ body.review-mode-active #joinSubmission {
    ========================================================================== */
 .student-answer-reveal {
   width: 100%;
-  margin: 1.5rem auto 0 auto;
+  margin: 1.5rem auto 1rem auto;
   max-width: 800px;
   padding: 1rem 1.25rem;
   background: #f8f9ff;
