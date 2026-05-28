@@ -3698,7 +3698,7 @@ function renderJoinQuestion(question) {
     joinPromptEl.classList.toggle('with-reading', hasReadingText);
   }
 
-  // Clear background first
+  // Clear background and old inline media first
   if (joinQuestionWrap) {
     joinQuestionWrap.style.backgroundImage = '';
     joinQuestionWrap.style.backgroundSize = 'contain';
@@ -3707,25 +3707,36 @@ function renderJoinQuestion(question) {
     const oldReading = joinQuestionWrap.querySelector('.reading-text-block');
     if (oldReading) oldReading.remove();
   }
+  const oldMedia = document.getElementById('joinQuestionMedia');
+  if (oldMedia) oldMedia.remove();
   const interactiveOverlay = document.getElementById('joinQuestionInteractive');
   if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || hasReadingText);
 
-  if (hasAnyImage) {
+  if (hasAnyImage && question.type !== 'match_pairs') {
     let imgSrc = question.imageData;
     if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
       const base = loadBackendUrl() || "https://api.pinplay.win";
       imgSrc = `${base}/api/media/${imgSrc}`;
     }
-    if (joinQuestionWrap) {
-      if (question.type !== 'match_pairs') {
-        joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
+    // Inline media element (replaces the old wrap background-image pattern).
+    // Capped at max-height via CSS so the answer card below it gets clean
+    // vertical space and never visually chops the image.
+    const interactiveEl = document.getElementById('joinQuestionInteractive');
+    if (interactiveEl) {
+      const mediaEl = document.createElement('img');
+      mediaEl.id = 'joinQuestionMedia';
+      mediaEl.alt = '';
+      mediaEl.src = imgSrc;
+      if (joinAnswersEl && joinAnswersEl.parentNode === interactiveEl) {
+        interactiveEl.insertBefore(mediaEl, joinAnswersEl);
+      } else {
+        interactiveEl.appendChild(mediaEl);
       }
     }
   }
-  // Signals that the answer surface is rendered in front of a backdrop image, so
-  // CSS can give it a card treatment (solid bg + elevation) instead of letting
-  // the surface visually chop the image. Excluded from match_pairs (own overlay)
-  // and pin (own canvas).
+  // Signal to CSS that the answers section sits below a media element so it
+  // can render as a clearly demarcated card. Excluded from match_pairs (own
+  // overlay) and pin (own canvas).
   joinAnswersEl.classList.toggle(
     'over-backdrop-image',
     hasSharedImage && question.type !== 'match_pairs',
