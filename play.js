@@ -107,48 +107,6 @@ const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
-// Reveal panels ("Correct Answer" + teacher correction) mount into a fixed
-// bottom-sheet stack so the question card never grows on submit and the answer
-// surface never overlaps background media. Multiple panels stack vertically.
-let studentAnswerSheetObserver = null;
-function syncStudentAnswerSheetOffset() {
-  const stack = document.getElementById('studentAnswerSheetStack');
-  const h = stack ? stack.getBoundingClientRect().height : 0;
-  document.documentElement.style.setProperty('--reveal-sheet-offset', `${Math.ceil(h)}px`);
-}
-function getStudentAnswerSheetStack() {
-  let stack = document.getElementById('studentAnswerSheetStack');
-  if (!stack) {
-    stack = document.createElement('div');
-    stack.id = 'studentAnswerSheetStack';
-    document.body.appendChild(stack);
-    if (typeof ResizeObserver !== 'undefined') {
-      studentAnswerSheetObserver = new ResizeObserver(syncStudentAnswerSheetOffset);
-      studentAnswerSheetObserver.observe(stack);
-    }
-  }
-  return stack;
-}
-function mountStudentAnswerReveal(el) {
-  if (!el) return;
-  const stack = getStudentAnswerSheetStack();
-  if (el.parentNode !== stack) stack.appendChild(el);
-  document.body.classList.add('reveal-sheet-open');
-  syncStudentAnswerSheetOffset();
-}
-function unmountStudentAnswerReveal(el) {
-  if (el && el.parentNode) el.parentNode.removeChild(el);
-  const stack = document.getElementById('studentAnswerSheetStack');
-  if (stack && !stack.querySelector('.student-answer-reveal')) {
-    if (studentAnswerSheetObserver) { studentAnswerSheetObserver.disconnect(); studentAnswerSheetObserver = null; }
-    stack.remove();
-    document.body.classList.remove('reveal-sheet-open');
-    document.documentElement.style.removeProperty('--reveal-sheet-offset');
-  } else {
-    syncStudentAnswerSheetOffset();
-  }
-}
-
 const live = {
   player: {
     pin: null,
@@ -2930,7 +2888,10 @@ function renderPlayerState(state) {
   }
 
   const renderJoinReveal = () => {
-    let revealEl = document.querySelector('[data-join-correct-reveal="1"]');
+    // Target the broader container to avoid flex-wrap collisions
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
 
     const question = state.question;
     const isPoll = !!question?.isPoll;
@@ -2939,7 +2900,7 @@ function renderPlayerState(state) {
 
     if (!show || !needsReveal) {
       // Preserve reveal box placed by immediate live-mode answer reveal
-      if (revealEl && !live.player.liveRevealApplied) unmountStudentAnswerReveal(revealEl);
+      if (revealEl && !live.player.liveRevealApplied) revealEl.remove();
       return;
     }
 
@@ -2959,7 +2920,7 @@ function renderPlayerState(state) {
     // When the student got it right, the answer surface itself carries the green signal —
     // showing a "Correct Answer: …" box on top would be redundant. Suppress entirely.
     if (verdict === true) {
-      if (revealEl) unmountStudentAnswerReveal(revealEl);
+      if (revealEl) revealEl.remove();
       return;
     }
 
@@ -2974,7 +2935,7 @@ function renderPlayerState(state) {
     }
 
     if (!correctText) {
-      if (revealEl) unmountStudentAnswerReveal(revealEl);
+      if (revealEl) revealEl.remove();
       return;
     }
 
@@ -2993,9 +2954,13 @@ function renderPlayerState(state) {
 
       revealEl.append(title, content);
 
-      // Mounted on body so the question card never grows on submit — the panel
-      // floats as a bottom sheet, leaving media/chips fixed in place.
-      mountStudentAnswerReveal(revealEl);
+      // Better placement: drop it right above the submit button section
+      const submissionWrap = document.getElementById('joinSubmission');
+      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+        wrap.insertBefore(revealEl, submissionWrap);
+      } else {
+        wrap.appendChild(revealEl);
+      }
     }
 
     // Red-tint when we know the student was wrong; stay neutral when verdict is unknown
@@ -3047,7 +3012,7 @@ function renderPlayerState(state) {
   const renderInlineCorrection = (rrNow = null) => {
     const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
     if (!wrap) return;
-    document.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => unmountStudentAnswerReveal(el));
+    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
     const corr = String(rrNow?.correction || '').trim();
     const audioKey = String(rrNow?.correctionAudioKey || '').trim();
     if (!corr && !audioKey) return;
@@ -3142,7 +3107,12 @@ function renderPlayerState(state) {
       p.appendChild(audioWrap);
     }
 
-    mountStudentAnswerReveal(p);
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+      wrap.insertBefore(p, submissionWrap);
+    } else {
+      wrap.appendChild(p);
+    }
   };
 
   if (state.phase !== 'question' || !state.question) {
@@ -3698,7 +3668,7 @@ function renderJoinQuestion(question) {
     joinPromptEl.classList.toggle('with-reading', hasReadingText);
   }
 
-  // Clear background and old inline media first
+  // Clear background first
   if (joinQuestionWrap) {
     joinQuestionWrap.style.backgroundImage = '';
     joinQuestionWrap.style.backgroundSize = 'contain';
@@ -3707,40 +3677,21 @@ function renderJoinQuestion(question) {
     const oldReading = joinQuestionWrap.querySelector('.reading-text-block');
     if (oldReading) oldReading.remove();
   }
-  const oldMedia = document.getElementById('joinQuestionMedia');
-  if (oldMedia) oldMedia.remove();
   const interactiveOverlay = document.getElementById('joinQuestionInteractive');
   if (interactiveOverlay) interactiveOverlay.classList.toggle('interactive-overlay', hasAnyImage || hasReadingText);
 
-  if (hasAnyImage && question.type !== 'match_pairs') {
+  if (hasAnyImage) {
     let imgSrc = question.imageData;
     if (!imgSrc.startsWith("http") && !imgSrc.startsWith("data:")) {
       const base = loadBackendUrl() || "https://api.pinplay.win";
       imgSrc = `${base}/api/media/${imgSrc}`;
     }
-    // Inline media element (replaces the old wrap background-image pattern).
-    // Capped at max-height via CSS so the answer card below it gets clean
-    // vertical space and never visually chops the image.
-    const interactiveEl = document.getElementById('joinQuestionInteractive');
-    if (interactiveEl) {
-      const mediaEl = document.createElement('img');
-      mediaEl.id = 'joinQuestionMedia';
-      mediaEl.alt = '';
-      mediaEl.src = imgSrc;
-      if (joinAnswersEl && joinAnswersEl.parentNode === interactiveEl) {
-        interactiveEl.insertBefore(mediaEl, joinAnswersEl);
-      } else {
-        interactiveEl.appendChild(mediaEl);
+    if (joinQuestionWrap) {
+      if (question.type !== 'match_pairs') {
+        joinQuestionWrap.style.backgroundImage = `url("${imgSrc}")`;
       }
     }
   }
-  // Signal to CSS that the answers section sits below a media element so it
-  // can render as a clearly demarcated card. Excluded from match_pairs (own
-  // overlay) and pin (own canvas).
-  joinAnswersEl.classList.toggle(
-    'over-backdrop-image',
-    hasSharedImage && question.type !== 'match_pairs',
-  );
 
   if (hasReadingText && joinQuestionWrap) {
     const readingBlock = document.createElement('div');
@@ -4602,23 +4553,31 @@ async function submitLiveAnswer(opts = {}) {
       const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
       const correctText = String(data.correctAnswer || '').trim();
       if (needsReveal && correctText && !data.correct) {
-        let revealEl = document.querySelector('[data-join-correct-reveal="1"]');
-        if (!revealEl) {
-          revealEl = document.createElement('div');
-          revealEl.className = 'student-answer-reveal';
-          revealEl.dataset.joinCorrectReveal = '1';
-          const title = document.createElement('div');
-          title.className = 'student-answer-reveal-title';
-          title.textContent = 'Correct Answer';
-          const content = document.createElement('div');
-          content.className = 'student-answer-reveal-content';
-          revealEl.append(title, content);
-          mountStudentAnswerReveal(revealEl);
-        }
-        revealEl.classList.add('student-answer-reveal--bad');
-        const contentEl = revealEl.querySelector('.student-answer-reveal-content');
-        if (contentEl && contentEl.textContent !== correctText) {
-          contentEl.textContent = correctText;
+        const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+        if (wrap) {
+          let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
+          if (!revealEl) {
+            revealEl = document.createElement('div');
+            revealEl.className = 'student-answer-reveal';
+            revealEl.dataset.joinCorrectReveal = '1';
+            const title = document.createElement('div');
+            title.className = 'student-answer-reveal-title';
+            title.textContent = 'Correct Answer';
+            const content = document.createElement('div');
+            content.className = 'student-answer-reveal-content';
+            revealEl.append(title, content);
+            const submissionWrap = document.getElementById('joinSubmission');
+            if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
+              wrap.insertBefore(revealEl, submissionWrap);
+            } else {
+              wrap.appendChild(revealEl);
+            }
+          }
+          revealEl.classList.add('student-answer-reveal--bad');
+          const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+          if (contentEl && contentEl.textContent !== correctText) {
+            contentEl.textContent = correctText;
+          }
         }
       }
     } else {
