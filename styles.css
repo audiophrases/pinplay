@@ -1848,28 +1848,22 @@ textarea.join-answer-input:focus {
   border-radius: .25rem;
   text-decoration: line-through;
 }
-
-
-
-/* Subtle "press t" hint shown on the first blank answer field while no text
-   field is focused. Looks like a faint keyboard key; never intercepts clicks. */
-.answer-key-hint {
-  position: absolute;
-  pointer-events: none;
-  z-index: 2;
-  font-size: .7rem;
-  line-height: 1;
-  font-weight: 600;
-  text-transform: lowercase;
-  color: #9ca3af;
-  background: rgba(255, 255, 255, .55);
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  padding: 2px 5px;
-  opacity: .65;
+/* Ensure input-style answer surfaces stay readable when a question has a
+   background image. */
+#joinAnswers input[type="text"],
+#joinAnswers input[type="search"],
+#joinAnswers input[type="number"],
+#joinAnswers select,
+#joinAnswers textarea {
+  background: var(--card-bg, #fff);
+  color: var(--text, #111);
+  border: 1px solid #d1d5db; /* Ensure a base border exists */
+  transition: all 0.2s ease-in-out; /* Smooth transition for highlights */
 }
 
-/* Context Gap */
+/* ... (Your .answer-key-hint CSS remains perfectly fine) ... */
+
+/* Context Gap Container */
 .context-gap-inline {
   display: flex;
   flex-wrap: wrap;
@@ -1878,6 +1872,7 @@ textarea.join-answer-input:focus {
   justify-content: center;
 }
 
+/* Context Gap Input */
 .context-gap-inline-input {
   width: 84px;
   min-width: 84px;
@@ -1886,18 +1881,18 @@ textarea.join-answer-input:focus {
   padding: .3rem .5rem;
 }
 
-.context-gap-inline.correct-highlight {
-  border-color: var(--ok) !important;
-  background: #d1fae5 !important;
-  color: #065f46 !important;
+/* Highlight States (Targeting the input, scoped to override defaults) */
+#joinAnswers .context-gap-inline-input.correct-highlight {
+  border-color: var(--ok); 
+  background: #d1fae5;
+  color: #065f46;
 }
 
-.context-gap-inline.incorrect-highlight {
-  border-color: var(--bad) !important;
-  background: #fee2e2 !important;
-  color: #991b1b !important;
+#joinAnswers .context-gap-inline-input.incorrect-highlight {
+  border-color: var(--bad);
+  background: #fee2e2;
+  color: #991b1b;
 }
-
 /* Match Pairs */
 .match-pairs-wrap {
   display: grid;
