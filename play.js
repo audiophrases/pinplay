@@ -5295,7 +5295,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Context gap
   if (question.type === 'context_gap') {
-    highlightContextGap(question);
+    highlightContextGap(question, isCorrect);
     return; // Text reveal handled inline
   }
 
@@ -5441,14 +5441,16 @@ function showPinFeedback(question, state) {
 
 
 // Context gap: highlight each input
-function highlightContextGap(question) {
+function highlightContextGap(question, isCorrect) {
   // Answer reveal is handled by renderJoinReveal using state.correctAnswer
-  // (question.gaps is not available on the student side).
-  // Only reset highlight styles on the input rows.
+  // (question.gaps is not available on the student side — apply overall verdict to each wrap).
   const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
   fields.forEach((field) => {
-    const row = field.closest('.answer-row') || field.parentElement;
-    if (row) row.classList.remove('correct-highlight', 'incorrect-highlight');
+    const row = field.closest('.context-gap-inline') || field.closest('.answer-row') || field.parentElement;
+    if (!row) return;
+    row.classList.remove('correct-highlight', 'incorrect-highlight');
+    if (isCorrect === true) row.classList.add('correct-highlight');
+    else if (isCorrect === false) row.classList.add('incorrect-highlight');
   });
 }
 
