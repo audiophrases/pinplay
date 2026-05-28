@@ -3918,10 +3918,10 @@ body.review-mode-active #joinSubmission {
    STUDENT ANSWER REVEAL (Context-Aware)
    ========================================================================== */
 .student-answer-reveal {
-  width: 100%;
+  width: fit-content;
   margin: 1.5rem auto 1rem auto;
   max-width: 800px;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1rem;
   background: #f8f9ff;
   border: 1px solid #d4d4f7;
   border-radius: 0.85rem;
