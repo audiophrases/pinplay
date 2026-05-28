@@ -107,18 +107,45 @@ const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
-// Reveal panel ("Correct Answer" + teacher correction) is mounted to <body> as a
-// fixed bottom sheet so the question card never grows on submit and the answer
-// surface never overlaps background media.
+// Reveal panels ("Correct Answer" + teacher correction) mount into a fixed
+// bottom-sheet stack so the question card never grows on submit and the answer
+// surface never overlaps background media. Multiple panels stack vertically.
+let studentAnswerSheetObserver = null;
+function syncStudentAnswerSheetOffset() {
+  const stack = document.getElementById('studentAnswerSheetStack');
+  const h = stack ? stack.getBoundingClientRect().height : 0;
+  document.documentElement.style.setProperty('--reveal-sheet-offset', `${Math.ceil(h)}px`);
+}
+function getStudentAnswerSheetStack() {
+  let stack = document.getElementById('studentAnswerSheetStack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'studentAnswerSheetStack';
+    document.body.appendChild(stack);
+    if (typeof ResizeObserver !== 'undefined') {
+      studentAnswerSheetObserver = new ResizeObserver(syncStudentAnswerSheetOffset);
+      studentAnswerSheetObserver.observe(stack);
+    }
+  }
+  return stack;
+}
 function mountStudentAnswerReveal(el) {
   if (!el) return;
-  if (el.parentNode !== document.body) document.body.appendChild(el);
+  const stack = getStudentAnswerSheetStack();
+  if (el.parentNode !== stack) stack.appendChild(el);
   document.body.classList.add('reveal-sheet-open');
+  syncStudentAnswerSheetOffset();
 }
 function unmountStudentAnswerReveal(el) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
-  if (!document.querySelector('.student-answer-reveal')) {
+  const stack = document.getElementById('studentAnswerSheetStack');
+  if (stack && !stack.querySelector('.student-answer-reveal')) {
+    if (studentAnswerSheetObserver) { studentAnswerSheetObserver.disconnect(); studentAnswerSheetObserver = null; }
+    stack.remove();
     document.body.classList.remove('reveal-sheet-open');
+    document.documentElement.style.removeProperty('--reveal-sheet-offset');
+  } else {
+    syncStudentAnswerSheetOffset();
   }
 }
 

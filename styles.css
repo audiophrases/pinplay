@@ -3917,17 +3917,30 @@ body.review-mode-active #joinSubmission {
 /* ==========================================================================
    STUDENT ANSWER REVEAL (Context-Aware)
    ========================================================================== */
-/* Fixed bottom sheet so the question card never grows vertically on submit.
-   Stops the answer surface from being pushed up into background images. */
-.student-answer-reveal {
+/* Bottom-sheet stack container — fixed at viewport bottom so the question card
+   never grows on submit and the answer surface never overlaps background media.
+   Multiple reveal panels (correct answer + teacher correction) stack inside. */
+#studentAnswerSheetStack {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
-  transform: translateX(-50%);
-  width: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px)) 0.75rem;
+  pointer-events: none;
+  z-index: 60;
+}
+#studentAnswerSheetStack > .student-answer-reveal {
+  pointer-events: auto;
+}
+.student-answer-reveal {
+  width: 100%;
   max-width: 800px;
   margin: 0;
-  padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px)) 1.25rem;
+  padding: 1rem 1.25rem;
   background: #f8f9ff;
   border: 1px solid #d4d4f7;
   border-bottom: none;
@@ -3938,20 +3951,15 @@ body.review-mode-active #joinSubmission {
   animation: revealSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   text-align: left;
   box-sizing: border-box;
-  z-index: 60;
-}
-/* Stack multiple sheets (correct-answer + teacher-correction) without overlap. */
-.student-answer-reveal + .student-answer-reveal {
-  bottom: 100%;
-  margin-bottom: 0.5rem;
 }
 @keyframes revealSlideUp {
-  from { transform: translate(-50%, 100%); opacity: 0; }
-  to   { transform: translate(-50%, 0);    opacity: 1; }
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
-/* Ensure the in-flow submit/Continue button is not hidden under the sheet. */
+/* Ensure the in-flow submit/Continue button is not hidden under the sheet.
+   The offset is set by JS (syncStudentAnswerSheetOffset) to match actual stack height. */
 body.reveal-sheet-open #joinQuestionInteractive {
-  padding-bottom: 9rem;
+  padding-bottom: calc(var(--reveal-sheet-offset, 9rem) + 1rem);
 }
 
 .student-answer-reveal-title {
