@@ -3962,6 +3962,14 @@ body.reveal-sheet-open #joinQuestionInteractive {
   padding-bottom: calc(var(--reveal-sheet-offset, 9rem) + 1rem);
 }
 
+/* After submit, the question media's role is done — the student can no longer
+   change their answer based on it. Hide it so the answer card + Continue have
+   the full vertical space and aren't pushed off-screen by tall layouts (e.g.
+   error_hunt's textarea + diff + tokens row). */
+body.reveal-sheet-open #joinQuestionMedia {
+  display: none;
+}
+
 .student-answer-reveal-title {
   font-size: 0.75rem;
   text-transform: uppercase;
