@@ -1887,6 +1887,10 @@ textarea.join-answer-input:focus {
   gap: .4rem;
   align-items: center;
   justify-content: center;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: .2rem .4rem;
+  transition: background .2s, border-color .2s, color .2s;
 }
 
 .context-gap-inline-input {
