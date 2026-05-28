@@ -2954,10 +2954,10 @@ function renderPlayerState(state) {
 
       revealEl.append(title, content);
 
-      // Better placement: drop it right above the submit button section
-      const submissionWrap = document.getElementById('joinSubmission');
-      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
-        wrap.insertBefore(revealEl, submissionWrap);
+      // Place it above the student's answer surface, below the prompt.
+      const answersAnchor = document.getElementById('joinAnswers');
+      if (wrap.id === 'joinQuestionInteractive' && answersAnchor) {
+        wrap.insertBefore(revealEl, answersAnchor);
       } else {
         wrap.appendChild(revealEl);
       }
@@ -4566,9 +4566,9 @@ async function submitLiveAnswer(opts = {}) {
             const content = document.createElement('div');
             content.className = 'student-answer-reveal-content';
             revealEl.append(title, content);
-            const submissionWrap = document.getElementById('joinSubmission');
-            if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
-              wrap.insertBefore(revealEl, submissionWrap);
+            const answersAnchor = document.getElementById('joinAnswers');
+            if (wrap.id === 'joinQuestionInteractive' && answersAnchor) {
+              wrap.insertBefore(revealEl, answersAnchor);
             } else {
               wrap.appendChild(revealEl);
             }
