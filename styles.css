@@ -3917,20 +3917,41 @@ body.review-mode-active #joinSubmission {
 /* ==========================================================================
    STUDENT ANSWER REVEAL (Context-Aware)
    ========================================================================== */
+/* Fixed bottom sheet so the question card never grows vertically on submit.
+   Stops the answer surface from being pushed up into background images. */
 .student-answer-reveal {
-  width: 100%;
-  margin: 1.5rem auto 0 auto;
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: calc(100% - 1.5rem);
   max-width: 800px;
-  padding: 1rem 1.25rem;
+  margin: 0;
+  padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px)) 1.25rem;
   background: #f8f9ff;
   border: 1px solid #d4d4f7;
-  border-radius: 0.85rem;
+  border-bottom: none;
+  border-radius: 0.85rem 0.85rem 0 0;
   color: #2b2b5f;
   font-size: 1.05rem;
-  box-shadow: 0 4px 12px rgba(96, 93, 255, 0.06);
-  animation: revealFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  box-shadow: 0 -6px 20px rgba(96, 93, 255, 0.12);
+  animation: revealSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   text-align: left;
   box-sizing: border-box;
+  z-index: 60;
+}
+/* Stack multiple sheets (correct-answer + teacher-correction) without overlap. */
+.student-answer-reveal + .student-answer-reveal {
+  bottom: 100%;
+  margin-bottom: 0.5rem;
+}
+@keyframes revealSlideUp {
+  from { transform: translate(-50%, 100%); opacity: 0; }
+  to   { transform: translate(-50%, 0);    opacity: 1; }
+}
+/* Ensure the in-flow submit/Continue button is not hidden under the sheet. */
+body.reveal-sheet-open #joinQuestionInteractive {
+  padding-bottom: 9rem;
 }
 
 .student-answer-reveal-title {

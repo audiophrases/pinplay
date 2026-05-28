@@ -107,6 +107,21 @@ const joinFeedbackEl = document.getElementById('joinStatusHud');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
+// Reveal panel ("Correct Answer" + teacher correction) is mounted to <body> as a
+// fixed bottom sheet so the question card never grows on submit and the answer
+// surface never overlaps background media.
+function mountStudentAnswerReveal(el) {
+  if (!el) return;
+  if (el.parentNode !== document.body) document.body.appendChild(el);
+  document.body.classList.add('reveal-sheet-open');
+}
+function unmountStudentAnswerReveal(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  if (!document.querySelector('.student-answer-reveal')) {
+    document.body.classList.remove('reveal-sheet-open');
+  }
+}
+
 const live = {
   player: {
     pin: null,
@@ -2888,10 +2903,7 @@ function renderPlayerState(state) {
   }
 
   const renderJoinReveal = () => {
-    // Target the broader container to avoid flex-wrap collisions
-    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-    if (!wrap) return;
-    let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
+    let revealEl = document.querySelector('[data-join-correct-reveal="1"]');
 
     const question = state.question;
     const isPoll = !!question?.isPoll;
@@ -2900,7 +2912,7 @@ function renderPlayerState(state) {
 
     if (!show || !needsReveal) {
       // Preserve reveal box placed by immediate live-mode answer reveal
-      if (revealEl && !live.player.liveRevealApplied) revealEl.remove();
+      if (revealEl && !live.player.liveRevealApplied) unmountStudentAnswerReveal(revealEl);
       return;
     }
 
@@ -2920,7 +2932,7 @@ function renderPlayerState(state) {
     // When the student got it right, the answer surface itself carries the green signal —
     // showing a "Correct Answer: …" box on top would be redundant. Suppress entirely.
     if (verdict === true) {
-      if (revealEl) revealEl.remove();
+      if (revealEl) unmountStudentAnswerReveal(revealEl);
       return;
     }
 
@@ -2935,7 +2947,7 @@ function renderPlayerState(state) {
     }
 
     if (!correctText) {
-      if (revealEl) revealEl.remove();
+      if (revealEl) unmountStudentAnswerReveal(revealEl);
       return;
     }
 
@@ -2954,13 +2966,9 @@ function renderPlayerState(state) {
 
       revealEl.append(title, content);
 
-      // Better placement: drop it right above the submit button section
-      const submissionWrap = document.getElementById('joinSubmission');
-      if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
-        wrap.insertBefore(revealEl, submissionWrap);
-      } else {
-        wrap.appendChild(revealEl);
-      }
+      // Mounted on body so the question card never grows on submit — the panel
+      // floats as a bottom sheet, leaving media/chips fixed in place.
+      mountStudentAnswerReveal(revealEl);
     }
 
     // Red-tint when we know the student was wrong; stay neutral when verdict is unknown
@@ -3012,7 +3020,7 @@ function renderPlayerState(state) {
   const renderInlineCorrection = (rrNow = null) => {
     const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
     if (!wrap) return;
-    wrap.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => el.remove());
+    document.querySelectorAll('[data-join-correction-inline="1"]').forEach((el) => unmountStudentAnswerReveal(el));
     const corr = String(rrNow?.correction || '').trim();
     const audioKey = String(rrNow?.correctionAudioKey || '').trim();
     if (!corr && !audioKey) return;
@@ -3107,12 +3115,7 @@ function renderPlayerState(state) {
       p.appendChild(audioWrap);
     }
 
-    const submissionWrap = document.getElementById('joinSubmission');
-    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
-      wrap.insertBefore(p, submissionWrap);
-    } else {
-      wrap.appendChild(p);
-    }
+    mountStudentAnswerReveal(p);
   };
 
   if (state.phase !== 'question' || !state.question) {
@@ -4553,31 +4556,23 @@ async function submitLiveAnswer(opts = {}) {
       const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
       const correctText = String(data.correctAnswer || '').trim();
       if (needsReveal && correctText && !data.correct) {
-        const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-        if (wrap) {
-          let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
-          if (!revealEl) {
-            revealEl = document.createElement('div');
-            revealEl.className = 'student-answer-reveal';
-            revealEl.dataset.joinCorrectReveal = '1';
-            const title = document.createElement('div');
-            title.className = 'student-answer-reveal-title';
-            title.textContent = 'Correct Answer';
-            const content = document.createElement('div');
-            content.className = 'student-answer-reveal-content';
-            revealEl.append(title, content);
-            const submissionWrap = document.getElementById('joinSubmission');
-            if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
-              wrap.insertBefore(revealEl, submissionWrap);
-            } else {
-              wrap.appendChild(revealEl);
-            }
-          }
-          revealEl.classList.add('student-answer-reveal--bad');
-          const contentEl = revealEl.querySelector('.student-answer-reveal-content');
-          if (contentEl && contentEl.textContent !== correctText) {
-            contentEl.textContent = correctText;
-          }
+        let revealEl = document.querySelector('[data-join-correct-reveal="1"]');
+        if (!revealEl) {
+          revealEl = document.createElement('div');
+          revealEl.className = 'student-answer-reveal';
+          revealEl.dataset.joinCorrectReveal = '1';
+          const title = document.createElement('div');
+          title.className = 'student-answer-reveal-title';
+          title.textContent = 'Correct Answer';
+          const content = document.createElement('div');
+          content.className = 'student-answer-reveal-content';
+          revealEl.append(title, content);
+          mountStudentAnswerReveal(revealEl);
+        }
+        revealEl.classList.add('student-answer-reveal--bad');
+        const contentEl = revealEl.querySelector('.student-answer-reveal-content');
+        if (contentEl && contentEl.textContent !== correctText) {
+          contentEl.textContent = correctText;
         }
       }
     } else {
