@@ -5442,15 +5442,12 @@ function showPinFeedback(question, state) {
 
 // Context gap: highlight each input
 function highlightContextGap(question, isCorrect) {
-  // Answer reveal is handled by renderJoinReveal using state.correctAnswer
-  // (question.gaps is not available on the student side — apply overall verdict to each wrap).
+  // Highlight each individual gap input rather than the whole sentence wrap.
   const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
   fields.forEach((field) => {
-    const row = field.closest('.context-gap-inline') || field.closest('.answer-row') || field.parentElement;
-    if (!row) return;
-    row.classList.remove('correct-highlight', 'incorrect-highlight');
-    if (isCorrect === true) row.classList.add('correct-highlight');
-    else if (isCorrect === false) row.classList.add('incorrect-highlight');
+    field.classList.remove('correct-highlight', 'incorrect-highlight');
+    if (isCorrect === true) field.classList.add('correct-highlight');
+    else if (isCorrect === false) field.classList.add('incorrect-highlight');
   });
 }
 
@@ -7231,7 +7228,7 @@ function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
     input.type = 'text';
     input.maxLength = 20;
     input.placeholder = '____';
-    input.className = 'context-gap-inline-input';
+    input.className = 'context-gap-inline-input join-answer-input';
     input.dataset[datasetKey] = String(blankIndex);
     input.readOnly = true;
     const resize = () => {
