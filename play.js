@@ -3918,7 +3918,7 @@ function renderJoinQuestion(question) {
       const ta = document.createElement('textarea');
       ta.id = 'joinErrorHuntRewrite';
       ta.className = 'join-answer-input error-hunt-textarea';
-      ta.rows = 3;
+      ta.rows = 1;
       ta.maxLength = 300;
       ta.dataset.originalPrompt = originalPrompt;
 
