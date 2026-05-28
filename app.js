@@ -9331,7 +9331,7 @@ function handleHostHotkeys(e) {
 
   if (e.key === 's' || e.key === 'S') {
     e.preventDefault();
-    hostStartGame();
+    saveBtn?.click();
     return;
   }
 
