@@ -3722,6 +3722,14 @@ function renderJoinQuestion(question) {
       }
     }
   }
+  // Signals that the answer surface is rendered in front of a backdrop image, so
+  // CSS can give it a card treatment (solid bg + elevation) instead of letting
+  // the surface visually chop the image. Excluded from match_pairs (own overlay)
+  // and pin (own canvas).
+  joinAnswersEl.classList.toggle(
+    'over-backdrop-image',
+    hasSharedImage && question.type !== 'match_pairs',
+  );
 
   if (hasReadingText && joinQuestionWrap) {
     const readingBlock = document.createElement('div');

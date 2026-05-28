@@ -4001,6 +4001,27 @@ body.reveal-sheet-open #joinQuestionInteractive {
   color: #991b1b !important;
 }
 
+/* When the answer surface sits in front of a backdrop image (full-viewport
+   .wrap background), wrap it in a clear card so the image becomes a deliberate
+   backdrop and the answer stops looking like it accidentally chops the image. */
+#joinAnswers.over-backdrop-image {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  margin: 0 auto;
+  max-width: 720px;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+}
+@media (max-width: 760px) {
+  #joinAnswers.over-backdrop-image {
+    padding: 0.9rem 1rem;
+    border-radius: 0.85rem;
+  }
+}
+
 .puzzle-selected.correct-highlight {
   outline: 2px solid var(--ok);
   outline-offset: 4px;
