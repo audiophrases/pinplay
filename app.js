@@ -8,7 +8,6 @@ const CREATOR_TOKEN_KEY = 'pinplay.creatorToken';
 // at boot by setupCreateAccess() before any cloud-save / preview call runs.
 let creatorRole = null;
 let creatorWsid = null;
-const DRIVE_PUBLISH_ENDPOINT = '/api/drive/publish';
 
 const TEMPLATE_ALL_13_TYPES = {
   "version": 3,
@@ -457,8 +456,6 @@ const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
 const exportPdfBtn = document.getElementById('exportPdfBtn');
-const publishDriveBtn = document.getElementById('publishDriveBtn');
-const openDriveBtn = document.getElementById('openDriveBtn');
 const openCloudBtn = document.getElementById('openCloudBtn');
 const saveCloudBtn = document.getElementById('saveCloudBtn');
 const importBtn = document.getElementById('importBtn');
@@ -1344,14 +1341,6 @@ function bindBuilderEvents() {
     });
   }
 
-  if (publishDriveBtn) {
-    publishDriveBtn.addEventListener('click', publishQuizToDrive);
-  }
-
-  if (openDriveBtn) {
-    openDriveBtn.addEventListener('click', () => openQuizFromDrive());
-  }
-
   if (openCloudBtn) {
     openCloudBtn.addEventListener('click', () => openQuizFromCloud());
   }
@@ -1463,7 +1452,7 @@ function bindBuilderEvents() {
     if (savedOk) {
       alert(label);
     } else {
-      alert(label + '\n(local autosave skipped: browser storage is full). Use Save Drive or Export to keep a backup.');
+      alert(label + '\n(local autosave skipped: browser storage is full). Use Export to keep a backup.');
     }
     importInput.value = '';
   });
@@ -3383,32 +3372,6 @@ function syncQuizFromUI() {
   });
 }
 
-async function publishQuizToDrive() {
-  try {
-    syncQuizFromUI();
-
-    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
-    if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
-
-    await ensureQuizMediaReady({ contextLabel: 'publish to drive', convertTtsToMp3: true, strictMediaCheck: true });
-    const payload = normalizeQuizForLive(quiz);
-    const data = await api(DRIVE_PUBLISH_ENDPOINT, {
-      method: 'POST',
-      body: {
-        quiz: payload,
-      },
-    });
-
-    const fileName = data?.file?.name || 'quiz.json';
-    const fileId = data?.file?.id || null;
-
-    setStatus(hostStatusEl, `Published to Drive: ${fileName}`, 'ok');
-    await openQuizFromDrive({ highlightId: fileId });
-  } catch (err) {
-    setStatus(hostStatusEl, `Drive publish failed: ${err.message}`, 'bad');
-  }
-}
-
 async function openImageSearchDialog(questionIdx) {
   const q = quiz.questions?.[Number(questionIdx)];
   if (!q) return;
@@ -3789,40 +3752,6 @@ function openLocalLibraryDialog(opts = {}) {
     },
     highlightId: opts.highlightId || null,
   });
-}
-
-async function openQuizFromDrive(opts = {}) {
-  try {
-    const list = await api('/api/drive/list', { method: 'GET' });
-    const files = Array.isArray(list?.files) ? list.files : [];
-    showQuizManagerDialog({
-      title: 'Drive quizzes',
-      items: files.map((f) => ({ id: f.id, raw: f, label: String(f.name || f.id) })),
-      onOpen: async (item) => {
-        const chosen = item.raw;
-        const openData = await api(`/api/drive/open?fileId=${encodeURIComponent(chosen.id)}`, { method: 'GET' });
-        const loadedQuiz = openData?.quiz;
-        validateImportedQuiz(loadedQuiz);
-        quiz = loadedQuiz;
-        setApplyAssignmentTarget('', '');
-        collapseAllQuestions(quiz);
-        renderBuilder();
-        saveQuiz(quiz);
-        setStatus(hostStatusEl, `Loaded from Drive: ${chosen.name || chosen.id}`, 'ok');
-      },
-      onDelete: async (item) => {
-        const chosen = item.raw;
-        await api('/api/drive/delete', {
-          method: 'POST',
-          body: { fileId: chosen.id },
-        });
-        setStatus(hostStatusEl, `Deleted from Drive: ${chosen.name || chosen.id}`, 'ok');
-      },
-      highlightId: opts.highlightId || null,
-    });
-  } catch (err) {
-    setStatus(hostStatusEl, `Open from Drive failed: ${err.message}`, 'bad');
-  }
 }
 
 // Open quiz from Cloud (R2)
@@ -9320,12 +9249,6 @@ function handleHostHotkeys(e) {
   if (e.key === 'o' || e.key === 'O') {
     e.preventDefault();
     openLocalLibraryDialog();
-    return;
-  }
-
-  if (e.key === 'd' || e.key === 'D') {
-    e.preventDefault();
-    openQuizFromDrive();
     return;
   }
 
