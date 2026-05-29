@@ -327,7 +327,20 @@
       "imageData": ""
     },
     {
-      "id": "q15-reading-comprehension",
+      "id": "q15-image-answer",
+      "type": "image_open",
+      "prompt": "Solve the problem on paper, then photograph your handwritten working and upload it.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "EN",
+      "imageKeyword": "",
+      "imageData": ""
+    },
+    {
+      "id": "q16-reading-comprehension",
       "type": "mcq",
       "prompt": "According to the passage, what is the main reason monarch butterflies migrate south each autumn?",
       "points": 1000,
