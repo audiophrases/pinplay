@@ -716,57 +716,49 @@ How to read this section:
 
 ---
 
-## Batch 13 — Image Open
+## Batch 13 — Image Answer
 
-### 1) Describe-Interpret-Evaluate
-- **Learning goal:** Build structured visual analysis.
-- **How to run it:** 3-part response: what you see, what it means, why it matters.
-- **Creative twist:** Limit each part to one sentence.
+> **Image answer (🖼️):** students submit an *image* as their response — they photograph or upload it from their device, and you grade it by viewing the picture. Reach for it whenever the best evidence of learning is visual rather than typed: handwritten work, sketches, diagrams, or real-world objects. (You can optionally attach a prompt image to the question.) If you instead want students to *write about* a picture you provide, use an **Open answer** with an attached image.
 
-### 2) Caption Upgrade Challenge
-- **Learning goal:** Improve concise expressive writing.
-- **How to run it:** Write best caption for image context.
-- **Creative twist:** Do neutral, persuasive, and humorous versions.
+### 1) Show Your Working
+- **Learning goal:** Make problem-solving process visible.
+- **How to run it:** Students solve on paper, then photograph and upload their full working.
+- **Creative twist:** Require each step labelled before the photo is taken.
 
-### 3) Inference from Visual Clues
-- **Learning goal:** Train evidence-based inference.
-- **How to run it:** Students infer time/place/situation from image clues.
-- **Creative twist:** Require citing 2 visible clues.
+### 2) Labelled Diagram
+- **Learning goal:** Assess structural/spatial understanding.
+- **How to run it:** Students draw and label a diagram (cell, circuit, map) and upload a photo.
+- **Creative twist:** Have peers identify the labels during review.
 
-### 4) Before/After Narrative Prompt
-- **Learning goal:** Practice narrative tense control.
-- **How to run it:** “What happened just before and after this image?”
-- **Creative twist:** Force one past perfect and one future form.
+### 3) Real-World Hunt
+- **Learning goal:** Connect concepts to the environment.
+- **How to run it:** Students photograph a real object that matches the prompt (a right angle, a metaphor, a chemical change).
+- **Creative twist:** One-object-only rule — the clearest example wins.
 
-### 5) Character Voice Monologue
-- **Learning goal:** Build perspective writing.
-- **How to run it:** Write as one person/object in the image.
-- **Creative twist:** Add emotional constraint (worried, proud, confused).
+### 4) Handwriting & Script Practice
+- **Learning goal:** Practise handwriting, characters, or notation.
+- **How to run it:** Students write the target by hand and upload a clear photo.
+- **Creative twist:** Compare a "before" and "after" attempt across two questions.
 
-### 6) Problem-Solution from Scene
-- **Learning goal:** Develop practical reasoning.
-- **How to run it:** Identify problem visible in image + propose solution.
-- **Creative twist:** Students compare feasibility of solutions.
+### 5) Sketch the Concept
+- **Learning goal:** Externalise an abstract idea visually.
+- **How to run it:** Students sketch what a term/process looks like and upload it.
+- **Creative twist:** Ban words in the image — drawing only.
 
-### 7) Evidence for Theme (Literature/Art)
-- **Learning goal:** Connect visuals to thematic analysis.
-- **How to run it:** Explain which theme the image supports and why.
-- **Creative twist:** Link to one classroom text/unit concept.
+### 6) Annotate a Source
+- **Learning goal:** Build close-reading / analysis habits.
+- **How to run it:** Students annotate a printed text or image by hand, then upload the marked-up version.
+- **Creative twist:** Limit annotations to three highest-value marks.
 
-### 8) Data Comment from Infographic
-- **Learning goal:** Improve visual data literacy writing.
-- **How to run it:** Students summarize trend and implication from infographic image.
-- **Creative twist:** Require one caution about data limitations.
+### 7) Build & Capture
+- **Learning goal:** Assess hands-on / model-making tasks.
+- **How to run it:** Students build something physical (a model, a layout, a manipulative) and photograph the result.
+- **Creative twist:** Require the photo to include a unit of scale.
 
-### 9) Local Community Lens
-- **Learning goal:** Encourage civic relevance.
-- **How to run it:** Use local image (street, beach, transport) and ask for improvement idea.
-- **Creative twist:** Convert best idea into mini class action plan.
-
-### 10) Empathy Snapshot
-- **Learning goal:** Build social-emotional expression.
-- **How to run it:** Describe possible feelings of people shown and why.
-- **Creative twist:** Discuss respectful language choices.
+### 8) Art & Design Response
+- **Learning goal:** Encourage creative expression.
+- **How to run it:** Students create an artwork or design responding to the prompt and upload it.
+- **Creative twist:** Add a single constraint (one colour, one material, one minute).
 
 ---
 
@@ -952,6 +944,6 @@ Track 4 metrics:
 - [x] Batch 10: Slider
 - [x] Batch 11: Pin on image
 - [x] Batch 12: Audio question
-- [x] Batch 13: Image open
+- [x] Batch 13: Image answer
 
 All listed question-type batches are now completed (10+ use-cases each).
