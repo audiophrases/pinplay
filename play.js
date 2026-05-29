@@ -6867,14 +6867,19 @@ function renderVoiceRecorder(container, question) {
 
     try {
       const ext = mimeType.includes('mp4') ? '.mp4' : mimeType.includes('ogg') ? '.ogg' : '.webm';
-      const fileName = `voice_${Date.now()}${ext}`;
+      const fileName = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
       const formData = new FormData();
       formData.append('file', blob, fileName);
-      formData.append('path', `voice_records/${fileName}`);
       if (live.player.mode === 'assignment') {
-        formData.append('code', live.player.assignment.code || '');
+        const code = live.player.assignment.code || '';
+        // Co-locate under the assignment's own R2 prefix so it's swept by the
+        // existing orphan-purge / assignment-delete cleanup (not a permanent leak).
+        formData.append('path', `assign-${code}/answers/${fileName}`);
+        formData.append('code', code);
         formData.append('attemptId', live.player.assignment.attemptId || '');
       } else {
+        // Live (pin) games are ephemeral — keep the flat prefix.
+        formData.append('path', `voice_records/${fileName}`);
         formData.append('pin', live.player.pin || '');
         formData.append('playerId', live.player.id || '');
       }
