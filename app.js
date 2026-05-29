@@ -270,6 +270,19 @@ const TEMPLATE_ALL_13_TYPES = {
       "accepted": ["manzana", "una manzana", "la manzana"],
       "imageKeyword": "red apple",
       "imageData": ""
+    },
+    {
+      "id": "q15-image-answer",
+      "type": "image_open",
+      "prompt": "Solve the problem on paper, then photograph your handwritten working and upload it.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "EN",
+      "imageKeyword": "",
+      "imageData": ""
     }
   ]
 };
@@ -288,6 +301,7 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'open', label: 'Open', inTemplate: true, supportsAudio: true },
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
   { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
+  { type: 'image_open', label: 'Image answer', inTemplate: true, supportsAudio: true },
   { type: 'voice_text', label: 'Voice Answer', inTemplate: true, supportsAudio: true }
 ];
 
@@ -412,6 +426,15 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "audioText can model the expected response register.",
     "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners.", "Set 'answerLanguage' explicitly when the spoken response language differs from the question/quiz language (e.g. quiz in English, answer in Spanish)."],
     "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading.", "Forgetting 'answerLanguage' on cross-language tasks — the transcript will use the question language and may be unintelligible."]
+  },
+  "image_open": {
+    "name": "Image Answer",
+    "rules": "Students submit an IMAGE as their answer — they upload a photo or capture one with their device camera. Teacher grades manually by viewing the submitted image (no auto-grading, like 'open' and 'voice_record'). Do NOT provide options, accepted answers, or gaps. The 'prompt' must tell students what to photograph, draw, or create (e.g. 'Photograph your handwritten solution', 'Draw a labelled diagram of a plant cell and upload a photo'). Optionally set 'imageKeyword' to attach a reference/prompt image to the question — this is NOT required; a text-only prompt is fine.",
+    "constraints": { "maxUploadMB": 12, "answerType": "single image (jpg/png/webp/gif/heic)" },
+    "pedagogicalUses": ["Collect handwritten work, drawings, diagrams, or lab setups that can't be typed.", "Assess process and visual evidence (math working, sketches, real-world objects).", "Bring offline/physical work into the digital quiz for grading."],
+    "ttsStrategy": "audioText can read the task aloud so students know what to capture without reading.",
+    "differentiationTips": ["Give a clear capture checklist for support (state exactly what must be visible in the photo).", "Require annotation or labels in the image for advanced learners."],
+    "commonPitfalls": ["Prompt doesn't say WHAT to photograph or create.", "Expecting a typed answer — use 'open' for text, or 'pin' for clicking on a provided image, instead.", "Asking for multiple images — only one image per answer is supported."]
   },
   "voice_text": {
     "name": "Voice Answer (auto-graded)",
