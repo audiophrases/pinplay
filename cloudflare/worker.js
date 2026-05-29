@@ -2369,6 +2369,98 @@ export class QuizRoom {
         }, 201);
       }
 
+      // Snapshot a finished login-required live game into a persistent assignment.
+      // Called DO-to-DO from the live room on game_finished. Creates one submitted
+      // attempt per logged-in student; teacher-graded answers land as pending (or
+      // carry any grade applied live) for post-hoc grading in the normal UI.
+      if (url.pathname === '/assignments/import-live' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const quiz = normalizeQuiz(body?.quiz || {});
+        if (!quiz.questions?.length) return json({ error: 'Quiz required.' }, 400);
+        const incoming = Array.isArray(body?.attempts) ? body.attempts : [];
+        if (!incoming.length) return json({ error: 'No attempts to import.' }, 400);
+
+        const now = Date.now();
+        const finishedAt = Number(body?.finishedAt || now) || now;
+        const livePin = sanitizePin(body?.pin) || '';
+        const assignment = {
+          id: randomId('as_'),
+          code: await nextAssignmentCode(this.state.storage),
+          createdAt: now,
+          updatedAt: now,
+          title: String(body?.title || quiz.title || 'Live game').trim().slice(0, 120) || 'Live game',
+          className: sanitizeClassName(body?.className),
+          attemptsLimit: 0,
+          dueAt: null,
+          randomNames: false,
+          feedbackMode: 'none',
+          examMode: false,
+          active: true,
+          origin: 'live',
+          liveMediaPin: livePin,
+          livePin,
+          finishedAt,
+          quiz,
+          pendingGradingCount: 0,
+          pendingAttemptsCount: 0,
+        };
+
+        const seenKeys = new Set();
+        const attemptsToSave = [];
+        for (const a of incoming) {
+          const studentKey = sanitizeAssignmentStudentKey(a?.studentKey);
+          if (!studentKey || seenKeys.has(studentKey)) continue;
+          seenKeys.add(studentKey);
+          const src = (a?.answersByQ && typeof a.answersByQ === 'object') ? a.answersByQ : {};
+          const answersByQ = {};
+          Object.entries(src).forEach(([idxRaw, item]) => {
+            const qi = Number(idxRaw);
+            const question = quiz.questions[qi];
+            if (!question) return;
+            const tg = item?.teacherGrade;
+            answersByQ[String(qi)] = {
+              answer: sanitizeAssignmentAnswer(question, item?.answer),
+              bet: sanitizeBet(item?.bet),
+              teacherGrade: (tg && tg.graded)
+                ? {
+                    graded: true,
+                    pointsAwarded: Math.max(0, Math.round(Number(tg.pointsAwarded || 0))),
+                    correction: String(tg.correction || '').slice(0, 2000),
+                  }
+                : null,
+              updatedAt: Number(item?.updatedAt || finishedAt) || finishedAt,
+            };
+          });
+          const attempt = {
+            id: randomId('at_'),
+            studentKey,
+            studentName: sanitizeName(a?.studentName || a?.username || 'Student'),
+            startedAt: finishedAt,
+            updatedAt: finishedAt,
+            submitted: true,
+            submittedAt: finishedAt,
+            answersByQ,
+            autoScore: 0,
+            origin: 'live',
+          };
+          attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+          attemptsToSave.push(attempt);
+        }
+
+        if (!attemptsToSave.length) return json({ error: 'No valid attempts.' }, 400);
+
+        assignment.attempts = {};
+        for (const at of attemptsToSave) assignment.attempts[at.id] = at;
+        recomputeAssignmentPending(assignment);
+
+        await saveAssignmentBase(this.state.storage, assignment.code, assignment);
+        for (const at of attemptsToSave) {
+          await saveAttempt(this.state.storage, assignment.code, at.id, at);
+        }
+
+        return json({ ok: true, code: assignment.code, attempts: attemptsToSave.length }, 201);
+      }
+
       if (url.pathname === '/assignments/list' && request.method === 'GET') {
         const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50)));
 
@@ -3641,7 +3733,10 @@ export class QuizRoom {
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
         const timeoutClosed = closeQuestionIfTimedOut(room);
-        if (timeoutClosed) await this.#setRoom(room);
+        // Retry the live→assignment snapshot if game_finished couldn't persist it
+        // (login-required games only; no-op once snapshotted).
+        const snapped = room.phase === 'results' ? await maybeSnapshotLiveGame(room, this.env) : false;
+        if (timeoutClosed || snapped) await this.#setRoom(room);
 
         return json(hostState(room));
       }
@@ -3734,6 +3829,9 @@ export class QuizRoom {
               totalQuestions: Number(room.quiz?.questions?.length || 0),
               finishedAt: room.questionClosedAt,
             });
+            // Persist a login-required game as an assignment (best-effort; the
+            // /host/state poll retries if this DO-to-DO call fails here).
+            await maybeSnapshotLiveGame(room, this.env);
             room.updatedAt = Date.now();
           }
         }
@@ -6562,6 +6660,81 @@ function appendRoomEvent(room, type, payload = {}) {
   room.eventLog.push(event);
   if (room.eventLog.length > MAX_ROOM_EVENTS) {
     room.eventLog.splice(0, room.eventLog.length - MAX_ROOM_EVENTS);
+  }
+}
+
+// Snapshot a finished login-required live game into a persistent assignment
+// (DO-to-DO call to the assignments DO). Idempotent via room.snapshotted; only
+// runs for login-required games (random-name games stay ephemeral). Mutates
+// room.snapshotted / room.assignmentCode on success — caller must persist room.
+async function maybeSnapshotLiveGame(room, env) {
+  if (!room || room.snapshotted) return false;
+  if (room.settings?.randomNames) return false;
+  if (!env?.ROOMS) return false;
+
+  const players = Object.values(room.players || {});
+  const pidToKey = new Map();
+  const rows = new Map(); // studentKey -> { studentKey, studentName, username, answersByQ }
+  for (const p of players) {
+    const key = String(p?.identity?.studentKey || '').trim();
+    if (!key) continue;
+    pidToKey.set(p.id, key);
+    if (!rows.has(key)) {
+      rows.set(key, {
+        studentKey: key,
+        studentName: String(p.name || p?.identity?.username || 'Student'),
+        username: String(p?.identity?.username || ''),
+        answersByQ: {},
+      });
+    }
+  }
+
+  const responsesByQ = room.responsesByQuestion || {};
+  Object.keys(responsesByQ).forEach((idxRaw) => {
+    const qi = Number(idxRaw);
+    const question = room.quiz?.questions?.[qi];
+    if (!question) return;
+    const teacherGraded = question.type === 'open' || question.type === 'image_open'
+      || question.type === 'speaking' || question.type === 'voice_record'
+      || isTeacherGradedTextQuestion(question);
+    const perQ = responsesByQ[idxRaw] || {};
+    Object.entries(perQ).forEach(([pid, resp]) => {
+      const key = pidToKey.get(pid);
+      const row = key && rows.get(key);
+      if (!row) return;
+      row.answersByQ[String(qi)] = {
+        answer: resp?.answer,
+        bet: Number(resp?.bet || 0),
+        teacherGrade: (teacherGraded && resp?.graded)
+          ? { graded: true, pointsAwarded: Number(resp?.pointsAwarded || 0), correction: String(resp?.correction || '') }
+          : null,
+        updatedAt: Number(resp?.submittedAt || 0) || Date.now(),
+      };
+    });
+  });
+
+  const attempts = [...rows.values()].filter((r) => Object.keys(r.answersByQ).length > 0);
+  if (!attempts.length) return false;
+
+  try {
+    const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+    const resp = await stub.fetch('https://room/assignments/import-live', {
+      method: 'POST',
+      body: JSON.stringify({
+        quiz: room.quiz,
+        title: room.quiz?.title || 'Live game',
+        pin: room.pin,
+        finishedAt: Number(room.questionClosedAt || 0) || Date.now(),
+        attempts,
+      }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json().catch(() => ({}));
+    room.snapshotted = true;
+    room.assignmentCode = String(data?.code || '');
+    return true;
+  } catch {
+    return false;
   }
 }
 
