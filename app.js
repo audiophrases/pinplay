@@ -6153,17 +6153,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
               // Upload
               try {
                 audioStatus.textContent = 'Uploading...';
-                const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-                const fileName = `correction_${Date.now()}${ext}`;
-                const formData = new FormData();
-                formData.append('file', blob, fileName);
-                formData.append('path', `voice_records/${fileName}`);
-
-                const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-                const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
-                if (!resp.ok) throw new Error('Upload failed');
-                const res = await resp.json();
-                currentAudioKey = res.path || res.key || '';
+                currentAudioKey = await uploadCorrectionAudioBlob(blob, safeCode);
                 audioStatus.textContent = '🎙️ Recorded';
                 renderAudioPreview();
               } catch (err) {
@@ -6229,6 +6219,25 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
   } catch (err) {
     if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading error: ${err.message}`;
   }
+}
+
+// Upload teacher correction audio recorded during grading. Co-locates under the
+// assignment's own R2 prefix (assign-<code>/corrections/) so the existing
+// orphan-purge / assignment-delete cleanup sweeps it; falls back to the flat
+// voice_records/ prefix when there is no assignment code.
+async function uploadCorrectionAudioBlob(blob, code) {
+  const ext = (blob.type || '').includes('mp4') ? '.mp4' : '.webm';
+  const fileName = `correction_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+  const safeCode = String(code || '').trim();
+  const path = safeCode ? `assign-${safeCode}/corrections/${fileName}` : `voice_records/${fileName}`;
+  const formData = new FormData();
+  formData.append('file', blob, fileName);
+  formData.append('path', path);
+  const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+  const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
+  if (!resp.ok) throw new Error('Upload failed');
+  const res = await resp.json();
+  return res.path || res.key || '';
 }
 
 function focusQuestionGradingAnswer(attemptId) {
@@ -6344,16 +6353,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
         stream.getTracks().forEach((t) => t.stop());
         try {
           audioStatus.textContent = 'Uploading...';
-          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-          const fileName = `correction_${Date.now()}${ext}`;
-          const formData = new FormData();
-          formData.append('file', blob, fileName);
-          formData.append('path', `voice_records/${fileName}`);
-          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
-          if (!resp.ok) throw new Error('Upload failed');
-          const res = await resp.json();
-          currentAudioKey = res.path || res.key || '';
+          currentAudioKey = await uploadCorrectionAudioBlob(blob, code);
           audioStatus.textContent = '🎙️ Recorded';
           renderAudioPreview();
         } catch (err) {
@@ -6850,16 +6850,7 @@ function renderGradingFocusItem() {
         stream.getTracks().forEach((t) => t.stop());
         try {
           audioStatus.textContent = 'Uploading...';
-          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-          const fileName = `correction_${Date.now()}${ext}`;
-          const formData = new FormData();
-          formData.append('file', blob, fileName);
-          formData.append('path', `voice_records/${fileName}`);
-          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
-          if (!resp.ok) throw new Error('Upload failed');
-          const res = await resp.json();
-          currentAudioKey = res.path || res.key || '';
+          currentAudioKey = await uploadCorrectionAudioBlob(blob, gradingFocusState.code);
           audioStatus.textContent = '🎙️ Recorded';
           renderAudioPreview();
         } catch (err) {
@@ -7462,16 +7453,7 @@ function renderStudentGradingFocusItem() {
         stream.getTracks().forEach((t) => t.stop());
         try {
           audioStatus.textContent = 'Uploading...';
-          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-          const fileName = `correction_${Date.now()}${ext}`;
-          const formData = new FormData();
-          formData.append('file', blob, fileName);
-          formData.append('path', `voice_records/${fileName}`);
-          const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-          const resp = await fetch(`${base}/api/media/upload`, { method: 'POST', headers: { Authorization: `Bearer ${createSessionPassword}` }, body: formData });
-          if (!resp.ok) throw new Error('Upload failed');
-          const res = await resp.json();
-          currentAudioKey = res.path || res.key || '';
+          currentAudioKey = await uploadCorrectionAudioBlob(blob, studentGradingFocusState.code);
           audioStatus.textContent = '🎙️ Recorded';
           renderAudioPreview();
         } catch (err) {
