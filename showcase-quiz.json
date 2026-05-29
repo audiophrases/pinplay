@@ -184,6 +184,20 @@
       "answerLanguage": "en-US"
     },
     {
+      "id": "showcase-image-answer",
+      "type": "image_open",
+      "prompt": "💡 Tip — Image answer (🖼️, teacher-graded): The student uploads a photo, or snaps one with their device camera, as their answer — perfect for handwritten work, sketches, diagrams, or real-world objects. You grade it by viewing the submitted image. (You can optionally attach a prompt image to the question.)\n\nQ: Write the word \"hello\" by hand on paper, then photograph it and upload the picture.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Image answer. Write the word hello by hand on paper, then photograph it and upload the picture.",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "imageKeyword": "",
+      "imageData": ""
+    },
+    {
       "id": "showcase-puzzle",
       "type": "puzzle",
       "prompt": "💡 Tip — Order puzzle (🧩): Students reorder shuffled tokens. Keep the item count between 4 and 9 so it stays readable on phones. Works for sentences, formulas, or timelines.\n\nQ: Put the words in the right order to form a famous Neil Armstrong line.",

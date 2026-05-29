@@ -560,6 +560,20 @@
       "audioText": "",
       "language": "en-US-Wave",
       "audioData": ""
+    },
+    {
+      "id": "image-answer-1",
+      "type": "image_open",
+      "prompt": "Photograph your handwritten solution and upload it.",
+      "points": 1000,
+      "timeLimit": 0,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "language": "en-US-Wave",
+      "audioData": "",
+      "imageKeyword": "",
+      "imageData": ""
     }
   ],
   "templateGuide": {
