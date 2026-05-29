@@ -4290,6 +4290,22 @@ function bindLiveEvents() {
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (applyAssignmentBtn) applyAssignmentBtn.addEventListener('click', applyQuizToAssignment);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
+
+  // No-login live games are ephemeral: when the host closes the tab AFTER the
+  // game has finished, purge the room + its live-<pin>/ answer media. Armed only
+  // on the finished ('results') state so a mid-game refresh / phone-lock never
+  // ends a game. Login-required live games are left alone (persistence pending).
+  window.addEventListener('pagehide', () => {
+    try {
+      const h = live.host;
+      const st = h?.state;
+      if (!h?.pin || !h?.token) return;
+      if (st?.phase !== 'results') return;
+      if (!st?.settings?.randomNames) return;
+      const blob = new Blob([JSON.stringify({ pin: h.pin, hostToken: h.token })], { type: 'application/json' });
+      navigator.sendBeacon(`${loadBackendUrl() || DEFAULT_BACKEND_URL}/api/host/end`, blob);
+    } catch (_) { /* best effort */ }
+  });
   if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.addEventListener('click', () => fetchHostAttempts({ force: true }));
   if (hostAttemptsExportBtn) hostAttemptsExportBtn.addEventListener('click', exportHostAttemptsCsv);
   if (hostAttemptsSearchEl) hostAttemptsSearchEl.addEventListener('input', () => renderHostAttemptsSnapshot(live.host.attemptsCache));
