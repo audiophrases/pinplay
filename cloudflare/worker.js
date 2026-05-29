@@ -3770,10 +3770,11 @@ export class QuizRoom {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
         const endedPin = room.pin;
+        const endedSnapshotted = !!room.snapshotted;
         await this.#deleteRoom();
-        // Purge this game's ephemeral no-login answer media. Login-required live
-        // keeps the flat prefix until the persistence work lands.
-        if (this.env?.QUIZ_MEDIA && endedPin) {
+        // Purge this game's ephemeral answer media — unless it was snapshotted
+        // into an assignment, which now owns the live-<pin>/ folder.
+        if (this.env?.QUIZ_MEDIA && endedPin && !endedSnapshotted) {
           try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${endedPin}`); } catch { /* */ }
         }
         return json({ ok: true });
@@ -4512,8 +4513,11 @@ export class QuizRoom {
     const idleFor = Date.now() - Number(room.updatedAt || 0);
     if (idleFor >= ROOM_TTL_MS) {
       const pin = room.pin;
+      const wasSnapshotted = !!room.snapshotted;
       await this.#deleteRoom();
-      if (this.env?.QUIZ_MEDIA && pin) {
+      // Keep the media if a login-required game was snapshotted (the assignment
+      // owns live-<pin>/); otherwise free it.
+      if (this.env?.QUIZ_MEDIA && pin && !wasSnapshotted) {
         try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${pin}`); } catch { /* */ }
       }
     } else {
