@@ -4369,6 +4369,16 @@ export class QuizRoom {
     await Promise.all(writes);
     // Keep the in-memory cache aligned with what we just persisted.
     this.roomCache = room;
+
+    // Arm a one-shot cleanup alarm so an abandoned live room (and its ephemeral
+    // no-login media) is purged ~ROOM_TTL_MS later without anyone re-opening the
+    // PIN. Set only when none is pending (avoids an alarm write per mutation);
+    // alarm() re-arms from updatedAt. No-op for the assignments DO (never #setRoom).
+    try {
+      if ((await storage.getAlarm()) == null) {
+        await storage.setAlarm(Date.now() + ROOM_TTL_MS);
+      }
+    } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
   }
 
   async #migrateLegacyRoom() {
@@ -4389,6 +4399,26 @@ export class QuizRoom {
     keys.push('room'); // best-effort cleanup of the legacy key
     if (keys.length) await this.state.storage.delete(keys);
     this.roomCache = null;
+  }
+
+  // Cleanup alarm for live rooms (armed in #setRoom). Fires ~ROOM_TTL_MS after
+  // creation; purges the room + its ephemeral no-login media once it's been idle
+  // past the TTL, otherwise re-arms for the remaining time. Safe no-op on the
+  // assignments DO (it never calls #setRoom, so #getRoom returns null here).
+  async alarm() {
+    let room;
+    try { room = await this.#getRoom(); } catch { room = null; }
+    if (!room) return;
+    const idleFor = Date.now() - Number(room.updatedAt || 0);
+    if (idleFor >= ROOM_TTL_MS) {
+      const pin = room.pin;
+      await this.#deleteRoom();
+      if (this.env?.QUIZ_MEDIA && pin) {
+        try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${pin}`); } catch { /* */ }
+      }
+    } else {
+      try { await this.state.storage.setAlarm(Date.now() + (ROOM_TTL_MS - idleFor)); } catch { /* */ }
+    }
   }
 }
 
