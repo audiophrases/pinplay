@@ -311,7 +311,7 @@ export default {
       }
     }
 
-    // Upload student voice recording to R2 (authenticated via player token)
+    // Upload student answer media (voice recording or answer image) to R2 (authenticated via player token)
     if (url.pathname === '/api/player/voice-upload' && request.method === 'POST') {
       const playerToken = request.headers.get('X-Player-Token') || '';
       const contentType = request.headers.get('content-type') || '';
@@ -323,8 +323,10 @@ export default {
       const file = formData.get('file');
       const path = String(formData.get('path') || '');
       if (!file || !path) return json({ error: 'Missing file or path' }, 400);
-      // Restrict to voice_records/ prefix to prevent path traversal
-      if (!path.startsWith('voice_records/')) return json({ error: 'Invalid upload path.' }, 400);
+      // Restrict to known student-answer prefixes to prevent path traversal
+      if (!path.startsWith('voice_records/') && !path.startsWith('image_answers/')) {
+        return json({ error: 'Invalid upload path.' }, 400);
+      }
 
       // Support two auth modes: live game (pin+playerId+token) or assignment (code+attemptId)
       const pin = sanitizePin(formData.get('pin'));
