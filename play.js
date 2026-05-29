@@ -6878,9 +6878,13 @@ function renderVoiceRecorder(container, question) {
         formData.append('code', code);
         formData.append('attemptId', live.player.assignment.attemptId || '');
       } else {
-        // Live (pin) games are ephemeral — keep the flat prefix.
-        formData.append('path', `voice_records/${fileName}`);
-        formData.append('pin', live.player.pin || '');
+        const pin = live.player.pin || '';
+        // No-login (random-name) live games are ephemeral and purged when the
+        // host ends them — keep their media in a per-game folder so it can be
+        // deleted as a unit. Login-required live keeps the flat prefix for now
+        // (the upcoming persistence work moves it under assign-<code>/).
+        formData.append('path', (live.player.randomNamesMode && pin) ? `live-${pin}/answers/${fileName}` : `voice_records/${fileName}`);
+        formData.append('pin', pin);
         formData.append('playerId', live.player.id || '');
       }
 
@@ -7166,9 +7170,13 @@ async function uploadImageBlob(file, statusEl) {
       formData.append('code', code);
       formData.append('attemptId', live.player.assignment.attemptId || '');
     } else {
-      // Live (pin) games are ephemeral — keep the flat prefix.
-      formData.append('path', `image_answers/${fileName}`);
-      formData.append('pin', live.player.pin || '');
+      const pin = live.player.pin || '';
+      // No-login (random-name) live games are ephemeral and purged when the host
+      // ends them — keep their media in a per-game folder so it can be deleted as
+      // a unit. Login-required live keeps the flat prefix for now (the upcoming
+      // persistence work moves it under assign-<code>/).
+      formData.append('path', (live.player.randomNamesMode && pin) ? `live-${pin}/answers/${fileName}` : `image_answers/${fileName}`);
+      formData.append('pin', pin);
       formData.append('playerId', live.player.id || '');
     }
 

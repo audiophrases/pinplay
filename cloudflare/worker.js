@@ -337,7 +337,8 @@ export default {
       // (pin) games keep the flat voice_records/ and image_answers/ folders.
       const allowedPath = path.startsWith('voice_records/')
         || path.startsWith('image_answers/')
-        || (code && path.startsWith(`assign-${code}/answers/`));
+        || (code && path.startsWith(`assign-${code}/answers/`))
+        || (pin && path.startsWith(`live-${pin}/answers/`));
       if (!allowedPath) return json({ error: 'Invalid upload path.' }, 400);
 
       if (pin && playerId) {
@@ -462,6 +463,25 @@ export default {
       return withCors(
         await stub.fetch('https://room/host/state', {
           method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+    }
+
+    // End + purge a live game (room + its ephemeral no-login answer media).
+    // Beacon-friendly: sendBeacon can't set headers, so accept pin + hostToken
+    // in the JSON body, falling back to the Authorization header.
+    if (url.pathname === '/api/host/end' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = String(body?.hostToken || readBearer(request) || '');
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(
+        await stub.fetch('https://room/host/end', {
+          method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         }),
       );
@@ -2293,8 +2313,9 @@ export default {
 };
 
 export class QuizRoom {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env;
     // In-memory cache of the live-room object. DOs are single-threaded per
     // instance and stay warm between requests, so we can return the cached
     // room without re-listing storage rows on every poll. Invariants:
@@ -3450,7 +3471,12 @@ export class QuizRoom {
       if (!room) return json({ error: 'Room not found.' }, 404);
 
       if (Date.now() - room.updatedAt > ROOM_TTL_MS) {
+        const expiredPin = room.pin;
         await this.#deleteRoom();
+        // Free any ephemeral no-login answer media this game uploaded.
+        if (this.env?.QUIZ_MEDIA && expiredPin) {
+          try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${expiredPin}`); } catch { /* */ }
+        }
         return json({ error: 'Room expired.' }, 410);
       }
 
@@ -3641,6 +3667,19 @@ export class QuizRoom {
 
       if (url.pathname === '/host/join' && request.method === 'POST') {
         return json({ ok: true, pin: room.pin, hostToken: room.hostToken, phase: room.phase });
+      }
+
+      if (url.pathname === '/host/end' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+        const endedPin = room.pin;
+        await this.#deleteRoom();
+        // Purge this game's ephemeral no-login answer media. Login-required live
+        // keeps the flat prefix until the persistence work lands.
+        if (this.env?.QUIZ_MEDIA && endedPin) {
+          try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${endedPin}`); } catch { /* */ }
+        }
+        return json({ ok: true });
       }
 
       if (url.pathname === '/host/start' && request.method === 'POST') {
