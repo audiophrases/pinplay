@@ -258,6 +258,9 @@
                     <button id="addVoiceRecordBtn" class="btn question-type-btn" title="Teacher-graded">
                       <span class="qt-emoji">🎙️</span><span class="qt-text">Voice record</span>
                     </button>
+                    <button id="addImageOpenBtn" class="btn question-type-btn" title="Teacher-graded — students upload/photograph an image as their answer">
+                      <span class="qt-emoji">🖼️</span><span class="qt-text">Image answer</span>
+                    </button>
                     <button id="addVoiceTextBtn" class="btn question-type-btn" title="Auto-graded via speech recognition (Chrome / Edge / Safari)">
                       <span class="qt-emoji">🎤</span><span class="qt-text">Voice answer</span>
                     </button>
@@ -387,7 +390,7 @@
               <div id="assignmentSectionBody" class="section-collapsible-body hidden">
                 <div class="row gap top-space" id="assignmentActionRow">
                   <input id="assignmentClass" type="text" placeholder="Class (optional)" style="max-width:150px;" />
-                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" />
+                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" title="Due date (optional)" aria-label="Due date (optional)" />
                   <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" />
                   <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback">Instant feedback</button>
                   <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel.">Exam mode: off</button>
@@ -405,7 +408,7 @@
                   <ul id="assignmentList" class="list"></ul>
                   <div class="row gap top-space" style="flex-wrap:wrap;">
                     <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
-                    <select id="assignmentResultsFilter" style="max-width:180px;">
+                    <select id="assignmentResultsFilter" style="max-width:180px;" title="Filter attempts" aria-label="Filter attempts">
                       <option value="all">All attempts</option>
                       <option value="pending">Pending grading</option>
                       <option value="submitted">Submitted only</option>
@@ -413,7 +416,7 @@
                       <option value="notified">Notified</option>
                       <option value="not-notified">Not notified</option>
                     </select>
-                    <select id="assignmentResultsClassFilter" style="max-width:160px;">
+                    <select id="assignmentResultsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class">
                       <option value="">All classes</option>
                     </select>
                     <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts">
