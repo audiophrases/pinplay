@@ -1108,6 +1108,9 @@ function buildTfStudentAnswerHtml(item, base) {
       <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
       ${transcript ? `<div class="tf-answer-text">${escapeHtml(transcript)}</div>` : ''}
     `;
+  } else if (item.questionType === 'image_open' && raw && typeof raw === 'object' && raw.imageUrl) {
+    const src = resolveMediaSrc(raw.imageUrl, base);
+    inner = `<img class="tf-answer-image" src="${escapeHtml(src)}" alt="Your image answer" />`;
   } else if (item.questionType === 'speaking') {
     inner = `<div class="tf-answer-text tf-answer-muted">🗣️ Spoke aloud — no recording captured for this answer type.</div>`;
   } else if (typeof raw === 'string' && raw.trim()) {
@@ -4621,7 +4624,7 @@ function readJoinAnswer() {
     return selected.length ? selected : null;
   }
 
-  if (q.type === 'text' || q.type === 'voice_text' || q.type === 'open' || q.type === 'image_open') {
+  if (q.type === 'text' || q.type === 'voice_text' || q.type === 'open') {
     const text = document.getElementById('joinTextAnswer');
     return text ? text.value : '';
   }
@@ -4637,6 +4640,14 @@ function readJoinAnswer() {
       durationMs: _voiceRecordUpload.durationMs,
       mimeType: _voiceRecordUpload.mimeType,
       transcript: String(_voiceRecordUpload.transcript || ''),
+    };
+  }
+
+  if (q.type === 'image_open') {
+    if (!_imageAnswerUpload || _imageAnswerUpload.uploading || _imageAnswerUpload.error || !_imageAnswerUpload.url) return null;
+    return {
+      imageUrl: _imageAnswerUpload.url,
+      mimeType: _imageAnswerUpload.mimeType || '',
     };
   }
 
