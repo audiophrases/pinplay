@@ -11933,8 +11933,13 @@ function renderJoinQuestion(question) {
       note.className = 'small';
       note.textContent = 'Voice answer is available in assignment mode.';
       joinAnswersEl.appendChild(note);
+    } else if (question.type === 'image_open') {
+      const note = document.createElement('p');
+      note.className = 'small';
+      note.textContent = 'Image answer is available in assignment mode.';
+      joinAnswersEl.appendChild(note);
     } else {
-      const isOpenAnswer = question.type === 'open' || question.type === 'image_open';
+      const isOpenAnswer = question.type === 'open';
       const input = document.createElement(isOpenAnswer ? 'textarea' : 'input');
       if (!isOpenAnswer) input.type = 'text';
       input.id = 'joinTextAnswer';
