@@ -4302,7 +4302,9 @@ function bindLiveEvents() {
       if (!h?.pin || !h?.token) return;
       if (st?.phase !== 'results') return;
       if (!st?.settings?.randomNames) return;
-      const blob = new Blob([JSON.stringify({ pin: h.pin, hostToken: h.token })], { type: 'application/json' });
+      // text/plain keeps the beacon a CORS "simple request" (no preflight, which
+      // sendBeacon can't do); the worker parses the JSON body regardless of type.
+      const blob = new Blob([JSON.stringify({ pin: h.pin, hostToken: h.token })], { type: 'text/plain' });
       navigator.sendBeacon(`${loadBackendUrl() || DEFAULT_BACKEND_URL}/api/host/end`, blob);
     } catch (_) { /* best effort */ }
   });
