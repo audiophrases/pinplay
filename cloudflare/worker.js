@@ -323,16 +323,22 @@ export default {
       const file = formData.get('file');
       const path = String(formData.get('path') || '');
       if (!file || !path) return json({ error: 'Missing file or path' }, 400);
-      // Restrict to known student-answer prefixes to prevent path traversal
-      if (!path.startsWith('voice_records/') && !path.startsWith('image_answers/')) {
-        return json({ error: 'Invalid upload path.' }, 400);
-      }
+      if (path.includes('..')) return json({ error: 'Invalid upload path.' }, 400);
 
       // Support two auth modes: live game (pin+playerId+token) or assignment (code+attemptId)
       const pin = sanitizePin(formData.get('pin'));
       const playerId = sanitizeId(formData.get('playerId'));
       const code = sanitizeAssignmentCode(formData.get('code'));
       const attemptId = sanitizeAssignmentAttemptId(formData.get('attemptId'));
+
+      // Restrict to known student-answer prefixes. Assignment image answers are
+      // co-located under the assignment's own prefix (assign-<code>/answers/) so
+      // the existing orphan-purge / assignment-delete cleanup sweeps them; live
+      // (pin) games keep the flat voice_records/ and image_answers/ folders.
+      const allowedPath = path.startsWith('voice_records/')
+        || path.startsWith('image_answers/')
+        || (code && path.startsWith(`assign-${code}/answers/`));
+      if (!allowedPath) return json({ error: 'Invalid upload path.' }, 400);
 
       if (pin && playerId) {
         // Live game mode: verify player token
@@ -954,6 +960,10 @@ export default {
       // Step 2: build the alive-prefix set by reading each assignment's quiz
       // JSON (each call is now O(1) thanks to the single-row /assignments/get-quiz).
       const alivePrefixes = new Set();
+      // Student answer media is co-located under assign-<code>/ (one folder per
+      // assignment). Keep that folder alive for every live code so the sweep
+      // below only deletes answer folders whose assignment is gone.
+      for (const code of codes) alivePrefixes.add(`assign-${code}`);
       let getQuizFailures = 0;
       for (const code of codes) {
         try {
@@ -1040,6 +1050,10 @@ export default {
         for (const prefix of mediaPrefixes) {
           try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
         }
+        // Also remove student answer media co-located under this assignment
+        // (assign-<code>/answers/...). deleteR2Prefix appends a trailing slash,
+        // so this matches only the assign-<code>/ folder, not assign-<code>-<ts>/.
+        try { await deleteR2Prefix(env.QUIZ_MEDIA, `assign-${code}`); } catch { /* */ }
       }
       return withCors(deleteResp);
     }
@@ -1294,6 +1308,10 @@ export default {
         for (const prefix of mediaPrefixes) {
           try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
         }
+        // Also remove student answer media co-located under this assignment
+        // (assign-<code>/answers/...). deleteR2Prefix appends a trailing slash,
+        // so this matches only the assign-<code>/ folder, not assign-<code>-<ts>/.
+        try { await deleteR2Prefix(env.QUIZ_MEDIA, `assign-${code}`); } catch { /* */ }
       }
       return withCors(deleteResp);
     }

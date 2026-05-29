@@ -7113,11 +7113,36 @@ function renderImageAnswerInput(container, question) {
   });
 }
 
+// Downscale large photos before upload to cap R2 storage growth. EXIF-safe
+// (createImageBitmap applies the orientation); falls back to the original file
+// if the browser can't decode it (e.g. HEIC outside Safari) or it's a GIF.
+async function downscaleImageForUpload(file, maxEdge = 1600, quality = 0.82) {
+  try {
+    if (!String(file.type || '').startsWith('image/') || file.type === 'image/gif') return file;
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    // Already small in both dimensions and bytes → no point re-encoding.
+    if (scale === 1 && file.size <= 1200000) { bitmap.close?.(); return file; }
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+    // Never upload something larger than the original.
+    return (blob && blob.size < file.size) ? blob : file;
+  } catch (_) {
+    return file;
+  }
+}
+
 async function uploadImageBlob(file, statusEl) {
-  const mimeType = file.type || 'image/jpeg';
+  statusEl.textContent = 'Processing…';
+  statusEl.className = 'image-answer-upload-status uploading';
+  const blob = await downscaleImageForUpload(file);
+  const mimeType = blob.type || 'image/jpeg';
   _imageAnswerUpload = { url: null, mimeType, uploading: true, error: null };
   statusEl.textContent = 'Uploading…';
-  statusEl.className = 'image-answer-upload-status uploading';
 
   try {
     const ext = mimeType.includes('png') ? '.png'
@@ -7125,14 +7150,19 @@ async function uploadImageBlob(file, statusEl) {
       : mimeType.includes('gif') ? '.gif'
       : mimeType.includes('heic') ? '.heic'
       : '.jpg';
-    const fileName = `img_${Date.now()}${ext}`;
+    const fileName = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
     const formData = new FormData();
-    formData.append('file', file, fileName);
-    formData.append('path', `image_answers/${fileName}`);
+    formData.append('file', blob, fileName);
     if (live.player.mode === 'assignment') {
-      formData.append('code', live.player.assignment.code || '');
+      const code = live.player.assignment.code || '';
+      // Co-locate under the assignment's own R2 prefix so it's swept by the
+      // existing orphan-purge / assignment-delete cleanup (not a permanent leak).
+      formData.append('path', `assign-${code}/answers/${fileName}`);
+      formData.append('code', code);
       formData.append('attemptId', live.player.assignment.attemptId || '');
     } else {
+      // Live (pin) games are ephemeral — keep the flat prefix.
+      formData.append('path', `image_answers/${fileName}`);
       formData.append('pin', live.player.pin || '');
       formData.append('playerId', live.player.id || '');
     }
