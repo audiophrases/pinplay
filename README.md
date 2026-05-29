@@ -25,7 +25,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - Voice record (student-recorded audio, teacher-graded by playback)
 - Open answer (teacher-graded)
 - Speaking answer (teacher-graded oral mode)
-- Image open answer (teacher-graded)
+- Image answer (student uploads or photographs an image as their answer; teacher-graded)
 - Context gap (fill blanks, multiple accepted answers per blank)
 - Match pairs (drag-and-drop matching)
 - Error hunt (find and fix errors in text)
