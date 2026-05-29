@@ -3826,7 +3826,7 @@ function renderJoinQuestion(question) {
     if (question.type === 'image_open' && question.imageData) {
       const wrap = document.createElement('div');
       wrap.className = 'pin-preview question-image-preview';
-      let bgSrc = question.imageData; if (!bgSrc.StartsWith("http") && !bgSrc.StartsWith("data:")) { const base = loadBackendUrl() || "https://api.pinplay.win"; bgSrc = `${base}/api/media/${bgSrc}`; } wrap.style.backgroundImage = `url(${bgSrc})`;
+      let bgSrc = question.imageData; if (!bgSrc.startsWith("http") && !bgSrc.startsWith("data:")) { const base = loadBackendUrl() || "https://api.pinplay.win"; bgSrc = `${base}/api/media/${bgSrc}`; } wrap.style.backgroundImage = `url(${bgSrc})`;
       wrap.style.backgroundRepeat = 'no-repeat';
       wrap.style.backgroundPosition = 'center';
       wrap.style.backgroundSize = 'contain';
@@ -4000,8 +4000,10 @@ function renderJoinQuestion(question) {
       renderVoiceRecorder(joinAnswersEl, question);
     } else if (question.type === 'voice_text') {
       renderVoiceTextRecognizer(joinAnswersEl, question);
+    } else if (question.type === 'image_open') {
+      renderImageAnswerInput(joinAnswersEl, question);
     } else {
-      const isOpenAnswer = question.type === 'open' || question.type === 'image_open';
+      const isOpenAnswer = question.type === 'open';
       const input = document.createElement(isOpenAnswer ? 'textarea' : 'input');
       if (!isOpenAnswer) input.type = 'text';
       input.id = 'joinTextAnswer';
@@ -6999,6 +7001,156 @@ function renderVoiceRecorder(container, question) {
       _voiceRecordRecorder.stop();
     }
   });
+}
+
+// ===== Image Answer (student uploads / photographs an image as their answer) =====
+let _imageAnswerUpload = null; // { url, mimeType, uploading, error }
+const IMAGE_ANSWER_MAX_BYTES = 12 * 1024 * 1024;
+
+function renderImageAnswerInput(container, question) {
+  _imageAnswerUpload = null;
+
+  const reviewMode = !!live.player.assignment?.reviewMode;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'image-answer';
+
+  const pickBtn = document.createElement('button');
+  pickBtn.type = 'button';
+  pickBtn.className = 'btn image-answer-pick-btn';
+  pickBtn.innerHTML = '📷 Add a photo';
+
+  // Plain image/* input — lets phones offer camera OR gallery (no forced capture).
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.className = 'image-answer-file';
+  fileInput.hidden = true;
+
+  const previewWrap = document.createElement('div');
+  previewWrap.className = 'image-answer-preview hidden';
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'image-answer-upload-status';
+
+  wrap.append(pickBtn, fileInput, previewWrap, statusEl);
+  container.appendChild(wrap);
+
+  const showPreview = (src) => {
+    previewWrap.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'Your image answer';
+    img.dataset.zoomable = '1';
+    previewWrap.appendChild(img);
+    if (!reviewMode) {
+      const replaceBtn = document.createElement('button');
+      replaceBtn.type = 'button';
+      replaceBtn.className = 'btn';
+      replaceBtn.textContent = '🔄 Replace';
+      replaceBtn.addEventListener('click', () => fileInput.click());
+      previewWrap.appendChild(replaceBtn);
+    }
+    previewWrap.classList.remove('hidden');
+  };
+
+  // Pre-fill from a previously-saved answer (assignment re-entry / review).
+  const rawAnswers = live.player.assignment?.state?.attempt?.answersByQ || {};
+  const answerObj = rawAnswers[String(live.player.assignment?.currentIndex)];
+  const savedUrl = answerObj?.answer && typeof answerObj.answer === 'object'
+    ? String(answerObj.answer.imageUrl || '')
+    : '';
+
+  if (savedUrl) {
+    let src = savedUrl;
+    if (!src.startsWith('http') && !src.startsWith('data:')) {
+      const base = loadBackendUrl() || 'https://api.pinplay.win';
+      src = `${base}/api/media/${src}`;
+    }
+    // Treat the saved upload as already complete so submit/edit works without re-uploading.
+    _imageAnswerUpload = { url: savedUrl, mimeType: '', uploading: false, error: null };
+    pickBtn.classList.add('hidden');
+    showPreview(src);
+  } else if (reviewMode) {
+    pickBtn.classList.add('hidden');
+    statusEl.textContent = '(No image submitted)';
+  }
+
+  if (reviewMode) {
+    fileInput.disabled = true;
+    return;
+  }
+
+  pickBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (!String(file.type || '').startsWith('image/')) {
+      statusEl.textContent = 'Please choose an image file.';
+      statusEl.className = 'image-answer-upload-status error';
+      return;
+    }
+    if (file.size > IMAGE_ANSWER_MAX_BYTES) {
+      statusEl.textContent = `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB, max ${IMAGE_ANSWER_MAX_BYTES / 1024 / 1024} MB).`;
+      statusEl.className = 'image-answer-upload-status error';
+      return;
+    }
+    pickBtn.classList.add('hidden');
+    showPreview(URL.createObjectURL(file));
+    uploadImageBlob(file, statusEl);
+  });
+}
+
+async function uploadImageBlob(file, statusEl) {
+  const mimeType = file.type || 'image/jpeg';
+  _imageAnswerUpload = { url: null, mimeType, uploading: true, error: null };
+  statusEl.textContent = 'Uploading…';
+  statusEl.className = 'image-answer-upload-status uploading';
+
+  try {
+    const ext = mimeType.includes('png') ? '.png'
+      : mimeType.includes('webp') ? '.webp'
+      : mimeType.includes('gif') ? '.gif'
+      : mimeType.includes('heic') ? '.heic'
+      : '.jpg';
+    const fileName = `img_${Date.now()}${ext}`;
+    const formData = new FormData();
+    formData.append('file', file, fileName);
+    formData.append('path', `image_answers/${fileName}`);
+    if (live.player.mode === 'assignment') {
+      formData.append('code', live.player.assignment.code || '');
+      formData.append('attemptId', live.player.assignment.attemptId || '');
+    } else {
+      formData.append('pin', live.player.pin || '');
+      formData.append('playerId', live.player.id || '');
+    }
+
+    const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+    const uploadHeaders = {};
+    if (live.player.mode !== 'assignment' && live.player.token) {
+      uploadHeaders['X-Player-Token'] = live.player.token;
+    }
+    const resp = await fetch(`${base}/api/player/voice-upload`, {
+      method: 'POST',
+      headers: uploadHeaders,
+      body: formData,
+    });
+    if (!resp.ok) throw new Error(`Upload failed (${resp.status})`);
+    const data = await resp.json();
+    const mediaKey = data?.path || data?.key || data?.url || '';
+    if (!mediaKey) throw new Error('No media key returned');
+
+    _imageAnswerUpload = { url: mediaKey, mimeType, uploading: false, error: null };
+    statusEl.textContent = '✓ Uploaded';
+    statusEl.className = 'image-answer-upload-status uploaded';
+  } catch (err) {
+    _imageAnswerUpload = { url: null, mimeType, uploading: false, error: err.message };
+    statusEl.textContent = `⚠ ${err.message}. Tap to retry.`;
+    statusEl.className = 'image-answer-upload-status error';
+    statusEl.style.cursor = 'pointer';
+    statusEl.onclick = () => { statusEl.onclick = null; uploadImageBlob(file, statusEl); };
+  }
 }
 
 let _voiceTextRecognition = null;
