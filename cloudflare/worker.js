@@ -3564,9 +3564,11 @@ export class QuizRoom {
 
       if (Date.now() - room.updatedAt > ROOM_TTL_MS) {
         const expiredPin = room.pin;
+        const expiredSnapshotted = !!room.snapshotted;
         await this.#deleteRoom();
-        // Free any ephemeral no-login answer media this game uploaded.
-        if (this.env?.QUIZ_MEDIA && expiredPin) {
+        // Free ephemeral answer media — unless a login-required game was
+        // snapshotted into an assignment, which now owns this folder.
+        if (this.env?.QUIZ_MEDIA && expiredPin && !expiredSnapshotted) {
           try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${expiredPin}`); } catch { /* */ }
         }
         return json({ error: 'Room expired.' }, 410);
