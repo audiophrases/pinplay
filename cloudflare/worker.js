@@ -4229,7 +4229,10 @@ export class QuizRoom {
           };
         } else if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record' || isTeacherGradedTextQuestion(question)) {
           room.responsesByQuestion[qIndex][playerId] = {
-            answer: String(body?.answer || '').slice(0, 500),
+            // image_open / voice_record submit an object ({imageUrl} / {audioUrl,
+            // transcript,...}); sanitizeAssignmentAnswer preserves those and caps
+            // plain-text answers, so media isn't flattened to "[object Object]".
+            answer: sanitizeAssignmentAnswer(question, body?.answer),
             correct: false,
             bet,
             pointsAwarded: 0,
