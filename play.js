@@ -4236,6 +4236,7 @@ function appendRiskBetBar() {
   return; // Skip full bet bar
 
   // Old code preserved for reference:
+  /*
   if (!joinAnswersEl) return;
 
   const wrap = document.createElement('div');
@@ -4299,6 +4300,7 @@ function appendRiskBetBar() {
 
   wrap.appendChild(controls);
   joinAnswersEl.appendChild(wrap);
+  */
 }
 
 function getStudentAnswerTextFromUI() {
@@ -4355,6 +4357,7 @@ function appendReactionBar() {
   // Disabled - reactions are now in the submission row
   return;
 
+  /*
   const host = joinAnswersEl;
   if (!host) return;
 
@@ -4381,6 +4384,7 @@ function appendReactionBar() {
   wrap.appendChild(row);
 
   host.appendChild(wrap);
+  */
 }
 
 async function sendReaction(emoji) {

@@ -14070,7 +14070,6 @@ function makeMatchPairsQuestion() {
     prompt: 'Match each item with the correct pair.',
     points: 1000,
     timeLimit: 0,
-    media: makeDefaultQuestionMedia(),
     pairs: [
       { left: '', right: '' },
       { left: '', right: '' },
