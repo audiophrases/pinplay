@@ -6879,11 +6879,10 @@ function renderVoiceRecorder(container, question) {
         formData.append('attemptId', live.player.assignment.attemptId || '');
       } else {
         const pin = live.player.pin || '';
-        // No-login (random-name) live games are ephemeral and purged when the
-        // host ends them — keep their media in a per-game folder so it can be
-        // deleted as a unit. Login-required live keeps the flat prefix for now
-        // (the upcoming persistence work moves it under assign-<code>/).
-        formData.append('path', (live.player.randomNamesMode && pin) ? `live-${pin}/answers/${fileName}` : `voice_records/${fileName}`);
+        // All live games put answer media in a per-game folder. No-login games
+        // are purged when the host ends them; login-required games are adopted
+        // by the assignment created on finish (stored as liveMediaPin).
+        formData.append('path', pin ? `live-${pin}/answers/${fileName}` : `voice_records/${fileName}`);
         formData.append('pin', pin);
         formData.append('playerId', live.player.id || '');
       }
@@ -7171,11 +7170,10 @@ async function uploadImageBlob(file, statusEl) {
       formData.append('attemptId', live.player.assignment.attemptId || '');
     } else {
       const pin = live.player.pin || '';
-      // No-login (random-name) live games are ephemeral and purged when the host
-      // ends them — keep their media in a per-game folder so it can be deleted as
-      // a unit. Login-required live keeps the flat prefix for now (the upcoming
-      // persistence work moves it under assign-<code>/).
-      formData.append('path', (live.player.randomNamesMode && pin) ? `live-${pin}/answers/${fileName}` : `image_answers/${fileName}`);
+      // All live games put answer media in a per-game folder. No-login games are
+      // purged when the host ends them; login-required games are adopted by the
+      // assignment created on finish (stored as liveMediaPin).
+      formData.append('path', pin ? `live-${pin}/answers/${fileName}` : `image_answers/${fileName}`);
       formData.append('pin', pin);
       formData.append('playerId', live.player.id || '');
     }
