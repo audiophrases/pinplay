@@ -2300,7 +2300,7 @@ function renderBuilder() {
 
     if (q.type === 'image_open') {
       specific += `
-        <p class="small top-space">Students write 1-2 sentences from the image. Teacher grades live.</p>
+        <p class="small top-space">Students upload or photograph an image as their answer. Teacher grades live. (Optionally attach a prompt image below.)</p>
       `;
     }
 
@@ -10283,7 +10283,7 @@ function renderHostQuestion(state) {
 
     const max = Math.max(1, ...summary.items.map((x) => Number(x.count || 0)));
 
-    const textLikeTypes = new Set(['text', 'voice_text', 'open', 'image_open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
+    const textLikeTypes = new Set(['text', 'voice_text', 'open', 'error_hunt', 'context_gap', 'match_pairs', 'puzzle']);
     const isTextLike = textLikeTypes.has(String(summary.type || ''));
     const mode = isTextLike ? String(live.host.pollViewMode || 'bar') : 'bar';
 
@@ -14279,7 +14279,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'image_open') {
-      if (!q.imageData) return;
+      // Prompt image is optional — the student's answer is an uploaded image, not the prompt.
       normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
       return;
     }
@@ -15019,7 +15019,7 @@ function labelForType(type) {
       voice_text: 'Voice answer (auto-graded)',
       open: 'Open short answer',
       speaking: 'Speaking answer (teacher-graded)',
-      image_open: 'Image prompt writing',
+      image_open: 'Image answer',
       context_gap: 'Context gap fill',
       match_pairs: 'Match pairs',
       error_hunt: 'Error hunt',
