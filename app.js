@@ -8607,7 +8607,8 @@ function buildAssignmentListItem(a) {
     ? ` <span class="badge-pending" title="${pendingAttempts} attempt(s) with ungraded teacher-graded answers">${pendingAttempts} att · ${pendingGrading} to grade</span>`
     : '';
   const archivedTag = a?.archived ? ' <span class="badge-archived" title="Archived — hidden from default view">archived</span>' : '';
-  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}${archivedTag}`;
+  const liveTag = a?.origin === 'live' ? ' <span class="badge-live" title="Captured from a login-required live game">🔴 live</span>' : '';
+  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}${archivedTag}${liveTag}`;
 
   const meta = document.createElement('div');
   meta.className = 'small muted';

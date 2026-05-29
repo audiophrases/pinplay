@@ -1309,12 +1309,14 @@ export default {
       // clean up after deleting the DO record. Historically the delete
       // flow only removed the DO record and let media accumulate in R2.
       let mediaPrefixes = new Set();
+      let liveMediaPin = '';
       if (env.QUIZ_MEDIA) {
         try {
           const qResp = await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, { method: 'GET' });
           if (qResp.ok) {
             const data = await qResp.json();
             mediaPrefixes = extractMediaPrefixesFromQuiz(data?.quiz);
+            liveMediaPin = sanitizePin(data?.assignment?.liveMediaPin) || '';
           }
         } catch { /* fall through; DO delete still runs */ }
       }
@@ -1332,6 +1334,11 @@ export default {
         // (assign-<code>/answers/...). deleteR2Prefix appends a trailing slash,
         // so this matches only the assign-<code>/ folder, not assign-<code>-<ts>/.
         try { await deleteR2Prefix(env.QUIZ_MEDIA, `assign-${code}`); } catch { /* */ }
+        // A snapshotted live game adopted its live-<pin>/ answer-media folder —
+        // remove that too.
+        if (liveMediaPin) {
+          try { await deleteR2Prefix(env.QUIZ_MEDIA, `live-${liveMediaPin}`); } catch { /* */ }
+        }
       }
       return withCors(deleteResp);
     }
@@ -6559,6 +6566,8 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     examMode: !!assignment.examMode,
     active: !!assignment.active,
     archived: !!assignment.archived,
+    origin: String(assignment.origin || ''),
+    liveMediaPin: String(assignment.liveMediaPin || ''),
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: Number(assignment.quiz?.questions?.length || 0),
   };

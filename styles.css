@@ -2628,6 +2628,19 @@ button.review-retake-attempt-row:active {
   letter-spacing: 0.03em;
 }
 
+.badge-live {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
 .assignment-archived {
   opacity: 0.72;
 }
