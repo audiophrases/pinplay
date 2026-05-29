@@ -4351,6 +4351,7 @@ function summarizeHistoryAnswer(question, answer) {
   }
   if (question.type === 'speaking') return '__spoken__' === String(answer || '') ? '🗣️ Spoke (teacher grades)' : String(answer || '');
   if (question.type === 'voice_record') return '🎙️ Voice Recording (teacher grades)';
+  if (question.type === 'image_open') return '🖼️ Image (teacher grades)';
   if (question.type === 'error_hunt') return String(answer?.rewrite || '');
   if (question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'puzzle') {
     return Array.isArray(answer) ? answer.join(' | ') : String(answer || '');
@@ -4450,7 +4451,7 @@ function hostState(room) {
         .map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
-          answer: roomQuestion?.type === 'voice_record' ? r?.answer : String(r?.answer || ''),
+          answer: (roomQuestion?.type === 'voice_record' || roomQuestion?.type === 'image_open') ? r?.answer : String(r?.answer || ''),
           graded: !!r?.graded,
           pointsAwarded: Number(r?.pointsAwarded || 0),
           correction: String(r?.correction || ''),
@@ -4463,7 +4464,7 @@ function hostState(room) {
         .map(([pid, r]) => ({
           playerId: pid,
           name: room.players?.[pid]?.name || 'Student',
-          answer: roomQuestion?.type === 'voice_record' ? r?.answer : String(r?.answer || ''),
+          answer: (roomQuestion?.type === 'voice_record' || roomQuestion?.type === 'image_open') ? r?.answer : String(r?.answer || ''),
           correction: String(r?.correction || ''),
         }))
       : [],
@@ -5025,7 +5026,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'image_open') {
-      if (!q.imageData) return;
+      // Prompt image is optional — the student's answer is an uploaded image, not the prompt.
       normalized.questions.push({ ...base, imageData: String(q.imageData || '') });
       return;
     }
