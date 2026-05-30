@@ -15951,17 +15951,18 @@ function renderMatchPairsPreview(container, leftItems, rightOptions) {
   container.appendChild(wrap);
 }
 
-function renderMatchPairsReveal(container, pairs) {
-  const rows = Array.isArray(pairs)
-    ? pairs
-      .map((p) => ({ left: String(p?.left || '').trim(), right: String(p?.right || '').trim() }))
-      .filter((p) => p.left && p.right)
-    : [];
+function renderMatchPairsReveal(container, leftItems, rightOptions, pairs) {
+  const lefts = Array.isArray(leftItems) ? leftItems : [];
+  const rights = Array.isArray(rightOptions) ? rightOptions : [];
+  if (!lefts.length || !rights.length) return;
 
-  if (!rows.length) {
-    appendBigReveal('No pairs to reveal.');
-    return;
-  }
+  // Correct mapping: left value -> right value (matched by value, not position).
+  const correctByLeft = new Map();
+  (Array.isArray(pairs) ? pairs : []).forEach((p) => {
+    const left = String(p?.left || '').trim();
+    const right = String(p?.right || '').trim();
+    if (left) correctByLeft.set(left, right);
+  });
 
   const wrap = document.createElement('div');
   wrap.className = 'match-pairs-wrap match-pairs-wrap-interactive';
@@ -15975,22 +15976,27 @@ function renderMatchPairsReveal(container, pairs) {
   const rightCol = document.createElement('div');
   rightCol.className = 'match-pairs-col match-pairs-col-right';
 
-  const leftEls = [];
-  const rightEls = [];
-
-  rows.forEach((pair) => {
-    const left = document.createElement('div');
-    left.className = 'match-pair-left filled';
-    left.textContent = pair.left;
-    leftCol.appendChild(left);
-    leftEls.push(left);
-
-    const right = document.createElement('div');
-    right.className = 'btn';
-    right.textContent = pair.right;
-    rightCol.appendChild(right);
-    rightEls.push(right);
+  // Render both columns in their original on-screen order — never reordered —
+  // so the reveal only adds the connecting lines (matches the student device).
+  const leftEls = lefts.map((left) => {
+    const el = document.createElement('div');
+    el.className = 'match-pair-left filled';
+    el.textContent = String(left || '').trim();
+    leftCol.appendChild(el);
+    return el;
   });
+
+  const rightElByValue = new Map();
+  rights.forEach((opt) => {
+    const el = document.createElement('div');
+    el.className = 'btn';
+    const value = String(opt || '').trim();
+    el.textContent = value;
+    rightCol.appendChild(el);
+    if (!rightElByValue.has(value)) rightElByValue.set(value, el);
+  });
+
+  const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
 
   const draw = () => {
     lineLayer.innerHTML = '';
@@ -16002,7 +16008,9 @@ function renderMatchPairsReveal(container, pairs) {
     lineLayer.setAttribute('height', String(wrapRect.height));
 
     leftEls.forEach((leftEl, i) => {
-      const rightEl = rightEls[i];
+      const rightValue = correctByLeft.get(String(lefts[i] || '').trim());
+      if (!rightValue) return;
+      const rightEl = rightElByValue.get(rightValue);
       if (!rightEl) return;
       const l = leftEl.getBoundingClientRect();
       const r = rightEl.getBoundingClientRect();
@@ -16012,10 +16020,7 @@ function renderMatchPairsReveal(container, pairs) {
       line.setAttribute('y1', String(Math.max(0, l.top + (l.height / 2) - wrapRect.top)));
       line.setAttribute('x2', String(Math.max(0, r.left - wrapRect.left)));
       line.setAttribute('y2', String(Math.max(0, r.top + (r.height / 2) - wrapRect.top)));
-
-      const colorList = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
       line.setAttribute('stroke', colorList[i % colorList.length]);
-
       line.classList.add('match-connection-line');
       lineLayer.appendChild(line);
     });
@@ -16023,7 +16028,20 @@ function renderMatchPairsReveal(container, pairs) {
 
   wrap.append(leftCol, rightCol, lineLayer);
   container.appendChild(wrap);
-  requestAnimationFrame(draw);
+  // Double rAF so the columns have laid out before we measure endpoints.
+  requestAnimationFrame(() => requestAnimationFrame(draw));
+
+  // The wrap is recreated on every render and the old one is detached, so this
+  // observer is GC'd with it rather than leaking across questions/polls.
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(wrap);
+  }
+
+  // Redraw once the projector image finishes decoding (it shares the flex row,
+  // so its final size shifts the right column's endpoints).
+  const img = container.closest('.match-pairs-center-overlay')?.querySelector('.match-pairs-img-wrap img');
+  if (img && !img.complete) img.addEventListener('load', draw, { once: true });
 }
 
 function renderPuzzleRevealTokens(container, items) {

@@ -2047,6 +2047,17 @@ textarea.join-answer-input:focus {
   right: auto;
   margin: 1rem 0;
   width: 100%;
+  align-items: center;
+}
+
+/* On the projector the overlay has auto height (no fixed top/bottom anchors),
+   so the image needs an explicit cap instead of the student's height:100%. */
+.match-pairs-center-overlay.host-mode .match-pairs-img-wrap {
+  height: auto;
+}
+
+.match-pairs-center-overlay.host-mode .match-pairs-img-wrap img {
+  max-height: min(45vh, 520px);
 }
 
 .match-pairs-img-wrap {
