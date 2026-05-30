@@ -687,6 +687,7 @@ const live = {
     timerAnchorAtMs: null,
     timerInitialRemainingMs: null,
     isPrimaryAudioHost: false,
+    musicMuted: false,
     lastPhase: null,
     lastIndex: null,
     lastResponseCount: 0,
@@ -4518,6 +4519,10 @@ async function createLiveGame() {
     live.host.attemptsCache = null;
     live.host.attemptsFetchedAt = 0;
     live.host.isPrimaryAudioHost = true;
+    // Fresh live game always starts with music on, even if a prior preview/game
+    // left it muted.
+    live.host.musicMuted = false;
+    applyHostMusicMute();
 
     stopFx('answering');
     if (livePinEl) livePinEl.textContent = data.pin;
@@ -9257,7 +9262,14 @@ function handleHostHotkeys(e) {
   const isEditableHotkeyTarget = !!hotkeyTarget?.isContentEditable || ['input', 'textarea', 'select'].includes(hotkeyTag);
   if (!isEditableHotkeyTarget && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
     e.preventDefault();
-    runManualMediaCheck();
+    // During a live game / live preview, M mutes the game music (hall, final,
+    // answering loop, stings) without silencing question audio. Outside a live
+    // session it keeps its authoring role of running a manual media check.
+    if (live.host.isPrimaryAudioHost) {
+      toggleHostMusicMute();
+    } else {
+      runManualMediaCheck();
+    }
     return;
   }
 
@@ -11183,6 +11195,36 @@ function playHallMusic() {
 function stopHallMusic() {
   if (!audioFx.hall) return;
   audioFx.hall.pause();
+}
+
+// Every ambient/game music element the host controls: the answering loop pool
+// plus the hall/answered/counter/drumroll/final stings. Question audio is
+// created separately via new Audio() in the media-playback path and is
+// intentionally excluded, so muting music never silences a question.
+function allHostMusicEls() {
+  return [...answeringFxPool, ...Object.values(audioFx)].filter(Boolean);
+}
+
+// Apply the current mute flag to every music element. Uses the .muted property
+// (not pause) so looping ambient keeps its position and resumes seamlessly when
+// unmuted.
+function applyHostMusicMute() {
+  const muted = !!live.host.musicMuted;
+  for (const a of allHostMusicEls()) {
+    try { a.muted = muted; } catch { /* ignore */ }
+  }
+}
+
+// Teacher hotkey (M) during a live game / live preview: mute or unmute all game
+// music without touching question audio.
+function toggleHostMusicMute() {
+  live.host.musicMuted = !live.host.musicMuted;
+  applyHostMusicMute();
+  setStatus(
+    hostStatusEl,
+    live.host.musicMuted ? 'Music muted 🔇 (press M to unmute)' : 'Music on 🔊 (press M to mute)',
+    'ok',
+  );
 }
 
 function playFxWithVolume(name, volume = 1) {
