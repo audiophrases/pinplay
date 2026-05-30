@@ -921,7 +921,16 @@ textarea {
 }
 
 #hostQuestionCard .question-video-el {
-  max-height: min(40vh, 480px);
+  /* Same iframe-collapse + ratio problem as the student view: an <iframe>
+     has no intrinsic aspect ratio, so we set one explicitly and derive width
+     from the available height (~70vh) so the player fills the projector
+     without distorting. Capped at 1200px on wide displays. */
+  width: min(100%, 1200px, 70vh * 16 / 9);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: none;
+  object-fit: contain;
 }
 
 /* ==========================================================================

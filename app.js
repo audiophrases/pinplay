@@ -10522,13 +10522,25 @@ function renderHostQuestion(state) {
       const wrap = document.createElement('div');
       wrap.className = 'top-space question-video-wrap';
       if (config.src) {
+        const vStart = Number(config.start || 0) || 0;
+        const vEnd = config.end == null ? null : Number(config.end);
         if (config.provider === 'direct') {
           const video = document.createElement('video');
           video.controls = true;
           video.preload = 'metadata';
           video.src = config.src;
           video.className = 'question-video-el';
-          video.addEventListener('play', () => { stopFx('answering'); });
+          video.addEventListener('loadedmetadata', () => { video.currentTime = vStart; }, { once: true });
+          // Snap back into the configured [startAt, endAt] window on (re)play.
+          video.addEventListener('play', () => {
+            if (video.currentTime < vStart || (vEnd != null && video.currentTime >= vEnd)) {
+              video.currentTime = vStart;
+            }
+            stopFx('answering');
+          });
+          video.addEventListener('timeupdate', () => {
+            if (vEnd != null && video.currentTime >= vEnd) video.pause();
+          });
           video.addEventListener('pause', () => {
             const s = live.host.state;
             if (s && s.phase === 'question' && !s.questionClosed) resumeFx('answering');
@@ -10545,7 +10557,12 @@ function renderHostQuestion(state) {
           iframe.allowFullscreen = true;
           iframe.className = 'question-video-el';
           wrap.appendChild(iframe);
-          if (config.provider === 'youtube') _subscribeYtIframe(iframe);
+          if (config.provider === 'youtube') {
+            _subscribeYtIframe(iframe);
+            _enforceYtIframeClip(iframe, vStart, vEnd);
+          } else if (config.provider === 'vimeo') {
+            _enforceVimeoIframeClip(iframe, vStart, vEnd);
+          }
         }
       }
       hostQuestionAnswersEl.appendChild(wrap);
@@ -11297,6 +11314,84 @@ function _subscribeYtIframe(iframe) {
     trySend();
     if (++attempts >= 10) clearInterval(poller);
   }, 500);
+}
+
+// Enforce the configured [startAt, endAt] clip on a YouTube iframe across the
+// iframe boundary so the window is honored on every (re)play, not just the
+// first. Coexists with _subscribeYtIframe (which handles ambient ducking via
+// the global message listener above) by adding its own scoped listener.
+// Requires the embed URL to carry enablejsapi=1 (toVideoEmbedConfig sets it).
+function _enforceYtIframeClip(iframe, startAt, endAt) {
+  const post = (func, args) => {
+    try {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func, args: args || [] }), '*');
+    } catch { }
+  };
+  let prevState = -1;
+  const guard = setInterval(() => {
+    if (!iframe.isConnected) {
+      window.removeEventListener('message', onMessage);
+      clearInterval(guard);
+    }
+  }, 1000);
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (!e.data || typeof e.data !== 'string') return;
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    const info = msg && msg.info;
+    if (!info || typeof info.playerState !== 'number') return;
+    const t = Number(info.currentTime || 0);
+    const playing = info.playerState === 1;
+    if (playing && prevState !== 1 && (t < startAt - 0.3 || (endAt != null && t >= endAt - 0.1))) {
+      post('seekTo', [startAt, true]);
+    } else if (playing && endAt != null && t >= endAt) {
+      post('pauseVideo');
+    }
+    prevState = info.playerState;
+  };
+  window.addEventListener('message', onMessage);
+}
+
+// Vimeo equivalent. Vimeo's postMessage API uses method/event envelopes; we
+// subscribe to time/play/pause/finish, seek to startAt on load, re-clip on
+// replay from outside the window, and pause when crossing endAt.
+function _enforceVimeoIframeClip(iframe, startAt, endAt) {
+  const post = (method, value) => {
+    try {
+      const payload = { method };
+      if (value !== undefined) payload.value = value;
+      iframe.contentWindow.postMessage(JSON.stringify(payload), '*');
+    } catch { }
+  };
+  const subscribe = () => {
+    ['timeupdate', 'play', 'pause', 'finish'].forEach((ev) => post('addEventListener', ev));
+    post('setCurrentTime', startAt);
+  };
+  iframe.addEventListener('load', subscribe, { once: true });
+  let attempts = 0;
+  const poller = setInterval(() => { subscribe(); if (++attempts >= 10) clearInterval(poller); }, 500);
+  let lastT = startAt;
+  const guard = setInterval(() => {
+    if (!iframe.isConnected) {
+      window.removeEventListener('message', onMessage);
+      clearInterval(poller); clearInterval(guard);
+    }
+  }, 1000);
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (!e.data || typeof e.data !== 'string') return;
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.event === 'timeupdate') {
+      lastT = Number(msg.data && msg.data.seconds || 0);
+      if (endAt != null && lastT >= endAt) post('pause');
+    } else if (msg.event === 'play') {
+      if (lastT < startAt - 0.3 || (endAt != null && lastT >= endAt - 0.1)) {
+        post('setCurrentTime', startAt);
+      }
+    }
+  };
+  window.addEventListener('message', onMessage);
 }
 
 function isHostVideoPlaying() {
