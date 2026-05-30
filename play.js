@@ -6715,11 +6715,16 @@ function _startVoiceRecordSilentSR(lang) {
     };
     rec.onerror = () => { /* silent: collection is best-effort */ };
     rec.onend = () => {
-      // Auto-restart if MediaRecorder is still going. Chrome ends recognition
-      // on silence even with continuous=true, and an immediate start() can
-      // throw InvalidStateError — schedule on a microtask with a small delay.
+      // Do NOT auto-restart while a recording is in progress. Starting a fresh
+      // SpeechRecognition re-acquires the microphone, and on Windows/Chrome that
+      // re-acquisition makes the concurrent MediaRecorder drop samples — clipping
+      // the student's audio (e.g. "Hello my n… [gap] …eni"). This bit in LIVE mode
+      // because the 2s state poll's main-thread jank trips Chrome into ending
+      // recognition mid-utterance, firing this restart at the worst moment;
+      // assignment mode has no poll, so its single session never restarts.
+      // The recording is the graded artifact and must stay intact; the transcript
+      // is best-effort, so we keep whatever this session captured and stop here.
       _voiceRecordSR = null;
-      if (_voiceRecordSRActive) setTimeout(start, 150);
     };
 
     try {
