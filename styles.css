@@ -713,7 +713,8 @@ textarea {
   flex: 1 1 0;
   min-width: 0;
   max-width: 50%;
-  align-items: stretch;
+  /* Hug the text instead of stretching each pill to the full half-column width. */
+  align-items: center;
 }
 
 #hostQuestionAnswers.project-answers .puzzle-reveal-token {
