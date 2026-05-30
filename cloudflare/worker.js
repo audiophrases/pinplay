@@ -1068,6 +1068,10 @@ export default {
       });
       if (deleteResp.ok && env.QUIZ_MEDIA) {
         for (const prefix of mediaPrefixes) {
+          // Never delete shared cloud-quiz media (quiz-...): other assignments
+          // built from the same saved quiz still reference it. Only the preview's
+          // own preview-*/ folder is safe to remove here.
+          if (isSharedQuizMediaPrefix(prefix)) continue;
           try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
         }
         // Also remove student answer media co-located under this assignment
@@ -1328,6 +1332,10 @@ export default {
 
       if (deleteResp.ok && env.QUIZ_MEDIA) {
         for (const prefix of mediaPrefixes) {
+          // Never delete shared cloud-quiz media (quiz-...): other assignments
+          // built from the same saved quiz still reference it. Its lifecycle is
+          // owned by the cloud quiz-delete flow, not by deleting one assignment.
+          if (isSharedQuizMediaPrefix(prefix)) continue;
           try { await deleteR2Prefix(env.QUIZ_MEDIA, prefix); } catch { /* */ }
         }
         // Also remove student answer media co-located under this assignment
@@ -5803,6 +5811,17 @@ function extractMediaPrefixesFromQuiz(quiz) {
     }
   }
   return prefixes;
+}
+
+// True for prefixes that belong to a cloud-saved quiz (`quiz-...`, root-level or
+// workspace-scoped). Such media is SHARED: a single saved quiz can back many
+// assignments/previews, and its lifecycle is tied to the quiz itself (removed via
+// the cloud quiz-delete flow), NOT to any one assignment or preview. Deleting it
+// when an assignment/preview goes away would orphan the images of every OTHER
+// assignment built from the same quiz — so the delete paths skip these.
+function isSharedQuizMediaPrefix(prefix) {
+  const seg = String(prefix || '').split('/').pop() || '';
+  return seg.startsWith('quiz-');
 }
 
 // Walk a quiz, find any `data:` URLs in audioData/imageData, put them to R2 under
