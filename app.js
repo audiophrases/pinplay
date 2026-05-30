@@ -10497,7 +10497,7 @@ function renderHostQuestion(state) {
     readingBlock.className = 'reading-text-block reading-text-host';
     readingBlock.textContent = hostReadingText;
     hostQuestionAnswersEl.appendChild(readingBlock);
-  } else if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.imageData) {
+  } else if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
     preview.className = 'pin-preview question-image-preview';
     const img = document.createElement('img');
@@ -10651,15 +10651,41 @@ function renderHostQuestion(state) {
 
   if (question.type === 'match_pairs') {
     hostQuestionHintEl.textContent = '';
-    const pairsWrap = document.createElement('div');
-    pairsWrap.className = 'match-pairs-content-wrap';
-    pairsWrap.style.width = '100%';
-    if (!showReveal) {
-      renderMatchPairsPreview(pairsWrap, question.leftItems || [], question.rightOptions || []);
+    const leftItems = question.leftItems || [];
+    const rightOptions = question.rightOptions || [];
+
+    // Mirror the student device: when there's an image, sit it beside the
+    // columns instead of stacking a full-width image above them.
+    let columnsTarget;
+    if (question.imageData) {
+      const overlay = document.createElement('div');
+      overlay.className = 'match-pairs-center-overlay host-mode';
+
+      const imgWrap = document.createElement('div');
+      imgWrap.className = 'match-pairs-img-wrap';
+      const img = document.createElement('img');
+      img.src = question.imageData;
+      img.alt = 'Question image';
+      img.dataset.zoomable = '1';
+      imgWrap.appendChild(img);
+
+      columnsTarget = document.createElement('div');
+      columnsTarget.className = 'match-pairs-content-wrap';
+
+      overlay.append(imgWrap, columnsTarget);
+      hostQuestionAnswersEl.appendChild(overlay);
     } else {
-      renderMatchPairsReveal(pairsWrap, question.pairs || []);
+      columnsTarget = document.createElement('div');
+      columnsTarget.className = 'match-pairs-content-wrap';
+      columnsTarget.style.width = '100%';
+      hostQuestionAnswersEl.appendChild(columnsTarget);
     }
-    hostQuestionAnswersEl.appendChild(pairsWrap);
+
+    if (!showReveal) {
+      renderMatchPairsPreview(columnsTarget, leftItems, rightOptions);
+    } else {
+      renderMatchPairsReveal(columnsTarget, leftItems, rightOptions, question.pairs || []);
+    }
     return;
   }
 
