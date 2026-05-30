@@ -1,7 +1,0 @@
-BRANCH: main
---- log ---
-c0e33f4 feat(quiz-room): improve match pairs reveal logic and enhance image handling in host mode
-84e711c feat(quiz-room): enhance match pairs rendering with image support and layout adjustments
-1106b56 feat(quiz-room): enhance answer sanitization for media submissions in open questions
---- status ---
---- end ---
