@@ -1,27 +1,7 @@
-Source: [ 'he', 'go', 'to', 'school', 'every', 'days' ]
-Target: [ 'he', 'goes', 'to', 'school', 'every', 'day' ]
-
-Prompt: He go to school every days.
-Corrected: He goes to school every day.
-START ERROR BLOCK (total=1) at (6, 6)
-SUB (5, 5) 'days' -> 'day' dp=2->1
-MATCH (4, 4) 'every' == 'every' dp=1
-MATCH (3, 3) 'school' == 'school' dp=1
-MATCH (2, 2) 'to' == 'to' dp=1
-START ERROR BLOCK (total=2) at (2, 2)
-SUB (1, 1) 'go' -> 'goes' dp=1->0
-MATCH (0, 0) 'he' == 'he' dp=0
-Count: 2
-Source: [ 'i', 'goes', 'to', 'store' ]
-Target: [ 'i', 'go', 'to', 'the', 'store' ]
-
-Prompt: I goes to store.
-Corrected: I go to the store.
-MATCH (3, 4) 'store' == 'store' dp=2
-START ERROR BLOCK (total=1) at (3, 4)
-INS (-, 3) 'the' dp=2->1
-MATCH (2, 2) 'to' == 'to' dp=1
-START ERROR BLOCK (total=2) at (2, 2)
-SUB (1, 1) 'goes' -> 'go' dp=1->0
-MATCH (0, 0) 'i' == 'i' dp=0
-Count: 2
+BRANCH: main
+--- log ---
+c0e33f4 feat(quiz-room): improve match pairs reveal logic and enhance image handling in host mode
+84e711c feat(quiz-room): enhance match pairs rendering with image support and layout adjustments
+1106b56 feat(quiz-room): enhance answer sanitization for media submissions in open questions
+--- status ---
+--- end ---
