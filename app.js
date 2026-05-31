@@ -4026,6 +4026,9 @@ async function exportCreationPrompt() {
       ? 'For generated audio use audioMode:"tts", audioData:"", meaningful audioText, and always include question-level ttsLanguage.'
       : 'Do not add question audio fields unless required by request.',
     cleanRequest.audio === 'some'
+      ? 'In audioText, never write blanks as underscores or "___" — TTS reads them aloud literally as "underscore underscore underscore". Use the spoken word "blank" instead (e.g. prompt "I went to the ___" → audioText "I went to the blank").'
+      : undefined,
+    cleanRequest.audio === 'some'
       ? 'If question ttsLanguage is "OTHER", question language must be an exact Edge voice ID (format like "xx-XX-NameNeural").'
       : undefined,
     cleanRequest.audio === 'some'
