@@ -21,6 +21,9 @@ __pycache__/
 cloudflare/restore-secrets.local.cmd
 question-bank/.bridge.secret
 
+# Teacher onboarding wizard — generated, teacher-specific artifacts (never commit)
+setup/.generated/
+
 # Assets Deployment Ignores
 .git/
 .git/**
