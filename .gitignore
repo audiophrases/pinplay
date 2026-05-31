@@ -40,6 +40,7 @@ tests/**
 !question-bank/stop.cmd
 *.log
 README.md
+!setup/README.md
 TEACHER_GUIDE_BATCHES.md
 QA_CHECKLIST.md
 QA_NOTES_2026-03-07.md

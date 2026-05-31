@@ -40,6 +40,10 @@ const OWNER_API_HOST = 'https://pinplay-api.eugenime.workers.dev'; // stamped in
 const OWNER_FRONTEND_BASE = 'https://api.pinplay.win';             // DEFAULT_BACKEND_URL in app.js/play.js
 const R2_BUCKET = 'pinplay-quiz-media';
 
+// Public source for self-update (--update downloads + unpacks this, then redeploys).
+const UPDATE_TARBALL_URL = 'https://codeload.github.com/audiophrases/pinplay/tar.gz/refs/heads/main';
+const UPDATE_TARBALL_TOPDIR = 'pinplay-main'; // top-level folder inside the tarball
+
 // Canonical frontend assets to publish (the assets worker serves _site/).
 const FRONTEND_ASSETS = ['index.html', 'app.js', 'play.js', 'styles.css', 'favicon.svg', 'question-bank-ui.js'];
 const FRONTEND_DIRS = ['create', 'music'];
@@ -171,6 +175,62 @@ function replaceInFile(file, from, to) {
 function parseDeployedUrl(stdout) {
   const m = stdout.match(/https:\/\/[a-z0-9.-]+\.workers\.dev/i);
   return m ? m[0] : '';
+}
+
+// Download the latest published PinPlay code (public tarball) and copy the
+// canonical app files over the local repo, so a teacher gets the owner's newest
+// bug fixes / features without needing git. Refreshes ONLY canonical app files —
+// never touches setup/.generated/ (the teacher's own config/secrets) or _site/
+// (rebuilt fresh from these files during deploy). Returns true on success.
+async function fetchLatestCode() {
+  console.log(head('Getting the latest PinPlay updates'));
+  if (typeof fetch !== 'function') {
+    console.log(warn('This Node version can\'t download updates automatically. Deploying the code you have.'));
+    return false;
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinplay-update-'));
+  const tgz = path.join(tmpDir, 'pinplay.tgz');
+  try {
+    console.log(dim('Downloading the newest version…'));
+    const res = await fetch(UPDATE_TARBALL_URL, { redirect: 'follow' });
+    if (!res.ok) throw new Error(`download failed (HTTP ${res.status})`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(tgz, buf);
+
+    // tar ships on Windows 10+, macOS, and Linux. On Windows, GNU tar treats the
+    // colon in "C:\..." as a remote-host spec, so --force-local is required there
+    // (BSD tar on macOS has no such flag and no drive-letter ambiguity).
+    const tarArgs = process.platform === 'win32'
+      ? ['--force-local', '-xzf', tgz, '-C', tmpDir]
+      : ['-xzf', tgz, '-C', tmpDir];
+    const ex = runCapture('tar', tarArgs);
+    if (ex.code !== 0) throw new Error(`could not unpack update: ${ex.stderr.trim()}`);
+
+    const srcRoot = path.join(tmpDir, UPDATE_TARBALL_TOPDIR);
+    if (!fs.existsSync(srcRoot)) throw new Error('unexpected update archive layout');
+
+    // Canonical files/dirs to refresh = exactly what the deploy steps consume.
+    const files = ['cloudflare/worker.js', 'cloudflare/wrangler.toml', 'cloudflare/edge_tts_bridge.py', ...FRONTEND_ASSETS];
+    for (const rel of files) {
+      const from = path.join(srcRoot, rel);
+      if (fs.existsSync(from)) copyFileSafe(from, path.join(REPO_ROOT, rel));
+    }
+    for (const d of FRONTEND_DIRS) {
+      const from = path.join(srcRoot, d);
+      if (fs.existsSync(from)) copyDirRecursive(from, path.join(REPO_ROOT, d));
+    }
+    // Refresh bundled JSON templates too.
+    for (const f of fs.readdirSync(srcRoot)) {
+      if (f.endsWith('.json')) copyFileSafe(path.join(srcRoot, f), path.join(REPO_ROOT, f));
+    }
+    console.log(ok('✓ Updated to the latest PinPlay version.'));
+    return true;
+  } catch (e) {
+    console.log(warn(`Could not fetch updates (${e.message}). Deploying the code you already have.`));
+    return false;
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* */ }
+  }
 }
 
 // ---------- State persistence (resume / --update) ----------
@@ -492,6 +552,7 @@ async function main() {
       process.exit(1);
     }
     await step1Prereqs();
+    await fetchLatestCode(); // self-fetch newest code; falls back to local on any failure
     const { tomlPath, workerCopy } = generateTeacherConfig();
     const apiUrl = deployApiPass1(tomlPath, state);
     deployApiPass2(tomlPath, workerCopy, apiUrl);
