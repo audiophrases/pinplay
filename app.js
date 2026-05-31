@@ -3028,6 +3028,7 @@ function toVideoEmbedConfig(media) {
       if (parsed.hostname.includes('youtu.be')) id = parsed.pathname.slice(1);
       if (!id && parsed.searchParams.get('v')) id = parsed.searchParams.get('v');
       if (!id && parsed.pathname.includes('/embed/')) id = parsed.pathname.split('/embed/')[1];
+      if (!id && parsed.pathname.includes('/shorts/')) id = parsed.pathname.split('/shorts/')[1].split('/')[0];
       if (!id) return { provider, src: '', start, end };
       const embed = new URL(`https://www.youtube.com/embed/${id}`);
       if (start > 0) embed.searchParams.set('start', String(Math.floor(start)));

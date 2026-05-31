@@ -5694,6 +5694,8 @@ function assignmentVideoEmbedConfig(media) {
     if (m.provider === 'youtube' && u.hostname.includes('youtu')) {
       let id = u.searchParams.get('v') || '';
       if (!id && u.hostname.includes('youtu.be')) id = u.pathname.slice(1);
+      if (!id && u.pathname.includes('/embed/')) id = u.pathname.split('/embed/')[1].split('/')[0];
+      if (!id && u.pathname.includes('/shorts/')) id = u.pathname.split('/shorts/')[1].split('/')[0];
       if (!id) return { ...m, src: '' };
       const e = new URL(`https://www.youtube.com/embed/${id}`);
       if (m.startAt > 0) e.searchParams.set('start', String(Math.floor(m.startAt)));
