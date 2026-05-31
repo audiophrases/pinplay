@@ -15,20 +15,41 @@ PinPlay, and your students' data stays in your own account.
   read aloud in natural "neural" voices. Skip it and PinPlay still reads questions
   using your device's built-in voice.
 
-## How to run it
+## How to run it (Windows — easiest)
 
-1. Install **Node.js** (the "LTS" version) from <https://nodejs.org> if you don't
-   have it.
-2. Open a terminal (on Windows: "PowerShell"; on Mac: "Terminal").
-3. Go to the PinPlay folder, then run:
+You don't need to download anything first. Just:
+
+1. Click the **Start** menu, type **PowerShell**, and open it.
+2. Paste this one line and press **Enter**:
+
+   ```text
+   iwr https://raw.githubusercontent.com/audiophrases/pinplay/main/setup/install.ps1 | iex
+   ```
+
+That command installs Node.js if needed, downloads PinPlay into a `PinPlay`
+folder in your user folder, and starts the wizard automatically. If Windows shows
+a permission prompt while installing Node.js, click **Yes**.
+
+> If pasting the command is blocked by your system's security policy, use the
+> "Manual steps" below instead.
+
+### Manual steps (Mac, or if the one-liner is blocked)
+
+1. Install **Node.js** (the "LTS" version) from <https://nodejs.org>.
+2. Download PinPlay: go to the project's GitHub page, click the green **Code**
+   button ➜ **Download ZIP**, and unzip it. That folder is your "PinPlay folder."
+3. Open a terminal (Windows: **PowerShell**; Mac: **Terminal**), go to the PinPlay
+   folder, and run:
 
    ```text
    node setup/pinplay-setup.mjs
    ```
 
-4. Follow the on-screen steps. The wizard opens the right web pages for you and
-   pauses whenever it needs you to do something (like signing in or clicking a
-   button), then continues when you press **ENTER**.
+## What happens next
+
+Follow the on-screen steps. The wizard opens the right web pages for you and
+pauses whenever it needs you to do something (like signing in or clicking a
+button), then continues when you press **ENTER**.
 
 When it finishes, it prints your three links:
 
