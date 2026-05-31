@@ -6054,8 +6054,18 @@ function onExamFocusVisibilityChange() {
 }
 
 function onExamFocusBlur() {
-  // Some browsers fire blur without hidden (e.g. dev tools focus). Treat as lost too.
-  handleExamFocusLost();
+  // Clicking Play on an embedded video (YouTube/Vimeo iframe) moves focus *into*
+  // the iframe, firing window 'blur' even though the tab is still visible and the
+  // student never left. A real leave always trips visibilitychange (document.hidden),
+  // which we handle separately — so a blur that just handed focus to an in-page
+  // iframe is not a leave. Defer one tick so document.activeElement settles to the
+  // iframe before we check (it can briefly read <body> during the blur).
+  setTimeout(() => {
+    if (examFocus.blurAt != null) return; // visibilitychange already handled it
+    if (!document.hidden && document.activeElement?.tagName === 'IFRAME') return;
+    // Some browsers fire blur without hidden (e.g. dev tools focus). Treat as lost too.
+    handleExamFocusLost();
+  }, 0);
 }
 
 function handleExamFocusLost() {
