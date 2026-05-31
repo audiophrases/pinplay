@@ -2829,6 +2829,15 @@ async function pollPlayerState() {
   if (live.player.mode !== 'live') return;
   if (!live.player.pin || !live.player.id || !live.player.token) return;
 
+  // While a voice answer is recording, skip this poll tick. The fetch + full
+  // renderPlayerState janks the main thread, which trips Chrome's background
+  // SpeechRecognition into ending mid-utterance — and since we no longer restart
+  // it (that re-grabbed the mic and clipped the audio), everything spoken after
+  // the jank is lost from the best-effort transcript. The recorder runs
+  // continuously regardless; polling resumes on the next tick once recording
+  // stops. (Assignment mode never polls, which is why its transcript was full.)
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
+
   try {
     const data = await api(
       `/api/player/state?pin=${encodeURIComponent(live.player.pin)}&playerId=${encodeURIComponent(live.player.id)}`,
