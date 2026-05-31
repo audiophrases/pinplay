@@ -5914,7 +5914,16 @@ function maybeActivateExamModeFocusTracking() {
 function onExamFullscreenChange() {
   // Only treat exits as a focus-loss event — entering fullscreen is fine.
   if (document.fullscreenElement) return;
-  handleExamFocusLost();
+  // Exiting fullscreen *from an embedded video* (the student opened the video's own
+  // fullscreen, then closed it) hands focus back to the in-page iframe/video — the
+  // tab stays visible and they never left. Same guard as onExamFocusBlur; a real
+  // leave still trips visibilitychange. Defer a tick so activeElement settles.
+  setTimeout(() => {
+    if (examFocus.blurAt != null) return; // visibilitychange already handled it
+    const tag = document.activeElement?.tagName;
+    if (!document.hidden && (tag === 'IFRAME' || tag === 'VIDEO')) return;
+    handleExamFocusLost();
+  }, 0);
 }
 
 function requestExamFullscreen() {
