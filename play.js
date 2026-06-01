@@ -6552,6 +6552,25 @@ function normalizeErrorHuntToken(text) {
   return String(text || '').toLowerCase().trim();
 }
 
+// Splits each whitespace word into [leadingPunct?, core, trailingPunct?] tokens
+// so the diff aligns words and punctuation independently. Without this, a word
+// that moves drags the sentence-final period with it (e.g. "room." -> "room")
+// and the diff flags the untouched word as an edit. Internal punctuation
+// (don't, e-mail) stays attached to the core. Uses Unicode letter/number
+// classes so accented characters (á, ñ, ü) count as part of the word.
+function tokenizeErrorHunt(text) {
+  const out = [];
+  for (const w of tokenizeWords(text)) {
+    const m = w.match(/^([^\p{L}\p{N}]*)([\s\S]*?)([^\p{L}\p{N}]*)$/u);
+    if (!m) { out.push(w); continue; }
+    const [, lead, core, trail] = m;
+    if (lead) out.push(lead);
+    if (core) out.push(core);
+    if (trail) out.push(trail);
+  }
+  return out;
+}
+
 function formatPartialScore(n) {
   const x = Number(n) || 0;
   return Number.isInteger(x) ? String(x) : x.toFixed(1);
@@ -6580,8 +6599,8 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
   // 2. Calculate the required errors for each variant and take the minimum
   // (the closest-fit correction — the fewest edits the player must make).
   for (const correctedStr of validVariants) {
-    const source = tokenizeWords(prompt).map(normalizeErrorHuntToken);
-    const target = tokenizeWords(correctedStr).map(normalizeErrorHuntToken);
+    const source = tokenizeErrorHunt(prompt).map(normalizeErrorHuntToken);
+    const target = tokenizeErrorHunt(correctedStr).map(normalizeErrorHuntToken);
 
     if (!source.length || !target.length) continue;
     if (source.join(' ') === target.join(' ')) continue;
@@ -6648,8 +6667,8 @@ function countErrorHuntRequiredTokens(prompt, corrected) {
 // HTML string showing the current rewrite with changed/added/removed words
 // highlighted relative to the original prompt.
 function renderErrorHuntDiff(original, current) {
-  const srcRaw = tokenizeWords(original);
-  const tgtRaw = tokenizeWords(current);
+  const srcRaw = tokenizeErrorHunt(original);
+  const tgtRaw = tokenizeErrorHunt(current);
   const src = srcRaw.map(normalizeErrorHuntToken);
   const tgt = tgtRaw.map(normalizeErrorHuntToken);
   const m = src.length;
@@ -6695,13 +6714,19 @@ function renderErrorHuntDiff(original, current) {
   }
   const ops = opsRev.reverse();
 
-  const html = ops.map((o) => {
-    const t = escapeHtml(o.text);
-    if (o.kind === 'same') return `<span class="ehd-same">${t}</span>`;
-    if (o.kind === 'changed') return `<span class="ehd-changed">${t}</span>`;
-    if (o.kind === 'added') return `<span class="ehd-added">${t}</span>`;
-    return `<span class="ehd-removed">${t}</span>`;
-  }).join(' ');
+  const clsFor = (kind) =>
+    kind === 'same' ? 'ehd-same' :
+    kind === 'changed' ? 'ehd-changed' :
+    kind === 'added' ? 'ehd-added' : 'ehd-removed';
+  // A token that is pure punctuation glues to the preceding word with no space
+  // (e.g. "room" + "." -> "room."). Covers trailing marks (. , ! ? ; :) which is
+  // the common case here; leading marks like "¿" are rare in this English app.
+  const isPunctTok = (s) => /^[^\p{L}\p{N}]+$/u.test(String(s || ''));
+  let html = '';
+  ops.forEach((o, idx) => {
+    const span = `<span class="${clsFor(o.kind)}">${escapeHtml(o.text)}</span>`;
+    html += (idx === 0 || isPunctTok(o.text)) ? span : ' ' + span;
+  });
 
   return { editedCount: errorPositions.size, html };
 }
