@@ -5556,10 +5556,14 @@ function aiGradeImportEditRatio(original, edited) {
 function aiGradeImportResolveCorrection(row) {
   const studentText = String(row?.answer?.answerText || '').trim();
   const correctedText = String(row?.correctedText || '').trim();
+  const note = String(row?.comment || '').trim();
+  let body;
   if (aiGradeImportIsTextDiffType(row?.qType) && correctedText && correctedText !== studentText && studentText) {
-    return CORRECTION_DIFF_PREFIX + computeWordDiff(studentText, correctedText);
+    body = CORRECTION_DIFF_PREFIX + computeWordDiff(studentText, correctedText);
+  } else {
+    body = String(row?.correction || '');
   }
-  return String(row?.correction || '');
+  return joinCorrectionNote(body, note);
 }
 
 function aiGradeImportDedupe(rows) {
@@ -5627,6 +5631,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
         <textarea data-edit-corrected data-autosize rows="1" placeholder="Corrected text" style="width:100%;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
         <div data-diff-preview style="margin-top:4px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
+        <textarea data-edit-comment data-autosize rows="1" maxlength="500" placeholder="💬 Comment to student (optional) — shown below the diff" style="width:100%;margin-top:4px;font-size:0.8rem;line-height:1.4;resize:none;overflow:hidden;color:#374151;" ${disabled ? 'disabled' : ''}>${escapeHtml(String(r.comment || ''))}</textarea>
       </td>`;
     }
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
@@ -5809,6 +5814,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const pointsInput = tr.querySelector('[data-edit-points]');
     const corrInput = tr.querySelector('[data-edit-correction]');
     const correctedInput = tr.querySelector('[data-edit-corrected]');
+    const commentInput = tr.querySelector('[data-edit-comment]');
     const diffPreviewEl = tr.querySelector('[data-diff-preview]');
     const includeCb = tr.querySelector('[data-include-row]');
     const autoInclude = () => {
@@ -5822,16 +5828,20 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       if (!diffPreviewEl) return;
       const studentText = String(row?.answer?.answerText || '').trim();
       const correctedText = String(row.correctedText || '').trim();
+      const noteHtml = renderCorrectionNoteHtml(row.comment);
       if (!studentText || !correctedText || studentText === correctedText) {
-        diffPreviewEl.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+        diffPreviewEl.innerHTML = noteHtml
+          ? noteHtml
+          : `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
         return;
       }
-      diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(studentText, correctedText));
+      diffPreviewEl.innerHTML = renderStructuredCorrectionDiff(computeWordDiff(studentText, correctedText)) + noteHtml;
     };
     if (correctedInput) {
       row.correctedText = String(correctedInput.value || '');
-      renderDiff();
     }
+    if (commentInput) row.comment = String(commentInput.value || '');
+    renderDiff();
     tr.querySelectorAll('textarea[data-autosize]').forEach((el) => autosize(el));
     pointsInput?.addEventListener('input', () => {
       const v = Math.round(Number(pointsInput.value || 0));
@@ -5846,6 +5856,12 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     correctedInput?.addEventListener('input', () => {
       row.correctedText = String(correctedInput.value || '');
       autosize(correctedInput);
+      renderDiff();
+      autoInclude();
+    });
+    commentInput?.addEventListener('input', () => {
+      row.comment = String(commentInput.value || '');
+      autosize(commentInput);
       renderDiff();
       autoInclude();
     });
