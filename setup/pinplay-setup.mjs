@@ -374,28 +374,27 @@ async function step8TtsBridge(tomlPath, state) {
     return;
   }
 
-  // Generate a deployable bridge folder from the repo's bridge source.
-  const bridgeDir = path.join(GEN_DIR, 'tts-bridge');
-  ensureDir(bridgeDir);
-  copyFileSafe(path.join(CF_DIR, 'edge_tts_bridge.py'), path.join(bridgeDir, 'edge_tts_bridge.py'));
-  fs.writeFileSync(path.join(bridgeDir, 'requirements.txt'), 'edge-tts\nfastapi\nuvicorn\n');
-  fs.writeFileSync(path.join(bridgeDir, 'render.yaml'), [
-    'services:',
-    '  - type: web',
-    '    name: pinplay-tts-bridge',
-    '    runtime: python',
-    '    plan: free',
-    '    buildCommand: pip install -r requirements.txt',
-    '    startCommand: uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT',
-    '',
-  ].join('\n'));
-  console.log(ok(`\n✓ Created a ready-to-deploy bridge in: ${bridgeDir}`));
-  console.log('Deploy it free on Render:');
-  console.log('  1. Create a free account at ' + bold('https://render.com'));
-  console.log('  2. New ➜ Web Service ➜ upload/connect this folder (it includes render.yaml)');
-  console.log('  3. When it\'s live, copy the service URL (looks like https://something.onrender.com)');
-  openInBrowser('https://render.com');
-  await pause('Deploy the bridge, then press ENTER.');
+  // The bridge already lives in the public repo at setup/tts-bridge (its own
+  // Python-only folder so Render auto-detects Python cleanly). The teacher deploys
+  // that folder straight from GitHub via Render's "Public Git Repository" option —
+  // Render cannot upload a local folder, it only deploys from Git.
+  console.log('\nDeploy your own free bridge on Render (no credit card needed):');
+  console.log('  1. Create a free account / log in at ' + bold('https://render.com'));
+  console.log('  2. Click ' + bold('New  ->  Web Service') + '.');
+  console.log('  3. Open the ' + bold('"Public Git Repository"') + ' tab and paste this address:');
+  console.log('       ' + bold(REPO_WEB_URL));
+  console.log('     then click ' + bold('Connect') + '.');
+  console.log('  4. Fill in these settings exactly (copy/paste the bold parts):');
+  console.log('       Name            pinplay-tts-bridge  (or any name you like)');
+  console.log('       Root Directory  ' + bold('setup/tts-bridge'));
+  console.log('       Language        Python 3   (filled in automatically)');
+  console.log('       Build Command   pip install -r requirements.txt   (filled in automatically)');
+  console.log('       Start Command   ' + bold('uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT'));
+  console.log('       Instance Type   ' + bold('Free'));
+  console.log('  5. Click ' + bold('Deploy Web Service') + ' and wait until the page says ' + bold('"Live"') + '.');
+  console.log('  6. Copy the service URL near the top (looks like https://pinplay-tts-bridge.onrender.com).');
+  openInBrowser('https://dashboard.render.com/web/new');
+  await pause('\nDeploy the bridge, then press ENTER.');
 
   let bridgeUrl = '';
   while (!bridgeUrl) {
