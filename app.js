@@ -6547,10 +6547,15 @@ function reconstructCorrectedFromDiff(diffBody) {
 function inlineCorrectionDiffSetup({ correctionInput, studentText, qType }) {
   const isTextDiff = qType === 'open' || qType === 'text';
   const studentAnswer = isTextDiff ? String(studentText || '').trim() : '';
-  const initial = String(correctionInput.value || '');
+  // Peel off any AI/teacher comment so the editor only ever shows/operates on
+  // the correction body; the note rides along untouched and is re-attached in
+  // finalize().
+  const { body: initial, note: storedNote } = splitCorrectionNote(correctionInput.value || '');
   const hasStoredDiff = initial.startsWith(CORRECTION_DIFF_PREFIX);
   if (hasStoredDiff && studentAnswer) {
     correctionInput.value = reconstructCorrectedFromDiff(initial.slice(CORRECTION_DIFF_PREFIX.length));
+  } else if (storedNote) {
+    correctionInput.value = initial;
   }
   const preloadedAnswer = studentAnswer && (hasStoredDiff || !initial) ? studentAnswer : '';
   const diffPreview = document.createElement('div');
@@ -6576,11 +6581,14 @@ function inlineCorrectionDiffSetup({ correctionInput, studentText, qType }) {
   correctionInput.addEventListener('input', render);
   const finalize = (rawValue) => {
     const v = String(rawValue ?? correctionInput.value ?? '');
+    let bodyOut;
     if (preloadedAnswer) {
-      if (v === preloadedAnswer || !v.trim()) return v.trim() ? v : '';
-      return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+      if (v === preloadedAnswer || !v.trim()) bodyOut = v.trim() ? v : '';
+      else bodyOut = CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+    } else {
+      bodyOut = v;
     }
-    return v;
+    return joinCorrectionNote(bodyOut, storedNote);
   };
   return { diffPreview, finalize, render };
 }
@@ -6850,7 +6858,9 @@ function renderGradingFocusItem() {
 
   const submittedAt = it?.submittedAt ? `Submitted ${new Date(it.submittedAt).toLocaleString()}` : '';
   const initialPoints = Number(grade?.pointsAwarded || 0);
-  const initialCorrection = String(grade?.correction || '');
+  // Split off any teacher comment; the editor works on the body only and
+  // re-attaches the note in buildFinalCorrection so editing never loses it.
+  const { body: initialCorrection, note: storedNote } = splitCorrectionNote(grade?.correction || '');
   const initialAudioKey = String(grade?.correctionAudioKey || '');
   const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
   const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
@@ -7039,11 +7049,12 @@ function renderGradingFocusItem() {
 
   function buildFinalCorrection(rawValue) {
     const v = String(rawValue || '');
+    let bodyOut = v;
     if (preloadedAnswer) {
-      if (v === preloadedAnswer) return '';
-      if (v.trim()) return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+      if (v === preloadedAnswer) bodyOut = '';
+      else if (v.trim()) bodyOut = CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
     }
-    return v;
+    return joinCorrectionNote(bodyOut, storedNote);
   }
 
   async function saveCurrentAndAdvance() {
@@ -7454,7 +7465,9 @@ function renderStudentGradingFocusItem() {
     : `<span style="background:#dcfce7;color:#166534;border-radius:10px;padding:2px 10px;font-size:0.75rem;font-weight:700;">GRADED · ${Number(grade.pointsAwarded || 0)} pts</span>`;
 
   const initialPoints = Number(grade?.pointsAwarded || 0);
-  const initialCorrection = String(grade?.correction || '');
+  // Split off any teacher comment; the editor works on the body only and
+  // re-attaches the note in buildFinalCorrection so editing never loses it.
+  const { body: initialCorrection, note: storedNote } = splitCorrectionNote(grade?.correction || '');
   const initialAudioKey = String(grade?.correctionAudioKey || '');
   const isTextAnswer = qType !== 'voice_record' && qType !== 'image_open';
   const studentAnswerText = isTextAnswer ? String(it?.answerText || '').trim() : '';
@@ -7642,11 +7655,12 @@ function renderStudentGradingFocusItem() {
 
   function buildFinalCorrection(rawValue) {
     const v = String(rawValue || '');
+    let bodyOut = v;
     if (preloadedAnswer) {
-      if (v === preloadedAnswer) return '';
-      if (v.trim()) return CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
+      if (v === preloadedAnswer) bodyOut = '';
+      else if (v.trim()) bodyOut = CORRECTION_DIFF_PREFIX + computeWordDiff(preloadedAnswer, v);
     }
-    return v;
+    return joinCorrectionNote(bodyOut, storedNote);
   }
 
   async function saveCurrentAndAdvance() {

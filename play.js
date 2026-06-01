@@ -4341,6 +4341,18 @@ function escapeHtmlText(s) {
 }
 
 const CORRECTION_DIFF_PREFIX = '§§DIFF§§';
+// Optional teacher comment appended after the diff/correction body. Peeled off
+// before the diff parser runs (see splitCorrectionNote), so the diff color
+// coding is never affected — and old corrections without the marker render
+// exactly as before.
+const CORRECTION_NOTE_PREFIX = '§§NOTE§§';
+
+function splitCorrectionNote(stored) {
+  const s = String(stored || '');
+  const i = s.indexOf(CORRECTION_NOTE_PREFIX);
+  if (i === -1) return { body: s, note: '' };
+  return { body: s.slice(0, i), note: s.slice(i + CORRECTION_NOTE_PREFIX.length) };
+}
 
 function renderStructuredCorrectionDiff(text) {
   const safe = escapeHtmlText(text);
@@ -4351,20 +4363,33 @@ function renderStructuredCorrectionDiff(text) {
     .replace(/\{\+([\s\S]+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
 }
 
+// Teacher's guidance comment, rendered as a distinct block below the diff.
+// Inline styles so it matches regardless of which stylesheet is loaded.
+function renderCorrectionNoteHtml(note) {
+  const n = String(note || '').trim();
+  if (!n) return '';
+  const safe = escapeHtmlText(n).replace(/\n/g, '<br>');
+  return `<span class="correction-note" style="display:block;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(120,120,120,0.35);font-style:italic;opacity:0.92;">💬 ${safe}</span>`;
+}
+
 function buildCorrectionDiffHtml(correction, original) {
-  const corr = String(correction || '');
+  const { body, note } = splitCorrectionNote(correction);
+  const corr = String(body || '');
+  let html;
   if (corr.startsWith(CORRECTION_DIFF_PREFIX)) {
-    return renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+    html = renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+  } else {
+    const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
+    const tokens = corr.match(/\s+|[^\s]+/g) || [];
+    html = tokens.map((tok) => {
+      const safe = escapeHtmlText(tok);
+      const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
+      const word = core ? String(core).toLowerCase() : null;
+      if (!word || origWords.has(word)) return safe;
+      return `<span class="join-correction-diff">${safe}</span>`;
+    }).join('');
   }
-  const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
-  const tokens = corr.match(/\s+|[^\s]+/g) || [];
-  return tokens.map((tok) => {
-    const safe = escapeHtmlText(tok);
-    const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
-    const word = core ? String(core).toLowerCase() : null;
-    if (!word || origWords.has(word)) return safe;
-    return `<span class="join-correction-diff">${safe}</span>`;
-  }).join('');
+  return html + renderCorrectionNoteHtml(note);
 }
 
 function appendReactionBar() {
