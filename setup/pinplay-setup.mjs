@@ -43,6 +43,7 @@ const R2_BUCKET = 'pinplay-quiz-media';
 // Public source for self-update (--update downloads + unpacks this, then redeploys).
 const UPDATE_TARBALL_URL = 'https://codeload.github.com/audiophrases/pinplay/tar.gz/refs/heads/main';
 const UPDATE_TARBALL_TOPDIR = 'pinplay-main'; // top-level folder inside the tarball
+const REPO_WEB_URL = 'https://github.com/audiophrases/pinplay'; // public repo, used for the Render bridge deploy
 
 // Canonical frontend assets to publish (the assets worker serves _site/).
 const FRONTEND_ASSETS = ['index.html', 'app.js', 'play.js', 'styles.css', 'favicon.svg', 'question-bank-ui.js'];

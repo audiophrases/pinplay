@@ -1,0 +1,11 @@
+# Render Blueprint for the PinPlay neural-voice (Edge TTS) bridge.
+# Most teachers deploy via Render -> New -> Web Service -> "Public Git Repository"
+# (see README.md), which does not read this file. It is kept for reference and for
+# anyone who prefers Render's Blueprint flow.
+services:
+  - type: web
+    name: pinplay-tts-bridge
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT
