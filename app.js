@@ -6495,6 +6495,30 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
 // Grade-by-Question focused modal — single-student view with keyboard shortcuts
 // ============================================================================
 const CORRECTION_DIFF_PREFIX = '§§DIFF§§';
+// Optional teacher comment appended to the stored `correction` string after
+// the diff/correction body. Keeping it behind its own marker lets the diff
+// parser stay oblivious to it — `splitCorrectionNote` peels it off first so
+// the body still starts with CORRECTION_DIFF_PREFIX (or is a plain comment),
+// exactly as before this feature existed.
+const CORRECTION_NOTE_PREFIX = '§§NOTE§§';
+
+// Split a stored correction into its diff/comment `body` and the optional
+// trailing teacher `note`. Backward compatible: strings without the marker
+// return `{ body: <whole string>, note: '' }`.
+function splitCorrectionNote(stored) {
+  const s = String(stored || '');
+  const i = s.indexOf(CORRECTION_NOTE_PREFIX);
+  if (i === -1) return { body: s, note: '' };
+  return { body: s.slice(0, i), note: s.slice(i + CORRECTION_NOTE_PREFIX.length) };
+}
+
+// Re-attach a teacher note to a correction body. Blank notes are dropped so we
+// never store a dangling marker.
+function joinCorrectionNote(body, note) {
+  const b = String(body || '');
+  const n = String(note || '').trim();
+  return n ? `${b}${CORRECTION_NOTE_PREFIX}${n}` : b;
+}
 
 function reconstructCorrectedFromDiff(diffBody) {
   return String(diffBody || '')
@@ -11716,20 +11740,34 @@ function renderStructuredCorrectionDiff(text) {
     .replace(/\{\+((?:(?!\+\})[\s\S])+?)\+\}/g, (_, b) => `<span class="diff-ins">${b}</span>`);
 }
 
+// Renders the optional teacher comment as a distinct block below the diff.
+// Inline styles (not a CSS class) so it looks identical in the teacher app and
+// the student play app, which load different stylesheets.
+function renderCorrectionNoteHtml(note) {
+  const n = String(note || '').trim();
+  if (!n) return '';
+  const safe = escapeHtmlText(n).replace(/\n/g, '<br>');
+  return `<span class="correction-note" style="display:block;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(120,120,120,0.35);font-style:italic;opacity:0.92;">💬 ${safe}</span>`;
+}
+
 function buildCorrectionDiffHtml(correction, original) {
-  const corr = String(correction || '');
+  const { body, note } = splitCorrectionNote(correction);
+  const corr = String(body || '');
+  let html;
   if (corr.startsWith(CORRECTION_DIFF_PREFIX)) {
-    return renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+    html = renderStructuredCorrectionDiff(corr.slice(CORRECTION_DIFF_PREFIX.length));
+  } else {
+    const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
+    const tokens = corr.match(/\s+|[^\s]+/g) || [];
+    html = tokens.map((tok) => {
+      const safe = escapeHtmlText(tok);
+      const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
+      const word = core ? String(core).toLowerCase() : null;
+      if (!word || origWords.has(word)) return safe;
+      return `<span class="join-correction-diff">${safe}</span>`;
+    }).join('');
   }
-  const origWords = new Set(String(original || '').toLowerCase().match(/[\p{L}\p{N}']+/gu) || []);
-  const tokens = corr.match(/\s+|[^\s]+/g) || [];
-  return tokens.map((tok) => {
-    const safe = escapeHtmlText(tok);
-    const core = (tok.match(/[\p{L}\p{N}']+/u) || [null])[0];
-    const word = core ? String(core).toLowerCase() : null;
-    if (!word || origWords.has(word)) return safe;
-    return `<span class="join-correction-diff">${safe}</span>`;
-  }).join('');
+  return html + renderCorrectionNoteHtml(note);
 }
 
 function renderPlayerState(state) {
