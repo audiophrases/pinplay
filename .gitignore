@@ -41,6 +41,7 @@ tests/**
 *.log
 README.md
 !setup/README.md
+!setup/tts-bridge/README.md
 TEACHER_GUIDE_BATCHES.md
 QA_CHECKLIST.md
 QA_NOTES_2026-03-07.md
