@@ -16596,8 +16596,11 @@ function buildPaperQuestionHtml(q, index, showReadingText) {
     case 'match_pairs': {
       const pairs = (q.pairs || []).filter((p) => (p.left || '').trim() && (p.right || '').trim());
       const lefts = pairs.map((p, i) => `<b>${i + 1}.</b> ${escapeHtml(String(p.left).trim())}`);
-      const rights = shuffleArrayCopy(pairs.map((p, i) => ({ key: String.fromCharCode(65 + i), text: String(p.right).trim() })))
-        .map((r) => `<b>${r.key}.</b> ${escapeHtml(r.text)}`);
+      // Shuffle the right values FIRST, then label them A, B, C… by their shuffled
+      // position. Labelling before shuffling kept each letter glued to its original
+      // right value, so the answer was always the trivial 1→A, 2→B, 3→C.
+      const rights = shuffleArrayCopy(pairs.map((p) => String(p.right).trim()))
+        .map((text, i) => `<b>${String.fromCharCode(65 + i)}.</b> ${escapeHtml(text)}`);
       body = `<span class="pdf-match-row"><span class="pdf-match-col"><i>Items:</i> ${lefts.join(' &nbsp;·&nbsp; ')}</span><span class="pdf-match-col"><i>Options:</i> ${rights.join(' &nbsp;·&nbsp; ')}</span></span>`;
       break;
     }
