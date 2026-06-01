@@ -197,13 +197,11 @@ async function fetchLatestCode() {
     const buf = Buffer.from(await res.arrayBuffer());
     fs.writeFileSync(tgz, buf);
 
-    // tar ships on Windows 10+, macOS, and Linux. On Windows, GNU tar treats the
-    // colon in "C:\..." as a remote-host spec, so --force-local is required there
-    // (BSD tar on macOS has no such flag and no drive-letter ambiguity).
-    const tarArgs = process.platform === 'win32'
-      ? ['--force-local', '-xzf', tgz, '-C', tmpDir]
-      : ['-xzf', tgz, '-C', tmpDir];
-    const ex = runCapture('tar', tarArgs);
+    // Extract with cwd = tmpDir and a RELATIVE archive name, so no "C:\..." path
+    // is ever passed to tar. This works with both Windows tar builds — bsdtar
+    // (System32 default, rejects --force-local) and GNU tar (e.g. Git-for-Windows,
+    // which would otherwise read "C:\" as a remote host) — and on macOS/Linux.
+    const ex = runCapture('tar', ['-xzf', 'pinplay.tgz'], { cwd: tmpDir });
     if (ex.code !== 0) throw new Error(`could not unpack update: ${ex.stderr.trim()}`);
 
     const srcRoot = path.join(tmpDir, UPDATE_TARBALL_TOPDIR);

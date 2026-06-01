@@ -114,9 +114,18 @@ function Get-Repo {
 
   Invoke-WebRequest -UseBasicParsing -Uri $TarballUrl -OutFile $tgz
 
-  # GNU tar on Windows reads "C:\..." as a remote host → --force-local is required.
-  & tar.exe --force-local -xzf "$tgz" -C "$tmp"
-  if ($LASTEXITCODE -ne 0) { throw 'failed to unpack the download' }
+  # Extract by cd-ing into the temp dir and using a RELATIVE archive name. This
+  # avoids passing a "C:\..." path to tar entirely, so it works with both Windows
+  # builds: bsdtar (System32, the default — rejects --force-local) and GNU tar
+  # (e.g. from Git-for-Windows — which would otherwise read "C:\" as a remote host).
+  Push-Location $tmp
+  try {
+    & tar.exe -xzf 'pinplay.tgz'
+    $tarCode = $LASTEXITCODE
+  } finally {
+    Pop-Location
+  }
+  if ($tarCode -ne 0) { throw 'failed to unpack the download' }
 
   $extracted = Join-Path $tmp "$RepoName-$Branch"
   if (-not (Test-Path $extracted)) { throw 'unexpected download layout' }
