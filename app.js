@@ -8062,7 +8062,42 @@ function renderAssignmentResults(safeCode, data) {
     openNotifyModal(safeCode, assignment, chosen, () => fetchAssignmentResults(safeCode));
   });
 
-  headerLi.append(selectAll, selectedCountEl, notifyBtn);
+  const deleteSelectedBtn = document.createElement('button');
+  deleteSelectedBtn.className = 'btn';
+  deleteSelectedBtn.textContent = 'Delete selected';
+  deleteSelectedBtn.title = 'Permanently delete the selected attempts. This cannot be undone.';
+  deleteSelectedBtn.style.cssText = 'flex:none; color:#b91c1c; border-color:#b91c1c;';
+  deleteSelectedBtn.disabled = notifySelection.ids.size === 0;
+  deleteSelectedBtn.addEventListener('click', async () => {
+    const chosen = filtered.filter((a) => notifySelection.ids.has(String(a?.id || '')));
+    if (!chosen.length) return;
+    const n = chosen.length;
+    if (!confirm(`Delete ${n} selected attempt${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    notifyBtn.disabled = true;
+    deleteSelectedBtn.disabled = true;
+    let deleted = 0;
+    const failures = [];
+    for (const a of chosen) {
+      const attemptId = String(a?.id || '');
+      if (!attemptId) continue;
+      try {
+        await deleteAssignmentAttempt(safeCode, attemptId);
+        notifySelection.ids.delete(attemptId);
+        deleted += 1;
+        if (assignmentStatusEl) assignmentStatusEl.textContent = `Deleting selected attempts… (${deleted}/${n})`;
+      } catch (err) {
+        failures.push(`${a?.studentName || attemptId}: ${err.message}`);
+      }
+    }
+    if (assignmentStatusEl) {
+      assignmentStatusEl.textContent = failures.length
+        ? `Deleted ${deleted}/${n} attempt(s). Failed: ${failures.join('; ')}`
+        : `Deleted ${deleted} selected attempt${deleted === 1 ? '' : 's'}.`;
+    }
+    await fetchAssignmentResults(safeCode);
+  });
+
+  headerLi.append(selectAll, selectedCountEl, notifyBtn, deleteSelectedBtn);
   assignmentResultsListEl.appendChild(headerLi);
 
   filtered.forEach((a) => {
@@ -8084,6 +8119,7 @@ function renderAssignmentResults(safeCode, data) {
       else notifySelection.ids.delete(attemptId);
       selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
       notifyBtn.disabled = notifySelection.ids.size === 0;
+      deleteSelectedBtn.disabled = notifySelection.ids.size === 0;
       selectAll.checked = filtered.length > 0 && filtered.every((x) => notifySelection.ids.has(String(x?.id || '')));
     });
 
