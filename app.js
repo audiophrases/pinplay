@@ -6031,6 +6031,10 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
 
     if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading grading detail for ${safeAttemptId}...`;
     if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+    // Auto-scroll the grading panel into view so the teacher lands on the
+    // attempt they just opened (the panel sits below a potentially long
+    // results list). Done up-front for immediate feedback before the fetch.
+    assignmentGradingSummaryEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     const data = await api('/api/assignments/attempt', {
       method: 'POST',
