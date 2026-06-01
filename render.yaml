@@ -1,0 +1,17 @@
+# Render Blueprint — used ONLY by the "Deploy to Render" one-click button for the
+# PinPlay teacher onboarding wizard. It provisions a teacher's own free Edge TTS
+# bridge (neural question audio) from the Python-only folder at setup/tts-bridge.
+#
+# This file is inert for the owner's setup: the API runs on Cloudflare Workers
+# (cloudflare/wrangler.toml) and the site is a Cloudflare assets worker serving
+# _site/ (wrangler.jsonc) — neither reads render.yaml. It is also not bundled into
+# the served site (the assets directory is _site/, which never includes this file).
+services:
+  - type: web
+    name: pinplay-tts-bridge
+    runtime: python
+    plan: free
+    rootDir: setup/tts-bridge
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health

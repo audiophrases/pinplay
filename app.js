@@ -6929,6 +6929,7 @@ function renderGradingFocusItem() {
         <span><kbd>Shift</kbd>+<kbd>Enter</kbd> Newline</span>
         <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
         <span><kbd>E</kbd> Edit correction</span>
+        <span><kbd>M</kbd> Comment</span>
         <span><kbd>G</kbd> Edit points</span>
         <span><kbd>R</kbd> Record</span>
         <span><kbd>Space</kbd> Play answer</span>
@@ -7174,6 +7175,10 @@ function gradingFocusKeydown(e) {
     swallow();
     const el = document.querySelector('#gradingFocusContent [data-grade-correction-input]');
     if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'm') {
+    swallow();
+    const el = document.querySelector('#gradingFocusContent [data-grade-comment-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
   } else if (k === 'g') {
     swallow();
     const el = document.querySelector('#gradingFocusContent [data-grade-points-input]');
@@ -7196,12 +7201,12 @@ function gradingFocusKeydown(e) {
       }
     }
   }
-  // To fully isolate the modal from the host hotkeys (M, L, O, D, S, A, F),
+  // To fully isolate the modal from the host hotkeys (L, O, D, S, A, F),
   // also swallow those letter keys while the modal is open and no input is
   // focused. Without this, e.g. pressing 'L' would also call createLiveGame()
   // behind the modal. We don't bind these to anything inside the modal — just
-  // suppress them.
-  else if (['l', 'o', 'd', 's', 'a', 'm', 'f'].includes(k)) {
+  // suppress them. ('M' is handled above to focus the comment box.)
+  else if (['l', 'o', 'd', 's', 'a', 'f'].includes(k)) {
     swallow();
   }
 }
@@ -7543,6 +7548,7 @@ function renderStudentGradingFocusItem() {
         <span><kbd>Shift</kbd>+<kbd>Enter</kbd> Newline</span>
         <span><kbd>←</kbd>/<kbd>→</kbd> or <kbd>P</kbd>/<kbd>N</kbd> Nav</span>
         <span><kbd>E</kbd> Edit correction</span>
+        <span><kbd>M</kbd> Comment</span>
         <span><kbd>G</kbd> Edit points</span>
         <span><kbd>R</kbd> Record</span>
         <span><kbd>Space</kbd> Play answer</span>
@@ -7775,6 +7781,10 @@ function studentGradingFocusKeydown(e) {
     swallow();
     const el = document.querySelector('#studentGradingFocusContent [data-sgrade-correction-input]');
     if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
+  } else if (k === 'm') {
+    swallow();
+    const el = document.querySelector('#studentGradingFocusContent [data-sgrade-comment-input]');
+    if (el) { el.focus(); if (typeof el.select === 'function') el.select(); }
   } else if (k === 'g') {
     swallow();
     const el = document.querySelector('#studentGradingFocusContent [data-sgrade-points-input]');
@@ -7790,7 +7800,7 @@ function studentGradingFocusKeydown(e) {
       if (audio.paused) audio.play().catch(() => {});
       else audio.pause();
     }
-  } else if (['l', 'o', 'd', 's', 'a', 'm', 'f'].includes(k)) {
+  } else if (['l', 'o', 'd', 's', 'a', 'f'].includes(k)) {
     swallow();
   }
 }

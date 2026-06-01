@@ -44,6 +44,7 @@ const R2_BUCKET = 'pinplay-quiz-media';
 const UPDATE_TARBALL_URL = 'https://codeload.github.com/audiophrases/pinplay/tar.gz/refs/heads/main';
 const UPDATE_TARBALL_TOPDIR = 'pinplay-main'; // top-level folder inside the tarball
 const REPO_WEB_URL = 'https://github.com/audiophrases/pinplay'; // public repo, used for the Render bridge deploy
+const RENDER_DEPLOY_URL = 'https://render.com/deploy?repo=' + REPO_WEB_URL; // one-click Deploy to Render (reads root render.yaml)
 
 // Canonical frontend assets to publish (the assets worker serves _site/).
 const FRONTEND_ASSETS = ['index.html', 'app.js', 'play.js', 'styles.css', 'favicon.svg', 'question-bank-ui.js'];
@@ -374,27 +375,24 @@ async function step8TtsBridge(tomlPath, state) {
     return;
   }
 
-  // The bridge already lives in the public repo at setup/tts-bridge (its own
-  // Python-only folder so Render auto-detects Python cleanly). The teacher deploys
-  // that folder straight from GitHub via Render's "Public Git Repository" option —
-  // Render cannot upload a local folder, it only deploys from Git.
-  console.log('\nDeploy your own free bridge on Render (no credit card needed):');
-  console.log('  1. Create a free account / log in at ' + bold('https://render.com'));
-  console.log('  2. Click ' + bold('New  ->  Web Service') + '.');
-  console.log('  3. Open the ' + bold('"Public Git Repository"') + ' tab and paste this address:');
-  console.log('       ' + bold(REPO_WEB_URL));
-  console.log('     then click ' + bold('Connect') + '.');
-  console.log('  4. Fill in these settings exactly (copy/paste the bold parts):');
-  console.log('       Name            pinplay-tts-bridge  (or any name you like)');
-  console.log('       Root Directory  ' + bold('setup/tts-bridge'));
-  console.log('       Language        Python 3   (filled in automatically)');
-  console.log('       Build Command   pip install -r requirements.txt   (filled in automatically)');
-  console.log('       Start Command   ' + bold('uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT'));
-  console.log('       Instance Type   ' + bold('Free'));
-  console.log('  5. Click ' + bold('Deploy Web Service') + ' and wait until the page says ' + bold('"Live"') + '.');
-  console.log('  6. Copy the service URL near the top (looks like https://pinplay-tts-bridge.onrender.com).');
-  openInBrowser('https://dashboard.render.com/web/new');
-  await pause('\nDeploy the bridge, then press ENTER.');
+  // The bridge lives in the public repo at setup/tts-bridge (its own Python-only
+  // folder so Render auto-detects Python cleanly) and the repo root has a
+  // render.yaml Blueprint. The "Deploy to Render" button reads that Blueprint and
+  // provisions the service in one click. Render only deploys from Git — it cannot
+  // upload a local folder — so there is no folder to send anywhere.
+  console.log('\nDeploy your own free bridge on Render (no credit card needed).');
+  console.log('\n' + bold('Easiest — one click:'));
+  console.log('  1. Open this link (I just opened it in your browser):');
+  console.log('       ' + bold(RENDER_DEPLOY_URL));
+  console.log('  2. Sign in or create a free Render account if asked.');
+  console.log('  3. On the Blueprint page, click ' + bold('Apply') + ' (a.k.a. "Create Services") — leave the defaults.');
+  console.log('  4. Wait until the service shows ' + bold('"Live"') + ', then copy its URL near the top');
+  console.log('       (looks like https://pinplay-tts-bridge.onrender.com).');
+  console.log('\n' + dim('Prefer to do it by hand? New -> Web Service -> "Public Git Repository" tab:'));
+  console.log(dim('  Repo: ' + REPO_WEB_URL + '   Root Directory: setup/tts-bridge   Instance: Free'));
+  console.log(dim('  Start Command: uvicorn edge_tts_bridge:app --host 0.0.0.0 --port $PORT'));
+  openInBrowser(RENDER_DEPLOY_URL);
+  await pause('\nWhen your bridge says "Live", press ENTER.');
 
   let bridgeUrl = '';
   while (!bridgeUrl) {
