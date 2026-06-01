@@ -4596,6 +4596,55 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
 
 const AI_GRADE_PACK_SIZE_WARN_BYTES = 25 * 1024 * 1024;
 
+// How aggressively the AI should rewrite the student's text into
+// `correctedText` (the red/green diff). The teacher picks this in the
+// "Grade with AI" picker; the chosen block is substituted into the prompt
+// template at the `{{CORRECTION_DEPTH}}` placeholder. The choice is sticky
+// across sessions via localStorage.
+const AI_GRADE_DEPTH_KEY = 'pinplay.aiGradeDepth.v1';
+const AI_GRADE_DEFAULT_MODE = 'minimal';
+const AI_GRADE_CORRECTION_MODES = {
+  minimal: {
+    label: 'Minimal — fix key mistakes, adapt to the student’s level',
+    block: `**Correction depth — minimal (adapt to the student's level).** First
+  gauge the student's level from what they wrote, then correct the **most
+  important** mistakes — the ones that affect meaning or that this
+  student is ready to learn from. You don't have to fix everything.
+  - If the answer is weak, target the biggest errors only; don't bury the
+    student under a sea of red.
+  - If the answer is already quite good, fix the couple of remaining
+    mistakes — and if there's essentially nothing left to correct,
+    fold in **one** improvement (a more natural word choice or turn of
+    phrase).
+  - Put every change into \`correctedText\` by editing the student's own
+    text, so the red/green diff shows exactly what you touched and leaves
+    the rest of their wording intact.`,
+  },
+  grammar: {
+    label: 'Grammar — fix all errors, keep their phrasing',
+    block: `**Correction depth — fix all grammar, keep their phrasing.** Correct
+  **every** objective language error: spelling, verb tense, agreement,
+  articles, prepositions, word order, punctuation, capitalization. Do
+  **not** rephrase for style — if a sentence is grammatically correct
+  but awkward or just not how you'd say it, leave it alone. Style
+  preferences are not corrections.
+  - Put every grammar fix (and nothing more) into \`correctedText\` by
+    editing the student's own text, so the red/green diff shows only real
+    errors.`,
+  },
+  idiomatic: {
+    label: 'Grammar + style — make it natural & idiomatic',
+    block: `**Correction depth — fix everything and make it idiomatic.** Correct
+  all grammar errors **and** improve the phrasing so the result reads the
+  way a native speaker would naturally write it: better word choice,
+  smoother flow, idiomatic expressions — even where the original was
+  already grammatically correct.
+  - Put the polished, natural version into \`correctedText\`, but build on
+    what the student wrote rather than replacing it wholesale, so the
+    red/green diff stays meaningful.`,
+  },
+};
+
 const AI_GRADE_PROMPT_TEMPLATE = `# Grading task
 
 You are grading short student answers from a language-learning quiz. Read
@@ -4699,17 +4748,10 @@ need spelling/grammar fixes — fill in \`correctedText\` in that case
 too. Conversely a student can get partial points for incomplete content
 but write their incomplete answer in perfect English.
 
-- **Always fill \`correctedText\` for \`open\` questions** if **any** of
-  these are true in the student's text:
-  - Spelling errors (e.g. "stuidents" → "students")
-  - Grammar mistakes (verb tense, agreement, article use)
-  - Awkward or unnatural phrasing a native speaker wouldn't use
-  - Missing punctuation or capitalization that hurts readability
-  - Incomplete content — write what a complete answer would say
-- Make **minimal edits**. Keep the student's original wording wherever
-  possible — only change what is actually wrong. Don't paraphrase
-  correct sentences just to make them sound more like you would write
-  them. Style preferences are not corrections.
+- {{CORRECTION_DEPTH}}
+- Whatever the depth above, also write out the missing content when the
+  student left it out: if they didn't answer the prompt (or answered only
+  part of it), put what a complete answer would say into \`correctedText\`.
 - When the student wrote almost nothing useful (blank, single period,
   one unrelated word), write what a good answer to the prompt would
   look like in \`correctedText\` anyway. The app always renders the
@@ -5105,9 +5147,26 @@ function aiGradePackDownloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function aiGradePackBuildFinalPrompt(teacherNote) {
+function loadAiGradeDepth() {
+  try {
+    const v = localStorage.getItem(AI_GRADE_DEPTH_KEY);
+    return AI_GRADE_CORRECTION_MODES[v] ? v : AI_GRADE_DEFAULT_MODE;
+  } catch {
+    return AI_GRADE_DEFAULT_MODE;
+  }
+}
+
+function saveAiGradeDepth(mode) {
+  try {
+    if (AI_GRADE_CORRECTION_MODES[mode]) localStorage.setItem(AI_GRADE_DEPTH_KEY, mode);
+  } catch {}
+}
+
+function aiGradePackBuildFinalPrompt(teacherNote, correctionMode) {
+  const mode = AI_GRADE_CORRECTION_MODES[correctionMode] ? correctionMode : AI_GRADE_DEFAULT_MODE;
+  const base = AI_GRADE_PROMPT_TEMPLATE.replace('{{CORRECTION_DEPTH}}', AI_GRADE_CORRECTION_MODES[mode].block);
   const note = String(teacherNote || '').trim();
-  if (!note) return AI_GRADE_PROMPT_TEMPLATE;
+  if (!note) return base;
   return `# Teacher's special instructions
 
 ${note}
@@ -5117,7 +5176,7 @@ conflict, follow what the teacher said.
 
 ---
 
-${AI_GRADE_PROMPT_TEMPLATE}`;
+${base}`;
 }
 
 function aiGradePackToast(msg, isError = false) {
@@ -5126,7 +5185,7 @@ function aiGradePackToast(msg, isError = false) {
   }
 }
 
-async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote }) {
+async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, correctionMode }) {
   if (typeof window === 'undefined' || !window.JSZip) {
     throw new Error('JSZip not loaded — check that the CDN script tag is present in index.html.');
   }
@@ -5151,7 +5210,7 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote })
   }
 
   aiGradePackToast('Building AI grade pack — zipping…');
-  const finalPrompt = aiGradePackBuildFinalPrompt(teacherNote);
+  const finalPrompt = aiGradePackBuildFinalPrompt(teacherNote, correctionMode);
   const zip = new window.JSZip();
   zip.file('prompt.md', finalPrompt);
   zip.file('data.json', JSON.stringify(data, null, 2));
@@ -5193,6 +5252,7 @@ async function openAiGradePackPicker(code) {
 
   document.getElementById('aiGradePackPickerModal')?.remove();
 
+  const aiGradeDepthDefault = loadAiGradeDepth();
   const attempts = Array.isArray(assignmentResultsCache?.data?.attempts)
     ? assignmentResultsCache.data.attempts
     : [];
@@ -5242,6 +5302,14 @@ async function openAiGradePackPicker(code) {
     <div role="dialog" aria-modal="true" aria-label="Grade with AI" class="agp-dialog">
       <h3>Grade with AI · ${escapeHtml(safeCode)}</h3>
       <p class="small muted">Choose what to include in the pack.</p>
+      <div style="margin:4px 0 12px;">
+        <label class="small muted" style="display:block;margin-bottom:2px;font-weight:normal;">How much should the AI correct?</label>
+        <select id="aiGradePackDepth" style="width:100%;margin:0;font:inherit;font-weight:normal;">
+          ${Object.entries(AI_GRADE_CORRECTION_MODES).map(([key, m]) =>
+            `<option value="${escapeHtml(key)}"${key === aiGradeDepthDefault ? ' selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+        </select>
+        <span class="small muted" style="display:block;margin-top:2px;font-weight:normal;">Controls how heavily typed open answers are rewritten in the red/green diff.</span>
+      </div>
       <div style="margin:4px 0 12px;">
         <label class="small muted" style="display:block;margin-bottom:2px;font-weight:normal;">Special grading instructions for the AI (optional)</label>
         <textarea id="aiGradePackTeacherNote" rows="2" placeholder="e.g. Focus on verb tenses. Ignore minor punctuation. Use British spelling. Praise creative ideas." style="width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical;"></textarea>
@@ -5319,6 +5387,8 @@ async function openAiGradePackPicker(code) {
       if (!Number.isFinite(args.qIndex)) { aiGradePackToast('Pick a question first.', true); return; }
     }
     args.teacherNote = String(modal.querySelector('#aiGradePackTeacherNote')?.value || '').trim();
+    args.correctionMode = String(modal.querySelector('#aiGradePackDepth')?.value || AI_GRADE_DEFAULT_MODE);
+    saveAiGradeDepth(args.correctionMode);
     close();
     runAiGradePack(args);
   }
