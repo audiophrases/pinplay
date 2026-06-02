@@ -5741,7 +5741,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
         <thead style="position:sticky;top:0;background:#f9fafb;">
           <tr>
             <th data-toggle-apply style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to toggle Apply on all rows">Apply</th>
-            <th data-toggle-sort style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to sort by Question; click again to sort by Student">Who · Q <span data-sort-indicator class="small muted" style="font-weight:normal;"></span></th>
+            <th data-toggle-sort style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;cursor:pointer;user-select:none;" title="Click to cycle sort: Question → Student → Score">Who · Q <span data-sort-indicator class="small muted" style="font-weight:normal;"></span></th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Student answer</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;">Correction (editable) / diff</th>
           </tr>
@@ -5901,11 +5901,17 @@ function aiGradeImportRenderPreview(modal, response, rows) {
   const sortIndicator = body.querySelector('[data-sort-indicator]');
   const sortHeader = body.querySelector('[data-toggle-sort]');
   sortHeader?.addEventListener('click', () => {
-    sortMode = sortMode === 'question' ? 'student' : 'question';
-    if (sortIndicator) sortIndicator.textContent = sortMode === 'question' ? '↓ Q' : '↓ name';
+    // Cycle Question → Student → Score → Question. Score is an unlabelled third
+    // stop (no header text per request), so its indicator stays blank.
+    const nextMode = { default: 'question', question: 'student', student: 'score', score: 'question' };
+    sortMode = nextMode[sortMode] || 'question';
+    if (sortIndicator) sortIndicator.textContent = sortMode === 'question' ? '↓ Q' : (sortMode === 'student' ? '↓ name' : '');
+    const byNameThenQ = (a, b) => (a.studentName || a.attemptId || '').localeCompare(b.studentName || b.attemptId || '') || a.qIndex - b.qIndex;
+    const scoreRatio = (r) => Number(r.points || 0) / (Number(r.maxPoints) || 1);
     const sortFns = {
       question: (a, b) => a.qIndex - b.qIndex || (a.studentName || a.attemptId || '').localeCompare(b.studentName || b.attemptId || ''),
-      student: (a, b) => (a.studentName || a.attemptId || '').localeCompare(b.studentName || b.attemptId || '') || a.qIndex - b.qIndex,
+      student: byNameThenQ,
+      score: (a, b) => scoreRatio(a) - scoreRatio(b) || byNameThenQ(a, b),
     };
     const tbody = body.querySelector('tbody');
     if (!tbody) return;
