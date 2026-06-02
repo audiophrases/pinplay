@@ -1595,6 +1595,14 @@ export default {
       const assignment = getData?.assignment || null;
       if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
+      // Exam mode with a single allowed attempt: deleting would reset the limit
+      // and grant an extra try. Block it server-side too (the UI already hides
+      // the control, but a direct API call must not bypass the integrity rule).
+      const examAttemptsLimit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
+      if (assignment.examMode && examAttemptsLimit === 1) {
+        return json({ error: 'Attempts cannot be deleted for this exam.' }, 403);
+      }
+
       const passwordRequired = assignment.randomNames === false;
       if (passwordRequired) {
         if (!password) return json({ error: 'Password required.' }, 401);
@@ -2645,6 +2653,7 @@ export class QuizRoom {
           canRetake,
           attemptsUsed,
           attemptsLimit: limit,
+          examMode: !!assignment.examMode,
           feedbackMode: assignment.feedbackMode || 'none',
           assignmentTitle: String(assignment.title || '').slice(0, 120),
           previousAttempts,

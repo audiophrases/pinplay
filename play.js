@@ -1486,6 +1486,11 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   sub.textContent = `${used} attempt${used !== 1 ? 's' : ''} completed · Limit: ${limitText}`;
   card.appendChild(sub);
 
+  // In exam mode with a single allowed attempt, students must not be able to
+  // delete their attempt — doing so would reset the limit and hand them an
+  // extra try. Suppress the trash control entirely in that case.
+  const allowDelete = !(checkData.examMode && limit === 1);
+
   // Helper: build the trash button used by both completed and unfinished rows.
   const makeDeleteButton = (attemptId, attemptLabel) => {
     const del = document.createElement('span');
@@ -1546,9 +1551,11 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       row.append(label, badge, date);
       li.appendChild(row);
-      li.appendChild(makeDeleteButton(openAttempt.id, openAttempt.attemptNumber
-        ? `Attempt ${openAttempt.attemptNumber} (unfinished)`
-        : 'unfinished attempt'));
+      if (allowDelete) {
+        li.appendChild(makeDeleteButton(openAttempt.id, openAttempt.attemptNumber
+          ? `Attempt ${openAttempt.attemptNumber} (unfinished)`
+          : 'unfinished attempt'));
+      }
       list.appendChild(li);
     }
 
@@ -1608,7 +1615,9 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       }
 
       li.appendChild(row);
-      li.appendChild(makeDeleteButton(a.id, `Attempt ${a.attemptNumber || '?'}`));
+      if (allowDelete) {
+        li.appendChild(makeDeleteButton(a.id, `Attempt ${a.attemptNumber || '?'}`));
+      }
       list.appendChild(li);
     });
 
