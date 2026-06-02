@@ -142,6 +142,40 @@ const npx = (args, opts) => runInherit('npx', ['--yes', 'wrangler', ...args], op
 const npxCapture = (args, opts) => runCapture('npx', ['--yes', 'wrangler', ...args], opts);
 const npxStdin = (args, stdinData, opts) => runWithStdin('npx', ['--yes', 'wrangler', ...args], stdinData, opts);
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Run `wrangler deploy` with an INTERACTIVE stdin (so a brand-new account can
+// answer wrangler's one-time prompts, e.g. registering a *.workers.dev subdomain)
+// while still capturing stdout to parse the deployed URL. stderr streams live so
+// the teacher sees progress and any prompt text.
+function runDeploy(args, opts = {}) {
+  const res = spawnSync('npx', ['--yes', 'wrangler', ...args], {
+    stdio: ['inherit', 'pipe', 'inherit'],
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+    ...opts,
+  });
+  const stdout = res.stdout || '';
+  if (stdout) process.stdout.write(stdout);
+  return { code: res.status ?? 1, stdout };
+}
+
+// Deploy with a few retries — a fresh account's *.workers.dev address can take a
+// minute to activate, which surfaces as a transient deploy failure.
+async function deployWithRetry(label, args, opts = {}) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = runDeploy(args, opts);
+    if (res.code === 0) return res;
+    if (attempt < maxAttempts) {
+      console.log(warn(`\n${label} didn't go through (try ${attempt}/${maxAttempts}). On a brand-new`));
+      console.log(warn('account this is usually just your free address still activating — waiting 15s…'));
+      await sleep(15000);
+    }
+  }
+  return { code: 1, stdout: '' };
+}
+
 // ---------- Crypto: must match worker.js sha256Hex ----------
 async function sha256Hex(inputStr) {
   const data = new TextEncoder().encode(String(inputStr || ''));
@@ -243,6 +277,86 @@ function saveState(state) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// Has the teacher made any progress in a previous run? (Used to offer "resume".)
+function hasPriorProgress(state) {
+  return Boolean(
+    state && (state.loggedIn || state.passwordSet || state.bucketCreated ||
+      state.apiUrl || (state.secrets && Object.keys(state.secrets).length)),
+  );
+}
+
+// Record that a secret NAME is set (never the value — values live only in
+// Cloudflare). This lets a resume know what's already configured.
+function markSecret(state, name) {
+  state.secrets = state.secrets || {};
+  state.secrets[name] = true;
+  saveState(state);
+}
+
+// Best-effort: which worker secrets are already set? Merges names recorded in
+// state with a live `wrangler secret list` (names only — Cloudflare never returns
+// values). Returns a Set; empty/partial on any failure (e.g. worker not deployed).
+function liveSecretNames(tomlPath, state) {
+  const names = new Set(Object.keys((state && state.secrets) || {}));
+  try {
+    const res = npxCapture(['secret', 'list', '--config', tomlPath], { cwd: CF_DIR });
+    if (res.code === 0) {
+      const text = res.stdout || '';
+      const start = text.indexOf('[');
+      const end = text.lastIndexOf(']');
+      if (start !== -1 && end > start) {
+        for (const s of JSON.parse(text.slice(start, end + 1))) {
+          if (s && s.name) names.add(s.name);
+        }
+      }
+    }
+  } catch { /* best-effort only */ }
+  return names;
+}
+
+// Returning teacher: summarize what's configured and ask how to proceed.
+// Returns 'continue' (keep all, just finish), 'review' (add/change keys), or
+// 'fresh' (reconfigure everything).
+async function chooseResumeMode(state, setNames) {
+  console.log(head('Welcome back — I found your previous PinPlay setup'));
+  console.log('Here\'s what\'s already configured:');
+  const row = (done, label) => '  ' + (done ? ok('✓ ') : dim('• ')) + label;
+  console.log(row(state.loggedIn, 'Cloudflare account connected'));
+  console.log(row(state.bucketCreated, 'Storage bucket'));
+  console.log(row(setNames.has('CREATE_PASSWORD_HASH'), 'Teacher password'));
+  console.log(row(setNames.has('EDGE_TTS_URL'), 'Neural voices' + (setNames.has('EDGE_TTS_URL') ? '' : dim(' (off)'))));
+  const opt = OPTIONAL_SECRETS.map(([n]) => n).filter((n) => setNames.has(n));
+  console.log(row(opt.length > 0, 'Optional keys: ' + (opt.length ? opt.join(', ') : dim('none'))));
+  if (state.apiUrl) console.log(row(true, 'Backend: ' + state.apiUrl));
+  if (state.siteUrl) console.log(row(true, 'Website: ' + state.siteUrl));
+
+  console.log('\nWhat would you like to do?');
+  console.log('  ' + bold('1') + ') Keep everything and finish — re-publish and pick up where we left off  ' + dim('(recommended)'));
+  console.log('  ' + bold('2') + ') Add or change keys / settings, then finish');
+  console.log('  ' + bold('3') + ') Start over — reconfigure everything from scratch');
+  const a = (await ask('\nChoose 1, 2, or 3:', '1')).trim();
+  if (a === '2') return 'review';
+  if (a === '3') return 'fresh';
+  return 'continue';
+}
+
+// Verify we're still connected (the wrangler login persists between runs). Only
+// triggers a fresh login if the saved session is gone.
+async function ensureLogin(state) {
+  console.log(head('Connecting to your Cloudflare account'));
+  const who = npxCapture(['whoami']);
+  const text = (who.stdout + who.stderr).toLowerCase();
+  const loggedOut = /not authenticated|not logged in|you are not/.test(text);
+  if (who.code === 0 && !loggedOut) {
+    console.log(ok('✓ Still connected to your Cloudflare account.'));
+    console.log(dim(who.stdout.trim().split('\n').slice(0, 6).join('\n')));
+    state.loggedIn = true;
+    saveState(state);
+    return;
+  }
+  await step3Login(state);
+}
+
 // ====================================================================
 // Steps
 // ====================================================================
@@ -305,12 +419,13 @@ async function step4EnableR2() {
   await pause('Once R2 says it\'s enabled, press ENTER.');
 }
 
-function step5Bucket() {
+function step5Bucket(state) {
   console.log(head('Step 5 — Creating your storage bucket'));
   const res = npxCapture(['r2', 'bucket', 'create', R2_BUCKET]);
   const out = (res.stdout + res.stderr).toLowerCase();
   if (res.code === 0 || out.includes('already') || out.includes('exists')) {
     console.log(ok(`✓ Storage bucket "${R2_BUCKET}" ready.`));
+    if (state) { state.bucketCreated = true; saveState(state); }
     return true;
   }
   console.log(err('\nCould not create the storage bucket. Output:'));
@@ -342,8 +457,21 @@ function generateTeacherConfig() {
   return { tomlPath, workerCopy };
 }
 
-async function step7Password(tomlPath, state) {
+async function step7Password(tomlPath, state, mode = 'first', setNames = new Set()) {
   console.log(head('Step 6 — Your teacher password'));
+  const alreadySet = setNames.has('CREATE_PASSWORD_HASH') || state.passwordSet;
+  if (alreadySet && mode === 'continue') {
+    console.log(ok('✓ Teacher password already set — keeping it.'));
+    state.passwordSet = true;
+    saveState(state);
+    return;
+  }
+  if (alreadySet && mode === 'review') {
+    if (!(await confirm('A teacher password is already set. Change it?', false))) {
+      console.log(dim('Keeping your current password.'));
+      return;
+    }
+  }
   console.log('This password lets YOU create live games and assignments. Students never need it.');
   let pw = '';
   while (!pw) {
@@ -362,11 +490,24 @@ async function step7Password(tomlPath, state) {
   }
   console.log(ok('✓ Teacher password set.'));
   state.passwordSet = true;
-  saveState(state);
+  markSecret(state, 'CREATE_PASSWORD_HASH');
 }
 
-async function step8TtsBridge(tomlPath, state) {
+async function step8TtsBridge(tomlPath, state, mode = 'first', setNames = new Set()) {
   console.log(head('Step 7 — Question audio (neural voices) — optional'));
+  const alreadySet = setNames.has('EDGE_TTS_URL') || Boolean(state.ttsBridge);
+  if (mode === 'continue') {
+    console.log(alreadySet
+      ? ok('✓ Neural voices already set up — keeping them.')
+      : dim('Neural voices stay off (device voice). Choose option 2 next time to add them.'));
+    return;
+  }
+  if (mode === 'review' && alreadySet) {
+    if (!(await confirm('Neural voices are ON (your Render bridge). Change the bridge URL?', false))) {
+      console.log(dim('Keeping your current neural-voice bridge.'));
+      return;
+    }
+  }
   console.log('PinPlay can read questions aloud in natural voices. This needs a tiny free');
   console.log('helper service on Render (your own, so it never shares anyone else\'s limits).');
   console.log('If you skip this, audio still works using your device\'s built-in voice.');
@@ -414,37 +555,63 @@ async function step8TtsBridge(tomlPath, state) {
   }
   console.log(ok('✓ Neural voices connected.'));
   state.ttsBridge = ttsUrl;
-  saveState(state);
+  markSecret(state, 'EDGE_TTS_URL');
 }
 
-async function step9OptionalSecrets(tomlPath) {
+async function step9OptionalSecrets(tomlPath, state, mode = 'first', setNames = new Set()) {
   console.log(head('Step 8 — Optional extras'));
-  console.log('These add nice-to-have features. Skip any you don\'t need — you can add them later.');
-  if (!(await confirm('\nConfigure any optional features now?', false))) {
+  if (mode === 'continue') {
+    const have = OPTIONAL_SECRETS.map(([n]) => n).filter((n) => setNames.has(n));
+    console.log(dim('Keeping your optional keys' + (have.length ? ': ' + have.join(', ') : ' (none set)') + '.'));
+    return;
+  }
+  console.log('These add nice-to-have features. You can keep, change, or add any of them.');
+  if ((mode === 'first' || mode === 'fresh') &&
+      !(await confirm('\nConfigure any optional features now?', false))) {
     console.log(dim('Skipped all optional extras.'));
     return;
   }
   for (const [name, desc] of OPTIONAL_SECRETS) {
-    const val = await ask(`\n${desc}\n  ${name} (paste key or leave blank to skip):`);
+    const isSet = setNames.has(name);
+    if (isSet) {
+      if (!(await confirm(`\n${name} (${desc}) is set. Replace it?`, false))) {
+        console.log(dim(`  Keeping ${name}.`));
+        continue;
+      }
+    }
+    const prompt = isSet
+      ? `  New value for ${name} (leave blank to keep current):`
+      : `\n${desc}\n  ${name} (paste key or leave blank to skip):`;
+    const val = await ask(prompt);
     if (!val) continue;
     const r = npxStdin(['secret', 'put', name, '--config', tomlPath], val + '\n', { cwd: CF_DIR });
-    console.log(r.code === 0 ? ok(`  ✓ ${name} set.`) : warn(`  Could not set ${name}; skipping.`));
+    if (r.code === 0) {
+      console.log(ok(`  ✓ ${name} set.`));
+      markSecret(state, name);
+    } else {
+      console.log(warn(`  Could not set ${name}; skipping.`));
+    }
   }
 }
 
-function deployApiPass1(tomlPath, state) {
+async function deployApiPass1(tomlPath, state) {
   console.log(head('Step 9 — Publishing your PinPlay backend (1/2)'));
-  const res = npxCapture(['deploy', '--config', tomlPath], { cwd: CF_DIR });
-  process.stdout.write(res.stdout);
-  if (res.stderr) process.stdout.write(dim(res.stderr));
+  console.log(dim('(If this is a brand-new account, wrangler may ask you to pick a free'));
+  console.log(dim(' *.workers.dev address — just answer in this window.)'));
+  const res = await deployWithRetry('Backend publish', ['deploy', '--config', tomlPath], { cwd: CF_DIR });
   if (res.code !== 0) {
-    console.log(err('\nBackend deploy failed (see output above).'));
+    console.log(err('\nThe backend didn\'t publish. On a brand-new Cloudflare account this can'));
+    console.log(err('happen while your free *.workers.dev address is still activating (up to a'));
+    console.log(err('minute or two). Wait a moment, then run the wizard again — it keeps all your'));
+    console.log(err('settings and will pick up right here.'));
     process.exit(1);
   }
-  const apiUrl = parseDeployedUrl(res.stdout + res.stderr);
+  let apiUrl = parseDeployedUrl(res.stdout);
   if (!apiUrl) {
-    console.log(err('\nDeployed, but could not detect your backend URL automatically.'));
-    process.exit(1);
+    console.log(warn('\nPublished, but I couldn\'t read your backend address from the output above.'));
+    while (!/^https?:\/\//i.test(apiUrl || '')) {
+      apiUrl = (await ask('Copy it from the lines above and paste it here (https://...workers.dev):')).trim();
+    }
   }
   console.log(ok(`\n✓ Backend live at: ${apiUrl}`));
   state.apiUrl = apiUrl;
@@ -452,20 +619,20 @@ function deployApiPass1(tomlPath, state) {
   return apiUrl;
 }
 
-function deployApiPass2(tomlPath, workerCopy, apiUrl) {
+async function deployApiPass2(tomlPath, workerCopy, apiUrl) {
   console.log(head('Step 10 — Linking your media to your own backend (2/2)'));
   // Repoint the media host stamped into uploads, on the COPY only.
   replaceInFile(workerCopy, OWNER_API_HOST, apiUrl);
-  const res = npxCapture(['deploy', '--config', tomlPath], { cwd: CF_DIR });
+  const res = await deployWithRetry('Media linking', ['deploy', '--config', tomlPath], { cwd: CF_DIR });
   if (res.code !== 0) {
-    console.log(err('\nSecond backend deploy failed:'));
-    console.log(res.stdout + res.stderr);
+    console.log(err('\nThe second backend publish didn\'t go through. Wait a moment and run the'));
+    console.log(err('wizard again — it keeps your settings and resumes here.'));
     process.exit(1);
   }
   console.log(ok('✓ Your uploaded images/audio will be served from your own backend.'));
 }
 
-function buildAndDeployFrontend(apiUrl, state) {
+async function buildAndDeployFrontend(apiUrl, state) {
   console.log(head('Step 11 — Publishing your PinPlay website'));
   // Populate _site/ from canonical root files (git-ignored payload).
   ensureDir(SITE_DIR);
@@ -493,16 +660,19 @@ function buildAndDeployFrontend(apiUrl, state) {
       replaceInFile(path.join(SITE_DIR, f), OWNER_FRONTEND_BASE, apiUrl);
     }
   }
-  const res = npxCapture(['deploy'], { cwd: REPO_ROOT });
-  process.stdout.write(res.stdout);
-  if (res.stderr) process.stdout.write(dim(res.stderr));
+  const res = await deployWithRetry('Website publish', ['deploy'], { cwd: REPO_ROOT });
   if (res.code !== 0) {
-    console.log(err('\nWebsite deploy failed (see output above).'));
+    console.log(err('\nThe website didn\'t publish. Wait a moment and run the wizard again — it'));
+    console.log(err('keeps your settings and resumes here.'));
     process.exit(1);
   }
-  const siteUrl = parseDeployedUrl(res.stdout + res.stderr);
+  let siteUrl = parseDeployedUrl(res.stdout);
+  if (!siteUrl) {
+    siteUrl = (await ask('Published! Paste your website address from above (https://...workers.dev):')).trim();
+  }
   console.log(ok(`\n✓ Website live${siteUrl ? ` at: ${siteUrl}` : ''}.`));
   state.siteUrl = siteUrl;
+  state.completed = true;
   saveState(state);
   return siteUrl;
 }
@@ -550,26 +720,46 @@ async function main() {
     await step1Prereqs();
     await fetchLatestCode(); // self-fetch newest code; falls back to local on any failure
     const { tomlPath, workerCopy } = generateTeacherConfig();
-    const apiUrl = deployApiPass1(tomlPath, state);
-    deployApiPass2(tomlPath, workerCopy, apiUrl);
-    buildAndDeployFrontend(apiUrl, state);
+    const apiUrl = await deployApiPass1(tomlPath, state);
+    await deployApiPass2(tomlPath, workerCopy, apiUrl);
+    await buildAndDeployFrontend(apiUrl, state);
     summary(state);
     getRl().close();
     return;
   }
 
   await step1Prereqs();
-  await step2Account();
-  await step3Login(state);
-  await step4EnableR2();
-  step5Bucket();
-  const { tomlPath, workerCopy } = generateTeacherConfig();
-  await step7Password(tomlPath, state);
-  await step8TtsBridge(tomlPath, state);
-  await step9OptionalSecrets(tomlPath);
-  const apiUrl = deployApiPass1(tomlPath, state);
-  deployApiPass2(tomlPath, workerCopy, apiUrl);
-  buildAndDeployFrontend(apiUrl, state);
+
+  // Returning teacher? Offer to resume instead of redoing everything.
+  const prior = hasPriorProgress(state);
+  let mode = 'first';
+  let setNames = new Set();
+  let cfg = null;
+  if (prior) {
+    await ensureLogin(state);              // wrangler session persists between runs
+    cfg = generateTeacherConfig();         // local-only; needed to list existing secrets
+    setNames = liveSecretNames(cfg.tomlPath, state);
+    mode = await chooseResumeMode(state, setNames);
+    if (mode === 'fresh') setNames = new Set();   // reconfigure everything from scratch
+  } else {
+    await step2Account();
+    await step3Login(state);
+  }
+
+  // R2: only walk a returning teacher through enabling it if the bucket isn't ready.
+  if (mode === 'fresh' || !state.bucketCreated) {
+    await step4EnableR2();
+  }
+  step5Bucket(state);
+  if (!cfg) cfg = generateTeacherConfig();
+
+  const { tomlPath, workerCopy } = cfg;
+  await step7Password(tomlPath, state, mode, setNames);
+  await step8TtsBridge(tomlPath, state, mode, setNames);
+  await step9OptionalSecrets(tomlPath, state, mode, setNames);
+  const apiUrl = await deployApiPass1(tomlPath, state);
+  await deployApiPass2(tomlPath, workerCopy, apiUrl);
+  await buildAndDeployFrontend(apiUrl, state);
   summary(state);
   getRl().close();
 }
