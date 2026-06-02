@@ -2490,15 +2490,34 @@ export class QuizRoom {
         }
 
         // Pick up any legacy `a:<code>` base rows that haven't migrated yet.
-        // Skip the `:t:` attempt rows in this prefix.
-        const seenCodes = new Set(bases.map((b) => String(b.value?.code || '')));
-        const aEntries = await this.state.storage.list({ prefix: 'a:' });
-        for (const [key, value] of aEntries) {
-          const rest = key.slice(2);
-          if (rest.includes(':t:')) continue;
-          if (value && typeof value === 'object' && !seenCodes.has(rest)) {
-            bases.push({ value, fromLegacy: true, legacyKey: key });
-            seenCodes.add(rest);
+        // This scan returns EVERY `a:` key — including `a:<code>:t:<id>` attempt
+        // rows — so it bills O(total attempts) row reads on every refresh. We
+        // only need it while un-migrated base rows might still exist. Once a
+        // full scan finds none (and the code never writes new `a:<code>` bases
+        // anymore — only `ab:` bases and `a:…:t:` attempts), set a one-time
+        // marker and skip the scan forever after, dropping the list cost back
+        // to O(assignments).
+        const legacyBasesDone = await this.state.storage.get('__legacy_bases_migrated__');
+        if (!legacyBasesDone) {
+          const seenCodes = new Set(bases.map((b) => String(b.value?.code || '')));
+          let foundLegacyBase = false;
+          const aEntries = await this.state.storage.list({ prefix: 'a:' });
+          for (const [key, value] of aEntries) {
+            const rest = key.slice(2);
+            if (rest.includes(':t:')) continue;
+            foundLegacyBase = true;
+            if (value && typeof value === 'object' && !seenCodes.has(rest)) {
+              bases.push({ value, fromLegacy: true, legacyKey: key });
+              seenCodes.add(rest);
+            }
+          }
+          // Any legacy rows queued above are migrated to `ab:` (and their
+          // `a:<code>` keys deleted) in the backfill loop below. Only flip the
+          // marker when a scan saw zero legacy bases — i.e. there is nothing
+          // left to migrate. If some were found this pass, the next refresh
+          // re-scans and flips the marker once they're gone.
+          if (!foundLegacyBase) {
+            await this.state.storage.put('__legacy_bases_migrated__', true);
           }
         }
 
@@ -2524,7 +2543,8 @@ export class QuizRoom {
           let assignment = base;
           const needsBackfill = fromLegacy
             || !Number.isFinite(Number(base?.pendingGradingCount))
-            || !Number.isFinite(Number(base?.pendingAttemptsCount));
+            || !Number.isFinite(Number(base?.pendingAttemptsCount))
+            || !Number.isFinite(Number(base?.attemptsCount));
           if (code && needsBackfill) {
             const attemptsByKey = await loadAttemptsForCode(this.state.storage, code);
             assignment = { ...base, attempts: attemptsByKey };
@@ -2537,7 +2557,10 @@ export class QuizRoom {
           }
           const pub = publicAssignment(assignment, { includeQuiz: false });
           const pending = summarizePendingGrading(assignment);
-          if (pub) out.push({ ...pub, ...pending });
+          // Total attempts started, served from the cached counter so the list
+          // still never has to read attempt rows.
+          const attemptsCount = Number(assignment?.attemptsCount) || 0;
+          if (pub) out.push({ ...pub, ...pending, attemptsCount });
         }
 
         return json({ ok: true, assignments: out });
@@ -2679,6 +2702,9 @@ export class QuizRoom {
 
         assignment.attempts[attempt.id] = attempt;
         assignment.updatedAt = now;
+        // This handler already loaded every attempt for the code, so the cached
+        // total is exact (no separate delta/backfill needed).
+        assignment.attemptsCount = Object.keys(assignment.attempts).length;
         await saveAttempt(this.state.storage, code, attempt.id, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
@@ -3188,6 +3214,7 @@ export class QuizRoom {
 
         await ensurePendingCounts(this.state.storage, code, assignment);
         applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
+        assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3220,6 +3247,7 @@ export class QuizRoom {
 
         await ensurePendingCounts(this.state.storage, code, assignment);
         applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
+        assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -6438,15 +6466,19 @@ async function saveAssignmentBase(storage, code, assignment) {
 // caller's subsequent `saveAssignmentBase` then persists it.
 async function ensurePendingCounts(storage, code, assignment) {
   if (!assignment) return assignment;
+  // Also ensures the cached `attemptsCount` (total attempts) is present — it
+  // rides the same one-time attempt scan as the pending counts.
   if (
     Number.isFinite(Number(assignment.pendingGradingCount))
     && Number.isFinite(Number(assignment.pendingAttemptsCount))
+    && Number.isFinite(Number(assignment.attemptsCount))
   ) return assignment;
   const attemptsByKey = await loadAttemptsForCode(storage, code);
   const seeded = { ...assignment, attempts: attemptsByKey };
   recomputeAssignmentPending(seeded);
   assignment.pendingGradingCount = seeded.pendingGradingCount;
   assignment.pendingAttemptsCount = seeded.pendingAttemptsCount;
+  assignment.attemptsCount = seeded.attemptsCount;
   return assignment;
 }
 
@@ -6570,6 +6602,7 @@ function recomputeAssignmentPending(assignment) {
   }
   assignment.pendingGradingCount = total;
   assignment.pendingAttemptsCount = attemptsWithPending;
+  assignment.attemptsCount = Object.keys(attempts).length;
 }
 
 function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = false } = {}) {

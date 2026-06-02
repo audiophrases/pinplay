@@ -8807,7 +8807,11 @@ function buildAssignmentListItem(a) {
     : '';
   const archivedTag = a?.archived ? ' <span class="badge-archived" title="Archived — hidden from default view">archived</span>' : '';
   const liveTag = a?.origin === 'live' ? ' <span class="badge-live" title="Captured from a login-required live game">🔴 live</span>' : '';
-  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${pendingBadge}${archivedTag}${liveTag}`;
+  const attemptsCount = Number(a?.attemptsCount || 0);
+  const attemptsCountTag = attemptsCount > 0
+    ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
+    : '';
+  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}`;
 
   const meta = document.createElement('div');
   meta.className = 'small muted';
