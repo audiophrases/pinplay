@@ -5291,62 +5291,71 @@ async function openAiGradePackPicker(code) {
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
     <style>
-      #aiGradePackPickerModal .agp-dialog { background:#fff;color:#111;border-radius:12px;padding:20px 24px;max-width:480px;width:calc(100% - 32px);box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
-      #aiGradePackPickerModal h3 { margin:0 0 12px 0; }
-      #aiGradePackPickerModal p { margin:0 0 12px 0; }
-      #aiGradePackPickerModal .agp-row { display:flex;align-items:center;gap:8px;padding:6px 0;margin:0;font-weight:normal; }
+      #aiGradePackPickerModal .agp-dialog { background:#fff;color:#111;border-radius:12px;padding:18px 22px;max-width:720px;width:calc(100% - 32px);max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:left; }
+      #aiGradePackPickerModal h3 { margin:0 0 14px 0; }
+      #aiGradePackPickerModal .agp-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px 28px;align-items:start; }
+      #aiGradePackPickerModal .agp-col-title { font-weight:600;font-size:0.92rem;margin:0 0 6px; }
+      #aiGradePackPickerModal .agp-row { display:flex;align-items:center;gap:8px;padding:3px 0;margin:0;font-weight:normal; }
       #aiGradePackPickerModal .agp-row input[type="radio"] { width:auto;margin:0;flex:none; }
-      #aiGradePackPickerModal select { width:calc(100% - 26px);margin:4px 0 8px 26px;display:block;font-weight:normal; }
-      #aiGradePackPickerModal .agp-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:16px; }
+      #aiGradePackPickerModal label.agp-field { display:block;font-weight:normal;margin-bottom:2px; }
+      #aiGradePackPickerModal select { width:100%;margin:0;display:block;font-weight:normal; }
+      #aiGradePackPickerModal .agp-indent { width:calc(100% - 26px);margin:2px 0 6px 26px; }
+      #aiGradePackPickerModal textarea { width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical; }
+      #aiGradePackPickerModal .agp-hint { display:block;margin:3px 0 12px; }
+      #aiGradePackPickerModal .agp-actions { display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:18px;flex-wrap:wrap; }
+      @media (max-width:560px) { #aiGradePackPickerModal .agp-grid { grid-template-columns:1fr; } }
     </style>
     <div role="dialog" aria-modal="true" aria-label="Grade with AI" class="agp-dialog">
       <h3>Grade with AI · ${escapeHtml(safeCode)}</h3>
-      <p class="small muted">Choose what to include in the pack.</p>
-      <div style="margin:4px 0 12px;">
-        <label class="small muted" style="display:block;margin-bottom:2px;font-weight:normal;">How much should the AI correct?</label>
-        <select id="aiGradePackDepth" style="width:100%;margin:0;font:inherit;font-weight:normal;">
-          ${Object.entries(AI_GRADE_CORRECTION_MODES).map(([key, m]) =>
-            `<option value="${escapeHtml(key)}"${key === aiGradeDepthDefault ? ' selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
-        </select>
-        <span class="small muted" style="display:block;margin-top:2px;font-weight:normal;">Controls how heavily typed open answers are rewritten in the red/green diff.</span>
+      <div class="agp-grid">
+        <div>
+          <div class="agp-col-title">What to grade</div>
+          <label class="agp-row">
+            <input type="radio" name="aiGradePackScope" value="pending" checked />
+            <span>All <strong>pending</strong> teacher-graded answers</span>
+          </label>
+          <label class="agp-row">
+            <input type="radio" name="aiGradePackScope" value="assignment" />
+            <span>All teacher-graded answers</span>
+          </label>
+          <label class="agp-row">
+            <input type="radio" name="aiGradePackScope" value="attempt" ${studentOptions.length ? '' : 'disabled'} />
+            <span>One student</span>
+          </label>
+          <select id="aiGradePackPickStudent" class="agp-indent" ${studentOptions.length ? '' : 'disabled'}>
+            ${studentOptions.length
+              ? studentOptions.map((o) => `<option value="${escapeHtml(o.attemptId)}">${escapeHtml(o.label)}</option>`).join('')
+              : '<option>(no attempts loaded — open View results first)</option>'}
+          </select>
+          <label class="agp-row">
+            <input type="radio" name="aiGradePackScope" value="question" ${questionOptions.length ? '' : 'disabled'} />
+            <span>One question</span>
+          </label>
+          <select id="aiGradePackPickQuestion" class="agp-indent" ${questionOptions.length ? '' : 'disabled'}>
+            ${questionOptions.length
+              ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
+              : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
+          </select>
+        </div>
+        <div>
+          <div class="agp-col-title">AI settings</div>
+          <label class="agp-field small muted" for="aiGradePackDepth">How much should the AI correct?</label>
+          <select id="aiGradePackDepth">
+            ${Object.entries(AI_GRADE_CORRECTION_MODES).map(([key, m]) =>
+              `<option value="${escapeHtml(key)}"${key === aiGradeDepthDefault ? ' selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+          </select>
+          <span class="small muted agp-hint">Controls how heavily typed open answers are rewritten in the red/green diff.</span>
+          <label class="agp-field small muted" for="aiGradePackTeacherNote">Special instructions (optional)</label>
+          <textarea id="aiGradePackTeacherNote" rows="4" placeholder="e.g. Focus on verb tenses. Ignore minor punctuation. Use British spelling. Praise creative ideas."></textarea>
+        </div>
       </div>
-      <div style="margin:4px 0 12px;">
-        <label class="small muted" style="display:block;margin-bottom:2px;font-weight:normal;">Special grading instructions for the AI (optional)</label>
-        <textarea id="aiGradePackTeacherNote" rows="2" placeholder="e.g. Focus on verb tenses. Ignore minor punctuation. Use British spelling. Praise creative ideas." style="width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical;"></textarea>
-      </div>
-      <label class="agp-row">
-        <input type="radio" name="aiGradePackScope" value="pending" checked />
-        <span>All <strong>pending</strong> teacher-graded answers</span>
-      </label>
-      <label class="agp-row">
-        <input type="radio" name="aiGradePackScope" value="assignment" />
-        <span>All teacher-graded answers in this assignment</span>
-      </label>
-      <label class="agp-row">
-        <input type="radio" name="aiGradePackScope" value="attempt" ${studentOptions.length ? '' : 'disabled'} />
-        <span>One student</span>
-      </label>
-      <select id="aiGradePackPickStudent" ${studentOptions.length ? '' : 'disabled'}>
-        ${studentOptions.length
-          ? studentOptions.map((o) => `<option value="${escapeHtml(o.attemptId)}">${escapeHtml(o.label)}</option>`).join('')
-          : '<option>(no attempts loaded — open View results first)</option>'}
-      </select>
-      <label class="agp-row">
-        <input type="radio" name="aiGradePackScope" value="question" ${questionOptions.length ? '' : 'disabled'} />
-        <span>One question</span>
-      </label>
-      <select id="aiGradePackPickQuestion" ${questionOptions.length ? '' : 'disabled'}>
-        ${questionOptions.length
-          ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
-          : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
-      </select>
       <div class="agp-actions">
-        <button class="btn" type="button" data-ai-pack-cancel>Cancel</button>
-        <button class="btn primary" type="button" data-ai-pack-confirm>Build pack</button>
+        <button class="btn" type="button" data-ai-pack-import title="Already have an AI response? Paste or upload it here">Import AI grades →</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" type="button" data-ai-pack-cancel>Cancel</button>
+          <button class="btn primary" type="button" data-ai-pack-confirm>Build pack</button>
+        </div>
       </div>
-      <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0 12px;" />
-      <div class="small muted" style="margin-bottom:8px;">Already have an AI response?</div>
-      <button class="btn" type="button" data-ai-pack-import style="width:100%;">Import AI grades →</button>
     </div>
   `;
   document.body.appendChild(modal);
