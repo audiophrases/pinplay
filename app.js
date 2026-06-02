@@ -5382,7 +5382,11 @@ async function openAiGradePackPicker(code) {
     if (e.key === 'Escape') { e.stopPropagation(); close(); }
     else if (e.key === 'Enter' && !(e.target instanceof HTMLSelectElement)) { e.stopPropagation(); confirm(); }
   }
-  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  // Dismiss only when both press and release land on the backdrop, so a text
+  // selection that ends outside the dialog doesn't close it.
+  let pressedOnBackdrop = false;
+  modal.addEventListener('mousedown', (e) => { pressedOnBackdrop = (e.target === modal); });
+  modal.addEventListener('click', (e) => { if (e.target === modal && pressedOnBackdrop) close(); });
   modal.querySelector('[data-ai-pack-cancel]').addEventListener('click', close);
 
   function confirm() {
@@ -5995,7 +5999,13 @@ function openAiGradeImport(code) {
   function close() { modal.remove(); document.removeEventListener('keydown', onKey, true); }
   function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
   document.addEventListener('keydown', onKey, true);
-  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  // Only dismiss when both the press and the release land on the backdrop. The
+  // mousedown guard stops a text selection that starts inside the dialog and
+  // ends over the backdrop from firing a backdrop `click` and wiping all the
+  // review progress.
+  let pressedOnBackdrop = false;
+  modal.addEventListener('mousedown', (e) => { pressedOnBackdrop = (e.target === modal); });
+  modal.addEventListener('click', (e) => { if (e.target === modal && pressedOnBackdrop) close(); });
   modal.addEventListener('click', (e) => {
     if (e.target.matches('[data-import-cancel]')) close();
   });
@@ -6764,8 +6774,12 @@ function ensureGradingFocusModal() {
   modal.id = 'gradingFocusModal';
   modal.className = 'grading-focus-modal';
   modal.innerHTML = `<div class="grading-focus-content" id="gradingFocusContent" role="dialog" aria-modal="true" aria-label="Grade question"></div>`;
+  // Dismiss only when both press and release land on the backdrop, so selecting
+  // text in the correction/comment box and releasing outside doesn't close it.
+  let pressedOnBackdrop = false;
+  modal.addEventListener('mousedown', (e) => { pressedOnBackdrop = (e.target === modal); });
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeGradingFocusModal();
+    if (e.target === modal && pressedOnBackdrop) closeGradingFocusModal();
   });
   document.body.appendChild(modal);
   return modal;
@@ -7384,8 +7398,12 @@ function ensureStudentGradingFocusModal() {
   modal.id = 'studentGradingFocusModal';
   modal.className = 'grading-focus-modal';
   modal.innerHTML = `<div class="grading-focus-content" id="studentGradingFocusContent" role="dialog" aria-modal="true" aria-label="Grade student"></div>`;
+  // Dismiss only when both press and release land on the backdrop, so selecting
+  // text in the correction/comment box and releasing outside doesn't close it.
+  let pressedOnBackdrop = false;
+  modal.addEventListener('mousedown', (e) => { pressedOnBackdrop = (e.target === modal); });
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeStudentGradingFocusModal();
+    if (e.target === modal && pressedOnBackdrop) closeStudentGradingFocusModal();
   });
   document.body.appendChild(modal);
   return modal;
