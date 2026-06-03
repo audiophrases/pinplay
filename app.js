@@ -4214,7 +4214,9 @@ async function exportCreationPrompt() {
     '',
     '## Reference data — PinPlay v3 schema (field shapes, allowed types, examples)',
     '',
-    'Match the key shapes in `exampleTemplate`. Do not copy this reference into your output — produce a fresh quiz JSON.',
+    aiMode === 'agent'
+      ? 'Match the key shapes in `exampleTemplate`. The example questions set imageKeyword with an empty imageData only to show where a visual goes — in agent mode you should instead populate imageData with real embedded base64 for any content-bearing visual (see Phase 2); imageKeyword is for decorative visuals only. Do not copy this reference into your output — produce a fresh quiz JSON.'
+      : 'Match the key shapes in `exampleTemplate`. Do not copy this reference into your output — produce a fresh quiz JSON.',
     '',
     '```json',
     JSON.stringify(exportData, null, 2),
@@ -4275,7 +4277,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
 
   // Phase 2 asset guidance is built only from the media the teacher actually enabled.
   const assetSteps = [];
-  if (wantsImages) assetSteps.push('search for and embed real images as base64 imageData (confirm the image truly shows the subject before embedding)');
+  if (wantsImages) assetSteps.push('find or capture the actual image the question is about (real UI screenshot, diagram, map, chart, artwork, specimen — not a generic stock photo) and embed it as base64 imageData, confirming it truly shows the subject');
   if (wantsGifs) assetSteps.push('embed a fitting animated GIF as base64 imageData where motion aids understanding');
   if (wantsVideo) assetSteps.push('find the exact clip and set media.url with startAt/endAt to show precisely the right seconds');
   if (wantsAudio) assetSteps.push('decide deliberately between real sourced audio and TTS for each listening prompt');
@@ -4285,13 +4287,13 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
 
   const workflow = {
     phase1_research: 'Before writing any question, research the topic. Verify every fact, statistic, name, date, and slider target against a real source (web search, Wikipedia, reference sites). Do not write a question about anything you cannot verify — drop it or pick a verifiable angle instead.',
-    phase2_assets: `Resolve all media before assembling questions. ${assetGuidance} Decision rule: embed an asset as base64 only when that specific asset adds unique pedagogical value and stays small (roughly under a few hundred KB); for generic or incidental visuals use an imageKeyword/gifKeyword/videoKeyword and let auto-search resolve it at save time.`,
-    phase3_assemble: 'Only now write the quiz JSON, with every asset already resolved. Prefer a real embedded imageData over an imageKeyword placeholder, and a specific media.url with startAt/endAt over a videoKeyword, whenever you actually found the asset. Keep ids stable and unique, prompts tight, and distractors based on real near-misses you found while researching.'
+    phase2_assets: `Resolve all media yourself now — do NOT defer to save-time keyword auto-search and hope it finds something usable. That deferral is the chatbot fallback, and shipping keyword placeholders instead of real assets is exactly the lazy route you must avoid. ${assetGuidance} Litmus test for every visual: is there ONE specific real image that correctly shows what the question is about — a particular UI screen, diagram, map, chart, artwork, place, person, or specimen? If yes, you MUST find, capture, generate, or compose that exact image and embed it as base64 imageData; a generic stock photo from a keyword search would be a wrong answer there. Software/interface and procedural "how-to" topics nearly always need real screenshots or annotated captures of the actual product — stock imagery teaches nothing. Reserve imageKeyword/gifKeyword only for purely decorative or generic-reaction visuals where any representative image is fine. If a real embed is large, downscale or compress it (aim for a few hundred KB) rather than dropping to a keyword.`,
+    phase3_assemble: 'Only now write the quiz JSON, with every asset already resolved. Any question whose content or answer depends on a specific real visual must already carry an embedded base64 imageData — not an imageKeyword placeholder — and likewise a specific media.url with startAt/endAt over a videoKeyword. If you could not resolve a needed real image, drop or rework that question rather than papering over it with a keyword. Keep ids stable and unique, prompts tight, and distractors based on real near-misses you found while researching.'
   };
 
   // Hints — non-prescriptive ideas, gated by the same form selections.
   const hints = {};
-  if (wantsImages) hints.images = 'Search and embed real images, generate or compose custom ones (e.g. map + flag overlay), annotate with arrows/labels, crop to the subject, or screenshot a real stats table. Embed the result as base64 imageData. imageKeyword is a fallback, not the goal.';
+  if (wantsImages) hints.images = 'Find or capture the actual image the question is about — a real UI screenshot/annotated capture, diagram, map, chart, artwork, or specimen — and embed it as base64 imageData. You can also generate or compose custom images (e.g. map + flag overlay), crop to the subject, or annotate with arrows/labels. imageKeyword is only a fallback for decorative visuals, never the default.';
   if (wantsGifs) hints.gifs = 'Animated GIFs shine for reaction/emotion verbs and short concrete actions. Embed a real one in imageData when motion adds pedagogical value; gifKeyword is only a fallback.';
   if (wantsVideo) hints.video = 'Find a specific YouTube/Vimeo clip and set startAt/endAt to show exactly the right seconds, or transcribe a clip into a listening-comprehension question. Verify the link is live before using it.';
   if (wantsAudio) hints.audio = 'Beyond generic TTS: consider pacing (pauses for dictation), voice selection by gender/accent for pedagogical effect, or sourcing real ambient/crowd audio when it adds value.';
@@ -4306,7 +4308,11 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
     ? `Choose the question types that best fit the goal and theme from: ${allowedTypesText}.`
     : `Use only these question types: ${allowedTypesText}.`);
   if (blockedTypesText) constraints.push(`Never use blocked types: ${blockedTypesText}.`);
-  constraints.push('Quizzes are saved to limited cloud storage. Embed base64 assets when they genuinely add pedagogical value, but for incidental visuals prefer an imageKeyword/gifKeyword (auto-resolved at save time) so the quiz does not balloon past the storage limit.');
+  if (wantsImages || wantsGifs) {
+    constraints.push('Embed real, verified assets for any question whose content or answer depends on a specific image — do not ship imageKeyword/gifKeyword placeholders there and lean on save-time auto-search (that is the chatbot fallback). Keyword fields are only for purely decorative or generic-reaction visuals. Control storage by downscaling/compressing embeds (aim for a few hundred KB each), not by swapping them for keywords.');
+  } else if (cleanRequest.images === 'no') {
+    constraints.push('Do not add imageKeyword, gifKeyword, or imageData to any question.');
+  }
   if (wantsReading) {
     constraints.push('readingText is a plain UTF-8 string (no markdown/HTML, no base64), max ~10,000 chars; split long content across questions.');
     constraints.push('On any question with readingText, leave imageKeyword, gifKeyword, and imageData empty — they are mutually exclusive. Never put readingText on a pin question.');
