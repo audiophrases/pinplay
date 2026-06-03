@@ -3886,6 +3886,7 @@ async function exportCreationPrompt() {
   const audio = document.getElementById('promptAudio')?.value;
   const video = document.getElementById('promptVideo')?.value;
   const readingText = document.getElementById('promptReadingText')?.value;
+  const aiMode = document.getElementById('promptAiMode')?.value || 'chatbot';
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
   const customGoalEl = document.getElementById('promptGoalCustom') instanceof HTMLTextAreaElement ? document.getElementById('promptGoalCustom') : null;
   const goal = goalEl?.value;
@@ -3977,6 +3978,35 @@ async function exportCreationPrompt() {
   );
   // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
 
+  // Shrink exampleTemplate: keep max 2 examples (1 simple + 1 complex) to save tokens
+  const EXAMPLE_SIMPLE_TYPES = ['mcq'];
+  const EXAMPLE_COMPLEX_TYPES = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
+  const pickedExamples = [];
+  const simpleEx = filteredTemplateQuestions.find((q) => EXAMPLE_SIMPLE_TYPES.includes(q.type));
+  if (simpleEx) pickedExamples.push(simpleEx);
+  const complexEx = filteredTemplateQuestions.find((q) => EXAMPLE_COMPLEX_TYPES.includes(q.type) && q.type !== simpleEx?.type);
+  if (complexEx) pickedExamples.push(complexEx);
+  // Fallback: if no match found, take first 2 filtered questions
+  if (!pickedExamples.length) pickedExamples.push(...filteredTemplateQuestions.slice(0, 2));
+
+  const allowedTypesText = allowedTypes.join(', ');
+  const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
+
+  let promptText;
+  let exportData;
+  let filename = `prompt-${toSafeFilename(theme)}.json`;
+
+  if (aiMode === 'agent') {
+    ({ promptText, exportData } = buildAgentArtifacts({
+      cleanRequest,
+      textualSummary,
+      allowedTypes,
+      blockedTypesText,
+      typeExplanations: relevantTypeExplanations,
+      pickedExamples
+    }));
+    filename = `prompt-agent-${toSafeFilename(theme)}.json`;
+  } else {
   const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
   const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
 
@@ -4014,8 +4044,6 @@ async function exportCreationPrompt() {
     implementation: "Apply audio fields (audioMode: 'tts', audioText: '...') to existing supported question types."
   } : undefined;
 
-  const allowedTypesText = allowedTypes.join(', ');
-  const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
     : `Use only allowed question types: ${allowedTypesText}.`;
@@ -4116,7 +4144,7 @@ async function exportCreationPrompt() {
     })()
   ].filter(Boolean);
 
-  const promptText = [
+  promptText = [
     'Task',
     textualSummary,
     '',
@@ -4130,18 +4158,7 @@ async function exportCreationPrompt() {
     outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n')
   ].join('\n').trim();
 
-  // Shrink exampleTemplate: keep max 2 examples (1 simple + 1 complex) to save tokens
-  const EXAMPLE_SIMPLE_TYPES = ['mcq'];
-  const EXAMPLE_COMPLEX_TYPES = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
-  const pickedExamples = [];
-  const simpleEx = filteredTemplateQuestions.find((q) => EXAMPLE_SIMPLE_TYPES.includes(q.type));
-  if (simpleEx) pickedExamples.push(simpleEx);
-  const complexEx = filteredTemplateQuestions.find((q) => EXAMPLE_COMPLEX_TYPES.includes(q.type) && q.type !== simpleEx?.type);
-  if (complexEx) pickedExamples.push(complexEx);
-  // Fallback: if no match found, take first 2 filtered questions
-  if (!pickedExamples.length) pickedExamples.push(...filteredTemplateQuestions.slice(0, 2));
-
-  const exportData = {
+  exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
       type: "PinPlay Creation Prompt",
@@ -4159,6 +4176,7 @@ async function exportCreationPrompt() {
       questions: pickedExamples
     }
   };
+  }
 
   const CONTEXT_BUDGET = 22000;
   if (JSON.stringify(exportData).length > CONTEXT_BUDGET && exportData.context?.typeExplanations) {
@@ -4191,8 +4209,136 @@ async function exportCreationPrompt() {
     }
   }
 
-  const filename = `prompt-${toSafeFilename(theme)}.json`;
   downloadJson(exportData, filename);
+}
+
+// Agent-mode counterpart to the chatbot prompt: a brief + research/assets/assemble
+// workflow + non-prescriptive hints + short hard constraints, instead of a long rulebook.
+// Returns the same { promptText (clipboard), exportData (downloaded JSON) } shape so the
+// shared tail of exportCreationPrompt can copy + trim + download it identically.
+function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, typeExplanations, pickedExamples }) {
+  const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
+  const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
+  const wantsVideo = cleanRequest.video === 'some';
+  const wantsAudio = cleanRequest.audio === 'some';
+  const wantsReading = cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all';
+  const allowsSlider = allowedTypes.includes('slider');
+  const aiChoice = cleanRequest.questionTypeSelection === 'ai_choice';
+  const allowedTypesText = allowedTypes.join(', ');
+
+  // Brief — one paragraph of pedagogical intent synthesised from the form.
+  let brief = `Build a PinPlay v3 quiz on "${cleanRequest.theme}"`;
+  if (cleanRequest.level) brief += `, pitched at ${cleanRequest.level}`;
+  if (cleanRequest.language) brief += `, in ${cleanRequest.language}`;
+  brief += `. Pedagogical aim: ${cleanRequest.goal || 'a balanced scaffold + retrieval-practice progression'}. `;
+  brief += 'You are an agent, not a form-filler — read the intent, then decide how to reach a genuinely high-quality quiz. ';
+  brief += 'Favour real, verified content over plausible-sounding guesses, and vary question types where they serve the goal.';
+
+  // Phase 2 asset guidance is built only from the media the teacher actually enabled.
+  const assetSteps = [];
+  if (wantsImages) assetSteps.push('search for and embed real images as base64 imageData (confirm the image truly shows the subject before embedding)');
+  if (wantsGifs) assetSteps.push('embed a fitting animated GIF as base64 imageData where motion aids understanding');
+  if (wantsVideo) assetSteps.push('find the exact clip and set media.url with startAt/endAt to show precisely the right seconds');
+  if (wantsAudio) assetSteps.push('decide deliberately between real sourced audio and TTS for each listening prompt');
+  const assetGuidance = assetSteps.length
+    ? `For each question that needs media: ${assetSteps.join('; ')}. Verify every asset actually loads and matches the question.`
+    : 'This quiz needs no media — go straight to assembly.';
+
+  const workflow = {
+    phase1_research: 'Before writing any question, research the topic. Verify every fact, statistic, name, date, and slider target against a real source (web search, Wikipedia, reference sites). Do not write a question about anything you cannot verify — drop it or pick a verifiable angle instead.',
+    phase2_assets: `Resolve all media before assembling questions. ${assetGuidance}`,
+    phase3_assemble: 'Only now write the quiz JSON, with every asset already resolved. Prefer a real embedded imageData over an imageKeyword placeholder, and a specific media.url with startAt/endAt over a videoKeyword, whenever you actually found the asset. Keep ids stable and unique, prompts tight, and distractors based on real near-misses you found while researching.'
+  };
+
+  // Hints — non-prescriptive ideas, gated by the same form selections.
+  const hints = {};
+  if (wantsImages) hints.images = 'Search and embed real images, generate or compose custom ones (e.g. map + flag overlay), annotate with arrows/labels, crop to the subject, or screenshot a real stats table. Embed the result as base64 imageData. imageKeyword is a fallback, not the goal.';
+  if (wantsGifs) hints.gifs = 'Animated GIFs shine for reaction/emotion verbs and short concrete actions. Embed a real one in imageData when motion adds pedagogical value; gifKeyword is only a fallback.';
+  if (wantsVideo) hints.video = 'Find a specific YouTube/Vimeo clip and set startAt/endAt to show exactly the right seconds, or transcribe a clip into a listening-comprehension question. Verify the link is live before using it.';
+  if (wantsAudio) hints.audio = 'Beyond generic TTS: consider pacing (pauses for dictation), voice selection by gender/accent for pedagogical effect, or sourcing real ambient/crowd audio when it adds value.';
+  if (allowsSlider) hints.facts = 'Slider questions are far better when the target value is real and verified (venue capacity, goals scored, population, distance). Look it up before writing the question.';
+  hints.composition = "When a single found asset won't capture the idea, compose one — e.g. combine a regional map with event branding rather than hoping one keyword finds it.";
+
+  // Constraints — hard rules only.
+  const constraints = [];
+  constraints.push('Return one valid PinPlay JSON v3 object that matches the key shapes in exampleTemplate. Keep ids stable and unique.');
+  constraints.push(aiChoice
+    ? `Choose the question types that best fit the goal and theme from: ${allowedTypesText}.`
+    : `Use only these question types: ${allowedTypesText}.`);
+  if (blockedTypesText) constraints.push(`Never use blocked types: ${blockedTypesText}.`);
+  constraints.push('Quizzes are saved to limited cloud storage. Embed base64 assets when they genuinely add pedagogical value, but for incidental visuals prefer an imageKeyword/gifKeyword (auto-resolved at save time) so the quiz does not balloon past the storage limit.');
+  if (wantsReading) {
+    constraints.push('readingText is a plain UTF-8 string (no markdown/HTML, no base64), max ~10,000 chars; split long content across questions.');
+    constraints.push('On any question with readingText, leave imageKeyword, gifKeyword, and imageData empty — they are mutually exclusive. Never put readingText on a pin question.');
+  } else if (cleanRequest.readingText === 'no') {
+    constraints.push('Do not use the readingText field on any question.');
+  }
+  if (wantsAudio) {
+    constraints.push('TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }. In audioText write the word "blank" rather than "___" so TTS does not read underscores aloud.');
+  }
+  const qc = cleanRequest.questionCount;
+  const isTextualBrief = typeof qc === 'string';
+  const numericCount = typeof qc === 'number' ? qc : 10;
+  if (cleanRequest.batchSize) {
+    constraints.push(isTextualBrief
+      ? `Decide the question count yourself from this brief: "${qc}". Deliver in batches of ${cleanRequest.batchSize}; the teacher combines them via Import → Append.`
+      : `Produce ${numericCount} questions in batches of ${cleanRequest.batchSize}; the teacher combines them via Import → Append.`);
+  } else {
+    constraints.push(isTextualBrief
+      ? `Decide the question count yourself from this brief: "${qc}", then return the whole quiz as one JSON object.`
+      : `Return all ${numericCount} questions in one JSON object.`);
+  }
+
+  const outputContract = [
+    'Resolve and embed all assets first, then assemble.',
+    'Output only one JSON object — no commentary, no markdown fences.',
+    'Follow exampleTemplate key shapes; prefer embedded imageData / media.url+startAt/endAt over keyword placeholders when you found the real asset.'
+  ];
+
+  const promptText = [
+    'Task',
+    textualSummary,
+    '',
+    'Brief',
+    brief,
+    '',
+    'Workflow',
+    `1. Research — ${workflow.phase1_research}`,
+    `2. Assets — ${workflow.phase2_assets}`,
+    `3. Assemble — ${workflow.phase3_assemble}`,
+    '',
+    "Hints (optional — use what helps, ignore what doesn't)",
+    Object.entries(hints).map(([k, v]) => `- ${k}: ${v}`).join('\n'),
+    '',
+    'Constraints',
+    constraints.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    '',
+    'Output contract',
+    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n')
+  ].join('\n').trim();
+
+  const exportData = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      type: "PinPlay Creation Prompt",
+      version: "3.5",
+      agentMode: "agent"
+    },
+    brief,
+    workflow,
+    hints,
+    constraints,
+    context: {
+      allowedQuestionTypes: allowedTypes,
+      typeExplanations
+    },
+    exampleTemplate: {
+      ...TEMPLATE_ALL_13_TYPES,
+      questions: pickedExamples
+    }
+  };
+
+  return { promptText, exportData };
 }
 
 async function customPasswordPrompt(message) {

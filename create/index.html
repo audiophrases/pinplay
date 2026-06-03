@@ -65,6 +65,14 @@
                 </button>
                 <div id="creationPromptBody" class="section-collapsible-body hidden">
                   <div class="creation-prompt-grid">
+                    <div class="prompt-field full-width">
+                      <label>AI Mode
+                        <select id="promptAiMode">
+                          <option value="chatbot" selected>🤖 AI Chatbot (fill fields by rules)</option>
+                          <option value="agent">🦾 AI Agent (research, verify, embed real assets)</option>
+                        </select>
+                      </label>
+                    </div>
                     <div class="prompt-field">
                       <label>Theme
                         <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
