@@ -16939,7 +16939,9 @@ function downloadJson(data, filename) {
 }
 
 function downloadTextFile(text, filename, mime = 'text/markdown;charset=utf-8') {
-  const blob = new Blob([text], { type: mime });
+  // Prepend a UTF-8 BOM so Windows editors auto-detect UTF-8 and render accented
+  // characters (é, ç, à) and em dashes correctly instead of mojibake.
+  const blob = new Blob(['﻿', text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
