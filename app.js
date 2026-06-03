@@ -3996,17 +3996,8 @@ async function exportCreationPrompt() {
   let exportData;
   let filename = `prompt-${toSafeFilename(theme)}.json`;
 
-  if (aiMode === 'agent') {
-    ({ promptText, exportData } = buildAgentArtifacts({
-      cleanRequest,
-      textualSummary,
-      allowedTypes,
-      blockedTypesText,
-      typeExplanations: relevantTypeExplanations,
-      pickedExamples
-    }));
-    filename = `prompt-agent-${toSafeFilename(theme)}.json`;
-  } else {
+  // featureGuides + audioPedagogicalUse are shared: chatbot puts them in context, and
+  // agent mode reuses the same keyword/audio fallback rules in its context block.
   const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
   const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
 
@@ -4044,6 +4035,19 @@ async function exportCreationPrompt() {
     implementation: "Apply audio fields (audioMode: 'tts', audioText: '...') to existing supported question types."
   } : undefined;
 
+  if (aiMode === 'agent') {
+    ({ promptText, exportData } = buildAgentArtifacts({
+      cleanRequest,
+      textualSummary,
+      allowedTypes,
+      blockedTypesText,
+      featureGuides,
+      audioPedagogicalUse,
+      typeExplanations: relevantTypeExplanations,
+      pickedExamples
+    }));
+    filename = `prompt-agent-${toSafeFilename(theme)}.json`;
+  } else {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
     : `Use only allowed question types: ${allowedTypesText}.`;
@@ -4216,13 +4220,14 @@ async function exportCreationPrompt() {
 // workflow + non-prescriptive hints + short hard constraints, instead of a long rulebook.
 // Returns the same { promptText (clipboard), exportData (downloaded JSON) } shape so the
 // shared tail of exportCreationPrompt can copy + trim + download it identically.
-function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, typeExplanations, pickedExamples }) {
+function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, featureGuides, audioPedagogicalUse, typeExplanations, pickedExamples }) {
   const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
   const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
   const wantsVideo = cleanRequest.video === 'some';
   const wantsAudio = cleanRequest.audio === 'some';
   const wantsReading = cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all';
   const allowsSlider = allowedTypes.includes('slider');
+  const allowsPin = allowedTypes.includes('pin');
   const aiChoice = cleanRequest.questionTypeSelection === 'ai_choice';
   const allowedTypesText = allowedTypes.join(', ');
 
@@ -4246,7 +4251,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
 
   const workflow = {
     phase1_research: 'Before writing any question, research the topic. Verify every fact, statistic, name, date, and slider target against a real source (web search, Wikipedia, reference sites). Do not write a question about anything you cannot verify — drop it or pick a verifiable angle instead.',
-    phase2_assets: `Resolve all media before assembling questions. ${assetGuidance}`,
+    phase2_assets: `Resolve all media before assembling questions. ${assetGuidance} Decision rule: embed an asset as base64 only when that specific asset adds unique pedagogical value and stays small (roughly under a few hundred KB); for generic or incidental visuals use an imageKeyword/gifKeyword/videoKeyword and let auto-search resolve it at save time.`,
     phase3_assemble: 'Only now write the quiz JSON, with every asset already resolved. Prefer a real embedded imageData over an imageKeyword placeholder, and a specific media.url with startAt/endAt over a videoKeyword, whenever you actually found the asset. Keep ids stable and unique, prompts tight, and distractors based on real near-misses you found while researching.'
   };
 
@@ -4257,6 +4262,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
   if (wantsVideo) hints.video = 'Find a specific YouTube/Vimeo clip and set startAt/endAt to show exactly the right seconds, or transcribe a clip into a listening-comprehension question. Verify the link is live before using it.';
   if (wantsAudio) hints.audio = 'Beyond generic TTS: consider pacing (pauses for dictation), voice selection by gender/accent for pedagogical effect, or sourcing real ambient/crowd audio when it adds value.';
   if (allowsSlider) hints.facts = 'Slider questions are far better when the target value is real and verified (venue capacity, goals scored, population, distance). Look it up before writing the question.';
+  if (allowsPin) hints.pin = 'For pin questions, find or generate a real image (map, diagram, stadium layout), then compute accurate x/y/r zone coordinates from the actual image dimensions. A bad pin with wrong zones is worse than none — only use pin when you can resolve a real image and verify the zones.';
   hints.composition = "When a single found asset won't capture the idea, compose one — e.g. combine a regional map with event branding rather than hoping one keyword finds it.";
 
   // Constraints — hard rules only.
@@ -4324,13 +4330,16 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
       version: "3.5",
       agentMode: "agent"
     },
+    agentMode: "agent",
     brief,
     workflow,
     hints,
     constraints,
     context: {
       allowedQuestionTypes: allowedTypes,
-      typeExplanations
+      typeExplanations,
+      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value)),
+      audioPedagogicalUse
     },
     exampleTemplate: {
       ...TEMPLATE_ALL_13_TYPES,
