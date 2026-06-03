@@ -3994,7 +3994,7 @@ async function exportCreationPrompt() {
 
   let promptText;
   let exportData;
-  let filename = `prompt-${toSafeFilename(theme)}.json`;
+  let filename = `prompt-${toSafeFilename(theme)}.md`;
 
   // featureGuides + audioPedagogicalUse are shared: chatbot puts them in context, and
   // agent mode reuses the same keyword/audio fallback rules in its context block.
@@ -4046,7 +4046,7 @@ async function exportCreationPrompt() {
       typeExplanations: relevantTypeExplanations,
       pickedExamples
     }));
-    filename = `prompt-agent-${toSafeFilename(theme)}.json`;
+    filename = `prompt-agent-${toSafeFilename(theme)}.md`;
   } else {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
@@ -4199,21 +4199,46 @@ async function exportCreationPrompt() {
   }
   // typeUseCases no longer exists; skip this trim step
 
+  // Single self-contained instructions file: readable prose prompt at the top, then the
+  // schema/reference JSON in a fenced block. The teacher attaches just this one file.
+  const instructionsFile = [
+    '# PinPlay — Quiz Creation Instructions',
+    '',
+    'Attach this whole file to your AI chatbot or agent and say: "Here are the instructions to create a new quiz." Read the instructions below, then use the reference JSON at the bottom for the exact field shapes, allowed question types, and examples. Return your quiz as a single JSON object.',
+    '',
+    '---',
+    '',
+    promptText,
+    '',
+    '---',
+    '',
+    '## Reference data — PinPlay v3 schema (field shapes, allowed types, examples)',
+    '',
+    'Match the key shapes in `exampleTemplate`. Do not copy this reference into your output — produce a fresh quiz JSON.',
+    '',
+    '```json',
+    JSON.stringify(exportData, null, 2),
+    '```',
+    ''
+  ].join('\n');
+
+  // Download the file first so the attachment always lands even if clipboard access fails.
+  downloadTextFile(instructionsFile, filename);
+
   try {
     await navigator.clipboard.writeText(promptText);
     if (promptStatusEl) {
-      promptStatusEl.textContent = 'Prompt copied! 📋';
+      promptStatusEl.textContent = 'Instructions file downloaded — prompt also copied 📋';
       promptStatusEl.className = 'small ok';
       setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
     }
   } catch (err) {
     if (promptStatusEl) {
-      promptStatusEl.textContent = 'Copied failed, but JSON exported.';
-      promptStatusEl.className = 'small bad';
+      promptStatusEl.textContent = 'Instructions file downloaded (clipboard copy unavailable).';
+      promptStatusEl.className = 'small ok';
+      setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
     }
   }
-
-  downloadJson(exportData, filename);
 }
 
 // Agent-mode counterpart to the chatbot prompt: a brief + research/assets/assemble
@@ -16897,6 +16922,18 @@ function toSafeFilename(s) {
 
 function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadTextFile(text, filename, mime = 'text/markdown;charset=utf-8') {
+  const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
