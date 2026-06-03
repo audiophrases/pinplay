@@ -4239,6 +4239,15 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
   brief += 'You are an agent, not a form-filler — read the intent, then decide how to reach a genuinely high-quality quiz. ';
   brief += 'Favour real, verified content over plausible-sounding guesses, and vary question types where they serve the goal.';
 
+  // Capabilities — conditional (don't assert tools the agent may lack) + extensible
+  // (acquire or author a subskill when the quiz needs a capability not already at hand).
+  const capabilityTools = ['web search to verify facts, names, dates, and slider targets'];
+  if (wantsImages || wantsGifs) capabilityTools.push('image download/generation and base64 embedding');
+  if (wantsGifs) capabilityTools.push('GIF search');
+  if (wantsVideo) capabilityTools.push('YouTube/video lookup with timestamp verification');
+  if (wantsImages) capabilityTools.push('image composition and annotation');
+  const agentCapabilities = `If you have tools, use them rather than treating these hints as suggestions you cannot act on — ${capabilityTools.join('; ')}. This is not a keyword-fill task. If this quiz needs a specialized capability you do not already have (e.g. rendering chemical structures, music notation, IPA phonetics, accurate map/flag overlays, LaTeX math figures), first look for an existing skill or tool online that provides it, or author a small reusable subskill connected to your PinPlay quiz-creator skills — then use it. Match any capability you acquire to what THIS quiz actually requires; skip this for topics you can already handle.`;
+
   // Phase 2 asset guidance is built only from the media the teacher actually enabled.
   const assetSteps = [];
   if (wantsImages) assetSteps.push('search for and embed real images as base64 imageData (confirm the image truly shows the subject before embedding)');
@@ -4308,6 +4317,9 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
     'Brief',
     brief,
     '',
+    'Capabilities',
+    agentCapabilities,
+    '',
     'Workflow',
     `1. Research — ${workflow.phase1_research}`,
     `2. Assets — ${workflow.phase2_assets}`,
@@ -4331,6 +4343,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
       agentMode: "agent"
     },
     agentMode: "agent",
+    agentCapabilities,
     brief,
     workflow,
     hints,
