@@ -2085,11 +2085,12 @@ function renderInstantFeedbackFromState() {
   if (!wrap) return;
 
   const existing = document.getElementById('assignmentResultsPanel');
-  // Preserve the question-summary list's scroll position so the 5s polling
-  // re-render doesn't yank the student back to Q1 after they scroll down.
-  const prevListScrollTop = existing
-    ? existing.querySelector('.assignment-results-list-wrap')?.scrollTop || 0
-    : 0;
+  // Preserve the scroll position so the 2s polling re-render doesn't yank the
+  // student back to the top after they scroll down to review their answers.
+  // The drawer panel itself is the scroll container (overflow-y:auto +
+  // max-height in CSS); the inner list-wrap has no height cap so it never
+  // scrolls on its own. Read the panel's scrollTop, not the list-wrap's.
+  const prevPanelScrollTop = existing ? existing.scrollTop || 0 : 0;
   if (existing) existing.remove();
 
   const panel = document.createElement('div');
@@ -2218,7 +2219,6 @@ function renderInstantFeedbackFromState() {
   // --- Scrollable, clickable question list ---
   const listWrap = document.createElement('div');
   listWrap.className = 'assignment-results-list-wrap';
-  const listCollapsed = false;
 
   const list = document.createElement('ul');
   list.className = 'assignment-results-list';
@@ -2306,8 +2306,10 @@ function renderInstantFeedbackFromState() {
   });
   document.body.appendChild(handle);
 
-  if (prevListScrollTop > 0 && !listCollapsed) {
-    listWrap.scrollTop = prevListScrollTop;
+  // Restore scroll on the panel (the actual scroll container) after it's in the
+  // DOM so the re-render keeps the student where they were in the review list.
+  if (prevPanelScrollTop > 0) {
+    panel.scrollTop = prevPanelScrollTop;
   }
 }
 
