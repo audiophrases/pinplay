@@ -1968,7 +1968,7 @@ function bindBuilderEvents() {
       const status = getRecognitionLangState(q);
       if (statusEl) {
         if (!result.ok && raw) {
-          statusEl.innerHTML = `⚠ Unrecognized language code "<strong>${escapeHtml(raw)}</strong>". ${renderRecognitionLangStatus(status)}`;
+          statusEl.innerHTML = t("⚠ Unrecognized language code \"<strong>{p1}</strong>\". {p2}", { p1: escapeHtml(raw), p2: renderRecognitionLangStatus(status) });
           statusEl.classList.remove('muted');
           statusEl.style.color = 'var(--bad, #b91c1c)';
         } else {
@@ -3290,7 +3290,7 @@ function syncQuizFromUI() {
       const counterEl = questionListEl.querySelector(`[data-reading-counter="${idx}"]`);
       if (counterEl) {
         const len = q.readingText.length;
-        counterEl.textContent = `${len} / 10,000 chars`;
+        counterEl.textContent = t("{p1} / 10,000 chars", { p1: len });
         counterEl.classList.toggle('near-limit', len > 9000);
       }
     }
@@ -3501,7 +3501,7 @@ async function openImageSearchDialog(questionIdx) {
         status.textContent = t('No images found.');
         return;
       }
-      status.textContent = `Found ${items.length} images. Click an image to import.`;
+      status.textContent = t("Found {p1} images. Click an image to import.", { p1: items.length });
 
       items.forEach((item) => {
         const card = document.createElement('div');
@@ -3635,7 +3635,7 @@ async function openGifSearchDialog(questionIdx) {
         status.textContent = t('No GIFs found.');
         return;
       }
-      status.textContent = `Found ${items.length} GIFs. Click one to use.`;
+      status.textContent = t("Found {p1} GIFs. Click one to use.", { p1: items.length });
 
       items.forEach((item) => {
         const card = document.createElement('div');
@@ -3728,9 +3728,9 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = n
       const delBtn = document.createElement('button');
       delBtn.className = 'btn dialog-delete';
       delBtn.textContent = '✕';
-      delBtn.title = `Delete ${item.label}`;
+      delBtn.title = t("Delete {p1}", { p1: item.label });
       delBtn.addEventListener('click', async () => {
-        if (!confirm(`Delete "${item.label}"?`)) return;
+        if (!confirm(t("Delete \"{p1}\"?", { p1: item.label }))) return;
         await onDelete(item);
         row.remove();
       });
@@ -4554,7 +4554,7 @@ function bindLiveEvents() {
       return;
     }
     enterGradeByQuestionMode(code).catch((err) => {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-question error: ${err.message}`;
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Grade-by-question error: {p1}", { p1: err.message });
     });
   });
   if (gradeByStudentBtnEl) gradeByStudentBtnEl.addEventListener('click', () => {
@@ -4564,7 +4564,7 @@ function bindLiveEvents() {
       return;
     }
     enterGradeByStudentMode(code).catch((err) => {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grade-by-student error: ${err.message}`;
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Grade-by-student error: {p1}", { p1: err.message });
     });
   });
   if (aiGradePackAssignmentBtnEl) aiGradePackAssignmentBtnEl.addEventListener('click', () => {
@@ -5977,16 +5977,16 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     if (summaryEl) summaryEl.textContent = parts.join(' · ');
     if (safeBtn) {
       const n = includedNonOverwrite.length;
-      safeBtn.textContent = `Apply ${n} grade${n === 1 ? '' : 's'}`;
+      safeBtn.textContent = t("Apply {p1} grade{p2}", { p1: n, p2: n === 1 ? '' : 's' });
       safeBtn.disabled = n === 0;
     }
     if (allBtn) {
       const total = includedNonOverwrite.length + includedOverwrite.length;
-      allBtn.textContent = `Apply ${total} incl. overwrites`;
+      allBtn.textContent = t("Apply {p1} incl. overwrites", { p1: total });
       allBtn.disabled = total === 0;
     }
     if (overwriteLabel) {
-      overwriteLabel.textContent = `I have reviewed the ${includedOverwrite.length} overwrite${includedOverwrite.length === 1 ? '' : 's'}`;
+      overwriteLabel.textContent = t("I have reviewed the {p1} overwrite{p2}", { p1: includedOverwrite.length, p2: includedOverwrite.length === 1 ? '' : 's' });
     }
   }
 
@@ -6130,7 +6130,7 @@ async function aiGradeImportApply(modal, code, rowsToApply) {
   let failed = 0;
   const failures = [];
   for (const row of rowsToApply) {
-    progressEl.textContent = `Applying ${done + 1} of ${rowsToApply.length}…`;
+    progressEl.textContent = t("Applying {p1} of {p2}…", { p1: done + 1, p2: rowsToApply.length });
     try {
       const correctionValue = aiGradeImportResolveCorrection(row);
       await gradeAssignmentQuestion(code, row.attemptId, row.qIndex, row.points, correctionValue, '');
@@ -6140,7 +6140,7 @@ async function aiGradeImportApply(modal, code, rowsToApply) {
       failures.push(`${row.studentName || row.attemptId} · Q${row.qIndex + 1}: ${err.message}`);
     }
   }
-  progressEl.innerHTML = `<strong>Done.</strong> ${done} applied${failed ? `, ${failed} failed` : ''}.${failures.length ? `<details style="margin-top:6px;"><summary>Show failures</summary><pre style="white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(failures.join('\n'))}</pre></details>` : ''}`;
+  progressEl.innerHTML = `<strong>Done.</strong> ${done} applied${failed ? `, ${failed} failed` : ''}.${failures.length ? `<details style="margin-top:6px;"><summary>Show failures</summary><pre style="white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(failures.join('\n'))}</pre></details>` : ''}`; // i18n-ignore
   if (assignmentResultsCache?.code === code) {
     try { await fetchAssignmentResults(code); } catch {}
   }
@@ -6231,7 +6231,7 @@ function openAiGradeImport(code) {
       if (fileNameEl) fileNameEl.textContent = file.name;
       errEl.textContent = '';
     } catch (err) {
-      errEl.textContent = `Could not read file: ${err.message}`;
+      errEl.textContent = t("Could not read file: {p1}", { p1: err.message });
     }
   }
   modal.querySelector('[data-import-pick]')?.addEventListener('click', () => fileInput?.click());
@@ -6248,18 +6248,18 @@ function openAiGradeImport(code) {
       return;
     }
     if (String(parsed.assignmentCode || '').toUpperCase() !== safeCode) {
-      errEl.textContent = `assignmentCode "${parsed.assignmentCode}" does not match current assignment ${safeCode}. Open the right assignment first.`;
+      errEl.textContent = t("assignmentCode \"{p1}\" does not match current assignment {p2}. Open the right assignment first.", { p1: parsed.assignmentCode, p2: safeCode });
       return;
     }
     const qIndexesNeeded = new Set(
       parsed.results.map((r) => Number(r?.qIndex)).filter((n) => Number.isFinite(n))
     );
-    errEl.textContent = `Loading current grades for cross-check (${qIndexesNeeded.size} question${qIndexesNeeded.size === 1 ? '' : 's'})…`;
+    errEl.textContent = t("Loading current grades for cross-check ({p1} question{p2})…", { p1: qIndexesNeeded.size, p2: qIndexesNeeded.size === 1 ? '' : 's' });
     let ctx;
     try {
       ctx = await aiGradeImportLoadContext(safeCode, qIndexesNeeded);
     } catch (err) {
-      errEl.textContent = `Could not load context: ${err.message}`;
+      errEl.textContent = t("Could not load context: {p1}", { p1: err.message });
       return;
     }
     const rawRows = parsed.results.map((r) => aiGradeImportBucketRow(r, ctx));
@@ -6339,7 +6339,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
     if (!safeCode || !safeAttemptId) throw new Error('Missing code/attemptId.');
     if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading grading detail for ${safeAttemptId}...`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading grading detail for {p1}...", { p1: safeAttemptId });
     if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
     // Auto-scroll the grading panel into view so the teacher lands on the
     // attempt they just opened (the panel sits below a potentially long
@@ -6356,7 +6356,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
     });
 
     const items = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading ${safeAttemptId} · Items: ${items.length}`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Grading {p1} · Items: {p2}", { p1: safeAttemptId, p2: items.length });
     if (!assignmentGradingListEl) return;
 
     if (!items.length) {
@@ -6373,7 +6373,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       const aiBtn = document.createElement('button');
       aiBtn.className = 'btn';
       aiBtn.type = 'button';
-      aiBtn.textContent = `Grade with AI (this student, ${teacherGradedCount} answer${teacherGradedCount === 1 ? '' : 's'})`;
+      aiBtn.textContent = t("Grade with AI (this student, {p1} answer{p2})", { p1: teacherGradedCount, p2: teacherGradedCount === 1 ? '' : 's' });
       aiBtn.title = t('Build a ZIP + prompt to grade this student’s teacher-graded answers with an AI');
       aiBtn.addEventListener('click', () => {
         runAiGradePack({ scope: 'attempt', code: safeCode, attemptId: safeAttemptId });
@@ -6421,11 +6421,11 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         if (transcript) {
           const tEl = document.createElement('div');
           tEl.className = 'small muted top-space voice-record-transcript';
-          tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+          tEl.innerHTML = t("<em>Transcript:</em> {p1}", { p1: escapeHtml(transcript) });
           li.appendChild(tEl);
         }
       } else {
-        answer.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
+        answer.textContent = t("Answer: {p1}", { p1: String(it?.answerText || '') || '(blank)' });
         li.append(head, prompt, answer);
       }
       if (it?.teacherGraded) {
@@ -6539,11 +6539,11 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
           try {
             saveBtn.disabled = true;
             await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
-            if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${safeAttemptId}.`;
+            if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} for {p2}.", { p1: Number(it.qIndex || 0) + 1, p2: safeAttemptId });
             await fetchAssignmentResults(safeCode);
             await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
           } catch (err) {
-            if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+            if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
           } finally {
             saveBtn.disabled = false;
           }
@@ -6558,7 +6558,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       assignmentGradingListEl.appendChild(li);
     });
   } catch (err) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Grading error: ${err.message}`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Grading error: {p1}", { p1: err.message });
   }
 }
 
@@ -6715,10 +6715,10 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
       saveBtn.disabled = true;
       await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
       saveBtn.textContent = t('Update grade');
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(qIndex) + 1} · ${attemptId}.`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} · {p2}.", { p1: Number(qIndex) + 1, p2: attemptId });
       if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
     } finally {
       saveBtn.disabled = false;
     }
@@ -6795,7 +6795,7 @@ function inlineCorrectionDiffSetup({ correctionInput, studentText, qType }) {
     const edited = String(correctionInput.value || '').trim();
     if (!edited || edited === preloadedAnswer) {
       diffPreview.style.display = 'block';
-      diffPreview.innerHTML = `<span class="small muted" style="font-style:italic;">(no changes — student sees no correction)</span>`;
+      diffPreview.innerHTML = t("<span class=\"small muted\" style=\"font-style:italic;\">(no changes — student sees no correction)</span>");
       return;
     }
     diffPreview.style.display = 'block';
@@ -6932,7 +6932,7 @@ async function openGradingFocusModal(code, qIndex) {
   if (!Number.isFinite(Number(qIndex))) throw new Error('Missing qIndex.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading Q${Number(qIndex) + 1}...`;
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading Q{p1}...", { p1: Number(qIndex) + 1 });
 
   const data = await api('/api/assignments/question-grading', {
     method: 'POST',
@@ -6943,12 +6943,12 @@ async function openGradingFocusModal(code, qIndex) {
   const items = Array.isArray(data?.items) ? data.items : [];
 
   if (!question.teacherGraded) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1} is auto-graded — no teacher grading needed.`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Q{p1} is auto-graded — no teacher grading needed.", { p1: Number(qIndex) + 1 });
     return;
   }
 
   if (!items.length) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1}: no answers yet.`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Q{p1}: no answers yet.", { p1: Number(qIndex) + 1 });
     return;
   }
 
@@ -7274,10 +7274,10 @@ function renderGradingFocusItem() {
         correction: String(correction || ''),
         correctionAudioKey: String(audioKey || ''),
       };
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded ${it.studentName || 'student'} · Q${gradingFocusState.qIndex + 1} · ${Number(points || 0)} pts.`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded {p1} · Q{p2} · {p3} pts.", { p1: it.studentName || 'student', p2: gradingFocusState.qIndex + 1, p3: Number(points || 0) });
       moveGradingFocusTo(gradingFocusState.current + 1);
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
       saveBtn.disabled = false;
     } finally {
       gradingFocusState.saving = false;
@@ -7462,7 +7462,7 @@ async function enterGradeByStudentMode(code) {
   if (!safeCode) throw new Error('Missing assignment code.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading student list for ${safeCode}...`;
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading student list for {p1}...", { p1: safeCode });
   if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
 
   const data = await api('/api/assignments/results', {
@@ -7493,13 +7493,13 @@ async function enterGradeByStudentMode(code) {
 
   if (assignmentGradingSummaryEl) {
     if (!gradable.length) {
-      assignmentGradingSummaryEl.textContent = `${title} · No gradable attempts yet.`;
+      assignmentGradingSummaryEl.textContent = t("{p1} · No gradable attempts yet.", { p1: title });
     } else {
       const parts = [];
       if (submittedCount) parts.push(`${submittedCount} submitted`);
       if (inProgressCount) parts.push(`${inProgressCount} in progress`);
       parts.push(`${totalPending} pending teacher grade${totalPending === 1 ? '' : 's'}`);
-      assignmentGradingSummaryEl.textContent = `${title} · Per-student grading · ${parts.join(' · ')} · Pick a student below.`;
+      assignmentGradingSummaryEl.textContent = t("{p1} · Per-student grading · {p2} · Pick a student below.", { p1: title, p2: parts.join(' · ') });
     }
   }
 
@@ -7541,7 +7541,7 @@ async function enterGradeByStudentMode(code) {
     openBtn.textContent = pending > 0 ? `Grade ${pending} pending` : 'Review answers';
     openBtn.addEventListener('click', () => {
       openStudentGradingFocusModal(safeCode, String(a?.id || ''), String(a?.studentName || 'Student')).catch((err) => {
-        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Student grading error: ${err.message}`;
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Student grading error: {p1}", { p1: err.message });
       });
     });
     actionRow.appendChild(openBtn);
@@ -7562,7 +7562,7 @@ async function openStudentGradingFocusModal(code, attemptId, studentName) {
   if (!safeCode || !safeAttemptId) throw new Error('Missing code or attemptId.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading answers for ${studentName || safeAttemptId}...`;
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading answers for {p1}...", { p1: studentName || safeAttemptId });
 
   const data = await api('/api/assignments/attempt', {
     method: 'POST',
@@ -7573,7 +7573,7 @@ async function openStudentGradingFocusModal(code, attemptId, studentName) {
   const items = allItems.filter((it) => it?.teacherGraded);
 
   if (!items.length) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `No teacher-graded questions found for ${studentName || safeAttemptId}.`;
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("No teacher-graded questions found for {p1}.", { p1: studentName || safeAttemptId });
     return;
   }
 
@@ -7897,10 +7897,10 @@ function renderStudentGradingFocusItem() {
         correction: String(correction || ''),
         correctionAudioKey: String(audioKey || ''),
       };
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(it.qIndex || 0) + 1} for ${studentGradingFocusState.studentName} · ${Number(points || 0)} pts.`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} for {p2} · {p3} pts.", { p1: Number(it.qIndex || 0) + 1, p2: studentGradingFocusState.studentName, p3: Number(points || 0) });
       moveStudentGradingFocusTo(studentGradingFocusState.current + 1);
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Grade error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
       saveBtn.disabled = false;
     } finally {
       studentGradingFocusState.saving = false;
@@ -8042,7 +8042,7 @@ async function enterGradeByQuestionMode(code) {
   if (!safeCode) throw new Error('Missing assignment code.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading per-question overview for ${safeCode}...`;
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading per-question overview for {p1}...", { p1: safeCode });
   if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
 
   const data = await api('/api/assignments/grading-overview', {
@@ -8099,7 +8099,7 @@ async function enterGradeByQuestionMode(code) {
     openBtn.textContent = pending > 0 ? `Grade ${pending} pending` : (answered > 0 ? 'Review graded' : 'Open');
     openBtn.addEventListener('click', () => {
       openGradingFocusModal(safeCode, Number(q.qIndex)).catch((err) => {
-        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Question grading error: ${err.message}`;
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Question grading error: {p1}", { p1: err.message });
       });
     });
     actionRow.appendChild(openBtn);
@@ -8120,7 +8120,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   if (!Number.isFinite(Number(qIndex))) throw new Error('Missing qIndex.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Loading answers for Q${Number(qIndex) + 1}...`;
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Loading answers for Q{p1}...", { p1: Number(qIndex) + 1 });
   if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
 
   const data = await api('/api/assignments/question-grading', {
@@ -8149,7 +8149,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   backBtn.textContent = t('← All questions');
   backBtn.addEventListener('click', () => {
     enterGradeByQuestionMode(safeCode).catch((err) => {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Overview error: ${err.message}`;
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Overview error: {p1}", { p1: err.message });
     });
   });
   headerRow.appendChild(backBtn);
@@ -8160,7 +8160,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   prevBtn.addEventListener('click', () => {
     if (Number(qIndex) > 0) {
       enterQuestionGradingFocus(safeCode, Number(qIndex) - 1).catch((err) => {
-        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Nav error: ${err.message}`;
+        if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Nav error: {p1}", { p1: err.message });
       });
     }
   });
@@ -8172,7 +8172,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   nextBtn.textContent = t('Next question ›');
   nextBtn.addEventListener('click', () => {
     enterQuestionGradingFocus(safeCode, Number(qIndex) + 1).catch((err) => {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Nav error: ${err.message}`;
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Nav error: {p1}", { p1: err.message });
     });
   });
   headerRow.appendChild(nextBtn);
@@ -8190,7 +8190,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   headerLi.appendChild(promptWrap);
 
   if (assignmentGradingSummaryEl) {
-    assignmentGradingSummaryEl.textContent = `Q${Number(qIndex) + 1} · ${items.length} answer${items.length === 1 ? '' : 's'} · ${gradedNow} graded · ${pendingNow} pending · max ${maxPoints} pts`;
+    assignmentGradingSummaryEl.textContent = t("Q{p1} · {p2} answer{p3} · {p4} graded · {p5} pending · max {p6} pts", { p1: Number(qIndex) + 1, p2: items.length, p3: items.length === 1 ? '' : 's', p4: gradedNow, p5: pendingNow, p6: maxPoints });
   }
 
   if (!assignmentGradingListEl) return;
@@ -8258,7 +8258,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
       if (transcript) {
         const tEl = document.createElement('div');
         tEl.className = 'small muted top-space voice-record-transcript';
-        tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+        tEl.innerHTML = t("<em>Transcript:</em> {p1}", { p1: escapeHtml(transcript) });
         answerWrap.appendChild(tEl);
       }
     } else if (String(question.qType || '') === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
@@ -8283,7 +8283,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
     } else {
       const label = document.createElement('div');
       label.className = 'small';
-      label.textContent = `Answer: ${String(it?.answerText || '') || '(blank)'}`;
+      label.textContent = t("Answer: {p1}", { p1: String(it?.answerText || '') || '(blank)' });
       answerWrap.appendChild(label);
     }
     li.appendChild(answerWrap);
@@ -8431,7 +8431,7 @@ function renderAssignmentResults(safeCode, data) {
   const selectedCountEl = document.createElement('span');
   selectedCountEl.className = 'small muted';
   selectedCountEl.style.cssText = 'flex:1; min-width:0;';
-  selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
+  selectedCountEl.textContent = t("{p1} selected", { p1: notifySelection.ids.size });
 
   const notifyBtn = document.createElement('button');
   notifyBtn.className = 'btn';
@@ -8454,7 +8454,7 @@ function renderAssignmentResults(safeCode, data) {
     const chosen = filtered.filter((a) => notifySelection.ids.has(String(a?.id || '')));
     if (!chosen.length) return;
     const n = chosen.length;
-    if (!confirm(`Delete ${n} selected attempt${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    if (!confirm(t("Delete {p1} selected attempt{p2}? This cannot be undone.", { p1: n, p2: n === 1 ? '' : 's' }))) return;
     notifyBtn.disabled = true;
     deleteSelectedBtn.disabled = true;
     let deleted = 0;
@@ -8466,7 +8466,7 @@ function renderAssignmentResults(safeCode, data) {
         await deleteAssignmentAttempt(safeCode, attemptId);
         notifySelection.ids.delete(attemptId);
         deleted += 1;
-        if (assignmentStatusEl) assignmentStatusEl.textContent = `Deleting selected attempts… (${deleted}/${n})`;
+        if (assignmentStatusEl) assignmentStatusEl.textContent = t("Deleting selected attempts… ({p1}/{p2})", { p1: deleted, p2: n });
       } catch (err) {
         failures.push(`${a?.studentName || attemptId}: ${err.message}`);
       }
@@ -8499,7 +8499,7 @@ function renderAssignmentResults(safeCode, data) {
     cb.addEventListener('change', () => {
       if (cb.checked) notifySelection.ids.add(attemptId);
       else notifySelection.ids.delete(attemptId);
-      selectedCountEl.textContent = `${notifySelection.ids.size} selected`;
+      selectedCountEl.textContent = t("{p1} selected", { p1: notifySelection.ids.size });
       notifyBtn.disabled = notifySelection.ids.size === 0;
       deleteSelectedBtn.disabled = notifySelection.ids.size === 0;
       selectAll.checked = filtered.length > 0 && filtered.every((x) => notifySelection.ids.has(String(x?.id || '')));
@@ -8527,7 +8527,7 @@ function renderAssignmentResults(safeCode, data) {
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
-    scoreEl.textContent = `${totalScore} pts`;
+    scoreEl.textContent = t("{p1} pts", { p1: totalScore });
 
     top.append(cb, nameWrap, scoreEl);
 
@@ -8538,7 +8538,7 @@ function renderAssignmentResults(safeCode, data) {
     const total = Number(a?.metrics?.totalQuestions || 0);
     const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
     const completion = total ? `${Math.round((answered / total) * 100)}%` : '—';
-    meta.textContent = `Completion: ${completion} (${answered}/${total}) · Accuracy: ${acc} · Pending teacher: ${pending}`;
+    meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
 
     const row = document.createElement('div');
     row.className = 'row gap';
@@ -8557,10 +8557,10 @@ function renderAssignmentResults(safeCode, data) {
         try {
           reopenBtn.disabled = true;
           await reopenAssignmentAttempt(safeCode, attemptId);
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopened attempt ${attemptId}.`;
+          if (assignmentStatusEl) assignmentStatusEl.textContent = t("Reopened attempt {p1}.", { p1: attemptId });
           await fetchAssignmentResults(safeCode);
         } catch (err) {
-          if (assignmentStatusEl) assignmentStatusEl.textContent = `Reopen error: ${err.message}`;
+          if (assignmentStatusEl) assignmentStatusEl.textContent = t("Reopen error: {p1}", { p1: err.message });
         } finally {
           reopenBtn.disabled = false;
         }
@@ -8574,14 +8574,14 @@ function renderAssignmentResults(safeCode, data) {
     deleteAttemptBtn.title = t('Permanently delete this attempt. This cannot be undone.');
     deleteAttemptBtn.addEventListener('click', async () => {
       const who = String(a?.studentName || 'this student');
-      if (!confirm(`Delete ${who}'s attempt? This cannot be undone.`)) return;
+      if (!confirm(t("Delete {p1}'s attempt? This cannot be undone.", { p1: who }))) return;
       try {
         deleteAttemptBtn.disabled = true;
         await deleteAssignmentAttempt(safeCode, attemptId);
-        if (assignmentStatusEl) assignmentStatusEl.textContent = `Deleted ${who}'s attempt.`;
+        if (assignmentStatusEl) assignmentStatusEl.textContent = t("Deleted {p1}'s attempt.", { p1: who });
         await fetchAssignmentResults(safeCode);
       } catch (err) {
-        if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete attempt error: ${err.message}`;
+        if (assignmentStatusEl) assignmentStatusEl.textContent = t("Delete attempt error: {p1}", { p1: err.message });
       } finally {
         deleteAttemptBtn.disabled = false;
       }
@@ -8688,11 +8688,11 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const title = document.createElement('div');
   title.style.cssText = 'font-weight:600;font-size:18px;';
-  title.textContent = `Notify students — ${quizTitle}`;
+  title.textContent = t("Notify students — {p1}", { p1: quizTitle });
 
   const status = document.createElement('div');
   status.className = 'small muted';
-  status.textContent = `Looking up emails for ${attempts.length} student(s)...`;
+  status.textContent = t("Looking up emails for {p1} student(s)...", { p1: attempts.length });
 
   const subjectLabel = document.createElement('label');
   subjectLabel.className = 'small muted';
@@ -8836,7 +8836,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     } catch (err) {
       markBtn.disabled = false;
       markBtn.textContent = t('Mark as notified');
-      missingNote.textContent = `Mark failed: ${err.message}`;
+      missingNote.textContent = t("Mark failed: {p1}", { p1: err.message });
     }
   });
 
@@ -8870,11 +8870,11 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     missingNames = resolvedAttempts.filter((a) => !a._email).map((a) => a.studentName || 'Student');
 
     if (missingNames.length) {
-      missingNote.textContent = `No email found for: ${missingNames.join(', ')} (check the roster sheet)`;
+      missingNote.textContent = t("No email found for: {p1} (check the roster sheet)", { p1: missingNames.join(', ') });
     } else {
       missingNote.textContent = '';
     }
-    status.textContent = `${recipients.length} recipient(s) resolved · ${attempts.length} attempt(s) selected`;
+    status.textContent = t("{p1} recipient(s) resolved · {p2} attempt(s) selected", { p1: recipients.length, p2: attempts.length });
     refreshDerived();
   })();
 
@@ -8887,7 +8887,7 @@ async function fetchAssignmentResults(code) {
     if (!safeCode) throw new Error('Assignment code required.');
     if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Loading results for ${safeCode}...`;
+    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = t("Loading results for {p1}...", { p1: safeCode });
     if (assignmentResultsListEl) assignmentResultsListEl.innerHTML = '';
 
     const data = await api('/api/assignments/results', {
@@ -8909,7 +8909,7 @@ async function fetchAssignmentResults(code) {
       });
     }
   } catch (err) {
-    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = `Results error: ${err.message}`;
+    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = t("Results error: {p1}", { p1: err.message });
   }
 }
 
@@ -8967,7 +8967,7 @@ async function refreshAssignmentsList() {
     assignmentsListCache = rawList.filter(a => a?.className !== '__preview__');
     renderAssignmentsList();
   } catch (err) {
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment list error: ${err.message}`;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = t("Assignment list error: {p1}", { p1: err.message });
   } finally {
     if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = false;
   }
@@ -9009,7 +9009,7 @@ function renderAssignmentsList() {
     const divider = document.createElement('li');
     divider.className = 'small muted top-space';
     divider.style.listStyle = 'none';
-    divider.textContent = `— Archived (${archived.length}) —`;
+    divider.textContent = t("— Archived ({p1}) —", { p1: archived.length });
     assignmentListEl.appendChild(divider);
     archived.forEach((a) => assignmentListEl.appendChild(buildAssignmentListItem(a)));
   }
@@ -9050,7 +9050,7 @@ function buildAssignmentListItem(a) {
   const dueAt = Number(a?.dueAt || 0);
   const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
   const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
-  meta.textContent = `${String(a?.className || '').trim() || 'All classes'} · Attempts ${attemptsText} · ${dueText}`;
+  meta.textContent = t("{p1} · Attempts {p2} · {p3}", { p1: String(a?.className || '').trim() || 'All classes', p2: attemptsText, p3: dueText });
 
   headerText.append(title, meta);
 
@@ -9103,7 +9103,7 @@ function buildAssignmentListItem(a) {
       openQuizBtn.disabled = true;
       await openAssignmentInBuilder(code, String(a?.title || ''));
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Open quiz error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Open quiz error: {p1}", { p1: err.message });
     } finally {
       openQuizBtn.disabled = false;
     }
@@ -9128,7 +9128,7 @@ function buildAssignmentListItem(a) {
         : `Assignment ${code} closed.`;
       await refreshAssignmentsList();
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Toggle error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Toggle error: {p1}", { p1: err.message });
     } finally {
       toggleBtn.disabled = false;
     }
@@ -9155,7 +9155,7 @@ function buildAssignmentListItem(a) {
         if (scroller) scroller.scrollTop = savedScrollTop;
       });
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Archive error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Archive error: {p1}", { p1: err.message });
     } finally {
       archiveBtn.disabled = false;
     }
@@ -9165,7 +9165,7 @@ function buildAssignmentListItem(a) {
   deleteBtn.className = 'btn';
   deleteBtn.textContent = t('Delete');
   deleteBtn.addEventListener('click', async () => {
-    if (!confirm(`Delete assignment ${code}? This cannot be undone.`)) return;
+    if (!confirm(t("Delete assignment {p1}? This cannot be undone.", { p1: code }))) return;
     try {
       deleteBtn.disabled = true;
       await api('/api/assignments/delete', {
@@ -9176,11 +9176,11 @@ function buildAssignmentListItem(a) {
           code,
         },
       });
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment ${code} deleted.`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Assignment {p1} deleted.", { p1: code });
       if (applyTargetAssignmentCode === code) setApplyAssignmentTarget('', '');
       await refreshAssignmentsList();
     } catch (err) {
-      if (assignmentStatusEl) assignmentStatusEl.textContent = `Delete error: ${err.message}`;
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t("Delete error: {p1}", { p1: err.message });
     } finally {
       deleteBtn.disabled = false;
     }
@@ -9271,7 +9271,7 @@ async function createAssignmentFromCurrentQuiz() {
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}`;
 
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `${msg} · Link: ${link}`;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = t("{p1} · Link: {p2}", { p1: msg, p2: link });
     setStatus(hostStatusEl, msg, 'ok');
 
     window.dispatchEvent(new CustomEvent('pinplay:quiz-persisted', {
@@ -9280,7 +9280,7 @@ async function createAssignmentFromCurrentQuiz() {
 
     await refreshAssignmentsList();
   } catch (err) {
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `Assignment error: ${err.message}`;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = t("Assignment error: {p1}", { p1: err.message });
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
@@ -9324,7 +9324,7 @@ function setApplyAssignmentTarget(code, title) {
   if (!applyAssignmentBtn) return;
   if (applyTargetAssignmentCode) {
     applyAssignmentBtn.style.display = '';
-    applyAssignmentBtn.textContent = `Apply to Assignment (${applyTargetAssignmentCode})`;
+    applyAssignmentBtn.textContent = t("Apply to Assignment ({p1})", { p1: applyTargetAssignmentCode });
     applyAssignmentBtn.title = applyTargetAssignmentTitle
       ? `Save edits back to assignment "${applyTargetAssignmentTitle}" (${applyTargetAssignmentCode})`
       : `Save edits back to assignment ${applyTargetAssignmentCode}`;
@@ -9386,7 +9386,7 @@ async function openAssignmentInBuilder(code, titleHint) {
   }
 
   if (assignmentStatusEl) {
-    assignmentStatusEl.textContent = `Opened assignment ${codeTrim} in the builder. Edit, then click "Apply to Assignment".`;
+    assignmentStatusEl.textContent = t("Opened assignment {p1} in the builder. Edit, then click \"Apply to Assignment\".", { p1: codeTrim });
   }
   setStatus(hostStatusEl, t('Editing assignment {code} — click Apply to Assignment to save changes.', { code: codeTrim }), 'ok');
 }
@@ -9441,7 +9441,7 @@ async function applyQuizToAssignment() {
 
     await refreshAssignmentsList();
   } catch (err) {
-    if (assignmentStatusEl) assignmentStatusEl.textContent = `Apply to assignment error: ${err.message}`;
+    if (assignmentStatusEl) assignmentStatusEl.textContent = t("Apply to assignment error: {p1}", { p1: err.message });
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
@@ -10088,7 +10088,7 @@ function renderHostAnswerHistory(state) {
         const row = document.createElement('li');
         const verdict = entry.graded ? (entry.correct ? '✅' : '❌') : '⏳';
         const line = document.createElement('div');
-        line.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}${entry.graded ? ` (${Number(entry.pointsAwarded || 0)} pts)` : ''}`;
+        line.textContent = `${entry.name}: ${formatHistoryAnswer(entry)} ${verdict}${entry.graded ? ` (${Number(entry.pointsAwarded || 0)} pts)` : ''}`; // i18n-ignore
         row.appendChild(line);
 
         const currentQ = state?.question || null;
@@ -10109,7 +10109,7 @@ function renderHostAnswerHistory(state) {
           if (transcript) {
             const tEl = document.createElement('div');
             tEl.className = 'small muted voice-record-transcript';
-            tEl.innerHTML = `<em>Transcript:</em> ${escapeHtml(transcript)}`;
+            tEl.innerHTML = t("<em>Transcript:</em> {p1}", { p1: escapeHtml(transcript) });
             row.appendChild(tEl);
           }
         }
@@ -10126,7 +10126,7 @@ function renderHostAnswerHistory(state) {
           const gradeBtn = document.createElement('button');
           gradeBtn.className = 'btn';
           gradeBtn.textContent = `+${maxPoints}`;
-          gradeBtn.title = `Award full points (${maxPoints})`;
+          gradeBtn.title = t("Award full points ({p1})", { p1: maxPoints });
           gradeBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, maxPoints));
 
           const zeroBtn = document.createElement('button');
@@ -10180,7 +10180,7 @@ function renderHostAttemptsSnapshot(data) {
   const filtered = getFilteredHostAttempts(students);
 
   if (hostAttemptsSummaryEl) {
-    hostAttemptsSummaryEl.textContent = `Quiz: ${quizTitle} · Showing ${filtered.length}/${students.length} students`;
+    hostAttemptsSummaryEl.textContent = t("Quiz: {p1} · Showing {p2}/{p3} students", { p1: quizTitle, p2: filtered.length, p3: students.length });
   }
 
   if (!hostAttemptsListEl) return;
@@ -10209,21 +10209,21 @@ function renderHostAttemptsSnapshot(data) {
     const top = document.createElement('button');
     top.type = 'button';
     top.className = 'btn attempt-row-btn';
-    top.innerHTML = `<strong>${escapeHtml(name)}${escapeHtml(classSuffix)}</strong> · ${Number(s.scoreCurrent || 0)} pts · ${signal} ${accuracy}`;
+    top.innerHTML = t("<strong>{p1}{p2}</strong> · {p3} pts · {p4} {p5}", { p1: escapeHtml(name), p2: escapeHtml(classSuffix), p3: Number(s.scoreCurrent || 0), p4: signal, p5: accuracy });
 
     const detail = document.createElement('div');
     detail.className = 'small muted';
     const answered = Number(s.answeredCount || 0);
     const graded = Number(s.autoGradedCount || 0) + Number(s.teacherGradedCount || 0);
     const pending = Number(s.pendingTeacherGradeCount || 0);
-    detail.textContent = `Answered: ${answered} · Graded: ${graded} · Pending: ${pending} · Accuracy: ${accuracy}`;
+    detail.textContent = t("Answered: {p1} · Graded: {p2} · Pending: {p3} · Accuracy: {p4}", { p1: answered, p2: graded, p3: pending, p4: accuracy });
 
     const more = document.createElement('div');
     more.className = 'small muted hidden';
     const email = String(s.email || '').trim() || '—';
     const lastAnswerAt = Number(s.lastAnswerAt || 0);
     const lastAnswerText = lastAnswerAt ? new Date(lastAnswerAt).toLocaleString() : '—';
-    more.textContent = `Email: ${email} · Auto pts: ${Number(s.pointsAuto || 0)} · Teacher pts: ${Number(s.pointsTeacher || 0)} · Last answer: ${lastAnswerText} · Events: ${Number(s.eventCount || 0)}`;
+    more.textContent = t("Email: {p1} · Auto pts: {p2} · Teacher pts: {p3} · Last answer: {p4} · Events: {p5}", { p1: email, p2: Number(s.pointsAuto || 0), p3: Number(s.pointsTeacher || 0), p4: lastAnswerText, p5: Number(s.eventCount || 0) });
 
     top.addEventListener('click', () => {
       more.classList.toggle('hidden');
@@ -10300,7 +10300,7 @@ async function fetchHostAttempts({ force = false } = {}) {
     live.host.attemptsFetchedAt = Date.now();
     renderHostAttemptsSnapshot(data);
   } catch (err) {
-    if (hostAttemptsSummaryEl) hostAttemptsSummaryEl.textContent = `Attempt snapshot error: ${err.message}`;
+    if (hostAttemptsSummaryEl) hostAttemptsSummaryEl.textContent = t("Attempt snapshot error: {p1}", { p1: err.message });
   } finally {
     live.host.attemptsLoading = false;
     if (hostAttemptsRefreshBtn) hostAttemptsRefreshBtn.disabled = false;
@@ -10371,7 +10371,17 @@ function applyAdaptiveFitHost() {
   }
 }
 
+// Cache the last host state so a language switch can re-render the live view in
+// place (the toggle does NOT reload the page — see i18n.js). The builder/list
+// chrome is static (data-i18n) and flips on its own; deeper panels re-render on
+// the next refresh, so we avoid disrupting any in-progress editing here.
+let _i18nLastHostState = null;
+window.onLocaleChange = function () {
+  try { if (_i18nLastHostState) renderHostState(_i18nLastHostState); } catch (e) { console.error('locale re-render failed', e); }
+};
+
 function renderHostState(state) {
+  _i18nLastHostState = state;
   const prevState = live.host.state;
   // Keep a stable "previous question" score snapshot for R count-up.
   // Important: do not keep overwriting while already in results, otherwise from==to and animation looks static.
@@ -10420,7 +10430,7 @@ function renderHostState(state) {
   }
   if (livePinHudEl) livePinHudEl.textContent = state.pin || '-';
 
-  if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${state.responseCount} / ${state.playerCount}`;
+  if (projectorAnswersEl) projectorAnswersEl.textContent = t("👥 Answers: {p1} / {p2}", { p1: state.responseCount, p2: state.playerCount });
   if (projectorProgressEl) projectorProgressEl.textContent = `❓ ${state.currentIndex + 1} / ${state.totalQuestions}`;
   if (projectorScoresEl) {
     const showScores = state.phase === 'results' || live.host.rankingMode;
@@ -10474,7 +10484,7 @@ function renderHostState(state) {
       const userLabel = String(p?.identity?.username || '').trim();
       const idSuffix = classLabel ? ` (${classLabel})` : '';
       const userSuffix = userLabel && userLabel.trim().toLowerCase() !== String(p.name || '').trim().toLowerCase() ? ` · @${userLabel}` : '';
-      name.textContent = `${p.name}${idSuffix}${userSuffix} - ${p.score} pts${p.answeredCurrent ? ' [answered]' : ''}`;
+      name.textContent = t("{p1}{p2}{p3} - {p4} pts{p5}", { p1: p.name, p2: idSuffix, p3: userSuffix, p4: p.score, p5: p.answeredCurrent ? ' [answered]' : '' });
 
       const actions = document.createElement('div');
       actions.className = 'row gap';
@@ -10711,7 +10721,7 @@ function renderHostQuestion(state) {
         const weight = Number(item.count || 0) / max;
         const size = Math.round(14 + weight * 20);
         chip.style.fontSize = `${size}px`;
-        chip.title = `${item.count} vote(s)`;
+        chip.title = t("{p1} vote(s)", { p1: item.count });
         cloud.appendChild(chip);
       });
       hostQuestionAnswersEl.appendChild(cloud);
@@ -10890,7 +10900,7 @@ function renderHostQuestion(state) {
             const points = Number(question.points || 0).toLocaleString('en-US');
             const splash = document.createElement('div');
             splash.className = 'question-intro-points';
-            splash.textContent = `🎯 ${points} points`;
+            splash.textContent = t("🎯 {p1} points", { p1: points });
             hostQuestionAnswersEl.appendChild(splash);
           } else {
             // Stage 1: keep splash mounted underneath if any so we cross-fade rather than hard-cut.
@@ -11275,7 +11285,7 @@ function buildProjectorScoreItem(rank, name, score, medal = '🏅') {
 
   const right = document.createElement('span');
   right.className = 'projector-score-value';
-  right.textContent = `${score} pts`;
+  right.textContent = t("{p1} pts", { p1: score });
 
   li.append(left, right);
   return li;
@@ -11487,7 +11497,7 @@ function updateHostTimer(state) {
 
   const deadlineMs = Number(live.host.timerDeadlineMs || 0);
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
-    projectorTimerEl.textContent = `⏱️ Time: ${limitSec}s`;
+    projectorTimerEl.textContent = t("⏱️ Time: {p1}s", { p1: limitSec });
     setHostTimerBar(limitSec, limitSec, true);
     return;
   }
@@ -11496,7 +11506,7 @@ function updateHostTimer(state) {
   const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
   const remainingMs = Math.min(capMs, remainingMsRaw);
   const remaining = Math.ceil(remainingMs / 1000);
-  projectorTimerEl.textContent = `⏱️ Time: ${remaining}s`;
+  projectorTimerEl.textContent = t("⏱️ Time: {p1}s", { p1: remaining });
   setHostTimerBar(remainingMs / 1000, limitSec, true);
   startHostTimerTicker();
 }
@@ -11513,7 +11523,7 @@ function startHostTimerTicker() {
     const remainingMsRaw = Math.max(0, deadlineMs - Date.now());
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const remaining = Math.ceil(remainingMs / 1000);
-    projectorTimerEl.textContent = `⏱️ Time: ${remaining}s`;
+    projectorTimerEl.textContent = t("⏱️ Time: {p1}s", { p1: remaining });
 
     if (hostTimerBarFill) {
       const pct = Math.max(0, Math.min(100, (remainingMs / capMs) * 100));
@@ -12063,8 +12073,8 @@ function buildCorrectionDiffHtml(correction, original) {
 }
 
 function renderPlayerState(state) {
-  joinProgressEl.textContent = `Question ${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
-  joinScoreEl.textContent = `Score: ${state.score}`;
+  joinProgressEl.textContent = t("Question {p1} / {p2}", { p1: Math.max(0, state.currentIndex + 1), p2: state.totalQuestions });
+  joinScoreEl.textContent = t("Score: {p1}", { p1: state.score });
 
   const renderJoinReveal = () => {
     // Target the broader container to avoid flex-wrap collisions
@@ -12363,7 +12373,7 @@ function renderJoinQuestion(question) {
       const required = getErrorHuntRequired(question);
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
+      info.textContent = t("Find {p1} wrong token(s), then rewrite.", { p1: required });
       joinAnswersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
@@ -12549,7 +12559,7 @@ function renderJoinQuestion(question) {
     const slider = document.getElementById('joinSlider');
     const out = document.getElementById('joinSliderValue');
     slider.addEventListener('input', () => {
-      out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`;
+      out.textContent = `Selected: ${slider.value}${question.unit ? ` ${question.unit}` : ''}`; // i18n-ignore
     });
     return;
   }
@@ -12668,7 +12678,7 @@ async function submitLiveAnswer() {
       setStatus(joinFeedbackEl, t('Not correct ❌'), 'bad');
     }
 
-    joinScoreEl.textContent = `Score: ${data.score}`;
+    joinScoreEl.textContent = t("Score: {p1}", { p1: data.score });
   } catch (err) {
     const msg = String(err?.message || 'Could not submit answer.');
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
@@ -12771,7 +12781,7 @@ function renderLeaderboardInJoin(leaderboard) {
 
   leaderboard.forEach((p, i) => {
     const li = document.createElement('li');
-    li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
+    li.textContent = t("{p1}. {p2} - {p3} pts", { p1: i + 1, p2: p.name, p3: p.score });
     ul.appendChild(li);
   });
 
@@ -13008,11 +13018,11 @@ async function purgeOrphanMedia() {
     const summary = `Scanned ${data.liveAssignments || 0} live assignments. Deleted ${data.deletedFolders || 0} orphan folder(s) / ${data.deletedRows || 0} R2 object(s).`;
     setStatus(statusEl, summary, 'ok');
     console.log('[purge-orphan-media]', data);
-    window.alert(`🗑️ Orphan media purge done.\n\nLive assignments scanned: ${data.liveAssignments || 0}\nAlive R2 prefixes: ${data.alivePrefixes || 0}\nFolders deleted: ${data.deletedFolders || 0}\nObjects deleted: ${data.deletedRows || 0}\n\n(If "Folders deleted" is 0, it means every assign-*/ folder is still referenced by a current assignment — no leaks to clean. The 24h average storage metric on the R2 dashboard lags real state by hours.)`);
+    window.alert(t("🗑️ Orphan media purge done.\n\nLive assignments scanned: {p1}\nAlive R2 prefixes: {p2}\nFolders deleted: {p3}\nObjects deleted: {p4}\n\n(If \"Folders deleted\" is 0, it means every assign-*/ folder is still referenced by a current assignment — no leaks to clean. The 24h average storage metric on the R2 dashboard lags real state by hours.)", { p1: data.liveAssignments || 0, p2: data.alivePrefixes || 0, p3: data.deletedFolders || 0, p4: data.deletedRows || 0 }));
   } catch (err) {
     const msg = err?.message || String(err);
     setStatus(statusEl, t('Orphan purge aborted: {msg}', { msg }), 'bad');
-    window.alert(`⚠️ Orphan purge aborted (nothing was deleted).\n\n${msg}\n\nThis usually means the Durable Objects daily row-read quota is exhausted — the purge needs to load all live assignments to know what's safe to delete. Retry after UTC midnight when the quota resets.`);
+    window.alert(t("⚠️ Orphan purge aborted (nothing was deleted).\n\n{p1}\n\nThis usually means the Durable Objects daily row-read quota is exhausted — the purge needs to load all live assignments to know what's safe to delete. Retry after UTC midnight when the quota resets.", { p1: msg }));
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = t('🗑️ Purge orphan media'); }
   }
@@ -13036,10 +13046,10 @@ async function purgePreviewBacklog() {
     if (data.doError) {
       // DO part failed (most likely quota exhausted); R2 part may have run.
       setStatus(statusEl, t('Partial: DO purge failed ({err}). R2 cleaned {r2}.', { err: data.doError, r2: r2Msg }), 'bad');
-      window.alert(`⚠️ Partial purge.\n\nDurable Objects purge FAILED:\n  ${data.doError}\n\nR2 cleanup ran: ${r2Msg}\n\nThe DO part needs DO row reads, which are blocked when the daily quota is exhausted. Retry after UTC midnight.`);
+      window.alert(t("⚠️ Partial purge.\n\nDurable Objects purge FAILED:\n  {p1}\n\nR2 cleanup ran: {p2}\n\nThe DO part needs DO row reads, which are blocked when the daily quota is exhausted. Retry after UTC midnight.", { p1: data.doError, p2: r2Msg }));
     } else {
       setStatus(statusEl, t('Purged {d1}; cleaned {r2}.', { d1: doMsg, r2: r2Msg }), 'ok');
-      window.alert(`🧹 Preview backlog purged.\n\n${doMsg}\n${r2Msg}\n\n(R2 dashboard "Storage" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)`);
+      window.alert(t("🧹 Preview backlog purged.\n\n{p1}\n{p2}\n\n(R2 dashboard \"Storage\" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)", { p1: doMsg, p2: r2Msg }));
     }
   } catch (err) {
     setStatus(statusEl, t('Purge failed: {msg}', { msg: err?.message || err }), 'bad');
@@ -13116,7 +13126,7 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
   labelSpan.textContent = ws.label || ws.wsid;
   const metaSpan = document.createElement('span');
   metaSpan.className = 'workspace-meta';
-  metaSpan.textContent = `· ${ws.quizCount || 0} quizzes · created ${created} · expires ${expires}`;
+  metaSpan.textContent = t("· {p1} quizzes · created {p2} · expires {p3}", { p1: ws.quizCount || 0, p2: created, p3: expires });
   top.append(labelSpan, metaSpan);
   li.appendChild(top);
 
@@ -13239,7 +13249,7 @@ async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
     const errBox = document.createElement('div');
     errBox.className = 'workspace-quizzes-sub';
     errBox.style.color = '#b91c1c';
-    errBox.textContent = `Failed to load: ${err?.message || err}`;
+    errBox.textContent = t("Failed to load: {p1}", { p1: err?.message || err });
     liEl.appendChild(errBox);
   } finally {
     btnEl.disabled = false;
@@ -13660,7 +13670,7 @@ function renderPreviewStudentStack(sim) {
     const submitted = list.length - none;
     const phase = previewMode.showReveal ? 'reveal' : 'question';
     const qSeed = String(previewMode.simQuestionSeed || 0).slice(-6);
-    studentPreviewSummaryEl.textContent = `Summary: ${submitted}/${list.length} submitted · ${correct} correct · ${wrong} wrong · ${none} no submission · ${bets} with bet · phase: ${phase} · seed:${qSeed}`;
+    studentPreviewSummaryEl.textContent = t("Summary: {p1}/{p2} submitted · {p3} correct · {p4} wrong · {p5} no submission · {p6} with bet · phase: {p7} · seed:{p8}", { p1: submitted, p2: list.length, p3: correct, p4: wrong, p5: none, p6: bets, p7: phase, p8: qSeed });
   }
 
   list.forEach((p, i) => {
@@ -13680,7 +13690,7 @@ function renderPreviewStudentStack(sim) {
     const betChip = bet > 0
       ? `<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#fef3c7;color:#7c2d12;">bet x${bet}</span>`
       : '<span class="small" style="padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:#334155;">no bet</span>';
-    card.innerHTML = `<div class="row spread gap"><strong>${escapeHtml(p.name)}</strong><span class="small">#${i + 1}</span></div><div class="row gap top-space">${stateChip}${betChip}</div><div class="small">Score: ${Number(p.score || 0)} · ${status}${betTxt}</div><div class="small muted">Answer: ${escapeHtml(answerText)}</div>`;
+    card.innerHTML = t("<div class=\"row spread gap\"><strong>{p1}</strong><span class=\"small\">#{p2}</span></div><div class=\"row gap top-space\">{p3}{p4}</div><div class=\"small\">Score: {p5} · {p6}{p7}</div><div class=\"small muted\">Answer: {p8}</div>", { p1: escapeHtml(p.name), p2: i + 1, p3: stateChip, p4: betChip, p5: Number(p.score || 0), p6: status, p7: betTxt, p8: escapeHtml(answerText) });
     studentPreviewStackEl.appendChild(card);
   });
 }
@@ -13789,13 +13799,13 @@ function renderPreviewFrame() {
   const sim = buildPreviewSimulationState(q);
 
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.remove('hidden');
-  if (liveProgressEl) liveProgressEl.textContent = `Progress: ${previewMode.index + 1} / ${quiz.questions.length}`;
+  if (liveProgressEl) liveProgressEl.textContent = t("Progress: {p1} / {p2}", { p1: previewMode.index + 1, p2: quiz.questions.length });
   if (livePhaseEl) {
     const reason = sim.hostState.questionClosed ? ` · close=${sim.hostState.questionCloseReason || 'manual_reveal'}` : '';
-    livePhaseEl.textContent = `Phase: question${reason}`;
+    livePhaseEl.textContent = t("Phase: question{p1}", { p1: reason });
   }
-  if (liveResponsesEl) liveResponsesEl.textContent = `Answers this round: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
-  if (projectorAnswersEl) projectorAnswersEl.textContent = `👥 Answers: ${sim.hostState.responseCount} / ${sim.hostState.playerCount}`;
+  if (liveResponsesEl) liveResponsesEl.textContent = t("Answers this round: {p1} / {p2}", { p1: sim.hostState.responseCount, p2: sim.hostState.playerCount });
+  if (projectorAnswersEl) projectorAnswersEl.textContent = t("👥 Answers: {p1} / {p2}", { p1: sim.hostState.responseCount, p2: sim.hostState.playerCount });
   renderProjectorScores(sim.hostState.players || []);
   // Skip intro animation in preview — render question content immediately
   live.host.questionIntroDone = true;
@@ -13857,7 +13867,7 @@ function bindSoloEvents() {
       const label = q.type === 'context_gap'
         ? `Partial · ${formatPartialScore(result.partialScore)}/${result.partialTotal} gaps`
         : `Partial · half credit (diacritic)`;
-      setStatus(feedbackEl, `${label} · ${sign} pts · ${result.hint || ''}`.trim(), pts >= 0 ? 'ok' : 'bad');
+      setStatus(feedbackEl, t("{p1} · {p2} pts · {p3}", { p1: label, p2: sign, p3: result.hint || '' }).trim(), pts >= 0 ? 'ok' : 'bad');
     } else {
       pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
       soloGame.score += pts;
@@ -13868,7 +13878,7 @@ function bindSoloEvents() {
     soloGame.answered = true;
     submitBtn.classList.add('hidden');
     nextBtn.classList.remove('hidden');
-    scoreEl.textContent = `Score: ${soloGame.score}`;
+    scoreEl.textContent = t("Score: {p1}", { p1: soloGame.score });
 
     const betBtn = document.getElementById('betIndicator');
     if (betBtn) betBtn.disabled = true;
@@ -13898,8 +13908,8 @@ function bindSoloEvents() {
 
 function renderSoloQuestion() {
   const q = quiz.questions[soloGame.index];
-  progressEl.textContent = `Question ${soloGame.index + 1} / ${quiz.questions.length}`;
-  scoreEl.textContent = `Score: ${soloGame.score}`;
+  progressEl.textContent = t("Question {p1} / {p2}", { p1: soloGame.index + 1, p2: quiz.questions.length });
+  scoreEl.textContent = t("Score: {p1}", { p1: soloGame.score });
   qPromptEl.textContent = q.prompt || '(No question text)';
 
   soloGame.pinSelection = null;
@@ -13976,7 +13986,7 @@ function renderSoloQuestion() {
       const required = getErrorHuntRequired(q);
       const info = document.createElement('p');
       info.className = 'small';
-      info.textContent = `Find ${required} wrong token(s), then rewrite.`;
+      info.textContent = t("Find {p1} wrong token(s), then rewrite.", { p1: required });
       answersEl.appendChild(info);
 
       const tokenWrap = document.createElement('div');
@@ -14152,7 +14162,7 @@ function renderSoloQuestion() {
     const slider = document.getElementById('soloSlider');
     const out = document.getElementById('soloSliderValue');
     slider.addEventListener('input', () => {
-      out.textContent = `${slider.value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}`;
+      out.textContent = `${slider.value}${q.unit ? ` ${escapeHtml(q.unit)}` : ''}`; // i18n-ignore
     });
     return;
   }
@@ -14351,7 +14361,7 @@ function finishSoloGame() {
   resultCard.classList.remove('hidden');
 
   const totalPossible = quiz.questions.reduce((sum, q) => sum + Number(q.points || 1000), 0);
-  finalScoreEl.textContent = `${soloGame.student}, you scored ${soloGame.score} / ${totalPossible}.`;
+  finalScoreEl.textContent = t("{p1}, you scored {p2} / {p3}.", { p1: soloGame.student, p2: soloGame.score, p3: totalPossible });
 }
 
 function refreshLocalPin() {
@@ -17163,7 +17173,7 @@ async function startBuilderAudioRecording(idx, q) {
     } else if (n === 'NotReadableError' || n === 'TrackStartError') {
       alert(t('Microphone is in use by another app. Close it and try again.'));
     } else {
-      alert(`Mic error: ${err?.message || err}`);
+      alert(t("Mic error: {p1}", { p1: err?.message || err }));
     }
     return;
   }
@@ -17197,7 +17207,7 @@ async function startBuilderAudioRecording(idx, q) {
       q._userAudioUploaded = true;
       renderBuilder();
     } catch (err) {
-      alert(`Recording save failed: ${err.message}`);
+      alert(t("Recording save failed: {p1}", { p1: err.message }));
     }
   };
 

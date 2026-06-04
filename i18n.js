@@ -64,10 +64,17 @@
 
   function setLocale(loc) {
     if (SUPPORTED.indexOf(loc) === -1 || loc === LOCALE) return;
+    LOCALE = loc;
     try { localStorage.setItem(LOCALE_KEY, loc); } catch (_) { /* ignore */ }
-    // Reload so every already-rendered dynamic string re-evaluates in the new
-    // locale. Robust for a retrofit; the active screen restores from storage/server.
-    location.reload();
+    try { document.documentElement.setAttribute('lang', loc); } catch (_) {}
+    // Switch in place — NO page reload — so the user keeps their session and
+    // in-progress quiz/builder state. Re-translate static chrome, refresh the
+    // toggle, then let the app re-render its dynamic content via the hook.
+    applyStatic(document);
+    refreshToggle();
+    if (typeof window.onLocaleChange === 'function') {
+      try { window.onLocaleChange(loc); } catch (e) { console.error('onLocaleChange failed', e); }
+    }
   }
 
   // --- Static HTML translation -------------------------------------------------
@@ -77,34 +84,42 @@
   //   data-i18n-title      -> title attribute
   //   data-i18n-aria       -> aria-label attribute
   //   data-i18n-html       -> innerHTML (use sparingly; key is trimmed innerHTML)
+  // The English original is captured once (in a data-* slot) the first time we
+  // see each element, then we always render t(original). Because t() returns the
+  // original unchanged in English, switching FR→EN restores the source text —
+  // so toggling works both directions without a reload.
   function applyStatic(root) {
-    if (LOCALE === 'en') return; // English is the source; nothing to swap.
     var scope = root || document;
 
     scope.querySelectorAll('[data-i18n]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n') || el.textContent.trim();
-      var val = t(key);
-      if (val !== key) el.textContent = val;
+      if (el.dataset.i18nOrig === undefined) {
+        el.dataset.i18nOrig = (el.getAttribute('data-i18n') || el.textContent || '').trim();
+      }
+      el.textContent = t(el.dataset.i18nOrig);
     });
     scope.querySelectorAll('[data-i18n-html]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n-html') || el.innerHTML.trim();
-      var val = t(key);
-      if (val !== key) el.innerHTML = val;
+      if (el.dataset.i18nOrigHtml === undefined) {
+        el.dataset.i18nOrigHtml = (el.getAttribute('data-i18n-html') || el.innerHTML || '').trim();
+      }
+      el.innerHTML = t(el.dataset.i18nOrigHtml);
     });
     scope.querySelectorAll('[data-i18n-ph]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n-ph') || el.getAttribute('placeholder') || '';
-      var val = t(key);
-      if (val !== key) el.setAttribute('placeholder', val);
+      if (el.dataset.i18nOrigPh === undefined) {
+        el.dataset.i18nOrigPh = el.getAttribute('data-i18n-ph') || el.getAttribute('placeholder') || '';
+      }
+      el.setAttribute('placeholder', t(el.dataset.i18nOrigPh));
     });
     scope.querySelectorAll('[data-i18n-title]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n-title') || el.getAttribute('title') || '';
-      var val = t(key);
-      if (val !== key) el.setAttribute('title', val);
+      if (el.dataset.i18nOrigTitle === undefined) {
+        el.dataset.i18nOrigTitle = el.getAttribute('data-i18n-title') || el.getAttribute('title') || '';
+      }
+      el.setAttribute('title', t(el.dataset.i18nOrigTitle));
     });
     scope.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n-aria') || el.getAttribute('aria-label') || '';
-      var val = t(key);
-      if (val !== key) el.setAttribute('aria-label', val);
+      if (el.dataset.i18nOrigAria === undefined) {
+        el.dataset.i18nOrigAria = el.getAttribute('data-i18n-aria') || el.getAttribute('aria-label') || '';
+      }
+      el.setAttribute('aria-label', t(el.dataset.i18nOrigAria));
     });
   }
 
@@ -138,11 +153,19 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = label;
+      btn.dataset.loc = loc;
       btn.setAttribute('aria-pressed', String(loc === LOCALE));
       btn.addEventListener('click', function () { setLocale(loc); });
       wrap.appendChild(btn);
     });
     bar.appendChild(wrap);
+  }
+
+  // Reflect the active locale on the toggle buttons (called after an in-place switch).
+  function refreshToggle() {
+    document.querySelectorAll('.lang-toggle button').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', String(btn.dataset.loc === LOCALE));
+    });
   }
 
   function boot() {

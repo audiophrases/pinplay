@@ -517,7 +517,7 @@
         syncBtn.disabled = false;
         syncBtn.textContent = origText;
         if (!result && !_getPassword()) {
-          flashOk('Unlock teacher access first, then try Sync again.');
+          flashOk(t("Unlock teacher access first, then try Sync again."));
         }
       },
     }, '🔄 Sync');
@@ -1078,7 +1078,7 @@
     state.selected.clear();
     renderFooter();
     renderResults();
-    flashOk(`Added ${added} questions${skipped ? ` (${skipped} skipped)` : ''}.`);
+    flashOk(`Added ${added} questions${skipped ? ` (${skipped} skipped)` : ''}.`); // i18n-ignore
   }
 
   function flashOk(msg) {

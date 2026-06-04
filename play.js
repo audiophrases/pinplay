@@ -2195,7 +2195,7 @@ function renderInstantFeedbackFromState() {
   const scoreSummary = document.createElement('div');
   scoreSummary.className = 'assignment-results-score';
   const pendingTxt = pendingCount > 0 ? ` · ${pendingCount} pending ⏳` : '';
-  scoreSummary.textContent = `${percent}% · ${totalPoints.toLocaleString()} pts${pendingTxt}`;
+  scoreSummary.textContent = t("{p1}% · {p2} pts{p3}", { p1: percent, p2: totalPoints.toLocaleString(), p3: pendingTxt });
   header.appendChild(scoreSummary);
 
   panel.appendChild(header);
@@ -2897,7 +2897,15 @@ async function rerollRandomName() {
   }
 }
 
+// Cache the last rendered state so a language switch can re-render the current
+// view in place (the toggle does NOT reload the page — see i18n.js).
+let _i18nLastPlayerState = null;
+window.onLocaleChange = function () {
+  try { if (_i18nLastPlayerState) renderPlayerState(_i18nLastPlayerState); } catch (e) { console.error('locale re-render failed', e); }
+};
+
 function renderPlayerState(state) {
+  _i18nLastPlayerState = state;
   // Clear liveRevealApplied when the question changes (different index)
   if (live.player.liveRevealApplied && state.currentIndex !== live.player.liveRevealForIndex) {
     live.player.liveRevealApplied = false;
@@ -4125,14 +4133,14 @@ function renderJoinQuestion(question) {
     const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
     if (answerObj?.answer != null && slider) {
       slider.value = answerObj.answer;
-      if (out) out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
+      if (out) out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`; // i18n-ignore
     }
     if (live.player.assignment.reviewMode && slider) {
       slider.disabled = true;
     }
 
     slider?.addEventListener('input', () => {
-      out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`;
+      out.textContent = `${slider.value}${question.unit ? ` ${escapeHtml(question.unit)}` : ''}`; // i18n-ignore
     });
     appendRiskBetBar();
     appendReactionBar();
@@ -4270,7 +4278,7 @@ function appendRiskBetBar() {
 
   const bg = document.createElement('div');
   bg.className = 'risk-danger-bg';
-  bg.textContent = 'Danger';
+  bg.textContent = t("Danger");
   wrap.appendChild(bg);
 
   const controls = document.createElement('div');
@@ -4864,7 +4872,7 @@ function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
 
     leaderboard.forEach((p, i) => {
       const li = document.createElement('li');
-      li.textContent = `${i + 1}. ${p.name} - ${p.score} pts`;
+      li.textContent = t("{p1}. {p2} - {p3} pts", { p1: i + 1, p2: p.name, p3: p.score });
       ul.appendChild(li);
     });
 
@@ -7401,7 +7409,7 @@ function renderVoiceTextRecognizer(container, question) {
     const final = finalTranscript.trim();
     const interim = interimTranscript.trim();
     if (!final && !interim) { transcriptEl.textContent = ''; return; }
-    transcriptEl.innerHTML = `“<strong>${escapeHtml(final)}</strong>${interim ? ` <span class="muted">${escapeHtml(interim)}</span>` : ''}”`;
+    transcriptEl.innerHTML = `“<strong>${escapeHtml(final)}</strong>${interim ? ` <span class="muted">${escapeHtml(interim)}</span>` : ''}”`; // i18n-ignore
   };
 
   const finalizeUI = () => {
