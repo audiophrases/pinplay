@@ -213,6 +213,21 @@ function parseDeployedUrl(stdout) {
   return m ? m[0] : '';
 }
 
+// Shorten a URL via TinyURL's no-account endpoint (returns '' on any failure, so
+// callers can fall back to a manual flow). The student join page is much easier to
+// type as tinyurl.com/xxxx than a long workers.dev address.
+async function makeTinyUrl(longUrl) {
+  if (typeof fetch !== 'function') return '';
+  try {
+    const res = await fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
+    if (!res.ok) return '';
+    const txt = (await res.text()).trim();
+    return /^https?:\/\/tinyurl\.com\//i.test(txt) ? txt : '';
+  } catch {
+    return '';
+  }
+}
+
 // Download the latest published PinPlay code (public tarball) and copy the
 // canonical app files over the local repo, so a teacher gets the owner's newest
 // bug fixes / features without needing git. Refreshes ONLY canonical app files —
@@ -677,6 +692,62 @@ async function buildAndDeployFrontend(apiUrl, state) {
   return siteUrl;
 }
 
+async function stepStudentLink(state, mode, siteUrl) {
+  if (!siteUrl) return;
+  console.log(head('Step 12 — A short join link for your students (optional)'));
+  const target = siteUrl.replace(/\/+$/, '') + '/';
+
+  // Already have one (resume): keep it unless the teacher chose to review/redo.
+  if (state.studentShortUrl) {
+    if (mode !== 'review' && mode !== 'fresh') {
+      console.log(ok(`✓ Student join link: ${state.studentShortUrl}`));
+      console.log(dim(`   → redirects to ${target}`));
+      return;
+    }
+    if (!(await confirm(`Your student link is ${state.studentShortUrl}. Replace it?`, false))) {
+      console.log(dim('Keeping your current student link.'));
+      return;
+    }
+  }
+
+  console.log('Students join your live games at your website address:');
+  console.log('   ' + dim(target));
+  console.log('That\'s long to type. A tinyurl.com link is far easier on phones and tablets.');
+  if (!(await confirm('\nCreate a short student link now?', true))) {
+    console.log(dim('Skipped — you can make one anytime at https://tinyurl.com.'));
+    return;
+  }
+
+  let short = await makeTinyUrl(target);
+  if (short) {
+    console.log(ok(`\n✓ Created: ${bold(short)}  ->  ${target}`));
+  } else {
+    console.log(warn('\nCouldn\'t create it automatically — let\'s make it on the website:'));
+    console.log('  1. tinyurl.com will open. Paste this as the long URL:');
+    console.log('       ' + bold(target));
+    console.log('  2. Create the link (you can give it a memorable name).');
+    console.log('  3. Copy the tinyurl it gives you and paste it below.');
+    openInBrowser('https://tinyurl.com/app');
+    const pasted = (await ask('Paste your tinyurl (or leave blank to skip):')).trim();
+    if (/^https?:\/\//i.test(pasted)) short = pasted;
+  }
+
+  if (short) {
+    // The auto link uses a random code; offer a memorable custom name.
+    console.log(dim('\nWant it easier to remember (e.g. tinyurl.com/ms-emilie)? You can rename it'));
+    console.log(dim('free at tinyurl.com (a quick sign-up is needed for a custom name).'));
+    if (await confirm('Set a custom name now?', false)) {
+      openInBrowser('https://tinyurl.com/app');
+      console.log('Point your custom link to: ' + bold(target));
+      const custom = (await ask('Paste your custom tinyurl (or leave blank to keep the one above):')).trim();
+      if (/^https?:\/\//i.test(custom)) short = custom;
+    }
+    state.studentShortUrl = short;
+    saveState(state);
+    console.log(ok(`✓ Student join link saved: ${short}`));
+  }
+}
+
 function summary(state) {
   const site = state.siteUrl || '(your website URL — see the deploy output above)';
   const lines = [
@@ -685,6 +756,9 @@ function summary(state) {
     '',
     `${bold('Teacher (create & host):')} ${site}/create/`,
     `${bold('Students join at:')}       ${site}/`,
+    ...(state.studentShortUrl
+      ? [`${bold('Easy student link:')}      ${state.studentShortUrl}  ${dim('(share this — redirects to the line above)')}`]
+      : []),
     `${bold('Assignment links:')}       ${site}/?assignment=CODE`,
     '',
     `${bold('Backend:')} ${state.apiUrl || '(see output above)'}`,
@@ -722,7 +796,8 @@ async function main() {
     const { tomlPath, workerCopy } = generateTeacherConfig();
     const apiUrl = await deployApiPass1(tomlPath, state);
     await deployApiPass2(tomlPath, workerCopy, apiUrl);
-    await buildAndDeployFrontend(apiUrl, state);
+    const siteUrl = await buildAndDeployFrontend(apiUrl, state);
+    await stepStudentLink(state, 'continue', siteUrl || state.siteUrl);
     summary(state);
     getRl().close();
     return;
@@ -759,7 +834,8 @@ async function main() {
   await step9OptionalSecrets(tomlPath, state, mode, setNames);
   const apiUrl = await deployApiPass1(tomlPath, state);
   await deployApiPass2(tomlPath, workerCopy, apiUrl);
-  await buildAndDeployFrontend(apiUrl, state);
+  const siteUrl = await buildAndDeployFrontend(apiUrl, state);
+  await stepStudentLink(state, mode, siteUrl || state.siteUrl);
   summary(state);
   getRl().close();
 }
