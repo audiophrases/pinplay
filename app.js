@@ -1317,7 +1317,9 @@ function bindBuilderEvents() {
   saveBtn.addEventListener('click', async () => {
     try {
       syncQuizFromUI();
-      await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true });
+      // Local save must stay fully local: keep media as data URLs and never
+      // push images/audio to R2 (that belongs to the cloud-save action).
+      await ensureQuizMediaReady({ contextLabel: 'save local quiz', convertTtsToMp3: true, strictMediaCheck: true, uploadToR2: false });
 
       saveQuiz(quiz);
       const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
