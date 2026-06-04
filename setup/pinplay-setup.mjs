@@ -27,6 +27,12 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+// Silence Node's DEP0190 "args to a child process with shell" warning. The wizard
+// only ever passes its OWN controlled arguments to wrangler (any teacher input —
+// passwords, keys — is fed through stdin, never as a shell argument), so the
+// warning is harmless noise that needlessly alarms non-technical teachers.
+process.noDeprecation = true;
+
 // ---------- Paths ----------
 const __filename = fileURLToPath(import.meta.url);
 const SETUP_DIR = path.dirname(__filename);
