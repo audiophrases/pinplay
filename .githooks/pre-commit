@@ -1,0 +1,13 @@
+#!/bin/sh
+# PinPlay i18n gate — blocks commits that introduce NEW unwrapped UI strings.
+#
+# This hook is version-controlled. Activate it once per clone with:
+#     git config core.hooksPath .githooks
+#
+# Bypass a single commit with:  git commit --no-verify
+node scripts/i18n-check.mjs || {
+  echo ""
+  echo "Commit blocked by i18n-check (see above). Wrap new UI strings in t(),"
+  echo "or run 'git commit --no-verify' to bypass."
+  exit 1
+}
