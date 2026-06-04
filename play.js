@@ -339,8 +339,9 @@ function markAnswerDirty() {
   if (fbMode === 'instant') return;
   if (live.player.assignment.dirtyAnswer) return;
   live.player.assignment.dirtyAnswer = true;
-  if (joinSubmitBtn && joinSubmitBtn.textContent.startsWith('Continue')) {
-    joinSubmitBtn.innerHTML = 'Save answer <kbd>\u21b5</kbd>';
+  if (joinSubmitBtn && joinSubmitBtn.dataset.mode === 'continue') {
+    joinSubmitBtn.dataset.mode = 'save';
+    joinSubmitBtn.innerHTML = t('Save answer') + ' <kbd>\u21b5</kbd>';
   }
 }
 
@@ -365,8 +366,8 @@ function initAssignmentFromUrl() {
   live.player.mode = 'assignment';
   live.player.assignment.code = code;
   if (joinPinEl) joinPinEl.value = code;
-  if (validatePinBtn) validatePinBtn.textContent = 'Open assignment';
-  if (joinTitleEl) joinTitleEl.textContent = 'Assignment mode';
+  if (validatePinBtn) validatePinBtn.textContent = t('Open assignment');
+  if (joinTitleEl) joinTitleEl.textContent = t('Assignment mode');
   document.body.classList.add('assignment-mode');
 
   // Assignment links should behave like a direct entry point:
@@ -385,7 +386,7 @@ function initLivePreviewFromUrl() {
   if (!autojoin) return;
 
   if (joinPinEl) joinPinEl.value = pin;
-  if (joinTitleEl) joinTitleEl.textContent = 'Live preview';
+  if (joinTitleEl) joinTitleEl.textContent = t('Live preview');
 
   setTimeout(async () => {
     try {
@@ -433,8 +434,8 @@ async function validatePin() {
         if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
         if (joinModeHintEl) {
           const dueAt = Number(a?.dueAt || 0);
-          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Random names mode`;
+          const dueText = dueAt ? t(' · Due: {d}', { d: new Date(dueAt).toLocaleString() }) : '';
+          joinModeHintEl.textContent = t('Assignment: {title}{due} · Random names mode', { title: a?.title || code, due: dueText });
         }
         // Fetch and display a random name immediately so the student sees it
         if (!live.player.displayName) {
@@ -452,12 +453,12 @@ async function validatePin() {
         if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
         if (joinModeHintEl) {
           const dueAt = Number(a?.dueAt || 0);
-          const dueText = dueAt ? ` · Due: ${new Date(dueAt).toLocaleString()}` : '';
-          joinModeHintEl.textContent = `Assignment: ${a?.title || code}${dueText} · Login required`;
+          const dueText = dueAt ? t(' · Due: {d}', { d: new Date(dueAt).toLocaleString() }) : '';
+          joinModeHintEl.textContent = t('Assignment: {title}{due} · Login required', { title: a?.title || code, due: dueText });
         }
       }
-      if (joinBtn) joinBtn.textContent = 'Start assignment';
-      setStatus(joinStatusEl, 'Assignment code valid ✅', 'ok');
+      if (joinBtn) joinBtn.textContent = t('Start assignment');
+      setStatus(joinStatusEl, t('Assignment code valid ✅'), 'ok');
       return;
     }
 
@@ -479,14 +480,14 @@ async function validatePin() {
       if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
       if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
       if (joinModeHintEl) {
-        joinModeHintEl.textContent = 'Random names mode: your nickname is assigned automatically.';
+        joinModeHintEl.textContent = t('Random names mode: your nickname is assigned automatically.');
       }
     } else {
       if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
       if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
       if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
       if (joinModeHintEl) {
-        joinModeHintEl.textContent = 'Login required mode: enter valid username and password.';
+        joinModeHintEl.textContent = t('Login required mode: enter valid username and password.');
       }
       if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
         joinNameEl.value = data.joinedPlayer.name;
@@ -494,7 +495,7 @@ async function validatePin() {
     }
 
     if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
-    setStatus(joinStatusEl, 'PIN valid ✅', 'ok');
+    setStatus(joinStatusEl, t('PIN valid ✅'), 'ok');
   } catch (err) {
     setStatus(joinStatusEl, err.message, 'bad');
     showLoginError(err.message);
@@ -509,11 +510,11 @@ async function joinLiveGame() {
     busyApplied = true;
     joinBtn.disabled = true;
     joinBtn.dataset.originalLabel = originalLabel;
-    joinBtn.textContent = '⏳ Please wait…';
+    joinBtn.textContent = t('⏳ Please wait…');
     if (!live.player.randomNamesMode) {
-      setStatus(joinStatusEl, '⏳ Checking your login… please wait, do not click again.', 'ok');
+      setStatus(joinStatusEl, t('⏳ Checking your login… please wait, do not click again.'), 'ok');
     } else {
-      setStatus(joinStatusEl, '⏳ Joining… please wait.', 'ok');
+      setStatus(joinStatusEl, t('⏳ Joining… please wait.'), 'ok');
     }
   };
   const clearBusyState = () => {
@@ -576,8 +577,8 @@ async function joinLiveGame() {
     live.player.displayName = shownName;
     setJoinTitle(shownName);
 
-    const prefix = data.alreadyJoined ? 'Rejoined' : 'Joined';
-    setStatus(joinStatusEl, `${prefix} as ${shownName} ✅`, 'ok');
+    const prefix = data.alreadyJoined ? t('Rejoined') : t('Joined');
+    setStatus(joinStatusEl, t('{prefix} as {name} ✅', { prefix, name: shownName }), 'ok');
     hideLoginError();
 
     if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
@@ -735,8 +736,8 @@ function renderReviewNavigator() {
   const exitChip = document.createElement('button');
   exitChip.type = 'button';
   exitChip.className = 'rev-chip-exit';
-  exitChip.title = 'Exit review mode';
-  exitChip.innerHTML = '<span class="rev-chip-exit-icon">✕</span><span class="rev-chip-exit-label">Exit Review</span>';
+  exitChip.title = t('Exit review mode');
+  exitChip.innerHTML = '<span class="rev-chip-exit-icon">✕</span><span class="rev-chip-exit-label">' + t('Exit Review') + '</span>';
   exitChip.addEventListener('click', () => {
     const ctx = live.player.assignment?.reviewExitContext || {};
     exitAssignmentReviewMode(ctx.code, ctx.checkData);
@@ -773,7 +774,7 @@ function renderReviewNavigator() {
     chip.type = 'button';
     chip.className = `rev-chip status-${statusClass}`;
     if (qIndex === currentIdx) chip.classList.add('active');
-    chip.title = `Question ${qIndex + 1} — ${statusClass}`;
+    chip.title = t('Question {n} — {status}', { n: qIndex + 1, status: t(statusClass) });
     chip.innerHTML = `<span class="rev-chip-num">${qIndex + 1}</span><span class="rev-chip-badge">${badge}</span>`;
     chip.addEventListener('click', () => jumpToAssignmentQuestion(qIndex));
     nav.appendChild(chip);
@@ -1045,7 +1046,7 @@ async function showTeacherFeedback(code, attemptId) {
             ${scoreBadge}
           </div>
           <div style="color:#3fb950; display:flex; flex-direction:column;">
-            ${item.correction ? `<span>💬 Teacher: ${buildCorrectionDiffHtml(item.correction, item.studentAnswer || '')}</span>` : ''}
+            ${item.correction ? `<span>${t('💬 Teacher:')} ${buildCorrectionDiffHtml(item.correction, item.studentAnswer || '')}</span>` : ''}
             ${audioHtml}
           </div>
         </div>
@@ -1053,7 +1054,7 @@ async function showTeacherFeedback(code, attemptId) {
     }).join('');
 
     feedbackPanel.innerHTML = `
-      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">💬 Teacher Feedback (${feedbackItems.length}) — tap to jump</div>
+      <div style="font-weight:bold;color:#3fb950;margin-bottom:8px;">${t('💬 Teacher Feedback')} (${feedbackItems.length}) — ${t('tap to jump')}</div>
       ${feedbackHtml}
     `;
     feedbackPanel.style.display = 'block';
@@ -1110,9 +1111,9 @@ function buildTfStudentAnswerHtml(item, base) {
     `;
   } else if (item.questionType === 'image_open' && raw && typeof raw === 'object' && raw.imageUrl) {
     const src = resolveMediaSrc(raw.imageUrl, base);
-    inner = `<img class="tf-answer-image" src="${escapeHtml(src)}" alt="Your image answer" />`;
+    inner = `<img class="tf-answer-image" src="${escapeHtml(src)}" alt="${t('Your image answer')}" />`;
   } else if (item.questionType === 'speaking') {
-    inner = `<div class="tf-answer-text tf-answer-muted">🗣️ Spoke aloud — no recording captured for this answer type.</div>`;
+    inner = `<div class="tf-answer-text tf-answer-muted">${t('🗣️ Spoke aloud — no recording captured for this answer type.')}</div>`;
   } else if (typeof raw === 'string' && raw.trim()) {
     inner = `<div class="tf-answer-text">${escapeHtml(raw)}</div>`;
   } else if (typeof raw === 'object') {
@@ -1123,7 +1124,7 @@ function buildTfStudentAnswerHtml(item, base) {
 
   return `
     <details class="tf-collapse" open>
-      <summary>📨 Your answer</summary>
+      <summary>${t('📨 Your answer')}</summary>
       <div class="tf-collapse-body">${inner}</div>
     </details>`;
 }
@@ -1188,7 +1189,7 @@ function showTeacherFeedbackOverlay(items) {
   header.className = 'tf-header';
   const titleEl = document.createElement('h3');
   titleEl.id = 'tfOverlayTitle';
-  titleEl.textContent = '💬 Teacher Feedback';
+  titleEl.textContent = t('💬 Teacher Feedback');
   const subtitleEl = document.createElement('div');
   subtitleEl.className = 'tf-subtitle';
   header.appendChild(titleEl);
@@ -1205,17 +1206,17 @@ function showTeacherFeedbackOverlay(items) {
   const prevBtn = document.createElement('button');
   prevBtn.type = 'button';
   prevBtn.className = 'tf-nav-btn tf-prev';
-  prevBtn.innerHTML = '<span aria-hidden="true">←</span> Previous';
+  prevBtn.innerHTML = '<span aria-hidden="true">←</span> ' + t('Previous');
 
   const viewBtn = document.createElement('button');
   viewBtn.type = 'button';
   viewBtn.className = 'tf-view-btn';
-  viewBtn.textContent = 'Open this question';
+  viewBtn.textContent = t('Open this question');
 
   const nextBtn = document.createElement('button');
   nextBtn.type = 'button';
   nextBtn.className = 'tf-nav-btn tf-next';
-  nextBtn.innerHTML = 'Next <span aria-hidden="true">→</span>';
+  nextBtn.innerHTML = t('Next') + ' <span aria-hidden="true">→</span>';
 
   footer.appendChild(prevBtn);
   footer.appendChild(viewBtn);
@@ -1224,13 +1225,13 @@ function showTeacherFeedbackOverlay(items) {
 
   const dismissHint = document.createElement('div');
   dismissHint.className = 'tf-dismiss-hint';
-  dismissHint.textContent = 'Close to review the rest of the quiz';
+  dismissHint.textContent = t('Close to review the rest of the quiz');
   card.appendChild(dismissHint);
 
   function render() {
     const item = items[cursor];
     if (!item) return;
-    subtitleEl.textContent = `${cursor + 1} of ${items.length}`;
+    subtitleEl.textContent = t('{cur} of {total}', { cur: cursor + 1, total: items.length });
 
     const promptText = String(item.question || `Question ${item.qIndex + 1}`);
     const corrText = String(item.correction || '');
@@ -1240,13 +1241,13 @@ function showTeacherFeedbackOverlay(items) {
       if (!src.startsWith('http')) src = `${base}/api/media/${src}`;
       audioHtml = `
         <div class="tf-row">
-          <div class="tf-row-label">🎙️ Voice feedback</div>
+          <div class="tf-row-label">${t('🎙️ Voice feedback')}</div>
           <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
         </div>`;
     }
     const corrHtml = corrText ? `
       <div class="tf-row">
-        <div class="tf-row-label">📝 Teacher wrote</div>
+        <div class="tf-row-label">${t('📝 Teacher wrote')}</div>
         <div class="tf-correction-text">${buildCorrectionDiffHtml(corrText, item.studentAnswer || '')}</div>
       </div>` : '';
 
@@ -1259,7 +1260,7 @@ function showTeacherFeedbackOverlay(items) {
     const scoreStatus = earned > 0 ? 'tf-score-positive' : 'tf-score-zero';
     const scoreHtml = `
       <div class="tf-row tf-score-row ${scoreStatus}">
-        <div class="tf-row-label">🏅 Score</div>
+        <div class="tf-row-label">${t('🏅 Score')}</div>
         <div class="tf-score-value">${escapeHtml(scoreLabel)} <span class="tf-score-unit">pts</span></div>
       </div>`;
 
@@ -1397,17 +1398,17 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
   if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
-  if (joinSubmitBtn) joinSubmitBtn.innerHTML = 'Save answer <kbd>\u21b5</kbd>';
+  if (joinSubmitBtn) joinSubmitBtn.innerHTML = t('Save answer') + ' <kbd>\u21b5</kbd>';
 
   // Show attempt number info
   if (data?.alreadyStarted) {
-    setStatus(joinStatusEl, 'Resumed previous attempt ✅', 'ok');
+    setStatus(joinStatusEl, t('Resumed previous attempt ✅'), 'ok');
   } else {
-    setStatus(joinStatusEl, 'New attempt started ✅', 'ok');
+    setStatus(joinStatusEl, t('New attempt started ✅'), 'ok');
     if (data?.attempt?.attemptNumber) {
       const num = data.attempt.attemptNumber;
       const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
-      setStatus(joinStatusEl, `Attempt ${num}${suffix} started ✅`, 'ok');
+      setStatus(joinStatusEl, t('Attempt {n}{suffix} started ✅', { n: num, suffix }), 'ok');
     }
   }
 
@@ -1437,7 +1438,7 @@ async function deleteOwnAttempt(code, attemptId, studentKey, username, password,
       body: { code, attemptId, studentKey, studentName: username, password },
     });
   } catch (err) {
-    window.alert(`Could not delete attempt: ${err.message}`);
+    window.alert(t('Could not delete attempt: {msg}', { msg: err.message }));
     return;
   }
 
@@ -1453,12 +1454,12 @@ async function deleteOwnAttempt(code, attemptId, studentKey, username, password,
       // Nothing left to manage — return the student to the identity step
       // so they can start a fresh attempt.
       if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
-      setStatus(joinStatusEl, 'All previous attempts deleted. Ready to start fresh ✅', 'ok');
+      setStatus(joinStatusEl, t('All previous attempts deleted. Ready to start fresh ✅'), 'ok');
     }
   } catch (err) {
     // If refresh fails, fall back to closing the modal silently.
     dismissReviewRetakeModal();
-    setStatus(joinStatusEl, `Attempt deleted, but refresh failed: ${err.message}`, 'bad');
+    setStatus(joinStatusEl, t('Attempt deleted, but refresh failed: {msg}', { msg: err.message }), 'bad');
   }
 }
 
@@ -1482,8 +1483,8 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   sub.className = 'review-retake-subtitle';
   const used = Number(checkData.attemptsUsed || 0);
   const limit = Number(checkData.attemptsLimit || 0);
-  const limitText = limit === 0 ? 'unlimited' : `${limit}`;
-  sub.textContent = `${used} attempt${used !== 1 ? 's' : ''} completed · Limit: ${limitText}`;
+  const limitText = limit === 0 ? t('unlimited') : `${limit}`;
+  sub.textContent = t('{used} attempt(s) completed · Limit: {limit}', { used, limit: limitText });
   card.appendChild(sub);
 
   // In exam mode with a single allowed attempt, students must not be able to
@@ -1497,13 +1498,13 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
     del.className = 'rr-attempt-delete';
     del.setAttribute('role', 'button');
     del.setAttribute('tabindex', '0');
-    del.setAttribute('aria-label', `Delete ${attemptLabel}`);
-    del.title = `Delete ${attemptLabel}`;
+    del.setAttribute('aria-label', t('Delete {label}', { label: attemptLabel }));
+    del.title = t('Delete {label}', { label: attemptLabel });
     del.textContent = '🗑️';
     const trigger = (e) => {
       e.stopPropagation();
       e.preventDefault();
-      const ok = window.confirm(`Delete ${attemptLabel}? This cannot be undone.`);
+      const ok = window.confirm(t('Delete {label}? This cannot be undone.', { label: attemptLabel }));
       if (!ok) return;
       deleteOwnAttempt(code, attemptId, studentKey, username, password, checkData);
     };
@@ -1531,7 +1532,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       const row = document.createElement('div');
       row.className = 'review-retake-attempt-row rr-attempt-row-open';
-      row.title = 'Unfinished attempt';
+      row.title = t('Unfinished attempt');
 
       const label = document.createElement('span');
       label.className = 'rr-attempt-label';
@@ -1541,7 +1542,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       const badge = document.createElement('span');
       badge.className = 'rr-attempt-badge rr-attempt-badge-open';
-      badge.textContent = 'Unfinished';
+      badge.textContent = t('Unfinished');
 
       const date = document.createElement('span');
       date.className = 'rr-attempt-date';
@@ -1553,8 +1554,8 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       li.appendChild(row);
       if (allowDelete) {
         li.appendChild(makeDeleteButton(openAttempt.id, openAttempt.attemptNumber
-          ? `Attempt ${openAttempt.attemptNumber} (unfinished)`
-          : 'unfinished attempt'));
+          ? t('Attempt {n} (unfinished)', { n: openAttempt.attemptNumber })
+          : t('unfinished attempt')));
       }
       list.appendChild(li);
     }
@@ -1574,11 +1575,11 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       if (totalTeacher > 0) {
         const parts = [];
-        if (gradedCount > 0) parts.push(`${gradedCount} graded`);
-        if (feedbackCount > 0) parts.push(`${feedbackCount} with feedback`);
-        row.title = `${hasNew ? 'New from teacher · ' : ''}${parts.join(' · ')}. Click to review.`;
+        if (gradedCount > 0) parts.push(t('{n} graded', { n: gradedCount }));
+        if (feedbackCount > 0) parts.push(t('{n} with feedback', { n: feedbackCount }));
+        row.title = `${hasNew ? t('New from teacher · ') : ''}${parts.join(' · ')}. ${t('Click to review.')}`;
       } else {
-        row.title = 'Click to review this attempt';
+        row.title = t('Click to review this attempt');
       }
 
       row.addEventListener('click', () => {
@@ -1588,11 +1589,11 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       const label = document.createElement('span');
       label.className = 'rr-attempt-label';
-      label.textContent = `Attempt ${a.attemptNumber || '?'}`;
+      label.textContent = t('Attempt {n}', { n: a.attemptNumber || '?' });
 
       const score = document.createElement('span');
       score.className = 'rr-attempt-score';
-      score.textContent = `${Number(a.totalScore || 0)} pts`;
+      score.textContent = t('{n} pts', { n: Number(a.totalScore || 0) });
 
       const date = document.createElement('span');
       date.className = 'rr-attempt-date';
@@ -1616,7 +1617,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
 
       li.appendChild(row);
       if (allowDelete) {
-        li.appendChild(makeDeleteButton(a.id, `Attempt ${a.attemptNumber || '?'}`));
+        li.appendChild(makeDeleteButton(a.id, t('Attempt {n}', { n: a.attemptNumber || '?' })));
       }
       list.appendChild(li);
     });
@@ -1636,8 +1637,8 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
     reviewBtn.type = 'button';
     reviewBtn.innerHTML = `
       <span class="rr-btn-icon">📖</span>
-      <span class="rr-btn-label">Review</span>
-      <span class="rr-btn-hint">View your answers</span>
+      <span class="rr-btn-label">${t('Review')}</span>
+      <span class="rr-btn-hint">${t('View your answers')}</span>
     `;
     reviewBtn.addEventListener('click', () => {
       const latestAttempt = checkData.pastAttempts?.[0]; // Fallback to raw array
@@ -1658,8 +1659,8 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
     actionBtn.type = 'button';
     actionBtn.innerHTML = `
       <span class="rr-btn-icon">${isContinue ? '▶️' : '🔄'}</span>
-      <span class="rr-btn-label">${isContinue ? 'Continue' : 'Retake'}</span>
-      <span class="rr-btn-hint">${isContinue ? 'Resume your current attempt' : 'Start a new attempt'}</span>
+      <span class="rr-btn-label">${isContinue ? t('Continue') : t('Retake')}</span>
+      <span class="rr-btn-hint">${isContinue ? t('Resume your current attempt') : t('Start a new attempt')}</span>
     `;
     actionBtn.addEventListener('click', async () => {
       dismissReviewRetakeModal();
@@ -1674,7 +1675,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
   } else {
     const msg = document.createElement('div');
     msg.className = 'rr-exhausted-msg';
-    msg.textContent = 'All attempts have been used. You can review your answers.';
+    msg.textContent = t('All attempts have been used. You can review your answers.');
     card.appendChild(msg);
   }
 
@@ -1740,9 +1741,9 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     // Build the per-question navigator strip (includes the Exit chip)
     renderReviewNavigator();
 
-    setStatus(joinStatusEl, 'Reviewing submitted attempt ✅', 'ok');
+    setStatus(joinStatusEl, t('Reviewing submitted attempt ✅'), 'ok');
   } catch (err) {
-    setStatus(joinStatusEl, `Review error: ${err.message}`, 'bad');
+    setStatus(joinStatusEl, t('Review error: {msg}', { msg: err.message }), 'bad');
   }
 }
 
@@ -1820,7 +1821,7 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     await loadAssignmentState();
     renderInstantFeedbackFromState();
   } catch (err) {
-    setJoinStatusHud(String(err?.message || 'Could not submit assignment.'), 'bad');
+    setJoinStatusHud(String(err?.message || t('Could not submit assignment.')), 'bad');
   }
 }
 
@@ -1839,7 +1840,7 @@ function showUnansweredConfirmModal(blankIndexes) {
 
   const title = document.createElement('div');
   title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:0.75rem;';
-  title.textContent = 'Submit assignment with unanswered questions:';
+  title.textContent = t('Submit assignment with unanswered questions:');
   panel.appendChild(title);
 
   const chipsWrap = document.createElement('div');
@@ -1871,7 +1872,7 @@ function showUnansweredConfirmModal(blankIndexes) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'button';
   submitBtn.className = 'btn primary';
-  submitBtn.textContent = 'OK';
+  submitBtn.textContent = t('OK');
   submitBtn.addEventListener('click', () => {
     submitBtn.disabled = true;
     finalizeAssignmentAttempt({ force: true })
@@ -2188,7 +2189,7 @@ function renderInstantFeedbackFromState() {
 
   const title = document.createElement('div');
   title.className = 'assignment-results-title';
-  title.textContent = 'Final Results';
+  title.textContent = t('Final Results');
   header.appendChild(title);
 
   const scoreSummary = document.createElement('div');
@@ -2204,7 +2205,7 @@ function renderInstantFeedbackFromState() {
   closeBtn.type = 'button';
   closeBtn.className = 'assignment-results-close';
   closeBtn.setAttribute('aria-label', 'Hide question summary');
-  closeBtn.title = 'Hide question summary';
+  closeBtn.title = t('Hide question summary');
   closeBtn.textContent = '✕';
   closeBtn.addEventListener('click', () => {
     live.player.assignment.resultsDrawerOpen = false;
@@ -2243,7 +2244,7 @@ function renderInstantFeedbackFromState() {
     const icon = document.createElement('span');
     icon.className = 'result-icon';
     icon.textContent = r.statusIcon;
-    if (r.status === 'pending') icon.title = 'Waiting for teacher grading';
+    if (r.status === 'pending') icon.title = t('Waiting for teacher grading');
     li.appendChild(icon);
 
     let pointsText = '';
@@ -2296,7 +2297,7 @@ function renderInstantFeedbackFromState() {
   handle.className = 'assignment-results-handle';
   if (drawerOpen) handle.classList.add('hidden');
   handle.setAttribute('aria-label', 'Show question summary');
-  handle.title = 'Show question summary';
+  handle.title = t('Show question summary');
   handle.innerHTML = `<span>📋</span><span class="handle-count">${rows.length}/${questions.length}</span>`;
   handle.addEventListener('click', () => {
     live.player.assignment.resultsDrawerOpen = true;
@@ -2511,8 +2512,8 @@ function renderRetakeRow(panel, state) {
   if (alreadyServerSelfCorrected) {
     const pill = document.createElement('div');
     pill.style.cssText = 'background:#8b5cf6;color:white;border-radius:999px;padding:0.35rem 0.9rem;font-weight:700;font-size:0.85rem;';
-    pill.textContent = '✓ Self-corrected';
-    pill.title = 'You retook and corrected every retakeable mistake from this attempt.';
+    pill.textContent = t('✓ Self-corrected');
+    pill.title = t('You retook and corrected every retakeable mistake from this attempt.');
     row.appendChild(pill);
     panel.appendChild(row);
     return;
@@ -2527,11 +2528,11 @@ function renderRetakeRow(panel, state) {
   btn.className = 'btn primary';
   btn.style.cssText = 'padding:0.5rem 1rem;font-weight:600;';
   if (remaining === 0) {
-    btn.textContent = '🎯 Finish self-correct';
-    btn.title = 'Submit completion to your teacher';
+    btn.textContent = t('🎯 Finish self-correct');
+    btn.title = t('Submit completion to your teacher');
   } else {
-    btn.textContent = `🔄 Self-correct (${remaining} of ${eligible.length} left)`;
-    btn.title = 'Retake the questions you got wrong or skipped';
+    btn.textContent = t('🔄 Self-correct ({remaining} of {total} left)', { remaining, total: eligible.length });
+    btn.title = t('Retake the questions you got wrong or skipped');
   }
   btn.addEventListener('click', () => enterRetakeMode(state));
   row.appendChild(btn);
@@ -2612,8 +2613,8 @@ function renderRetakeHeader() {
   const exit = document.createElement('button');
   exit.type = 'button';
   exit.style.cssText = 'background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.4);padding:0.25rem 0.7rem;font-size:0.8rem;border-radius:999px;cursor:pointer;';
-  exit.textContent = 'Exit';
-  exit.title = 'Exit retake (progress saved on this device)';
+  exit.textContent = t('Exit');
+  exit.title = t('Exit retake (progress saved on this device)');
   exit.addEventListener('click', () => exitRetakeMode());
 
   header.append(label, exit);
@@ -2640,7 +2641,7 @@ function renderRetakeVerdictBanner(result) {
   if (!result.correct && result.correctAnswerText) {
     const sub = document.createElement('div');
     sub.style.cssText = 'font-size:0.95rem;margin-top:0.4rem;opacity:0.95;font-weight:500;';
-    sub.textContent = `Correct answer: ${result.correctAnswerText}`;
+    sub.textContent = t('Correct answer: {answer}', { answer: result.correctAnswerText });
     banner.appendChild(sub);
   }
 
@@ -2765,7 +2766,7 @@ async function handleRetakeSubmit() {
   // end-mode, so paths assume "no immediate reveal"). For retake we always
   // want instant feedback — so reassert the verdict, highlight the correct
   // answer, and lock the inputs ourselves. Pure DOM; zero server cost.
-  const verdictText = correct ? '✅ Correct' : '❌ Not quite — try again';
+  const verdictText = correct ? t(t('✅ Correct')) : t('❌ Not quite — try again');
   setJoinStatusHud(verdictText, correct ? 'ok' : 'bad');
   if (mapped) highlightAnswerItems(correct, mapped);
   if (joinAnswersEl) {
@@ -2801,7 +2802,7 @@ function advanceRetake(wasCorrect) {
   if (!uncleared.length) {
     // Loop complete — everything cleared.
     finishRetakeLoop({ code, attemptId });
-    setJoinStatusHud('🎉 Self-corrected — every retakeable mistake fixed!', 'ok');
+    setJoinStatusHud(t('🎉 Self-corrected — every retakeable mistake fixed!'), 'ok');
     exitRetakeMode();
     return;
   }
@@ -2858,7 +2859,7 @@ async function pollPlayerState() {
 
     renderPlayerState(data);
   } catch (err) {
-    setStatus(joinStatusEl, `Join poll failed: ${err.message}`, 'bad');
+    setStatus(joinStatusEl, t('Join poll failed: {msg}', { msg: err.message }), 'bad');
     stopPlayerPolling();
   }
 }
@@ -2887,10 +2888,10 @@ async function rerollRandomName() {
     if (nextName) {
       live.player.displayName = nextName;
       setJoinTitle(nextName);
-      setStatus(joinStatusEl, `New random name: ${nextName} ✅`, 'ok');
+      setStatus(joinStatusEl, t('New random name: {name} ✅', { name: nextName }), 'ok');
     }
   } catch (err) {
-    setStatus(joinStatusEl, String(err?.message || 'Could not change name.'), 'bad');
+    setStatus(joinStatusEl, String(err?.message || t('Could not change name.')), 'bad');
   } finally {
     if (rerollNameBtn) rerollNameBtn.disabled = false;
   }
@@ -2968,7 +2969,7 @@ function renderPlayerState(state) {
 
       const title = document.createElement('div');
       title.className = 'student-answer-reveal-title';
-      title.textContent = 'Correct Answer';
+      title.textContent = t('Correct Answer');
 
       const content = document.createElement('div');
       content.className = 'student-answer-reveal-content';
@@ -3013,7 +3014,7 @@ function renderPlayerState(state) {
       joinScoreEl.textContent = '';
       joinScoreEl.classList.add('hidden');
     } else {
-      joinScoreEl.textContent = `Score: ${state.score}`;
+      joinScoreEl.textContent = t('Score: {n}', { n: state.score });
       joinScoreEl.classList.remove('hidden');
     }
   }
@@ -3057,7 +3058,7 @@ function renderPlayerState(state) {
     title.style.gap = '0.5rem';
 
     const titleText = document.createElement('span');
-    titleText.textContent = 'Teacher Feedback';
+    titleText.textContent = t('Teacher Feedback');
     title.appendChild(titleText);
 
     const earnedPts = Number(rrNow?.pointsAwarded || 0);
@@ -3085,7 +3086,7 @@ function renderPlayerState(state) {
     if (corr) {
       content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
     } else {
-      content.textContent = '(Voice comment only)';
+      content.textContent = t('(Voice comment only)');
     }
 
     p.append(title, content);
@@ -3104,7 +3105,7 @@ function renderPlayerState(state) {
       audioBtn.type = 'button';
       audioBtn.style.padding = '0.4rem 0.8rem';
       audioBtn.style.fontSize = '0.9rem';
-      audioBtn.innerHTML = '🔊 Play Voice Comment';
+      audioBtn.innerHTML = t('🔊 Play Voice Comment');
 
       const audioEl = new Audio();
       const base = loadBackendUrl() || 'https://api.pinplay.win';
@@ -3113,15 +3114,15 @@ function renderPlayerState(state) {
       audioBtn.onclick = () => {
         if (audioEl.paused) {
           audioEl.play().catch(err => console.warn('Audio playback failed:', err));
-          audioBtn.innerHTML = '⏸️ Pause';
+          audioBtn.innerHTML = t('⏸️ Pause');
         } else {
           audioEl.pause();
-          audioBtn.innerHTML = '🔊 Play Voice Comment';
+          audioBtn.innerHTML = t('🔊 Play Voice Comment');
         }
       };
 
       audioEl.onended = () => {
-        audioBtn.innerHTML = '🔊 Play Voice Comment';
+        audioBtn.innerHTML = t('🔊 Play Voice Comment');
       };
 
       audioWrap.appendChild(audioBtn);
@@ -3144,7 +3145,7 @@ function renderPlayerState(state) {
 
     applyJoinLayoutMode(false, null);
     stopJoinTimer();
-    if (joinTimerEl) joinTimerEl.textContent = 'Time: -';
+    if (joinTimerEl) joinTimerEl.textContent = t('Time: —');
     if (joinQuestionWrap) joinQuestionWrap.classList.add('hidden');
 
     const canReroll = (state.phase === 'lobby' && !!live.player.randomNamesMode)
@@ -3152,7 +3153,7 @@ function renderPlayerState(state) {
     if (rerollNameBtn) rerollNameBtn.classList.toggle('hidden', !canReroll);
 
     if (state.phase === 'lobby') {
-      setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
+      setStatus(joinStatusEl, t('Waiting for teacher to start…'), 'ok');
     } else if (state.phase === 'results') {
       if (!assignmentFinalPlayed) {
         playAssignmentSfx('final');
@@ -3160,7 +3161,7 @@ function renderPlayerState(state) {
       }
       // Update header for finished state
       const modeLabel = document.getElementById('joinModeLabel');
-      if (modeLabel) modeLabel.textContent = 'Game finished 🎉';
+      if (modeLabel) modeLabel.textContent = t('Game finished 🎉');
       // Clear status (shown in header now)
       renderLeaderboardInJoin(state.leaderboard || [], {
         answerText: live?.player?.lastAnswerText || '',
@@ -3195,19 +3196,19 @@ function renderPlayerState(state) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
     stopJoinTimer();
-    if (joinTimerEl) joinTimerEl.textContent = 'Time: —';
-    if (joinProgressEl) joinProgressEl.textContent = `Completed ${answeredSet.size} / ${assignmentTotal}`;
-    if (joinPromptEl) joinPromptEl.textContent = 'End of quiz 🎉';
+    if (joinTimerEl) joinTimerEl.textContent = t('Time: —');
+    if (joinProgressEl) joinProgressEl.textContent = t('Completed {done} / {total}', { done: answeredSet.size, total: assignmentTotal });
+    if (joinPromptEl) joinPromptEl.textContent = t('End of quiz 🎉');
     if (joinAnswersEl) joinAnswersEl.innerHTML = '';
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
     if (assignmentNextBtn) assignmentNextBtn.classList.add('hidden');
     if (assignmentNextPendingBtn) assignmentNextPendingBtn.classList.add('hidden');
     if (assignmentBannerEl) {
       assignmentBannerEl.classList.remove('hidden');
-      assignmentBannerEl.textContent = 'All answers saved. Submit assignment to finish.';
+      assignmentBannerEl.textContent = t('All answers saved. Submit assignment to finish.');
     }
-    setJoinStatusHud('All answers saved ✅', 'ok');
-    setStatus(joinStatusEl, 'End of quiz reached. Submit assignment to finish.', 'ok');
+    setJoinStatusHud(t('All answers saved ✅'), 'ok');
+    setStatus(joinStatusEl, t('End of quiz reached. Submit assignment to finish.'), 'ok');
     const allowEditing = state.feedbackMode !== 'instant';
     showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
       title: 'End of quiz 🎉',
@@ -3323,19 +3324,21 @@ function renderPlayerState(state) {
       && !assignmentSubmitted;
 
     if (isContinueMode) {
-      joinSubmitBtn.innerHTML = live.player.assignment.pendingComplete ? 'Finish quiz <kbd>\u21b5</kbd>' : 'Continue <kbd>\u21b5</kbd>';
+      joinSubmitBtn.innerHTML = (live.player.assignment.pendingComplete ? t('Finish quiz') : t('Continue')) + ' <kbd>\u21b5</kbd>';
+      joinSubmitBtn.dataset.mode = live.player.assignment.pendingComplete ? 'finish' : 'continue';
       joinSubmitBtn.disabled = false;
     } else {
-      joinSubmitBtn.innerHTML = isAssignment ? 'Save answer <kbd>\u21b5</kbd>' : 'Submit';
+      joinSubmitBtn.innerHTML = isAssignment ? t('Save answer') + ' <kbd>\u21b5</kbd>' : t('Submit');
+      joinSubmitBtn.dataset.mode = isAssignment ? 'save' : 'submit';
       joinSubmitBtn.disabled = shouldDisable;
     }
 
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
-    joinSubmitBtn.title = isPoll ? 'Poll question (no points)' : `${pts} points`;
+    joinSubmitBtn.title = isPoll ? t('Poll question (no points)') : t('{pts} points', { pts });
     if (isAnswerFullscreenLocked()) {
       setJoinStatusHud('Exit fullscreen to answer.', 'bad');
     } else if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live' && !live.player.liveRevealApplied) {
-      setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
+      setJoinStatusHud(t('Answer submitted. Waiting for reveal…'), 'ok');
     }
   }
 
@@ -3390,28 +3393,28 @@ function renderPlayerState(state) {
 
   if (questionClosed) {
     if (isPoll) {
-      setJoinStatusHud('🗳️ Poll closed. Results on projector.', 'ok');
-      setStatus(joinStatusEl, 'Poll closed.', 'ok');
+      setJoinStatusHud(t('🗳️ Poll closed. Results on projector.'), 'ok');
+      setStatus(joinStatusEl, t('Poll closed.'), 'ok');
     } else {
       const rr = state.revealedResult;
       const closeReason = String(state.questionCloseReason || '').trim();
       const closedMsg = closeReason === 'all_answered'
-        ? 'Everyone answered. Waiting for next question…'
-        : (closeReason === 'manual_reveal' ? 'Teacher closed the question. Waiting for next question…' : 'Question closed.');
+        ? t('Everyone answered. Waiting for next question…')
+        : (closeReason === 'manual_reveal' ? t('Teacher closed the question. Waiting for next question…') : t('Question closed.'));
       if (rr) {
         const corr = String(rr.correction || '').trim();
         if (corr) {
           setJoinStatusHud('', '');
         } else if (rr.graded === false) {
-          setJoinStatusHud('📝 Waiting for teacher grading.', 'ok');
+          setJoinStatusHud(t('📝 Waiting for teacher grading.'), 'ok');
         } else {
           // Highlight items: green for correct, red for student's wrong answer
           const partialScore = Number(rr.partialScore || 0);
           const partialTotal = Number(rr.partialTotal || 0);
           const isPartial = !rr.correct && isPartialCreditType(state.question?.type) && partialScore > 0 && partialTotal > 0;
           const resultText = rr.correct
-            ? '✅ Correct'
-            : (isPartial ? `⚠️ ${partialCreditLabel(state.question?.type, partialScore, partialTotal)}` : '❌ Incorrect');
+            ? t('✅ Correct')
+            : (isPartial ? `⚠️ ${partialCreditLabel(state.question?.type, partialScore, partialTotal)}` : t('❌ Incorrect'));
           const pts = Number(rr.pointsAwarded || 0);
 
           // FIX: Show negative deductions properly
@@ -3421,7 +3424,7 @@ function renderPlayerState(state) {
 
           let feedback = `${resultText}${pointsText}`;
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
-            feedback += ` · Correct: ${state.correctAnswer}`;
+            feedback += t(' · Correct: {answer}', { answer: state.correctAnswer });
           }
           setJoinStatusHud(feedback, rr.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
@@ -3439,7 +3442,7 @@ function renderPlayerState(state) {
       }
     }
   } else if (assignmentSubmitted) {
-    setStatus(joinStatusEl, 'Assignment submitted.', 'ok');
+    setStatus(joinStatusEl, t('Assignment submitted.'), 'ok');
   } else if (state.answeredCurrent) {
     const rr = state.revealedResult;
     const corr = String(rr?.correction || '').trim();
@@ -3449,7 +3452,7 @@ function renderPlayerState(state) {
       // Only set generic status if immediate live reveal is not showing
     }
     if (!live.player.liveRevealApplied) {
-      setStatus(joinStatusEl, live.player.mode === 'assignment' ? 'Answer saved.' : 'Answer received.', 'ok');
+      setStatus(joinStatusEl, live.player.mode === 'assignment' ? t('Answer saved.') : t('Answer received.'), 'ok');
     }
   } else {
     // Status shown in header row now, no need for separate status line
@@ -3642,7 +3645,7 @@ function renderJoinQuestion(question) {
       eq.className = 'audio-eq audio-eq-replay';
       eq.setAttribute('role', 'button');
       eq.setAttribute('tabindex', '0');
-      eq.title = 'Replay question audio';
+      eq.title = t('Replay question audio');
       eq.setAttribute('aria-label', 'Replay question audio');
       eq.addEventListener('click', () => {
         const q = live.player.currentQuestion;
@@ -3729,7 +3732,7 @@ function renderJoinQuestion(question) {
   if (question.isPoll) {
     const note = document.createElement('p');
     note.className = 'small';
-    note.textContent = 'Poll mode: anonymous results, no points.';
+    note.textContent = t('Poll mode: anonymous results, no points.');
     joinAnswersEl.appendChild(note);
   }
 
@@ -3970,7 +3973,7 @@ function renderJoinQuestion(question) {
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
       resetBtn.className = 'error-hunt-reset';
-      resetBtn.textContent = '↺ Reset to original';
+      resetBtn.textContent = t('↺ Reset to original');
       if (isLocked) resetBtn.disabled = true;
       statusRow.appendChild(resetBtn);
 
@@ -3983,8 +3986,8 @@ function renderJoinQuestion(question) {
       const updateErrorHuntUI = () => {
         const current = String(ta.value || '');
         const { editedCount, html } = renderErrorHuntDiff(originalPrompt, current);
-        const editsLabel = required === 1 ? 'edit' : 'edits';
-        counter.innerHTML = `<strong>${editedCount}</strong> / ${required} ${editsLabel} made`;
+        const editsLabel = required === 1 ? t('edit') : t('edits');
+        counter.innerHTML = t('<strong>{count}</strong> / {required} {label} made', { count: editedCount, required, label: editsLabel });
         counter.classList.toggle('error-hunt-counter-match', editedCount === required && required > 0);
         counter.classList.toggle('error-hunt-counter-over', editedCount > required);
 
@@ -4030,7 +4033,7 @@ function renderJoinQuestion(question) {
       input.id = 'joinTextAnswer';
       input.className = 'join-answer-input';
       input.maxLength = isOpenAnswer ? 500 : 120;
-      input.placeholder = 'Type your answer';
+      input.placeholder = t('Type your answer');
       if (isOpenAnswer) input.rows = 3;
 
       // --- NEW: Pre-fill answer if available ---
@@ -4140,7 +4143,7 @@ function renderJoinQuestion(question) {
     if (!question.imageData) {
       const p = document.createElement('p');
       p.className = 'small';
-      p.textContent = 'No image set for this question.';
+      p.textContent = t('No image set for this question.');
       joinAnswersEl.appendChild(p);
       appendRiskBetBar();
       appendReactionBar();
@@ -4460,7 +4463,7 @@ async function submitLiveAnswer(opts = {}) {
       return;
     }
 
-    if (joinSubmitBtn && (joinSubmitBtn.textContent.startsWith('Continue') || joinSubmitBtn.textContent.startsWith('Finish quiz'))) {
+    if (joinSubmitBtn && (joinSubmitBtn.dataset.mode === 'continue' || joinSubmitBtn.dataset.mode === 'finish')) {
       if (live.player.assignment.pendingComplete) {
         live.player.assignment.pendingComplete = false;
         const mapped = mapAssignmentStateToPlayerState();
@@ -4526,7 +4529,7 @@ async function submitLiveAnswer(opts = {}) {
         live.player.assignment.forceAutoAdvance = false;
       }
 
-      setJoinStatusHud('Answer saved ✅', 'ok');
+      setJoinStatusHud(t('Answer saved ✅'), 'ok');
       await loadAssignmentState();
       renderInstantFeedbackFromState();
       // Re-render replaces the focused input, so focus falls back to <body> and the next
@@ -4562,7 +4565,7 @@ async function submitLiveAnswer(opts = {}) {
     live.player.lastAnswerText = (question?.answers?.[answerIdx]?.text || '');
     live.player.lastAnswerCorrect = !!data.correct;
 
-    if (joinScoreEl) joinScoreEl.textContent = `Score: ${data.score}`;
+    if (joinScoreEl) joinScoreEl.textContent = t('Score: {n}', { n: data.score });
 
     // --- Immediate answer reveal (clone assignment-mode behavior) ---
     const isPoll = !!question?.isPoll;
@@ -4573,14 +4576,14 @@ async function submitLiveAnswer(opts = {}) {
       const partialTotal = Number(data.partialTotal || 0);
       const isPartial = !data.correct && isPartialCreditType(question?.type) && partialScore > 0 && partialTotal > 0;
       const resultText = data.correct
-        ? '✅ Correct'
-        : (isPartial ? `⚠️ ${partialCreditLabel(question?.type, partialScore, partialTotal)}` : '❌ Incorrect');
+        ? t('✅ Correct')
+        : (isPartial ? `⚠️ ${partialCreditLabel(question?.type, partialScore, partialTotal)}` : t('❌ Incorrect'));
       let pointsText = '';
       if (pts > 0) pointsText = ` +${pts} points`;
       else if (pts < 0) pointsText = ` ${pts} points`;
       let feedback = `${resultText}${pointsText}`;
       if (question?.type === 'error_hunt' && data.correctAnswer) {
-        feedback += ` · Correct: ${data.correctAnswer}`;
+        feedback += t(' · Correct: {answer}', { answer: data.correctAnswer });
       }
       setJoinStatusHud(feedback, data.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
 
@@ -4614,7 +4617,7 @@ async function submitLiveAnswer(opts = {}) {
             revealEl.dataset.joinCorrectReveal = '1';
             const title = document.createElement('div');
             title.className = 'student-answer-reveal-title';
-            title.textContent = 'Correct Answer';
+            title.textContent = t('Correct Answer');
             const content = document.createElement('div');
             content.className = 'student-answer-reveal-content';
             revealEl.append(title, content);
@@ -4633,7 +4636,7 @@ async function submitLiveAnswer(opts = {}) {
         }
       }
     } else {
-      setJoinStatusHud('Answer submitted. Waiting for reveal…', 'ok');
+      setJoinStatusHud(t('Answer submitted. Waiting for reveal…'), 'ok');
     }
 
     // Mark that immediate reveal is active for this question index
@@ -4643,10 +4646,10 @@ async function submitLiveAnswer(opts = {}) {
       live.player.liveRevealForIndex = data.currentIndex;
     }
   } catch (err) {
-    const msg = String(err?.message || 'Could not submit answer.');
+    const msg = String(err?.message || t('Could not submit answer.'));
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
-      setJoinStatusHud('Question is closed. Waiting for next one…', 'ok');
+      setJoinStatusHud(t('Question is closed. Waiting for next one…'), 'ok');
       return;
     }
     setJoinStatusHud(msg, 'bad');
@@ -4788,7 +4791,7 @@ function startJoinTimer(state) {
     live.player.timerStartedAt = startedAt;
     live.player.timerLimitSec = 0;
     live.player.timerDeadlineAt = null;
-    joinTimerEl.textContent = 'Time: No limit';
+    joinTimerEl.textContent = t('Time: No limit');
     setJoinTimerBar(0, 1, false);
     return;
   }
@@ -4826,7 +4829,7 @@ function startJoinTimer(state) {
     const remainingMsRaw = Math.max(0, Number(live.player.timerInitialRemainingMs || 0) - elapsedMs);
     const remainingMs = Math.min(capMs, remainingMsRaw);
     const sec = Math.ceil(remainingMs / 1000);
-    joinTimerEl.textContent = `Time: ${sec}s`;
+    joinTimerEl.textContent = t('Time: {sec}s', { sec });
     setJoinTimerBar(remainingMs / 1000, limitSec, true);
   };
 
@@ -4851,7 +4854,7 @@ function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
 
   joinQuestionWrap.classList.remove('hidden');
   document.body.classList.add('question-active');
-  joinPromptEl.textContent = 'Final leaderboard';
+  joinPromptEl.textContent = t('Final leaderboard');
   joinAnswersEl.innerHTML = '';
   if (joinSubmitBtn) joinSubmitBtn.classList.add('hidden');
 
@@ -4870,7 +4873,7 @@ function renderLeaderboardInJoin(leaderboard, lastQuestionState) {
 
   const hint = document.createElement('p');
   hint.className = 'small';
-  hint.textContent = 'React to the final result 👇';
+  hint.textContent = t('React to the final result 👇');
   joinAnswersEl.appendChild(hint);
   appendReactionBar();
 }
@@ -5090,7 +5093,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
   resetBtn.className = 'btn puzzle-reset';
-  resetBtn.textContent = 'Reset order';
+  resetBtn.textContent = t('Reset order');
 
   let draggedRow = null;
 
@@ -5881,7 +5884,7 @@ function _refreshAssignmentRecordBtnsForAudio() {
       btn.dataset.audioLocked = '1';
       btn.disabled = true;
       btn.classList.add('audio-locked');
-      btn.title = 'Listen to the question first';
+      btn.title = t('Listen to the question first');
     } else if (btn.dataset.audioLocked === '1') {
       const prior = btn.dataset.priorDisabled === '1';
       delete btn.dataset.audioLocked;
@@ -6033,14 +6036,14 @@ function showExamFocusStartNotice() {
   card.innerHTML = `
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
       <span style="font-size:26px; line-height:1;">👀</span>
-      <strong style="font-size:1.1rem;">Please stay on this page</strong>
+      <strong style="font-size:1.1rem;">${t('Please stay on this page')}</strong>
     </div>
     <p style="margin:0 0 16px 0; font-size:0.95rem; line-height:1.45; opacity:0.92;">
-      Your teacher can see if you leave this page.
+      ${t('Your teacher can see if you leave this page.')}
     </p>
     <div style="display:flex; justify-content:flex-end;">
       <button type="button" id="examFocusStartOk" class="btn" style="background:#3b82f6; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:600; cursor:pointer;">
-        OK, I'm ready
+        ${t("OK, I'm ready")}
       </button>
     </div>
   `;
@@ -6070,7 +6073,7 @@ function updateExamFocusCountBadge() {
     if (n <= 0) return;
     const badge = document.createElement('div');
     badge.id = 'examFocusCountBadge';
-    badge.title = "Each time you leave this tab is recorded for your teacher.";
+    badge.title = t('Each time you leave this tab is recorded for your teacher.');
     badge.style.cssText = [
       'position:fixed',
       'top:10px',
@@ -6088,7 +6091,7 @@ function updateExamFocusCountBadge() {
     document.body.appendChild(badge);
     examFocus.countBadgeEl = badge;
   }
-  examFocus.countBadgeEl.textContent = `⚠ Left tab ${n}×`;
+  examFocus.countBadgeEl.textContent = t('⚠ Left tab {n}×', { n });
   examFocus.countBadgeEl.style.display = n > 0 ? 'block' : 'none';
 }
 
@@ -6133,8 +6136,8 @@ function showExamFocusOverlay() {
   // overlay text reflects the trip the student is currently on.
   const n = examFocus.count;
   const numHtml = `<span style="color:#f87171; font-size:1.15em; font-weight:800;">${n}</span>`;
-  const suffix = n === 1 ? 'time' : 'times';
-  const timesHtml = `You've left this page ${numHtml} ${suffix} so far.`;
+  const suffix = n === 1 ? t('time') : t('times');
+  const timesHtml = t("You've left this page {num} {unit} so far.", { num: numHtml, unit: suffix });
 
   if (examFocus.overlayEl) {
     examFocus.overlayEl.classList.remove('hidden');
@@ -6171,10 +6174,10 @@ function showExamFocusOverlay() {
   ].join(';');
   card.innerHTML = `
     <div style="font-size:34px; line-height:1; margin-bottom:8px;">⚠️</div>
-    <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">Quiz paused</div>
-    <div style="font-size:0.9rem; opacity:0.85; margin-bottom:8px;">You left this page. Your teacher will see this on your results.</div>
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px;">${t('Quiz paused')}</div>
+    <div style="font-size:0.9rem; opacity:0.85; margin-bottom:8px;">${t('You left this page. Your teacher will see this on your results.')}</div>
     <div data-exam-count style="font-size:0.85rem; opacity:0.95; color:#fbbf24; margin-bottom:14px; font-weight:600;">${timesHtml}</div>
-    <div style="font-size:0.8rem; opacity:0.6;">Click anywhere to resume</div>
+    <div style="font-size:0.8rem; opacity:0.6;">${t('Click anywhere to resume')}</div>
   `;
 
   overlay.appendChild(card);
@@ -6611,8 +6614,8 @@ function formatPartialScore(n) {
 }
 
 function partialCreditLabel(qType, partialScore, partialTotal) {
-  if (qType === 'context_gap') return `Partial · ${formatPartialScore(partialScore)}/${partialTotal} gaps`;
-  return `Partial · half credit (diacritic)`;
+  if (qType === 'context_gap') return t('Partial · {score}/{total} gaps', { score: formatPartialScore(partialScore), total: partialTotal });
+  return t('Partial · half credit (diacritic)');
 }
 
 function isPartialCreditType(qType) {
@@ -6860,12 +6863,12 @@ function renderVoiceRecorder(container, question) {
   const recordBtn = document.createElement('button');
   recordBtn.type = 'button';
   recordBtn.className = 'btn voice-record-btn';
-  recordBtn.innerHTML = '🎙️ Record <kbd>R</kbd>';
+  recordBtn.innerHTML = t('🎙️ Record') + ' <kbd>R</kbd>';
 
   const stopBtn = document.createElement('button');
   stopBtn.type = 'button';
   stopBtn.className = 'btn voice-record-stop-btn hidden';
-  stopBtn.innerHTML = '⏹ Stop <kbd>R</kbd>';
+  stopBtn.innerHTML = t('⏹ Stop') + ' <kbd>R</kbd>';
 
   const timerEl = document.createElement('div');
   timerEl.className = 'voice-record-status hidden';
@@ -6905,7 +6908,7 @@ function renderVoiceRecorder(container, question) {
       const rerecordBtn = document.createElement('button');
       rerecordBtn.type = 'button';
       rerecordBtn.className = 'btn';
-      rerecordBtn.textContent = '🔄 Re-record';
+      rerecordBtn.textContent = t('🔄 Re-record');
       rerecordBtn.onclick = () => {
         previewWrap.classList.add('hidden');
         recordBtn.classList.remove('hidden');
@@ -6918,7 +6921,7 @@ function renderVoiceRecorder(container, question) {
     }
   } else if (live.player.assignment.reviewMode) {
     recordBtn.classList.add('hidden');
-    statusEl.textContent = '(No recording provided)';
+    statusEl.textContent = t('(No recording provided)');
   }
 
   const MAX_DURATION_SEC = 120;
@@ -6934,7 +6937,7 @@ function renderVoiceRecorder(container, question) {
     const rerecordBtn = document.createElement('button');
     rerecordBtn.type = 'button';
     rerecordBtn.className = 'btn';
-    rerecordBtn.textContent = '🔄 Re-record';
+    rerecordBtn.textContent = t('🔄 Re-record');
     rerecordBtn.addEventListener('click', () => {
       _cleanupVoiceRecordStream();
       _voiceRecordUpload = null;
@@ -6957,7 +6960,7 @@ function renderVoiceRecorder(container, question) {
   async function uploadBlob(blob, durationMs, transcript) {
     const mimeType = blob.type || 'audio/webm';
     _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null, transcript: transcript || '' };
-    statusEl.textContent = 'Uploading…';
+    statusEl.textContent = t('Uploading…');
     statusEl.className = 'voice-record-upload-status uploading';
 
     try {
@@ -6998,11 +7001,11 @@ function renderVoiceRecorder(container, question) {
       if (!mediaKey) throw new Error('No media key returned');
 
       _voiceRecordUpload = { url: mediaKey, durationMs, mimeType, uploading: false, error: null, transcript: transcript || '' };
-      statusEl.textContent = '✓ Uploaded';
+      statusEl.textContent = t('✓ Uploaded');
       statusEl.className = 'voice-record-upload-status uploaded';
     } catch (err) {
       _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: false, error: err.message, transcript: transcript || '' };
-      statusEl.textContent = `⚠ ${err.message}. Tap to retry.`;
+      statusEl.textContent = t('⚠ {msg}. Tap to retry.', { msg: err.message });
       statusEl.className = 'voice-record-upload-status error';
       statusEl.style.cursor = 'pointer';
       statusEl.onclick = () => { statusEl.onclick = null; uploadBlob(blob, durationMs, transcript); };
@@ -7018,19 +7021,19 @@ function renderVoiceRecorder(container, question) {
       statusEl.innerHTML = '';
       const n = err?.name || '';
       if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
-        statusEl.textContent = 'Mic access denied. Allow the microphone in browser settings, then ';
+        statusEl.textContent = t('Mic access denied. Allow the microphone in browser settings, then ');
         const reloadLink = document.createElement('a');
         reloadLink.href = '#';
-        reloadLink.textContent = 'reload the page';
+        reloadLink.textContent = t('reload the page');
         reloadLink.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
         statusEl.appendChild(reloadLink);
         statusEl.appendChild(document.createTextNode('.'));
       } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
-        statusEl.textContent = 'No microphone found. Connect a mic and try again.';
+        statusEl.textContent = t('No microphone found. Connect a mic and try again.');
       } else if (n === 'NotReadableError' || n === 'TrackStartError') {
-        statusEl.textContent = 'Microphone is in use by another app. Close it and try again.';
+        statusEl.textContent = t('Microphone is in use by another app. Close it and try again.');
       } else {
-        statusEl.textContent = `Mic error: ${err?.message || err}`;
+        statusEl.textContent = t('Mic error: {msg}', { msg: err?.message || err });
       }
       statusEl.className = 'voice-record-upload-status error';
       // Mic failed to open — bring ambient back so the student isn't left in silence.
@@ -7064,7 +7067,7 @@ function renderVoiceRecorder(container, question) {
       stopBtn.classList.add('hidden');
 
       if (blob.size > MAX_SIZE_BYTES) {
-        statusEl.textContent = `Recording too large (${(blob.size / 1024 / 1024).toFixed(1)} MB, max ${MAX_SIZE_BYTES / 1024 / 1024} MB). Try again.`;
+        statusEl.textContent = t('Recording too large ({size} MB, max {max} MB). Try again.', { size: (blob.size / 1024 / 1024).toFixed(1), max: MAX_SIZE_BYTES / 1024 / 1024 });
         statusEl.className = 'voice-record-upload-status error';
         recordBtn.classList.remove('hidden');
         _voiceRecordStream?.getTracks().forEach((t) => t.stop());
@@ -7132,7 +7135,7 @@ function renderImageAnswerInput(container, question) {
   const pickBtn = document.createElement('button');
   pickBtn.type = 'button';
   pickBtn.className = 'btn image-answer-pick-btn';
-  pickBtn.innerHTML = '📷 Add a photo';
+  pickBtn.innerHTML = t('📷 Add a photo');
 
   // Plain image/* input — lets phones offer camera OR gallery (no forced capture).
   const fileInput = document.createElement('input');
@@ -7161,7 +7164,7 @@ function renderImageAnswerInput(container, question) {
       const replaceBtn = document.createElement('button');
       replaceBtn.type = 'button';
       replaceBtn.className = 'btn';
-      replaceBtn.textContent = '🔄 Replace';
+      replaceBtn.textContent = t('🔄 Replace');
       replaceBtn.addEventListener('click', () => fileInput.click());
       previewWrap.appendChild(replaceBtn);
     }
@@ -7187,7 +7190,7 @@ function renderImageAnswerInput(container, question) {
     showPreview(src);
   } else if (reviewMode) {
     pickBtn.classList.add('hidden');
-    statusEl.textContent = '(No image submitted)';
+    statusEl.textContent = t('(No image submitted)');
   }
 
   if (reviewMode) {
@@ -7201,12 +7204,12 @@ function renderImageAnswerInput(container, question) {
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
     if (!String(file.type || '').startsWith('image/')) {
-      statusEl.textContent = 'Please choose an image file.';
+      statusEl.textContent = t('Please choose an image file.');
       statusEl.className = 'image-answer-upload-status error';
       return;
     }
     if (file.size > IMAGE_ANSWER_MAX_BYTES) {
-      statusEl.textContent = `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB, max ${IMAGE_ANSWER_MAX_BYTES / 1024 / 1024} MB).`;
+      statusEl.textContent = t('Image too large ({size} MB, max {max} MB).', { size: (file.size / 1024 / 1024).toFixed(1), max: IMAGE_ANSWER_MAX_BYTES / 1024 / 1024 });
       statusEl.className = 'image-answer-upload-status error';
       return;
     }
@@ -7240,12 +7243,12 @@ async function downscaleImageForUpload(file, maxEdge = 1600, quality = 0.82) {
 }
 
 async function uploadImageBlob(file, statusEl) {
-  statusEl.textContent = 'Processing…';
+  statusEl.textContent = t('Processing…');
   statusEl.className = 'image-answer-upload-status uploading';
   const blob = await downscaleImageForUpload(file);
   const mimeType = blob.type || 'image/jpeg';
   _imageAnswerUpload = { url: null, mimeType, uploading: true, error: null };
-  statusEl.textContent = 'Uploading…';
+  statusEl.textContent = t('Uploading…');
 
   try {
     const ext = mimeType.includes('png') ? '.png'
@@ -7289,11 +7292,11 @@ async function uploadImageBlob(file, statusEl) {
     if (!mediaKey) throw new Error('No media key returned');
 
     _imageAnswerUpload = { url: mediaKey, mimeType, uploading: false, error: null };
-    statusEl.textContent = '✓ Uploaded';
+    statusEl.textContent = t('✓ Uploaded');
     statusEl.className = 'image-answer-upload-status uploaded';
   } catch (err) {
     _imageAnswerUpload = { url: null, mimeType, uploading: false, error: err.message };
-    statusEl.textContent = `⚠ ${err.message}. Tap to retry.`;
+    statusEl.textContent = t('⚠ {msg}. Tap to retry.', { msg: err.message });
     statusEl.className = 'image-answer-upload-status error';
     statusEl.style.cursor = 'pointer';
     statusEl.onclick = () => { statusEl.onclick = null; uploadImageBlob(file, statusEl); };
@@ -7361,11 +7364,11 @@ function renderVoiceTextRecognizer(container, question) {
     typed.type = 'text';
     typed.className = 'join-answer-input';
     typed.maxLength = 120;
-    typed.placeholder = 'Speech recognition not supported — type your answer';
+    typed.placeholder = t('Speech recognition not supported — type your answer');
     typed.value = hidden.value || '';
     typed.addEventListener('input', () => { hidden.value = typed.value; });
     if (isLocked) typed.disabled = true;
-    statusEl.textContent = 'Speech recognition not available in this browser. Use Chrome, Edge or Safari.';
+    statusEl.textContent = t('Speech recognition not available in this browser. Use Chrome, Edge or Safari.');
     wrap.append(typed, statusEl);
     container.appendChild(wrap);
     return;
@@ -7374,13 +7377,13 @@ function renderVoiceTextRecognizer(container, question) {
   const micBtn = document.createElement('button');
   micBtn.type = 'button';
   micBtn.className = 'btn voice-text-mic-btn';
-  micBtn.textContent = '🎤 Tap to speak';
+  micBtn.textContent = t('🎤 Tap to speak');
   micBtn.disabled = isLocked;
 
   const stopBtn = document.createElement('button');
   stopBtn.type = 'button';
   stopBtn.className = 'btn voice-text-stop-btn hidden';
-  stopBtn.textContent = '■ Stop';
+  stopBtn.textContent = t('■ Stop');
 
   wrap.append(micBtn, stopBtn, transcriptEl, statusEl);
   container.appendChild(wrap);
@@ -7405,7 +7408,7 @@ function renderVoiceTextRecognizer(container, question) {
     micBtn.classList.remove('hidden');
     stopBtn.classList.add('hidden');
     micBtn.textContent = finalTranscript ? '🎤 Re-record' : '🎤 Tap to speak';
-    if (finalTranscript) statusEl.textContent = 'Saved. Tap Submit to grade.';
+    if (finalTranscript) statusEl.textContent = t('Saved. Tap Submit to grade.');
     if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
   };
 
@@ -7479,7 +7482,7 @@ function renderVoiceTextRecognizer(container, question) {
             _voiceTextRecognition = r2;
           } catch (err2) {
             _userListening = false;
-            statusEl.textContent = `Could not start mic: ${err2?.message || err2}`;
+            statusEl.textContent = t('Could not start mic: {msg}', { msg: err2?.message || err2 });
             finalizeUI();
           }
         }
@@ -7501,7 +7504,7 @@ function renderVoiceTextRecognizer(container, question) {
 
     micBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
-    statusEl.textContent = 'Listening…';
+    statusEl.textContent = t('Listening…');
     startRecognition();
   });
 

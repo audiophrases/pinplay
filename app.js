@@ -849,7 +849,7 @@ function setupCreateAccess() {
         if (createWorkspace) createWorkspace.classList.add('hidden');
         if (createAuthCard) {
           createAuthCard.classList.remove('hidden');
-          setStatus(createAuthStatusEl, 'Guest access expired or revoked. Sign in to continue.', 'bad');
+          setStatus(createAuthStatusEl, t('Guest access expired or revoked. Sign in to continue.'), 'bad');
         }
       }
     };
@@ -866,12 +866,12 @@ function setupCreateAccess() {
       }
       pendingDeadAcute = false;
       if (!value) {
-        setStatus(createAuthStatusEl, 'Enter password', 'bad');
+        setStatus(createAuthStatusEl, t('Enter password'), 'bad');
         return;
       }
 
       if (unlockCreateBtn) unlockCreateBtn.disabled = true;
-      setStatus(createAuthStatusEl, 'Checking password…', 'ok');
+      setStatus(createAuthStatusEl, t('Checking password…'), 'ok');
 
       const authResult = await api('/api/create/auth', {
         method: 'POST',
@@ -883,7 +883,7 @@ function setupCreateAccess() {
       creatorWsid = authResult?.wsid || null;
       if (createWorkspace) createWorkspace.classList.remove('hidden');
       if (createAuthCard) createAuthCard.classList.add('hidden');
-      setStatus(createAuthStatusEl, 'Unlocked ✅', 'ok');
+      setStatus(createAuthStatusEl, t('Unlocked ✅'), 'ok');
       if (createPasswordEl) createPasswordEl.value = '';
       // Owner: initialize the guest-workspaces admin tile lazily on first expand.
       if (creatorRole === 'owner') initWorkspacesAdmin();
@@ -1323,10 +1323,10 @@ function bindBuilderEvents() {
       const fallback = String(quiz.title || 'Untitled quiz').trim() || 'Untitled quiz';
       const autoName = `${fallback} (${new Date().toLocaleString()})`;
       const saved = saveQuizToLibrary(autoName, quiz);
-      setStatus(hostStatusEl, `Saved locally: ${saved.name}`, 'ok');
+      setStatus(hostStatusEl, t('Saved locally: {name}', { name: saved.name }), 'ok');
       openLocalLibraryDialog({ highlightId: saved.id });
     } catch (err) {
-      setStatus(hostStatusEl, `Save failed: ${err.message}`, 'bad');
+      setStatus(hostStatusEl, t('Save failed: {msg}', { msg: err.message }), 'bad');
     }
   });
 
@@ -1342,14 +1342,14 @@ function bindBuilderEvents() {
       syncQuizFromUI();
       const missingOtherVoice = collectMissingOtherTtsVoiceIssues(quiz);
       if (missingOtherVoice.length) {
-        setStatus(hostStatusEl, `⚠️ ${missingOtherVoice.join(', ')} use ttsLanguage:"OTHER" without a valid Edge voice code. Default voice will be used on export.`, 'checking');
+        setStatus(hostStatusEl, t('⚠️ {voices} use ttsLanguage:"OTHER" without a valid Edge voice code. Default voice will be used on export.', { voices: missingOtherVoice.join(', ') }), 'checking');
       }
       await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
 
       downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
-      setStatus(hostStatusEl, 'Exported with validated media + auto-filled images.', 'ok');
+      setStatus(hostStatusEl, t('Exported with validated media + auto-filled images.'), 'ok');
     } catch (err) {
-      setStatus(hostStatusEl, `Export failed: ${err.message}`, 'bad');
+      setStatus(hostStatusEl, t('Export failed: {msg}', { msg: err.message }), 'bad');
     }
   });
 
@@ -1358,9 +1358,9 @@ function bindBuilderEvents() {
       try {
         syncQuizFromUI();
         exportQuizToPdf(quiz);
-        setStatus(hostStatusEl, 'PDF preview opened — use the print dialog to save as PDF.', 'ok');
+        setStatus(hostStatusEl, t('PDF preview opened — use the print dialog to save as PDF.'), 'ok');
       } catch (err) {
-        setStatus(hostStatusEl, `PDF export failed: ${err.message}`, 'bad');
+        setStatus(hostStatusEl, t('PDF export failed: {msg}', { msg: err.message }), 'bad');
       }
     });
   }
@@ -1511,7 +1511,7 @@ function bindBuilderEvents() {
       }
 
       if (byIndex.size === 0) {
-        setStatus(hostStatusEl, 'No numbered media files found. Name files 1.jpg, 2.jpg … or 1.mp3, 2.mp3 …', 'bad');
+        setStatus(hostStatusEl, t('No numbered media files found. Name files 1.jpg, 2.jpg … or 1.mp3, 2.mp3 …'), 'bad');
         return;
       }
 
@@ -1528,7 +1528,7 @@ function bindBuilderEvents() {
             replaceQuestionImageData(q, data);
             applied++;
           } catch (err) {
-            setStatus(hostStatusEl, `Q${num}: image failed – ${err.message}`, 'bad');
+            setStatus(hostStatusEl, t('Q{num}: image failed – {msg}', { num, msg: err.message }), 'bad');
           }
         }
         if (audio) {
@@ -1540,16 +1540,16 @@ function bindBuilderEvents() {
             q._userAudioUploaded = true;
             applied++;
           } catch (err) {
-            setStatus(hostStatusEl, `Q${num}: audio failed – ${err.message}`, 'bad');
+            setStatus(hostStatusEl, t('Q{num}: audio failed – {msg}', { num, msg: err.message }), 'bad');
           }
         }
       }
 
       if (applied > 0) {
         renderBuilder();
-        setStatus(hostStatusEl, `Media batch applied: ${applied} file(s) assigned to ${byIndex.size} question(s).`, 'ok');
+        setStatus(hostStatusEl, t('Media batch applied: {applied} file(s) assigned to {count} question(s).', { applied, count: byIndex.size }), 'ok');
       } else {
-        setStatus(hostStatusEl, 'No files were matched to existing questions.', 'bad');
+        setStatus(hostStatusEl, t('No files were matched to existing questions.'), 'bad');
       }
     });
   }
@@ -1646,7 +1646,7 @@ function bindBuilderEvents() {
       if (!q) return;
       replaceQuestionImageData(q, '');
       renderBuilder();
-      setStatus(hostStatusEl, `Image cleared from Q${idx + 1}.`, 'ok');
+      setStatus(hostStatusEl, t('Image cleared from Q{n}.', { n: idx + 1 }), 'ok');
       return;
     }
 
@@ -1875,7 +1875,7 @@ function bindBuilderEvents() {
           replaceQuestionImageData(q, nextImageData);
           applied = true;
         } catch (err) {
-          setStatus(hostStatusEl, `Image load failed: ${err.message}`, 'bad');
+          setStatus(hostStatusEl, t('Image load failed: {msg}', { msg: err.message }), 'bad');
         }
       }
       if (audioFile) {
@@ -1887,14 +1887,14 @@ function bindBuilderEvents() {
           q._userAudioUploaded = true;
           applied = true;
         } catch (err) {
-          setStatus(hostStatusEl, `Audio load failed: ${err.message}`, 'bad');
+          setStatus(hostStatusEl, t('Audio load failed: {msg}', { msg: err.message }), 'bad');
         }
       }
       if (applied) {
         renderBuilder();
-        setStatus(hostStatusEl, `File(s) applied to Q${idx + 1}.`, 'ok');
+        setStatus(hostStatusEl, t('File(s) applied to Q{n}.', { n: idx + 1 }), 'ok');
       } else if (files.length > 0) {
-        setStatus(hostStatusEl, 'Unsupported file type. Drop an image or audio file.', 'bad');
+        setStatus(hostStatusEl, t('Unsupported file type. Drop an image or audio file.'), 'bad');
       }
       return;
     }
@@ -1936,7 +1936,7 @@ function bindBuilderEvents() {
       const nextImageData = await imageFileToOptimizedDataUrl(file);
       replaceQuestionImageData(q, nextImageData);
       renderBuilder();
-      setStatus(hostStatusEl, `Image pasted into Q${idx + 1} (optimized).`, 'ok');
+      setStatus(hostStatusEl, t('Image pasted into Q{n} (optimized).', { n: idx + 1 }), 'ok');
     } catch (err) {
       setStatus(hostStatusEl, err.message || 'Could not paste image.', 'bad');
     }
@@ -2055,7 +2055,7 @@ function bindBuilderEvents() {
       if (!file) return;
 
       if (!file.type.startsWith('image/')) {
-        alert('Please choose an image file.');
+        alert(t('Please choose an image file.'));
         return;
       }
 
@@ -2064,7 +2064,7 @@ function bindBuilderEvents() {
         replaceQuestionImageData(q, nextImageData);
         renderBuilder();
       } catch (err) {
-        alert(`Image load failed: ${err.message}`);
+        alert(t('Image load failed: {msg}', { msg: err.message }));
       }
       return;
     }
@@ -2079,7 +2079,7 @@ function bindBuilderEvents() {
       if (!file) return;
 
       if (!file.type.startsWith('image/')) {
-        alert('Please choose an image file.');
+        alert(t('Please choose an image file.'));
         return;
       }
 
@@ -2088,7 +2088,7 @@ function bindBuilderEvents() {
         replaceQuestionImageData(q, nextImageData);
         renderBuilder();
       } catch (err) {
-        alert(`Image load failed: ${err.message}`);
+        alert(t('Image load failed: {msg}', { msg: err.message }));
       }
       return;
     }
@@ -2103,7 +2103,7 @@ function bindBuilderEvents() {
       const file = audioUpload.files?.[0];
       if (!file) return;
       if (!file.type.startsWith('audio/')) {
-        alert('Please choose an audio file.');
+        alert(t('Please choose an audio file.'));
         return;
       }
 
@@ -2115,7 +2115,7 @@ function bindBuilderEvents() {
         q._userAudioUploaded = true;
         renderBuilder();
       } catch (err) {
-        alert(`Audio load failed: ${err.message}`);
+        alert(t('Audio load failed: {msg}', { msg: err.message }));
       }
     }
   });
@@ -2154,7 +2154,7 @@ function renderBuilder() {
   questionListEl.innerHTML = '';
 
   if (!quiz.questions.length) {
-    questionListEl.innerHTML = '<p class="muted">No questions yet. Add one above.</p>';
+    questionListEl.innerHTML = t('<p class="muted">No questions yet. Add one above.</p>');
     return;
   }
 
@@ -3410,10 +3410,10 @@ async function openImageSearchDialog(questionIdx) {
   const head = document.createElement('div');
   head.className = 'row spread gap';
   const h = document.createElement('h3');
-  h.textContent = 'Search web images';
+  h.textContent = t('Search web images');
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn';
-  closeBtn.textContent = 'Close';
+  closeBtn.textContent = t('Close');
   closeBtn.addEventListener('click', () => overlay.remove());
   head.append(h, closeBtn);
 
@@ -3421,11 +3421,11 @@ async function openImageSearchDialog(questionIdx) {
   row.className = 'row gap top-space';
   const input = document.createElement('input');
   input.type = 'text';
-  input.placeholder = 'Search query';
+  input.placeholder = t('Search query');
   input.value = String(q.prompt || q.type || '').slice(0, 140);
   const searchBtn = document.createElement('button');
   searchBtn.className = 'btn primary';
-  searchBtn.textContent = 'Search';
+  searchBtn.textContent = t('Search');
   row.append(input, searchBtn);
 
   const status = document.createElement('p');
@@ -3439,10 +3439,10 @@ async function openImageSearchDialog(questionIdx) {
   const runSearch = async () => {
     const query = String(input.value || '').trim();
     if (!query) {
-      status.textContent = 'Enter a search query.';
+      status.textContent = t('Enter a search query.');
       return;
     }
-    status.textContent = 'Searching images...';
+    status.textContent = t('Searching images...');
     results.innerHTML = '';
 
     try {
@@ -3498,7 +3498,7 @@ async function openImageSearchDialog(questionIdx) {
 
       const items = allItems;
       if (!items.length) {
-        status.textContent = 'No images found.';
+        status.textContent = t('No images found.');
         return;
       }
       status.textContent = `Found ${items.length} images. Click an image to import.`;
@@ -3528,7 +3528,7 @@ async function openImageSearchDialog(questionIdx) {
             const resized = await imageFileToOptimizedDataUrl(blob);
             replaceQuestionImageData(q, resized);
             renderBuilder();
-            setStatus(hostStatusEl, 'Image added from web search.', 'ok');
+            setStatus(hostStatusEl, t('Image added from web search.'), 'ok');
             overlay.remove();
           } catch (err) {
             setStatus(hostStatusEl, err.message || 'Could not import image.', 'bad');
@@ -3594,10 +3594,10 @@ async function openGifSearchDialog(questionIdx) {
   const head = document.createElement('div');
   head.className = 'row spread gap';
   const h = document.createElement('h3');
-  h.textContent = 'Search GIFs (GIPHY)';
+  h.textContent = t('Search GIFs (GIPHY)');
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn';
-  closeBtn.textContent = 'Close';
+  closeBtn.textContent = t('Close');
   closeBtn.addEventListener('click', () => overlay.remove());
   head.append(h, closeBtn);
 
@@ -3605,11 +3605,11 @@ async function openGifSearchDialog(questionIdx) {
   row.className = 'row gap top-space';
   const input = document.createElement('input');
   input.type = 'text';
-  input.placeholder = 'Search GIFs';
+  input.placeholder = t('Search GIFs');
   input.value = String(q.gifKeyword || q.prompt || '').slice(0, 140);
   const searchBtn = document.createElement('button');
   searchBtn.className = 'btn primary';
-  searchBtn.textContent = 'Search';
+  searchBtn.textContent = t('Search');
   row.append(input, searchBtn);
 
   const status = document.createElement('p');
@@ -3623,16 +3623,16 @@ async function openGifSearchDialog(questionIdx) {
   const runSearch = async () => {
     const query = String(input.value || '').trim();
     if (!query) {
-      status.textContent = 'Enter a search query.';
+      status.textContent = t('Enter a search query.');
       return;
     }
-    status.textContent = 'Searching GIFs...';
+    status.textContent = t('Searching GIFs...');
     results.innerHTML = '';
 
     try {
       const items = await giphySearch(query, 24);
       if (!items.length) {
-        status.textContent = 'No GIFs found.';
+        status.textContent = t('No GIFs found.');
         return;
       }
       status.textContent = `Found ${items.length} GIFs. Click one to use.`;
@@ -3654,7 +3654,7 @@ async function openGifSearchDialog(questionIdx) {
         card.addEventListener('click', () => {
           replaceQuestionImageData(q, item.url);
           renderBuilder();
-          setStatus(hostStatusEl, 'GIF embedded from GIPHY.', 'ok');
+          setStatus(hostStatusEl, t('GIF embedded from GIPHY.'), 'ok');
           overlay.remove();
         });
         card.append(img);
@@ -3696,7 +3696,7 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = n
   h.textContent = title;
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn';
-  closeBtn.textContent = 'Close';
+  closeBtn.textContent = t('Close');
   closeBtn.addEventListener('click', () => overlay.remove());
   head.append(h, closeBtn);
 
@@ -3706,7 +3706,7 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = n
   if (!items.length) {
     const p = document.createElement('p');
     p.className = 'small';
-    p.textContent = 'No saved quizzes found.';
+    p.textContent = t('No saved quizzes found.');
     list.appendChild(p);
   } else {
     items.forEach((item) => {
@@ -3768,12 +3768,12 @@ function openLocalLibraryDialog(opts = {}) {
       collapseAllQuestions(quiz);
       renderBuilder();
       saveQuiz(quiz);
-      setStatus(hostStatusEl, `Loaded local save: ${chosen.name}`, 'ok');
+      setStatus(hostStatusEl, t('Loaded local save: {name}', { name: chosen.name }), 'ok');
     },
     onDelete: async (item) => {
       const next = loadQuizLibrary().filter((x) => x.id !== item.id);
       saveQuizLibrary(next);
-      setStatus(hostStatusEl, `Deleted local save: ${item.raw.name}`, 'ok');
+      setStatus(hostStatusEl, t('Deleted local save: {name}', { name: item.raw.name }), 'ok');
     },
     highlightId: opts.highlightId || null,
   });
@@ -3783,13 +3783,13 @@ function openLocalLibraryDialog(opts = {}) {
 async function openQuizFromCloud() {
   try {
     const base = loadBackendUrl() || 'https://api.pinplay.win';
-    setStatus(hostStatusEl, '☁️ Loading quizzes from cloud...', 'ok');
+    setStatus(hostStatusEl, t('☁️ Loading quizzes from cloud...'), 'ok');
 
     const data = await api('/api/quizzes', { method: 'GET', headers: { Authorization: `Bearer ${createSessionPassword}` } });
     const cloudQuizzes = Array.isArray(data?.quizzes) ? data.quizzes : [];
 
     if (!cloudQuizzes.length) {
-      setStatus(hostStatusEl, 'No quizzes in cloud yet. Import a quiz first!', 'ok');
+      setStatus(hostStatusEl, t('No quizzes in cloud yet. Import a quiz first!'), 'ok');
       return;
     }
 
@@ -3803,7 +3803,7 @@ async function openQuizFromCloud() {
       onOpen: async (item) => {
         const quizKey = item.raw.key;
         const base = loadBackendUrl() || 'https://api.pinplay.win';
-        setStatus(hostStatusEl, '☁️ Loading from cloud...', 'ok');
+        setStatus(hostStatusEl, t('☁️ Loading from cloud...'), 'ok');
         const res = await fetch(`${base}/api/media/${quizKey}`);
         if (!res.ok) throw new Error('Failed to load quiz from cloud');
         const loadedQuiz = await res.json();
@@ -3817,18 +3817,18 @@ async function openQuizFromCloud() {
         collapseAllQuestions(quiz);
         renderBuilder();
         saveQuiz(quiz);
-        setStatus(hostStatusEl, `✅ Loaded: ${item.label}`, 'ok');
+        setStatus(hostStatusEl, t('✅ Loaded: {label}', { label: item.label }), 'ok');
       },
       onDelete: async (item) => {
         // Delete from R2 via Worker API
         const quizKey = item.raw.key;
         await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
-        setStatus(hostStatusEl, `Deleted from Cloud: ${item.label}`, 'ok');
+        setStatus(hostStatusEl, t('Deleted from Cloud: {label}', { label: item.label }), 'ok');
       },
       highlightId: null,
     });
   } catch (err) {
-    setStatus(hostStatusEl, `Cloud load failed: ${err.message}`, 'bad');
+    setStatus(hostStatusEl, t('Cloud load failed: {msg}', { msg: err.message }), 'bad');
   }
 }
 
@@ -3848,11 +3848,11 @@ async function saveQuizToCloud() {
     const payload = JSON.stringify({ quiz, quizId });
     const payloadHash = hashStringInt(payload);
     if (quiz._lastCloudHash === payloadHash) {
-      setStatus(hostStatusEl, `✅ Already saved: ${quiz.title || 'Quiz'} (no changes)`, 'ok');
+      setStatus(hostStatusEl, t('✅ Already saved: {title} (no changes)', { title: quiz.title || 'Quiz' }), 'ok');
       return;
     }
 
-    setStatus(hostStatusEl, '☁️ Uploading quiz to cloud...', 'ok');
+    setStatus(hostStatusEl, t('☁️ Uploading quiz to cloud...'), 'ok');
 
     // Upload quiz JSON to R2 (with title and questions for listing)
     const res = await fetch(`${base}/api/quizzes/upload`, {
@@ -3865,13 +3865,13 @@ async function saveQuizToCloud() {
     const data = await res.json();
     quiz._lastCloudHash = payloadHash;
 
-    setStatus(hostStatusEl, `✅ Saved: ${quiz.title || 'Quiz'} (PIN when playing)`, 'ok');
+    setStatus(hostStatusEl, t('✅ Saved: {title} (PIN when playing)', { title: quiz.title || 'Quiz' }), 'ok');
 
     window.dispatchEvent(new CustomEvent('pinplay:quiz-persisted', {
       detail: { source_id: quizId, quiz },
     }));
   } catch (err) {
-    setStatus(hostStatusEl, `Cloud save failed: ${err.message}`, 'bad');
+    setStatus(hostStatusEl, t('Cloud save failed: {msg}', { msg: err.message }), 'bad');
   }
 }
 
@@ -3894,7 +3894,7 @@ async function exportCreationPrompt() {
   const customGoalText = customGoalEl?.value.trim();
 
   if (!theme) {
-    alert('Please enter a theme for the quiz!');
+    alert(t('Please enter a theme for the quiz!'));
     return;
   }
 
@@ -3918,7 +3918,7 @@ async function exportCreationPrompt() {
 
   if (goal === 'custom') {
     if (!customGoalText) {
-      alert('Please enter a custom pedagogical goal before generating the prompt.');
+      alert(t('Please enter a custom pedagogical goal before generating the prompt.'));
       customGoalEl?.focus();
       return;
     }
@@ -4230,13 +4230,13 @@ async function exportCreationPrompt() {
   try {
     await navigator.clipboard.writeText(promptText);
     if (promptStatusEl) {
-      promptStatusEl.textContent = 'Instructions file downloaded — prompt also copied 📋';
+      promptStatusEl.textContent = t('Instructions file downloaded — prompt also copied 📋');
       promptStatusEl.className = 'small ok';
       setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
     }
   } catch (err) {
     if (promptStatusEl) {
-      promptStatusEl.textContent = 'Instructions file downloaded (clipboard copy unavailable).';
+      promptStatusEl.textContent = t('Instructions file downloaded (clipboard copy unavailable).');
       promptStatusEl.className = 'small ok';
       setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
     }
@@ -4443,13 +4443,13 @@ async function customPasswordPrompt(message) {
     btnRow.style.marginTop = '8px';
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = t('Cancel');
     cancelBtn.className = 'btn';
     cancelBtn.style.backgroundColor = 'transparent';
     cancelBtn.style.color = 'var(--text, #333)';
 
     const okBtn = document.createElement('button');
-    okBtn.textContent = 'OK';
+    okBtn.textContent = t('OK');
     okBtn.className = 'btn';
 
     btnRow.append(cancelBtn, okBtn);
@@ -4550,7 +4550,7 @@ function bindLiveEvents() {
   if (gradeByQuestionBtnEl) gradeByQuestionBtnEl.addEventListener('click', () => {
     const code = assignmentResultsCache?.code;
     if (!code) {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open View results on an assignment first.';
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('Open View results on an assignment first.');
       return;
     }
     enterGradeByQuestionMode(code).catch((err) => {
@@ -4560,7 +4560,7 @@ function bindLiveEvents() {
   if (gradeByStudentBtnEl) gradeByStudentBtnEl.addEventListener('click', () => {
     const code = assignmentResultsCache?.code;
     if (!code) {
-      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open View results on an assignment first.';
+      if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('Open View results on an assignment first.');
       return;
     }
     enterGradeByStudentMode(code).catch((err) => {
@@ -4610,7 +4610,7 @@ function bindLiveEvents() {
     if (!joinSubmitBtn) return;
     if (isQuestionMediaFullscreenActive()) {
       joinSubmitBtn.disabled = true;
-      setStatus(joinStatusEl, 'Exit fullscreen to answer.', 'bad');
+      setStatus(joinStatusEl, t('Exit fullscreen to answer.'), 'bad');
     }
   });
 
@@ -4632,7 +4632,7 @@ function bindLiveEvents() {
       previewMode.simClassSeed = Date.now();
       previewMode.simTeacherByQ = {};
       renderPreviewFrame();
-      setStatus(hostStatusEl, 'Unified preview class re-rolled (local grading reset).', 'ok');
+      setStatus(hostStatusEl, t('Unified preview class re-rolled (local grading reset).'), 'ok');
     });
   }
   if (previewResimBtn) {
@@ -4642,7 +4642,7 @@ function bindLiveEvents() {
       const qKey = String(Number(previewMode.index || 0));
       delete previewMode.simTeacherByQ[qKey];
       renderPreviewFrame();
-      setStatus(hostStatusEl, 'Unified preview current question re-simulated.', 'ok');
+      setStatus(hostStatusEl, t('Unified preview current question re-simulated.'), 'ok');
     });
   }
   const jumpPreviewQuestion = () => {
@@ -4653,7 +4653,7 @@ function bindLiveEvents() {
     const idx = Math.max(0, Math.min(total - 1, (Number.isFinite(wanted) ? wanted : 1) - 1));
     previewMode.index = idx;
     renderPreviewFrame();
-    setStatus(hostStatusEl, `Unified preview jumped to Q${idx + 1}.`, 'ok');
+    setStatus(hostStatusEl, t('Unified preview jumped to Q{n}.', { n: idx + 1 }), 'ok');
   };
   if (previewJumpBtn) previewJumpBtn.addEventListener('click', jumpPreviewQuestion);
   if (previewJumpInputEl) {
@@ -4745,7 +4745,7 @@ async function createLiveGame() {
       liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    setStatus(hostStatusEl, 'Live game created. Share the PIN with students.', 'ok');
+    setStatus(hostStatusEl, t('Live game created. Share the PIN with students.'), 'ok');
 
     startHostPolling();
     await pollHostState();
@@ -6361,7 +6361,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
 
     if (!items.length) {
       const li = document.createElement('li');
-      li.textContent = 'No submitted answers yet.';
+      li.textContent = t('No submitted answers yet.');
       assignmentGradingListEl.appendChild(li);
       return;
     }
@@ -6374,7 +6374,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       aiBtn.className = 'btn';
       aiBtn.type = 'button';
       aiBtn.textContent = `Grade with AI (this student, ${teacherGradedCount} answer${teacherGradedCount === 1 ? '' : 's'})`;
-      aiBtn.title = 'Build a ZIP + prompt to grade this student’s teacher-graded answers with an AI';
+      aiBtn.title = t('Build a ZIP + prompt to grade this student’s teacher-graded answers with an AI');
       aiBtn.addEventListener('click', () => {
         runAiGradePack({ scope: 'attempt', code: safeCode, attemptId: safeAttemptId });
       });
@@ -6415,7 +6415,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
           dur.textContent = ` (${Math.round(it.answer.durationMs / 1000)}s)`;
           audioWrap.appendChild(dur);
         }
-        answer.textContent = 'Answer: 🎙️ Voice recording';
+        answer.textContent = t('Answer: 🎙️ Voice recording');
         li.append(head, prompt, answer, audioWrap);
         const transcript = String(it.answer.transcript || '').trim();
         if (transcript) {
@@ -6441,7 +6441,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
 
         const correctionInput = document.createElement('input');
         correctionInput.type = 'text';
-        correctionInput.placeholder = 'Correction (optional)';
+        correctionInput.placeholder = t('Correction (optional)');
         correctionInput.value = String(it?.grade?.correction || '');
         correctionInput.style.maxWidth = '320px';
 
@@ -6460,7 +6460,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         recordBtn.className = 'btn';
         recordBtn.style.padding = '4px 8px';
         recordBtn.innerHTML = '🎙️';
-        recordBtn.title = 'Record voice comment';
+        recordBtn.title = t('Record voice comment');
 
         const saveBtn = document.createElement('button');
         saveBtn.className = 'btn';
@@ -6493,21 +6493,21 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
               
               // Upload
               try {
-                audioStatus.textContent = 'Uploading...';
+                audioStatus.textContent = t('Uploading...');
                 currentAudioKey = await uploadCorrectionAudioBlob(blob, safeCode);
-                audioStatus.textContent = '🎙️ Recorded';
+                audioStatus.textContent = t('🎙️ Recorded');
                 renderAudioPreview();
               } catch (err) {
-                audioStatus.textContent = '❌ Upload failed';
+                audioStatus.textContent = t('❌ Upload failed');
               }
             };
 
             mediaRecorder.start();
             recordBtn.innerHTML = '⏹️';
             recordBtn.classList.add('bad');
-            audioStatus.textContent = 'Recording...';
+            audioStatus.textContent = t('Recording...');
           } catch (err) {
-            alert('Mic access denied or error: ' + err.message);
+            alert(t('Mic access denied or error: ') + err.message);
           }
         });
 
@@ -6624,7 +6624,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
 
   const correctionInput = document.createElement('input');
   correctionInput.type = 'text';
-  correctionInput.placeholder = 'Correction (optional)';
+  correctionInput.placeholder = t('Correction (optional)');
   correctionInput.value = String(initialGrade?.correction || '');
   correctionInput.style.maxWidth = '320px';
   correctionInput.dataset.gradeCorrectionInput = '1';
@@ -6640,7 +6640,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   recordBtn.className = 'btn';
   recordBtn.style.padding = '4px 8px';
   recordBtn.innerHTML = '🎙️';
-  recordBtn.title = 'Record voice comment';
+  recordBtn.title = t('Record voice comment');
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn';
@@ -6693,20 +6693,20 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
         const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
         stream.getTracks().forEach((t) => t.stop());
         try {
-          audioStatus.textContent = 'Uploading...';
+          audioStatus.textContent = t('Uploading...');
           currentAudioKey = await uploadCorrectionAudioBlob(blob, code);
-          audioStatus.textContent = '🎙️ Recorded';
+          audioStatus.textContent = t('🎙️ Recorded');
           renderAudioPreview();
         } catch (err) {
-          audioStatus.textContent = '❌ Upload failed';
+          audioStatus.textContent = t('❌ Upload failed');
         }
       };
       mediaRecorder.start();
       recordBtn.innerHTML = '⏹️';
       recordBtn.classList.add('bad');
-      audioStatus.textContent = 'Recording...';
+      audioStatus.textContent = t('Recording...');
     } catch (err) {
-      alert('Mic access denied or error: ' + err.message);
+      alert(t('Mic access denied or error: ') + err.message);
     }
   });
 
@@ -6714,7 +6714,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
     try {
       saveBtn.disabled = true;
       await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
-      saveBtn.textContent = 'Update grade';
+      saveBtn.textContent = t('Update grade');
       if (assignmentStatusEl) assignmentStatusEl.textContent = `Graded Q${Number(qIndex) + 1} · ${attemptId}.`;
       if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
     } catch (err) {
@@ -7237,20 +7237,20 @@ function renderGradingFocusItem() {
         const blob = new Blob(gradingFocusState.audioChunks, { type: newRec.mimeType || 'audio/webm' });
         stream.getTracks().forEach((t) => t.stop());
         try {
-          audioStatus.textContent = 'Uploading...';
+          audioStatus.textContent = t('Uploading...');
           currentAudioKey = await uploadCorrectionAudioBlob(blob, gradingFocusState.code);
-          audioStatus.textContent = '🎙️ Recorded';
+          audioStatus.textContent = t('🎙️ Recorded');
           renderAudioPreview();
         } catch (err) {
-          audioStatus.textContent = '❌ Upload failed';
+          audioStatus.textContent = t('❌ Upload failed');
         }
       };
       newRec.start();
       recordBtn.innerHTML = '⏹️';
       recordBtn.classList.add('bad');
-      audioStatus.textContent = 'Recording...';
+      audioStatus.textContent = t('Recording...');
     } catch (err) {
-      alert('Mic access denied or error: ' + err.message);
+      alert(t('Mic access denied or error: ') + err.message);
     }
   });
 
@@ -7860,20 +7860,20 @@ function renderStudentGradingFocusItem() {
         const blob = new Blob(studentGradingFocusState.audioChunks, { type: newRec.mimeType || 'audio/webm' });
         stream.getTracks().forEach((t) => t.stop());
         try {
-          audioStatus.textContent = 'Uploading...';
+          audioStatus.textContent = t('Uploading...');
           currentAudioKey = await uploadCorrectionAudioBlob(blob, studentGradingFocusState.code);
-          audioStatus.textContent = '🎙️ Recorded';
+          audioStatus.textContent = t('🎙️ Recorded');
           renderAudioPreview();
         } catch (err) {
-          audioStatus.textContent = '❌ Upload failed';
+          audioStatus.textContent = t('❌ Upload failed');
         }
       };
       newRec.start();
       recordBtn.innerHTML = '⏹️';
       recordBtn.classList.add('bad');
-      audioStatus.textContent = 'Recording...';
+      audioStatus.textContent = t('Recording...');
     } catch (err) {
-      alert('Mic access denied or error: ' + err.message);
+      alert(t('Mic access denied or error: ') + err.message);
     }
   });
 
@@ -8146,7 +8146,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
 
   const backBtn = document.createElement('button');
   backBtn.className = 'btn';
-  backBtn.textContent = '← All questions';
+  backBtn.textContent = t('← All questions');
   backBtn.addEventListener('click', () => {
     enterGradeByQuestionMode(safeCode).catch((err) => {
       if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Overview error: ${err.message}`;
@@ -8156,7 +8156,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
 
   const prevBtn = document.createElement('button');
   prevBtn.className = 'btn';
-  prevBtn.textContent = '‹ Prev question';
+  prevBtn.textContent = t('‹ Prev question');
   prevBtn.addEventListener('click', () => {
     if (Number(qIndex) > 0) {
       enterQuestionGradingFocus(safeCode, Number(qIndex) - 1).catch((err) => {
@@ -8169,7 +8169,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
 
   const nextBtn = document.createElement('button');
   nextBtn.className = 'btn';
-  nextBtn.textContent = 'Next question ›';
+  nextBtn.textContent = t('Next question ›');
   nextBtn.addEventListener('click', () => {
     enterQuestionGradingFocus(safeCode, Number(qIndex) + 1).catch((err) => {
       if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = `Nav error: ${err.message}`;
@@ -8200,7 +8200,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   if (!question.teacherGraded) {
     const li = document.createElement('li');
     li.className = 'small muted';
-    li.textContent = 'This question is auto-graded — no teacher grading needed.';
+    li.textContent = t('This question is auto-graded — no teacher grading needed.');
     assignmentGradingListEl.appendChild(li);
     return;
   }
@@ -8208,7 +8208,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   if (!items.length) {
     const li = document.createElement('li');
     li.className = 'small muted';
-    li.textContent = 'No submitted answers for this question yet.';
+    li.textContent = t('No submitted answers for this question yet.');
     assignmentGradingListEl.appendChild(li);
     return;
   }
@@ -8236,7 +8236,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
     if (String(question.qType || '') === 'voice_record' && it?.answer && typeof it.answer === 'object' && it.answer.audioUrl) {
       const label = document.createElement('div');
       label.className = 'small';
-      label.textContent = 'Answer: 🎙️ Voice recording';
+      label.textContent = t('Answer: 🎙️ Voice recording');
       answerWrap.appendChild(label);
       const audio = document.createElement('audio');
       audio.controls = true;
@@ -8264,7 +8264,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
     } else if (String(question.qType || '') === 'image_open' && it?.answer && typeof it.answer === 'object' && it.answer.imageUrl) {
       const label = document.createElement('div');
       label.className = 'small';
-      label.textContent = 'Answer: 🖼️ Image';
+      label.textContent = t('Answer: 🖼️ Image');
       answerWrap.appendChild(label);
       const img = document.createElement('img');
       let src = String(it.answer.imageUrl || '');
@@ -8324,7 +8324,7 @@ function renderAssignmentResults(safeCode, data) {
     const current = String(assignmentResultsClassFilterEl.value || '');
     const classes = [...new Set(attempts.map((a) => String(a?._class || '').trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b));
-    assignmentResultsClassFilterEl.innerHTML = '<option value="">All classes</option>';
+    assignmentResultsClassFilterEl.innerHTML = t('<option value="">All classes</option>');
     classes.forEach((c) => {
       const opt = document.createElement('option');
       opt.value = c;
@@ -8415,7 +8415,7 @@ function renderAssignmentResults(safeCode, data) {
 
   const selectAll = document.createElement('input');
   selectAll.type = 'checkbox';
-  selectAll.title = 'Select all visible';
+  selectAll.title = t('Select all visible');
   selectAll.style.cssText = 'width:18px; height:18px; cursor:pointer; flex:none; margin:0;';
   const allSelected = filtered.length > 0 && filtered.every((a) => notifySelection.ids.has(String(a?.id || '')));
   selectAll.checked = allSelected;
@@ -8435,7 +8435,7 @@ function renderAssignmentResults(safeCode, data) {
 
   const notifyBtn = document.createElement('button');
   notifyBtn.className = 'btn';
-  notifyBtn.textContent = 'Notify selected';
+  notifyBtn.textContent = t('Notify selected');
   notifyBtn.style.flex = 'none';
   notifyBtn.disabled = notifySelection.ids.size === 0;
   notifyBtn.addEventListener('click', () => {
@@ -8446,8 +8446,8 @@ function renderAssignmentResults(safeCode, data) {
 
   const deleteSelectedBtn = document.createElement('button');
   deleteSelectedBtn.className = 'btn';
-  deleteSelectedBtn.textContent = 'Delete selected';
-  deleteSelectedBtn.title = 'Permanently delete the selected attempts. This cannot be undone.';
+  deleteSelectedBtn.textContent = t('Delete selected');
+  deleteSelectedBtn.title = t('Permanently delete the selected attempts. This cannot be undone.');
   deleteSelectedBtn.style.cssText = 'flex:none; color:#b91c1c; border-color:#b91c1c;';
   deleteSelectedBtn.disabled = notifySelection.ids.size === 0;
   deleteSelectedBtn.addEventListener('click', async () => {
@@ -8494,7 +8494,7 @@ function renderAssignmentResults(safeCode, data) {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = notifySelection.ids.has(attemptId);
-    cb.title = 'Select for notify';
+    cb.title = t('Select for notify');
     cb.style.cssText = 'width:18px; height:18px; cursor:pointer; flex:none; margin:0;';
     cb.addEventListener('change', () => {
       if (cb.checked) notifySelection.ids.add(attemptId);
@@ -8545,14 +8545,14 @@ function renderAssignmentResults(safeCode, data) {
 
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn';
-    gradeBtn.textContent = 'Open grading';
+    gradeBtn.textContent = t('Open grading');
     gradeBtn.addEventListener('click', () => fetchAssignmentAttemptDetail(safeCode, attemptId));
     row.appendChild(gradeBtn);
 
     if (a?.submitted) {
       const reopenBtn = document.createElement('button');
       reopenBtn.className = 'btn';
-      reopenBtn.textContent = 'Reopen attempt';
+      reopenBtn.textContent = t('Reopen attempt');
       reopenBtn.addEventListener('click', async () => {
         try {
           reopenBtn.disabled = true;
@@ -8570,8 +8570,8 @@ function renderAssignmentResults(safeCode, data) {
 
     const deleteAttemptBtn = document.createElement('button');
     deleteAttemptBtn.className = 'btn';
-    deleteAttemptBtn.textContent = 'Delete Attempt';
-    deleteAttemptBtn.title = 'Permanently delete this attempt. This cannot be undone.';
+    deleteAttemptBtn.textContent = t('Delete Attempt');
+    deleteAttemptBtn.title = t('Permanently delete this attempt. This cannot be undone.');
     deleteAttemptBtn.addEventListener('click', async () => {
       const who = String(a?.studentName || 'this student');
       if (!confirm(`Delete ${who}'s attempt? This cannot be undone.`)) return;
@@ -8696,7 +8696,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const subjectLabel = document.createElement('label');
   subjectLabel.className = 'small muted';
-  subjectLabel.textContent = 'Subject (placeholders: {{quizTitle}}, {{quizLink}} — note: {{studentName}} resolves to the first BCC recipient only)';
+  subjectLabel.textContent = t('Subject (placeholders: {{quizTitle}}, {{quizLink}} — note: {{studentName}} resolves to the first BCC recipient only)');
   const subjectInput = document.createElement('input');
   subjectInput.type = 'text';
   subjectInput.value = tpl.subject;
@@ -8704,7 +8704,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const bodyLabel = document.createElement('label');
   bodyLabel.className = 'small muted';
-  bodyLabel.textContent = 'Body';
+  bodyLabel.textContent = t('Body');
   const bodyInput = document.createElement('textarea');
   bodyInput.value = tpl.body;
   bodyInput.rows = 8;
@@ -8712,7 +8712,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const recipientsLabel = document.createElement('label');
   recipientsLabel.className = 'small muted';
-  recipientsLabel.textContent = 'Recipients (BCC)';
+  recipientsLabel.textContent = t('Recipients (BCC)');
   const recipientsBox = document.createElement('textarea');
   recipientsBox.readOnly = true;
   recipientsBox.rows = 3;
@@ -8727,27 +8727,27 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn';
-  closeBtn.textContent = 'Close';
+  closeBtn.textContent = t('Close');
   closeBtn.style.background = 'transparent';
 
   const copyAddrBtn = document.createElement('button');
   copyAddrBtn.className = 'btn';
-  copyAddrBtn.textContent = 'Copy addresses';
+  copyAddrBtn.textContent = t('Copy addresses');
 
   const copyAllBtn = document.createElement('button');
   copyAllBtn.className = 'btn';
-  copyAllBtn.textContent = 'Copy all (one block)';
+  copyAllBtn.textContent = t('Copy all (one block)');
 
   const mailtoBtn = document.createElement('a');
   mailtoBtn.className = 'btn';
-  mailtoBtn.textContent = 'Open in Gmail';
+  mailtoBtn.textContent = t('Open in Gmail');
   mailtoBtn.style.textDecoration = 'none';
   mailtoBtn.target = '_blank';
   mailtoBtn.rel = 'noopener';
 
   const markBtn = document.createElement('button');
   markBtn.className = 'btn';
-  markBtn.textContent = 'Mark as notified';
+  markBtn.textContent = t('Mark as notified');
   markBtn.style.background = '#10b981';
   markBtn.style.color = 'white';
 
@@ -8786,17 +8786,17 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
       mailtoBtn.removeAttribute('href');
       mailtoBtn.style.opacity = '0.5';
       mailtoBtn.style.pointerEvents = 'none';
-      mailtoBtn.title = 'No resolved emails.';
+      mailtoBtn.title = t('No resolved emails.');
     } else if (gmailUrl.length > 7000) {
       mailtoBtn.removeAttribute('href');
       mailtoBtn.style.opacity = '0.5';
       mailtoBtn.style.pointerEvents = 'none';
-      mailtoBtn.title = 'Recipient list too long for a URL — use copy buttons instead.';
+      mailtoBtn.title = t('Recipient list too long for a URL — use copy buttons instead.');
     } else {
       mailtoBtn.href = gmailUrl;
       mailtoBtn.style.opacity = '1';
       mailtoBtn.style.pointerEvents = 'auto';
-      mailtoBtn.title = 'Opens Gmail compose in a new tab with subject, body, and BCCs pre-filled.';
+      mailtoBtn.title = t('Opens Gmail compose in a new tab with subject, body, and BCCs pre-filled.');
     }
   };
 
@@ -8806,7 +8806,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
   copyAddrBtn.addEventListener('click', async () => {
     const ok = await copyTextSmart(recipients.join(', '));
     copyAddrBtn.textContent = ok ? 'Copied!' : 'Copy failed';
-    setTimeout(() => { copyAddrBtn.textContent = 'Copy addresses'; }, 1500);
+    setTimeout(() => { copyAddrBtn.textContent = t('Copy addresses'); }, 1500);
   });
 
   copyAllBtn.addEventListener('click', async () => {
@@ -8820,7 +8820,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     const block = `BCC:\n${recipients.join(', ')}\n\nSubject:\n${applyNotifyTemplate(subject, sampleVars)}\n\nBody:\n${applyNotifyTemplate(body, sampleVars)}`;
     const ok = await copyTextSmart(block);
     copyAllBtn.textContent = ok ? 'Copied!' : 'Copy failed';
-    setTimeout(() => { copyAllBtn.textContent = 'Copy all (one block)'; }, 1500);
+    setTimeout(() => { copyAllBtn.textContent = t('Copy all (one block)'); }, 1500);
   });
 
   markBtn.addEventListener('click', async () => {
@@ -8828,14 +8828,14 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     if (!ids.length) return;
     try {
       markBtn.disabled = true;
-      markBtn.textContent = 'Marking...';
+      markBtn.textContent = t('Marking...');
       await markAttemptsNotified(safeCode, ids);
-      markBtn.textContent = 'Marked ✓';
+      markBtn.textContent = t('Marked ✓');
       if (typeof onAfterMarked === 'function') onAfterMarked();
       setTimeout(cleanup, 600);
     } catch (err) {
       markBtn.disabled = false;
-      markBtn.textContent = 'Mark as notified';
+      markBtn.textContent = t('Mark as notified');
       missingNote.textContent = `Mark failed: ${err.message}`;
     }
   });
@@ -8953,7 +8953,7 @@ async function refreshAssignmentsList() {
     assignmentResultsCache = null;
     if (assignmentListEl) assignmentListEl.innerHTML = '';
     if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = 'Open an attempt to grade teacher-graded answers.';
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('Open an attempt to grade teacher-graded answers.');
 
     const data = await api('/api/assignments/list', {
       method: 'POST',
@@ -8998,7 +8998,7 @@ function renderAssignmentsList() {
 
   if (!list.length) {
     const li = document.createElement('li');
-    li.textContent = 'No assignments yet.';
+    li.textContent = t('No assignments yet.');
     assignmentListEl.appendChild(li);
     return;
   }
@@ -9088,7 +9088,7 @@ function buildAssignmentListItem(a) {
 
   const copyLinkBtn = document.createElement('button');
   copyLinkBtn.className = 'btn';
-  copyLinkBtn.textContent = 'Copy link';
+  copyLinkBtn.textContent = t('Copy link');
   copyLinkBtn.addEventListener('click', async () => {
     const ok = await copyTextSmart(link);
     if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? `Copied link for ${code}` : 'Copy failed';
@@ -9096,8 +9096,8 @@ function buildAssignmentListItem(a) {
 
   const openQuizBtn = document.createElement('button');
   openQuizBtn.className = 'btn';
-  openQuizBtn.textContent = 'Open Quiz';
-  openQuizBtn.title = 'Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.';
+  openQuizBtn.textContent = t('Open Quiz');
+  openQuizBtn.title = t('Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.');
   openQuizBtn.addEventListener('click', async () => {
     try {
       openQuizBtn.disabled = true;
@@ -9111,7 +9111,7 @@ function buildAssignmentListItem(a) {
 
   const viewResultsBtn = document.createElement('button');
   viewResultsBtn.className = 'btn';
-  viewResultsBtn.textContent = 'View results';
+  viewResultsBtn.textContent = t('View results');
   viewResultsBtn.addEventListener('click', () => {
     fetchAssignmentResults(code);
   });
@@ -9163,7 +9163,7 @@ function buildAssignmentListItem(a) {
 
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'btn';
-  deleteBtn.textContent = 'Delete';
+  deleteBtn.textContent = t('Delete');
   deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete assignment ${code}? This cannot be undone.`)) return;
     try {
@@ -9311,7 +9311,7 @@ async function hostApplyBuilderToLive() {
       body: { pin: live.host.pin, quiz: payload },
     });
 
-    setStatus(hostStatusEl, 'Live game updated from builder ✅', 'ok');
+    setStatus(hostStatusEl, t('Live game updated from builder ✅'), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9330,7 +9330,7 @@ function setApplyAssignmentTarget(code, title) {
       : `Save edits back to assignment ${applyTargetAssignmentCode}`;
   } else {
     applyAssignmentBtn.style.display = 'none';
-    applyAssignmentBtn.textContent = 'Apply to Assignment';
+    applyAssignmentBtn.textContent = t('Apply to Assignment');
     applyAssignmentBtn.title = '';
   }
 }
@@ -9388,7 +9388,7 @@ async function openAssignmentInBuilder(code, titleHint) {
   if (assignmentStatusEl) {
     assignmentStatusEl.textContent = `Opened assignment ${codeTrim} in the builder. Edit, then click "Apply to Assignment".`;
   }
-  setStatus(hostStatusEl, `Editing assignment ${codeTrim} — click Apply to Assignment to save changes.`, 'ok');
+  setStatus(hostStatusEl, t('Editing assignment {code} — click Apply to Assignment to save changes.', { code: codeTrim }), 'ok');
 }
 
 async function applyQuizToAssignment() {
@@ -9495,7 +9495,7 @@ async function joinLiveGameAsHostByPin() {
       liveScreenSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    setStatus(hostStatusEl, 'Joined as host by PIN. Controls are live.', 'ok');
+    setStatus(hostStatusEl, t('Joined as host by PIN. Controls are live.'), 'ok');
 
     startHostPolling();
     await pollHostState();
@@ -9649,7 +9649,7 @@ function setRandomNamesToggleState(enabled) {
   if (!randomNamesToggleEl) return;
   const loginRequired = !enabled;
   randomNamesToggleEl.classList.toggle('active', !!loginRequired);
-  randomNamesToggleEl.textContent = 'Login';
+  randomNamesToggleEl.textContent = t('Login');
   randomNamesToggleEl.title = loginRequired ? 'Login required (username + password)' : 'Random names assigned';
 }
 
@@ -9822,7 +9822,7 @@ async function kickPlayer(playerId) {
         playerId,
       },
     });
-    setStatus(hostStatusEl, 'Player removed.', 'ok');
+    setStatus(hostStatusEl, t('Player removed.'), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9850,7 +9850,7 @@ async function renamePlayer(playerId, currentName = '') {
       },
     });
 
-    setStatus(hostStatusEl, `Renamed to ${name}.`, 'ok');
+    setStatus(hostStatusEl, t('Renamed to {name}.', { name }), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9878,7 +9878,7 @@ async function adjustPlayerScore(playerId, currentName = '') {
       },
     });
 
-    setStatus(hostStatusEl, `Score adjusted (${delta > 0 ? '+' : ''}${Math.round(delta)}).`, 'ok');
+    setStatus(hostStatusEl, t('Score adjusted ({delta}).', { delta: (delta > 0 ? '+' : '') + Math.round(delta) }), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9896,7 +9896,7 @@ async function gradeOpenAnswer(playerId, points) {
         graded: true,
         pointsAwarded: safePoints,
       });
-      setStatus(hostStatusEl, `Preview grade applied: ${safePoints} pts.`, 'ok');
+      setStatus(hostStatusEl, t('Preview grade applied: {n} pts.', { n: safePoints }), 'ok');
       renderPreviewFrame();
       return;
     }
@@ -9917,7 +9917,7 @@ async function gradeOpenAnswer(playerId, points) {
       },
     });
 
-    setStatus(hostStatusEl, `Open answer graded: ${safePoints} pts.`, 'ok');
+    setStatus(hostStatusEl, t('Open answer graded: {n} pts.', { n: safePoints }), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9938,7 +9938,7 @@ async function hostHidePollResponse(playerId) {
       },
     });
 
-    setStatus(hostStatusEl, 'Poll response hidden (moved to Other).', 'ok');
+    setStatus(hostStatusEl, t('Poll response hidden (moved to Other).'), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9950,7 +9950,7 @@ async function hostHideOpenResponse(playerId) {
     if (!playerId) return;
     if (previewMode.active) {
       setPreviewTeacherPatch(previewMode.index, playerId, { hidden: true });
-      setStatus(hostStatusEl, 'Preview hide applied.', 'ok');
+      setStatus(hostStatusEl, t('Preview hide applied.'), 'ok');
       renderPreviewFrame();
       return;
     }
@@ -9965,7 +9965,7 @@ async function hostHideOpenResponse(playerId) {
       },
     });
 
-    setStatus(hostStatusEl, 'Open response hidden.', 'ok');
+    setStatus(hostStatusEl, t('Open response hidden.'), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -9980,7 +9980,7 @@ async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer =
       const text = prompt('Preview correction/feedback for student:', seed);
       if (text == null) return;
       setPreviewTeacherPatch(previewMode.index, playerId, { correction: String(text || '').slice(0, 280) });
-      setStatus(hostStatusEl, 'Preview correction saved.', 'ok');
+      setStatus(hostStatusEl, t('Preview correction saved.'), 'ok');
       renderPreviewFrame();
       return;
     }
@@ -10000,7 +10000,7 @@ async function hostSetOpenCorrection(playerId, currentText = '', studentAnswer =
       },
     });
 
-    setStatus(hostStatusEl, 'Correction saved.', 'ok');
+    setStatus(hostStatusEl, t('Correction saved.'), 'ok');
     await pollHostState();
   } catch (err) {
     setStatus(hostStatusEl, err.message, 'bad');
@@ -10045,7 +10045,7 @@ async function pollHostState() {
     renderHostState(data);
     fetchHostAttempts({ force: false });
   } catch (err) {
-    setStatus(hostStatusEl, `Host poll failed: ${err.message}`, 'bad');
+    setStatus(hostStatusEl, t('Host poll failed: {msg}', { msg: err.message }), 'bad');
     stopHostPolling();
   }
 }
@@ -10063,7 +10063,7 @@ function renderHostAnswerHistory(state) {
   const blocks = Array.isArray(state?.answerHistory) ? state.answerHistory : [];
   if (!blocks.length) {
     const li = document.createElement('li');
-    li.textContent = 'No answers yet.';
+    li.textContent = t('No answers yet.');
     hostAnswerHistoryEl.appendChild(li);
     return;
   }
@@ -10079,7 +10079,7 @@ function renderHostAnswerHistory(state) {
     if (!entries.length) {
       const muted = document.createElement('div');
       muted.className = 'small muted';
-      muted.textContent = 'No submissions on this question.';
+      muted.textContent = t('No submissions on this question.');
       li.appendChild(muted);
     } else {
       const sub = document.createElement('ul');
@@ -10132,7 +10132,7 @@ function renderHostAnswerHistory(state) {
           const zeroBtn = document.createElement('button');
           zeroBtn.className = 'btn';
           zeroBtn.textContent = '0';
-          zeroBtn.title = 'Set 0 points';
+          zeroBtn.title = t('Set 0 points');
           zeroBtn.addEventListener('click', () => gradeOpenAnswer(entry.playerId, 0));
 
           const corrBtn = document.createElement('button');
@@ -10147,7 +10147,7 @@ function renderHostAnswerHistory(state) {
 
           const hideBtn = document.createElement('button');
           hideBtn.className = 'btn';
-          hideBtn.textContent = 'Hide';
+          hideBtn.textContent = t('Hide');
           hideBtn.addEventListener('click', () => hostHideOpenResponse(entry.playerId));
 
           actions.append(gradeBtn, zeroBtn, corrBtn, modelBtn, hideBtn);
@@ -10245,7 +10245,7 @@ function exportHostAttemptsCsv() {
   const students = Array.isArray(data?.students) ? data.students : [];
   const filtered = getFilteredHostAttempts(students);
   if (!filtered.length) {
-    setStatus(hostStatusEl, 'No rows to export for current filters.', 'bad');
+    setStatus(hostStatusEl, t('No rows to export for current filters.'), 'bad');
     return;
   }
 
@@ -10277,7 +10277,7 @@ function exportHostAttemptsCsv() {
   a.remove();
   URL.revokeObjectURL(url);
 
-  setStatus(hostStatusEl, `CSV exported (${filtered.length} rows).`, 'ok');
+  setStatus(hostStatusEl, t('CSV exported ({n} rows).', { n: filtered.length }), 'ok');
 }
 
 async function fetchHostAttempts({ force = false } = {}) {
@@ -10483,18 +10483,18 @@ function renderHostState(state) {
       rename.className = 'btn';
       rename.dataset.renamePlayer = p.id;
       rename.dataset.currentName = p.name || '';
-      rename.textContent = 'Rename';
+      rename.textContent = t('Rename');
 
       const points = document.createElement('button');
       points.className = 'btn';
       points.dataset.adjustPlayer = p.id;
       points.dataset.currentName = p.name || '';
-      points.textContent = 'Points';
+      points.textContent = t('Points');
 
       const kick = document.createElement('button');
       kick.className = 'btn';
       kick.dataset.kickPlayer = p.id;
-      kick.textContent = 'Remove';
+      kick.textContent = t('Remove');
 
       actions.append(rename, points, kick);
       row.append(name, actions);
@@ -10504,7 +10504,7 @@ function renderHostState(state) {
 
     if (!state.players?.length) {
       const li = document.createElement('li');
-      li.textContent = 'No students joined yet.';
+      li.textContent = t('No students joined yet.');
       hostPlayersEl.appendChild(li);
     }
   }
@@ -10665,7 +10665,7 @@ function renderHostQuestion(state) {
     if (!summary || !Array.isArray(summary.items) || !summary.items.length) {
       const p = document.createElement('p');
       p.className = 'small';
-      p.textContent = 'No poll answers submitted.';
+      p.textContent = t('No poll answers submitted.');
       hostQuestionAnswersEl.appendChild(p);
       return;
     }
@@ -10682,7 +10682,7 @@ function renderHostQuestion(state) {
       const barBtn = document.createElement('button');
       barBtn.type = 'button';
       barBtn.className = `btn ${mode === 'bar' ? 'active' : ''}`;
-      barBtn.textContent = 'Bar view';
+      barBtn.textContent = t('Bar view');
       barBtn.addEventListener('click', () => {
         live.host.pollViewMode = 'bar';
         renderHostQuestion(state);
@@ -10691,7 +10691,7 @@ function renderHostQuestion(state) {
       const cloudBtn = document.createElement('button');
       cloudBtn.type = 'button';
       cloudBtn.className = `btn ${mode === 'cloud' ? 'active' : ''}`;
-      cloudBtn.textContent = 'Cloud view';
+      cloudBtn.textContent = t('Cloud view');
       cloudBtn.addEventListener('click', () => {
         live.host.pollViewMode = 'cloud';
         renderHostQuestion(state);
@@ -10746,7 +10746,7 @@ function renderHostQuestion(state) {
         const row = document.createElement('div');
         row.className = 'answer-row';
         const label = document.createElement('span');
-        label.textContent = 'Other';
+        label.textContent = t('Other');
         const barWrap = document.createElement('div');
         barWrap.style.height = '10px';
         barWrap.style.borderRadius = '999px';
@@ -10770,7 +10770,7 @@ function renderHostQuestion(state) {
     if (raw.length) {
       const modTitle = document.createElement('p');
       modTitle.className = 'small top-space';
-      modTitle.textContent = 'Moderation (host only):';
+      modTitle.textContent = t('Moderation (host only):');
       hostQuestionAnswersEl.appendChild(modTitle);
 
       raw.forEach((r) => {
@@ -10809,9 +10809,9 @@ function renderHostQuestion(state) {
   if (phase === 'results') {
     applyProjectorLayoutMode(false, null);
     hostQuestionWrap.classList.remove('hidden');
-    hostQuestionPromptEl.textContent = '🏁 Final ranking reveal';
+    hostQuestionPromptEl.textContent = t('🏁 Final ranking reveal');
     hostQuestionAnswersEl.innerHTML = '';
-    hostQuestionHintEl.textContent = 'Final reveal mode.';
+    hostQuestionHintEl.textContent = t('Final reveal mode.');
     return;
   }
 
@@ -10835,7 +10835,7 @@ function renderHostQuestion(state) {
     hostQuestionWrap.classList.add('hidden');
     hostQuestionPromptEl.textContent = '';
     hostQuestionAnswersEl.innerHTML = '';
-    hostQuestionHintEl.textContent = 'Question will appear here when game starts.';
+    hostQuestionHintEl.textContent = t('Question will appear here when game starts.');
     return;
   }
 
@@ -11287,7 +11287,7 @@ function renderProjectorScores(players, opts = {}) {
 
   if (!players.length) {
     const li = document.createElement('li');
-    li.textContent = 'No players yet.';
+    li.textContent = t('No players yet.');
     projectorScoresEl.appendChild(li);
     return;
   }
@@ -11326,7 +11326,7 @@ function renderProjectorScores(players, opts = {}) {
     }
 
     const title = document.createElement('li');
-    title.textContent = '🏁 FINAL RANKING REVEAL';
+    title.textContent = t('🏁 FINAL RANKING REVEAL');
     title.classList.add('projector-score-item', 'rank-1');
     projectorScoresEl.appendChild(title);
 
@@ -11438,7 +11438,7 @@ function updateHostTimer(state) {
     live.host.timerAnchorAtMs = null;
     live.host.timerInitialRemainingMs = null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = '⏱️ Time: -';
+    projectorTimerEl.textContent = t('⏱️ Time: -');
     setHostTimerBar(0, 1, false);
     return;
   }
@@ -11462,7 +11462,7 @@ function updateHostTimer(state) {
     live.host.timerForIndex = Number(state.currentIndex || 0);
     live.host.timerStartedAtMs = Number(state.questionStartedAt || 0) || null;
     stopHostTimerTicker();
-    projectorTimerEl.textContent = '⏱️ Time: No limit';
+    projectorTimerEl.textContent = t('⏱️ Time: No limit');
     setHostTimerBar(0, 1, false);
     return;
   }
@@ -11606,9 +11606,9 @@ function updateHallScene(state) {
   }
 
   if (state.phase === 'question') {
-    hallHintEl.textContent = 'Question in progress.';
+    hallHintEl.textContent = t('Question in progress.');
   } else if (state.phase === 'results') {
-    hallHintEl.textContent = 'Game finished.';
+    hallHintEl.textContent = t('Game finished.');
   } else {
     hallHintEl.textContent = '';
   }
@@ -11973,7 +11973,7 @@ async function joinLiveGame() {
     live.player.pinSelection = null;
     live.player.pinSelections = [];
 
-    setStatus(joinStatusEl, `Joined as ${data.name || name} ✅`, 'ok');
+    setStatus(joinStatusEl, t('Joined as {name} ✅', { name: data.name || name }), 'ok');
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
@@ -11995,7 +11995,7 @@ async function pollPlayerState() {
 
     renderPlayerState(data);
   } catch (err) {
-    setStatus(joinStatusEl, `Join poll failed: ${err.message}`, 'bad');
+    setStatus(joinStatusEl, t('Join poll failed: {msg}', { msg: err.message }), 'bad');
     stopPlayerPolling();
   }
 }
@@ -12104,7 +12104,7 @@ function renderPlayerState(state) {
 
       const title = document.createElement('div');
       title.className = 'student-answer-reveal-title';
-      title.textContent = 'Correct Answer';
+      title.textContent = t('Correct Answer');
 
       const content = document.createElement('div');
       content.className = 'student-answer-reveal-content';
@@ -12148,7 +12148,7 @@ function renderPlayerState(state) {
     const title = document.createElement('div');
     title.className = 'student-answer-reveal-title';
     title.style.color = '#dc2626';
-    title.textContent = 'Teacher Feedback';
+    title.textContent = t('Teacher Feedback');
 
     const content = document.createElement('div');
     content.className = 'student-answer-reveal-content';
@@ -12171,9 +12171,9 @@ function renderPlayerState(state) {
     joinQuestionWrap.classList.add('hidden');
 
     if (state.phase === 'lobby') {
-      setStatus(joinStatusEl, 'Waiting for teacher to start…', 'ok');
+      setStatus(joinStatusEl, t('Waiting for teacher to start…'), 'ok');
     } else if (state.phase === 'results') {
-      setStatus(joinStatusEl, 'Game finished 🎉', 'ok');
+      setStatus(joinStatusEl, t('Game finished 🎉'), 'ok');
       renderLeaderboardInJoin(state.leaderboard || []);
     }
     renderJoinReveal();
@@ -12217,14 +12217,14 @@ function renderPlayerState(state) {
     if (rr?.graded === true) {
       setStatus(joinFeedbackEl, rr.correct ? `Graded ✓ (+${Number(rr.pointsAwarded || 0)})` : `Graded ✗ (+${Number(rr.pointsAwarded || 0)})`, rr.correct ? 'ok' : 'bad');
     } else {
-      setStatus(joinFeedbackEl, 'Answer submitted. Waiting for next question…', 'ok');
+      setStatus(joinFeedbackEl, t('Answer submitted. Waiting for next question…'), 'ok');
     }
-    setStatus(joinStatusEl, 'Answer received.', 'ok');
+    setStatus(joinStatusEl, t('Answer received.'), 'ok');
   } else {
-    setStatus(joinStatusEl, 'Question live!', 'ok');
+    setStatus(joinStatusEl, t('Question live!'), 'ok');
   }
   if (fullscreenLocked) {
-    setStatus(joinStatusEl, 'Exit fullscreen to answer.', 'bad');
+    setStatus(joinStatusEl, t('Exit fullscreen to answer.'), 'bad');
   }
 
   const rrNow = state.revealedResult;
@@ -12259,7 +12259,7 @@ function renderJoinQuestion(question) {
   if (question.isPoll) {
     const note = document.createElement('p');
     note.className = 'small';
-    note.textContent = 'Poll mode: anonymous results, no points.';
+    note.textContent = t('Poll mode: anonymous results, no points.');
     joinAnswersEl.appendChild(note);
   }
 
@@ -12302,7 +12302,7 @@ function renderJoinQuestion(question) {
     } else {
       const p = document.createElement('p');
       p.className = 'small';
-      p.textContent = 'Video could not be embedded.';
+      p.textContent = t('Video could not be embedded.');
       mediaWrap.appendChild(p);
     }
     joinAnswersEl.appendChild(mediaWrap);
@@ -12337,7 +12337,7 @@ function renderJoinQuestion(question) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '▶ Play audio';
+      btn.textContent = t('▶ Play audio');
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
     }
@@ -12446,7 +12446,7 @@ function renderJoinQuestion(question) {
       input.type = 'text';
       input.id = 'joinErrorRewrite';
       input.maxLength = 160;
-      input.placeholder = 'Rewrite the corrected sentence';
+      input.placeholder = t('Rewrite the corrected sentence');
       input.className = 'top-space';
       input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
       joinAnswersEl.appendChild(input);
@@ -12475,22 +12475,22 @@ function renderJoinQuestion(question) {
     } else if (question.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Speak your answer in class, then tap Submit answer so teacher can grade you.';
+      note.textContent = t('Speak your answer in class, then tap Submit answer so teacher can grade you.');
       joinAnswersEl.appendChild(note);
     } else if (question.type === 'voice_record') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Voice recording is available in assignment mode.';
+      note.textContent = t('Voice recording is available in assignment mode.');
       joinAnswersEl.appendChild(note);
     } else if (question.type === 'voice_text') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Voice answer is available in assignment mode.';
+      note.textContent = t('Voice answer is available in assignment mode.');
       joinAnswersEl.appendChild(note);
     } else if (question.type === 'image_open') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Image answer is available in assignment mode.';
+      note.textContent = t('Image answer is available in assignment mode.');
       joinAnswersEl.appendChild(note);
     } else {
       const isOpenAnswer = question.type === 'open';
@@ -12498,7 +12498,7 @@ function renderJoinQuestion(question) {
       if (!isOpenAnswer) input.type = 'text';
       input.id = 'joinTextAnswer';
       input.maxLength = isOpenAnswer ? 500 : 120;
-      input.placeholder = 'Type your answer';
+      input.placeholder = t('Type your answer');
       if (!isOpenAnswer) {
         input.addEventListener('keydown', (e) => {
           if (e.key !== 'Enter') return;
@@ -12514,7 +12514,7 @@ function renderJoinQuestion(question) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '▶ Play audio';
+      btn.textContent = t('▶ Play audio');
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
     }
@@ -12529,7 +12529,7 @@ function renderJoinQuestion(question) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '▶ Play audio';
+      btn.textContent = t('▶ Play audio');
       btn.addEventListener('click', () => playQuestionAudio(question));
       joinAnswersEl.appendChild(btn);
     }
@@ -12558,7 +12558,7 @@ function renderJoinQuestion(question) {
     if (!question.imageData) {
       const p = document.createElement('p');
       p.className = 'small';
-      p.textContent = 'No image set for this question.';
+      p.textContent = t('No image set for this question.');
       joinAnswersEl.appendChild(p);
       return;
     }
@@ -12631,7 +12631,7 @@ async function runManualMediaCheck() {
     syncQuizFromUI();
     await ensureQuizMediaReady({ contextLabel: 'manual media check', convertTtsToMp3: true, strictMediaCheck: true });
     renderBuilder();
-    setStatus(hostStatusEl, 'Media check complete ✅', 'ok');
+    setStatus(hostStatusEl, t('Media check complete ✅'), 'ok');
   } catch (err) {
     setStatus(hostStatusEl, err?.message || 'Media check failed.', 'bad');
   }
@@ -12640,7 +12640,7 @@ async function runManualMediaCheck() {
 async function submitLiveAnswer() {
   try {
     if (previewMode.active) {
-      setStatus(joinFeedbackEl, 'Preview mode: use teacher controls.', 'ok');
+      setStatus(joinFeedbackEl, t('Preview mode: use teacher controls.'), 'ok');
       return;
     }
 
@@ -12663,16 +12663,16 @@ async function submitLiveAnswer() {
     joinSubmitBtn.disabled = true;
 
     if (data.correct) {
-      setStatus(joinFeedbackEl, `Correct ✅ (+${data.pointsAwarded})`, 'ok');
+      setStatus(joinFeedbackEl, t('Correct ✅ (+{n})', { n: data.pointsAwarded }), 'ok');
     } else {
-      setStatus(joinFeedbackEl, 'Not correct ❌', 'bad');
+      setStatus(joinFeedbackEl, t('Not correct ❌'), 'bad');
     }
 
     joinScoreEl.textContent = `Score: ${data.score}`;
   } catch (err) {
     const msg = String(err?.message || 'Could not submit answer.');
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
-      setStatus(joinFeedbackEl, 'Question is closed. Waiting for next one…', 'ok');
+      setStatus(joinFeedbackEl, t('Question is closed. Waiting for next one…'), 'ok');
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
       return;
     }
@@ -12781,7 +12781,7 @@ function renderLeaderboardInJoin(leaderboard) {
 function startPreviewMode() {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
-    setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
+    setStatus(hostStatusEl, t('Add at least 1 question first.'), 'bad');
     return;
   }
 
@@ -12821,7 +12821,7 @@ function startPreviewMode() {
   }
 
   renderPreviewFrame();
-  setStatus(hostStatusEl, 'Unified preview active: fixed baseline (14 mixed simulated students).', 'ok');
+  setStatus(hostStatusEl, t('Unified preview active: fixed baseline (14 mixed simulated students).'), 'ok');
   hostQuestionCardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -12841,7 +12841,7 @@ function stopPreviewMode() {
   if (previewJumpBtn) previewJumpBtn.classList.add('hidden');
   if (studentPreviewStackCardEl) studentPreviewStackCardEl.classList.add('hidden');
   setStatus(joinFeedbackEl, '', '');
-  setStatus(hostStatusEl, 'Preview mode closed.', 'ok');
+  setStatus(hostStatusEl, t('Preview mode closed.'), 'ok');
 }
 
 // ---------- Student Preview (opens as assignment in new tab) ----------
@@ -12858,7 +12858,7 @@ function cleanupPreviewPoll() {
       method: 'POST',
       body: { password: createSessionPassword, code: oldCode },
     }).then(() => {
-      setStatus(hostStatusEl, `Preview assignment ${oldCode} cleaned up.`, 'ok');
+      setStatus(hostStatusEl, t('Preview assignment {code} cleaned up.', { code: oldCode }), 'ok');
     }).catch(() => {});
   }
 }
@@ -12867,23 +12867,23 @@ async function launchStudentPreviewAssignment() {
   try {
     syncQuizFromUI();
     if (!quiz.title?.trim()) {
-      setStatus(hostStatusEl, 'Add a quiz title first.', 'bad');
+      setStatus(hostStatusEl, t('Add a quiz title first.'), 'bad');
       return;
     }
     if (!quiz.questions?.length) {
-      setStatus(hostStatusEl, 'Add at least 1 question first.', 'bad');
+      setStatus(hostStatusEl, t('Add at least 1 question first.'), 'bad');
       return;
     }
 
     const btn = document.getElementById('studentPreviewBtn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
-    setStatus(hostStatusEl, 'Creating preview assignment…', 'ok');
+    if (btn) { btn.disabled = true; btn.textContent = t('⏳ Creating…'); }
+    setStatus(hostStatusEl, t('Creating preview assignment…'), 'ok');
 
     if (!createSessionPassword) {
       createSessionPassword = await customPasswordPrompt('Enter teacher password to create preview:');
       if (!createSessionPassword) {
-        if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
-        setStatus(hostStatusEl, 'Preview cancelled.', 'bad');
+        if (btn) { btn.disabled = false; btn.textContent = t('🧑‍🎓 Preview'); }
+        setStatus(hostStatusEl, t('Preview cancelled.'), 'bad');
         return;
       }
     }
@@ -12927,12 +12927,12 @@ async function launchStudentPreviewAssignment() {
       };
     }
 
-    setStatus(hostStatusEl, `Preview opened (${code}). Will auto-delete when you close the preview tab.`, 'ok');
+    setStatus(hostStatusEl, t('Preview opened ({code}). Will auto-delete when you close the preview tab.', { code }), 'ok');
   } catch (err) {
-    setStatus(hostStatusEl, `Preview failed: ${err?.message || err}`, 'bad');
+    setStatus(hostStatusEl, t('Preview failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
     const btn = document.getElementById('studentPreviewBtn');
-    if (btn) { btn.disabled = false; btn.textContent = '🧑‍🎓 Preview'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('🧑‍🎓 Preview'); }
   }
 }
 
@@ -12995,11 +12995,11 @@ function initWorkspacesAdmin() {
 
 async function purgeOrphanMedia() {
   if (!await ensureOwnerPassword('Enter teacher password to purge orphan media:')) return;
-  if (!window.confirm('Delete every R2 media folder (assign-*/, preview-*/) that no current assignment references?\n\nThis cleans up leaked media from past deletions. It will NOT touch any active assignment, cloud-saved quiz, or guest workspace.\n\nCannot be undone.')) return;
+  if (!window.confirm(t('Delete every R2 media folder (assign-*/, preview-*/) that no current assignment references?\n\nThis cleans up leaked media from past deletions. It will NOT touch any active assignment, cloud-saved quiz, or guest workspace.\n\nCannot be undone.'))) return;
   const statusEl = document.getElementById('maintenanceStatus');
   const btn = document.getElementById('purgeOrphanMediaBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '🗑️ Purging…'; }
-  setStatus(statusEl, 'Scanning for orphan media (this may take a few seconds)…', 'ok');
+  if (btn) { btn.disabled = true; btn.textContent = t('🗑️ Purging…'); }
+  setStatus(statusEl, t('Scanning for orphan media (this may take a few seconds)…'), 'ok');
   try {
     const data = await api('/api/admin/r2-orphans/purge', {
       method: 'POST',
@@ -13011,20 +13011,20 @@ async function purgeOrphanMedia() {
     window.alert(`🗑️ Orphan media purge done.\n\nLive assignments scanned: ${data.liveAssignments || 0}\nAlive R2 prefixes: ${data.alivePrefixes || 0}\nFolders deleted: ${data.deletedFolders || 0}\nObjects deleted: ${data.deletedRows || 0}\n\n(If "Folders deleted" is 0, it means every assign-*/ folder is still referenced by a current assignment — no leaks to clean. The 24h average storage metric on the R2 dashboard lags real state by hours.)`);
   } catch (err) {
     const msg = err?.message || String(err);
-    setStatus(statusEl, `Orphan purge aborted: ${msg}`, 'bad');
+    setStatus(statusEl, t('Orphan purge aborted: {msg}', { msg }), 'bad');
     window.alert(`⚠️ Orphan purge aborted (nothing was deleted).\n\n${msg}\n\nThis usually means the Durable Objects daily row-read quota is exhausted — the purge needs to load all live assignments to know what's safe to delete. Retry after UTC midnight when the quota resets.`);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Purge orphan media'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('🗑️ Purge orphan media'); }
   }
 }
 
 async function purgePreviewBacklog() {
   if (!await ensureOwnerPassword('Enter teacher password to purge previews:')) return;
-  if (!window.confirm('Delete ALL leftover __preview__ assignments?\n\nThis cleans up orphaned Student Preview records that never got auto-deleted (e.g. when the parent tab was closed). It does NOT touch real assignments.')) return;
+  if (!window.confirm(t('Delete ALL leftover __preview__ assignments?\n\nThis cleans up orphaned Student Preview records that never got auto-deleted (e.g. when the parent tab was closed). It does NOT touch real assignments.'))) return;
   const statusEl = document.getElementById('maintenanceStatus');
   const btn = document.getElementById('purgePreviewsBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '🧹 Purging…'; }
-  setStatus(statusEl, 'Purging preview backlog…', 'ok');
+  if (btn) { btn.disabled = true; btn.textContent = t('🧹 Purging…'); }
+  setStatus(statusEl, t('Purging preview backlog…'), 'ok');
   try {
     const data = await api('/api/admin/previews/purge', {
       method: 'POST',
@@ -13035,16 +13035,16 @@ async function purgePreviewBacklog() {
     console.log('[purge-previews]', data);
     if (data.doError) {
       // DO part failed (most likely quota exhausted); R2 part may have run.
-      setStatus(statusEl, `Partial: DO purge failed (${data.doError}). R2 cleaned ${r2Msg}.`, 'bad');
+      setStatus(statusEl, t('Partial: DO purge failed ({err}). R2 cleaned {r2}.', { err: data.doError, r2: r2Msg }), 'bad');
       window.alert(`⚠️ Partial purge.\n\nDurable Objects purge FAILED:\n  ${data.doError}\n\nR2 cleanup ran: ${r2Msg}\n\nThe DO part needs DO row reads, which are blocked when the daily quota is exhausted. Retry after UTC midnight.`);
     } else {
-      setStatus(statusEl, `Purged ${doMsg}; cleaned ${r2Msg}.`, 'ok');
+      setStatus(statusEl, t('Purged {d1}; cleaned {r2}.', { d1: doMsg, r2: r2Msg }), 'ok');
       window.alert(`🧹 Preview backlog purged.\n\n${doMsg}\n${r2Msg}\n\n(R2 dashboard "Storage" metric is a 24h rolling average — it can take hours to reflect this drop. Check the Objects tab for live state.)`);
     }
   } catch (err) {
-    setStatus(statusEl, `Purge failed: ${err?.message || err}`, 'bad');
+    setStatus(statusEl, t('Purge failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🧹 Purge preview backlog'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('🧹 Purge preview backlog'); }
   }
 }
 
@@ -13055,22 +13055,22 @@ async function createWorkspaceFromForm() {
   const statusEl = document.getElementById('workspaceStatus');
   const label = String(labelEl?.value || '').trim();
   if (!label) {
-    setStatus(statusEl, 'Add a label first (e.g. the guest\'s name).', 'bad');
+    setStatus(statusEl, t('Add a label first (e.g. the guest\'s name).'), 'bad');
     return;
   }
   const expiresInDays = Number(expiresEl?.value);
   const body = { password: createSessionPassword, label };
   if (Number.isFinite(expiresInDays) && expiresInDays > 0) body.expiresInDays = expiresInDays;
 
-  setStatus(statusEl, 'Creating workspace…', 'ok');
+  setStatus(statusEl, t('Creating workspace…'), 'ok');
   try {
     const data = await api('/api/admin/workspaces', { method: 'POST', body });
-    setStatus(statusEl, `Created "${data.label}". Invite link is below — copy and send it to your guest.`, 'ok');
+    setStatus(statusEl, t('Created "{label}". Invite link is below — copy and send it to your guest.', { label: data.label }), 'ok');
     if (labelEl) labelEl.value = '';
     if (expiresEl) expiresEl.value = '';
     await renderWorkspaces({ highlightWsid: data.wsid, freshInviteUrl: data.inviteUrl });
   } catch (err) {
-    setStatus(statusEl, `Create failed: ${err?.message || err}`, 'bad');
+    setStatus(statusEl, t('Create failed: {msg}', { msg: err?.message || err }), 'bad');
   }
 }
 
@@ -13086,7 +13086,7 @@ async function renderWorkspaces(opts = {}) {
     });
     const workspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
     if (!workspaces.length) {
-      listEl.innerHTML = '<li class="small muted" style="border:none; background:none;">No guest workspaces yet. Create one above to share an invite link.</li>';
+      listEl.innerHTML = t('<li class="small muted" style="border:none; background:none;">No guest workspaces yet. Create one above to share an invite link.</li>');
       return;
     }
     const now = Math.floor(Date.now() / 1000);
@@ -13097,7 +13097,7 @@ async function renderWorkspaces(opts = {}) {
       renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl);
     }
   } catch (err) {
-    setStatus(statusEl, `Load failed: ${err?.message || err}`, 'bad');
+    setStatus(statusEl, t('Load failed: {msg}', { msg: err?.message || err }), 'bad');
   }
 }
 
@@ -13128,7 +13128,7 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
   } else {
     const placeholder = document.createElement('div');
     placeholder.className = 'small muted top-space';
-    placeholder.textContent = 'No invite link stored (workspace created before re-retrievable links). Use Regenerate to mint a fresh one.';
+    placeholder.textContent = t('No invite link stored (workspace created before re-retrievable links). Use Regenerate to mint a fresh one.');
     li.appendChild(placeholder);
   }
 
@@ -13138,14 +13138,14 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
   if (inviteUrl) {
     const copyBtn = document.createElement('button');
     copyBtn.className = 'btn primary';
-    copyBtn.textContent = '📋 Copy invite link';
+    copyBtn.textContent = t('📋 Copy invite link');
     copyBtn.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(inviteUrl);
-        copyBtn.textContent = '✅ Copied!';
-        setTimeout(() => { copyBtn.textContent = '📋 Copy invite link'; }, 1500);
+        copyBtn.textContent = t('✅ Copied!');
+        setTimeout(() => { copyBtn.textContent = t('📋 Copy invite link'); }, 1500);
       } catch {
-        setStatus(statusEl, 'Copy failed — select the link manually.', 'bad');
+        setStatus(statusEl, t('Copy failed — select the link manually.'), 'bad');
       }
     });
     actions.appendChild(copyBtn);
@@ -13153,8 +13153,8 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
 
   const regenBtn = document.createElement('button');
   regenBtn.className = 'btn';
-  regenBtn.textContent = '🔄 Regenerate link';
-  regenBtn.title = 'Mint a new invite link. The previous one will continue to work until it expires.';
+  regenBtn.textContent = t('🔄 Regenerate link');
+  regenBtn.title = t('Mint a new invite link. The previous one will continue to work until it expires.');
   regenBtn.addEventListener('click', () => regenerateWorkspaceLink(ws));
   actions.appendChild(regenBtn);
 
@@ -13167,8 +13167,8 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
   const delBtn = document.createElement('button');
   delBtn.className = 'btn';
   delBtn.style.color = '#b91c1c';
-  delBtn.textContent = '🗑 Terminate';
-  delBtn.title = 'Wipes the workspace, all its quizzes/media, and invalidates the invite link.';
+  delBtn.textContent = t('🗑 Terminate');
+  delBtn.title = t('Wipes the workspace, all its quizzes/media, and invalidates the invite link.');
   delBtn.addEventListener('click', () => deleteWorkspace(ws));
   actions.appendChild(delBtn);
 
@@ -13178,16 +13178,16 @@ function renderWorkspaceRow(listEl, ws, inviteUrl, now, statusEl) {
 
 async function regenerateWorkspaceLink(ws) {
   const statusEl = document.getElementById('workspaceStatus');
-  setStatus(statusEl, `Regenerating link for "${ws.label || ws.wsid}"…`, 'ok');
+  setStatus(statusEl, t('Regenerating link for "{label}"…', { label: ws.label || ws.wsid }), 'ok');
   try {
     const data = await api(`/api/admin/workspaces/${encodeURIComponent(ws.wsid)}/regenerate`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${createSessionPassword}` },
     });
-    setStatus(statusEl, `New invite link minted for "${ws.label || ws.wsid}".`, 'ok');
+    setStatus(statusEl, t('New invite link minted for "{label}".', { label: ws.label || ws.wsid }), 'ok');
     await renderWorkspaces({ highlightWsid: ws.wsid, freshInviteUrl: data.inviteUrl });
   } catch (err) {
-    setStatus(statusEl, `Regenerate failed: ${err?.message || err}`, 'bad');
+    setStatus(statusEl, t('Regenerate failed: {msg}', { msg: err?.message || err }), 'bad');
   }
 }
 
@@ -13205,7 +13205,7 @@ async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
     const wrap = document.createElement('div');
     wrap.className = 'workspace-quizzes-sub';
     if (!quizzes.length) {
-      wrap.textContent = 'No quizzes saved in this workspace yet.';
+      wrap.textContent = t('No quizzes saved in this workspace yet.');
     } else {
       const ul = document.createElement('ul');
       for (const q of quizzes) {
@@ -13225,8 +13225,8 @@ async function loadWorkspaceQuizzes(wsid, liEl, btnEl) {
 
         const openBtn = document.createElement('button');
         openBtn.className = 'btn small';
-        openBtn.textContent = '📂 Open';
-        openBtn.title = 'Loads this quiz into your builder. Media URLs still point to the guest workspace — if you want a fully owned copy, ☁️ Save it after opening and re-upload its media.';
+        openBtn.textContent = t('📂 Open');
+        openBtn.title = t('Loads this quiz into your builder. Media URLs still point to the guest workspace — if you want a fully owned copy, ☁️ Save it after opening and re-upload its media.');
         openBtn.addEventListener('click', () => openWorkspaceQuiz(q.key));
         item.appendChild(openBtn);
 
@@ -13253,7 +13253,7 @@ async function openWorkspaceQuiz(quizKey) {
   if (!await ensureOwnerPassword('Enter teacher password:')) return;
   try {
     const base = loadBackendUrl() || 'https://api.pinplay.win';
-    setStatus(hostStatusEl, '☁️ Loading guest quiz…', 'ok');
+    setStatus(hostStatusEl, t('☁️ Loading guest quiz…'), 'ok');
     const res = await fetch(`${base}/api/media/${quizKey}`);
     if (!res.ok) throw new Error('Failed to load quiz from workspace');
     const loadedQuiz = await res.json();
@@ -13266,9 +13266,9 @@ async function openWorkspaceQuiz(quizKey) {
     collapseAllQuestions(quiz);
     renderBuilder();
     saveQuiz(quiz);
-    setStatus(hostStatusEl, `✅ Loaded guest quiz: ${quiz.title || quiz._r2QuizId}. Media still lives in their workspace.`, 'ok');
+    setStatus(hostStatusEl, t('✅ Loaded guest quiz: {title}. Media still lives in their workspace.', { title: quiz.title || quiz._r2QuizId }), 'ok');
   } catch (err) {
-    setStatus(hostStatusEl, `Open failed: ${err?.message || err}`, 'bad');
+    setStatus(hostStatusEl, t('Open failed: {msg}', { msg: err?.message || err }), 'bad');
   }
 }
 
@@ -13281,16 +13281,16 @@ async function deleteWorkspace(ws) {
   if (!window.confirm(msg)) return;
 
   const statusEl = document.getElementById('workspaceStatus');
-  setStatus(statusEl, `Terminating "${label}"…`, 'ok');
+  setStatus(statusEl, t('Terminating "{label}"…', { label }), 'ok');
   try {
     const data = await api(`/api/admin/workspaces/${encodeURIComponent(ws.wsid)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${createSessionPassword}` },
     });
-    setStatus(statusEl, `Terminated "${label}" (${data.deleted || 0} keys removed).`, 'ok');
+    setStatus(statusEl, t('Terminated "{label}" ({n} keys removed).', { label, n: data.deleted || 0 }), 'ok');
     await renderWorkspaces();
   } catch (err) {
-    setStatus(statusEl, `Terminate failed: ${err?.message || err}`, 'bad');
+    setStatus(statusEl, t('Terminate failed: {msg}', { msg: err?.message || err }), 'bad');
   }
 }
 
@@ -13306,7 +13306,7 @@ function cleanupLivePreviewPoll() {
 async function launchLivePreview() {
   const btn = document.getElementById('livePreviewBtn');
   try {
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('⏳ Creating…'); }
 
     // Create the live game (reuses full createLiveGame logic)
     await createLiveGame();
@@ -13329,17 +13329,17 @@ async function launchLivePreview() {
           if (livePreviewPoll?.win?.closed) {
             cleanupLivePreviewPoll();
             stopHostPolling();
-            setStatus(hostStatusEl, 'Live preview ended (student tab closed).', 'ok');
+            setStatus(hostStatusEl, t('Live preview ended (student tab closed).'), 'ok');
           }
         }, 2000),
       };
     }
 
-    setStatus(hostStatusEl, `Live preview started (PIN ${pin}). Student tab opened. Click Start when ready.`, 'ok');
+    setStatus(hostStatusEl, t('Live preview started (PIN {pin}). Student tab opened. Click Start when ready.', { pin }), 'ok');
   } catch (err) {
-    setStatus(hostStatusEl, `Live preview failed: ${err?.message || err}`, 'bad');
+    setStatus(hostStatusEl, t('Live preview failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '▶ Live Preview'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('▶ Live Preview'); }
   }
 }
 
@@ -13816,8 +13816,8 @@ function bindSoloEvents() {
 
   startBtn.addEventListener('click', () => {
     syncQuizFromUI();
-    if (!quiz.title?.trim()) return alert('Add a quiz title first.');
-    if (!quiz.questions.length) return alert('Add at least 1 question.');
+    if (!quiz.title?.trim()) return alert(t('Add a quiz title first.'));
+    if (!quiz.questions.length) return alert(t('Add at least 1 question.'));
 
     soloGame = {
       student: studentNameEl.value.trim() || 'Student',
@@ -13847,7 +13847,7 @@ function bindSoloEvents() {
     if (result.correct) {
       pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
       soloGame.score += pts;
-      setStatus(feedbackEl, `Correct ✅ (+${pts})`, 'ok');
+      setStatus(feedbackEl, t('Correct ✅ (+{n})', { n: pts }), 'ok');
     } else if (Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
       const proportional = Math.floor(basePoints * (result.partialScore / result.partialTotal));
       const betPenalty = live.player.selectedBet === 3 ? Math.round(basePoints * 0.4) : 0;
@@ -13862,7 +13862,7 @@ function bindSoloEvents() {
       pts = live.player.selectedBet === 3 ? -Math.round(basePoints * 0.4) : 0; // <-- FIXED: Changed from 0.3 to 0.4
       soloGame.score += pts;
       const ptsText = pts < 0 ? ` (${pts} pts)` : '';
-      setStatus(feedbackEl, `Not quite ❌ ${result.hint || ''}${ptsText}`.trim(), 'bad');
+      setStatus(feedbackEl, t('Not quite ❌ {hint}{pts}', { hint: result.hint || '', pts: ptsText }).trim(), 'bad');
     }
 
     soloGame.answered = true;
@@ -13949,7 +13949,7 @@ function renderSoloQuestion() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '? Play audio';
+      btn.textContent = t('? Play audio');
       btn.addEventListener('click', () => playQuestionAudio(q));
       answersEl.appendChild(btn);
       playQuestionAudio(q);
@@ -14059,7 +14059,7 @@ function renderSoloQuestion() {
       input.type = 'text';
       input.id = 'soloErrorRewrite';
       input.maxLength = 160;
-      input.placeholder = 'Rewrite the corrected sentence';
+      input.placeholder = t('Rewrite the corrected sentence');
       input.className = 'top-space';
       input.addEventListener('input', () => { input.dataset.fromTokens = '0'; });
       answersEl.appendChild(input);
@@ -14088,17 +14088,17 @@ function renderSoloQuestion() {
     } else if (q.type === 'speaking') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Speaking question: answer orally and get graded by teacher in live mode.';
+      note.textContent = t('Speaking question: answer orally and get graded by teacher in live mode.');
       answersEl.appendChild(note);
     } else if (q.type === 'voice_record') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Voice recording: available in assignment mode.';
+      note.textContent = t('Voice recording: available in assignment mode.');
       answersEl.appendChild(note);
     } else if (q.type === 'voice_text') {
       const note = document.createElement('p');
       note.className = 'small';
-      note.textContent = 'Voice answer: available in assignment mode.';
+      note.textContent = t('Voice answer: available in assignment mode.');
       answersEl.appendChild(note);
     } else {
       const isOpenAnswer = q.type === 'open' || q.type === 'image_open';
@@ -14106,7 +14106,7 @@ function renderSoloQuestion() {
       if (!isOpenAnswer) input.type = 'text';
       input.id = 'soloTextAnswer';
       input.maxLength = isOpenAnswer ? 500 : 120;
-      input.placeholder = 'Type your answer';
+      input.placeholder = t('Type your answer');
       answersEl.appendChild(input);
     }
 
@@ -14114,7 +14114,7 @@ function renderSoloQuestion() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '? Play audio';
+      btn.textContent = t('? Play audio');
       btn.addEventListener('click', () => playQuestionAudio(q));
       answersEl.appendChild(btn);
       playQuestionAudio(q);
@@ -14131,7 +14131,7 @@ function renderSoloQuestion() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn top-space';
-      btn.textContent = '? Play audio';
+      btn.textContent = t('? Play audio');
       btn.addEventListener('click', () => playQuestionAudio(q));
       answersEl.appendChild(btn);
       playQuestionAudio(q);
@@ -14161,7 +14161,7 @@ function renderSoloQuestion() {
     if (!q.imageData) {
       const p = document.createElement('p');
       p.className = 'small';
-      p.textContent = 'No image set for this question.';
+      p.textContent = t('No image set for this question.');
       answersEl.appendChild(p);
       return;
     }
@@ -15569,7 +15569,7 @@ function setBackendStatus(text, mode = '') {
 }
 
 function labelForType(type) {
-  return (
+  return t(
     {
       mcq: 'Multiple choice',
       multi: 'Multi-select',
@@ -15585,8 +15585,7 @@ function labelForType(type) {
       puzzle: 'Puzzle',
       slider: 'Slider',
       pin: 'Pin answer',
-    }[type] || type
-  );
+    }[type] || type);
 }
 
 function iconForType(type) {
@@ -16281,7 +16280,7 @@ async function playQuestionAudio(question, opts = {}) {
     await playAudioEl(a);
     return true;
   } catch (err) {
-    setStatus(hostStatusEl, `Edge TTS error: ${err?.message || 'failed'}`, 'bad');
+    setStatus(hostStatusEl, t('Edge TTS error: {msg}', { msg: err?.message || 'failed' }), 'bad');
     return false;
   }
 }
@@ -16653,7 +16652,7 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
   resetBtn.className = 'btn puzzle-reset';
-  resetBtn.textContent = 'Reset order';
+  resetBtn.textContent = t('Reset order');
 
   let draggedRow = null;
 
@@ -17158,11 +17157,11 @@ async function startBuilderAudioRecording(idx, q) {
   } catch (err) {
     const n = err?.name || '';
     if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
-      alert('Microphone access denied. Allow the mic in your browser settings and try again.');
+      alert(t('Microphone access denied. Allow the mic in your browser settings and try again.'));
     } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
-      alert('No microphone found. Connect a mic and try again.');
+      alert(t('No microphone found. Connect a mic and try again.'));
     } else if (n === 'NotReadableError' || n === 'TrackStartError') {
-      alert('Microphone is in use by another app. Close it and try again.');
+      alert(t('Microphone is in use by another app. Close it and try again.'));
     } else {
       alert(`Mic error: ${err?.message || err}`);
     }
@@ -17290,7 +17289,7 @@ function setupImageLightbox() {
   const modal = document.createElement('div');
   modal.id = 'imageLightbox';
   modal.className = 'image-lightbox hidden';
-  modal.innerHTML = '<img alt="Zoomed question image" />';
+  modal.innerHTML = t('<img alt="Zoomed question image" />');
   document.body.appendChild(modal);
 
   const modalImg = modal.querySelector('img');

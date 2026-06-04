@@ -330,19 +330,19 @@
   // ---------- modal state ----------
 
   const SEARCH_FIELDS = [
-    { value: '',               label: 'Anywhere' },
-    { value: 'question_text',  label: 'Question text' },
-    { value: 'correct_answer', label: 'Answer' },
-    { value: 'options',        label: 'Options' },
-    { value: 'explanation',    label: 'Explanation' },
+    { value: '',               label: t('Anywhere') },
+    { value: 'question_text',  label: t('Question text') },
+    { value: 'correct_answer', label: t('Answer') },
+    { value: 'options',        label: t('Options') },
+    { value: 'explanation',    label: t('Explanation') },
   ];
 
   const MEDIA_OPTIONS = [
-    { value: '',      label: 'Any (no filter)' },
-    { value: 'image', label: 'Has image' },
-    { value: 'audio', label: 'Has audio' },
-    { value: 'any',   label: 'Has any media' },
-    { value: 'none',  label: 'No media' },
+    { value: '',      label: t('Any (no filter)') },
+    { value: 'image', label: t('Has image') },
+    { value: 'audio', label: t('Has audio') },
+    { value: 'any',   label: t('Has any media') },
+    { value: 'none',  label: t('No media') },
   ];
 
   const state = {
@@ -424,23 +424,23 @@
     body.innerHTML = '';
     body.appendChild(el('div', { class: 'bank-header' },
       el('h2', { class: 'bank-title' }, '🔌 Connect to question bank'),
-      el('button', { class: 'btn bank-close', onClick: closeModal, title: 'Close' }, '×'),
+      el('button', { class: 'btn bank-close', onClick: closeModal, title: t('Close') }, '×'),
     ));
 
     const intro = el('p', { class: 'small muted' });
-    intro.innerHTML = `Start the bridge by running <code>question-bank\\run.cmd</code>. The first start prints a secret into <code>question-bank\\.bridge.secret</code> — paste it below.`;
+    intro.innerHTML = t(`Start the bridge by running <code>question-bank\\run.cmd</code>. The first start prints a secret into <code>question-bank\\.bridge.secret</code> — paste it below.`);
     body.appendChild(intro);
 
     const form = el('div', { class: 'bank-connect-form' });
     const urlInput = el('input', { type: 'text', value: bridgeCfg.url, placeholder: BRIDGE_DEFAULT_URL });
-    const secretInput = el('input', { type: 'password', value: bridgeCfg.secret, placeholder: 'paste secret here' });
+    const secretInput = el('input', { type: 'password', value: bridgeCfg.secret, placeholder: t('paste secret here') });
     const status = el('p', { class: 'small muted bank-connect-status' }, '');
 
-    form.appendChild(el('label', {}, 'Bridge URL', urlInput));
-    form.appendChild(el('label', {}, 'Bridge secret', secretInput));
+    form.appendChild(el('label', {}, t('Bridge URL'), urlInput));
+    form.appendChild(el('label', {}, t('Bridge secret'), secretInput));
 
     const connectBtn = el('button', { class: 'btn primary', onClick: async () => {
-      status.textContent = 'Testing connection…';
+      status.textContent = t('Testing connection…');
       status.className = 'small muted bank-connect-status';
       const next = { url: urlInput.value.trim() || BRIDGE_DEFAULT_URL, secret: secretInput.value.trim() };
       const previous = bridgeCfg;
@@ -448,12 +448,12 @@
       try {
         const ping = await pingBridge();
         if (!ping || !ping.ok) {
-          throw new Error('Bridge did not respond at that URL. Is run.cmd running?');
+          throw new Error(t('Bridge did not respond at that URL. Is run.cmd running?'));
         }
         await bankFetch('/facets');
         saveBridgeConfig(bridgeCfg);
         bridgeAvailable = true;
-        status.textContent = `Connected. ${ping.questions} questions in bank.`;
+        status.textContent = t('Connected. {n} questions in bank.', { n: ping.questions });
         status.className = 'small bank-connect-status bank-ok';
         if (!backfilledThisSession && _shouldAutoBackfill()) {
           backfillFromPinPlay({ status: (m) => console.info('[bank][sync]', m) });
@@ -529,7 +529,7 @@
         title: 'Change bridge URL or secret',
         onClick: () => renderConnectView(),
       }, '⚙'),
-      el('button', { class: 'btn bank-close', onClick: closeModal, title: 'Close' }, '×'),
+      el('button', { class: 'btn bank-close', onClick: closeModal, title: t('Close') }, '×'),
     );
   }
 
@@ -578,7 +578,7 @@
     });
     for (const o of MEDIA_OPTIONS) mediaSel.appendChild(el('option', { value: o.value }, o.label));
     mediaSel.value = state.hasMedia || '';
-    rail.appendChild(el('label', {}, 'Media', mediaSel));
+    rail.appendChild(el('label', {}, t('Media'), mediaSel));
 
     const clear = el('button', {
       class: 'btn bank-clear',
@@ -615,7 +615,7 @@
       fieldSel.appendChild(el('option', { value: f.value }, f.label));
     }
     fieldSel.value = state.searchField;
-    wrap.appendChild(el('label', { class: 'bank-search-field-label' }, 'Search in', fieldSel));
+    wrap.appendChild(el('label', { class: 'bank-search-field-label' }, t('Search in'), fieldSel));
 
     const input = el('input', {
       id: 'bankSearchInput',
@@ -637,14 +637,14 @@
   function buildResultsList() {
     const wrap = el('div', { class: 'bank-results' });
     wrap.id = 'bankResults';
-    wrap.appendChild(el('div', { class: 'bank-results-empty' }, 'Type a search or pick a filter to begin.'));
+    wrap.appendChild(el('div', { class: 'bank-results-empty' }, t('Type a search or pick a filter to begin.')));
     return wrap;
   }
 
   function buildPreviewPane() {
     const pane = el('div', { class: 'bank-preview' });
     pane.id = 'bankPreview';
-    pane.appendChild(el('p', { class: 'small muted' }, 'Click a row to preview. ⌘/Ctrl-click to select multiple.'));
+    pane.appendChild(el('p', { class: 'small muted' }, t('Click a row to preview. ⌘/Ctrl-click to select multiple.')));
     return pane;
   }
 
@@ -666,7 +666,7 @@
       disabled: n === 0,
       onClick: importSelected,
     }, n === 0 ? 'Add selected to current quiz' : `Add ${n} to current quiz`));
-    footer.appendChild(el('button', { class: 'btn', onClick: closeModal }, 'Close'));
+    footer.appendChild(el('button', { class: 'btn', onClick: closeModal }, t('Close')));
   }
 
   function showError(msg) {
@@ -697,7 +697,7 @@
     const wrap = modalEl.querySelector('#bankResults');
     if (wrap && !state.offset) {
       wrap.innerHTML = '';
-      wrap.appendChild(el('div', { class: 'bank-loading small muted' }, 'Searching…'));
+      wrap.appendChild(el('div', { class: 'bank-loading small muted' }, t('Searching…')));
     }
     try {
       const data = await bankFetch('/search', params);
@@ -729,7 +729,7 @@
     if (!wrap) return;
     wrap.innerHTML = '';
     if (!state.results.length) {
-      wrap.appendChild(el('div', { class: 'bank-results-empty' }, 'No matches. Try a broader search or clear filters.'));
+      wrap.appendChild(el('div', { class: 'bank-results-empty' }, t('No matches. Try a broader search or clear filters.')));
       return;
     }
     for (const row of state.results) {
@@ -787,7 +787,7 @@
     if (!pane) return;
     pane.innerHTML = '';
     if (!state.focused) {
-      pane.appendChild(el('p', { class: 'small muted' }, 'Click a row to preview.'));
+      pane.appendChild(el('p', { class: 'small muted' }, t('Click a row to preview.')));
       return;
     }
     if (state.editing) {
@@ -839,7 +839,7 @@
       pane.appendChild(ol);
     } else if (corrects.length) {
       const ansEl = el('div', { class: 'bank-preview-answer' });
-      ansEl.innerHTML = 'Answer: ' + corrects.map((c) => sanitizeHtmlPreview(c)).join(' · ');
+      ansEl.innerHTML = t('Answer: ') + corrects.map((c) => sanitizeHtmlPreview(c)).join(' · ');
       pane.appendChild(ansEl);
     }
 
@@ -921,30 +921,30 @@
     const stemTA = el('textarea', { rows: 4, class: 'bank-edit-input' });
     stemTA.value = d.question_text;
     stemTA.addEventListener('input', () => { d.question_text = stemTA.value; });
-    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Question text', stemTA));
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, t('Question text'), stemTA));
 
     const optsTA = el('textarea', { rows: 4, class: 'bank-edit-input', placeholder: 'One option per line' });
     optsTA.value = d.options_lines;
     optsTA.addEventListener('input', () => { d.options_lines = optsTA.value; });
-    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Options (one per line)', optsTA));
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, t('Options (one per line)'), optsTA));
 
     const ansTA = el('textarea', { rows: 2, class: 'bank-edit-input', placeholder: 'For multiple correct answers: one per line' });
     ansTA.value = d.correct_answer;
     ansTA.addEventListener('input', () => { d.correct_answer = ansTA.value; });
-    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Correct answer', ansTA));
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, t('Correct answer'), ansTA));
 
     const explTA = el('textarea', { rows: 2, class: 'bank-edit-input' });
     explTA.value = d.explanation;
     explTA.addEventListener('input', () => { d.explanation = explTA.value; });
-    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Explanation (optional)', explTA));
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, t('Explanation (optional)'), explTA));
 
     const mediaInput = el('input', { type: 'text', class: 'bank-edit-input', placeholder: 'https://… or empty to clear' });
     mediaInput.value = d.media_url;
     mediaInput.addEventListener('input', () => { d.media_url = mediaInput.value; });
-    pane.appendChild(el('label', { class: 'bank-edit-label' }, 'Media URL', mediaInput));
+    pane.appendChild(el('label', { class: 'bank-edit-label' }, t('Media URL'), mediaInput));
 
     const actions = el('div', { class: 'bank-preview-actions row gap' });
-    actions.appendChild(el('button', { class: 'btn primary', onClick: () => saveEdit(row) }, '💾 Save'));
+    actions.appendChild(el('button', { class: 'btn primary', onClick: () => saveEdit(row) }, t('💾 Save')));
     actions.appendChild(el('button', { class: 'btn', onClick: () => { state.editing = false; state.editDraft = null; renderPreview(); } }, 'Cancel'));
     pane.appendChild(actions);
   }
@@ -970,9 +970,9 @@
       state.editDraft = null;
       renderResults();
       renderPreview();
-      flashOk('Saved.');
+      flashOk(t('Saved.'));
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      alert(t('Save failed: ') + err.message);
     }
   }
 
@@ -993,14 +993,14 @@
       _mergeUpdatedQuestion(resp.question);
       renderResults();
       renderPreview();
-      flashOk(quality > 0 ? 'Starred.' : quality < 0 ? 'Hidden from default search.' : 'Quality reset.');
+      flashOk(quality > 0 ? t('Starred.') : quality < 0 ? t('Hidden from default search.') : t('Quality reset.'));
     } catch (err) {
-      alert('Update failed: ' + err.message);
+      alert(t('Update failed: ') + err.message);
     }
   }
 
   async function softDelete(row) {
-    if (!confirm(`Soft-delete question #${row.id}?\n\nIt'll be hidden from search but the row is kept (recoverable later).`)) return;
+    if (!confirm(t('Soft-delete question #{id}?\n\nIt\'ll be hidden from search but the row is kept (recoverable later).', { id: row.id }))) return;
     try {
       await bankPatch(`/question/${row.id}`, { deleted: true });
       state.results = state.results.filter((r) => r.id !== row.id);
@@ -1010,9 +1010,9 @@
       state.editDraft = null;
       renderResults();
       renderPreview();
-      flashOk('Question soft-deleted.');
+      flashOk(t('Question soft-deleted.'));
     } catch (err) {
-      alert('Delete failed: ' + err.message);
+      alert(t('Delete failed: ') + err.message);
     }
   }
 
@@ -1032,7 +1032,7 @@
       multiple_select_poll: 'multi (poll)',
       feedback: 'text (poll)',
     };
-    return map[String(bankType || '').toLowerCase()] || '(no mapping — will be skipped)';
+    return map[String(bankType || '').toLowerCase()] || t('(no mapping — will be skipped)');
   }
 
   // ---------- import actions ----------
@@ -1040,15 +1040,15 @@
   function importQuestion(row) {
     const mapped = bankToPinPlay(row);
     if (!mapped) {
-      alert(`Could not map bank type "${row.question_type}" to a PinPlay type. Skipped.`);
+      alert(t('Could not map bank type "{type}" to a PinPlay type. Skipped.', { type: row.question_type }));
       return;
     }
     if (typeof window.addQuestionToBuilder !== 'function') {
-      alert('PinPlay builder not ready (window.addQuestionToBuilder missing).');
+      alert(t('PinPlay builder not ready (window.addQuestionToBuilder missing).'));
       return;
     }
     window.addQuestionToBuilder(mapped);
-    flashOk(`Added 1 question.`);
+    flashOk(t('Added 1 question.'));
   }
 
   async function importWholeQuiz(quizId, quizTitle) {
@@ -1061,9 +1061,9 @@
         if (mapped) { window.addQuestionToBuilder(mapped); added++; }
         else skipped++;
       }
-      flashOk(`Added ${added} questions from "${quizTitle || quizId}"${skipped ? ` (${skipped} skipped: unmappable types)` : ''}.`);
+      flashOk(t('Added {n} questions from "{title}"{extra}.', { n: added, title: quizTitle || quizId, extra: skipped ? t(' ({n} skipped: unmappable types)', { n: skipped }) : '' }));
     } catch (err) {
-      alert('Quiz import failed: ' + err.message);
+      alert(t('Quiz import failed: ') + err.message);
     }
   }
 
@@ -1375,7 +1375,7 @@
     const ping = await pingBridge();
     if (ping && ping.ok) {
       btn.hidden = false;
-      btn.title = `Search ${ping.questions.toLocaleString()} questions in the local bank`;
+      btn.title = t('Search {n} questions in the local bank', { n: ping.questions.toLocaleString() });
     } else {
       btn.hidden = true;
     }

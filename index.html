@@ -16,29 +16,29 @@
     <main class="container">
       <section class="panel active">
         <div class="card" id="joinCard">
-          <h2 class="join-title-row"><button id="rerollNameBtn" class="dice-icon-btn hidden" type="button" title="Try another name" aria-label="Try another name">🎲</button><span id="joinTitle"></span></h2>
+          <h2 class="join-title-row"><button id="rerollNameBtn" class="dice-icon-btn hidden" type="button" title="Try another name" aria-label="Try another name" data-i18n-title data-i18n-aria>🎲</button><span id="joinTitle"></span></h2>
 
           <div id="joinStepPin">
             <label>PIN</label>
             <input id="joinPin" type="text" maxlength="6" placeholder="123456" autocomplete="one-time-code" inputmode="numeric" />
-            <button id="validatePinBtn" class="btn primary top-space">Play</button>
+            <button id="validatePinBtn" class="btn primary top-space" data-i18n>Play</button>
           </div>
 
           <div id="joinStepIdentity" class="hidden top-space">
             <p id="joinModeHint" class="small"></p>
             <div id="joinNameWrap">
-              <label>Username</label>
-              <input id="joinName" type="text" maxlength="40" placeholder="Username" autocomplete="off" autocapitalize="none" />
+              <label data-i18n>Username</label>
+              <input id="joinName" type="text" maxlength="40" placeholder="Username" data-i18n-ph autocomplete="off" autocapitalize="none" />
             </div>
             <div id="joinPasswordWrap" class="top-space hidden">
-              <label>Password</label>
-              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" autocomplete="new-password" data-lpignore="true" />
+              <label data-i18n>Password</label>
+              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" data-i18n-ph autocomplete="new-password" data-lpignore="true" />
             </div>
             <p id="joinSignupHint" class="small top-space hidden">
-              No account? <a href="https://docs.google.com/forms/d/e/1FAIpQLSeTNwOWzYnSR6V6fsSghUkyZLvbhnE5vvcxBYxlj0b0FWpY-g/viewform" target="_blank" rel="noopener">Sign up</a>
-              · <a id="loginLookupLink" href="#" target="_blank" rel="noopener">Forgot username/password?</a>
+              <span data-i18n>No account?</span> <a href="https://docs.google.com/forms/d/e/1FAIpQLSeTNwOWzYnSR6V6fsSghUkyZLvbhnE5vvcxBYxlj0b0FWpY-g/viewform" target="_blank" rel="noopener" data-i18n>Sign up</a>
+              · <a id="loginLookupLink" href="#" target="_blank" rel="noopener" data-i18n>Forgot username/password?</a>
             </p>
-            <button id="joinBtn" class="btn primary top-space">Join live game</button>
+            <button id="joinBtn" class="btn primary top-space" data-i18n>Join live game</button>
           </div>
 
           <p id="joinStatus" class="feedback"></p>
@@ -51,16 +51,16 @@
               <span id="joinPlayerName"></span>
               <span id="joinModeLabel"></span>
               <span id="joinProgress">Question 1 / 1</span>
-              <span id="joinTimer">Time: —</span>
-              <span id="joinScore">Score: 0</span>
+              <span id="joinTimer" data-i18n>Time: —</span>
+              <span id="joinScore" data-i18n>Score: 0</span>
               <span id="joinStatusHud"></span>
-              <button id="muteMusicBtn" class="mute-music-btn" type="button" title="Mute music" aria-label="Mute music" aria-pressed="false">🎵</button>
+              <button id="muteMusicBtn" class="mute-music-btn" type="button" title="Mute music" aria-label="Mute music" data-i18n-title data-i18n-aria aria-pressed="false">🎵</button>
             </div>
             <div id="joinQuestionInteractive">
               <h3 id="joinPrompt"></h3>
               <div id="joinAnswers"></div>
               <div id="joinSubmission">
-                <button id="joinSubmitBtn" class="btn primary pp-press-btn">Submit</button>
+                <button id="joinSubmitBtn" class="btn primary pp-press-btn" data-i18n>Submit</button>
                 <button id="betIndicator" class="bet-indicator" style="display:none">
                   <span class="bet-btn">+40%</span>
                 </button>
@@ -72,6 +72,8 @@
       </section>
     </main>
 
+    <script src="i18n-fr.js"></script>
+    <script src="i18n.js"></script>
     <script src="play.js"></script>
   </body>
 </html>

@@ -9,19 +9,19 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>🎯 PinPlay<span id="guestBadge" class="guest-badge guest-only">Guest creator</span></h1>
+      <h1>🎯 PinPlay<span id="guestBadge" class="guest-badge guest-only" data-i18n>Guest creator</span></h1>
     </header>
 
     <main class="container">
       <section id="create" class="panel active">
         <div class="card" id="createAuthCard">
-          <h2>Teacher access</h2>
+          <h2 data-i18n>Teacher access</h2>
 
-          <label>Password
-            <input id="createPassword" type="password" placeholder="Enter teacher password" />
+          <label><span data-i18n>Password</span>
+            <input id="createPassword" type="password" placeholder="Enter teacher password" data-i18n-ph />
           </label>
           <div class="row gap top-space">
-            <button id="unlockCreateBtn" class="btn primary">Unlock</button>
+            <button id="unlockCreateBtn" class="btn primary" data-i18n>Unlock</button>
             <span id="createAuthStatus" class="small"></span>
           </div>
         </div>
@@ -30,14 +30,14 @@
           <!-- Guest workspaces admin (owner only) -->
           <div class="card owner-only" id="workspacesCard">
             <h2 id="workspacesSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              👥 Guest workspaces <span class="collapse-chevron" aria-hidden="true">▸</span>
+              <span data-i18n>👥 Guest workspaces</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
             <div id="workspacesCardBody" class="hidden">
               <div class="row gap top-space">
-                <input id="workspaceLabelInput" type="text" placeholder="Label (e.g. Maria, Spring 2026)" maxlength="80" style="min-width:240px;" />
-                <input id="workspaceExpiresInput" type="number" min="1" max="365" placeholder="Expires in days (blank = never)" style="max-width:240px;" />
-                <button id="createWorkspaceBtn" class="btn primary">+ Create workspace</button>
-                <button id="refreshWorkspacesBtn" class="btn">Refresh</button>
+                <input id="workspaceLabelInput" type="text" placeholder="Label (e.g. Maria, Spring 2026)" data-i18n-ph maxlength="80" style="min-width:240px;" />
+                <input id="workspaceExpiresInput" type="number" min="1" max="365" placeholder="Expires in days (blank = never)" data-i18n-ph style="max-width:240px;" />
+                <button id="createWorkspaceBtn" class="btn primary" data-i18n>+ Create workspace</button>
+                <button id="refreshWorkspacesBtn" class="btn" data-i18n>Refresh</button>
               </div>
               <p id="workspaceStatus" class="small muted top-space"></p>
               <ul id="workspaceList" class="workspaces-list top-space"></ul>
@@ -46,134 +46,135 @@
 
           <!-- Guest-only banner -->
           <div class="card guest-only" id="guestBanner">
-            <strong>🎨 Guest creator workspace</strong>
-            <p class="small muted" style="margin:0.5rem 0 0;">You can build, save and preview quizzes. Saved quizzes stay private to this workspace until the teacher copies them or revokes access.</p>
-            <p class="small muted" style="margin:0.75rem 0 0.5rem;">New to PinPlay? Play a short demo quiz that walks through every question type and feature you can build here.</p>
-            <a id="showcaseQuizLink" class="btn primary" style="text-decoration:none;" href="https://audiophrases.github.io/pinplay/?assignment=9C2FEX" target="_blank" rel="noopener">🎓 Try the showcase quiz</a>
+            <strong data-i18n>🎨 Guest creator workspace</strong>
+            <p class="small muted" style="margin:0.5rem 0 0;" data-i18n>You can build, save and preview quizzes. Saved quizzes stay private to this workspace until the teacher copies them or revokes access.</p>
+            <p class="small muted" style="margin:0.75rem 0 0.5rem;" data-i18n>New to PinPlay? Play a short demo quiz that walks through every question type and feature you can build here.</p>
+            <a id="showcaseQuizLink" class="btn primary" style="text-decoration:none;" href="https://audiophrases.github.io/pinplay/?assignment=9C2FEX" target="_blank" rel="noopener" data-i18n>🎓 Try the showcase quiz</a>
           </div>
 
           <div class="card" id="builderCard">
             <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              🛠️ Quiz builder <span class="collapse-chevron" aria-hidden="true">▸</span>
+              <span data-i18n>🛠️ Quiz builder</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
             <div id="builderCardBody" class="hidden">
               <!-- Creation Prompt Section -->
               <div class="creation-prompt-section">
                 <button id="creationPromptToggle" class="section-toggle-btn prompt-toggle" type="button" aria-expanded="false">
-                  <span>✨ AI Creation Prompt</span>
+                  <span data-i18n>✨ AI Creation Prompt</span>
                   <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
                 <div id="creationPromptBody" class="section-collapsible-body hidden">
                   <div class="creation-prompt-grid">
                     <div class="prompt-field full-width">
-                      <label>AI Mode
+                      <label><span data-i18n>AI Mode</span>
                         <select id="promptAiMode">
-                          <option value="chatbot" selected>🤖 AI Chatbot (fill fields by rules)</option>
-                          <option value="agent">🦾 AI Agent (research, verify, embed real assets)</option>
+                          <option value="chatbot" selected data-i18n>🤖 AI Chatbot (fill fields by rules)</option>
+                          <option value="agent" data-i18n>🦾 AI Agent (research, verify, embed real assets)</option>
                         </select>
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Theme
-                        <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" />
+                      <label><span data-i18n>Theme</span>
+                        <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Goal
+                      <label><span data-i18n>Goal</span>
                         <select id="promptGoal">
-                          <option value="learning">More learning (scaffolded)</option>
-                          <option value="practising">More practising (retrieval)</option>
-                          <option value="balanced">Balanced mix (S-R-S-R)</option>
-                          <option value="standard_progression">Standard: Scaffolded → Retrieval</option>
-                          <option value="ratio_25_75">25% Scaffolded / 75% Retrieval</option>
-                          <option value="ratio_75_25">75% Scaffolded / 25% Retrieval</option>
-                          <option value="custom" selected>Custom pedagogical goal...</option>
+                          <option value="learning" data-i18n>More learning (scaffolded)</option>
+                          <option value="practising" data-i18n>More practising (retrieval)</option>
+                          <option value="balanced" data-i18n>Balanced mix (S-R-S-R)</option>
+                          <option value="standard_progression" data-i18n>Standard: Scaffolded → Retrieval</option>
+                          <option value="ratio_25_75" data-i18n>25% Scaffolded / 75% Retrieval</option>
+                          <option value="ratio_75_25" data-i18n>75% Scaffolded / 25% Retrieval</option>
+                          <option value="custom" selected data-i18n>Custom pedagogical goal...</option>
                         </select>
                         <textarea
                           id="promptGoalCustom"
                           class="top-space"
                           rows="2"
                           placeholder="e.g. Build conceptual understanding first, then retrieval under time pressure"
+                          data-i18n-ph
                         ></textarea>
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Language
-                        <input id="promptLanguage" type="text" placeholder="e.g. English, Català" />
+                      <label><span data-i18n>Language</span>
+                        <input id="promptLanguage" type="text" placeholder="e.g. English, Català" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Level
-                        <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" />
+                      <label><span data-i18n>Level</span>
+                        <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Time limit (sec)
+                      <label><span data-i18n>Time limit (sec)</span>
                         <input id="promptTimeLimit" type="number" value="0" min="0" max="300" />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Questions
-                        <input id="promptQuestionCount" type="text" value="15" placeholder="e.g. 15, or 'last about 50 minutes', or 'all irregular verbs'" />
+                      <label><span data-i18n>Questions</span>
+                        <input id="promptQuestionCount" type="text" value="15" placeholder="e.g. 15, or 'last about 50 minutes', or 'all irregular verbs'" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Create in batches of
+                      <label><span data-i18n>Create in batches of</span>
                         <input id="promptBatchSize" type="number" value="0" min="0" max="100" />
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Images
+                      <label><span data-i18n>Images</span>
                         <select id="promptImages">
-                          <option value="some">Images (when relevant)</option>
-                          <option value="gifs" selected>GIFs (when relevant)</option>
-                          <option value="mix">Mix of images and GIFs</option>
-                          <option value="no">No images or GIFs</option>
+                          <option value="some" data-i18n>Images (when relevant)</option>
+                          <option value="gifs" selected data-i18n>GIFs (when relevant)</option>
+                          <option value="mix" data-i18n>Mix of images and GIFs</option>
+                          <option value="no" data-i18n>No images or GIFs</option>
                         </select>
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Audio/TTS
+                      <label><span data-i18n>Audio/TTS</span>
                         <select id="promptAudio">
-                          <option value="some" selected>Some (when relevant)</option>
-                          <option value="no">No audio</option>
+                          <option value="some" selected data-i18n>Some (when relevant)</option>
+                          <option value="no" data-i18n>No audio</option>
                         </select>
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Video
+                      <label><span data-i18n>Video</span>
                         <select id="promptVideo">
-                          <option value="some">Some (when relevant)</option>
-                          <option value="no" selected>No videos</option>
+                          <option value="some" data-i18n>Some (when relevant)</option>
+                          <option value="no" selected data-i18n>No videos</option>
                         </select>
                       </label>
                     </div>
                     <div class="prompt-field">
-                      <label>Reading text
+                      <label><span data-i18n>Reading text</span>
                         <select id="promptReadingText">
-                          <option value="no" selected>No reading passages</option>
-                          <option value="some">Some (when relevant)</option>
-                          <option value="all">Every question (reading comprehension)</option>
+                          <option value="no" selected data-i18n>No reading passages</option>
+                          <option value="some" data-i18n>Some (when relevant)</option>
+                          <option value="all" data-i18n>Every question (reading comprehension)</option>
                         </select>
                       </label>
                     </div>
                   </div>
                   <div class="prompt-field full-width top-space">
-                    <label for="promptTypesMode">Question Types</label>
+                    <label for="promptTypesMode" data-i18n>Question Types</label>
                     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
                       <select id="promptTypesMode" style="width: auto; min-width: 200px;">
-                        <option value="exclude_teacher_graded" selected>Exclude teacher-corrected</option>
-                        <option value="ai_choice">Best fitting the quiz goals</option>
-                        <option value="include">Include selected</option>
-                        <option value="all">Use all available types</option>
+                        <option value="exclude_teacher_graded" selected data-i18n>Exclude teacher-corrected</option>
+                        <option value="ai_choice" data-i18n>Best fitting the quiz goals</option>
+                        <option value="include" data-i18n>Include selected</option>
+                        <option value="all" data-i18n>Use all available types</option>
                       </select>
-                      <button type="button" class="btn small" id="promptSelectAllTypes">Select all</button>
-                      <button type="button" class="btn small" id="promptClearAllTypes">Clear</button>
+                      <button type="button" class="btn small" id="promptSelectAllTypes" data-i18n>Select all</button>
+                      <button type="button" class="btn small" id="promptClearAllTypes" data-i18n>Clear</button>
                     </div>
                     <div class="prompt-types-grid" id="promptTypesList"></div>
                   </div>
                   <div class="prompt-field top-space">
-                    <button type="button" class="btn primary" id="exportPromptBtn" style="width: 100%; height: 100%; font-size: 1.1rem;">
+                    <button type="button" class="btn primary" id="exportPromptBtn" style="width: 100%; height: 100%; font-size: 1.1rem;" data-i18n>
                       ✨ Generate AI Prompt
                     </button>
                   </div>
@@ -183,42 +184,42 @@
 
               <div class="builder-section">
                 <button id="builderSettingsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span>⚙️ Settings & Actions</span>
+                  <span data-i18n>⚙️ Settings & Actions</span>
                   <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
                 <div id="builderSettingsBody" class="section-collapsible-body hidden">
                   <div class="row gap quiz-actions" id="builderActionRow">
-                    <button id="hostApplyBuilderBtn" class="btn owner-only">Apply live</button>
-                    <button id="applyAssignmentBtn" class="btn" style="display:none">Apply to Assignment</button>
-                    <button id="openLocalBtn" class="btn">Open</button>
-                    <button id="saveBtn" class="btn">Save</button>
-                    <button id="openCloudBtn" class="btn">☁️ Open</button>
-                    <button id="saveCloudBtn" class="btn primary">☁️ Save</button>
-                    <button id="importBtn" class="btn" type="button">Import</button>
+                    <button id="hostApplyBuilderBtn" class="btn owner-only" data-i18n>Apply live</button>
+                    <button id="applyAssignmentBtn" class="btn" style="display:none" data-i18n>Apply to Assignment</button>
+                    <button id="openLocalBtn" class="btn" data-i18n>Open</button>
+                    <button id="saveBtn" class="btn" data-i18n>Save</button>
+                    <button id="openCloudBtn" class="btn" data-i18n>☁️ Open</button>
+                    <button id="saveCloudBtn" class="btn primary" data-i18n>☁️ Save</button>
+                    <button id="importBtn" class="btn" type="button" data-i18n>Import</button>
                     <input id="importInput" type="file" accept="application/json,.json,.txt,text/plain" multiple hidden />
-                    <button id="exportBtn" class="btn">Export</button>
-                    <button id="exportPdfBtn" class="btn" title="Export quiz as printable PDF for paper-based students. Voice record questions become written open answers.">📄 Export PDF</button>
+                    <button id="exportBtn" class="btn" data-i18n>Export</button>
+                    <button id="exportPdfBtn" class="btn" title="Export quiz as printable PDF for paper-based students. Voice record questions become written open answers." data-i18n-title data-i18n>📄 Export PDF</button>
                   </div>
 
-                  <label>Quiz title
-                    <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" />
+                  <label><span data-i18n>Quiz title</span>
+                    <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" data-i18n-ph />
                   </label>
 
                   <div class="row gap top-space" id="quizAudioDefaultsRow">
                     <div style="min-width:220px;">
-                      <label>Hear questions
+                      <label><span data-i18n>Hear questions</span>
                         <select id="quizTtsLanguage">
-                          <option value="NONE">Don't hear questions</option>
+                          <option value="NONE" data-i18n>Don't hear questions</option>
                           <option value="EN">English</option>
                           <option value="CA">Català</option>
                           <option value="FR">Français</option>
-                          <option value="OTHER">Other</option>
+                          <option value="OTHER" data-i18n>Other</option>
                         </select>
                       </label>
                     </div>
                     <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
-                      <label>Language / voice
-                        <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" style="margin-bottom:6px;" />
+                      <label><span data-i18n>Language / voice</span>
+                        <input id="quizTtsOtherSearch" type="text" placeholder="Search voice / language / code" data-i18n-ph style="margin-bottom:6px;" />
                         <select id="quizTtsOtherVoice">
                         </select>
                       </label>
@@ -229,55 +230,55 @@
 
               <div class="builder-section">
                 <button id="builderTypesToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span>➕ Question types</span>
+                  <span data-i18n>➕ Question types</span>
                   <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
                 <div id="builderTypesBody" class="section-collapsible-body hidden">
                   <div class="question-type-grid" id="questionTypeGrid">
-                    <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded">
-                      <span class="qt-emoji">🔘</span><span class="qt-text">Multiple choice</span>
+                    <button id="addMcqBtn" class="btn question-type-btn" title="Auto-graded" data-i18n-title>
+                      <span class="qt-emoji">🔘</span><span class="qt-text" data-i18n>Multiple choice</span>
                     </button>
-                    <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded">
-                      <span class="qt-emoji">☑️</span><span class="qt-text">Multi-select</span>
+                    <button id="addMultiBtn" class="btn question-type-btn" title="Auto-graded" data-i18n-title>
+                      <span class="qt-emoji">☑️</span><span class="qt-text" data-i18n>Multi-select</span>
                     </button>
-                    <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded">
-                      <span class="qt-emoji">✅❌</span><span class="qt-text">True / False</span>
+                    <button id="addTfBtn" class="btn question-type-btn" title="Auto-graded" data-i18n-title>
+                      <span class="qt-emoji">✅❌</span><span class="qt-text" data-i18n>True / False</span>
                     </button>
-                    <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback">
-                      <span class="qt-emoji">⌨️</span><span class="qt-text">Type answer</span>
+                    <button id="addTextBtn" class="btn question-type-btn" title="Auto-graded or teacher-graded fallback" data-i18n-title>
+                      <span class="qt-emoji">⌨️</span><span class="qt-text" data-i18n>Type answer</span>
                     </button>
-                    <button id="addContextGapBtn" class="btn question-type-btn" title="Language task">
-                      <span class="qt-emoji">🕳️</span><span class="qt-text">Context gap fill</span>
+                    <button id="addContextGapBtn" class="btn question-type-btn" title="Language task" data-i18n-title>
+                      <span class="qt-emoji">🕳️</span><span class="qt-text" data-i18n>Context gap fill</span>
                     </button>
-                    <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task">
-                      <span class="qt-emoji">🔗</span><span class="qt-text">Match pairs</span>
+                    <button id="addMatchPairsBtn" class="btn question-type-btn" title="Language task" data-i18n-title>
+                      <span class="qt-emoji">🔗</span><span class="qt-text" data-i18n>Match pairs</span>
                     </button>
-                    <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task">
-                      <span class="qt-emoji">🕵️</span><span class="qt-text">Error hunt</span>
+                    <button id="addErrorHuntBtn" class="btn question-type-btn" title="Language task" data-i18n-title>
+                      <span class="qt-emoji">🕵️</span><span class="qt-text" data-i18n>Error hunt</span>
                     </button>
-                    <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded">
-                      <span class="qt-emoji">💬</span><span class="qt-text">Open answer</span>
+                    <button id="addOpenBtn" class="btn question-type-btn" title="Teacher-graded" data-i18n-title>
+                      <span class="qt-emoji">💬</span><span class="qt-text" data-i18n>Open answer</span>
                     </button>
-                    <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded">
-                      <span class="qt-emoji">🗣️</span><span class="qt-text">Speaking answer</span>
+                    <button id="addSpeakingBtn" class="btn question-type-btn" title="Teacher-graded" data-i18n-title>
+                      <span class="qt-emoji">🗣️</span><span class="qt-text" data-i18n>Speaking answer</span>
                     </button>
-                    <button id="addVoiceRecordBtn" class="btn question-type-btn" title="Teacher-graded">
-                      <span class="qt-emoji">🎙️</span><span class="qt-text">Voice record</span>
+                    <button id="addVoiceRecordBtn" class="btn question-type-btn" title="Teacher-graded" data-i18n-title>
+                      <span class="qt-emoji">🎙️</span><span class="qt-text" data-i18n>Voice record</span>
                     </button>
-                    <button id="addImageOpenBtn" class="btn question-type-btn" title="Teacher-graded — students upload/photograph an image as their answer">
-                      <span class="qt-emoji">🖼️</span><span class="qt-text">Image answer</span>
+                    <button id="addImageOpenBtn" class="btn question-type-btn" title="Teacher-graded — students upload/photograph an image as their answer" data-i18n-title>
+                      <span class="qt-emoji">🖼️</span><span class="qt-text" data-i18n>Image answer</span>
                     </button>
-                    <button id="addVoiceTextBtn" class="btn question-type-btn" title="Auto-graded via speech recognition (Chrome / Edge / Safari)">
-                      <span class="qt-emoji">🎤</span><span class="qt-text">Voice answer</span>
+                    <button id="addVoiceTextBtn" class="btn question-type-btn" title="Auto-graded via speech recognition (Chrome / Edge / Safari)" data-i18n-title>
+                      <span class="qt-emoji">🎤</span><span class="qt-text" data-i18n>Voice answer</span>
                     </button>
-                    <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive">
-                      <span class="qt-emoji">🧩</span><span class="qt-text">Order puzzle</span>
+                    <button id="addPuzzleBtn" class="btn question-type-btn" title="Interactive" data-i18n-title>
+                      <span class="qt-emoji">🧩</span><span class="qt-text" data-i18n>Order puzzle</span>
                     </button>
-                    <button id="addSliderBtn" class="btn question-type-btn" title="Interactive">
-                      <span class="qt-emoji">📐</span><span class="qt-text">Number slider</span>
+                    <button id="addSliderBtn" class="btn question-type-btn" title="Interactive" data-i18n-title>
+                      <span class="qt-emoji">📐</span><span class="qt-text" data-i18n>Number slider</span>
                     </button>
-                    <button id="addPinBtn" class="btn question-type-btn" title="Interactive">
-                      <span class="qt-emoji">📍</span><span class="qt-text">Pin on image</span>
+                    <button id="addPinBtn" class="btn question-type-btn" title="Interactive" data-i18n-title>
+                      <span class="qt-emoji">📍</span><span class="qt-text" data-i18n>Pin on image</span>
                     </button>
                   </div>
                 </div>
@@ -285,15 +286,15 @@
 
               <div class="builder-section">
                 <button id="builderQuestionsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span>📝 Questions</span>
+                  <span data-i18n>📝 Questions</span>
                   <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
                 <div id="builderQuestionsBody" class="section-collapsible-body hidden">
                   <div class="row gap">
-                    <button id="collapseAllBtn" class="btn">Collapse all</button>
-                    <button id="addMediaBatchBtn" class="btn" type="button" title="Attach numbered images and/or audio files to questions in order (1.jpg→Q1, 1.mp3→Q1, 2.jpg→Q2 …)">📎 Add Media Batch</button>
+                    <button id="collapseAllBtn" class="btn" data-i18n>Collapse all</button>
+                    <button id="addMediaBatchBtn" class="btn" type="button" title="Attach numbered images and/or audio files to questions in order (1.jpg→Q1, 1.mp3→Q1, 2.jpg→Q2 …)" data-i18n-title data-i18n>📎 Add Media Batch</button>
                     <input id="addMediaBatchInput" type="file" accept="image/*,audio/*" multiple hidden />
-                    <button id="bankSearchBtn" class="btn" type="button" hidden title="Search the local question bank and import questions into this quiz">🔍 Search bank</button>
+                    <button id="bankSearchBtn" class="btn" type="button" hidden title="Search the local question bank and import questions into this quiz" data-i18n-title data-i18n>🔍 Search bank</button>
                   </div>
                   <div id="questionList" class="question-list"></div>
                 </div>
@@ -301,13 +302,13 @@
 
               <div class="builder-section owner-only">
                 <button id="builderMaintenanceToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span>🧹 Storage maintenance</span>
+                  <span data-i18n>🧹 Storage maintenance</span>
                   <span class="collapse-chevron" aria-hidden="true">▸</span>
                 </button>
                 <div id="builderMaintenanceBody" class="section-collapsible-body hidden">
                   <div class="row gap top-space">
-                    <button id="purgePreviewsBtn" class="btn" type="button" title="Delete all leftover __preview__ assignments AND their R2 media folders.">🧹 Purge preview backlog</button>
-                    <button id="purgeOrphanMediaBtn" class="btn" type="button" title="Delete every assign-*/ or preview-*/ R2 folder that no current assignment references. Cleans up media leaked by historic delete bugs.">🗑️ Purge orphan media</button>
+                    <button id="purgePreviewsBtn" class="btn" type="button" title="Delete all leftover __preview__ assignments AND their R2 media folders." data-i18n-title data-i18n>🧹 Purge preview backlog</button>
+                    <button id="purgeOrphanMediaBtn" class="btn" type="button" title="Delete every assign-*/ or preview-*/ R2 folder that no current assignment references. Cleans up media leaked by historic delete bugs." data-i18n-title data-i18n>🗑️ Purge orphan media</button>
                   </div>
                   <p id="maintenanceStatus" class="small muted top-space"></p>
                 </div>
@@ -320,20 +321,20 @@
             <!-- Pop-up Scoreboard Modal -->
             <div id="projectorScoreboardSection" class="scoreboard-modal">
               <div class="scoreboard-modal-content">
-                <h2 style="margin-top:0; color:var(--primary); font-size:2.5rem; text-align:center;">🏆 Scoreboard 🏆</h2>
+                <h2 style="margin-top:0; color:var(--primary); font-size:2.5rem; text-align:center;" data-i18n>🏆 Scoreboard 🏆</h2>
                 <ul id="projectorScores" class="list projector-scores-large"></ul>
-                <p class="small muted" style="text-align:center; margin-top:1.5rem;">Click anywhere or press any key to close</p>
+                <p class="small muted" style="text-align:center; margin-top:1.5rem;" data-i18n>Click anywhere or press any key to close</p>
               </div>
             </div>
 
             <h2 id="liveScreenSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              <span>📺 Live screen <span class="collapse-chevron" aria-hidden="true">▸</span></span>
+              <span><span data-i18n>📺 Live screen</span> <span class="collapse-chevron" aria-hidden="true">▸</span></span>
               <span class="live-hud-row">
                 <span id="projectorPin" class="small">📌 <span id="livePinHud">—</span></span>
-                <span id="projectorTimer" class="small">⏱ Time: —</span>
+                <span id="projectorTimer" class="small" data-i18n>⏱ Time: —</span>
                 <span id="projectorProgress" class="small">❓ —</span>
-                <span id="projectorAnswers" class="small">👥 Answers: —</span>
-                <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;">Fullscreen</button>
+                <span id="projectorAnswers" class="small" data-i18n>👥 Answers: —</span>
+                <button id="projectorFullscreenBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.85rem;" data-i18n>Fullscreen</button>
               </span>
             </h2>
             <div id="liveScreenCardBody" class="hidden">
@@ -373,75 +374,75 @@
 
           <div class="card" id="hostCard">
             <h2 id="gameControlsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              🎮 Game controls <span class="collapse-chevron" aria-hidden="true">▸</span>
+              <span data-i18n>🎮 Game controls</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
             <div id="gameControlsCardBody" class="hidden">
             <div class="row gap top-space" id="hostActionRow">
-              <button id="randomNamesToggle" class="btn owner-only" type="button">Login</button>
-              <button id="createLiveBtn" class="btn primary owner-only">Live Pin</button>
-              <button id="hostRefreshBtn" class="btn owner-only">Refresh</button>
-              <button id="hostStartBtn" class="btn success owner-only">Start</button>
+              <button id="randomNamesToggle" class="btn owner-only" type="button" data-i18n>Login</button>
+              <button id="createLiveBtn" class="btn primary owner-only" data-i18n>Live Pin</button>
+              <button id="hostRefreshBtn" class="btn owner-only" data-i18n>Refresh</button>
+              <button id="hostStartBtn" class="btn success owner-only" data-i18n>Start</button>
               <button id="hostPrevBtn" class="btn owner-only">←</button>
               <button id="hostNextBtn" class="btn owner-only">→</button>
-              <button id="studentPreviewBtn" class="btn">🧑‍🎓 Preview</button>
-              <button id="livePreviewBtn" class="btn owner-only">▶ Live Preview</button>
+              <button id="studentPreviewBtn" class="btn" data-i18n>🧑‍🎓 Preview</button>
+              <button id="livePreviewBtn" class="btn owner-only" data-i18n>▶ Live Preview</button>
               <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" class="owner-only" />
-              <button id="hostJoinBtn" class="btn owner-only">Join as host</button>
+              <button id="hostJoinBtn" class="btn owner-only" data-i18n>Join as host</button>
             </div>
             <div class="top-space assignment-section owner-only" id="assignmentSection">
               <button id="assignmentSectionToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                <span>Assignments</span>
+                <span data-i18n>Assignments</span>
                 <span class="collapse-chevron" aria-hidden="true">▸</span>
               </button>
               <div id="assignmentSectionBody" class="section-collapsible-body hidden">
                 <div class="row gap top-space" id="assignmentActionRow">
-                  <input id="assignmentClass" type="text" placeholder="Class (optional)" style="max-width:150px;" />
-                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" title="Due date (optional)" aria-label="Due date (optional)" />
-                  <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" />
-                  <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback">Instant feedback</button>
-                  <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel.">Exam mode: off</button>
-                  <button id="createAssignmentBtn" class="btn">Create assignment</button>
+                  <input id="assignmentClass" type="text" placeholder="Class (optional)" data-i18n-ph style="max-width:150px;" />
+                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" title="Due date (optional)" aria-label="Due date (optional)" data-i18n-title data-i18n-aria />
+                  <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
+                  <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
+                  <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
+                  <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
                 </div>
                 <p id="assignmentStatus" class="small muted"></p>
                 <div class="top-space">
                   <div class="row spread gap">
-                    <strong>Assignments list</strong>
+                    <strong data-i18n>Assignments list</strong>
                     <div class="row gap">
-                      <button id="toggleArchivedAssignmentsBtn" class="btn" type="button" title="Show or hide archived assignments">Show archived</button>
-                      <button id="refreshAssignmentsBtn" class="btn">Refresh assignments</button>
+                      <button id="toggleArchivedAssignmentsBtn" class="btn" type="button" title="Show or hide archived assignments" data-i18n-title data-i18n>Show archived</button>
+                      <button id="refreshAssignmentsBtn" class="btn" data-i18n>Refresh assignments</button>
                     </div>
                   </div>
                   <ul id="assignmentList" class="list"></ul>
                   <div class="row gap top-space" style="flex-wrap:wrap;">
-                    <p id="assignmentResultsSummary" class="small muted" style="margin:0;">Select assignment to view results.</p>
-                    <select id="assignmentResultsFilter" style="max-width:180px;" title="Filter attempts" aria-label="Filter attempts">
-                      <option value="all">All attempts</option>
-                      <option value="pending">Pending grading</option>
-                      <option value="submitted">Submitted only</option>
-                      <option value="fully-answered">Fully answered</option>
-                      <option value="notified">Notified</option>
-                      <option value="not-notified">Not notified</option>
+                    <p id="assignmentResultsSummary" class="small muted" style="margin:0;" data-i18n>Select assignment to view results.</p>
+                    <select id="assignmentResultsFilter" style="max-width:180px;" title="Filter attempts" aria-label="Filter attempts" data-i18n-title data-i18n-aria>
+                      <option value="all" data-i18n>All attempts</option>
+                      <option value="pending" data-i18n>Pending grading</option>
+                      <option value="submitted" data-i18n>Submitted only</option>
+                      <option value="fully-answered" data-i18n>Fully answered</option>
+                      <option value="notified" data-i18n>Notified</option>
+                      <option value="not-notified" data-i18n>Not notified</option>
                     </select>
-                    <select id="assignmentResultsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class">
-                      <option value="">All classes</option>
+                    <select id="assignmentResultsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class" data-i18n-title data-i18n-aria>
+                      <option value="" data-i18n>All classes</option>
                     </select>
-                    <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts">
-                      <option value="name">Sort: Name (A→Z)</option>
-                      <option value="score-desc">Sort: Score (high→low)</option>
-                      <option value="accuracy-desc">Sort: Accuracy (high→low)</option>
-                      <option value="completion-desc">Sort: Completion (high→low)</option>
-                      <option value="latest">Sort: Latest activity</option>
-                      <option value="pending-desc">Sort: Pending grading first</option>
+                    <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts" data-i18n-title>
+                      <option value="name" data-i18n>Sort: Name (A→Z)</option>
+                      <option value="score-desc" data-i18n>Sort: Score (high→low)</option>
+                      <option value="accuracy-desc" data-i18n>Sort: Accuracy (high→low)</option>
+                      <option value="completion-desc" data-i18n>Sort: Completion (high→low)</option>
+                      <option value="latest" data-i18n>Sort: Latest activity</option>
+                      <option value="pending-desc" data-i18n>Sort: Pending grading first</option>
                     </select>
                     <label class="small" style="display:flex; align-items:center; gap:4px; white-space:nowrap;">
-                      <input type="checkbox" id="assignmentResultsBestOnly" /> Best per student
+                      <input type="checkbox" id="assignmentResultsBestOnly" /> <span data-i18n>Best per student</span>
                     </label>
-                    <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)">Grade by Question</button>
-                    <button id="gradeByStudentBtn" class="btn" type="button" title="Grade all questions for one student at a time (per-student focus mode)">Grade by Student</button>
-                    <button id="aiGradePackAssignmentBtn" class="btn" type="button" title="Build a ZIP + prompt to grade with an AI, or import an AI response">Grade with AI</button>
+                    <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)" data-i18n-title data-i18n>Grade by Question</button>
+                    <button id="gradeByStudentBtn" class="btn" type="button" title="Grade all questions for one student at a time (per-student focus mode)" data-i18n-title data-i18n>Grade by Student</button>
+                    <button id="aiGradePackAssignmentBtn" class="btn" type="button" title="Build a ZIP + prompt to grade with an AI, or import an AI response" data-i18n-title data-i18n>Grade with AI</button>
                   </div>
                   <ul id="assignmentResultsList" class="list"></ul>
-                  <p id="assignmentGradingSummary" class="small muted top-space">Open an attempt to grade teacher-graded answers.</p>
+                  <p id="assignmentGradingSummary" class="small muted top-space" data-i18n>Open an attempt to grade teacher-graded answers.</p>
                   <ul id="assignmentGradingList" class="list"></ul>
                 </div>
               </div>
@@ -449,20 +450,20 @@
 
 
             <div class="host-live-status-grid owner-only">
-              <div class="status-card pin-highlight" title="Current session PIN">
+              <div class="status-card pin-highlight" title="Current session PIN" data-i18n-title>
                 <span class="status-label">PIN</span>
                 <span id="livePin" class="status-value">—</span>
               </div>
-              <div class="status-card" title="Game current phase">
-                <span class="status-label">Phase</span>
+              <div class="status-card" title="Game current phase" data-i18n-title>
+                <span class="status-label" data-i18n>Phase</span>
                 <span id="livePhase" class="status-value">—</span>
               </div>
-              <div class="status-card" title="Current question progress">
-                <span class="status-label">Progress</span>
+              <div class="status-card" title="Current question progress" data-i18n-title>
+                <span class="status-label" data-i18n>Progress</span>
                 <span id="liveProgress" class="status-value">—</span>
               </div>
-              <div class="status-card" title="Answers received this round">
-                <span class="status-label">Answers</span>
+              <div class="status-card" title="Answers received this round" data-i18n-title>
+                <span class="status-label" data-i18n>Answers</span>
                 <span id="liveResponses" class="status-value">—</span>
               </div>
             </div>
@@ -471,27 +472,27 @@
             <p id="hostStatus" class="feedback"></p>
 
             <div class="host-section-header owner-only">
-              <h3>👥 <span id="hostPlayersTitle">Players</span></h3>
+              <h3>👥 <span id="hostPlayersTitle" data-i18n>Players</span></h3>
               <span class="host-section-count" id="hostPlayersCount">0</span>
             </div>
             <ul id="hostPlayers" class="list owner-only"></ul>
 
             <div class="host-section-header owner-only">
-              <h3>📜 Answer history (teacher only)</h3>
+              <h3 data-i18n>📜 Answer history (teacher only)</h3>
             </div>
             <ul id="hostAnswerHistory" class="list owner-only"></ul>
 
             <div class="host-section-header owner-only">
-              <h3>📊 Student performance snapshot</h3>
+              <h3 data-i18n>📊 Student performance snapshot</h3>
               <div class="row gap">
-                <button id="hostAttemptsRefreshBtn" class="btn">Refresh</button>
-                <button id="hostAttemptsExportBtn" class="btn">Export CSV</button>
+                <button id="hostAttemptsRefreshBtn" class="btn" data-i18n>Refresh</button>
+                <button id="hostAttemptsExportBtn" class="btn" data-i18n>Export CSV</button>
               </div>
             </div>
             <div class="row gap top-space owner-only">
-              <input id="hostAttemptsSearch" type="text" placeholder="Search student" style="max-width:260px;" />
+              <input id="hostAttemptsSearch" type="text" placeholder="Search student" data-i18n-ph style="max-width:260px;" />
             </div>
-            <p id="hostAttemptsSummary" class="small muted owner-only">No attempt snapshot loaded yet.</p>
+            <p id="hostAttemptsSummary" class="small muted owner-only" data-i18n>No attempt snapshot loaded yet.</p>
             <ul id="hostAttemptsList" class="list owner-only"></ul>
             </div>
             </div>
@@ -502,6 +503,8 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="../i18n-fr.js"></script>
+    <script src="../i18n.js"></script>
     <script src="../app.js?v=20260522-safe"></script>
     <script src="../question-bank-ui.js?v=20260522-bank-ts"></script>
   </body>
