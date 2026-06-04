@@ -44,6 +44,7 @@ const SITE_DIR = path.join(REPO_ROOT, '_site');
 // Owner constants that must be replaced with each teacher's own values.
 const OWNER_API_HOST = 'https://pinplay-api.eugenime.workers.dev'; // stamped into media by worker.js
 const OWNER_FRONTEND_BASE = 'https://api.pinplay.win';             // DEFAULT_BACKEND_URL in app.js/play.js
+const OWNER_GH_PAGES = 'https://audiophrases.github.io/pinplay';   // owner's frontend host baked into QR/join/assignment links
 const OWNER_STUDENT_ALIAS = 'PinPlayGame';                         // owner's hardcoded tinyurl alias on the live-host screen (create/index.html)
 const R2_BUCKET = 'pinplay-quiz-media';
 
@@ -214,15 +215,27 @@ function replaceInFile(file, from, to) {
   fs.writeFileSync(file, text.split(from).join(to));
 }
 // Recursively repoint owner constants in every .js/.html under a site dir (COPIES).
-function repointSiteFiles(dir, apiUrl, teacherAlias) {
+//  - OWNER_FRONTEND_BASE  -> teacher backend (apiUrl)
+//  - OWNER_GH_PAGES       -> teacher site (siteUrl): the host baked into the live-game
+//    QR codes and assignment share links. The plain form is swapped in .js only
+//    (the dynamic join/QR/assignment builders) so the static "Try the showcase quiz"
+//    demo link in HTML keeps pointing at the owner; the URL-encoded form is swapped
+//    everywhere (it appears inside a pre-built QR image URL in create/index.html).
+//  - OWNER_STUDENT_ALIAS  -> teacher's tinyurl alias (the displayed live-screen link)
+function repointSiteFiles(dir, apiUrl, siteUrl, teacherAlias) {
+  const ghEnc = encodeURIComponent(OWNER_GH_PAGES);
+  const siteEnc = siteUrl ? encodeURIComponent(siteUrl) : '';
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      repointSiteFiles(p, apiUrl, teacherAlias);
-    } else if (p.endsWith('.js') || p.endsWith('.html')) {
-      replaceInFile(p, OWNER_FRONTEND_BASE, apiUrl);
-      if (teacherAlias) replaceInFile(p, OWNER_STUDENT_ALIAS, teacherAlias);
+    if (entry.isDirectory()) { repointSiteFiles(p, apiUrl, siteUrl, teacherAlias); continue; }
+    const isJs = p.endsWith('.js');
+    if (!isJs && !p.endsWith('.html')) continue;
+    replaceInFile(p, OWNER_FRONTEND_BASE, apiUrl);
+    if (siteUrl) {
+      replaceInFile(p, ghEnc, siteEnc);
+      if (isJs) replaceInFile(p, OWNER_GH_PAGES, siteUrl);
     }
+    if (teacherAlias) replaceInFile(p, OWNER_STUDENT_ALIAS, teacherAlias);
   }
 }
 
@@ -666,7 +679,7 @@ async function deployApiPass2(tomlPath, workerCopy, apiUrl) {
   console.log(ok('✓ Your uploaded images/audio will be served from your own backend.'));
 }
 
-async function buildAndDeployFrontend(apiUrl, state) {
+async function buildAndDeployFrontend(apiUrl, state, siteHint = '') {
   console.log(head('Step 11 — Publishing your PinPlay website'));
   // Populate _site/ from canonical root files (git-ignored payload).
   ensureDir(SITE_DIR);
@@ -695,7 +708,7 @@ async function buildAndDeployFrontend(apiUrl, state) {
   // with their own host by worker pass-2, so that rewrite is a harmless no-op.
   const m = (state.studentShortUrl || '').match(/tinyurl\.com\/([^/?#\s]+)/i);
   const teacherAlias = m ? m[1] : '';
-  repointSiteFiles(SITE_DIR, apiUrl, teacherAlias);
+  repointSiteFiles(SITE_DIR, apiUrl, siteHint || '', teacherAlias);
   const res = await deployWithRetry('Website publish', ['deploy'], { cwd: REPO_ROOT });
   if (res.code !== 0) {
     console.log(err('\nThe website didn\'t publish. Wait a moment and run the wizard again — it'));
@@ -817,13 +830,9 @@ async function main() {
     const { tomlPath, workerCopy } = generateTeacherConfig();
     const apiUrl = await deployApiPass1(tomlPath, state);
     await deployApiPass2(tomlPath, workerCopy, apiUrl);
-    const hadShortLink = Boolean(state.studentShortUrl);
-    let siteUrl = await buildAndDeployFrontend(apiUrl, state);
-    await stepStudentLink(state, 'continue', siteUrl || state.siteUrl);
-    if (!hadShortLink && state.studentShortUrl) {
-      console.log(dim('\nUpdating your live-game join screen with your student link…'));
-      siteUrl = await buildAndDeployFrontend(apiUrl, state);
-    }
+    let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
+    await stepStudentLink(state, 'continue', siteUrl);
+    siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
     summary(state);
     getRl().close();
     return;
@@ -860,15 +869,13 @@ async function main() {
   await step9OptionalSecrets(tomlPath, state, mode, setNames);
   const apiUrl = await deployApiPass1(tomlPath, state);
   await deployApiPass2(tomlPath, workerCopy, apiUrl);
-  const hadShortLink = Boolean(state.studentShortUrl);
-  let siteUrl = await buildAndDeployFrontend(apiUrl, state);
-  await stepStudentLink(state, mode, siteUrl || state.siteUrl);
-  // A first-time short link is created after the site deploys, so republish once
-  // more to stamp the teacher's join link onto the live-host screen.
-  if (!hadShortLink && state.studentShortUrl) {
-    console.log(dim('\nUpdating your live-game join screen with your student link…'));
-    siteUrl = await buildAndDeployFrontend(apiUrl, state);
-  }
+  // Frontend publishes in two passes: pass 1 discovers the site URL (skipped if we
+  // already know it from a previous run); then we create the student link; then the
+  // final publish repoints the site's OWN join/QR/assignment links + tinyurl to the
+  // teacher (these reference the owner's host until the site URL is known).
+  let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
+  await stepStudentLink(state, mode, siteUrl);
+  siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
   summary(state);
   getRl().close();
 }
