@@ -65,8 +65,9 @@ const OPTIONAL_SECRETS = [
   ['GIPHY_API_KEY', 'GIF search per question'],
   ['YOUTUBE_API_KEY', 'YouTube video lookup for questions'],
   ['VIMEO_ACCESS_TOKEN', 'Vimeo video lookup for questions'],
-  ['CREATOR_SIGNING_KEY', 'Guest workspace sign-in tokens (advanced)'],
 ];
+// CREATOR_SIGNING_KEY (Guest Workspaces) is NOT a paste-a-key secret — it's an
+// internal HMAC key. The wizard auto-generates it (see provisionGuestWorkspaces).
 
 // ---------- Tiny ANSI helpers (no deps) ----------
 const C = {
@@ -641,6 +642,29 @@ async function step9OptionalSecrets(tomlPath, state, mode = 'first', setNames = 
   }
 }
 
+// Guest Workspaces (invite others to build quizzes under the teacher's account)
+// needs two worker secrets. We auto-provision both so the feature just works, and
+// it's harmless if never used:
+//   - CREATOR_SIGNING_KEY: the HMAC key that mints/verifies invite tokens. Generated
+//     once and kept across runs (regenerating would invalidate existing invites).
+//   - BUILDER_BASE_URL: where invite links open. Pointed at the teacher's OWN builder
+//     so guests land on her site, not the owner's default GitHub Pages builder.
+async function provisionGuestWorkspaces(tomlPath, state, siteUrl, setNames) {
+  let changed = false;
+  if (!setNames.has('CREATOR_SIGNING_KEY')) {
+    const key = [...webcrypto.getRandomValues(new Uint8Array(32))]
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    const r = npxStdin(['secret', 'put', 'CREATOR_SIGNING_KEY', '--config', tomlPath], key + '\n', { cwd: CF_DIR });
+    if (r.code === 0) { markSecret(state, 'CREATOR_SIGNING_KEY'); changed = true; }
+  }
+  if (siteUrl && !setNames.has('BUILDER_BASE_URL')) {
+    const builderBase = siteUrl.replace(/\/+$/, '') + '/create/';
+    const r = npxStdin(['secret', 'put', 'BUILDER_BASE_URL', '--config', tomlPath], builderBase + '\n', { cwd: CF_DIR });
+    if (r.code === 0) { markSecret(state, 'BUILDER_BASE_URL'); changed = true; }
+  }
+  if (changed) console.log(ok('✓ Guest Workspaces ready (invite links open your own builder).'));
+}
+
 async function deployApiPass1(tomlPath, state) {
   console.log(head('Step 9 — Publishing your PinPlay backend (1/2)'));
   console.log(dim('(If this is a brand-new account, wrangler may ask you to pick a free'));
@@ -833,6 +857,7 @@ async function main() {
     let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
     await stepStudentLink(state, 'continue', siteUrl);
     siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
+    await provisionGuestWorkspaces(tomlPath, state, siteUrl, liveSecretNames(tomlPath, state));
     summary(state);
     getRl().close();
     return;
@@ -876,6 +901,7 @@ async function main() {
   let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
   await stepStudentLink(state, mode, siteUrl);
   siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
+  await provisionGuestWorkspaces(tomlPath, state, siteUrl, setNames);
   summary(state);
   getRl().close();
 }
