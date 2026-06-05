@@ -46,6 +46,7 @@ const OWNER_API_HOST = 'https://pinplay-api.eugenime.workers.dev'; // stamped in
 const OWNER_FRONTEND_BASE = 'https://api.pinplay.win';             // DEFAULT_BACKEND_URL in app.js/play.js
 const OWNER_GH_PAGES = 'https://audiophrases.github.io/pinplay';   // owner's frontend host baked into QR/join/assignment links
 const OWNER_STUDENT_ALIAS = 'PinPlayGame';                         // owner's hardcoded tinyurl alias on the live-host screen (create/index.html)
+const OWNER_LOGIN_LOOKUP_URL = 'https://script.google.com/macros/s/AKfycbz5lL1e-bzNT8moViNmCzYEf2tiyCEU_j8BmHlQ_8Lvqhryj7dsoAo8yCiFoS4WWc7mqw/exec'; // owner's Apps Script "look up login" (play.js); cleared for teachers
 const R2_BUCKET = 'pinplay-quiz-media';
 
 // Public source for self-update (--update downloads + unpacks this, then redeploys).
@@ -153,6 +154,11 @@ const npxStdin = (args, stdinData, opts) => runWithStdin('npx', ['--yes', 'wrang
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Cryptographically-random lowercase hex string of `bytes` length (for secrets).
+function randomHex(bytes) {
+  return [...webcrypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Run `wrangler deploy` with an INTERACTIVE stdin (so a brand-new account can
 // answer wrangler's one-time prompts, e.g. registering a *.workers.dev subdomain)
 // while still capturing stdout to parse the deployed URL. stderr streams live so
@@ -251,7 +257,24 @@ function repointSiteFiles(dir, apiUrl, siteUrl, teacherAlias) {
       if (isJs) replaceInFile(p, OWNER_GH_PAGES, siteUrl);
     }
     if (teacherAlias) replaceInFile(p, OWNER_STUDENT_ALIAS, teacherAlias);
+    // Clear the owner's "look up login" Apps Script (play.js hides the link when
+    // empty). New teachers get self-service recovery via the student-accounts UI.
+    if (isJs) replaceInFile(p, OWNER_LOGIN_LOOKUP_URL, '');
   }
+}
+
+// When self-service student accounts are enabled, publish the enhancement script
+// and load it on the student join page (index.html). It self-gates at runtime on
+// the worker's /api/students/config, and reads the backend from window.__PINPLAY_API.
+function injectStudentAccountsUi(siteDir, apiUrl) {
+  copyFileSafe(path.join(SETUP_DIR, 'student-accounts-ui.js'), path.join(siteDir, 'student-accounts-ui.js'));
+  const indexPath = path.join(siteDir, 'index.html');
+  if (!fs.existsSync(indexPath)) return;
+  let html = fs.readFileSync(indexPath, 'utf8');
+  if (html.includes('student-accounts-ui.js')) return; // already injected
+  const inject = `<script>window.__PINPLAY_API=${JSON.stringify(apiUrl)};</script>\n  <script src="student-accounts-ui.js" defer></script>`;
+  html = html.includes('</body>') ? html.replace('</body>', `  ${inject}\n</body>`) : `${html}\n${inject}\n`;
+  fs.writeFileSync(indexPath, html);
 }
 
 // Parse the workers.dev URL wrangler prints on deploy.
@@ -497,14 +520,33 @@ function step5Bucket(state) {
 }
 
 function generateTeacherConfig() {
-  // Copy the canonical worker, and write a teacher wrangler.toml that points at
-  // the copy and drops the owner's account_id (wrangler infers it from login).
+  // Owner-safe worker setup: the canonical worker.js is copied VERBATIM to
+  // worker.original.js (this is the file the media-host repoint edits), and the
+  // teacher's entry point (worker.teacher.js) is a thin WRAPPER that handles the
+  // additive self-service student routes first, then falls through to the owner's
+  // unmodified worker for everything else. So worker.js itself is never changed.
   ensureDir(GEN_DIR);
-  const workerCopy = path.join(GEN_DIR, 'worker.teacher.js');
-  copyFileSafe(path.join(CF_DIR, 'worker.js'), workerCopy);
+  const workerOriginal = path.join(GEN_DIR, 'worker.original.js');
+  copyFileSafe(path.join(CF_DIR, 'worker.js'), workerOriginal);
+  // Self-service student-accounts module (only runs when STUDENT_ACCOUNTS=self).
+  copyFileSafe(path.join(SETUP_DIR, 'student-accounts.js'), path.join(GEN_DIR, 'student-accounts.js'));
+  // Wrapper entry point. Re-exports the Durable Object class so the binding resolves.
+  fs.writeFileSync(path.join(GEN_DIR, 'worker.teacher.js'), [
+    "import base, { QuizRoom } from './worker.original.js';",
+    "import { handleStudentRoutes } from './student-accounts.js';",
+    'export { QuizRoom };',
+    'export default {',
+    '  async fetch(request, env, ctx) {',
+    '    const handled = await handleStudentRoutes(request, env, ctx);',
+    '    if (handled) return handled;',
+    '    return base.fetch(request, env, ctx);',
+    '  },',
+    '};',
+    '',
+  ].join('\n'));
 
   // Line-based + CRLF-safe (the repo toml uses \r\n): drop the owner's account_id
-  // (wrangler infers it from the logged-in session) and repoint `main` at our copy.
+  // (wrangler infers it from the logged-in session) and repoint `main` at the wrapper.
   const ownerToml = fs.readFileSync(path.join(CF_DIR, 'wrangler.toml'), 'utf8');
   const outLines = [];
   for (const rawLine of ownerToml.split(/\r?\n/)) {
@@ -516,7 +558,7 @@ function generateTeacherConfig() {
 
   const tomlPath = path.join(GEN_DIR, 'wrangler.teacher.toml');
   fs.writeFileSync(tomlPath, teacherToml);
-  return { tomlPath, workerCopy };
+  return { tomlPath, workerOriginal };
 }
 
 async function step7Password(tomlPath, state, mode = 'first', setNames = new Set()) {
@@ -656,6 +698,66 @@ async function step9OptionalSecrets(tomlPath, state, mode = 'first', setNames = 
   }
 }
 
+// Ask (once) whether to enable self-service student accounts. Persisted; in
+// "continue" mode the saved choice is reused. Determines whether the build injects
+// the student-accounts UI and whether the secrets step runs.
+async function stepStudentAccountsPref(state, mode) {
+  if (mode === 'continue') return;
+  console.log(head('Student accounts (optional)'));
+  console.log('Let students self-register (email + username + password), verify their email');
+  console.log('with "Sign in with Google", and recover their own login. Assignments key to the');
+  console.log('email, so you can rename usernames without losing anyone\'s work. Needs a one-time,');
+  console.log('wizard-guided Google sign-in setup. If off, students just type a name to join.');
+  const def = state.studentAccounts === true;
+  state.studentAccounts = await confirm('Enable self-service student accounts?', def);
+  saveState(state);
+}
+
+// When student accounts are enabled, wire the worker secrets after the site is live
+// (the OAuth client needs the site URL as its authorized origin). Idempotent: skips
+// entirely once fully configured, and never re-prompts for an existing Client ID.
+async function stepStudentAccountsSecrets(tomlPath, state, apiUrl, siteUrl, setNames) {
+  if (!state.studentAccounts) return;
+  if (setNames.has('STUDENT_ACCOUNTS') && setNames.has('GOOGLE_CLIENT_ID')) return; // already set up
+  console.log(head('Student accounts — one-time Google sign-in setup'));
+  console.log('To verify student emails with "Sign in with Google", create a free Google OAuth');
+  console.log('Client ID (about 5 minutes, no recurring cost):');
+  console.log('  1. Open ' + bold('https://console.cloud.google.com/apis/credentials') + ' (create a project if asked).');
+  console.log('  2. Configure the ' + bold('OAuth consent screen') + ': User type ' + bold('External') + ', add an app name +');
+  console.log('     your email, keep the default email/profile scopes, then ' + bold('Publish app') + ' (email scope needs no review).');
+  console.log('  3. ' + bold('Create Credentials -> OAuth client ID -> Web application') + '.');
+  console.log('  4. Under ' + bold('Authorized JavaScript origins') + ' add EXACTLY this (no trailing slash):');
+  console.log('       ' + bold(siteUrl));
+  console.log('  5. Create, then copy the ' + bold('Client ID') + ' (ends in .apps.googleusercontent.com).');
+  openInBrowser('https://console.cloud.google.com/apis/credentials');
+  await pause('When you have your Client ID, press ENTER.');
+
+  if (!setNames.has('GOOGLE_CLIENT_ID')) {
+    const id = (await ask('Paste your Google Client ID (or leave blank to add later):')).trim();
+    if (id) {
+      const r = npxStdin(['secret', 'put', 'GOOGLE_CLIENT_ID', '--config', tomlPath], id + '\n', { cwd: CF_DIR });
+      if (r.code === 0) markSecret(state, 'GOOGLE_CLIENT_ID');
+    } else {
+      console.log(warn('No Client ID yet — students can still type+confirm their email; add Google later by re-running.'));
+    }
+  }
+  if (!setNames.has('STUDENT_ROSTER_LOOKUP_SECRET')) {
+    const sec = randomHex(16);
+    if (npxStdin(['secret', 'put', 'STUDENT_ROSTER_LOOKUP_SECRET', '--config', tomlPath], sec + '\n', { cwd: CF_DIR }).code === 0) {
+      markSecret(state, 'STUDENT_ROSTER_LOOKUP_SECRET');
+    }
+  }
+  const lookupUrl = apiUrl.replace(/\/+$/, '') + '/api/students/lookup';
+  if (npxStdin(['secret', 'put', 'STUDENT_ROSTER_LOOKUP_URL', '--config', tomlPath], lookupUrl + '\n', { cwd: CF_DIR }).code === 0) {
+    markSecret(state, 'STUDENT_ROSTER_LOOKUP_URL');
+  }
+  if (npxStdin(['secret', 'put', 'STUDENT_ACCOUNTS', '--config', tomlPath], 'self\n', { cwd: CF_DIR }).code === 0) {
+    markSecret(state, 'STUDENT_ACCOUNTS');
+  }
+  console.log(ok('✓ Self-service student accounts enabled (sign-up, login & self-recovery).'));
+  saveState(state);
+}
+
 // Guest Workspaces (invite others to build quizzes under the teacher's account)
 // needs two worker secrets. We auto-provision both so the feature just works, and
 // it's harmless if never used:
@@ -716,10 +818,10 @@ async function deployApiPass1(tomlPath, state) {
   return apiUrl;
 }
 
-async function deployApiPass2(tomlPath, workerCopy, apiUrl) {
+async function deployApiPass2(tomlPath, workerOriginal, apiUrl) {
   console.log(head('Step 10 — Linking your media to your own backend (2/2)'));
-  // Repoint the media host stamped into uploads, on the COPY only.
-  replaceInFile(workerCopy, OWNER_API_HOST, apiUrl);
+  // Repoint the media host stamped into uploads, on the COPY only (worker.original.js).
+  replaceInFile(workerOriginal, OWNER_API_HOST, apiUrl);
   const res = await deployWithRetry('Media linking', ['deploy', '--config', tomlPath], { cwd: CF_DIR });
   if (res.code !== 0) {
     console.log(err('\nThe second backend publish didn\'t go through. Wait a moment and run the'));
@@ -762,6 +864,8 @@ async function buildAndDeployFrontend(apiUrl, state, siteHint = '') {
   // Teacher deployments hide the Question Bank by default (owner-oriented import
   // library). Only kept if the teacher explicitly opted in (hideQuestionBank===false).
   if (state.hideQuestionBank !== false) hideQuestionBankInSite(SITE_DIR);
+  // Self-service student accounts: publish + load the enhancement UI when enabled.
+  if (state.studentAccounts) injectStudentAccountsUi(SITE_DIR, apiUrl);
   const res = await deployWithRetry('Website publish', ['deploy'], { cwd: REPO_ROOT });
   if (res.code !== 0) {
     console.log(err('\nThe website didn\'t publish. Wait a moment and run the wizard again — it'));
@@ -880,13 +984,15 @@ async function main() {
     }
     await step1Prereqs();
     await fetchLatestCode(); // self-fetch newest code; falls back to local on any failure
-    const { tomlPath, workerCopy } = generateTeacherConfig();
+    const { tomlPath, workerOriginal } = generateTeacherConfig();
     const apiUrl = await deployApiPass1(tomlPath, state);
-    await deployApiPass2(tomlPath, workerCopy, apiUrl);
+    await deployApiPass2(tomlPath, workerOriginal, apiUrl);
     let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
     await stepStudentLink(state, 'continue', siteUrl);
     siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
-    await provisionGuestWorkspaces(tomlPath, state, siteUrl, liveSecretNames(tomlPath, state));
+    const liveNames = liveSecretNames(tomlPath, state);
+    await stepStudentAccountsSecrets(tomlPath, state, apiUrl, siteUrl, liveNames);
+    await provisionGuestWorkspaces(tomlPath, state, siteUrl, liveNames);
     summary(state);
     getRl().close();
     return;
@@ -917,13 +1023,14 @@ async function main() {
   step5Bucket(state);
   if (!cfg) cfg = generateTeacherConfig();
 
-  const { tomlPath, workerCopy } = cfg;
+  const { tomlPath, workerOriginal } = cfg;
   await step7Password(tomlPath, state, mode, setNames);
   await step8TtsBridge(tomlPath, state, mode, setNames);
   await step9OptionalSecrets(tomlPath, state, mode, setNames);
   await stepQuestionBankPref(state, mode);
+  await stepStudentAccountsPref(state, mode);
   const apiUrl = await deployApiPass1(tomlPath, state);
-  await deployApiPass2(tomlPath, workerCopy, apiUrl);
+  await deployApiPass2(tomlPath, workerOriginal, apiUrl);
   // Frontend publishes in two passes: pass 1 discovers the site URL (skipped if we
   // already know it from a previous run); then we create the student link; then the
   // final publish repoints the site's OWN join/QR/assignment links + tinyurl to the
@@ -931,6 +1038,7 @@ async function main() {
   let siteUrl = state.siteUrl || await buildAndDeployFrontend(apiUrl, state, '');
   await stepStudentLink(state, mode, siteUrl);
   siteUrl = await buildAndDeployFrontend(apiUrl, state, siteUrl);
+  await stepStudentAccountsSecrets(tomlPath, state, apiUrl, siteUrl, setNames);
   await provisionGuestWorkspaces(tomlPath, state, siteUrl, setNames);
   summary(state);
   getRl().close();
