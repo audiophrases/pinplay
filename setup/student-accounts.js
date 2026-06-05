@@ -40,6 +40,12 @@ export async function handleStudentRoutes(request, env, ctx) { // eslint-disable
     if (route === 'signup' && request.method === 'POST') return await routeSignup(request, env);
     if (route === 'recover' && request.method === 'POST') return await routeRecover(request, env);
     if (route === 'reset-password' && request.method === 'POST') return await routeReset(request, env);
+    // Teacher admin (locked to the create password) — the new-teacher equivalent of
+    // editing the roster spreadsheet.
+    if (route === 'admin/list' && request.method === 'GET') return await routeAdminList(request, env);
+    if (route === 'admin/rename' && request.method === 'POST') return await routeAdminRename(request, env);
+    if (route === 'admin/reset' && request.method === 'POST') return await routeAdminReset(request, env);
+    if (route === 'admin/delete' && request.method === 'POST') return await routeAdminDelete(request, env);
     return jres({ ok: false, error: 'Unknown student route.' }, 404);
   } catch (e) {
     return jres({ ok: false, error: 'Server error.', detail: String(e && e.message || e) }, 500);
@@ -125,6 +131,79 @@ async function routeReset(request, env) {
   acct.passwordHash = await hashPassword(newPassword);
   await putJson(env, accountKeyForEmail(await sha256hex(acct.email)), acct);
   return jres({ ok: true, username: acct.username });
+}
+
+// ---------- Teacher admin (create-password protected) ----------
+
+// Matches worker.js verifyCreatePassword: sha256hex(password.trim().NFC) === CREATE_PASSWORD_HASH.
+async function requireTeacher(request, env) {
+  const auth = String(request.headers.get('Authorization') || '');
+  const pw = auth.replace(/^Bearer\s+/i, '').trim().normalize('NFC');
+  const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
+  if (!pw || !hash) return false;
+  return (await sha256hex(pw)) === hash;
+}
+
+async function routeAdminList(request, env) {
+  if (!(await requireTeacher(request, env))) return jres({ ok: false, error: 'Teacher password required.' }, 401);
+  const students = [];
+  let cursor;
+  do {
+    const listed = await env.QUIZ_MEDIA.list({ prefix: 'students/accounts/', cursor, limit: 1000 });
+    for (const obj of (listed.objects || [])) {
+      const acct = await getJson(env, obj.key);
+      if (acct?.email) students.push({ email: acct.email, username: acct.username, emailVerified: !!acct.emailVerified, createdAt: acct.createdAt || null });
+    }
+    cursor = listed.truncated ? listed.cursor : null;
+  } while (cursor);
+  students.sort((a, b) => String(a.username).localeCompare(String(b.username)));
+  return jres({ ok: true, students });
+}
+
+async function routeAdminRename(request, env) {
+  if (!(await requireTeacher(request, env))) return jres({ ok: false, error: 'Teacher password required.' }, 401);
+  const body = await safeJson(request);
+  const email = normalizeEmail(body?.email);
+  const newUsername = sanitizeUsername(body?.newUsername);
+  if (!email || !newUsername) return jres({ ok: false, error: 'Email and a valid new username are required.' }, 400);
+  const acct = await loadAccountByEmail(env, email);
+  if (!acct) return jres({ ok: false, error: 'Student not found.' }, 404);
+  const oldUsername = acct.username;
+  if (oldUsername.toLowerCase() !== newUsername.toLowerCase() && await loadUsernameIndex(env, newUsername)) {
+    return jres({ ok: false, error: 'That username is taken.' }, 409);
+  }
+  acct.username = newUsername;
+  await putJson(env, accountKeyForEmail(await sha256hex(email)), acct);
+  await putJson(env, usernameKey(newUsername), { email });
+  if (oldUsername.toLowerCase() !== newUsername.toLowerCase()) await env.QUIZ_MEDIA.delete(usernameKey(oldUsername));
+  return jres({ ok: true, username: newUsername });
+}
+
+async function routeAdminReset(request, env) {
+  if (!(await requireTeacher(request, env))) return jres({ ok: false, error: 'Teacher password required.' }, 401);
+  const body = await safeJson(request);
+  const email = normalizeEmail(body?.email);
+  const newPassword = String(body?.newPassword || '');
+  if (!email) return jres({ ok: false, error: 'Email required.' }, 400);
+  if (newPassword.length < 6) return jres({ ok: false, error: 'Password must be at least 6 characters.' }, 400);
+  const acct = await loadAccountByEmail(env, email);
+  if (!acct) return jres({ ok: false, error: 'Student not found.' }, 404);
+  acct.passwordHash = await hashPassword(newPassword);
+  await putJson(env, accountKeyForEmail(await sha256hex(email)), acct);
+  return jres({ ok: true });
+}
+
+async function routeAdminDelete(request, env) {
+  if (!(await requireTeacher(request, env))) return jres({ ok: false, error: 'Teacher password required.' }, 401);
+  const body = await safeJson(request);
+  const email = normalizeEmail(body?.email);
+  if (!email) return jres({ ok: false, error: 'Email required.' }, 400);
+  const acct = await loadAccountByEmail(env, email);
+  if (acct) {
+    await env.QUIZ_MEDIA.delete(usernameKey(acct.username));
+    await env.QUIZ_MEDIA.delete(accountKeyForEmail(await sha256hex(email)));
+  }
+  return jres({ ok: true });
 }
 
 // ---------- Storage ----------
@@ -239,7 +318,7 @@ async function safeJson(request) { try { return await request.json(); } catch { 
 function cors(res) {
   res.headers.set('Access-Control-Allow-Origin', '*');
   res.headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   return res;
 }
 function jres(obj, status = 200) {

@@ -263,18 +263,23 @@ function repointSiteFiles(dir, apiUrl, siteUrl, teacherAlias) {
   }
 }
 
-// When self-service student accounts are enabled, publish the enhancement script
-// and load it on the student join page (index.html). It self-gates at runtime on
-// the worker's /api/students/config, and reads the backend from window.__PINPLAY_API.
+// When self-service student accounts are enabled, publish + load the enhancement
+// scripts: the student signup/login/forgotten UI on the join page (index.html), and
+// the teacher "Students" admin panel on the create dashboard (create/index.html).
+// Both self-gate at runtime on /api/students/config and read window.__PINPLAY_API.
 function injectStudentAccountsUi(siteDir, apiUrl) {
   copyFileSafe(path.join(SETUP_DIR, 'student-accounts-ui.js'), path.join(siteDir, 'student-accounts-ui.js'));
-  const indexPath = path.join(siteDir, 'index.html');
-  if (!fs.existsSync(indexPath)) return;
-  let html = fs.readFileSync(indexPath, 'utf8');
-  if (html.includes('student-accounts-ui.js')) return; // already injected
-  const inject = `<script>window.__PINPLAY_API=${JSON.stringify(apiUrl)};</script>\n  <script src="student-accounts-ui.js" defer></script>`;
+  injectScriptTag(path.join(siteDir, 'index.html'), 'student-accounts-ui.js', apiUrl);
+  copyFileSafe(path.join(SETUP_DIR, 'student-admin-ui.js'), path.join(siteDir, 'student-admin-ui.js'));
+  injectScriptTag(path.join(siteDir, 'create', 'index.html'), '../student-admin-ui.js', apiUrl);
+}
+function injectScriptTag(htmlPath, src, apiUrl) {
+  if (!fs.existsSync(htmlPath)) return;
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  if (html.includes(src)) return; // already injected
+  const inject = `<script>window.__PINPLAY_API=${JSON.stringify(apiUrl)};</script>\n  <script src="${src}" defer></script>`;
   html = html.includes('</body>') ? html.replace('</body>', `  ${inject}\n</body>`) : `${html}\n${inject}\n`;
-  fs.writeFileSync(indexPath, html);
+  fs.writeFileSync(htmlPath, html);
 }
 
 // Parse the workers.dev URL wrangler prints on deploy.
