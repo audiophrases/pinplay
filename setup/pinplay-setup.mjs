@@ -536,12 +536,37 @@ function generateTeacherConfig() {
   // Self-service student-accounts module (only runs when STUDENT_ACCOUNTS=self).
   copyFileSafe(path.join(SETUP_DIR, 'student-accounts.js'), path.join(GEN_DIR, 'student-accounts.js'));
   // Wrapper entry point. Re-exports the Durable Object class so the binding resolves.
+  // Cloudflare blocks a Worker from fetch()ing its OWN hostname, which would break
+  // the owner worker's lookupAndVerifyStudent() self-call to /api/students/lookup
+  // (that's why assignment login failed). So we intercept that one self-call here and
+  // serve it in-process. `capturedEnv` is refreshed each request; bindings/secrets are
+  // identical across requests, so reusing it for the interception is concurrency-safe.
   fs.writeFileSync(path.join(GEN_DIR, 'worker.teacher.js'), [
     "import base, { QuizRoom } from './worker.original.js';",
     "import { handleStudentRoutes } from './student-accounts.js';",
     'export { QuizRoom };',
+    '',
+    'let capturedEnv = null;',
+    'let capturedCtx = null;',
+    'const __origFetch = globalThis.fetch.bind(globalThis);',
+    'globalThis.fetch = async function (input, init) {',
+    '  try {',
+    '    if (capturedEnv) {',
+    "      const u = typeof input === 'string' ? input : (input && input.url) || '';",
+    "      if (u && u.indexOf('/api/students/') !== -1 && new URL(u).pathname.startsWith('/api/students/')) {",
+    '        const req = input instanceof Request ? input : new Request(u, init);',
+    '        const handled = await handleStudentRoutes(req, capturedEnv, capturedCtx);',
+    '        if (handled) return handled;',
+    '      }',
+    '    }',
+    '  } catch (e) { /* fall through to the network */ }',
+    '  return __origFetch(input, init);',
+    '};',
+    '',
     'export default {',
     '  async fetch(request, env, ctx) {',
+    '    capturedEnv = env;',
+    '    capturedCtx = ctx;',
     '    const handled = await handleStudentRoutes(request, env, ctx);',
     '    if (handled) return handled;',
     '    return base.fetch(request, env, ctx);',
