@@ -451,6 +451,8 @@ window.PINPLAY_FR_DICT = {
   'Recording too large ({size} MB, max {max} MB). Try again.':
     'Enregistrement trop volumineux ({size} Mo, max {max} Mo). Réessayez.',
   '📷 Add a photo': '📷 Ajouter une photo',
+  '📷 Take a photo': '📷 Prendre une photo',
+  '🖼️ Upload image': '🖼️ Téléverser une image',
   '🔄 Replace': '🔄 Remplacer',
   '(No image submitted)': '(Aucune image envoyée)',
   'Please choose an image file.': 'Veuillez choisir un fichier image.',

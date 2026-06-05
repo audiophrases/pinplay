@@ -7142,12 +7142,35 @@ function renderImageAnswerInput(container, question) {
   const wrap = document.createElement('div');
   wrap.className = 'image-answer';
 
-  const pickBtn = document.createElement('button');
-  pickBtn.type = 'button';
-  pickBtn.className = 'btn image-answer-pick-btn';
-  pickBtn.innerHTML = t('📷 Add a photo');
+  // Two pick actions share one preview/upload path:
+  //  • "Take a photo" → input with capture="environment" opens the camera directly
+  //    on phones/tablets (falls back to a file picker on cameraless desktops).
+  //  • "Upload image" → plain image/* input for the gallery / file system.
+  // They're separate inputs because adding `capture` to a single input would force
+  // camera-only and remove the upload-from-gallery option.
+  const pickBtns = document.createElement('div');
+  pickBtns.className = 'image-answer-pick-btns';
 
-  // Plain image/* input — lets phones offer camera OR gallery (no forced capture).
+  const cameraBtn = document.createElement('button');
+  cameraBtn.type = 'button';
+  cameraBtn.className = 'btn image-answer-pick-btn';
+  cameraBtn.innerHTML = t('📷 Take a photo');
+
+  const uploadBtn = document.createElement('button');
+  uploadBtn.type = 'button';
+  uploadBtn.className = 'btn image-answer-pick-btn';
+  uploadBtn.innerHTML = t('🖼️ Upload image');
+
+  pickBtns.append(cameraBtn, uploadBtn);
+
+  const cameraInput = document.createElement('input');
+  cameraInput.type = 'file';
+  cameraInput.accept = 'image/*';
+  cameraInput.setAttribute('capture', 'environment');
+  cameraInput.className = 'image-answer-file';
+  cameraInput.hidden = true;
+
+  // Plain image/* input — lets phones offer gallery/files (no forced capture).
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = 'image/*';
@@ -7160,7 +7183,7 @@ function renderImageAnswerInput(container, question) {
   const statusEl = document.createElement('div');
   statusEl.className = 'image-answer-upload-status';
 
-  wrap.append(pickBtn, fileInput, previewWrap, statusEl);
+  wrap.append(pickBtns, cameraInput, fileInput, previewWrap, statusEl);
   container.appendChild(wrap);
 
   const showPreview = (src) => {
@@ -7196,22 +7219,24 @@ function renderImageAnswerInput(container, question) {
     }
     // Treat the saved upload as already complete so submit/edit works without re-uploading.
     _imageAnswerUpload = { url: savedUrl, mimeType: '', uploading: false, error: null };
-    pickBtn.classList.add('hidden');
+    pickBtns.classList.add('hidden');
     showPreview(src);
   } else if (reviewMode) {
-    pickBtn.classList.add('hidden');
+    pickBtns.classList.add('hidden');
     statusEl.textContent = t('(No image submitted)');
   }
 
   if (reviewMode) {
+    cameraInput.disabled = true;
     fileInput.disabled = true;
     return;
   }
 
-  pickBtn.addEventListener('click', () => fileInput.click());
+  cameraBtn.addEventListener('click', () => cameraInput.click());
+  uploadBtn.addEventListener('click', () => fileInput.click());
 
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files && fileInput.files[0];
+  const handlePick = (input) => {
+    const file = input.files && input.files[0];
     if (!file) return;
     if (!String(file.type || '').startsWith('image/')) {
       statusEl.textContent = t('Please choose an image file.');
@@ -7223,10 +7248,13 @@ function renderImageAnswerInput(container, question) {
       statusEl.className = 'image-answer-upload-status error';
       return;
     }
-    pickBtn.classList.add('hidden');
+    pickBtns.classList.add('hidden');
     showPreview(URL.createObjectURL(file));
     uploadImageBlob(file, statusEl);
-  });
+  };
+
+  cameraInput.addEventListener('change', () => handlePick(cameraInput));
+  fileInput.addEventListener('change', () => handlePick(fileInput));
 }
 
 // Downscale large photos before upload to cap R2 storage growth. EXIF-safe
