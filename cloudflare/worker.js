@@ -4409,7 +4409,7 @@ export class QuizRoom {
         if (list.length > 120) list.splice(0, list.length - 120);
 
         room.updatedAt = Date.now();
-        await this.#setRoom(room);
+        await this.#persistReactionSlice(room, qIndex);
 
         return json({ ok: true, reaction: payload });
       }
@@ -4530,6 +4530,31 @@ export class QuizRoom {
     // no-login media) is purged ~ROOM_TTL_MS later without anyone re-opening the
     // PIN. Set only when none is pending (avoids an alarm write per mutation);
     // alarm() re-arms from updatedAt. No-op for the assignments DO (never #setRoom).
+    try {
+      if ((await storage.getAlarm()) == null) {
+        await storage.setAlarm(Date.now() + ROOM_TTL_MS);
+      }
+    } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
+  }
+
+  // Slim persist path for the high-frequency reaction stream. Writes only the
+  // single changed r:react:<qIndex> slice, skipping the r:meta + r:events writes
+  // that #setRoom does unconditionally — cutting 3 storage writes per tap to 1.
+  // Reactions never touch eventLog, and a stale persisted updatedAt is harmless
+  // here: ROOM_TTL_MS is 24h and any real activity (advancing questions, polls)
+  // refreshes it via #setRoom long before expiry.
+  async #persistReactionSlice(room, qIndex) {
+    if (!room || typeof room !== 'object') return;
+    const storage = this.state.storage;
+    const key = `r:react:${qIndex}`;
+    const value = (room.reactionsByQuestion && room.reactionsByQuestion[qIndex]) || [];
+    const snap = room.__snapshot instanceof Map ? room.__snapshot : null;
+    if (snap) snap.set(key, JSON.stringify(value));
+    await storage.put(key, value);
+    // Keep the in-memory cache aligned (room is mutated in place by the caller).
+    this.roomCache = room;
+    // Ensure the cleanup alarm stays armed — normally already set by #setRoom,
+    // so this is a cheap getAlarm read with no write during an active game.
     try {
       if ((await storage.getAlarm()) == null) {
         await storage.setAlarm(Date.now() + ROOM_TTL_MS);

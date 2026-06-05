@@ -4448,7 +4448,14 @@ function appendReactionBar() {
   */
 }
 
+// Throttle student taps so a single kid spam-tapping can't flood the room DO
+// with writes (each accepted reaction costs a storage write server-side).
+const REACTION_COOLDOWN_MS = 600;
+let lastReactionAt = 0;
 async function sendReaction(emoji) {
+  const now = Date.now();
+  if (now - lastReactionAt < REACTION_COOLDOWN_MS) return;
+  lastReactionAt = now;
   try {
     if (!live.player.pin || !live.player.id || !live.player.token) return;
     await api('/api/react', {
