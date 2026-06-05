@@ -3948,6 +3948,11 @@ async function exportCreationPrompt() {
     cleanRequest.excludeQuestionTypes = TEACHER_GRADED_TYPES;
   }
 
+  // "Include selected" and "Use all available" are restrictive picks: the teacher
+  // wants every chosen type to actually appear, so mandate full coverage. "Best
+  // fitting" (ai_choice) and "Exclude teacher-corrected" stay open/non-prescriptive.
+  const requireFullTypeCoverage = (typesMode === 'include' && selectedTypes.length > 0) || typesMode === 'all';
+
   const textualSummary = Object.entries(cleanRequest)
     .map(([k, v]) => Array.isArray(v) ? `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v.join(', ')}` : `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
     .join('\n');
@@ -4046,13 +4051,16 @@ async function exportCreationPrompt() {
       featureGuides,
       audioPedagogicalUse,
       typeExplanations: relevantTypeExplanations,
-      pickedExamples
+      pickedExamples,
+      requireFullTypeCoverage
     }));
     filename = `prompt-agent-${toSafeFilename(theme)}.md`;
   } else {
   const questionTypesRule = typesMode === 'ai_choice'
     ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
-    : `Use only allowed question types: ${allowedTypesText}.`;
+    : requireFullTypeCoverage
+      ? `Use ONLY these question types AND include at least one question of EVERY one of them: ${allowedTypesText}. Treat this list as a required checklist, not a menu — full coverage is mandatory. The only acceptable reason to omit a listed type is if the total question count is smaller than the number of listed types (in which case still maximise coverage).`
+      : `Use only allowed question types: ${allowedTypesText}.`;
   const mustFollowRules = [
     'Return valid PinPlay JSON version 3.',
     questionTypesRule,
@@ -4249,7 +4257,7 @@ async function exportCreationPrompt() {
 // workflow + non-prescriptive hints + short hard constraints, instead of a long rulebook.
 // Returns the same { promptText (clipboard), exportData (downloaded JSON) } shape so the
 // shared tail of exportCreationPrompt can copy + trim + download it identically.
-function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, featureGuides, audioPedagogicalUse, typeExplanations, pickedExamples }) {
+function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, featureGuides, audioPedagogicalUse, typeExplanations, pickedExamples, requireFullTypeCoverage }) {
   const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
   const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
   const wantsVideo = cleanRequest.video === 'some';
@@ -4308,7 +4316,9 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
   constraints.push('Return one valid PinPlay JSON v3 object that matches the key shapes in exampleTemplate. Keep ids stable and unique.');
   constraints.push(aiChoice
     ? `Choose the question types that best fit the goal and theme from: ${allowedTypesText}.`
-    : `Use only these question types: ${allowedTypesText}.`);
+    : requireFullTypeCoverage
+      ? `Use ONLY these question types AND include at least one question of EVERY one — treat the list as a required checklist, not a menu, so full coverage is mandatory: ${allowedTypesText}. Omit a listed type only if the question count is smaller than the number of listed types.`
+      : `Use only these question types: ${allowedTypesText}.`);
   if (blockedTypesText) constraints.push(`Never use blocked types: ${blockedTypesText}.`);
   if (wantsImages || wantsGifs) {
     constraints.push('Embed real, verified assets for any question whose content or answer depends on a specific image — do not ship imageKeyword/gifKeyword placeholders there and lean on save-time auto-search (that is the chatbot fallback). Keyword fields are only for purely decorative or generic-reaction visuals. Control storage by downscaling/compressing embeds (aim for a few hundred KB each), not by swapping them for keywords.');
