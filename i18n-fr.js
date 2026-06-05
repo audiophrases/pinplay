@@ -453,6 +453,13 @@ window.PINPLAY_FR_DICT = {
   '📷 Add a photo': '📷 Ajouter une photo',
   '📷 Take a photo': '📷 Prendre une photo',
   '🖼️ Upload image': '🖼️ Téléverser une image',
+  'Starting camera…': 'Démarrage de la caméra…',
+  '📸 Capture': '📸 Capturer',
+  '🔄 Flip': '🔄 Pivoter',
+  'Camera access denied. Allow the camera in browser settings, then try again.':
+    'Accès à la caméra refusé. Autorisez la caméra dans les paramètres du navigateur, puis réessayez.',
+  'No camera available on this device.': 'Aucune caméra disponible sur cet appareil.',
+  'Could not capture the photo. Try again.': 'Impossible de capturer la photo. Réessayez.',
   '🔄 Replace': '🔄 Remplacer',
   '(No image submitted)': '(Aucune image envoyée)',
   'Please choose an image file.': 'Veuillez choisir un fichier image.',

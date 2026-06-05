@@ -7232,11 +7232,9 @@ function renderImageAnswerInput(container, question) {
     return;
   }
 
-  cameraBtn.addEventListener('click', () => cameraInput.click());
-  uploadBtn.addEventListener('click', () => fileInput.click());
-
-  const handlePick = (input) => {
-    const file = input.files && input.files[0];
+  // Validate + preview + upload a chosen image (File from a picker, or Blob from
+  // the live camera). Shared by both file inputs and the camera modal.
+  const acceptFile = (file) => {
     if (!file) return;
     if (!String(file.type || '').startsWith('image/')) {
       statusEl.textContent = t('Please choose an image file.');
@@ -7253,8 +7251,140 @@ function renderImageAnswerInput(container, question) {
     uploadImageBlob(file, statusEl);
   };
 
-  cameraInput.addEventListener('change', () => handlePick(cameraInput));
-  fileInput.addEventListener('change', () => handlePick(fileInput));
+  // "Take a photo": open a live getUserMedia camera (works on laptops/Chromebooks/
+  // desktops-with-webcam AND phones). Falls back to the `capture` file input when
+  // getUserMedia is unavailable (older browsers, insecure context).
+  cameraBtn.addEventListener('click', () => {
+    if (navigator.mediaDevices?.getUserMedia) {
+      openCameraModal(acceptFile, statusEl);
+    } else {
+      cameraInput.click();
+    }
+  });
+  uploadBtn.addEventListener('click', () => fileInput.click());
+
+  cameraInput.addEventListener('change', () => acceptFile(cameraInput.files && cameraInput.files[0]));
+  fileInput.addEventListener('change', () => acceptFile(fileInput.files && fileInput.files[0]));
+}
+
+// Live camera capture modal backed by getUserMedia. Shows a video preview with a
+// shutter button; on capture it grabs the current frame as a JPEG and hands it to
+// onCapture(blob). Cleans up the media stream on every exit path.
+function openCameraModal(onCapture, statusEl) {
+  let stream = null;
+  let facingMode = 'environment'; // prefer rear camera on phones; ignored on laptops
+
+  const overlay = document.createElement('div');
+  overlay.className = 'camera-modal-overlay';
+
+  const panel = document.createElement('div');
+  panel.className = 'camera-modal';
+
+  const video = document.createElement('video');
+  video.className = 'camera-modal-video';
+  video.autoplay = true;
+  video.playsInline = true;
+  video.muted = true;
+
+  const msg = document.createElement('div');
+  msg.className = 'camera-modal-msg';
+  msg.textContent = t('Starting camera…');
+
+  const controls = document.createElement('div');
+  controls.className = 'camera-modal-controls';
+
+  const shutterBtn = document.createElement('button');
+  shutterBtn.type = 'button';
+  shutterBtn.className = 'btn camera-modal-shutter';
+  shutterBtn.innerHTML = t('📸 Capture');
+  shutterBtn.disabled = true;
+
+  const flipBtn = document.createElement('button');
+  flipBtn.type = 'button';
+  flipBtn.className = 'btn camera-modal-flip';
+  flipBtn.innerHTML = t('🔄 Flip');
+  flipBtn.hidden = true; // shown only when more than one camera exists
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn camera-modal-cancel';
+  cancelBtn.innerHTML = t('Cancel');
+
+  controls.append(shutterBtn, flipBtn, cancelBtn);
+  panel.append(video, msg, controls);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  const stopStream = () => {
+    if (stream) { stream.getTracks().forEach((tr) => tr.stop()); stream = null; }
+  };
+  const close = () => {
+    stopStream();
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
+  const start = async () => {
+    stopStream();
+    shutterBtn.disabled = true;
+    msg.textContent = t('Starting camera…');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode }, audio: false,
+      });
+    } catch (err) {
+      // Some laptops have no 'environment' camera — retry without the constraint.
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch (err2) {
+        const n = err2?.name || err?.name || '';
+        msg.textContent = (n === 'NotAllowedError' || n === 'PermissionDeniedError')
+          ? t('Camera access denied. Allow the camera in browser settings, then try again.')
+          : t('No camera available on this device.');
+        return;
+      }
+    }
+    video.srcObject = stream;
+    try { await video.play(); } catch (_) { /* autoplay should cover it */ }
+    msg.textContent = '';
+    shutterBtn.disabled = false;
+    // Offer a flip button only when the device actually has multiple cameras.
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (devices.filter((d) => d.kind === 'videoinput').length > 1) flipBtn.hidden = false;
+    } catch (_) { /* enumerateDevices may be blocked; just hide flip */ }
+  };
+
+  shutterBtn.addEventListener('click', () => {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w || !h) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        if (statusEl) {
+          statusEl.textContent = t('Could not capture the photo. Try again.');
+          statusEl.className = 'image-answer-upload-status error';
+        }
+        close();
+        return;
+      }
+      onCapture(blob);
+      close();
+    }, 'image/jpeg', 0.92);
+  });
+
+  flipBtn.addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    start();
+  });
+  cancelBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  start();
 }
 
 // Downscale large photos before upload to cap R2 storage growth. EXIF-safe
