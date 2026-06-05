@@ -215,6 +215,20 @@ function replaceInFile(file, from, to) {
   const text = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, text.split(from).join(to));
 }
+// Strip the question-bank-ui.js <script> from create-page COPIES so the bank button
+// (hidden by default in the markup) is never revealed. Recurses; HTML only. The
+// owner's canonical files are untouched — this only edits the git-ignored _site copy.
+function hideQuestionBankInSite(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) { hideQuestionBankInSite(p); continue; }
+    if (!p.endsWith('.html')) continue;
+    const text = fs.readFileSync(p, 'utf8');
+    const stripped = text.replace(/[ \t]*<script\b[^>]*question-bank-ui\.js[^>]*>\s*<\/script>\s*\r?\n?/gi, '');
+    if (stripped !== text) fs.writeFileSync(p, stripped);
+  }
+}
+
 // Recursively repoint owner constants in every .js/.html under a site dir (COPIES).
 //  - OWNER_FRONTEND_BASE  -> teacher backend (apiUrl)
 //  - OWNER_GH_PAGES       -> teacher site (siteUrl): the host baked into the live-game
@@ -665,6 +679,18 @@ async function provisionGuestWorkspaces(tomlPath, state, siteUrl, setNames) {
   if (changed) console.log(ok('✓ Guest Workspaces ready (invite links open your own builder).'));
 }
 
+async function stepQuestionBankPref(state, mode) {
+  // New teachers hide the Question Bank by default (it's a shared import library
+  // aimed at the owner). Asked once; the choice persists for future updates. The
+  // owner's own build is never affected — this only flags the teacher _site copy.
+  if (mode === 'continue') return;
+  console.log(head('Question bank (optional)'));
+  console.log('The Question Bank imports pre-made questions from a shared library.');
+  const def = state.hideQuestionBank !== false; // default: hidden for teachers
+  state.hideQuestionBank = await confirm('Hide the Question Bank from the quiz builder?', def);
+  saveState(state);
+}
+
 async function deployApiPass1(tomlPath, state) {
   console.log(head('Step 9 — Publishing your PinPlay backend (1/2)'));
   console.log(dim('(If this is a brand-new account, wrangler may ask you to pick a free'));
@@ -733,6 +759,9 @@ async function buildAndDeployFrontend(apiUrl, state, siteHint = '') {
   const m = (state.studentShortUrl || '').match(/tinyurl\.com\/([^/?#\s]+)/i);
   const teacherAlias = m ? m[1] : '';
   repointSiteFiles(SITE_DIR, apiUrl, siteHint || '', teacherAlias);
+  // Teacher deployments hide the Question Bank by default (owner-oriented import
+  // library). Only kept if the teacher explicitly opted in (hideQuestionBank===false).
+  if (state.hideQuestionBank !== false) hideQuestionBankInSite(SITE_DIR);
   const res = await deployWithRetry('Website publish', ['deploy'], { cwd: REPO_ROOT });
   if (res.code !== 0) {
     console.log(err('\nThe website didn\'t publish. Wait a moment and run the wizard again — it'));
@@ -892,6 +921,7 @@ async function main() {
   await step7Password(tomlPath, state, mode, setNames);
   await step8TtsBridge(tomlPath, state, mode, setNames);
   await step9OptionalSecrets(tomlPath, state, mode, setNames);
+  await stepQuestionBankPref(state, mode);
   const apiUrl = await deployApiPass1(tomlPath, state);
   await deployApiPass2(tomlPath, workerCopy, apiUrl);
   // Frontend publishes in two passes: pass 1 discovers the site URL (skipped if we
