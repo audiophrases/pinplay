@@ -1750,15 +1750,29 @@ function bindBuilderEvents() {
       const restore = () => { audioBtn.disabled = false; audioBtn.textContent = origLabel; };
       audioBtn.disabled = true;
       audioBtn.textContent = t('⏳ Loading…');
+      let healed = false;
+      // If the attached cloud file is gone, drop the dead reference and switch
+      // back to Text-to-speech so the next save regenerates a fresh mp3.
+      const onMissingFile = (reason) => {
+        q.audioData = '';
+        q.audioMode = 'tts';
+        q._ttsGenerated = false;
+        q._userAudioUploaded = false;
+        q._audioVersion = '';
+        healed = true;
+        setStatus(hostStatusEl, t('{reason} Switched back to Text-to-speech — it will regenerate on the next save.', { reason: reason || '' }).trim(), 'checking');
+      };
       try {
         // onStart clears the loading label as soon as audio actually begins,
         // covering the Edge TTS fetch/decode latency on cold starts.
         // playQuestionAudio surfaces its own specific failure reason (missing
         // cloud file, decode error, TTS error), so no generic message here.
-        await playQuestionAudio(q, { onStart: restore, force: true });
+        await playQuestionAudio(q, { onStart: restore, force: true, onMissingFile });
       } finally {
         restore();
       }
+      // Re-render after playback so the source dropdown reflects the auto-reset.
+      if (healed) renderBuilder();
       return;
     }
 
@@ -16312,6 +16326,9 @@ async function playQuestionAudio(question, opts = {}) {
     });
   });
 
+  // Text we can regenerate from if the attached file is unplayable/missing.
+  const ttsFallbackText = String(question.audioText || question.prompt || '').trim();
+
   if (question.audioMode === 'file' && question.audioData) {
     const src = question.audioData;
     let ok = false;
@@ -16324,32 +16341,48 @@ async function playQuestionAudio(question, opts = {}) {
     // can tell exactly why (missing object, blocked, network) instead of silently
     // playing nothing, then retry via an in-memory blob URL — that bypasses the
     // cross-origin streaming path that some browsers refuse for media elements.
+    let fileGone = false;
+    let failReason = '';
     if (/^https?:/i.test(src)) {
       try {
         const res = await fetch(src, { cache: 'reload' });
-        if (!res.ok) {
-          setStatus(hostStatusEl, t('Audio file missing from cloud storage ({status}). Re-save the quiz to regenerate it.', { status: res.status }), 'bad');
-          return false;
+        if (res.ok) {
+          const objUrl = URL.createObjectURL(await res.blob());
+          try {
+            ok = await playAudioEl(new Audio(objUrl));
+          } finally {
+            setTimeout(() => { try { URL.revokeObjectURL(objUrl); } catch { } }, 60000);
+          }
+          if (ok) return true;
+          failReason = t('Audio file was downloaded but could not be decoded.');
+        } else {
+          fileGone = true;
+          failReason = t('Audio file missing from cloud storage ({status}).', { status: res.status });
         }
-        const objUrl = URL.createObjectURL(await res.blob());
-        try {
-          ok = await playAudioEl(new Audio(objUrl));
-        } finally {
-          setTimeout(() => { try { URL.revokeObjectURL(objUrl); } catch { } }, 60000);
-        }
-        if (!ok) setStatus(hostStatusEl, t('Audio file was downloaded but could not be decoded.'), 'bad');
-        return ok;
       } catch (err) {
-        setStatus(hostStatusEl, t('Could not reach the audio file: {msg}', { msg: err?.message || 'network error' }), 'bad');
-        return false;
+        fileGone = true;
+        failReason = t('Could not reach the audio file: {msg}', { msg: err?.message || 'network error' });
       }
+    } else {
+      failReason = t('The attached audio could not be played.');
     }
-    setStatus(hostStatusEl, t('The attached audio could not be played.'), 'bad');
-    return false;
+
+    // Self-heal: if the file is unusable but we still have the source text, let
+    // the caller drop the dead reference and regenerate, then fall through to
+    // live TTS so playback isn't blocked.
+    if (ttsFallbackText) {
+      if (fileGone && typeof opts.onMissingFile === 'function') {
+        try { opts.onMissingFile(failReason); } catch { }
+      }
+      // fall through to TTS synthesis below
+    } else {
+      setStatus(hostStatusEl, failReason, 'bad');
+      return false;
+    }
   }
 
-  // TTS mode: Edge TTS only (no fallback).
-  const text = String(question.audioText || question.prompt || '').trim();
+  // TTS mode (and fallback for missing/broken files): Edge TTS only.
+  const text = ttsFallbackText;
   if (!text) {
     return false;
   }
