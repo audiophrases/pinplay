@@ -3158,7 +3158,9 @@ function buildAudioSettingsMarkup(idx, q) {
       <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
-      <div class="small top-space">${q.audioData ? (mode === 'file' && q._ttsGenerated ? 'Audio file generated from text ✅' : 'Audio file uploaded ✅') : 'No audio file uploaded yet.'}</div>
+      <div class="small top-space">${mode === 'file'
+      ? (q.audioData ? (q._ttsGenerated ? 'Audio file generated from text ✅' : 'Audio file uploaded ✅') : 'No audio file uploaded yet.')
+      : 'Reads the text above aloud (Text-to-speech).'}</div>
       <div class="row gap top-space">
         <button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button>
         ${mode === 'file' ? `<button type="button" class="btn" data-reset-tts="${idx}" title="Switch the source back to Text-to-speech and regenerate audio from the current text">↺ Reset to Text-to-speech</button>` : ''}
