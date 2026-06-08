@@ -1737,7 +1737,15 @@ function bindBuilderEvents() {
       // preview reflects exactly what will be generated/played.
       syncQuizFromUI();
       const q = quiz.questions[idx];
-      if (!q || !hasQuestionAudio(q)) return;
+      if (!q) return;
+      // Decide what we can actually preview here — independent of the live-mode
+      // `audioEnabled` flag, which isn't maintained in the builder.
+      const hasFileAudio = q.audioMode === 'file' && !!q.audioData;
+      const hasTtsAudio = q.audioMode !== 'file' && !!String(q.audioText || q.prompt || '').trim();
+      if (!hasFileAudio && !hasTtsAudio) {
+        setStatus(hostStatusEl, t('Nothing to preview yet — upload an audio file or add text to read aloud.'), 'bad');
+        return;
+      }
       const origLabel = audioBtn.textContent;
       const restore = () => { audioBtn.disabled = false; audioBtn.textContent = origLabel; };
       audioBtn.disabled = true;
@@ -1745,7 +1753,8 @@ function bindBuilderEvents() {
       try {
         // onStart clears the loading label as soon as audio actually begins,
         // covering the Edge TTS fetch/decode latency on cold starts.
-        await playQuestionAudio(q, { onStart: restore });
+        const ok = await playQuestionAudio(q, { onStart: restore, force: true });
+        if (!ok) setStatus(hostStatusEl, t('Could not play this audio — check the file or TTS voice.'), 'bad');
       } finally {
         restore();
       }
@@ -16254,7 +16263,10 @@ function stopQuestionAudioPlayback() {
 }
 
 async function playQuestionAudio(question, opts = {}) {
-  if (!hasQuestionAudio(question)) return false;
+  // `force` lets the builder preview play whatever audio is attached without
+  // depending on the live-mode `audioEnabled` flag (which isn't set in the editor).
+  if (!opts.force && !hasQuestionAudio(question)) return false;
+  if (!question) return false;
 
   const qIndex = Number(live.host.state?.currentIndex);
   const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
