@@ -1776,22 +1776,6 @@ function bindBuilderEvents() {
       return;
     }
 
-    const resetTtsBtn = e.target.closest('[data-reset-tts]');
-    if (resetTtsBtn) {
-      const idx = Number(resetTtsBtn.dataset.resetTts);
-      // Keep any text the teacher just typed before switching the source back.
-      syncQuizFromUI();
-      const q = quiz.questions[idx];
-      if (!q) return;
-      q.audioMode = 'tts';
-      q.audioData = '';
-      q._ttsGenerated = false;
-      q._userAudioUploaded = false;
-      q._audioVersion = '';
-      renderBuilder();
-      return;
-    }
-
     const recordAudioBtn = e.target.closest('[data-record-audio]');
     if (recordAudioBtn) {
       const idx = Number(recordAudioBtn.dataset.recordAudio);
@@ -3161,10 +3145,7 @@ function buildAudioSettingsMarkup(idx, q) {
       <div class="small top-space">${mode === 'file'
       ? (q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.')
       : (q.ttsAudioKey ? 'Audio ready ✅ — reads the text aloud (auto-updates when you edit the text).' : 'Reads the text above aloud (Text-to-speech).')}</div>
-      <div class="row gap top-space">
-        <button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button>
-        ${mode === 'file' ? `<button type="button" class="btn" data-reset-tts="${idx}" title="Switch the source back to Text-to-speech and regenerate audio from the current text">↺ Reset to Text-to-speech</button>` : ''}
-      </div>
+      <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>
     </div>
   `;
 }
