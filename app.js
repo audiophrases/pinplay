@@ -1753,8 +1753,9 @@ function bindBuilderEvents() {
       try {
         // onStart clears the loading label as soon as audio actually begins,
         // covering the Edge TTS fetch/decode latency on cold starts.
-        const ok = await playQuestionAudio(q, { onStart: restore, force: true });
-        if (!ok) setStatus(hostStatusEl, t('Could not play this audio — check the file or TTS voice.'), 'bad');
+        // playQuestionAudio surfaces its own specific failure reason (missing
+        // cloud file, decode error, TTS error), so no generic message here.
+        await playQuestionAudio(q, { onStart: restore, force: true });
       } finally {
         restore();
       }
@@ -16292,28 +16293,59 @@ async function playQuestionAudio(question, opts = {}) {
     activeQuestionAudioEl = a;
     try { a.playbackRate = safeSpeed; } catch { }
 
-    const onFinish = () => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
       if (activeQuestionAudioEl === a) activeQuestionAudioEl = null;
-      resolve(true);
+      resolve(ok);
     };
 
-    a.addEventListener('ended', onFinish, { once: true });
-    a.addEventListener('error', onFinish, { once: true });
+    // 'ended' = played to completion; 'error' = failed to load/decode.
+    // These must be distinguished so callers know whether audio actually played.
+    a.addEventListener('ended', () => finish(true), { once: true });
+    a.addEventListener('error', () => finish(false), { once: true });
     a.play().then(() => {
       try { opts?.onStart?.(); } catch { }
     }).catch(() => {
-      onFinish();
+      finish(false);
     });
   });
 
   if (question.audioMode === 'file' && question.audioData) {
+    const src = question.audioData;
+    let ok = false;
     try {
-      const a = new Audio(question.audioData);
-      await playAudioEl(a);
-    } catch {
-      return false;
+      ok = await playAudioEl(new Audio(src));
+    } catch { ok = false; }
+    if (ok) return true;
+
+    // Direct playback failed. For remote (R2 / cloud) files, probe the URL so we
+    // can tell exactly why (missing object, blocked, network) instead of silently
+    // playing nothing, then retry via an in-memory blob URL — that bypasses the
+    // cross-origin streaming path that some browsers refuse for media elements.
+    if (/^https?:/i.test(src)) {
+      try {
+        const res = await fetch(src, { cache: 'reload' });
+        if (!res.ok) {
+          setStatus(hostStatusEl, t('Audio file missing from cloud storage ({status}). Re-save the quiz to regenerate it.', { status: res.status }), 'bad');
+          return false;
+        }
+        const objUrl = URL.createObjectURL(await res.blob());
+        try {
+          ok = await playAudioEl(new Audio(objUrl));
+        } finally {
+          setTimeout(() => { try { URL.revokeObjectURL(objUrl); } catch { } }, 60000);
+        }
+        if (!ok) setStatus(hostStatusEl, t('Audio file was downloaded but could not be decoded.'), 'bad');
+        return ok;
+      } catch (err) {
+        setStatus(hostStatusEl, t('Could not reach the audio file: {msg}', { msg: err?.message || 'network error' }), 'bad');
+        return false;
+      }
     }
-    return true;
+    setStatus(hostStatusEl, t('The attached audio could not be played.'), 'bad');
+    return false;
   }
 
   // TTS mode: Edge TTS only (no fallback).
@@ -16346,8 +16378,7 @@ async function playQuestionAudio(question, opts = {}) {
     }
 
     const a = new Audio(audioUrl);
-    await playAudioEl(a);
-    return true;
+    return await playAudioEl(a);
   } catch (err) {
     setStatus(hostStatusEl, t('Edge TTS error: {msg}', { msg: err?.message || 'failed' }), 'bad');
     return false;
