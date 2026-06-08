@@ -16345,7 +16345,10 @@ async function playQuestionAudio(question, opts = {}) {
     let failReason = '';
     if (/^https?:/i.test(src)) {
       try {
-        const res = await fetch(src, { cache: 'reload' });
+        // Use the browser cache (R2 media is served with max-age=1y) so this
+        // recovery probe reuses any bytes the <audio> element already fetched
+        // instead of re-downloading from R2 (egress + class-B op).
+        const res = await fetch(src, { cache: 'default' });
         if (res.ok) {
           const objUrl = URL.createObjectURL(await res.blob());
           try {
