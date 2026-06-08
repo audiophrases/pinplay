@@ -1733,9 +1733,39 @@ function bindBuilderEvents() {
     const audioBtn = e.target.closest('[data-play-audio-preview]');
     if (audioBtn) {
       const idx = Number(audioBtn.dataset.playAudioPreview);
+      // Capture the latest typed text/voice (and auto-reset stale TTS mp3s) so the
+      // preview reflects exactly what will be generated/played.
+      syncQuizFromUI();
       const q = quiz.questions[idx];
       if (!q || !hasQuestionAudio(q)) return;
-      playQuestionAudio(q);
+      const origLabel = audioBtn.textContent;
+      const restore = () => { audioBtn.disabled = false; audioBtn.textContent = origLabel; };
+      audioBtn.disabled = true;
+      audioBtn.textContent = t('⏳ Loading…');
+      try {
+        // onStart clears the loading label as soon as audio actually begins,
+        // covering the Edge TTS fetch/decode latency on cold starts.
+        await playQuestionAudio(q, { onStart: restore });
+      } finally {
+        restore();
+      }
+      return;
+    }
+
+    const resetTtsBtn = e.target.closest('[data-reset-tts]');
+    if (resetTtsBtn) {
+      const idx = Number(resetTtsBtn.dataset.resetTts);
+      // Keep any text the teacher just typed before switching the source back.
+      syncQuizFromUI();
+      const q = quiz.questions[idx];
+      if (!q) return;
+      q.audioMode = 'tts';
+      q.audioData = '';
+      q._ttsGenerated = false;
+      q._userAudioUploaded = false;
+      q._audioVersion = '';
+      renderBuilder();
+      return;
     }
 
     const recordAudioBtn = e.target.closest('[data-record-audio]');
@@ -3104,8 +3134,11 @@ function buildAudioSettingsMarkup(idx, q) {
       <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
-      <div class="small top-space">${q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.'}</div>
-      <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>
+      <div class="small top-space">${q.audioData ? (mode === 'file' && q._ttsGenerated ? 'Audio file generated from text ✅' : 'Audio file uploaded ✅') : 'No audio file uploaded yet.'}</div>
+      <div class="row gap top-space">
+        <button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button>
+        ${mode === 'file' ? `<button type="button" class="btn" data-reset-tts="${idx}" title="Switch the source back to Text-to-speech and regenerate audio from the current text">↺ Reset to Text-to-speech</button>` : ''}
+      </div>
     </div>
   `;
 }
@@ -16254,7 +16287,9 @@ async function playQuestionAudio(question, opts = {}) {
 
     a.addEventListener('ended', onFinish, { once: true });
     a.addEventListener('error', onFinish, { once: true });
-    a.play().catch(() => {
+    a.play().then(() => {
+      try { opts?.onStart?.(); } catch { }
+    }).catch(() => {
       onFinish();
     });
   });
