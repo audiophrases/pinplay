@@ -16360,7 +16360,10 @@ async function playQuestionAudio(question, opts = {}) {
           failReason = t('Audio file was downloaded but could not be decoded.');
         } else {
           fileGone = true;
-          failReason = t('Audio file missing from cloud storage ({status}).', { status: res.status });
+          // Include the R2 key so the prefix (assign-/preview-/quiz-) reveals
+          // where the missing object was expected to live.
+          const key = src.replace(/^https?:\/\/[^/]+\/api\/media\//, '').replace(/\?.*$/, '');
+          failReason = t('Audio file missing from cloud storage ({status}): {key}', { status: res.status, key });
         }
       } catch (err) {
         fileGone = true;
