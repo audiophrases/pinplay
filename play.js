@@ -6245,11 +6245,14 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     const clearEarlyHide = () => {
       if (earlyHideTimer) { clearTimeout(earlyHideTimer); earlyHideTimer = null; }
     };
-    const onFinish = () => {
+    let settled = false;
+    const onFinish = (ok) => {
+      if (settled) return;
+      settled = true;
       clearEarlyHide();
       if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
       setAssignmentAudioPlayingUi(false);
-      resolve(true);
+      resolve(ok);
     };
     audioEl.addEventListener('loadedmetadata', () => {
       const dur = audioEl.duration;
@@ -6259,28 +6262,37 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
         if (activeAssignmentQuestionAudioEl === audioEl) hideAssignmentAudioBarsEarly();
       }, Math.max(0, (dur - 0.7) * 1000));
     }, { once: true });
-    audioEl.addEventListener('ended', onFinish, { once: true });
-    audioEl.addEventListener('error', onFinish, { once: true });
-    audioEl.play().catch(() => onFinish());
+    audioEl.addEventListener('ended', () => onFinish(true), { once: true });
+    audioEl.addEventListener('error', () => onFinish(false), { once: true });
+    audioEl.play().catch(() => onFinish(false));
   });
 
   if (question.audioMode === 'file' && question.audioData) {
-    try {
-      let audioUrl = question.audioData;
-      if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
-        const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-        audioUrl = `${base}/api/media/${audioUrl}`;
-      }
-      await playAudioEl(new Audio(audioUrl));
-    } catch {
-      return false;
+    let audioUrl = question.audioData;
+    if (!audioUrl.startsWith('http') && !audioUrl.startsWith('data:')) {
+      const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
+      audioUrl = `${base}/api/media/${audioUrl}`;
     }
-    return true;
+    let ok = false;
+    try { ok = await playAudioEl(new Audio(audioUrl)); } catch { ok = false; }
+    if (ok) return true;
+    // File missing/undecodable → fall through to TTS synthesis from the question text.
   }
 
   const text = String(question.audioText || question.prompt || '').trim();
   if (!text) {
     return false;
+  }
+
+  // Prefer the pre-rendered R2 cache (instant, survives Edge cold-starts). Students
+  // can't synthesize/store, so on a miss we just fall through to live Edge TTS.
+  const ttsKey = String(question.ttsAudioKey || '').trim();
+  if (ttsKey) {
+    const cb = loadBackendUrl() || DEFAULT_BACKEND_URL;
+    const cacheUrl = (ttsKey.startsWith('http')) ? ttsKey : `${cb}/api/media/${ttsKey}`;
+    try {
+      if (await playAudioEl(new Audio(cacheUrl))) return true;
+    } catch { /* fall through to live Edge synthesis */ }
   }
 
   try {

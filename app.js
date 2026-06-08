@@ -1346,7 +1346,7 @@ function bindBuilderEvents() {
       if (missingOtherVoice.length) {
         setStatus(hostStatusEl, t('⚠️ {voices} use ttsLanguage:"OTHER" without a valid Edge voice code. Default voice will be used on export.', { voices: missingOtherVoice.join(', ') }), 'checking');
       }
-      await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true });
+      await ensureQuizMediaReady({ contextLabel: 'export quiz', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
 
       downloadJson(quiz, `${toSafeFilename(quiz.title || 'pinplay-quiz')}.json`);
       setStatus(hostStatusEl, t('Exported with validated media + auto-filled images.'), 'ok');
@@ -3159,8 +3159,8 @@ function buildAudioSettingsMarkup(idx, q) {
       <label>TTS Voice</label>
       <select data-q="${idx}" data-field="language">${voiceOptions}</select>
       <div class="small top-space">${mode === 'file'
-      ? (q.audioData ? (q._ttsGenerated ? 'Audio file generated from text ✅' : 'Audio file uploaded ✅') : 'No audio file uploaded yet.')
-      : 'Reads the text above aloud (Text-to-speech).'}</div>
+      ? (q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.')
+      : (q.ttsAudioKey ? 'Audio ready ✅ — reads the text aloud (auto-updates when you edit the text).' : 'Reads the text above aloud (Text-to-speech).')}</div>
       <div class="row gap top-space">
         <button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button>
         ${mode === 'file' ? `<button type="button" class="btn" data-reset-tts="${idx}" title="Switch the source back to Text-to-speech and regenerate audio from the current text">↺ Reset to Text-to-speech</button>` : ''}
@@ -3898,7 +3898,7 @@ async function openQuizFromCloud() {
 async function saveQuizToCloud() {
   try {
     syncQuizFromUI();
-    await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true });
+    await ensureQuizMediaReady({ contextLabel: 'cloud save', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
     const base = loadBackendUrl() || 'https://api.pinplay.win';
 
     const quizId = quiz._r2QuizId || `quiz-${Date.now()}`;
@@ -4758,7 +4758,7 @@ async function createLiveGame() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
-    await ensureQuizMediaReady({ contextLabel: 'create live game', convertTtsToMp3: true, strictMediaCheck: true });
+    await ensureQuizMediaReady({ contextLabel: 'create live game', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
 
     if (!createSessionPassword) {
       const typed = await customPasswordPrompt('Teacher password (needed to create live game):');
@@ -9301,7 +9301,7 @@ async function createAssignmentFromCurrentQuiz() {
     // after async work and accidentally create the assignment with the wrong mode.
     const randomNamesEnabled = isRandomNamesEnabled();
 
-    await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true });
+    await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
 
     if (!createSessionPassword) {
       const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
@@ -9472,7 +9472,7 @@ async function applyQuizToAssignment() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
-    await ensureQuizMediaReady({ contextLabel: 'apply to assignment', convertTtsToMp3: true, strictMediaCheck: true });
+    await ensureQuizMediaReady({ contextLabel: 'apply to assignment', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
 
     if (!createSessionPassword) {
       const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
@@ -12972,7 +12972,7 @@ async function launchStudentPreviewAssignment() {
     // Clean up any previous preview assignment
     cleanupPreviewPoll();
 
-    await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false });
+    await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false, materializeTts: true });
 
     const payload = normalizeQuizForLive(quiz);
     // /api/preview/create works for both owner and guest. Server forces
@@ -15089,7 +15089,56 @@ async function generateMp3FromTts({ text, voice }) {
   return blobToDataUrl(blob);
 }
 
-async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true } = {}) {
+// --- Content-addressed TTS cache helpers -----------------------------------
+// A TTS question stays in `tts` mode and carries `ttsAudioKey`, a backend-RELATIVE
+// R2 key derived from (voice + rate + text). The key changes automatically when the
+// text changes, so there is never a stale mp3 to invalidate, and identical prompts
+// dedupe to one object. Resolved to `${backend}/api/media/<key>` at play time, which
+// keeps it portable across self-hosted backends (no absolute host baked in).
+async function sha256HexClient(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str)));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function computeTtsAudioKey(voice, text, rate = '+0%') {
+  const v = String(voice || 'en-US-AriaNeural');
+  const hash = await sha256HexClient(`${v}::${rate}::${String(text || '').trim().slice(0, 1200)}`);
+  return `tts/${hash}.mp3`;
+}
+
+// Ask the worker to make sure one cached mp3 exists on R2 (synth once if missing).
+// Idempotent and quota-cheap: a HEAD plus, only on a miss, one synth + one PUT.
+// Returns the canonical (possibly workspace-scoped) key, or null if it couldn't run.
+// Used by the host's lazy repopulate on a live cache miss; publish uses the batch form.
+async function ensureTtsAudioOnR2(voice, text, rate = '+0%') {
+  if (!createSessionPassword) return null; // needs teacher auth; lazy path will cover it
+  const base = loadBackendUrl() || 'https://api.pinplay.win';
+  const res = await fetch(`${base}/api/tts/ensure`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionPassword}` },
+    body: JSON.stringify({ text: String(text || '').slice(0, 1200), voice, rate }),
+  });
+  if (!res.ok) throw new Error(`TTS ensure failed (${res.status})`);
+  const data = await res.json();
+  return String(data?.key || '') || null;
+}
+
+// Materialize many TTS clips in a single authed request (one auth check, not N).
+// Returns an array of canonical keys aligned to `items` (null where it failed).
+async function ensureTtsAudioBatchOnR2(items, rate = '+0%') {
+  if (!createSessionPassword || !items?.length) return null;
+  const base = loadBackendUrl() || 'https://api.pinplay.win';
+  const res = await fetch(`${base}/api/tts/ensure-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionPassword}` },
+    body: JSON.stringify({ items: items.map(({ voice, text }) => ({ voice, text: String(text || '').slice(0, 1200), rate })) }),
+  });
+  if (!res.ok) throw new Error(`TTS batch ensure failed (${res.status})`);
+  const data = await res.json();
+  return Array.isArray(data?.results) ? data.results.map((r) => (r?.ok ? String(r.key || '') || null : null)) : null;
+}
+
+async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false } = {}) {
   normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
@@ -15148,6 +15197,10 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   quiz._r2QuizId = quizId;
   const r2Base = `${loadBackendUrl() || 'https://api.pinplay.win'}/api/media`;
 
+  // TTS questions to materialize on R2 in one batched, authed call after the loop
+  // (one auth check instead of one-per-question, which would trip the rate limiter).
+  const pendingTts = [];
+
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
     if (!q || typeof q !== 'object') continue;
@@ -15190,60 +15243,49 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     // If hearing is disabled, skip TTS generation
     const hearingDisabled = (quizLanguage === 'NONE') || (String(q.ttsLanguage || '').toUpperCase() === 'NONE');
 
-    // Auto-regenerate TTS if question text or audioText changed
-    const promptChanged = q._lastPrompt && q._lastPrompt !== promptText;
-    const audioTextChanged = q._lastAudioText != null && q._lastAudioText !== overrideText;
-    if (q.audioMode === 'file' && q.audioData && (promptChanged || audioTextChanged)) {
-      setProgress(`🔄 Regenerating Q${i + 1} audio (text changed)...`);
-      q.audioMode = 'tts'; // Force TTS regeneration
-      q.audioData = null;
-      q._ttsGenerated = false;
-      q._userAudioUploaded = false;
-      q._audioVersion = '';
-      converted += 1;
-    }
-    q._lastPrompt = promptText;
-    q._lastAudioText = overrideText;
-
-    // Skip TTS generation if audio was already generated/uploaded and text hasn't changed
-    const alreadyHasAudio = q.audioData && q._ttsGenerated && q.audioMode === 'file';
-    if (!hearingDisabled && convertTtsToMp3 && (shouldGenerateQuizWide || wantsTts) && ttsText && !alreadyHasAudio) {
-      setProgress(`🔄 Generating Q${i + 1} audio...`);
+    // TTS questions stay in `tts` mode and carry a content-addressed cache key
+    // (ttsAudioKey) derived from voice+text. The key auto-changes when the text
+    // changes — no stale-mp3 invalidation, no flip to `file`. The mp3 is generated
+    // once and reused; we only materialize it on R2 at publish boundaries
+    // (materializeTts), not on every local save / media check.
+    if (!hearingDisabled && (wantsTts || shouldGenerateQuizWide) && ttsText) {
+      const voiceForKey = q.language || getVoiceForTtsLanguage(quizLanguage);
       try {
-        const audioData = await generateMp3FromTts({ text: ttsText, voice: q.language || getVoiceForTtsLanguage(quizLanguage) });
-        if (audioData) {
-          // Upload to R2, replace with URL
-          if (uploadToR2) {
-            setProgress(`🔄 Uploading Q${i + 1} audio to cloud...`);
-            try {
-              const token = ensureQuestionAudioVersion(q);
-              const key = `${quizId}/audio/q${i}-${token}.mp3`;
-              await uploadMediaToR2(audioData, key);
-              q.audioData = `${r2Base}/${key}?v=${encodeURIComponent(token)}`;
-            } catch (err) {
-              console.warn(`Q${i + 1} audio upload failed, keeping data URL:`, err);
-              q.audioData = audioData; // fallback to data URL
-            }
-          } else {
-            q.audioData = audioData;
-          }
-          q.audioMode = 'file';
-          q.audioEnabled = true;
-          q._ttsGenerated = true;
-          q._userAudioUploaded = false;
-          uploaded += 1;
-        }
+        q.ttsAudioKey = await computeTtsAudioKey(voiceForKey, ttsText);
+        q.audioEnabled = true; // this question has playable TTS audio (incl. quiz-wide read-aloud)
+        if (materializeTts && uploadToR2) pendingTts.push({ q, voice: voiceForKey, text: ttsText });
       } catch (err) {
-        throw new Error(`Q${i + 1} TTS->MP3 failed: ${err.message}`);
+        // Non-fatal: playback lazily synthesizes via Edge if the object is absent.
+        console.warn(`Q${i + 1} TTS prepare failed:`, err?.message || err);
       }
+    } else if (wantsTts) {
+      q.ttsAudioKey = '';
     }
 
-    // Validate audio: skip for TTS mode, disabled audio, R2 URLs, or empty
+    // Validate genuine uploaded/recorded file audio (data: URL) before it ships.
     if (q.audioData && strictMediaCheck && q.audioData.startsWith('data:')) {
       const audioMode = String(q.audioMode || '').toLowerCase();
       if (audioMode !== 'tts' && audioMode !== 'none' && q.audioEnabled !== false) {
         try { await validateAudioDataUrl(q.audioData); } catch (err) { throw new Error(`Q${i + 1} audio check failed: ${err.message}`); }
       }
+    }
+  }
+
+  // Materialize all TTS audio on R2 in one batched, authed request (idempotent:
+  // the worker skips synth+write for keys that already exist). Non-fatal — playback
+  // lazily synthesizes via Edge for anything still missing.
+  if (pendingTts.length) {
+    setProgress(`🔄 Preparing ${pendingTts.length} question audio clip(s)...`);
+    try {
+      const keys = await ensureTtsAudioBatchOnR2(pendingTts.map(({ voice, text }) => ({ voice, text })));
+      if (Array.isArray(keys)) {
+        pendingTts.forEach((item, idx) => {
+          const k = keys[idx];
+          if (k) { item.q.ttsAudioKey = k; uploaded += 1; }
+        });
+      }
+    } catch (err) {
+      console.warn('TTS batch prepare failed:', err?.message || err);
     }
   }
 
@@ -16389,11 +16431,32 @@ async function playQuestionAudio(question, opts = {}) {
     }
   }
 
-  // TTS mode (and fallback for missing/broken files): Edge TTS only.
+  // TTS mode (and fallback for missing/broken files).
   const text = ttsFallbackText;
   if (!text) {
     return false;
   }
+
+  // Prefer the pre-rendered R2 cache (instant, survives Edge cold-starts). The key
+  // is content-addressed from voice+text, so it's correct whenever they match.
+  const ttsKey = String(question.ttsAudioKey || '').trim();
+  if (ttsKey) {
+    const cb = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    const toUrl = (k) => (/^https?:/i.test(k) ? k : `${cb}/api/media/${k}`);
+    let cok = false;
+    try { cok = await playAudioEl(new Audio(toUrl(ttsKey))); } catch { cok = false; }
+    if (cok) return true;
+    // Miss (not yet materialized / purged): populate R2 once, then retry.
+    try {
+      const v = normalizeTtsVoice(question.language, question.ttsLanguage || guessTtsLanguageFromVoice(question.language));
+      const ensured = await ensureTtsAudioOnR2(v, text);
+      if (ensured) {
+        if (!question.ttsAudioKey || question.ttsAudioKey !== ensured) question.ttsAudioKey = ensured;
+        if (await playAudioEl(new Audio(toUrl(ensured)))) return true;
+      }
+    } catch { /* fall through to live Edge synthesis */ }
+  }
+
   try {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     if (!base) throw new Error('Backend URL is not configured.');

@@ -2067,6 +2067,108 @@ export default {
       }
     }
 
+    // Idempotent, content-addressed TTS cache. Key = sha256(voice::rate::text), so
+    // identical (text, voice) is synthesized + stored exactly once, ever, and reused
+    // across quizzes/assignments/sessions. Returns a backend-RELATIVE R2 key the
+    // client stamps onto the question (resolved to /api/media/<key> at play time).
+    if (url.pathname === '/api/tts/ensure' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'Storage unavailable.' }, 503);
+
+      const text = String(body?.text || '').trim().slice(0, 1200);
+      const voice = String(body?.voice || 'en-US-AriaNeural').trim();
+      const rate = String(body?.rate || '+0%').trim();
+      if (!text) return json({ error: 'Missing text.' }, 400);
+
+      const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+      const key = `${mediaPrefixFor(auth)}tts/${hash}.mp3`;
+
+      try {
+        // Already cached → no synth, no write. Just confirm the key.
+        const head = await env.QUIZ_MEDIA.head(key);
+        if (head) return json({ ok: true, key, cached: true });
+
+        const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
+        if (!edgeUrl) return json({ error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' }, 501);
+
+        const headers = { 'Content-Type': 'application/json' };
+        const secret = String(env.EDGE_TTS_SECRET || '').trim();
+        if (secret) headers['Authorization'] = `Bearer ${secret}`;
+
+        let ttsRes = await fetch(edgeUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
+        if (ttsRes.status === 404) {
+          const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
+          if (retryUrl !== edgeUrl) {
+            ttsRes = await fetch(retryUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
+          }
+        }
+        if (!ttsRes.ok) {
+          const txt = await ttsRes.text();
+          let err = txt;
+          try { const p = JSON.parse(txt); err = p?.error || p?.detail || p?.message || txt; } catch { }
+          return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
+        }
+
+        const audio = await ttsRes.arrayBuffer();
+        await env.QUIZ_MEDIA.put(key, audio, { httpMetadata: { contentType: 'audio/mpeg' } });
+        return json({ ok: true, key, cached: false });
+      } catch (err) {
+        return json({ error: `TTS ensure failed: ${err.message}` }, 502);
+      }
+    }
+
+    // Batched form of /api/tts/ensure: one auth check for a whole quiz's worth of
+    // clips. Returns results[] aligned to items[]. Idempotent + deduped within batch.
+    if (url.pathname === '/api/tts/ensure-batch' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const auth = await resolveAuth(env, request, body);
+      if (!auth) return json({ error: 'Unauthorized.' }, 401);
+      if (!env.QUIZ_MEDIA) return json({ error: 'Storage unavailable.' }, 503);
+
+      const items = Array.isArray(body?.items) ? body.items.slice(0, 300) : [];
+      const prefix = mediaPrefixFor(auth);
+      const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
+      const secret = String(env.EDGE_TTS_SECRET || '').trim();
+      const headers = { 'Content-Type': 'application/json' };
+      if (secret) headers['Authorization'] = `Bearer ${secret}`;
+
+      const seen = new Map(); // hash -> key (dedupe within this batch)
+      const results = [];
+      for (const it of items) {
+        const text = String(it?.text || '').trim().slice(0, 1200);
+        const voice = String(it?.voice || 'en-US-AriaNeural').trim();
+        const rate = String(it?.rate || '+0%').trim();
+        if (!text) { results.push({ ok: false, error: 'empty text' }); continue; }
+
+        const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+        const key = `${prefix}tts/${hash}.mp3`;
+        if (seen.has(hash)) { results.push({ ok: true, key, cached: true }); continue; }
+
+        try {
+          const head = await env.QUIZ_MEDIA.head(key);
+          if (head) { seen.set(hash, key); results.push({ ok: true, key, cached: true }); continue; }
+          if (!edgeUrl) { results.push({ ok: false, key, error: 'EDGE_TTS_URL not configured' }); continue; }
+
+          let ttsRes = await fetch(edgeUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
+          if (ttsRes.status === 404) {
+            const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
+            if (retryUrl !== edgeUrl) ttsRes = await fetch(retryUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
+          }
+          if (!ttsRes.ok) { results.push({ ok: false, key, error: `Edge TTS ${ttsRes.status}` }); continue; }
+
+          const audio = await ttsRes.arrayBuffer();
+          await env.QUIZ_MEDIA.put(key, audio, { httpMetadata: { contentType: 'audio/mpeg' } });
+          seen.set(hash, key);
+          results.push({ ok: true, key, cached: false });
+        } catch (err) {
+          results.push({ ok: false, key, error: err.message });
+        }
+      }
+      return json({ ok: true, results });
+    }
+
     if (url.pathname === '/api/images/search' && request.method === 'GET') {
       const query = String(url.searchParams.get('q') || '').trim();
       const count = clamp(Number(url.searchParams.get('count') || 10), 1, 100);
@@ -3199,6 +3301,7 @@ export class QuizRoom {
             audioMode: String(question?.audioMode || ''),
             audioText: String(question?.audioText || ''),
             audioData: String(question?.audioData || ''),
+            ttsAudioKey: String(question?.ttsAudioKey || ''),
             language: String(question?.language || ''),
             answerLanguage: String(question?.answerLanguage || ''),
             media: normalizeQuestionMediaForGrading(question?.media),
@@ -5087,6 +5190,7 @@ function publicAudioPayload(question) {
     audioText: String(question?.audioText || ''),
     language: String(question?.language || 'en-US-Wave'),
     audioData: String(question?.audioData || ''),
+    ttsAudioKey: String(question?.ttsAudioKey || ''),
   };
 }
 
@@ -5220,6 +5324,7 @@ function normalizeQuiz(quiz) {
       audioText: String(q.audioText || '').slice(0, 1200),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
+      ttsAudioKey: String(q.ttsAudioKey || '').slice(0, 200),
       imageData: String(q.imageData || ''),
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
@@ -6371,6 +6476,7 @@ function buildTeacherGradingItems(assignment, attempt) {
         audioMode: String(question?.audioMode || ''),
         audioText: String(question?.audioText || ''),
         audioData: String(question?.audioData || ''),
+        ttsAudioKey: String(question?.ttsAudioKey || ''),
         language: String(question?.language || ''),
         answerLanguage: String(question?.answerLanguage || ''),
         media: normalizeQuestionMediaForGrading(question?.media),
