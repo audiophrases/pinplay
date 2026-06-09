@@ -848,7 +848,14 @@ function setupCreateAccess() {
           // guest "Try your Quiz" label instead of reverting to "Preview".
           gcPreviewBtn.dataset.i18nOrig = 'Try your Quiz';
           gcPreviewBtn.textContent = t('Try your Quiz');
+          gcPreviewBtn.classList.add('success');
         }
+        // Auto-expand the Quiz builder for guests (collapsed by default in the
+        // teacher UI). Runs after bindCollapsibleSections() so it won't be
+        // re-collapsed; setSectionCollapsed also flips the visible chevron.
+        const builderBody = document.getElementById('builderCardBody');
+        const builderToggle = document.getElementById('builderSectionToggle');
+        if (builderBody && builderToggle) setSectionCollapsed(builderToggle, builderBody, false);
       } catch (err) {
         // Token rejected or workspace revoked — wipe local copy, fall back to password card
         try { localStorage.removeItem(CREATOR_TOKEN_KEY); } catch { /* */ }
