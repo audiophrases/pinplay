@@ -14847,6 +14847,7 @@ function normalizeQuizForLive(raw) {
       ttsLanguage: questionTtsLanguage,
       language: questionVoice,
       audioData: String(q.audioData || ''),
+      ttsAudioKey: String(q.ttsAudioKey || '').slice(0, 200),
       imageKeyword: String(q.imageKeyword || '').trim().slice(0, 140),
       gifKeyword: String(q.gifKeyword || '').trim().slice(0, 140),
       videoKeyword: String(q.videoKeyword || '').trim().slice(0, 140),
