@@ -842,6 +842,13 @@ function setupCreateAccess() {
         const gcToggle = document.getElementById('gameControlsSectionToggle');
         if (gcBody) gcBody.classList.remove('hidden');
         if (gcToggle) gcToggle.setAttribute('aria-expanded', 'true');
+        const gcPreviewBtn = document.getElementById('studentPreviewBtn');
+        if (gcPreviewBtn) {
+          // Re-key the i18n marker so a later language switch keeps the
+          // guest "Try your Quiz" label instead of reverting to "Preview".
+          gcPreviewBtn.dataset.i18nOrig = 'Try your Quiz';
+          gcPreviewBtn.textContent = t('Try your Quiz');
+        }
       } catch (err) {
         // Token rejected or workspace revoked — wipe local copy, fall back to password card
         try { localStorage.removeItem(CREATOR_TOKEN_KEY); } catch { /* */ }
@@ -12925,6 +12932,14 @@ function cleanupPreviewPoll() {
   }
 }
 
+// Guests see a single flattened "Try your Quiz" button (no Game controls
+// heading); the owner keeps the "🧑‍🎓 Preview" label inside Game controls.
+function studentPreviewBtnLabel() {
+  return document.body.classList.contains('guest-mode')
+    ? t('Try your Quiz')
+    : t('🧑‍🎓 Preview');
+}
+
 async function launchStudentPreviewAssignment() {
   try {
     syncQuizFromUI();
@@ -12944,7 +12959,7 @@ async function launchStudentPreviewAssignment() {
     if (!createSessionPassword) {
       createSessionPassword = await customPasswordPrompt('Enter teacher password to create preview:');
       if (!createSessionPassword) {
-        if (btn) { btn.disabled = false; btn.textContent = t('🧑‍🎓 Preview'); }
+        if (btn) { btn.disabled = false; btn.textContent = studentPreviewBtnLabel(); }
         setStatus(hostStatusEl, t('Preview cancelled.'), 'bad');
         return;
       }
@@ -12994,7 +13009,7 @@ async function launchStudentPreviewAssignment() {
     setStatus(hostStatusEl, t('Preview failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
     const btn = document.getElementById('studentPreviewBtn');
-    if (btn) { btn.disabled = false; btn.textContent = t('🧑‍🎓 Preview'); }
+    if (btn) { btn.disabled = false; btn.textContent = studentPreviewBtnLabel(); }
   }
 }
 

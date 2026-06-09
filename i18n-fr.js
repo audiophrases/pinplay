@@ -60,6 +60,7 @@ window.PINPLAY_FR_DICT = {
   'Expires in days (blank = never)': 'Expiration en jours (vide = jamais)',
   '+ Create workspace': '+ Créer un espace',
   'Showcase Quiz': 'Quiz de démonstration',
+  'Try your Quiz': 'Essayez votre quiz',
   '🛠️ Quiz builder': '🛠️ Créateur de quiz',
 
   /* AI Creation Prompt */
