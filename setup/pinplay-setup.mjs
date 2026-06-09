@@ -105,6 +105,24 @@ async function confirm(question, def = true) {
 }
 
 // ---------- Process helpers ----------
+// Resolve the `npx` launcher next to the SAME node that's running this wizard,
+// instead of trusting bare `npx` to be on PATH. The one-click installer runs the
+// wizard elevated (administrator), and an elevated session can carry a different
+// PATH than the teacher's normal shell — so `npx` may be unresolvable even though
+// node is fine. node.exe and npx(.cmd) always ship side by side, so this is the
+// reliable launcher. Falls back to bare 'npx' if the sibling can't be found.
+function resolveNpx() {
+  try {
+    const dir = path.dirname(process.execPath);
+    const candidate = path.join(dir, process.platform === 'win32' ? 'npx.cmd' : 'npx');
+    if (fs.existsSync(candidate)) return candidate;
+  } catch {
+    /* fall through to PATH lookup */
+  }
+  return 'npx';
+}
+const NPX = resolveNpx();
+
 function openInBrowser(url) {
   const platform = process.platform;
   try {
@@ -148,9 +166,9 @@ function runWithStdin(cmd, args, stdinData, opts = {}) {
   return { code: res.status ?? 1, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-const npx = (args, opts) => runInherit('npx', ['--yes', 'wrangler', ...args], opts);
-const npxCapture = (args, opts) => runCapture('npx', ['--yes', 'wrangler', ...args], opts);
-const npxStdin = (args, stdinData, opts) => runWithStdin('npx', ['--yes', 'wrangler', ...args], stdinData, opts);
+const npx = (args, opts) => runInherit(NPX, ['--yes', 'wrangler', ...args], opts);
+const npxCapture = (args, opts) => runCapture(NPX, ['--yes', 'wrangler', ...args], opts);
+const npxStdin = (args, stdinData, opts) => runWithStdin(NPX, ['--yes', 'wrangler', ...args], stdinData, opts);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -164,7 +182,7 @@ function randomHex(bytes) {
 // while still capturing stdout to parse the deployed URL. stderr streams live so
 // the teacher sees progress and any prompt text.
 function runDeploy(args, opts = {}) {
-  const res = spawnSync('npx', ['--yes', 'wrangler', ...args], {
+  const res = spawnSync(NPX, ['--yes', 'wrangler', ...args], {
     stdio: ['inherit', 'pipe', 'inherit'],
     encoding: 'utf8',
     shell: process.platform === 'win32',
@@ -465,6 +483,9 @@ async function step1Prereqs() {
   if (v.code !== 0) {
     console.log(err('\nCould not run wrangler (Cloudflare\'s deploy tool).'));
     console.log('Make sure you have an internet connection and try again.');
+    const detail = (v.stderr || v.stdout || '').trim();
+    if (detail) console.log(dim('\nDetails:\n' + detail.split('\n').slice(0, 12).join('\n')));
+    console.log(dim(`\n(launcher: ${NPX})`));
     process.exit(1);
   }
   console.log(ok(`✓ wrangler ${v.stdout.trim().split('\n').pop()}`));
