@@ -105,27 +105,42 @@ async function confirm(question, def = true) {
 }
 
 // ---------- Process helpers ----------
-// Resolve the `npx` launcher next to the SAME node that's running this wizard,
-// instead of trusting bare `npx` to be on PATH. The one-click installer runs the
-// wizard elevated (administrator), and an elevated session can carry a different
-// PATH than the teacher's normal shell — so `npx` may be unresolvable even though
-// node is fine. node.exe and npx(.cmd) always ship side by side, so this is the
-// reliable launcher. Falls back to bare 'npx' if the sibling can't be found.
-function resolveNpx() {
+// On Windows we spawn with shell:true (so .cmd shims run), which means cmd.exe
+// parses the command line — a path like "C:\Program Files\nodejs\npm.cmd" must be
+// quoted or it splits at the space. Quote launcher paths on win32.
+function shellQuote(p) {
+  return process.platform === 'win32' && /\s/.test(p) ? `"${p}"` : p;
+}
+
+// Resolve a launcher (npm/npx) next to the SAME node that's running this wizard,
+// instead of trusting it to be on PATH. The one-click installer runs the wizard
+// elevated (administrator), and an elevated session can carry a different PATH
+// than the teacher's normal shell. node.exe and npm/npx(.cmd) always ship side by
+// side, so the sibling is the reliable launcher; fall back to the bare name.
+function resolveSibling(name) {
   try {
     const dir = path.dirname(process.execPath);
-    const candidate = path.join(dir, process.platform === 'win32' ? 'npx.cmd' : 'npx');
-    if (fs.existsSync(candidate)) {
-      // All runners spawn with shell:true, so cmd.exe parses the command line and
-      // would split "C:\Program Files\nodejs\npx.cmd" at the space. Quote it.
-      return process.platform === 'win32' ? `"${candidate}"` : candidate;
-    }
+    const candidate = path.join(dir, process.platform === 'win32' ? `${name}.cmd` : name);
+    if (fs.existsSync(candidate)) return shellQuote(candidate);
   } catch {
     /* fall through to PATH lookup */
   }
-  return 'npx';
+  return name;
 }
-const NPX = resolveNpx();
+const NPM = resolveSibling('npm');
+
+// We do NOT use the global `npx` to run wrangler: its package cache is fragile
+// (a partial/corrupt entry leaves wrangler missing its platform `workerd` binary
+// — "@cloudflare/workerd-windows-64 could not be found" — and npx then REUSES the
+// broken entry on every run). Instead we install a pinned wrangler into a private
+// folder under .generated via `npm install` (which resolves optionalDependencies
+// reliably) and invoke that binary directly. Deterministic on any machine.
+const WRANGLER_VERSION = '4.42.0';
+const WRANGLER_DIR = path.join(GEN_DIR, 'wrangler');
+const WRANGLER_BIN = path.join(
+  WRANGLER_DIR, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler',
+);
+const WRANGLER = shellQuote(WRANGLER_BIN);
 
 function openInBrowser(url) {
   const platform = process.platform;
@@ -170,9 +185,40 @@ function runWithStdin(cmd, args, stdinData, opts = {}) {
   return { code: res.status ?? 1, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-const npx = (args, opts) => runInherit(NPX, ['--yes', 'wrangler', ...args], opts);
-const npxCapture = (args, opts) => runCapture(NPX, ['--yes', 'wrangler', ...args], opts);
-const npxStdin = (args, stdinData, opts) => runWithStdin(NPX, ['--yes', 'wrangler', ...args], stdinData, opts);
+// These run the locally-installed wrangler (see ensureWrangler). Names kept for
+// historical reasons; they no longer shell out to the global `npx`.
+const npx = (args, opts) => runInherit(WRANGLER, args, opts);
+const npxCapture = (args, opts) => runCapture(WRANGLER, args, opts);
+const npxStdin = (args, stdinData, opts) => runWithStdin(WRANGLER, args, stdinData, opts);
+
+// Make sure the pinned wrangler is installed under .generated. Idempotent: if the
+// binary already runs, returns immediately (so re-runs/--update don't reinstall).
+// On first run it does an `npm install` (~1–2 min) which reliably pulls wrangler's
+// platform `workerd` binary via optionalDependencies — the thing the global npx
+// cache so often drops. Returns { ok, detail }.
+function ensureWrangler() {
+  try { fs.mkdirSync(WRANGLER_DIR, { recursive: true }); } catch { /* exists */ }
+  const pkg = {
+    name: 'pinplay-wrangler', private: true,
+    dependencies: { wrangler: WRANGLER_VERSION },
+  };
+  try { fs.writeFileSync(path.join(WRANGLER_DIR, 'package.json'), JSON.stringify(pkg, null, 2)); } catch { /* best effort */ }
+
+  // Already working? (binary present AND runnable — catches partial installs.)
+  if (fs.existsSync(WRANGLER_BIN)) {
+    const v = runCapture(WRANGLER, ['--version']);
+    if (v.code === 0) return { ok: true, detail: v.stdout.trim() };
+  }
+
+  console.log(dim('\nPreparing Cloudflare tools (one-time, may take a minute or two)…'));
+  const inst = runWithStdin(NPM, ['install', '--no-audit', '--no-fund'], '', { cwd: WRANGLER_DIR });
+  if (inst.code !== 0) {
+    return { ok: false, detail: (inst.stderr || inst.stdout || '').trim() };
+  }
+  const v = runCapture(WRANGLER, ['--version']);
+  if (v.code === 0) return { ok: true, detail: v.stdout.trim() };
+  return { ok: false, detail: (v.stderr || v.stdout || 'wrangler installed but would not run').trim() };
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -186,7 +232,7 @@ function randomHex(bytes) {
 // while still capturing stdout to parse the deployed URL. stderr streams live so
 // the teacher sees progress and any prompt text.
 function runDeploy(args, opts = {}) {
-  const res = spawnSync(NPX, ['--yes', 'wrangler', ...args], {
+  const res = spawnSync(WRANGLER, args, {
     stdio: ['inherit', 'pipe', 'inherit'],
     encoding: 'utf8',
     shell: process.platform === 'win32',
@@ -483,16 +529,15 @@ async function step1Prereqs() {
     process.exit(1);
   }
   console.log(ok(`✓ Node.js ${process.version}`));
-  const v = npxCapture(['--version']);
-  if (v.code !== 0) {
-    console.log(err('\nCould not run wrangler (Cloudflare\'s deploy tool).'));
+  const w = ensureWrangler();
+  if (!w.ok) {
+    console.log(err('\nCould not set up wrangler (Cloudflare\'s deploy tool).'));
     console.log('Make sure you have an internet connection and try again.');
-    const detail = (v.stderr || v.stdout || '').trim();
-    if (detail) console.log(dim('\nDetails:\n' + detail.split('\n').slice(0, 12).join('\n')));
-    console.log(dim(`\n(launcher: ${NPX})`));
+    if (w.detail) console.log(dim('\nDetails:\n' + w.detail.split('\n').slice(0, 14).join('\n')));
+    console.log(dim(`\n(installer: ${NPM} → ${WRANGLER_DIR})`));
     process.exit(1);
   }
-  console.log(ok(`✓ wrangler ${v.stdout.trim().split('\n').pop()}`));
+  console.log(ok(`✓ wrangler ${w.detail.split('\n').pop()}`));
 }
 
 async function step2Account() {
