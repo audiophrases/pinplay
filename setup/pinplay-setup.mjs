@@ -115,7 +115,11 @@ function resolveNpx() {
   try {
     const dir = path.dirname(process.execPath);
     const candidate = path.join(dir, process.platform === 'win32' ? 'npx.cmd' : 'npx');
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(candidate)) {
+      // All runners spawn with shell:true, so cmd.exe parses the command line and
+      // would split "C:\Program Files\nodejs\npx.cmd" at the space. Quote it.
+      return process.platform === 'win32' ? `"${candidate}"` : candidate;
+    }
   } catch {
     /* fall through to PATH lookup */
   }
