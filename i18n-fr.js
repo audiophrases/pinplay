@@ -59,12 +59,7 @@ window.PINPLAY_FR_DICT = {
   'Label (e.g. Maria, Spring 2026)': 'Libellé (ex. Maria, printemps 2026)',
   'Expires in days (blank = never)': 'Expiration en jours (vide = jamais)',
   '+ Create workspace': '+ Créer un espace',
-  '🎨 Guest creator workspace': '🎨 Espace créateur invité',
-  'You can build, save and preview quizzes. Saved quizzes stay private to this workspace until the teacher copies them or revokes access.':
-    'Vous pouvez créer, enregistrer et prévisualiser des quiz. Les quiz enregistrés restent privés dans cet espace jusqu\'à ce que l\'enseignant les copie ou révoque l\'accès.',
-  'New to PinPlay? Play a short demo quiz that walks through every question type and feature you can build here.':
-    'Nouveau sur PinPlay ? Jouez à un court quiz de démonstration qui présente chaque type de question et fonctionnalité que vous pouvez créer ici.',
-  '🎓 Try the showcase quiz': '🎓 Essayer le quiz de démonstration',
+  'Showcase Quiz': 'Quiz de démonstration',
   '🛠️ Quiz builder': '🛠️ Créateur de quiz',
 
   /* AI Creation Prompt */
