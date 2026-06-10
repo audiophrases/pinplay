@@ -2754,6 +2754,12 @@ async function handleRetakeSubmit() {
     correctAnswerText: clientCorrectAnswerText(question),
   };
 
+  // Same as the save path: the reveal below shouldn't compete with a
+  // still-playing prompt audio or let its media sequence start ambient.
+  cancelPendingAssignmentQuestionAutoplay();
+  stopAssignmentQuestionAudioPlayback();
+  lastAssignmentAudioKey = '';
+
   // Re-render WITHOUT invalidating renderKey. A fresh re-mount would pre-fill
   // inputs from state.attempt.answersByQ — which holds the ORIGINAL wrong
   // answer — clobbering the pick the student just made for the retake. Keep
@@ -3309,6 +3315,9 @@ function renderPlayerState(state) {
   // crashing in. The next question's render will restart ambient.
   if (questionClosed && state.currentIndex !== lastClosedQuestionIndex) {
     stopAllAssignmentAmbient();
+    // Also cut the question prompt audio — the student may have answered
+    // mid-playback, and the reveal shouldn't have it talking over it.
+    stopAssignmentQuestionAudioPlayback();
     lastClosedQuestionIndex = state.currentIndex;
   }
 
@@ -4516,6 +4525,15 @@ async function submitLiveAnswer(opts = {}) {
       // edit (deferred-feedback mode) and stay put rather than auto-advancing.
       const wasAlreadyAnswered = Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
         && live.player.assignment.state.attempt.answeredQIndexes.map(Number).includes(qIndex);
+
+      // Saving closes (instant) or advances past (deferred) the question — cut
+      // any still-playing prompt audio now, and invalidate the in-flight media
+      // sequence so its trailing playAssignmentSfx('answering') can't start the
+      // ambient loop over the reveal once the audio would have ended.
+      cancelPendingAssignmentQuestionAutoplay();
+      stopAssignmentQuestionAudioPlayback();
+      lastAssignmentAudioKey = '';
+
       const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
@@ -6393,6 +6411,13 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   if (live.player.mode !== 'assignment') return;
   if (!attempt || attempt.submitted) return;
   if (audioKey && audioKey !== lastAssignmentAudioKey) return;
+
+  // Answered while the prompt audio was still playing (instant feedback) —
+  // the question is now revealed, so don't start ambient over the verdict.
+  const qIdx = Number(live.player.assignment.currentIndex || 0);
+  const answeredNow = Array.isArray(attempt.answeredQIndexes)
+    && attempt.answeredQIndexes.map(Number).includes(qIdx);
+  if (answeredNow && String(attempt.assignment?.feedbackMode || '') === 'instant') return;
 
   // ensure we don't play ambient if another sequence took over
 
