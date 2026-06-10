@@ -4672,3 +4672,83 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   word-break: break-word;
 }
 
+
+
+/* ===== Instant-feedback verdict effect (assignment mode) =====
+   One-shot overlay spawned by playVerdictFx() the moment an answer is
+   graded: a soft edge vignette flash + a springy badge whose check/cross
+   stroke draws itself in. pointer-events:none so Continue stays clickable
+   while it plays; the node self-removes after ~1.1s. */
+.verdict-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 9990; /* under modals (9999), over everything else */
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.verdict-fx::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: verdict-flash 1s ease-out forwards;
+}
+.verdict-fx.correct::before {
+  background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0) 45%, rgba(34, 197, 94, 0.38) 100%);
+}
+.verdict-fx.incorrect::before {
+  background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0) 45%, rgba(239, 68, 68, 0.38) 100%);
+}
+.verdict-fx-badge {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  animation: verdict-pop 1s cubic-bezier(0.22, 1.4, 0.36, 1) forwards;
+}
+.verdict-fx.correct .verdict-fx-badge { background: #22c55e; }
+.verdict-fx.incorrect .verdict-fx-badge { background: #ef4444; }
+.verdict-fx-badge svg { width: 60%; height: 60%; }
+.verdict-fx-path {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: verdict-draw 0.35s ease-out 0.1s forwards;
+}
+@keyframes verdict-flash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  70% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+@keyframes verdict-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  22% { transform: scale(1.06); opacity: 1; }
+  38% { transform: scale(1); }
+  78% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.92); opacity: 0; }
+}
+@keyframes verdict-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Wrong answer: brief horizontal shake of the question card. */
+.verdict-shake {
+  animation: verdict-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@keyframes verdict-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verdict-fx { display: none; }
+  .verdict-shake { animation: none; }
+}

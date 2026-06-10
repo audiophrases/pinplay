@@ -2780,6 +2780,7 @@ async function handleRetakeSubmit() {
   // Prominent, can't-miss visual feedback for the drill loop.
   renderRetakeHeader();
   renderRetakeVerdictBanner(retake.currentResult);
+  playVerdictFx(correct);
 }
 
 function advanceRetake(wasCorrect) {
@@ -4549,6 +4550,18 @@ async function submitLiveAnswer(opts = {}) {
       setJoinStatusHud(t('Answer saved ✅'), 'ok');
       await loadAssignmentState();
       renderInstantFeedbackFromState();
+
+      // Instant feedback: fire the verdict effect once, at grading time.
+      // Teacher-graded types (open/speaking/voice) have no auto verdict and
+      // stay pending, so they get no effect. Partial credit counts as wrong
+      // here — the HUD's ⚠️ line carries the nuance.
+      if (mode === 'instant' && !wasAlreadyAnswered) {
+        const autoList = live.player.assignment.state?.attempt?.answersWithCorrectness;
+        const auto = Array.isArray(autoList)
+          ? autoList.find((a) => Number(a.qIndex) === qIndex)
+          : null;
+        if (auto) playVerdictFx(auto.correct === true);
+      }
       // Re-render replaces the focused input, so focus falls back to <body> and the next
       // Enter never reaches joinAnswersEl's keydown handler. Move focus to the submit
       // button so Enter advances to the next question (matches the <kbd>↵</kbd> hint).
@@ -5663,6 +5676,8 @@ const assignmentAmbient = {
   hall: null,
   final: null,
   answering: [],
+  verdictCorrect: [],
+  verdictIncorrect: [],
 };
 let currentAnsweringIdx = -1; // Track current answering track per question
 let lastRenderedQuestionIndex = -1; // Track last rendered question to play ambient on change
@@ -5690,6 +5705,18 @@ function initAssignmentSfx() {
       new Audio('music/answering10.mp3'),
       new Audio('music/answering11.mp3'),
     ];
+    // Short verdict stingers for instant-feedback reveals. A random track is
+    // picked per answer so repeated questions don't sound monotonous.
+    assignmentAmbient.verdictCorrect = [
+      new Audio('music/correct.mp3'),
+      new Audio('music/correct2.mp3'),
+      new Audio('music/correct3.mp3'),
+      new Audio('music/correct4.mp3'),
+    ];
+    assignmentAmbient.verdictIncorrect = [
+      new Audio('music/incorrect.mp3'),
+      new Audio('music/incorrect2.mp3'),
+    ];
     Object.values(assignmentAmbient).flat().forEach(a => {
       if (!a) return;
       a.volume = 0.7;
@@ -5697,6 +5724,9 @@ function initAssignmentSfx() {
       a.addEventListener('pause', updateMuteMusicPlayingState);
       a.addEventListener('ended', updateMuteMusicPlayingState);
     });
+    // Stingers sit on top of (already-silenced) ambient — keep them crisp.
+    [...assignmentAmbient.verdictCorrect, ...assignmentAmbient.verdictIncorrect]
+      .forEach((a) => { a.volume = 0.85; });
   } catch { }
 }
 
@@ -6456,6 +6486,53 @@ function pickNewAnsweringTrack() {
   currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
 }
 
+// Instant-feedback verdict: short sound stinger + full-screen flash/badge.
+// Called once at the moment an answer is graded (save or retake submit) —
+// never from render paths, so navigating back to an answered question
+// doesn't replay it. Sound respects the music-mute toggle; motion respects
+// prefers-reduced-motion (the HUD text + answer highlights already convey
+// the verdict, so the overlay is purely celebratory).
+function playVerdictFx(correct) {
+  try {
+    if (!assignmentMusicMuted) {
+      const pool = correct ? assignmentAmbient.verdictCorrect : assignmentAmbient.verdictIncorrect;
+      const a = pool && pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
+    }
+  } catch { }
+
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    document.getElementById('verdictFxOverlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'verdictFxOverlay';
+    overlay.className = `verdict-fx ${correct ? 'correct' : 'incorrect'}`;
+    overlay.setAttribute('aria-hidden', 'true');
+
+    const badge = document.createElement('div');
+    badge.className = 'verdict-fx-badge';
+    badge.innerHTML = correct
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path class="verdict-fx-path" d="M4.5 12.5l5 5L19.5 7"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path class="verdict-fx-path" d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>';
+    overlay.appendChild(badge);
+
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.remove(), 1100);
+
+    if (!correct) {
+      const card = joinQuestionWrap || joinCardEl;
+      if (card) {
+        card.classList.remove('verdict-shake');
+        // Force reflow so back-to-back wrong answers restart the animation.
+        void card.offsetWidth;
+        card.classList.add('verdict-shake');
+        setTimeout(() => card.classList.remove('verdict-shake'), 600);
+      }
+    }
+  } catch { }
+}
+
 // Browsers (esp. iOS Safari) only allow Audio.play() inside a user gesture.
 // `joinLiveGame` -> `startAssignmentAttempt` chains several awaits before the
 // first ambient .play() is called, which breaks the gesture link and the
@@ -6471,6 +6548,8 @@ function unlockAssignmentAmbient() {
     assignmentAmbient.hall,
     assignmentAmbient.final,
     ...(assignmentAmbient.answering || []),
+    ...(assignmentAmbient.verdictCorrect || []),
+    ...(assignmentAmbient.verdictIncorrect || []),
   ].filter(Boolean);
   if (!all.length) return;
   all.forEach((a) => {
