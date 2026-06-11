@@ -257,7 +257,11 @@ function init() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       const q = live.player.currentQuestion;
       if (!q) return;
-      playAssignmentQuestionAudio(q).catch((err) => console.warn('Audio playback failed:', err));
+      // Mirror the 🎧 replay button: duck (don't kill) the ambient loop and
+      // hand the resume decision to resumeAssignmentAnsweringAmbient's guards.
+      playAssignmentQuestionAudio(q, { preserveAmbient: true })
+        .catch((err) => console.warn('Audio playback failed:', err))
+        .finally(() => { resumeAssignmentAnsweringAmbient(); });
     }
   });
 
@@ -1394,6 +1398,7 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   lastClosedQuestionIndex = -1;
   assignmentFinalPlayed = false;
   lastAssignmentAudioKey = '';
+  live.player.assignment.suppressAmbientResume = false;
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -2759,6 +2764,7 @@ async function handleRetakeSubmit() {
   cancelPendingAssignmentQuestionAutoplay();
   stopAssignmentQuestionAudioPlayback();
   lastAssignmentAudioKey = '';
+  live.player.assignment.suppressAmbientResume = true;
 
   // Re-render WITHOUT invalidating renderKey. A fresh re-mount would pre-fill
   // inputs from state.attempt.answersByQ — which holds the ORIGINAL wrong
@@ -3250,6 +3256,8 @@ function renderPlayerState(state) {
   // will start ambient only after the audio finishes, so it never overlaps.
   if (assignmentQuestionChanged) {
     cancelPendingAssignmentQuestionAutoplay();
+    // New question on screen — the reveal (if any) is over, ambient may flow again.
+    live.player.assignment.suppressAmbientResume = false;
     lastRenderedQuestionIndex = state.currentIndex;
     pickNewAnsweringTrack();
     if (!hasAssignmentQuestionAudio(state.question)) {
@@ -3671,10 +3679,13 @@ function renderJoinQuestion(question) {
         const q = live.player.currentQuestion;
         if (!q) return;
         stopAssignmentQuestionAudioPlayback();
-        playAssignmentQuestionAudio(q, { preserveAmbient: true }).then((played) => {
-          if (!played) return;
-          resumeAssignmentAnsweringAmbient();
-        }).catch(() => {});
+        // Always attempt the resume — even when playback failed or was
+        // interrupted, the answering track was paused at click time and
+        // resumeAssignmentAnsweringAmbient's guards (another audio playing,
+        // reveal in progress, muted) decide whether ambient belongs back.
+        playAssignmentQuestionAudio(q, { preserveAmbient: true })
+          .catch(() => {})
+          .finally(() => { resumeAssignmentAnsweringAmbient(); });
       });
       eq.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); eq.click(); }
@@ -4533,6 +4544,11 @@ async function submitLiveAnswer(opts = {}) {
       cancelPendingAssignmentQuestionAutoplay();
       stopAssignmentQuestionAudioPlayback();
       lastAssignmentAudioKey = '';
+      // Instant mode reveals in place — hold ambient-resume callbacks (e.g.
+      // an interrupted replay's) until the next question renders.
+      if (String(live.player.assignment.state?.attempt?.assignment?.feedbackMode || '') === 'instant') {
+        live.player.assignment.suppressAmbientResume = true;
+      }
 
       const data = await api('/api/assignment/answer', {
         method: 'POST',
@@ -4694,6 +4710,10 @@ async function submitLiveAnswer(opts = {}) {
       live.player.liveRevealForIndex = data.currentIndex;
     }
   } catch (err) {
+    // The save didn't land — the student is still on an open question, so
+    // release the reveal hold set on the way in (audio stays stopped; they
+    // can replay it, and ambient resume paths work again).
+    if (live.player?.assignment) live.player.assignment.suppressAmbientResume = false;
     const msg = String(err?.message || t('Could not submit answer.'));
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
@@ -5704,6 +5724,14 @@ let assignmentFinalPlayed = false; // Track final sound for completed assignment
 let assignmentPromptAutoplayTimer = null;
 let lastAssignmentAudioKey = '';
 let activeAssignmentQuestionAudioEl = null;
+// Resolver of the in-flight playAudioEl promise. A paused <audio> never fires
+// 'ended', so manual stops must settle the promise themselves — otherwise
+// awaiting callers (replay resume, media sequence) hang forever.
+let activeAssignmentQuestionAudioFinish = null;
+// Bumped on every manual stop. playAssignmentQuestionAudio captures it on
+// entry and aborts its source-fallback chain when it changes, so a
+// deliberately-stopped prompt can't resurrect itself via the next source.
+let assignmentQuestionAudioStopGen = 0;
 
 function initAssignmentSfx() {
   try {
@@ -5962,6 +5990,7 @@ function _refreshAssignmentRecordBtnsForAudio() {
 }
 
 function stopAssignmentQuestionAudioPlayback() {
+  assignmentQuestionAudioStopGen += 1;
   try {
     if (activeAssignmentQuestionAudioEl) {
       activeAssignmentQuestionAudioEl.pause();
@@ -5969,6 +5998,12 @@ function stopAssignmentQuestionAudioPlayback() {
       activeAssignmentQuestionAudioEl = null;
     }
   } catch { }
+
+  // Settle the in-flight playback promise — pausing alone leaves it pending
+  // forever, which used to strand the replay handler's ambient-resume callback.
+  const finish = activeAssignmentQuestionAudioFinish;
+  activeAssignmentQuestionAudioFinish = null;
+  if (finish) { try { finish(false); } catch { } }
 
   try {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
@@ -6286,6 +6321,11 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
   }
   stopAssignmentQuestionAudioPlayback();
 
+  // Captured after our own entry-stop above: any later stop (answer saved,
+  // second replay click, exam blur) bumps the generation and we abort.
+  const gen = assignmentQuestionAudioStopGen;
+  const aborted = () => gen !== assignmentQuestionAudioStopGen;
+
   const playAudioEl = (audioEl) => new Promise((resolve) => {
     activeAssignmentQuestionAudioEl = audioEl;
     setAssignmentAudioPlayingUi(true);
@@ -6298,10 +6338,12 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       if (settled) return;
       settled = true;
       clearEarlyHide();
+      if (activeAssignmentQuestionAudioFinish === onFinish) activeAssignmentQuestionAudioFinish = null;
       if (activeAssignmentQuestionAudioEl === audioEl) activeAssignmentQuestionAudioEl = null;
       setAssignmentAudioPlayingUi(false);
       resolve(ok);
     };
+    activeAssignmentQuestionAudioFinish = onFinish;
     audioEl.addEventListener('loadedmetadata', () => {
       const dur = audioEl.duration;
       if (!Number.isFinite(dur) || dur <= 0.7) return;
@@ -6324,6 +6366,7 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     let ok = false;
     try { ok = await playAudioEl(new Audio(audioUrl)); } catch { ok = false; }
     if (ok) return true;
+    if (aborted()) return 'aborted';
     // File missing/undecodable → fall through to TTS synthesis from the question text.
   }
 
@@ -6341,6 +6384,7 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     try {
       if (await playAudioEl(new Audio(cacheUrl))) return true;
     } catch { /* fall through to live Edge synthesis */ }
+    if (aborted()) return 'aborted';
   }
 
   try {
@@ -6361,9 +6405,12 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       audioUrl = URL.createObjectURL(blob);
       studentEdgeTtsCache.set(key, audioUrl);
     }
+    if (aborted()) return 'aborted';
     await playAudioEl(new Audio(audioUrl));
+    if (aborted()) return 'aborted';
     return true;
   } catch {
+    if (aborted()) return 'aborted';
     if (!('speechSynthesis' in window)) {
       return false;
     }
@@ -6404,7 +6451,11 @@ async function playAssignmentQuestionVideo(question) {
 }
 
 async function runAssignmentQuestionMediaSequence(question, audioKey) {
-  await playAssignmentQuestionAudio(question, { audioKey });
+  const audioResult = await playAssignmentQuestionAudio(question, { audioKey });
+  // Playback was deliberately stopped mid-play (answer saved, replay clicked,
+  // exam blur). Whoever stopped it owns what happens next — don't proceed to
+  // the video or start ambient.
+  if (audioResult === 'aborted') return;
   await playAssignmentQuestionVideo(question);
   const s = live.player.assignment.state;
   const attempt = s?.attempt;
@@ -6419,7 +6470,9 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
     && attempt.answeredQIndexes.map(Number).includes(qIdx);
   if (answeredNow && String(attempt.assignment?.feedbackMode || '') === 'instant') return;
 
-  // ensure we don't play ambient if another sequence took over
+  // A manual replay owns the audio channel right now — its own resume
+  // callback restarts ambient when it ends, so don't layer ambient under it.
+  if (_assignmentAudioPlaying || activeAssignmentQuestionAudioEl) return;
 
   playAssignmentSfx('answering');
 }
@@ -6610,6 +6663,11 @@ function pauseAssignmentAnsweringAmbient() {
 function resumeAssignmentAnsweringAmbient() {
   if (live.player.mode !== 'assignment') return;
   if (assignmentMusicMuted) return;
+  // Held during an instant-feedback reveal: when a save interrupts a replay,
+  // the replay's resume callback fires immediately — before the fresh state
+  // (with the question now marked answered) has loaded — and must not restart
+  // ambient over the verdict. Cleared when the next question renders.
+  if (live.player.assignment?.suppressAmbientResume) return;
   const s = live.player.assignment?.state;
   const attempt = s?.attempt;
   if (!attempt || attempt.submitted) return;
