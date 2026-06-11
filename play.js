@@ -5746,11 +5746,19 @@ function initAssignmentSfx() {
       new Audio('music/answering5.mp3'),
       new Audio('music/answering6.mp3'),
       new Audio('music/answering7.mp3'),
-      new Audio('music/answering8.mp3'),
-      new Audio('music/answering9.mp3'),
-      new Audio('music/answering10.mp3'),
-      new Audio('music/answering11.mp3'),
     ];
+    // If a track fails to load (file deleted/renamed on the server), drop it
+    // from the rotation so questions that drew it aren't silently ambient-less.
+    assignmentAmbient.answering.forEach((a) => {
+      a.addEventListener('error', () => {
+        const i = assignmentAmbient.answering.indexOf(a);
+        if (i < 0) return;
+        assignmentAmbient.answering.splice(i, 1);
+        // Indices shifted — drop the current pick; the next question (or
+        // resume) re-picks from the surviving tracks.
+        currentAnsweringIdx = -1;
+      });
+    });
     // Short verdict stingers for instant-feedback reveals. A random track is
     // picked per answer so repeated questions don't sound monotonous.
     assignmentAmbient.verdictCorrect = [

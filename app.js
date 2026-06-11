@@ -741,8 +741,21 @@ const live = {
 
 const answeringFxPool = [
   '../music/answering.mp3',
-  ...Array.from({ length: 10 }, (_, i) => `../music/answering${i + 2}.mp3`),
-].map((src) => createAudio(src, { loop: true, volume: 0.7 }));
+  ...Array.from({ length: 6 }, (_, i) => `../music/answering${i + 2}.mp3`),
+].map((src) => createAudio(src, { loop: true, volume: 0.7 })).filter(Boolean);
+// Evict tracks whose file is missing (deleted/renamed on the server) so a
+// random pick never lands on a silent loop.
+answeringFxPool.forEach((a) => {
+  a.addEventListener('error', () => {
+    const i = answeringFxPool.indexOf(a);
+    if (i < 0) return;
+    answeringFxPool.splice(i, 1);
+    if (live.host.currentAnsweringFx === a) live.host.currentAnsweringFx = null;
+    // Indices shifted — forget the last pick so the no-repeat nudge can't
+    // skip a valid track.
+    live.host.lastAnsweringFxIndex = -1;
+  });
+});
 
 const audioFx = {
   hall: createAudio('../music/hall.mp3', { loop: true, volume: 0.35 }),
