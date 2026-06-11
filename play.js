@@ -6564,6 +6564,37 @@ function pickNewAnsweringTrack() {
   currentAnsweringIdx = Math.floor(Math.random() * assignmentAmbient.answering.length);
 }
 
+// Shuffle-bag picker for the verdict stingers. Uniform random draws on a
+// small pool repeat constantly (same clip twice in a row 25% of the time on
+// 4 clips), which students perceive as "always the same sound". Instead each
+// pool plays through in full, in a random order, before any clip repeats —
+// and a fresh bag never leads with the clip that just played.
+const verdictClipBags = { correct: [], incorrect: [] };
+const verdictLastClipIdx = { correct: -1, incorrect: -1 };
+function nextVerdictClip(correct) {
+  const key = correct ? 'correct' : 'incorrect';
+  const pool = correct ? assignmentAmbient.verdictCorrect : assignmentAmbient.verdictIncorrect;
+  if (!pool || !pool.length) return null;
+  let bag = verdictClipBags[key];
+  if (!bag.length) {
+    bag = pool.map((_, i) => i);
+    // Fisher–Yates shuffle
+    for (let i = bag.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    // Clips are drawn from the end — if the fresh bag would lead with the
+    // clip that just played, swap it deeper into the bag.
+    if (bag.length > 1 && bag[bag.length - 1] === verdictLastClipIdx[key]) {
+      [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+    }
+    verdictClipBags[key] = bag;
+  }
+  const idx = bag.pop();
+  verdictLastClipIdx[key] = idx;
+  return pool[idx] || null;
+}
+
 // Instant-feedback verdict: short sound stinger + full-screen flash/badge.
 // Called once at the moment an answer is graded (save or retake submit) —
 // never from render paths, so navigating back to an answered question
@@ -6573,8 +6604,7 @@ function pickNewAnsweringTrack() {
 function playVerdictFx(correct) {
   try {
     if (!assignmentMusicMuted) {
-      const pool = correct ? assignmentAmbient.verdictCorrect : assignmentAmbient.verdictIncorrect;
-      const a = pool && pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+      const a = nextVerdictClip(correct);
       if (a) { a.currentTime = 0; a.play().catch(() => { }); }
     }
   } catch { }
