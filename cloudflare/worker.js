@@ -440,22 +440,13 @@ export default {
       if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      const headers = {};
-      // Live-mode login verification. Prefer the dedicated STUDENT_LOGIN_VERIFY_*
-      // vars (legacy Apps Script bridge), but fall back to the roster lookup
-      // endpoint the self-host wizard actually provisions (STUDENT_ROSTER_LOOKUP_URL
-      // -> /api/students/lookup) so new-teacher setups get working live login too.
-      // Both endpoints share the same { usernames[], password, secret } contract
-      // and report the match in results[].passwordOk.
-      const verifyUrl = env.STUDENT_LOGIN_VERIFY_URL || env.STUDENT_ROSTER_LOOKUP_URL || '';
-      const verifySecret = env.STUDENT_LOGIN_VERIFY_SECRET || env.STUDENT_ROSTER_LOOKUP_SECRET || '';
-      if (verifyUrl) headers['X-Login-Verify-Url'] = String(verifyUrl);
-      if (verifySecret) headers['X-Login-Verify-Secret'] = String(verifySecret);
-
+      // Live-mode login is verified inside the Durable Object via
+      // lookupAndVerifyStudent(this.env, ...) — the same path assignment login
+      // uses — so no verify config needs to be forwarded here.
       return withCors(
         await stub.fetch('https://room/join', {
           method: 'POST',
-          headers,
+          headers: {},
           body: JSON.stringify({ name, password, clientId }),
         }),
       );
@@ -3794,63 +3785,36 @@ export class QuizRoom {
         if (!room.settings?.randomNames) {
           if (!password) return json({ error: 'Username and password are required.' }, 401);
 
-          const verifyUrl = String(request.headers.get('X-Login-Verify-Url') || '').trim();
-          const verifySecret = String(request.headers.get('X-Login-Verify-Secret') || '').trim();
-          if (!verifyUrl) return json({ error: 'Login verification is not configured.' }, 501);
-
+          // Verify against the SAME roster helper that assignment login uses
+          // (lookupAndVerifyStudent -> STUDENT_ROSTER_LOOKUP_URL). Live mode used
+          // to have its own divergent path keyed on STUDENT_LOGIN_VERIFY_URL, which
+          // the wizard never provisions and which broke whenever that endpoint's
+          // response shape differed from the roster lookup's. One code path now.
           try {
-            const verifyHeaders = { 'Content-Type': 'application/json' };
-            if (verifySecret) verifyHeaders['Authorization'] = `Bearer ${verifySecret}`;
-
             const verifyNames = [name];
             const lowerName = sanitizeName(name).toLowerCase();
             if (lowerName && !verifyNames.includes(lowerName)) {
               verifyNames.push(lowerName);
             }
 
-            let vData = null;
+            let lookup = null;
             let verifiedWithName = name;
-            let verified = false;
-
             for (const candidateName of verifyNames) {
-              const vRes = await fetch(verifyUrl, {
-                method: 'POST',
-                headers: verifyHeaders,
-                // The verify endpoints (self-hosted student-accounts route and the
-                // Apps Script roster bridge) both read `usernames` as an array and
-                // report the match in results[].passwordOk. Sending singular
-                // `username` left usernames empty, so results was always [].
-                body: JSON.stringify({ usernames: [candidateName], username: candidateName, password, pin: room.pin, secret: verifySecret }),
-              });
-              const vTxt = await vRes.text();
-              let parsed = {};
-              try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
-
-              if (!vRes.ok) continue;
-              // Fail closed: the verify bridge returns top-level `ok: true` for any
-              // successful lookup regardless of password, and signals the actual
-              // password match per row via `results[].passwordOk`. Only admit on an
-              // explicit passwordOk === true — never on the mere absence of an error.
-              if (!parsed || parsed.ok !== true) continue;
-              const rows = Array.isArray(parsed.results) ? parsed.results : [];
-              const row = rows.find((r) => r && r.passwordOk === true);
-              if (!row) continue;
-
-              vData = { ...parsed, ...row };
-              verifiedWithName = candidateName;
-              verified = true;
-              break;
+              const res = await lookupAndVerifyStudent(this.env, candidateName, password);
+              if (res && res.passwordOk === true) {
+                lookup = res;
+                verifiedWithName = candidateName;
+                break;
+              }
             }
 
-            if (!verified) return json({ error: 'Invalid username or password.' }, 401);
+            if (!lookup) return json({ error: 'Invalid username or password.' }, 401);
 
-            verifiedIdentity = await normalizeStudentIdentity(vData || {}, verifiedWithName);
-            const preferredDisplay = sanitizeName(
-              verifiedIdentity?.displayName
-              || (vData && (vData.displayName || vData.display_name))
-              || name,
-            ) || name;
-            name = preferredDisplay;
+            verifiedIdentity = await normalizeStudentIdentity(
+              { username: verifiedWithName, email: lookup.email, studentKey: lookup.emailKey },
+              verifiedWithName,
+            );
+            name = sanitizeName(verifiedIdentity?.displayName || verifiedWithName) || name;
           } catch {
             return json({ error: 'Login verification service unavailable.' }, 502);
           }
