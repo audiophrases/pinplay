@@ -3815,9 +3815,16 @@ export class QuizRoom {
               try { parsed = vTxt ? JSON.parse(vTxt) : {}; } catch { }
 
               if (!vRes.ok) continue;
-              if (parsed && parsed.ok === false) continue;
+              // Fail closed: the verify bridge returns top-level `ok: true` for any
+              // successful lookup regardless of password, and signals the actual
+              // password match per row via `results[].passwordOk`. Only admit on an
+              // explicit passwordOk === true — never on the mere absence of an error.
+              if (!parsed || parsed.ok !== true) continue;
+              const rows = Array.isArray(parsed.results) ? parsed.results : [];
+              const row = rows.find((r) => r && r.passwordOk === true);
+              if (!row) continue;
 
-              vData = parsed;
+              vData = { ...parsed, ...row };
               verifiedWithName = candidateName;
               verified = true;
               break;
