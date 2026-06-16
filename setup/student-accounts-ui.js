@@ -84,6 +84,14 @@
 
   // ---- UI: entry points on the join page ----
   function injectEntryPoints() {
+    // Self-service mode supplies its own signup + recovery below, so drop the
+    // hardcoded "No account? Sign up · Forgot…" hint: it points at the OWNER's
+    // Google Form / lookup URL and is wrong for any other teacher's site.
+    // Removed (not just hidden) because play.js re-toggles its visibility after
+    // load; its `if (joinSignupHintEl)` guards stay safe on the detached node.
+    var ownerHint = document.getElementById('joinSignupHint');
+    if (ownerHint) ownerHint.remove();
+
     var anchor = document.getElementById('joinStepIdentity')
       || (document.getElementById('joinPassword') || {}).parentElement
       || document.getElementById('joinNameWrap')
