@@ -441,8 +441,16 @@ export default {
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
       const headers = {};
-      if (env.STUDENT_LOGIN_VERIFY_URL) headers['X-Login-Verify-Url'] = String(env.STUDENT_LOGIN_VERIFY_URL);
-      if (env.STUDENT_LOGIN_VERIFY_SECRET) headers['X-Login-Verify-Secret'] = String(env.STUDENT_LOGIN_VERIFY_SECRET);
+      // Live-mode login verification. Prefer the dedicated STUDENT_LOGIN_VERIFY_*
+      // vars (legacy Apps Script bridge), but fall back to the roster lookup
+      // endpoint the self-host wizard actually provisions (STUDENT_ROSTER_LOOKUP_URL
+      // -> /api/students/lookup) so new-teacher setups get working live login too.
+      // Both endpoints share the same { usernames[], password, secret } contract
+      // and report the match in results[].passwordOk.
+      const verifyUrl = env.STUDENT_LOGIN_VERIFY_URL || env.STUDENT_ROSTER_LOOKUP_URL || '';
+      const verifySecret = env.STUDENT_LOGIN_VERIFY_SECRET || env.STUDENT_ROSTER_LOOKUP_SECRET || '';
+      if (verifyUrl) headers['X-Login-Verify-Url'] = String(verifyUrl);
+      if (verifySecret) headers['X-Login-Verify-Secret'] = String(verifySecret);
 
       return withCors(
         await stub.fetch('https://room/join', {
