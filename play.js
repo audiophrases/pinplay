@@ -4631,84 +4631,21 @@ async function submitLiveAnswer(opts = {}) {
 
     if (joinScoreEl) joinScoreEl.textContent = t('Score: {n}', { n: data.score });
 
-    // --- Immediate answer reveal (clone assignment-mode behavior) ---
-    const isPoll = !!question?.isPoll;
-    const isAutoGraded = !!data.graded;
-    if (!isPoll && isAutoGraded) {
-      const pts = Number(data.pointsAwarded || 0);
-      const partialScore = Number(data.partialScore || 0);
-      const partialTotal = Number(data.partialTotal || 0);
-      const isPartial = !data.correct && isPartialCreditType(question?.type) && partialScore > 0 && partialTotal > 0;
-      const resultText = data.correct
-        ? t('✅ Correct')
-        : (isPartial ? `⚠️ ${partialCreditLabel(question?.type, partialScore, partialTotal)}` : t('❌ Incorrect'));
-      let pointsText = '';
-      if (pts > 0) pointsText = ` +${pts} points`;
-      else if (pts < 0) pointsText = ` ${pts} points`;
-      let feedback = `${resultText}${pointsText}`;
-      if (question?.type === 'error_hunt' && data.correctAnswer) {
-        feedback += t(' · Correct: {answer}', { answer: data.correctAnswer });
-      }
-      setJoinStatusHud(feedback, data.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
-
-      // Apply color-coded highlighting + text reveal (same as assignment mode)
-      const syntheticState = {
-        question,
-        correctAnswer: String(data.correctAnswer || ''),
-        correctZones: Array.isArray(data.correctZones) ? data.correctZones : undefined,
-      };
-      highlightAnswerItems(data.correct, syntheticState);
-
-      // Disable all answer inputs (same as assignment-mode questionClosed path)
-      if (joinAnswersEl) {
-        joinAnswersEl.querySelectorAll('input, select, button, textarea').forEach((el) => {
-          el.disabled = true;
-        });
-        joinAnswersEl.style.pointerEvents = 'none';
-      }
-
-      // Show correct-answer text reveal box for text-based question types — skip entirely
-      // when the student got it right (answer surface already carries the green signal).
-      const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
-      const correctText = String(data.correctAnswer || '').trim();
-      if (needsReveal && correctText && !data.correct) {
-        const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
-        if (wrap) {
-          let revealEl = wrap.querySelector('[data-join-correct-reveal="1"]');
-          if (!revealEl) {
-            revealEl = document.createElement('div');
-            revealEl.className = 'student-answer-reveal';
-            revealEl.dataset.joinCorrectReveal = '1';
-            const title = document.createElement('div');
-            title.className = 'student-answer-reveal-title';
-            title.textContent = t('Correct Answer');
-            const content = document.createElement('div');
-            content.className = 'student-answer-reveal-content';
-            revealEl.append(title, content);
-            const answersAnchor = document.getElementById('joinAnswers');
-            if (wrap.id === 'joinQuestionInteractive' && answersAnchor) {
-              wrap.insertBefore(revealEl, answersAnchor);
-            } else {
-              wrap.appendChild(revealEl);
-            }
-          }
-          revealEl.classList.add('student-answer-reveal--bad');
-          const contentEl = revealEl.querySelector('.student-answer-reveal-content');
-          if (contentEl && contentEl.textContent !== correctText) {
-            contentEl.textContent = correctText;
-          }
-        }
-      }
-    } else {
-      setJoinStatusHud(t('Answer submitted. Waiting for reveal…'), 'ok');
+    // --- Live mode: defer the reveal to the teacher ---
+    // Students never see correctness on submit, regardless of question type or
+    // grading (instant/end/etc. don't apply in live mode). The teacher's reveal
+    // on the projector closes the question, and the polling renderPlayerState
+    // path (questionClosed + revealedResult, ~line 3422) then drives the full
+    // reveal — verdict HUD, choice highlighting, and correct-answer box. Here we
+    // only lock the answer surface and show a waiting message; we deliberately do
+    // NOT set liveRevealApplied, so nothing reveals before the teacher acts.
+    if (joinAnswersEl) {
+      joinAnswersEl.querySelectorAll('input, select, button, textarea').forEach((el) => {
+        el.disabled = true;
+      });
+      joinAnswersEl.style.pointerEvents = 'none';
     }
-
-    // Mark that immediate reveal is active for this question index
-    // so polling renderPlayerState doesn't overwrite it before teacher closes
-    if (!isPoll && isAutoGraded) {
-      live.player.liveRevealApplied = true;
-      live.player.liveRevealForIndex = data.currentIndex;
-    }
+    setJoinStatusHud(t('Answer submitted. Waiting for reveal…'), 'ok');
   } catch (err) {
     // The save didn't land — the student is still on an open question, so
     // release the reveal hold set on the way in (audio stays stopped; they
