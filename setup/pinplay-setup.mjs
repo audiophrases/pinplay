@@ -402,7 +402,14 @@ async function fetchLatestCode() {
     if (!fs.existsSync(srcRoot)) throw new Error('unexpected update archive layout');
 
     // Canonical files/dirs to refresh = exactly what the deploy steps consume.
-    const files = ['cloudflare/worker.js', 'cloudflare/wrangler.toml', 'cloudflare/edge_tts_bridge.py', ...FRONTEND_ASSETS];
+    // Includes the setup/ deploy inputs (self-host worker route module + the
+    // join-page / admin UI scripts) — these are bundled/copied at deploy time, so
+    // omitting them left `--update` shipping a new worker.js with stale UI/routes.
+    const files = [
+      'cloudflare/worker.js', 'cloudflare/wrangler.toml', 'cloudflare/edge_tts_bridge.py',
+      'setup/student-accounts.js', 'setup/student-accounts-ui.js', 'setup/student-admin-ui.js',
+      ...FRONTEND_ASSETS,
+    ];
     for (const rel of files) {
       const from = path.join(srcRoot, rel);
       if (fs.existsSync(from)) copyFileSafe(from, path.join(REPO_ROOT, rel));
