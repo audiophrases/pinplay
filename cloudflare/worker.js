@@ -3808,7 +3808,11 @@ export class QuizRoom {
               const vRes = await fetch(verifyUrl, {
                 method: 'POST',
                 headers: verifyHeaders,
-                body: JSON.stringify({ username: candidateName, password, pin: room.pin, secret: verifySecret }),
+                // The verify endpoints (self-hosted student-accounts route and the
+                // Apps Script roster bridge) both read `usernames` as an array and
+                // report the match in results[].passwordOk. Sending singular
+                // `username` left usernames empty, so results was always [].
+                body: JSON.stringify({ usernames: [candidateName], username: candidateName, password, pin: room.pin, secret: verifySecret }),
               });
               const vTxt = await vRes.text();
               let parsed = {};
