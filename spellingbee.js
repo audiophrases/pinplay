@@ -42,8 +42,20 @@
   var DEFAULT_LADDER = { good: 0.4, great: 0.7, genius: 1.0 };
 
   // Multi-letter clusters offered as convenience / distractor tiles (2–3 letters).
-  var VOWEL_CLUSTERS = ['eau', 'ee', 'ou', 'oa', 'oo', 'ea', 'ei', 'ie'];
-  var CONSONANT_CLUSTERS = ['ght', 'ch', 'gh', 'th', 'll', 'pp', 'dd', 'gg', 'nn', 'tt', 'ss', 'mm'];
+  // Common English (+ a few French) digraphs/trigraphs, grouped so the decoy picker
+  // can reach for a confusable VOWEL cluster. Longest are listed first so substring
+  // dedup in inWordClusters() keeps "ght" over "gh", "tch" over "ch", etc.
+  var VOWEL_CLUSTERS = [
+    'eau', 'igh',
+    'ai', 'ay', 'au', 'aw', 'ea', 'ee', 'ei', 'eu', 'ew', 'ey', 'ie',
+    'oa', 'oo', 'oi', 'oy', 'ou', 'ow', 'oe', 'ue', 'ui',
+  ];
+  var CONSONANT_DIGRAPHS = [
+    'sch', 'tch', 'dge', 'ght',
+    'ch', 'sh', 'th', 'ph', 'wh', 'gh', 'ck', 'ng', 'qu', 'kn', 'wr', 'gn', 'sc',
+  ];
+  var DOUBLED_CONSONANTS = ['bb', 'cc', 'dd', 'ff', 'gg', 'll', 'mm', 'nn', 'pp', 'rr', 'ss', 'tt', 'zz'];
+  var CONSONANT_CLUSTERS = CONSONANT_DIGRAPHS.concat(DOUBLED_CONSONANTS);
   var CLUSTERS = VOWEL_CLUSTERS.concat(CONSONANT_CLUSTERS);
 
   // ------------------------------------------------------------------- helpers

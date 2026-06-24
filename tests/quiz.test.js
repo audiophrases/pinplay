@@ -1282,6 +1282,18 @@ describe('SpellingBee.inWordClusters', () => {
   it('returns nothing for a word with no inventory cluster', () => {
     assert.deepEqual(SB.inWordClusters('cat'), []);
   });
+  it('covers common English digraphs', () => {
+    const cases = {
+      ship: 'sh', much: 'ch', that: 'th', phone: 'ph', when: 'wh', duck: 'ck',
+      king: 'ng', queen: 'qu', rain: 'ai', play: 'ay', boil: 'oi', cow: 'ow',
+      house: 'ou', book: 'oo', blue: 'ue', mirror: 'rr', off: 'ff', buzz: 'zz',
+      knee: 'kn', write: 'wr', badge: 'dge', catch: 'tch',
+    };
+    Object.keys(cases).forEach((word) => {
+      assert.ok(SB.inWordClusters(word).includes(cases[word]),
+        `${word} should expose cluster "${cases[word]}" → got ${JSON.stringify(SB.inWordClusters(word))}`);
+    });
+  });
 });
 
 describe('SpellingBee.buildTiles', () => {
