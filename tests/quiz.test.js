@@ -1250,21 +1250,37 @@ describe('SpellingBee.gradeWord', () => {
 
 describe('SpellingBee.autoDistractors', () => {
   it('only fires for targets with under 7 distinct letters', () => {
-    assert.deepEqual(SB.autoDistractors('pollution', 'A2'), []); // 7 distinct → none
-    assert.ok(SB.autoDistractors('tree', 'A2').length > 0);       // 3 distinct → some
+    assert.deepEqual(SB.autoDistractors('pollution'), []); // 7 distinct → none
+    assert.ok(SB.autoDistractors('tree').length > 0);       // 3 distinct → some
   });
-  it('scaffold level caps the count (A1 < B1)', () => {
-    assert.ok(SB.autoDistractors('cat', 'A1').length <= 1);
-    assert.ok(SB.autoDistractors('cat', 'B1').length <= 3);
+  it('adds at most 3 distractors, aiming for ~7 keys total', () => {
+    assert.ok(SB.autoDistractors('cat').length <= SB.MAX_DISTRACTORS);
+    // "cat" = 3 distinct letters, no in-word clusters → 7-3 = 4, capped at 3.
+    assert.equal(SB.autoDistractors('cat').length, 3);
   });
   it('never returns a letter already in the target', () => {
-    SB.autoDistractors('tree', 'B1').forEach((d) => {
-      assert.ok(!'tree'.includes(d), `distractor ${d} is in target`);
+    SB.autoDistractors('tree').forEach((d) => {
+      assert.ok(SB.normalize('tree').indexOf(d) < 0, `distractor ${d} is in target`);
     });
   });
-  it('biases -tion words toward the cion/sion interference traps', () => {
-    const d = SB.autoDistractors('action', 'B1'); // 6 distinct, ends -tion
-    assert.ok(d.includes('sion') || d.includes('cion'));
+  it('offers a confusable absent vowel-cluster decoy when the word uses one', () => {
+    const d = SB.autoDistractors('green'); // contains "ee"
+    assert.ok(d.some((x) => SB.VOWEL_CLUSTERS.includes(x) && x !== 'ee'));
+  });
+});
+
+describe('SpellingBee.inWordClusters', () => {
+  it('detects clusters from the inventory present in the word', () => {
+    assert.ok(SB.inWordClusters('letter').includes('tt'));
+    assert.ok(SB.inWordClusters('green').includes('ee'));
+  });
+  it('drops a cluster contained in a longer matched one (ght beats gh)', () => {
+    const c = SB.inWordClusters('night');
+    assert.ok(c.includes('ght'));
+    assert.ok(!c.includes('gh'));
+  });
+  it('returns nothing for a word with no inventory cluster', () => {
+    assert.deepEqual(SB.inWordClusters('cat'), []);
   });
 });
 
@@ -1279,31 +1295,48 @@ describe('SpellingBee.buildTiles', () => {
       if ('cat'.includes(t.text)) assert.equal(t.distractor, false);
     });
   });
-  it('only keeps cluster tiles that occur in the word', () => {
+  it('auto-adds in-word clusters as (non-distractor) tiles', () => {
+    const tiles = SB.buildTiles('letter', { distractors: [] });
+    const tt = tiles.find((t) => t.text === 'tt');
+    assert.ok(tt && tt.distractor === false);
+  });
+  it('rejects author clusterTiles outside the inventory or not in the word', () => {
     const tiles = SB.buildTiles('nation', { clusterTiles: ['tion', 'ck'] });
-    assert.ok(tiles.some((t) => t.text === 'tion'));
-    assert.ok(!tiles.some((t) => t.text === 'ck')); // 'ck' not in 'nation'
+    assert.ok(!tiles.some((t) => t.text === 'tion')); // not in the cluster inventory
+    assert.ok(!tiles.some((t) => t.text === 'ck'));    // not present in "nation"
   });
 });
 
-describe('SpellingBee.scoreRound', () => {
+describe('SpellingBee.passWeight & scoreRound (per-pass weighting)', () => {
+  it('weights points 100/66/33 by solved pass', () => {
+    assert.equal(SB.passWeight(1), 1);
+    assert.equal(SB.passWeight(2), 0.66);
+    assert.equal(SB.passWeight(3), 0.33);
+    assert.equal(SB.passWeight(0), 0);
+  });
   const q = { words: [{ target: 'cat' }, { target: 'dog' }, { target: 'café' }] };
-  it('scores by matching targets, accent-insensitively', () => {
+  it('sums per-word weights using solvedPass', () => {
     const r = SB.scoreRound(q, { words: [
-      { target: 'cat', guess: 'cat' },
-      { target: 'dog', guess: 'dgo' },
-      { target: 'café', guess: 'cafe' },
+      { target: 'cat', guess: 'cat', solvedPass: 1 },   // 1.00
+      { target: 'dog', guess: 'dog', solvedPass: 3 },   // 0.33
+      { target: 'café', guess: 'cafe', solvedPass: 2 }, // 0.66
+    ] });
+    assert.ok(Math.abs(r.partialScore - 1.99) < 1e-9);
+    assert.equal(r.partialTotal, 3);
+    assert.equal(r.correct, true);
+  });
+  it('awards 0 for words spelled wrong, regardless of reported pass', () => {
+    const r = SB.scoreRound(q, { words: [
+      { target: 'cat', guess: 'cat', solvedPass: 1 },
+      { target: 'dog', guess: 'dgo', solvedPass: 1 }, // wrong → 0
+      { target: 'café', guess: 'cafe', solvedPass: 1 },
     ] });
     assert.equal(r.partialScore, 2);
-    assert.equal(r.partialTotal, 3);
     assert.equal(r.correct, false);
   });
-  it('is correct only when every word is right', () => {
-    const r = SB.scoreRound(q, { words: [
-      { target: 'cat', guess: 'cat' }, { target: 'dog', guess: 'dog' }, { target: 'café', guess: 'CAFE' },
-    ] });
-    assert.equal(r.correct, true);
-    assert.equal(r.partialScore, 3);
+  it('defaults missing solvedPass to full credit when correct', () => {
+    const r = SB.scoreRound({ words: [{ target: 'cat' }] }, { words: [{ target: 'cat', guess: 'cat' }] });
+    assert.equal(r.partialScore, 1);
   });
   it('handles missing/blank answer', () => {
     const r = SB.scoreRound(q, null);
@@ -1316,7 +1349,8 @@ describe('SpellingBee.validateConfig', () => {
   it('accepts a minimal config (bare targets)', () => {
     const v = SB.validateConfig({ words: [{ target: 'tree' }, { target: 'green' }] });
     assert.ok(v.ok);
-    assert.equal(v.config.scaffoldLevel, 'A2'); // default
+    assert.equal(v.config.words.length, 2);
+    assert.equal(v.config.scaffoldLevel, undefined); // no level any more
   });
   it('accepts string-only words', () => {
     const v = SB.validateConfig({ words: ['tree', 'green'] });

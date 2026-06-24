@@ -3661,6 +3661,10 @@ function renderJoinQuestion(question) {
   if (oldOverlay) oldOverlay.remove();
   joinQuestionWrap?.querySelectorAll('.question-video-wrap').forEach((el) => el.remove());
 
+  // Tear down any previous Spelling Bee round (removes its document keydown listener)
+  // before rendering the next question.
+  if (_spellingBeeController) { try { _spellingBeeController.destroy(); } catch (e) { /* noop */ } _spellingBeeController = null; }
+
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) {
     if (live.player.assignment.reviewMode) {

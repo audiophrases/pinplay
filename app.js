@@ -290,16 +290,14 @@ const TEMPLATE_ALL_13_TYPES = {
       "prompt": "Listen and spell each word.",
       "points": 1000,
       "timeLimit": 0,
-      "feature": "-tion words",
-      "scaffoldLevel": "A2",
-      "timer": 90,
-      "maxAttemptsPerWord": 3,
+      "feature": "double-letter words",
       "ttsLanguage": "EN",
       "language": "en-US-AriaNeural",
       "words": [
-        { "target": "action", "distractors": ["sion"], "clusterTiles": ["tion"] },
-        { "target": "nation", "clusterTiles": ["tion"] },
-        { "target": "station", "audioText": "a place where trains stop" }
+        { "target": "letter", "clusterTiles": ["tt"] },
+        { "target": "spelling", "clusterTiles": ["ll"] },
+        { "target": "green", "clusterTiles": ["ee"], "distractors": ["ea"] },
+        { "target": "bottle", "audioText": "a glass or plastic container for liquids" }
       ]
     }
   ]
@@ -468,11 +466,11 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "spellingbee": {
     "name": "Spelling Bee",
-    "rules": "Audio-first spelling game. A question is ONE ROUND — a list of words sharing a spelling feature. For each word the app pronounces it (Edge TTS) and the student spells it on a reduced NYT-Spelling-Bee-style letter circle (the word's own letters + a few distractor tiles). Auto-graded case- AND accent-insensitive. Provide 'words' as an array of objects with a required 'target'. Everything else is optional: per-word 'audioText' (a spoken CLUE — a definition or synonym — instead of the word itself), 'distractors' (extra wrong letters/clusters; auto-computed when omitted, only for targets under 7 distinct letters), and 'clusterTiles' (multi-letter convenience keys like 'tion','tt' that occur in the word). Question-level: 'feature' label, 'scaffoldLevel' (A1/A2/B1), 'timer' (challenge seconds, default 90), 'maxAttemptsPerWord', and 'language' (Edge TTS voice — NOT limited to English). Tiles can be single letters or clusters; the final string is graded, so 'b-e-tt-e-r' equals 'b-e-t-t-e-r'.",
-    "constraints": { "minWords": 1, "maxTargetLength": 40, "targetMinLetters": 2 },
-    "pedagogicalUses": ["Massed practice on one interference-prone spelling feature (e.g. all -tion words).", "Sound→spelling mapping for listening + orthography together.", "Anti-L1-interference drills (silent letters, vowel digraphs, consonant doubling)."],
+    "rules": "Audio-first spelling game. A question is ONE ROUND — a list of words sharing a spelling feature. For each word the app pronounces it (Edge TTS) and the student spells it on a reduced NYT-Spelling-Bee-style letter circle (the word's own letters + any in-word multi-letter clusters + up to 3 distractor tiles, ~7 keys total). Auto-graded case- AND accent-insensitive. Difficulty is FIXED (no level): each word gets 3 passes with escalating help — pass 1 no help, pass 2 shows the letter count, pass 3 traces the spelling — and a word scores less the later it is solved (100% / 66% / 33% / 0). Provide 'words' as an array of objects with a required 'target'. Everything else is optional: per-word 'audioText' (a spoken CLUE — a definition or synonym — instead of the word itself), 'distractors' (extra wrong keys; auto-computed when omitted, max 3, only for targets under 7 distinct letters), and 'clusterTiles' (multi-letter convenience keys that occur in the word, drawn from the cluster inventory: vowel digraphs ee/ea/ou/oa/oo/ei/ie/eau, doubled consonants ll/pp/dd/gg/nn/tt/ss/mm, and ch/gh/th/ght). Question-level: 'feature' label and 'language' (Edge TTS voice — NOT limited to English). Use the standard 'timeLimit' for an optional round time limit (0 = none). Tiles can be single letters or clusters; the final string is graded, so 'b-e-tt-e-r' equals 'b-e-t-t-e-r'.",
+    "constraints": { "minWords": 1, "maxTargetLength": 40, "targetMinLetters": 2, "maxDistractors": 3, "passes": 3 },
+    "pedagogicalUses": ["Massed practice on one interference-prone spelling feature (e.g. all double-letter words, or all ea/ee words).", "Sound→spelling mapping for listening + orthography together.", "Anti-L1-interference drills (silent letters, vowel digraphs, consonant doubling)."],
     "ttsStrategy": "Audio IS the question. Leave per-word 'audioText' empty to speak the target word; fill it with a definition or synonym to make the student retrieve the word from a clue.",
-    "differentiationTips": ["A1: keep words short, low scaffoldLevel (fewer distractors).", "Group words by a shared feature so the round drills it 5+ times.", "Use 'distractors' to plant the L1-interference form (e.g. 'cion' on a -tion round)."],
+    "differentiationTips": ["Group words by a shared feature so the round drills it 5+ times.", "Use 'clusterTiles' to surface the feature being taught (e.g. 'tt' on a doubling round).", "Use 'distractors' to plant the confusable form (e.g. 'ea' as a decoy on an 'ee' round)."],
     "commonPitfalls": ["Mixing unrelated words so no feature is drilled.", "Putting single-consonant words in a doubling round (the doubling tile then has nothing to teach).", "Targets under 2 letters (dropped)."]
   }
 };
@@ -2544,34 +2542,19 @@ function renderBuilder() {
       while (words.length < 3) words.push({ target: '' });
       const lastFilled = String(words[words.length - 1]?.target || '').trim().length > 0;
       if (lastFilled && words.length < maxWords) words.push({ target: '' });
-      const levels = ['A1', 'A2', 'B1'];
       const langBuckets = ['EN', 'FR', 'CA', 'OTHER'];
       const curBucket = langBuckets.indexOf(String(q.ttsLanguage || 'EN')) >= 0 ? String(q.ttsLanguage) : 'EN';
       specific += `
         <div class="row gap top-space">
-          <div style="flex:1;min-width:160px;">
+          <div style="flex:1;min-width:200px;">
             <label>Feature / theme label (optional)</label>
             <input data-q="${idx}" data-field="sbFeature" maxlength="80" value="${escapeHtml(q.feature || '')}" placeholder="e.g. -tion words, double letters" />
           </div>
-          <div style="min-width:110px;">
-            <label>Level</label>
-            <select data-q="${idx}" data-field="sbScaffold">
-              ${levels.map((l) => `<option value="${l}" ${(q.scaffoldLevel || 'A2') === l ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-          </div>
-          <div style="min-width:130px;">
+          <div style="min-width:140px;">
             <label>Voice language</label>
             <select data-q="${idx}" data-field="sbLang">
               ${langBuckets.map((b) => `<option value="${b}" ${curBucket === b ? 'selected' : ''}>${b}</option>`).join('')}
             </select>
-          </div>
-          <div style="min-width:120px;">
-            <label>Challenge timer (s)</label>
-            <input data-q="${idx}" data-field="sbTimer" type="number" min="0" max="600" value="${Number(q.timer ?? 90)}" />
-          </div>
-          <div style="min-width:120px;">
-            <label>Max tries / word</label>
-            <input data-q="${idx}" data-field="sbMaxAttempts" type="number" min="1" max="10" value="${Number(q.maxAttemptsPerWord ?? 3)}" />
           </div>
         </div>
         <label class="top-space">Words to spell (dynamic, max 20). Only the word is required.</label>
@@ -2581,11 +2564,11 @@ function renderBuilder() {
               <input data-q="${idx}" data-sb-target="${i}" maxlength="40" value="${escapeHtml(w.target || '')}" placeholder="Word ${i + 1}" />
               <input data-q="${idx}" data-sb-clue="${i}" maxlength="200" value="${escapeHtml(w.audioText || '')}" placeholder="Spoken clue (optional — blank = say the word)" />
               <input data-q="${idx}" data-sb-distractors="${i}" maxlength="60" value="${escapeHtml((Array.isArray(w.distractors) ? w.distractors : []).join(', '))}" placeholder="Distractor keys (optional, comma-sep)" />
-              <input data-q="${idx}" data-sb-clusters="${i}" maxlength="60" value="${escapeHtml((Array.isArray(w.clusterTiles) ? w.clusterTiles : []).join(', '))}" placeholder="Cluster keys e.g. tion, tt (optional)" />
+              <input data-q="${idx}" data-sb-clusters="${i}" maxlength="60" value="${escapeHtml((Array.isArray(w.clusterTiles) ? w.clusterTiles : []).join(', '))}" placeholder="Cluster keys e.g. ght, tt (optional)" />
             </div>
           `).join('')}
         </div>
-        <p class="small">The app pronounces each word (Edge TTS). Spelling is auto-graded, case- and accent-insensitive. Leave distractors blank to auto-add them (only for words with under 7 distinct letters).</p>
+        <p class="small">The app pronounces each word (Edge TTS); auto-graded, case- and accent-insensitive. Difficulty is fixed for everyone: each word gets 3 passes — pass 1 no help, pass 2 shows the letter count, pass 3 traces the spelling — and earlier passes score more. Set a round time limit in the standard Time limit field above (blank = no limit). Leave distractors blank to auto-add them (max 3, only for words under 7 distinct letters).</p>
       `;
     }
 
@@ -3542,10 +3525,9 @@ function syncQuizFromUI() {
       }
       q.words = words;
       q.feature = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbFeature"]`)?.value || '').slice(0, 80);
-      const levelVal = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbScaffold"]`)?.value || 'A2');
-      q.scaffoldLevel = ['A1', 'A2', 'B1'].includes(levelVal) ? levelVal : 'A2';
-      q.timer = clamp(Number(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbTimer"]`)?.value ?? 90), 0, 600);
-      q.maxAttemptsPerWord = clamp(Number(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbMaxAttempts"]`)?.value ?? 3), 1, 10);
+      // No level/timer/max-tries: difficulty is fixed (3 passes), timing uses the
+      // standard per-question timeLimit. Drop any legacy fields.
+      delete q.scaffoldLevel; delete q.timer; delete q.maxAttemptsPerWord;
       const bucket = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbLang"]`)?.value || 'EN');
       q.ttsLanguage = ['EN', 'FR', 'CA', 'OTHER'].includes(bucket) ? bucket : 'EN';
       // Keep a concrete Edge-TTS voice: reuse the quiz voice for OTHER, else the bucket default.
@@ -13604,9 +13586,6 @@ function buildPreviewHostQuestion(q) {
       ...base,
       words: Array.isArray(q.words) ? q.words : [],
       feature: q.feature || '',
-      scaffoldLevel: q.scaffoldLevel || 'A2',
-      timer: q.timer,
-      maxAttemptsPerWord: q.maxAttemptsPerWord,
       ladderThresholds: q.ladderThresholds,
       language: q.language || '',
     };
@@ -14147,6 +14126,8 @@ function renderSoloQuestion() {
 
   soloGame.pinSelection = null;
   soloGame.puzzleOptions = null;
+  // Tear down a previous Spelling Bee preview (removes its document keydown listener).
+  if (soloSpellingBeeController) { try { soloSpellingBeeController.destroy(); } catch (e) { /* noop */ } soloSpellingBeeController = null; }
 
   // FIX: Reset bet button cleanly
   live.player.selectedBet = 0;
@@ -14617,6 +14598,7 @@ function evaluateSoloQuestion(q) {
 }
 
 function finishSoloGame() {
+  if (soloSpellingBeeController) { try { soloSpellingBeeController.destroy(); } catch (e) { /* noop */ } soloSpellingBeeController = null; }
   gameCard.classList.add('hidden');
   resultCard.classList.remove('hidden');
 
@@ -14958,7 +14940,7 @@ function makeSpellingBeeQuestion() {
   const language = quiz.language || EDGE_TTS_LANGUAGE_DEFAULTS[ttsLanguage] || DEFAULT_EDGE_TTS_VOICE;
   const base = (window.SpellingBee && window.SpellingBee.defaultQuestion)
     ? window.SpellingBee.defaultQuestion()
-    : { type: 'spellingbee', prompt: 'Listen and spell each word.', feature: '', scaffoldLevel: 'A2', timer: 90, maxAttemptsPerWord: 3, points: 1000, timeLimit: 0, words: [{ target: '' }, { target: '' }, { target: '' }] };
+    : { type: 'spellingbee', prompt: 'Listen and spell each word.', feature: '', points: 1000, timeLimit: 0, words: [{ target: '' }, { target: '' }, { target: '' }] };
   return Object.assign({ id: crypto.randomUUID() }, base, {
     // Spelling Bee speaks each word itself, so the generic audio attach is off;
     // these fields are kept for parity with other types' audio-defaults handling.

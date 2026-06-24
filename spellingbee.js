@@ -4,52 +4,56 @@
  * An audio-first spelling game for language learners. A question is one ROUND: a
  * list of target words. For each word the app pronounces it (or a clue) via the
  * host's TTS, and the student spells it on a reduced NYT-Spelling-Bee-style letter
- * circle (the word's own letters + a few distractor tiles). Tiles can be single
- * letters or multi-letter clusters ("tion", "tt") — a cluster tile just inserts its
+ * circle (the word's own letters + auto-detected multi-letter clusters + a few
+ * distractor tiles, max ~7 keys total). Tiles can be single letters or clusters
+ * ("tion"→no, see CLUSTERS; e.g. "ee","tt","ght"); a cluster tile just inserts its
  * string, so "b-e-tt-e-r" and "b-e-t-t-e-r" grade identically (no segmentation).
  *
- *  - Tapping a DISTRACTOR tile (a string absent from the word) → red flash, nothing
- *    inserted, no attempt consumed (an interference nudge).
- *  - Submitting a real-letter misspelling → marked wrong + the word is re-queued to
- *    return later in the same pass (Password-style circle-back, no instant retype).
- *  - Two passes: a LEARN pass (untimed), then a timed CHALLENGE pass with a
- *    Beginner→Good→Great→Genius ladder.
+ * Difficulty is FIXED for everyone (no level selector): each word gets up to
+ * THREE passes with escalating help, and points decrease the later you get it —
+ *   pass 1: no help                        → 100%
+ *   pass 2: letter-count empty slots shown  →  66%
+ *   pass 3: trace mode (only the next correct letter is accepted; wrong taps
+ *           flash red)                       →  33%
+ *   never got it                            →   0%
+ * A word missed on a pass rolls to the next pass (Password-style circle-back).
+ *
+ * The student may also type on a physical keyboard: a letter that matches a tile
+ * acts like tapping it; a letter NOT in the circle does nothing.
  *
  * Grading is case- AND accent-insensitive.
  *
  * This file is a classic <script> (no modules) shared by the student app (play.js),
  * the teacher app (app.js) and the test harness; it attaches everything to
  * window.SpellingBee. The Cloudflare Worker can't load this browser file, so the
- * small normalize/grade helpers are duplicated in cloudflare/worker.js (same pattern
- * the codebase already uses for normalizeTextAnswer / stripDiacritics).
+ * small normalize/grade/score helpers are duplicated in cloudflare/worker.js.
  */
 (function (global) {
   'use strict';
 
   // ----------------------------------------------------------------- constants
-  var SCAFFOLD_LEVELS = ['A1', 'A2', 'B1'];
-  // Ladder thresholds as a fraction of the round's total words.
-  var DEFAULT_LADDER = { good: 0.4, great: 0.7, genius: 1.0 };
-  var TILE_TARGET = 7;          // aim each circle toward ~7 tiles (NYT-style)
+  var MAX_PASSES = 3;
+  var MAX_DISTRACTORS = 3;
+  var TILE_TARGET = 7;          // aim each circle toward ~7 tiles total (NYT-style)
   var MIN_TARGET_LETTERS = 2;
-  // Common English orthographic clusters offered as convenience / distractor tiles.
-  var CLUSTERS = ['tch', 'ght', 'igh', 'tion', 'sion', 'cion', 'ck', 'ee', 'ea', 'oo',
-    'ou', 'th', 'ch', 'sh', 'qu', 'tt', 'll', 'ss', 'bb', 'nn', 'mm', 'pp', 'rr', 'ff'];
+  // Points multiplier by the pass a word was first spelled correctly on.
+  var PASS_WEIGHTS = { 1: 1, 2: 0.66, 3: 0.33 };
+  // Ladder thresholds as a fraction of the round's max points.
+  var DEFAULT_LADDER = { good: 0.4, great: 0.7, genius: 1.0 };
+
+  // Multi-letter clusters offered as convenience / distractor tiles (2–3 letters).
+  var VOWEL_CLUSTERS = ['eau', 'ee', 'ou', 'oa', 'oo', 'ea', 'ei', 'ie'];
+  var CONSONANT_CLUSTERS = ['ght', 'ch', 'gh', 'th', 'll', 'pp', 'dd', 'gg', 'nn', 'tt', 'ss', 'mm'];
+  var CLUSTERS = VOWEL_CLUSTERS.concat(CONSONANT_CLUSTERS);
 
   // ------------------------------------------------------------------- helpers
-  // Case- and accent-insensitive, letters only (so "Café" === "cafe", and
-  // punctuation/spaces are ignored). Mirrored in cloudflare/worker.js.
+  // Case- and accent-insensitive, letters only (so "Café" === "cafe").
+  // Mirrored in cloudflare/worker.js.
   function normalize(s) {
     return String(s == null ? '' : s)
       .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip diacritics
       .toLowerCase()
       .replace(/[^a-z]/g, '');
-  }
-
-  function clampInt(v, lo, hi, dflt) {
-    var n = parseInt(v, 10);
-    if (!Number.isFinite(n)) return dflt;
-    return Math.max(lo, Math.min(hi, n));
   }
 
   function shuffle(arr) {
@@ -69,29 +73,41 @@
     return out;
   }
 
-  // ------------------------------------------------------------- auto distractors
-  // Interference-aware absent letter/cluster picker. Per the teacher's rule it
-  // ONLY fires for targets with FEWER than 7 distinct letters (to bring the circle
-  // toward ~7 tiles); targets with 7+ distinct letters get none. Creator-supplied
-  // distractors always win over this (see buildTiles).
-  function autoDistractors(target, level) {
+  function passWeight(p) { return PASS_WEIGHTS[p] || 0; }
+
+  // Clusters from the inventory that occur in the target, with any cluster fully
+  // contained in a longer matched cluster dropped (so "ght" wins over "gh").
+  function inWordClusters(target) {
+    var n = normalize(target);
+    var matched = CLUSTERS.filter(function (c) { return n.indexOf(c) >= 0; });
+    return matched.filter(function (c) {
+      return !matched.some(function (o) { return o !== c && o.length > c.length && o.indexOf(c) >= 0; });
+    });
+  }
+
+  // Up to MAX_DISTRACTORS decoy tiles (strings absent from the word), filling the
+  // circle toward ~7 keys. Fires only for targets with < 7 distinct letters. May
+  // include one absent vowel-cluster decoy when the word itself uses a vowel
+  // cluster (the classic ee/ea kind of trap), then absent single letters.
+  function autoDistractors(target) {
     var distinct = distinctLetters(target);
     if (distinct.length >= TILE_TARGET) return [];
-    var cap = level === 'A1' ? 1 : (level === 'B1' ? 3 : 2);
-    var count = Math.min(TILE_TARGET - distinct.length, cap);
+    var inWord = inWordClusters(target);
+    var count = Math.max(0, Math.min(MAX_DISTRACTORS, TILE_TARGET - (distinct.length + inWord.length)));
     if (count <= 0) return [];
 
+    var n = normalize(target);
     var present = {};
     distinct.forEach(function (c) { present[c] = 1; });
-    var n = normalize(target);
     var out = [];
 
-    // Interference-style cluster decoys (the classic -tion / -ción / -sion trap).
-    if (/tion$/.test(n)) {
-      if (!present['c']) out.push('cion');
-      if (out.length < count && n.indexOf('sion') < 0) out.push('sion');
+    // A confusable absent vowel-cluster decoy when the word uses a vowel cluster.
+    if (inWord.some(function (c) { return VOWEL_CLUSTERS.indexOf(c) >= 0; })) {
+      for (var v = 0; v < VOWEL_CLUSTERS.length; v++) {
+        if (n.indexOf(VOWEL_CLUSTERS[v]) < 0) { out.push(VOWEL_CLUSTERS[v]); break; }
+      }
     }
-    // Then fill with common confusable single letters absent from the word.
+    // Fill with common confusable single letters absent from the word.
     var pool = ['e', 'a', 's', 'c', 'k', 'h', 't', 'r', 'n', 'o', 'i', 'l',
       'd', 'm', 'u', 'y', 'g', 'b', 'p', 'w', 'f', 'v', 'z'];
     for (var i = 0; i < pool.length && out.length < count; i++) {
@@ -100,25 +116,26 @@
     return out.slice(0, count);
   }
 
-  // Build the display tiles for one word: distinct letters (always), any authored
-  // cluster tiles that actually occur in the word, plus distractor tiles. Each tile
-  // is { text, distractor } where distractor === (text is NOT a substring of the
-  // target) — that flag drives the red-flash-and-don't-insert behaviour.
+  // Build the display tiles for one word: distinct letters (always) + clusters
+  // (auto-detected in-word ones + valid author clusterTiles) + distractor tiles.
+  // Each tile is { text, distractor } where distractor === (text not a substring
+  // of the target) — that flag drives the red-flash-and-don't-insert behaviour.
   function buildTiles(word, opts) {
     opts = opts || {};
     var n = normalize(word);
     var texts = [];
-    var pushUnique = function (s) { if (s && texts.indexOf(s) < 0) texts.push(s); };
+    var push = function (s) { if (s && texts.indexOf(s) < 0) texts.push(s); };
 
-    distinctLetters(word).forEach(pushUnique);
+    distinctLetters(word).forEach(push);
+    inWordClusters(word).forEach(push);
     (opts.clusterTiles || []).forEach(function (c) {
       var cc = normalize(c);
-      if (cc.length > 1 && n.indexOf(cc) >= 0) pushUnique(cc);
+      if (cc.length >= 2 && CLUSTERS.indexOf(cc) >= 0 && n.indexOf(cc) >= 0) push(cc);
     });
-    var distract = (opts.distractors != null && opts.distractors.length)
-      ? opts.distractors
-      : autoDistractors(word, opts.level);
-    distract.forEach(function (d) { pushUnique(normalize(d)); });
+    var distract = (opts.distractors && opts.distractors.length)
+      ? opts.distractors.map(normalize).filter(Boolean).slice(0, MAX_DISTRACTORS)
+      : autoDistractors(word);
+    distract.forEach(push);
 
     return shuffle(texts.map(function (txt) {
       return { text: txt, distractor: n.indexOf(txt) < 0 };
@@ -131,19 +148,14 @@
     return t.length > 0 && t === normalize(guess);
   }
 
-  // Per-letter Wordle status array for a guess against a target.
-  // Returns one of 'hit' | 'present' | 'miss' for each guessed letter.
+  // Per-letter Wordle status array: 'hit' | 'present' | 'miss' for each guess letter.
   function wordleStatuses(guess, target) {
     var g = normalize(guess).split('');
     var t = normalize(target).split('');
     var res = new Array(g.length).fill('miss');
     var pool = {};
     t.forEach(function (c) { pool[c] = (pool[c] || 0) + 1; });
-    // First pass: exact-position hits.
-    for (var i = 0; i < g.length; i++) {
-      if (g[i] === t[i]) { res[i] = 'hit'; pool[g[i]]--; }
-    }
-    // Second pass: present-but-misplaced.
+    for (var i = 0; i < g.length; i++) { if (g[i] === t[i]) { res[i] = 'hit'; pool[g[i]]--; } }
     for (var j = 0; j < g.length; j++) {
       if (res[j] === 'hit') continue;
       if (pool[g[j]] > 0) { res[j] = 'present'; pool[g[j]]--; }
@@ -151,31 +163,34 @@
     return res;
   }
 
-  // Recompute the round score from the stored answer's guesses vs the question's
-  // targets, matching by normalized target (re-queue reorders play, not grading).
-  // Mirrored in cloudflare/worker.js. Returns the shape the app's evaluate() uses.
+  // Recompute round score from stored guesses vs the question's targets, matching
+  // by normalized target. Points per correct word are weighted by the pass it was
+  // solved on (solvedPass; missing → treated as pass 1). partialTotal = word count
+  // so points = basePoints * (sum of weights / wordCount). Mirrors worker.js.
   function scoreRound(question, answer) {
     var words = (question && Array.isArray(question.words) ? question.words : [])
-      .filter(function (w) { return w && normalize(w.target).length >= MIN_TARGET_LETTERS; });
+      .filter(function (w) { return normalize(w && w.target).length >= MIN_TARGET_LETTERS; });
     var total = words.length;
     if (!total) return { correct: false, partialScore: 0, partialTotal: 1 };
     var byTarget = {};
     if (answer && Array.isArray(answer.words)) {
-      answer.words.forEach(function (w) {
-        if (w && w.target != null) byTarget[normalize(w.target)] = w;
-      });
+      answer.words.forEach(function (w) { if (w && w.target != null) byTarget[normalize(w.target)] = w; });
     }
-    var correctCount = 0;
+    var correctCount = 0, score = 0;
     words.forEach(function (qw) {
       var a = byTarget[normalize(qw.target)];
-      if (a && gradeWord(qw.target, a.guess)) correctCount++;
+      if (a && gradeWord(qw.target, a.guess)) {
+        correctCount++;
+        var sp = Number(a.solvedPass);
+        score += passWeight(sp >= 1 && sp <= MAX_PASSES ? sp : 1);
+      }
     });
-    return { correct: correctCount === total, partialScore: correctCount, partialTotal: total };
+    return { correct: correctCount === total, partialScore: score, partialTotal: total };
   }
 
-  function ladderRank(correct, total, thresholds) {
+  function ladderRank(score, total, thresholds) {
     if (!total) return 'beginner';
-    var frac = correct / total;
+    var frac = score / total;
     var th = thresholds || DEFAULT_LADDER;
     if (frac >= (th.genius != null ? th.genius : 1)) return 'genius';
     if (frac >= (th.great != null ? th.great : 0.7)) return 'great';
@@ -192,7 +207,7 @@
     if (clue) out.audioText = clue;
     if (Array.isArray(w.distractors)) {
       var d = w.distractors.map(function (x) { return String(x || '').trim().slice(0, 8); }).filter(Boolean);
-      if (d.length) out.distractors = d.slice(0, 6);
+      if (d.length) out.distractors = d.slice(0, MAX_DISTRACTORS);
     }
     if (Array.isArray(w.clusterTiles)) {
       var c = w.clusterTiles.map(function (x) { return String(x || '').trim().slice(0, 8); }).filter(Boolean);
@@ -207,9 +222,6 @@
     var ladder = q.ladderThresholds && typeof q.ladderThresholds === 'object' ? q.ladderThresholds : null;
     return {
       feature: String(q.feature || '').slice(0, 80),
-      scaffoldLevel: SCAFFOLD_LEVELS.indexOf(q.scaffoldLevel) >= 0 ? q.scaffoldLevel : 'A2',
-      timer: clampInt(q.timer, 0, 600, 90),
-      maxAttemptsPerWord: clampInt(q.maxAttemptsPerWord, 1, 10, 3),
       ladderThresholds: ladder ? {
         good: Number(ladder.good) || DEFAULT_LADDER.good,
         great: Number(ladder.great) || DEFAULT_LADDER.great,
@@ -220,8 +232,7 @@
     };
   }
 
-  // Validate authored config; fail loudly with author-readable messages (authors
-  // won't have engine internals to debug against).
+  // Validate authored config; fail loudly with author-readable messages.
   function validateConfig(q) {
     var errors = [];
     var c = normalizeConfig(q);
@@ -242,11 +253,8 @@
       type: 'spellingbee',
       prompt: 'Listen and spell each word.',
       feature: '',
-      scaffoldLevel: 'A2',
-      timer: 90,
-      maxAttemptsPerWord: 3,
       points: 1000,
-      timeLimit: 0,
+      timeLimit: 0, // standard per-question time limit (0 = none); 3 passes are the attempt limit
       words: [{ target: '' }, { target: '' }, { target: '' }],
     };
   }
@@ -254,8 +262,6 @@
   // ---------------------------------------------------- Edge-TTS player factory
   // Returns playWord(text, voice) → Promise<boolean>. Reuses the app's
   // /api/tts/edge endpoint with a client cache, falling back to speechSynthesis.
-  // The cache (a Map) and backend URL are supplied by the host so play.js can share
-  // its existing studentEdgeTtsCache.
   function makeEdgeTtsPlayer(opts) {
     opts = opts || {};
     var cache = opts.cache || new Map();
@@ -322,12 +328,10 @@
     container.innerHTML = '';
     container.classList.add('sb-host');
 
-    // Review mode (locked): show a static summary, no game.
     if (options.reviewMode && options.savedResult) {
-      renderSummary(container, t, cfg, options.savedResult);
+      renderSummary(container, t, options.savedResult);
       return { getResult: function () { return options.savedResult; }, isAnswered: function () { return true; }, destroy: function () {} };
     }
-
     if (!cfg.words.length) {
       var warn = document.createElement('p');
       warn.className = 'small';
@@ -336,57 +340,46 @@
       return { getResult: function () { return null; }, isAnswered: function () { return false; }, destroy: function () {} };
     }
 
-    // Per-word result, keyed by original index.
     var results = cfg.words.map(function (w) {
-      return { target: w.target, guess: '', correct: false, attempts: 0 };
+      return { target: w.target, guess: '', correct: false, solvedPass: 0, attempts: 0 };
     });
 
-    var passes = ['learn', 'challenge'];
-    var passIndex = 0;
-    var learnDone = false;
-    var roundDone = false;
+    var passNum = 0;       // 1..3
     var queue = [];
-    var current = -1;            // original index of the current word
-    var guess = '';              // current typed string
-    var timerId = null;
-    var deadline = 0;
+    var nextQueue = [];    // words missed this pass → retried next pass with more help
+    var current = -1;
+    var guess = '';
+    var roundDone = false;
+    var started = false;   // first real submission → question becomes "answered"
     var startedAt = Date.now();
+    var currentTiles = [];
+    var tileBtns = {};
 
-    // ---- DOM scaffold ----
+    function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
+    function button(cls, label) { var b = document.createElement('button'); b.type = 'button'; b.className = 'sb-btn ' + cls; b.textContent = label; return b; }
+
     var root = el('div', 'sb-game');
     var header = el('div', 'sb-header');
     var featureEl = el('span', 'sb-feature'); featureEl.textContent = cfg.feature || '';
     var progressEl = el('span', 'sb-progress');
-    var timerEl = el('span', 'sb-timer hidden');
-    header.append(featureEl, progressEl, timerEl);
-
+    header.append(featureEl, progressEl);
     var audioRow = el('div', 'sb-audio');
     var playBtn = button('sb-play', t('🔊 Play word'));
     var repeatBtn = button('sb-repeat', t('↻ Repeat'));
     audioRow.append(playBtn, repeatBtn);
-
     var answerEl = el('div', 'sb-answer');
     var controls = el('div', 'sb-controls');
     var backBtn = button('sb-backspace', t('⌫'));
     var clearBtn = button('sb-clear', t('Clear'));
     var submitBtn = button('sb-submit btn-primary', t('Submit'));
     controls.append(backBtn, clearBtn, submitBtn);
-
     var circleEl = el('div', 'sb-circle');
-    var feedbackEl = el('div', 'sb-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     var ladderEl = el('div', 'sb-ladder hidden');
-
+    var feedbackEl = el('div', 'sb-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     root.append(header, audioRow, answerEl, controls, circleEl, ladderEl, feedbackEl);
     container.appendChild(root);
 
-    // ---- helpers ----
-    function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
-    function button(cls, label) { var b = document.createElement('button'); b.type = 'button'; b.className = 'sb-btn ' + cls; b.textContent = label; return b; }
-    function fmtTime(ms) {
-      var s = Math.max(0, Math.ceil(ms / 1000));
-      return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
-    }
-    function passLabel() { return passes[passIndex] === 'learn' ? t('Learn') : t('Challenge'); }
+    function passHelp() { return passNum >= 3 ? 'trace' : (passNum === 2 ? 'length' : 'none'); }
 
     function speak() {
       var w = cfg.words[current];
@@ -409,84 +402,99 @@
         if (statuses && statuses[i]) cell.classList.add('sb-' + statuses[i]);
         answerEl.appendChild(cell);
       }
-      // show empty slots hinting the word length only in learn pass
-      if (passes[passIndex] === 'learn') {
-        var remain = normalize(cfg.words[current].target).length - letters.length;
+      if (passHelp() !== 'none') { // pass 2 & 3 reveal the letter count
+        var remain = normalize(cfg.words[current].target).length - normalize(guess).length;
         for (var j = 0; j < remain; j++) answerEl.appendChild(el('span', 'sb-cell sb-empty'));
       }
     }
 
     function renderCircle() {
-      circleEl.innerHTML = '';
+      circleEl.innerHTML = ''; tileBtns = {};
       var w = cfg.words[current];
-      var tiles = buildTiles(w.target, {
-        distractors: w.distractors, clusterTiles: w.clusterTiles, level: cfg.scaffoldLevel,
-      });
-      tiles.forEach(function (tile, i) {
+      currentTiles = buildTiles(w.target, { distractors: w.distractors, clusterTiles: w.clusterTiles });
+      currentTiles.forEach(function (tile, i) {
         var b = el('button', 'sb-tile' + (i === 0 ? ' sb-tile-center' : ''));
         b.type = 'button';
         b.textContent = tile.text;
         b.dataset.distractor = tile.distractor ? '1' : '0';
         b.addEventListener('click', function () { onTile(tile, b); });
+        tileBtns[tile.text] = b;
         circleEl.appendChild(b);
       });
     }
 
+    function flash(btn) { if (!btn) return; btn.classList.remove('sb-flash'); void btn.offsetWidth; btn.classList.add('sb-flash'); }
+
     function onTile(tile, btn) {
-      if (roundDone) return;
-      if (tile.distractor) {
-        btn.classList.remove('sb-flash');
-        void btn.offsetWidth;            // restart the animation
-        btn.classList.add('sb-flash');
-        feedbackEl.textContent = t('Not in this word');
-        feedbackEl.className = 'sb-feedback sb-bad';
+      if (roundDone || current < 0) return;
+      if (passHelp() === 'trace') {
+        // Only the next correct letter(s) are accepted; anything else flashes red.
+        var cand = normalize(guess + tile.text);
+        var tgt = normalize(cfg.words[current].target);
+        if (cand.length <= tgt.length && tgt.indexOf(cand) === 0) {
+          guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer();
+        } else {
+          flash(btn); feedbackEl.textContent = t('Not the next letter'); feedbackEl.className = 'sb-feedback sb-bad';
+        }
         return;
       }
-      if (normalize(guess).length >= 24) return;
-      guess += tile.text;
-      feedbackEl.textContent = '';
-      feedbackEl.className = 'sb-feedback';
-      renderAnswer();
+      if (tile.distractor) {
+        flash(btn); feedbackEl.textContent = t('Not in this word'); feedbackEl.className = 'sb-feedback sb-bad';
+        return;
+      }
+      if (normalize(guess).length >= 28) return;
+      guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer();
+    }
+
+    // Physical keyboard: a letter matching a tile acts like tapping it; a letter
+    // NOT in the circle does nothing. Enter submits, Backspace deletes.
+    function onKey(e) {
+      if (roundDone || current < 0) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      var k = e.key;
+      if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); return; }
+      if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
+      if (k && k.length === 1 && /[a-z]/i.test(k)) {
+        var letter = normalize(k);
+        var tile = currentTiles.filter(function (x) { return x.text === letter; })[0];
+        if (!tile) return; // letter not in the circle → do nothing
+        e.preventDefault(); e.stopPropagation();
+        onTile(tile, tileBtns[letter]);
+      }
     }
 
     function nextWord() {
-      guess = '';
-      feedbackEl.textContent = '';
-      feedbackEl.className = 'sb-feedback';
-      if (!queue.length) { return endPass(); }
+      guess = ''; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
+      if (!queue.length) return endPass();
       current = queue.shift();
-      var correctSoFar = results.filter(function (r) { return r.correct; }).length;
-      progressEl.textContent = passLabel() + ' · ' + correctSoFar + '/' + cfg.words.length;
-      renderAnswer();
-      renderCircle();
+      var solved = results.filter(function (r) { return r.correct; }).length;
+      progressEl.textContent = t('Pass {n} of {max}', { n: passNum, max: MAX_PASSES }) + ' · ' + solved + '/' + cfg.words.length;
       submitBtn.disabled = false;
-      speak();
+      renderAnswer(); renderCircle(); speak();
     }
 
     function submit() {
       if (roundDone || current < 0) return;
       if (!normalize(guess)) { feedbackEl.textContent = t('Tap letters to spell the word first.'); feedbackEl.className = 'sb-feedback sb-bad'; return; }
+      started = true;
       var w = cfg.words[current];
-      var ok = gradeWord(w.target, guess);
       var rec = results[current];
       rec.attempts++;
+      var ok = gradeWord(w.target, guess);
       renderAnswer(wordleStatuses(guess, w.target));
-
       if (ok) {
-        rec.guess = guess; rec.correct = true;
+        rec.guess = guess; rec.correct = true; rec.solvedPass = passNum;
         feedbackEl.textContent = t('✓ Correct!'); feedbackEl.className = 'sb-feedback sb-good';
         if (options.onChange) options.onChange();
         wait(700).then(nextWord);
         return;
       }
-
-      // Wrong: keep the best/last guess; re-queue with a gap if attempts remain.
-      if (!rec.correct) rec.guess = guess;
-      if (rec.attempts < cfg.maxAttemptsPerWord) {
-        queue.push(current);  // circle back later in this pass
-        feedbackEl.textContent = t('Not quite — it will come back. Listen again.');
+      rec.guess = guess;
+      if (passNum < MAX_PASSES) {
+        nextQueue.push(current);
+        feedbackEl.textContent = t('Not quite — it comes back with more help.');
       } else {
-        feedbackEl.textContent = t('Moving on — spelling: {word}', { word: w.target });
+        feedbackEl.textContent = t('Spelling: {word}', { word: w.target });
       }
       feedbackEl.className = 'sb-feedback sb-bad';
       if (options.onChange) options.onChange();
@@ -495,57 +503,19 @@
 
     function endPass() {
       submitBtn.disabled = true;
-      if (passes[passIndex] === 'learn') {
-        learnDone = true;
-        if (options.onChange) options.onChange();   // now answerable
-        stopTimer();
-        showInterstitial();
-      } else {
-        finalize();
-      }
+      if (passNum < MAX_PASSES && nextQueue.length) startPass(passNum + 1);
+      else finalize();
     }
 
-    function showInterstitial() {
-      circleEl.innerHTML = '';
-      answerEl.innerHTML = '';
-      audioRow.classList.add('hidden');
-      controls.classList.add('hidden');
-      var correctSoFar = results.filter(function (r) { return r.correct; }).length;
-      feedbackEl.className = 'sb-feedback';
-      feedbackEl.innerHTML = '';
-      var msg = el('p', 'sb-interstitial-msg');
-      msg.textContent = t('Learn round done — {n}/{total} correct. Now beat the clock!', { n: correctSoFar, total: cfg.words.length });
-      var go = button('sb-start-challenge btn-primary', t('▶ Start timed challenge'));
-      go.addEventListener('click', startChallenge);
-      feedbackEl.append(msg, go);
-    }
-
-    function startChallenge() {
-      passIndex = 1;
-      audioRow.classList.remove('hidden');
-      controls.classList.remove('hidden');
-      queue = shuffle(cfg.words.map(function (_, i) { return i; }));
-      if (cfg.timer > 0) startTimer(cfg.timer * 1000);
+    function startPass(p) {
+      passNum = p;
+      queue = (p === 1) ? cfg.words.map(function (_, i) { return i; }) : nextQueue;
+      nextQueue = [];
       nextWord();
     }
 
-    function startTimer(ms) {
-      deadline = Date.now() + ms;
-      timerEl.classList.remove('hidden');
-      tick();
-      timerId = setInterval(tick, 250);
-    }
-    function tick() {
-      var left = deadline - Date.now();
-      timerEl.textContent = '⏱ ' + fmtTime(left);
-      timerEl.classList.toggle('sb-timer-low', left <= 10000);
-      if (left <= 0) { stopTimer(); finalize(); }
-    }
-    function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } timerEl.classList.add('hidden'); }
-
     function finalize() {
       roundDone = true;
-      stopTimer();
       audioRow.classList.add('hidden');
       controls.classList.add('hidden');
       circleEl.innerHTML = '';
@@ -557,88 +527,93 @@
     }
 
     function renderLadder(result) {
-      var rank = ladderRank(result.correctCount, result.total, cfg.ladderThresholds);
+      var frac = result.total ? result.pointsScore / result.total : 0;
+      var rank = ladderRank(result.pointsScore, result.total, cfg.ladderThresholds);
       var labels = { beginner: t('Beginner'), good: t('Good'), great: t('Great'), genius: t('Genius') };
       ladderEl.className = 'sb-ladder sb-rank-' + rank;
       ladderEl.innerHTML = '';
-      var score = el('div', 'sb-score');
-      score.textContent = result.correctCount + ' / ' + result.total;
-      var badge = el('div', 'sb-rank-badge');
-      badge.textContent = labels[rank];
+      var badge = el('div', 'sb-rank-badge'); badge.textContent = labels[rank];
+      var score = el('div', 'sb-score'); score.textContent = result.correctCount + ' / ' + result.total + ' · ' + Math.round(frac * 100) + '%';
       ladderEl.append(badge, score);
       feedbackEl.innerHTML = '';
-      feedbackEl.appendChild(buildResultList(t, cfg, result));
+      feedbackEl.appendChild(buildResultList(t, result));
     }
 
     function getResult() {
-      // Answerable only once the learn pass is complete.
-      if (!learnDone) return null;
-      var words = results.map(function (r) { return { target: r.target, guess: r.guess, correct: !!r.correct }; });
+      if (!started && !roundDone) return null;
+      var words = results.map(function (r) { return { target: r.target, guess: r.guess, correct: !!r.correct, solvedPass: r.solvedPass || 0 }; });
       var correctCount = words.filter(function (w) { return w.correct; }).length;
+      var pointsScore = results.reduce(function (s, r) { return s + (r.correct ? passWeight(r.solvedPass) : 0); }, 0);
       return {
         words: words,
         correctCount: correctCount,
         total: words.length,
-        pass: passes[passIndex],
+        pointsScore: pointsScore,
+        pass: passNum,
         elapsedMs: Date.now() - startedAt,
       };
     }
 
     function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-    // ---- wire controls ----
     playBtn.addEventListener('click', speak);
     repeatBtn.addEventListener('click', speak);
     backBtn.addEventListener('click', function () { if (guess) { guess = guess.slice(0, -1); renderAnswer(); } });
     clearBtn.addEventListener('click', function () { guess = ''; renderAnswer(); });
     submitBtn.addEventListener('click', submit);
+    document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers
 
-    // ---- start ----
-    queue = cfg.words.map(function (_, i) { return i; });
-    nextWord();
+    startPass(1);
 
     return {
       getResult: getResult,
-      isAnswered: function () { return learnDone; },
-      destroy: function () { stopTimer(); container.classList.remove('sb-host'); },
+      isAnswered: function () { return started || roundDone; },
+      destroy: function () { document.removeEventListener('keydown', onKey, true); container.classList.remove('sb-host'); },
     };
   }
 
   // Read-only summary (review mode / after finalize): list each word ✓/✗.
-  function buildResultList(t, cfg, result) {
+  function buildResultList(t, result) {
     var ul = document.createElement('ul');
     ul.className = 'sb-result-list';
     (result.words || []).forEach(function (w) {
       var li = document.createElement('li');
       li.className = w.correct ? 'sb-ok' : 'sb-no';
-      li.textContent = (w.correct ? '✓ ' : '✗ ') + w.target + (w.correct ? '' : (w.guess ? ' (' + t('you wrote') + ': ' + w.guess + ')' : ''));
+      var passNote = (w.correct && w.solvedPass > 1) ? ' (' + t('pass') + ' ' + w.solvedPass + ')' : '';
+      li.textContent = (w.correct ? '✓ ' : '✗ ') + w.target + (w.correct ? passNote : (w.guess ? ' (' + t('you wrote') + ': ' + w.guess + ')' : ''));
       ul.appendChild(li);
     });
     return ul;
   }
 
-  function renderSummary(container, t, cfg, result) {
+  function renderSummary(container, t, result) {
     var wrap = document.createElement('div');
     wrap.className = 'sb-game sb-review';
     var head = document.createElement('div');
     head.className = 'sb-score';
     head.textContent = t('Spelling Bee') + ': ' + (result.correctCount || 0) + ' / ' + (result.total || (result.words || []).length);
     wrap.appendChild(head);
-    wrap.appendChild(buildResultList(t, cfg, result));
+    wrap.appendChild(buildResultList(t, result));
     container.appendChild(wrap);
   }
 
   // ------------------------------------------------------------------- exports
   global.SpellingBee = {
-    SCAFFOLD_LEVELS: SCAFFOLD_LEVELS,
+    MAX_PASSES: MAX_PASSES,
+    MAX_DISTRACTORS: MAX_DISTRACTORS,
+    PASS_WEIGHTS: PASS_WEIGHTS,
     DEFAULT_LADDER: DEFAULT_LADDER,
     CLUSTERS: CLUSTERS,
+    VOWEL_CLUSTERS: VOWEL_CLUSTERS,
+    CONSONANT_CLUSTERS: CONSONANT_CLUSTERS,
     normalize: normalize,
     distinctLetters: distinctLetters,
+    inWordClusters: inWordClusters,
     autoDistractors: autoDistractors,
     buildTiles: buildTiles,
     gradeWord: gradeWord,
     wordleStatuses: wordleStatuses,
+    passWeight: passWeight,
     scoreRound: scoreRound,
     ladderRank: ladderRank,
     normalizeConfig: normalizeConfig,

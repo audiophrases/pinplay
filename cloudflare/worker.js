@@ -5146,9 +5146,6 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       isPoll: !!question.isPoll,
       words: Array.isArray(question.words) ? question.words : [],
       feature: String(question.feature || ''),
-      scaffoldLevel: question.scaffoldLevel || 'A2',
-      timer: question.timer,
-      maxAttemptsPerWord: question.maxAttemptsPerWord,
       ladderThresholds: question.ladderThresholds,
       language: String(question.language || 'en-US-Wave'),
       media: publicQuestionMediaPayload(question),
@@ -5500,9 +5497,6 @@ function normalizeQuiz(quiz) {
         ...base,
         words,
         feature: String(q.feature || '').slice(0, 80),
-        scaffoldLevel: ['A1', 'A2', 'B1'].includes(q.scaffoldLevel) ? q.scaffoldLevel : 'A2',
-        timer: clamp(Number(q.timer ?? 90), 0, 600),
-        maxAttemptsPerWord: clamp(Number(q.maxAttemptsPerWord ?? 3), 1, 10),
         ttsLanguage: String(q.ttsLanguage || '').slice(0, 8),
         ...(lad ? { ladderThresholds: lad } : {}),
       });
@@ -5603,8 +5597,15 @@ function gradeSpellingBeeWord(target, guess) {
   return t.length > 0 && t === normalizeSpellingBee(guess);
 }
 
-// Recompute round score from stored guesses vs the question's targets, matching
-// by normalized target. Mirrors SpellingBee.scoreRound() in spellingbee.js.
+// Points multiplier by the pass a word was first spelled correctly on.
+function spellingBeePassWeight(p) {
+  return p === 1 ? 1 : p === 2 ? 0.66 : p === 3 ? 0.33 : 0;
+}
+
+// Recompute round score from stored guesses vs the question's targets, matching by
+// normalized target. Each correct word is weighted by the pass it was solved on
+// (solvedPass; missing → pass 1). partialTotal = word count, so awarded points =
+// basePoints * (sum of weights / wordCount). Mirrors SpellingBee.scoreRound().
 function scoreSpellingBeeRound(question, answer) {
   const words = (question && Array.isArray(question.words) ? question.words : [])
     .filter((w) => normalizeSpellingBee(w && w.target).length >= 2);
@@ -5614,12 +5615,16 @@ function scoreSpellingBeeRound(question, answer) {
   if (answer && Array.isArray(answer.words)) {
     answer.words.forEach((w) => { if (w && w.target != null) byTarget[normalizeSpellingBee(w.target)] = w; });
   }
-  let correctCount = 0;
+  let correctCount = 0, score = 0;
   words.forEach((qw) => {
     const a = byTarget[normalizeSpellingBee(qw.target)];
-    if (a && gradeSpellingBeeWord(qw.target, a.guess)) correctCount++;
+    if (a && gradeSpellingBeeWord(qw.target, a.guess)) {
+      correctCount++;
+      const sp = Number(a.solvedPass);
+      score += spellingBeePassWeight(sp >= 1 && sp <= 3 ? sp : 1);
+    }
   });
-  return { correct: correctCount === total, partialScore: correctCount, partialTotal: total };
+  return { correct: correctCount === total, partialScore: score, partialTotal: total };
 }
 
 function stripDiacritics(text) {

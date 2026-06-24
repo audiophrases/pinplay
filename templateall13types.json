@@ -369,16 +369,14 @@
       "points": 1000,
       "timeLimit": 0,
       "isPoll": false,
-      "feature": "-tion words",
-      "scaffoldLevel": "A2",
-      "timer": 90,
-      "maxAttemptsPerWord": 3,
+      "feature": "double-letter words",
       "ttsLanguage": "EN",
       "language": "en-US-AriaNeural",
       "words": [
-        { "target": "action", "distractors": ["sion"], "clusterTiles": ["tion"] },
-        { "target": "nation", "clusterTiles": ["tion"] },
-        { "target": "station", "audioText": "a place where trains stop" }
+        { "target": "letter", "clusterTiles": ["tt"] },
+        { "target": "spelling", "clusterTiles": ["ll"] },
+        { "target": "green", "clusterTiles": ["ee"], "distractors": ["ea"] },
+        { "target": "bottle", "audioText": "a glass or plastic container for liquids" }
       ]
     }
   ],
