@@ -283,6 +283,24 @@ const TEMPLATE_ALL_13_TYPES = {
       "ttsLanguage": "EN",
       "imageKeyword": "",
       "imageData": ""
+    },
+    {
+      "id": "q16-spellingbee",
+      "type": "spellingbee",
+      "prompt": "Listen and spell each word.",
+      "points": 1000,
+      "timeLimit": 0,
+      "feature": "-tion words",
+      "scaffoldLevel": "A2",
+      "timer": 90,
+      "maxAttemptsPerWord": 3,
+      "ttsLanguage": "EN",
+      "language": "en-US-AriaNeural",
+      "words": [
+        { "target": "action", "distractors": ["sion"], "clusterTiles": ["tion"] },
+        { "target": "nation", "clusterTiles": ["tion"] },
+        { "target": "station", "audioText": "a place where trains stop" }
+      ]
     }
   ]
 };
@@ -302,7 +320,10 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'speaking', label: 'Speaking', inTemplate: true, supportsAudio: true },
   { type: 'voice_record', label: 'Voice Record', inTemplate: true, supportsAudio: true },
   { type: 'image_open', label: 'Image answer', inTemplate: true, supportsAudio: true },
-  { type: 'voice_text', label: 'Voice Answer', inTemplate: true, supportsAudio: true }
+  { type: 'voice_text', label: 'Voice Answer', inTemplate: true, supportsAudio: true },
+  // Spelling Bee carries its own per-word audio (the target word or a clue), so it
+  // opts out of the generic audioText attach UI (supportsAudio:false).
+  { type: 'spellingbee', label: 'Spelling Bee', inTemplate: true, supportsAudio: false }
 ];
 
 const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
@@ -444,6 +465,15 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "audioText can model the expected pronunciation.",
     "differentiationTips": ["Add several accepted variants for spelling/phrasing flexibility (singular/plural, with/without article).", "Always set 'answerLanguage' when the question prompt language differs from the expected spoken response language."],
     "commonPitfalls": ["Recognizer needs Chrome/Edge/Safari and an internet connection.", "Multi-word answers may pick up filler — keep accepted answers concise.", "Missing 'answerLanguage' on cross-language tasks causes mis-recognition."]
+  },
+  "spellingbee": {
+    "name": "Spelling Bee",
+    "rules": "Audio-first spelling game. A question is ONE ROUND — a list of words sharing a spelling feature. For each word the app pronounces it (Edge TTS) and the student spells it on a reduced NYT-Spelling-Bee-style letter circle (the word's own letters + a few distractor tiles). Auto-graded case- AND accent-insensitive. Provide 'words' as an array of objects with a required 'target'. Everything else is optional: per-word 'audioText' (a spoken CLUE — a definition or synonym — instead of the word itself), 'distractors' (extra wrong letters/clusters; auto-computed when omitted, only for targets under 7 distinct letters), and 'clusterTiles' (multi-letter convenience keys like 'tion','tt' that occur in the word). Question-level: 'feature' label, 'scaffoldLevel' (A1/A2/B1), 'timer' (challenge seconds, default 90), 'maxAttemptsPerWord', and 'language' (Edge TTS voice — NOT limited to English). Tiles can be single letters or clusters; the final string is graded, so 'b-e-tt-e-r' equals 'b-e-t-t-e-r'.",
+    "constraints": { "minWords": 1, "maxTargetLength": 40, "targetMinLetters": 2 },
+    "pedagogicalUses": ["Massed practice on one interference-prone spelling feature (e.g. all -tion words).", "Sound→spelling mapping for listening + orthography together.", "Anti-L1-interference drills (silent letters, vowel digraphs, consonant doubling)."],
+    "ttsStrategy": "Audio IS the question. Leave per-word 'audioText' empty to speak the target word; fill it with a definition or synonym to make the student retrieve the word from a clue.",
+    "differentiationTips": ["A1: keep words short, low scaffoldLevel (fewer distractors).", "Group words by a shared feature so the round drills it 5+ times.", "Use 'distractors' to plant the L1-interference form (e.g. 'cion' on a -tion round)."],
+    "commonPitfalls": ["Mixing unrelated words so no feature is drilled.", "Putting single-consonant words in a doubling round (the doubling tile then has nothing to teach).", "Targets under 2 letters (dropped)."]
   }
 };
 
@@ -475,6 +505,7 @@ const addPuzzleBtn = document.getElementById('addPuzzleBtn');
 const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
+const addSpellingBeeBtn = document.getElementById('addSpellingBeeBtn');
 const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -638,6 +669,7 @@ let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQ
 normalizeQuizAudioDefaults(quiz);
 collapseAllQuestions(quiz);
 let soloGame = null;
+let soloSpellingBeeController = null; // live SpellingBee controller in solo/preview play
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
@@ -1222,6 +1254,12 @@ function bindBuilderEvents() {
   addPinBtn.addEventListener('click', () => {
     addQuestionToBuilder(makePinQuestion());
   });
+
+  if (addSpellingBeeBtn) {
+    addSpellingBeeBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeSpellingBeeQuestion());
+    });
+  }
 
   const quizTtsOtherWrap = document.getElementById('quizTtsOtherWrap');
   const quizTtsOtherVoiceEl = document.getElementById('quizTtsOtherVoice');
@@ -2084,6 +2122,15 @@ function bindBuilderEvents() {
       }
     }
 
+    if ((el.dataset.sbTarget != null) && q.type === 'spellingbee') {
+      const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-sb-target]`)];
+      const last = fields[fields.length - 1];
+      if (el === last && fields.length < 20) {
+        shouldExpand = true;
+        nextSelector = `[data-q="${idx}"][data-sb-target="${fields.length}"]`;
+      }
+    }
+
     if ((el.dataset.answerIndex != null) && ['mcq', 'multi'].includes(q.type)) {
       const fields = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-answer-index]`)];
       const last = fields[fields.length - 1];
@@ -2487,6 +2534,58 @@ function renderBuilder() {
           .join('')}
         </div>
         <p class="small">Students will drag pieces into order on their screen.</p>
+      `;
+    }
+
+    if (q.type === 'spellingbee') {
+      const maxWords = 20;
+      const wordsRaw = (Array.isArray(q.words) ? q.words : []).map((w) => (typeof w === 'string' ? { target: w } : (w || {})));
+      const words = wordsRaw.filter((w) => String(w.target || '').trim().length > 0);
+      while (words.length < 3) words.push({ target: '' });
+      const lastFilled = String(words[words.length - 1]?.target || '').trim().length > 0;
+      if (lastFilled && words.length < maxWords) words.push({ target: '' });
+      const levels = ['A1', 'A2', 'B1'];
+      const langBuckets = ['EN', 'FR', 'CA', 'OTHER'];
+      const curBucket = langBuckets.indexOf(String(q.ttsLanguage || 'EN')) >= 0 ? String(q.ttsLanguage) : 'EN';
+      specific += `
+        <div class="row gap top-space">
+          <div style="flex:1;min-width:160px;">
+            <label>Feature / theme label (optional)</label>
+            <input data-q="${idx}" data-field="sbFeature" maxlength="80" value="${escapeHtml(q.feature || '')}" placeholder="e.g. -tion words, double letters" />
+          </div>
+          <div style="min-width:110px;">
+            <label>Level</label>
+            <select data-q="${idx}" data-field="sbScaffold">
+              ${levels.map((l) => `<option value="${l}" ${(q.scaffoldLevel || 'A2') === l ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div style="min-width:130px;">
+            <label>Voice language</label>
+            <select data-q="${idx}" data-field="sbLang">
+              ${langBuckets.map((b) => `<option value="${b}" ${curBucket === b ? 'selected' : ''}>${b}</option>`).join('')}
+            </select>
+          </div>
+          <div style="min-width:120px;">
+            <label>Challenge timer (s)</label>
+            <input data-q="${idx}" data-field="sbTimer" type="number" min="0" max="600" value="${Number(q.timer ?? 90)}" />
+          </div>
+          <div style="min-width:120px;">
+            <label>Max tries / word</label>
+            <input data-q="${idx}" data-field="sbMaxAttempts" type="number" min="1" max="10" value="${Number(q.maxAttemptsPerWord ?? 3)}" />
+          </div>
+        </div>
+        <label class="top-space">Words to spell (dynamic, max 20). Only the word is required.</label>
+        <div class="sb-word-rows">
+          ${words.slice(0, maxWords).map((w, i) => `
+            <div class="sb-word-row">
+              <input data-q="${idx}" data-sb-target="${i}" maxlength="40" value="${escapeHtml(w.target || '')}" placeholder="Word ${i + 1}" />
+              <input data-q="${idx}" data-sb-clue="${i}" maxlength="200" value="${escapeHtml(w.audioText || '')}" placeholder="Spoken clue (optional — blank = say the word)" />
+              <input data-q="${idx}" data-sb-distractors="${i}" maxlength="60" value="${escapeHtml((Array.isArray(w.distractors) ? w.distractors : []).join(', '))}" placeholder="Distractor keys (optional, comma-sep)" />
+              <input data-q="${idx}" data-sb-clusters="${i}" maxlength="60" value="${escapeHtml((Array.isArray(w.clusterTiles) ? w.clusterTiles : []).join(', '))}" placeholder="Cluster keys e.g. tion, tt (optional)" />
+            </div>
+          `).join('')}
+        </div>
+        <p class="small">The app pronounces each word (Edge TTS). Spelling is auto-graded, case- and accent-insensitive. Leave distractors blank to auto-add them (only for words with under 7 distinct letters).</p>
       `;
     }
 
@@ -3423,6 +3522,34 @@ function syncQuizFromUI() {
         items.push(String(itemEl?.value || '').slice(0, 90));
       }
       q.items = items;
+    }
+
+    if (q.type === 'spellingbee') {
+      const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6);
+      const words = [];
+      for (let i = 0; i < 20; i++) {
+        const tEl = questionListEl.querySelector(`[data-q="${idx}"][data-sb-target="${i}"]`);
+        const target = String(tEl?.value || '').trim().slice(0, 40);
+        if (!target) continue;
+        const clue = String(questionListEl.querySelector(`[data-q="${idx}"][data-sb-clue="${i}"]`)?.value || '').trim().slice(0, 200);
+        const distractors = splitList(questionListEl.querySelector(`[data-q="${idx}"][data-sb-distractors="${i}"]`)?.value);
+        const clusters = splitList(questionListEl.querySelector(`[data-q="${idx}"][data-sb-clusters="${i}"]`)?.value);
+        const word = { target };
+        if (clue) word.audioText = clue;
+        if (distractors.length) word.distractors = distractors;
+        if (clusters.length) word.clusterTiles = clusters;
+        words.push(word);
+      }
+      q.words = words;
+      q.feature = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbFeature"]`)?.value || '').slice(0, 80);
+      const levelVal = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbScaffold"]`)?.value || 'A2');
+      q.scaffoldLevel = ['A1', 'A2', 'B1'].includes(levelVal) ? levelVal : 'A2';
+      q.timer = clamp(Number(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbTimer"]`)?.value ?? 90), 0, 600);
+      q.maxAttemptsPerWord = clamp(Number(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbMaxAttempts"]`)?.value ?? 3), 1, 10);
+      const bucket = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbLang"]`)?.value || 'EN');
+      q.ttsLanguage = ['EN', 'FR', 'CA', 'OTHER'].includes(bucket) ? bucket : 'EN';
+      // Keep a concrete Edge-TTS voice: reuse the quiz voice for OTHER, else the bucket default.
+      q.language = (q.ttsLanguage === 'OTHER' && quiz.language) ? quiz.language : (EDGE_TTS_LANGUAGE_DEFAULTS[q.ttsLanguage] || DEFAULT_EDGE_TTS_VOICE);
     }
 
     if (q.type === 'slider') {
@@ -12178,6 +12305,7 @@ function renderPlayerState(state) {
       if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
+      if (question.type === 'spellingbee') correctText = (question.words || []).map(w => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
     }
 
     if (!correctText) {
@@ -13471,6 +13599,18 @@ function buildPreviewHostQuestion(q) {
     };
   }
   if (q.type === 'error_hunt') return { ...base, corrected: q.corrected, correctedVariants: q.correctedVariants, requiredErrors: q.requiredErrors };
+  if (q.type === 'spellingbee') {
+    return {
+      ...base,
+      words: Array.isArray(q.words) ? q.words : [],
+      feature: q.feature || '',
+      scaffoldLevel: q.scaffoldLevel || 'A2',
+      timer: q.timer,
+      maxAttemptsPerWord: q.maxAttemptsPerWord,
+      ladderThresholds: q.ladderThresholds,
+      language: q.language || '',
+    };
+  }
   return base;
 }
 
@@ -13538,6 +13678,11 @@ function evaluatePreviewAnswer(q, answer) {
     const coveredCount = zones.filter((z) => picks.some((p) => distance2D(p.x, p.y, Number(z.x), Number(z.y)) <= Number(z.r))).length;
     const ok = coveredCount >= required;
     return { correct: ok };
+  }
+  if (q.type === 'spellingbee') {
+    if (!window.SpellingBee) return { correct: false };
+    const r = window.SpellingBee.scoreRound(q, answer);
+    return { correct: r.correct, partialScore: r.partialScore, partialTotal: r.partialTotal };
   }
   return { correct: false };
 }
@@ -13740,6 +13885,7 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   }
   if (question.type === 'pin') return ok ? 'pin: inside valid zone' : 'pin: outside valid zone';
   if (question.type === 'puzzle') return ok ? 'puzzle: correct order' : 'puzzle: wrong order';
+  if (question.type === 'spellingbee') return ok ? 'spelling bee: all words spelled' : 'spelling bee: some words missed';
   return ok ? 'correct submission' : 'incorrect submission';
 }
 
@@ -14236,6 +14382,19 @@ function renderSoloQuestion() {
     return;
   }
 
+  if (q.type === 'spellingbee') {
+    soloSpellingBeeController = null;
+    if (window.SpellingBee) {
+      const player = window.SpellingBee.makeEdgeTtsPlayer({ getBackendUrl: () => loadBackendUrl() || '' });
+      soloSpellingBeeController = window.SpellingBee.render(answersEl, q, {
+        t,
+        voice: q.language || 'en-US',
+        playWord: player,
+      });
+    }
+    return;
+  }
+
   if (q.type === 'slider') {
     const wrap = document.createElement('div');
     wrap.className = 'slider-inline-wrap';
@@ -14438,6 +14597,20 @@ function evaluateSoloQuestion(q) {
     else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zones.length, n)); }
     const ok = hits >= required;
     return { correct: ok, hint: ok ? '' : (required > 1 ? `Try closer to all ${required} target areas.` : 'Try closer to a target area.') };
+  }
+
+  if (q.type === 'spellingbee') {
+    const result = soloSpellingBeeController ? soloSpellingBeeController.getResult() : null;
+    if (!result) return { correct: false, hint: 'Finish the learn round first.' };
+    const scored = window.SpellingBee
+      ? window.SpellingBee.scoreRound(q, result)
+      : { correct: false, partialScore: 0, partialTotal: 1 };
+    return {
+      correct: scored.correct,
+      partialScore: scored.partialScore,
+      partialTotal: scored.partialTotal,
+      hint: `${scored.partialScore} / ${scored.partialTotal} words spelled correctly`,
+    };
   }
 
   return { correct: false };
@@ -14778,6 +14951,25 @@ function makePuzzleQuestion(opts = {}) {
     items: ['', '', ''],
     media: makeDefaultQuestionMedia(),
   };
+}
+
+function makeSpellingBeeQuestion() {
+  const ttsLanguage = quiz.ttsLanguage && quiz.ttsLanguage !== 'NONE' ? quiz.ttsLanguage : DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.language || EDGE_TTS_LANGUAGE_DEFAULTS[ttsLanguage] || DEFAULT_EDGE_TTS_VOICE;
+  const base = (window.SpellingBee && window.SpellingBee.defaultQuestion)
+    ? window.SpellingBee.defaultQuestion()
+    : { type: 'spellingbee', prompt: 'Listen and spell each word.', feature: '', scaffoldLevel: 'A2', timer: 90, maxAttemptsPerWord: 3, points: 1000, timeLimit: 0, words: [{ target: '' }, { target: '' }, { target: '' }] };
+  return Object.assign({ id: crypto.randomUUID() }, base, {
+    // Spelling Bee speaks each word itself, so the generic audio attach is off;
+    // these fields are kept for parity with other types' audio-defaults handling.
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    audioData: '',
+    ttsLanguage,
+    language,
+    media: makeDefaultQuestionMedia(),
+  });
 }
 
 function makeSliderQuestion() {
@@ -15747,12 +15939,14 @@ function iconForType(type) {
       voice_record: '🎙️',
       voice_text: '🎤',
       pin: '📍',
+      spellingbee: '🐝',
     }[type] || ''
   );
 }
 
 function minTimeByType(type) {
   if (type === 'slider') return 10;
+  if (type === 'spellingbee') return 60;
   if (['text', 'voice_text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }

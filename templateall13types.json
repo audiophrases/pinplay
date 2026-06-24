@@ -361,6 +361,25 @@
         { "text": "Predator pressure in northern habitats", "correct": false },
         { "text": "Shifts in the Earth's magnetic field", "correct": false }
       ]
+    },
+    {
+      "id": "q17-spellingbee",
+      "type": "spellingbee",
+      "prompt": "Listen and spell each word.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "feature": "-tion words",
+      "scaffoldLevel": "A2",
+      "timer": 90,
+      "maxAttemptsPerWord": 3,
+      "ttsLanguage": "EN",
+      "language": "en-US-AriaNeural",
+      "words": [
+        { "target": "action", "distractors": ["sion"], "clusterTiles": ["tion"] },
+        { "target": "nation", "clusterTiles": ["tion"] },
+        { "target": "station", "audioText": "a place where trains stop" }
+      ]
     }
   ],
   "language": "en-US-JennyNeural"

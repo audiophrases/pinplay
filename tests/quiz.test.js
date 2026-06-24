@@ -1220,3 +1220,125 @@ describe('REACTION_EMOJIS', () => {
     REACTION_EMOJIS.forEach(e => assert.equal(typeof e, 'string'));
   });
 });
+
+// ============ Spelling Bee engine (spellingbee.js) ============
+// Load the real shared engine — its IIFE attaches to `this` (module.exports) in Node.
+const SB = require('../spellingbee.js').SpellingBee;
+
+describe('SpellingBee.normalize', () => {
+  it('is case-insensitive', () => { assert.equal(SB.normalize('Rhythm'), 'rhythm'); });
+  it('is accent-insensitive', () => {
+    assert.equal(SB.normalize('Café'), 'cafe');
+    assert.equal(SB.normalize('niño'), 'nino');
+  });
+  it('drops spaces and punctuation', () => { assert.equal(SB.normalize('ice-cream!'), 'icecream'); });
+});
+
+describe('SpellingBee.gradeWord', () => {
+  it('accepts exact spelling', () => { assert.ok(SB.gradeWord('necessary', 'necessary')); });
+  it('is case- and accent-insensitive', () => {
+    assert.ok(SB.gradeWord('Café', 'cafe'));
+    assert.ok(SB.gradeWord('café', 'CAFE'));
+  });
+  it('cluster vs single letters grade identically (b-e-tt-e-r == b-e-t-t-e-r)', () => {
+    assert.ok(SB.gradeWord('better', 'be' + 'tt' + 'er'));
+    assert.ok(SB.gradeWord('better', 'be' + 't' + 't' + 'er'));
+  });
+  it('rejects misspellings', () => { assert.ok(!SB.gradeWord('scissors', 'scisors')); });
+  it('rejects empty', () => { assert.ok(!SB.gradeWord('cat', '')); assert.ok(!SB.gradeWord('', 'cat')); });
+});
+
+describe('SpellingBee.autoDistractors', () => {
+  it('only fires for targets with under 7 distinct letters', () => {
+    assert.deepEqual(SB.autoDistractors('pollution', 'A2'), []); // 7 distinct → none
+    assert.ok(SB.autoDistractors('tree', 'A2').length > 0);       // 3 distinct → some
+  });
+  it('scaffold level caps the count (A1 < B1)', () => {
+    assert.ok(SB.autoDistractors('cat', 'A1').length <= 1);
+    assert.ok(SB.autoDistractors('cat', 'B1').length <= 3);
+  });
+  it('never returns a letter already in the target', () => {
+    SB.autoDistractors('tree', 'B1').forEach((d) => {
+      assert.ok(!'tree'.includes(d), `distractor ${d} is in target`);
+    });
+  });
+  it('biases -tion words toward the cion/sion interference traps', () => {
+    const d = SB.autoDistractors('action', 'B1'); // 6 distinct, ends -tion
+    assert.ok(d.includes('sion') || d.includes('cion'));
+  });
+});
+
+describe('SpellingBee.buildTiles', () => {
+  it('flags creator distractors as distractor tiles', () => {
+    const tiles = SB.buildTiles('cat', { distractors: ['z'] });
+    const z = tiles.find((t) => t.text === 'z');
+    assert.ok(z && z.distractor === true);
+  });
+  it('treats the word\'s own letters as non-distractor', () => {
+    SB.buildTiles('cat', { distractors: [] }).forEach((t) => {
+      if ('cat'.includes(t.text)) assert.equal(t.distractor, false);
+    });
+  });
+  it('only keeps cluster tiles that occur in the word', () => {
+    const tiles = SB.buildTiles('nation', { clusterTiles: ['tion', 'ck'] });
+    assert.ok(tiles.some((t) => t.text === 'tion'));
+    assert.ok(!tiles.some((t) => t.text === 'ck')); // 'ck' not in 'nation'
+  });
+});
+
+describe('SpellingBee.scoreRound', () => {
+  const q = { words: [{ target: 'cat' }, { target: 'dog' }, { target: 'café' }] };
+  it('scores by matching targets, accent-insensitively', () => {
+    const r = SB.scoreRound(q, { words: [
+      { target: 'cat', guess: 'cat' },
+      { target: 'dog', guess: 'dgo' },
+      { target: 'café', guess: 'cafe' },
+    ] });
+    assert.equal(r.partialScore, 2);
+    assert.equal(r.partialTotal, 3);
+    assert.equal(r.correct, false);
+  });
+  it('is correct only when every word is right', () => {
+    const r = SB.scoreRound(q, { words: [
+      { target: 'cat', guess: 'cat' }, { target: 'dog', guess: 'dog' }, { target: 'café', guess: 'CAFE' },
+    ] });
+    assert.equal(r.correct, true);
+    assert.equal(r.partialScore, 3);
+  });
+  it('handles missing/blank answer', () => {
+    const r = SB.scoreRound(q, null);
+    assert.equal(r.correct, false);
+    assert.equal(r.partialScore, 0);
+  });
+});
+
+describe('SpellingBee.validateConfig', () => {
+  it('accepts a minimal config (bare targets)', () => {
+    const v = SB.validateConfig({ words: [{ target: 'tree' }, { target: 'green' }] });
+    assert.ok(v.ok);
+    assert.equal(v.config.scaffoldLevel, 'A2'); // default
+  });
+  it('accepts string-only words', () => {
+    const v = SB.validateConfig({ words: ['tree', 'green'] });
+    assert.ok(v.ok);
+    assert.equal(v.config.words.length, 2);
+  });
+  it('fails loudly with no words', () => {
+    const v = SB.validateConfig({ words: [] });
+    assert.ok(!v.ok);
+    assert.ok(v.errors.length > 0);
+  });
+  it('flags too-short targets', () => {
+    const v = SB.validateConfig({ words: [{ target: 'a' }] });
+    assert.ok(!v.ok);
+  });
+});
+
+describe('SpellingBee.ladderRank', () => {
+  it('maps fractions to the Beginner→Genius ladder', () => {
+    assert.equal(SB.ladderRank(0, 10), 'beginner');
+    assert.equal(SB.ladderRank(5, 10), 'good');   // 0.5 ≥ 0.4
+    assert.equal(SB.ladderRank(8, 10), 'great');  // 0.8 ≥ 0.7
+    assert.equal(SB.ladderRank(10, 10), 'genius');
+  });
+});

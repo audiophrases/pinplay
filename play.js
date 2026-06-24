@@ -23,6 +23,7 @@ const QUESTION_TYPE_ICONS = {
   puzzle: '🧩',
   slider: '📐',
   pin: '📍',
+  spellingbee: '🐝',
 };
 function questionTypeIcon(type) {
   return QUESTION_TYPE_ICONS[String(type || '').toLowerCase()] || '❓';
@@ -2329,6 +2330,7 @@ const SELF_CORRECTING_TYPES = new Set([
   'text', 'voice_text',
   'context_gap', 'error_hunt',
   'slider', 'puzzle', 'match_pairs',
+  'spellingbee',
 ]);
 
 function isSelfCorrectingQuestion(question) {
@@ -2368,6 +2370,11 @@ function isSelfCorrectingQuestion(question) {
     const pairs = (Array.isArray(question.pairs) ? question.pairs : [])
       .filter((p) => String(p?.left || '').trim() && String(p?.right || '').trim());
     return pairs.length > 0;
+  }
+  if (t === 'spellingbee') {
+    const words = (Array.isArray(question.words) ? question.words : [])
+      .filter((w) => String((w && w.target) || w || '').trim());
+    return words.length > 0;
   }
   return false;
 }
@@ -2463,6 +2470,11 @@ function gradeSelfCorrectAnswer(question, userAnswer) {
     return pairs.every((p, i) =>
       normalizeTextAnswer(p?.right) === normalizeTextAnswer(userAnswer[i]),
     );
+  }
+  if (t === 'spellingbee') {
+    if (!window.SpellingBee) return false;
+    const r = window.SpellingBee.scoreRound(question, userAnswer);
+    return !!r.correct;
   }
   return false;
 }
@@ -4137,6 +4149,13 @@ function renderJoinQuestion(question) {
     return;
   }
 
+  if (question.type === 'spellingbee') {
+    renderSpellingBee(joinAnswersEl, question);
+    appendRiskBetBar();
+    appendReactionBar();
+    return;
+  }
+
   if (question.type === 'slider') {
     const wrap = document.createElement('div');
     wrap.className = 'slider-inline-wrap';
@@ -4756,6 +4775,12 @@ function readJoinAnswer() {
   if (q.type === 'pin') {
     const picks = Array.isArray(live.player.pinSelections) ? live.player.pinSelections : [];
     return picks.length ? picks : null;
+  }
+
+  if (q.type === 'spellingbee') {
+    // Answerable once the learn pass is complete; getResult() returns the round
+    // result (server re-grades it). null until then so it counts as unanswered.
+    return _spellingBeeController ? _spellingBeeController.getResult() : null;
   }
 
   return null;
@@ -6682,6 +6707,41 @@ function normalizeBackendUrl(url) {
 
 // Edge TTS cache for student UI
 const studentEdgeTtsCache = new Map();
+
+// --- Spelling Bee (audio-first spelling game) -----------------------------
+// The interactive engine + UI lives in spellingbee.js (window.SpellingBee). We
+// just host it: feed it our Edge-TTS player (sharing studentEdgeTtsCache) and
+// stash the live controller so readJoinAnswer can read the round result.
+let _spellingBeeController = null;
+const _spellingBeeTtsPlayer = () => window.SpellingBee && window.SpellingBee.makeEdgeTtsPlayer({
+  cache: studentEdgeTtsCache,
+  getBackendUrl: () => loadBackendUrl() || DEFAULT_BACKEND_URL,
+});
+
+function renderSpellingBee(container, question) {
+  _spellingBeeController = null;
+  if (!window.SpellingBee) {
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = t('Spelling Bee could not load.');
+    container.appendChild(p);
+    return;
+  }
+  const reviewMode = !!live.player.assignment.reviewMode;
+  const rawAnswers = live.player.assignment.state?.attempt?.answersByQ || {};
+  const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+  const savedResult = (answerObj && answerObj.answer && typeof answerObj.answer === 'object'
+    && Array.isArray(answerObj.answer.words)) ? answerObj.answer : null;
+
+  _spellingBeeController = window.SpellingBee.render(container, question, {
+    t,
+    voice: question.language || 'en-US',
+    playWord: _spellingBeeTtsPlayer(),
+    reviewMode,
+    savedResult,
+    onChange: () => { markAnswerDirty(); },
+  });
+}
 
 async function speakText(text, lang = 'en-US-Wave') {
   const value = String(text || '').trim();

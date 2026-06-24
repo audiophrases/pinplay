@@ -4713,6 +4713,12 @@ function summarizeHistoryAnswer(question, answer) {
   if (question.type === 'context_gap' || question.type === 'match_pairs' || question.type === 'puzzle') {
     return Array.isArray(answer) ? answer.join(' | ') : String(answer || '');
   }
+  if (question.type === 'spellingbee') {
+    if (answer && typeof answer === 'object' && Array.isArray(answer.words)) {
+      return `🐝 ${Number(answer.correctCount || 0)}/${Number(answer.total || answer.words.length)} spelled`;
+    }
+    return '(none)';
+  }
   return String(answer || '');
 }
 
@@ -5128,6 +5134,27 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
     };
   }
 
+  if (question.type === 'spellingbee') {
+    // The game can't render without the words: the letter circle IS the word's
+    // own letters and the TTS speaks the word/clue, so words are always sent (not
+    // gated by includeAnswerKey). The server still re-grades authoritatively.
+    return {
+      type: question.type,
+      prompt: question.prompt,
+      points: question.points,
+      timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
+      words: Array.isArray(question.words) ? question.words : [],
+      feature: String(question.feature || ''),
+      scaffoldLevel: question.scaffoldLevel || 'A2',
+      timer: question.timer,
+      maxAttemptsPerWord: question.maxAttemptsPerWord,
+      ladderThresholds: question.ladderThresholds,
+      language: String(question.language || 'en-US-Wave'),
+      media: publicQuestionMediaPayload(question),
+    };
+  }
+
   return {
     type: question.type,
     prompt: question.prompt,
@@ -5278,6 +5305,10 @@ function evaluate(question, answer) {
     else { const n = parseInt(pinMode, 10); if (n >= 1) required = Math.max(1, Math.min(zones.length, n)); }
     const ok = coveredCount >= required;
     return { correct: ok };
+  }
+
+  if (question.type === 'spellingbee') {
+    return scoreSpellingBeeRound(question, answer);
   }
 
   return { correct: false };
@@ -5442,6 +5473,42 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'spellingbee') {
+      const words = (Array.isArray(q.words) ? q.words : [])
+        .map((w) => (typeof w === 'string' ? { target: w } : (w || {})))
+        .map((w) => {
+          const out = { target: String(w.target || '').trim().slice(0, 40) };
+          const clue = String(w.audioText || '').trim().slice(0, 200);
+          if (clue) out.audioText = clue;
+          const distractors = Array.isArray(w.distractors)
+            ? w.distractors.map((x) => String(x || '').trim().slice(0, 8)).filter(Boolean).slice(0, 6) : [];
+          if (distractors.length) out.distractors = distractors;
+          const clusters = Array.isArray(w.clusterTiles)
+            ? w.clusterTiles.map((x) => String(x || '').trim().slice(0, 8)).filter(Boolean).slice(0, 6) : [];
+          if (clusters.length) out.clusterTiles = clusters;
+          return out;
+        })
+        .filter((w) => w.target)
+        .slice(0, 30);
+      if (!words.length) return;
+      const lad = q.ladderThresholds && typeof q.ladderThresholds === 'object' ? {
+        good: Number(q.ladderThresholds.good) || 0.4,
+        great: Number(q.ladderThresholds.great) || 0.7,
+        genius: Number(q.ladderThresholds.genius) || 1,
+      } : null;
+      normalized.questions.push({
+        ...base,
+        words,
+        feature: String(q.feature || '').slice(0, 80),
+        scaffoldLevel: ['A1', 'A2', 'B1'].includes(q.scaffoldLevel) ? q.scaffoldLevel : 'A2',
+        timer: clamp(Number(q.timer ?? 90), 0, 600),
+        maxAttemptsPerWord: clamp(Number(q.maxAttemptsPerWord ?? 3), 1, 10),
+        ttsLanguage: String(q.ttsLanguage || '').slice(0, 8),
+        ...(lad ? { ladderThresholds: lad } : {}),
+      });
+      return;
+    }
+
     if (q.type === 'pin') {
       if (!q.imageData) return;
       const zonesSource = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || {}];
@@ -5520,6 +5587,39 @@ function normalizeTextAnswer(text) {
     .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Spelling Bee: case- AND accent-insensitive, letters only. Mirrors
+// SpellingBee.normalize() in spellingbee.js (browser engine).
+function normalizeSpellingBee(s) {
+  return String(s == null ? '' : s)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+}
+
+function gradeSpellingBeeWord(target, guess) {
+  const t = normalizeSpellingBee(target);
+  return t.length > 0 && t === normalizeSpellingBee(guess);
+}
+
+// Recompute round score from stored guesses vs the question's targets, matching
+// by normalized target. Mirrors SpellingBee.scoreRound() in spellingbee.js.
+function scoreSpellingBeeRound(question, answer) {
+  const words = (question && Array.isArray(question.words) ? question.words : [])
+    .filter((w) => normalizeSpellingBee(w && w.target).length >= 2);
+  const total = words.length;
+  if (!total) return { correct: false, partialScore: 0, partialTotal: 1 };
+  const byTarget = {};
+  if (answer && Array.isArray(answer.words)) {
+    answer.words.forEach((w) => { if (w && w.target != null) byTarget[normalizeSpellingBee(w.target)] = w; });
+  }
+  let correctCount = 0;
+  words.forEach((qw) => {
+    const a = byTarget[normalizeSpellingBee(qw.target)];
+    if (a && gradeSpellingBeeWord(qw.target, a.guess)) correctCount++;
+  });
+  return { correct: correctCount === total, partialScore: correctCount, partialTotal: total };
 }
 
 function stripDiacritics(text) {
@@ -7081,6 +7181,8 @@ function summarizePoll(question, responses) {
     answers.forEach((a) => pushCount(String(a?.rewrite || '')));
   } else if (question?.type === 'context_gap' || question?.type === 'match_pairs' || question?.type === 'puzzle') {
     answers.forEach((a) => pushCount(Array.isArray(a) ? a.join(' | ') : String(a || '')));
+  } else if (question?.type === 'spellingbee') {
+    answers.forEach((a) => pushCount((a && typeof a === 'object') ? `${Number(a.correctCount || 0)}/${Number(a.total || 0)} correct` : '(none)'));
   } else {
     answers.forEach((a) => pushCount(String(a || '')));
   }
@@ -7143,6 +7245,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'puzzle') {
     return (question.items || []).join(' > ');
+  }
+
+  if (question.type === 'spellingbee') {
+    return (question.words || []).map((w) => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
   }
 
   if (question.type === 'slider') {
