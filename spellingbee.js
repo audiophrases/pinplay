@@ -356,10 +356,11 @@
       return { target: w.target, guess: '', correct: false, solvedPass: 0, attempts: 0 };
     });
 
-    var passNum = 0;       // 1..3
-    var queue = [];
-    var nextQueue = [];    // words missed this pass → retried next pass with more help
-    var current = -1;
+    var wordIdx = -1;      // index into cfg.words (words are played in order)
+    var attempt = 0;       // 1..MAX_PASSES — current word's attempt number (= help level)
+    var current = -1;      // alias of wordIdx for the shared tile/answer helpers
+    var phase = 'input';   // 'input' = entering a guess, 'reveal' = showing the result
+    var advanceAction = null; // 'retry' (same word, more help) | 'next' (next word/results)
     var guess = '';
     var roundDone = false;
     var started = false;   // first real submission → question becomes "answered"
@@ -385,13 +386,32 @@
     var clearBtn = button('sb-clear', t('Clear'));
     var submitBtn = button('sb-submit btn-primary', t('Submit'));
     controls.append(backBtn, clearBtn, submitBtn);
+    var advanceRow = el('div', 'sb-advance-row hidden');
+    var advanceBtn = button('sb-advance btn-primary', t('Next'));
+    advanceRow.append(advanceBtn);
     var circleEl = el('div', 'sb-circle');
     var ladderEl = el('div', 'sb-ladder hidden');
     var feedbackEl = el('div', 'sb-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
-    root.append(header, audioRow, answerEl, controls, circleEl, ladderEl, feedbackEl);
+    root.append(header, audioRow, answerEl, controls, advanceRow, circleEl, ladderEl, feedbackEl);
     container.appendChild(root);
 
-    function passHelp() { return passNum >= 3 ? 'trace' : (passNum === 2 ? 'length' : 'none'); }
+    // Help escalates with the attempt number on the SAME word (no list-wide passes).
+    function passHelp() { return attempt >= 3 ? 'trace' : (attempt === 2 ? 'length' : 'none'); }
+
+    function showInputPhase() {
+      phase = 'input';
+      audioRow.classList.remove('hidden');
+      controls.classList.remove('hidden');
+      circleEl.classList.remove('hidden');
+      advanceRow.classList.add('hidden');
+    }
+    function showRevealPhase(label) {
+      phase = 'reveal';
+      controls.classList.add('hidden');
+      circleEl.classList.add('hidden');
+      advanceBtn.textContent = label;
+      advanceRow.classList.remove('hidden');
+    }
 
     function speak() {
       var w = cfg.words[current];
@@ -438,7 +458,7 @@
     function flash(btn) { if (!btn) return; btn.classList.remove('sb-flash'); void btn.offsetWidth; btn.classList.add('sb-flash'); }
 
     function onTile(tile, btn) {
-      if (roundDone || current < 0) return;
+      if (roundDone || phase !== 'input' || current < 0) return;
       if (passHelp() === 'trace') {
         // Only the next correct letter(s) are accepted; anything else flashes red.
         var cand = normalize(guess + tile.text);
@@ -464,6 +484,10 @@
       if (roundDone || current < 0) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       var k = e.key;
+      if (phase === 'reveal') {
+        if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); advance(); }
+        return;
+      }
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); return; }
       if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
       if (k && k.length === 1 && /[a-z]/i.test(k)) {
@@ -475,61 +499,68 @@
       }
     }
 
-    function nextWord() {
-      guess = ''; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
-      if (!queue.length) return endPass();
-      current = queue.shift();
-      var solved = results.filter(function (r) { return r.correct; }).length;
-      progressEl.textContent = t('Pass {n} of {max}', { n: passNum, max: MAX_PASSES }) + ' · ' + solved + '/' + cfg.words.length;
+    function startWord(idx) {
+      wordIdx = idx; current = idx; attempt = 1;
+      beginAttempt();
+    }
+
+    // Start (or retry) the current word at the current attempt's help level.
+    function beginAttempt() {
+      guess = '';
+      feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
+      progressEl.textContent = t('Word {n} of {total}', { n: wordIdx + 1, total: cfg.words.length })
+        + (attempt > 1 ? ' · ' + t('try {n}', { n: attempt }) : '');
       submitBtn.disabled = false;
+      showInputPhase();
       renderAnswer(); renderCircle(); speak();
     }
 
     function submit() {
-      if (roundDone || current < 0) return;
+      if (roundDone || phase !== 'input' || current < 0) return;
       if (!normalize(guess)) { feedbackEl.textContent = t('Tap letters to spell the word first.'); feedbackEl.className = 'sb-feedback sb-bad'; return; }
       started = true;
       var w = cfg.words[current];
       var rec = results[current];
-      rec.attempts++;
+      rec.attempts = attempt;
       var ok = gradeWord(w.target, guess);
       renderAnswer(wordleStatuses(guess, w.target));
+      var lastWord = wordIdx >= cfg.words.length - 1;
       if (ok) {
-        rec.guess = guess; rec.correct = true; rec.solvedPass = passNum;
+        rec.guess = guess; rec.correct = true; rec.solvedPass = attempt;
         feedbackEl.textContent = t('✓ Correct!'); feedbackEl.className = 'sb-feedback sb-good';
-        if (options.onChange) options.onChange();
-        wait(700).then(nextWord);
-        return;
-      }
-      rec.guess = guess;
-      if (passNum < MAX_PASSES) {
-        nextQueue.push(current);
-        feedbackEl.textContent = t('Not quite — it comes back with more help.');
+        advanceAction = 'next';
+        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
+      } else if (attempt < MAX_PASSES) {
+        rec.guess = guess;
+        feedbackEl.textContent = t('Not quite — try again with a hint.');
+        feedbackEl.className = 'sb-feedback sb-bad';
+        advanceAction = 'retry';
+        showRevealPhase(t('Try again →'));
       } else {
-        feedbackEl.textContent = t('Spelling: {word}', { word: w.target });
+        rec.guess = guess; rec.correct = false; rec.solvedPass = 0;
+        feedbackEl.textContent = t('The correct spelling is: {word}', { word: w.target });
+        feedbackEl.className = 'sb-feedback sb-bad';
+        advanceAction = 'next';
+        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
       }
-      feedbackEl.className = 'sb-feedback sb-bad';
       if (options.onChange) options.onChange();
-      wait(900).then(nextWord);
     }
 
-    function endPass() {
-      submitBtn.disabled = true;
-      if (passNum < MAX_PASSES && nextQueue.length) startPass(passNum + 1);
-      else finalize();
-    }
-
-    function startPass(p) {
-      passNum = p;
-      queue = (p === 1) ? cfg.words.map(function (_, i) { return i; }) : nextQueue;
-      nextQueue = [];
-      nextWord();
+    // Student-controlled advance — nothing auto-clears, so they can read the
+    // reveal. Either retry the SAME word with more help, or move to the next word.
+    function advance() {
+      if (roundDone || phase !== 'reveal') return;
+      if (advanceAction === 'retry') { attempt++; beginAttempt(); return; }
+      if (wordIdx >= cfg.words.length - 1) { finalize(); return; }
+      startWord(wordIdx + 1);
     }
 
     function finalize() {
       roundDone = true;
+      phase = 'reveal';
       audioRow.classList.add('hidden');
       controls.classList.add('hidden');
+      advanceRow.classList.add('hidden');
       circleEl.innerHTML = '';
       answerEl.innerHTML = '';
       var result = getResult();
@@ -561,7 +592,7 @@
         correctCount: correctCount,
         total: words.length,
         pointsScore: pointsScore,
-        pass: passNum,
+        pass: attempt,
         elapsedMs: Date.now() - startedAt,
       };
     }
@@ -570,12 +601,13 @@
 
     playBtn.addEventListener('click', speak);
     repeatBtn.addEventListener('click', speak);
-    backBtn.addEventListener('click', function () { if (guess) { guess = guess.slice(0, -1); renderAnswer(); } });
-    clearBtn.addEventListener('click', function () { guess = ''; renderAnswer(); });
+    backBtn.addEventListener('click', function () { if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
+    clearBtn.addEventListener('click', function () { if (phase === 'input') { guess = ''; renderAnswer(); } });
     submitBtn.addEventListener('click', submit);
+    advanceBtn.addEventListener('click', advance);
     document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers
 
-    startPass(1);
+    startWord(0);
 
     return {
       getResult: getResult,

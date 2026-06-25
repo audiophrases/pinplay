@@ -4881,8 +4881,13 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-feedback.sb-bad { color: var(--bad); }
 .sb-interstitial-msg { margin: 6px 0 12px; color: var(--text); font-weight: 600; }
 
+/* Student-controlled advance between attempts / words (no auto-clear). */
+.sb-advance-row { display: flex; justify-content: center; }
+.sb-advance { font-weight: 700; padding: 12px 28px; }
+
 /* Final ladder + score. */
-.sb-ladder.hidden, .sb-timer.hidden, .sb-audio.hidden, .sb-controls.hidden { display: none; }
+.sb-ladder.hidden, .sb-timer.hidden, .sb-audio.hidden, .sb-controls.hidden,
+.sb-circle.hidden, .sb-advance-row.hidden { display: none; }
 .sb-ladder { text-align: center; }
 .sb-rank-badge {
   display: inline-block;

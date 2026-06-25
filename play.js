@@ -6737,10 +6737,20 @@ function renderSpellingBee(container, question) {
   const savedResult = (answerObj && answerObj.answer && typeof answerObj.answer === 'object'
     && Array.isArray(answerObj.answer.words)) ? answerObj.answer : null;
 
+  // Duck the ambient/background loop while a word plays and resume after — same
+  // behaviour as the standard question audio (mirrors the 🎧 replay path).
+  const basePlayer = _spellingBeeTtsPlayer();
+  const playWord = basePlayer
+    ? (text, v) => {
+      pauseAssignmentAnsweringAmbient();
+      return Promise.resolve(basePlayer(text, v)).finally(() => resumeAssignmentAnsweringAmbient());
+    }
+    : undefined;
+
   _spellingBeeController = window.SpellingBee.render(container, question, {
     t,
     voice: question.language || 'en-US',
-    playWord: _spellingBeeTtsPlayer(),
+    playWord,
     reviewMode,
     savedResult,
     onChange: () => { markAnswerDirty(); },
