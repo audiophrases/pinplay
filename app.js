@@ -15178,6 +15178,37 @@ function normalizeQuizForLive(raw) {
       });
       return;
     }
+
+    if (q.type === 'spellingbee') {
+      const splitList = (arr, max) => (Array.isArray(arr) ? arr.map((x) => String(x || '').trim().slice(0, 8)).filter(Boolean).slice(0, max) : []);
+      const words = (Array.isArray(q.words) ? q.words : [])
+        .map((w) => (typeof w === 'string' ? { target: w } : (w || {})))
+        .map((w) => {
+          const out = { target: String(w.target || '').trim().slice(0, 40) };
+          const clue = String(w.audioText || '').trim().slice(0, 200);
+          if (clue) out.audioText = clue;
+          const distractors = splitList(w.distractors, 3);
+          if (distractors.length) out.distractors = distractors;
+          const clusters = splitList(w.clusterTiles, 6);
+          if (clusters.length) out.clusterTiles = clusters;
+          return out;
+        })
+        .filter((w) => w.target)
+        .slice(0, 30);
+      if (!words.length) return;
+      const lad = q.ladderThresholds && typeof q.ladderThresholds === 'object' ? {
+        good: Number(q.ladderThresholds.good) || 0.4,
+        great: Number(q.ladderThresholds.great) || 0.7,
+        genius: Number(q.ladderThresholds.genius) || 1,
+      } : null;
+      normalized.questions.push({
+        ...base,
+        words,
+        feature: String(q.feature || '').slice(0, 80),
+        ...(lad ? { ladderThresholds: lad } : {}),
+      });
+      return;
+    }
   });
 
   if (!normalized.questions.length) {
