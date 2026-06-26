@@ -325,6 +325,22 @@
     };
   }
 
+  // Accept a stashed snapshot only if it still matches THIS question (same word
+  // count and same targets, in order) and its indices are in range. A mismatch
+  // (different question, edited quiz) is ignored so the round just starts fresh.
+  function sanitizeResumeState(state, cfg) {
+    if (!state || typeof state !== 'object' || !Array.isArray(state.results)) return null;
+    if (!cfg || !Array.isArray(cfg.words) || state.results.length !== cfg.words.length) return null;
+    for (var i = 0; i < cfg.words.length; i++) {
+      var r = state.results[i];
+      if (!r || r.target !== cfg.words[i].target) return null;
+    }
+    if (!state.roundDone) {
+      if (typeof state.wordIdx !== 'number' || state.wordIdx < 0 || state.wordIdx >= cfg.words.length) return null;
+    }
+    return state;
+  }
+
   // ------------------------------------------------------------------ UI render
   // render(container, question, options) → controller.
   // options: { t, voice, playWord(text,voice)->Promise, onChange(), onComplete(result),
@@ -342,14 +358,14 @@
 
     if (options.reviewMode && options.savedResult) {
       renderSummary(container, t, options.savedResult);
-      return { getResult: function () { return options.savedResult; }, isAnswered: function () { return true; }, destroy: function () {} };
+      return { getResult: function () { return options.savedResult; }, getState: function () { return null; }, isComplete: function () { return true; }, isAnswered: function () { return true; }, destroy: function () {} };
     }
     if (!cfg.words.length) {
       var warn = document.createElement('p');
       warn.className = 'small';
       warn.textContent = t('This Spelling Bee has no words yet.');
       container.appendChild(warn);
-      return { getResult: function () { return null; }, isAnswered: function () { return false; }, destroy: function () {} };
+      return { getResult: function () { return null; }, getState: function () { return null; }, isComplete: function () { return false; }, isAnswered: function () { return false; }, destroy: function () {} };
     }
 
     var results = cfg.words.map(function (w) {
@@ -525,6 +541,30 @@
       renderAnswer(); renderCircle(); speak();
     }
 
+    // Paint the result of the current guess: Wordle colours, feedback line, and
+    // the advance button. Pure UI derived from {current word, guess, attempt}, so
+    // it can be replayed verbatim when a half-finished round is restored after the
+    // student navigates away and back.
+    function renderReveal() {
+      var w = cfg.words[current];
+      var ok = gradeWord(w.target, guess);
+      renderAnswer(wordleStatuses(guess, w.target));
+      var lastWord = wordIdx >= cfg.words.length - 1;
+      if (ok) {
+        feedbackEl.textContent = t('✓ Correct!'); feedbackEl.className = 'sb-feedback sb-good';
+        advanceAction = 'next';
+        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
+      } else if (attempt < MAX_PASSES) {
+        feedbackEl.textContent = t('Not quite — try again with a hint.'); feedbackEl.className = 'sb-feedback sb-bad';
+        advanceAction = 'retry';
+        showRevealPhase(t('Try again →'));
+      } else {
+        feedbackEl.textContent = t('The correct spelling is: {word}', { word: w.target }); feedbackEl.className = 'sb-feedback sb-bad';
+        advanceAction = 'next';
+        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
+      }
+    }
+
     function submit() {
       if (roundDone || phase !== 'input' || current < 0) return;
       if (!normalize(guess)) { feedbackEl.textContent = t('Tap letters to spell the word first.'); feedbackEl.className = 'sb-feedback sb-bad'; return; }
@@ -532,27 +572,10 @@
       var w = cfg.words[current];
       var rec = results[current];
       rec.attempts = attempt;
-      var ok = gradeWord(w.target, guess);
-      renderAnswer(wordleStatuses(guess, w.target));
-      var lastWord = wordIdx >= cfg.words.length - 1;
-      if (ok) {
-        rec.guess = guess; rec.correct = true; rec.solvedPass = attempt;
-        feedbackEl.textContent = t('✓ Correct!'); feedbackEl.className = 'sb-feedback sb-good';
-        advanceAction = 'next';
-        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
-      } else if (attempt < MAX_PASSES) {
-        rec.guess = guess;
-        feedbackEl.textContent = t('Not quite — try again with a hint.');
-        feedbackEl.className = 'sb-feedback sb-bad';
-        advanceAction = 'retry';
-        showRevealPhase(t('Try again →'));
-      } else {
-        rec.guess = guess; rec.correct = false; rec.solvedPass = 0;
-        feedbackEl.textContent = t('The correct spelling is: {word}', { word: w.target });
-        feedbackEl.className = 'sb-feedback sb-bad';
-        advanceAction = 'next';
-        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
-      }
+      rec.guess = guess;
+      if (gradeWord(w.target, guess)) { rec.correct = true; rec.solvedPass = attempt; }
+      else if (attempt >= MAX_PASSES) { rec.correct = false; rec.solvedPass = 0; }
+      renderReveal();
       if (options.onChange) options.onChange();
     }
 
@@ -565,7 +588,10 @@
       startWord(wordIdx + 1);
     }
 
-    function finalize() {
+    // The finished-round view (ladder + per-word list). Split from finalize() so a
+    // restored already-complete round can show it WITHOUT re-firing the completion
+    // callbacks (which would spuriously re-mark the answer dirty).
+    function showFinalized() {
       roundDone = true;
       phase = 'reveal';
       audioRow.classList.add('hidden');
@@ -573,8 +599,12 @@
       advanceRow.classList.add('hidden');
       circleEl.innerHTML = '';
       answerEl.innerHTML = '';
+      renderLadder(getResult());
+    }
+
+    function finalize() {
+      showFinalized();
       var result = getResult();
-      renderLadder(result);
       if (options.onComplete) options.onComplete(result);
       if (options.onChange) options.onChange();
     }
@@ -607,7 +637,47 @@
       };
     }
 
-    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    // Serialisable snapshot of an in-progress (or finished) round, so the host can
+    // stash it on navigate-away and hand it back via options.resumeState. Returns
+    // null while the round is still pristine (nothing worth restoring).
+    function getState() {
+      if (!started && !roundDone && !normalize(guess) && wordIdx <= 0) return null;
+      return {
+        v: 1,
+        results: results.map(function (r) { return { target: r.target, guess: r.guess, correct: r.correct, solvedPass: r.solvedPass, attempts: r.attempts }; }),
+        wordIdx: wordIdx, attempt: attempt, phase: phase, advanceAction: advanceAction,
+        guess: guess, roundDone: roundDone, started: started, startedAt: startedAt,
+      };
+    }
+
+    // Rehydrate from a snapshot (already validated against this question). Restores
+    // the exact word/attempt and replays the input or reveal view; a finished round
+    // jumps straight to the results. Deliberately does NOT auto-speak — flipping
+    // back to a question shouldn't blast audio; the student can hit Play.
+    function restoreFrom(s) {
+      for (var i = 0; i < results.length && i < s.results.length; i++) {
+        var sr = s.results[i];
+        results[i].guess = sr.guess || '';
+        results[i].correct = !!sr.correct;
+        results[i].solvedPass = sr.solvedPass || 0;
+        results[i].attempts = sr.attempts || 0;
+      }
+      started = !!s.started;
+      startedAt = s.startedAt || Date.now();
+      if (s.roundDone) { showFinalized(); return; }
+      wordIdx = s.wordIdx; current = wordIdx; attempt = s.attempt || 1;
+      guess = s.guess || '';
+      progressEl.textContent = t('Word {n} of {total}', { n: wordIdx + 1, total: cfg.words.length })
+        + (attempt > 1 ? ' · ' + t('try {n}', { n: attempt }) : '');
+      submitBtn.disabled = false;
+      renderCircle();
+      if (s.phase === 'reveal' && normalize(guess)) {
+        renderReveal();
+      } else {
+        showInputPhase();
+        renderAnswer();
+      }
+    }
 
     playBtn.addEventListener('click', speak);
     repeatBtn.addEventListener('click', speak);
@@ -617,10 +687,13 @@
     advanceBtn.addEventListener('click', advance);
     document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers
 
-    startWord(0);
+    var resume = sanitizeResumeState(options.resumeState, cfg);
+    if (resume) restoreFrom(resume); else startWord(0);
 
     return {
       getResult: getResult,
+      getState: getState,
+      isComplete: function () { return roundDone; },
       isAnswered: function () { return started || roundDone; },
       destroy: function () { document.removeEventListener('keydown', onKey, true); container.classList.remove('sb-host'); },
     };
@@ -672,6 +745,7 @@
     ladderRank: ladderRank,
     normalizeConfig: normalizeConfig,
     validateConfig: validateConfig,
+    sanitizeResumeState: sanitizeResumeState,
     defaultQuestion: defaultQuestion,
     makeEdgeTtsPlayer: makeEdgeTtsPlayer,
     render: render,

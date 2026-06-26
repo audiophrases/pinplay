@@ -1414,6 +1414,7 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   assignmentFinalPlayed = false;
   lastAssignmentAudioKey = '';
   live.player.assignment.suppressAmbientResume = false;
+  _spellingBeeProgress.clear(); // fresh attempt → drop any prior in-progress rounds
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -2702,6 +2703,7 @@ function enterRetakeMode(state) {
 
   const retake = live.player.assignment.retake;
   retake.active = true;
+  _spellingBeeProgress.clear(); // retake is a fresh pass — don't resume original-attempt rounds
   retake.eligible = eligible.slice();
   retake.cleared = cleared.slice();
   retake.previousIndex = Number(live.player.assignment.currentIndex || 0);
@@ -3677,7 +3679,19 @@ function renderJoinQuestion(question) {
 
   // Tear down any previous Spelling Bee round (removes its document keydown listener)
   // before rendering the next question.
-  if (_spellingBeeController) { try { _spellingBeeController.destroy(); } catch (e) { /* noop */ } _spellingBeeController = null; }
+  if (_spellingBeeController) {
+    // Stash any unsaved progress for THIS question before tearing it down, so
+    // arrow-navigating back to it resumes instead of restarting (client-only).
+    if (_spellingBeeProgressIndex != null && typeof _spellingBeeController.getState === 'function') {
+      try {
+        const snap = _spellingBeeController.getState();
+        if (snap) _spellingBeeProgress.set(_spellingBeeProgressIndex, snap);
+      } catch (e) { /* noop */ }
+    }
+    try { _spellingBeeController.destroy(); } catch (e) { /* noop */ }
+    _spellingBeeController = null;
+  }
+  _spellingBeeProgressIndex = null;
   _spellingBeeRoundActive = false;
 
   applyJoinLayoutMode(true, question);
@@ -6736,6 +6750,12 @@ let _spellingBeeController = null;
 // keydown for word submit/advance). The host "Save answer ↵" button can't fire
 // then, so we hide its keycap to keep the ↵ hint meaningful — see renderPlayerState.
 let _spellingBeeRoundActive = false;
+// Unsaved in-progress rounds, keyed by question index, so the student can arrow-
+// navigate away and back without losing work. CLIENT-ONLY (no server write → zero
+// DO/R2 quota, no cleanup path); lives for the page session and is cleared at the
+// start of each attempt to avoid bleeding across attempts.
+const _spellingBeeProgress = new Map();
+let _spellingBeeProgressIndex = null;
 const _spellingBeeTtsPlayer = () => window.SpellingBee && window.SpellingBee.makeEdgeTtsPlayer({
   cache: studentEdgeTtsCache,
   getBackendUrl: () => loadBackendUrl() || DEFAULT_BACKEND_URL,
@@ -6744,6 +6764,7 @@ const _spellingBeeTtsPlayer = () => window.SpellingBee && window.SpellingBee.mak
 function renderSpellingBee(container, question) {
   _spellingBeeController = null;
   _spellingBeeRoundActive = false;
+  _spellingBeeProgressIndex = null;
   if (!window.SpellingBee) {
     const p = document.createElement('p');
     p.className = 'small';
@@ -6751,11 +6772,17 @@ function renderSpellingBee(container, question) {
     container.appendChild(p);
     return;
   }
+  const currentIndex = live.player.assignment.currentIndex;
   const reviewMode = !!live.player.assignment.reviewMode;
   const rawAnswers = live.player.assignment.state?.attempt?.answersByQ || {};
-  const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
+  const answerObj = rawAnswers[String(currentIndex)];
   const savedResult = (answerObj && answerObj.answer && typeof answerObj.answer === 'object'
     && Array.isArray(answerObj.answer.words)) ? answerObj.answer : null;
+
+  // Resume an unsaved round the student left when arrow-navigating away (skipped
+  // in review mode, which renders the saved summary instead).
+  _spellingBeeProgressIndex = currentIndex;
+  const resumeState = reviewMode ? undefined : _spellingBeeProgress.get(currentIndex);
 
   // Review mode shows a static summary (no Enter capture); the interactive round
   // owns Enter, so suppress the host button's duplicate ↵ for its duration.
@@ -6777,9 +6804,15 @@ function renderSpellingBee(container, question) {
     playWord,
     reviewMode,
     savedResult,
+    resumeState,
     onChange: () => { markAnswerDirty(); },
     onComplete: () => { _spellingBeeRoundActive = false; restoreJoinSubmitEnterHint(); },
   });
+
+  // A resumed round that was already finished hands Enter back to the host button.
+  if (_spellingBeeController && _spellingBeeController.isComplete && _spellingBeeController.isComplete()) {
+    _spellingBeeRoundActive = false;
+  }
 }
 
 async function speakText(text, lang = 'en-US-Wave') {

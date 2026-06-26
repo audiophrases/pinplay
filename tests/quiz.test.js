@@ -1388,3 +1388,39 @@ describe('SpellingBee.ladderRank', () => {
     assert.equal(SB.ladderRank(10, 10), 'genius');
   });
 });
+
+describe('SpellingBee.sanitizeResumeState (navigate-away resume)', () => {
+  const cfg = { words: [{ target: 'cat' }, { target: 'dog' }, { target: 'fish' }] };
+  const mid = {
+    v: 1,
+    results: [
+      { target: 'cat', guess: 'cat', correct: true, solvedPass: 1, attempts: 1 },
+      { target: 'dog', guess: '', correct: false, solvedPass: 0, attempts: 0 },
+      { target: 'fish', guess: '', correct: false, solvedPass: 0, attempts: 0 },
+    ],
+    wordIdx: 1, attempt: 1, phase: 'input', advanceAction: null,
+    guess: 'do', roundDone: false, started: true, startedAt: 1,
+  };
+  it('accepts a snapshot that matches the question', () => {
+    assert.equal(SB.sanitizeResumeState(mid, cfg), mid);
+  });
+  it('rejects a different word count', () => {
+    assert.equal(SB.sanitizeResumeState(mid, { words: [{ target: 'cat' }] }), null);
+  });
+  it('rejects mismatched targets (quiz was edited)', () => {
+    const other = { words: [{ target: 'cat' }, { target: 'pig' }, { target: 'fish' }] };
+    assert.equal(SB.sanitizeResumeState(mid, other), null);
+  });
+  it('rejects an out-of-range wordIdx for an unfinished round', () => {
+    assert.equal(SB.sanitizeResumeState({ ...mid, wordIdx: 9 }, cfg), null);
+  });
+  it('accepts a finished round regardless of wordIdx', () => {
+    const done = { ...mid, roundDone: true, wordIdx: 99 };
+    assert.equal(SB.sanitizeResumeState(done, cfg), done);
+  });
+  it('rejects junk', () => {
+    assert.equal(SB.sanitizeResumeState(null, cfg), null);
+    assert.equal(SB.sanitizeResumeState({}, cfg), null);
+    assert.equal(SB.sanitizeResumeState({ results: 'nope' }, cfg), null);
+  });
+});
