@@ -1307,15 +1307,40 @@ describe('SpellingBee.buildTiles', () => {
       if ('cat'.includes(t.text)) assert.equal(t.distractor, false);
     });
   });
-  it('auto-adds in-word clusters as (non-distractor) tiles', () => {
+  it('does NOT auto-add in-word clusters (keeps the hive compact)', () => {
     const tiles = SB.buildTiles('letter', { distractors: [] });
-    const tt = tiles.find((t) => t.text === 'tt');
-    assert.ok(tt && tt.distractor === false);
+    assert.ok(!tiles.some((t) => t.text === 'tt')); // only author clusters become tiles
   });
   it('rejects author clusterTiles outside the inventory or not in the word', () => {
     const tiles = SB.buildTiles('nation', { clusterTiles: ['tion', 'ck'] });
     assert.ok(!tiles.some((t) => t.text === 'tion')); // not in the cluster inventory
     assert.ok(!tiles.some((t) => t.text === 'ck'));    // not present in "nation"
+  });
+  it('includes author clusters and drops singles they fully cover', () => {
+    const tiles = SB.buildTiles('knowledge', { clusterTiles: ['kn', 'dge'] });
+    const texts = tiles.map((t) => t.text);
+    assert.ok(texts.includes('kn') && texts.includes('dge'));
+    // k/n/d/g only ever appear inside kn/dge → pruned as single tiles
+    ['k', 'n', 'd', 'g'].forEach((s) => assert.ok(!texts.includes(s), `should drop single "${s}"`));
+    assert.ok(texts.length <= 7, `expected ≤7 tiles, got ${texts.length}`);
+  });
+  it('keeps a single letter that also appears outside a cluster', () => {
+    // rhythm + "th": the first h (in "rh") is standalone → single h must stay; t only in th → dropped
+    const texts = SB.buildTiles('rhythm', { clusterTiles: ['th'] }).map((t) => t.text);
+    assert.ok(texts.includes('h'));
+    assert.ok(!texts.includes('t'));
+  });
+  it('always yields a tile set that can spell the target', () => {
+    [
+      ['knowledge', { clusterTiles: ['kn', 'dge'] }],
+      ['succeed', { distractors: ['ea'], clusterTiles: ['ee'] }],
+      ['embarrass', { clusterTiles: ['rr', 'ss'] }],
+      ['conscious', { clusterTiles: ['sc'] }],
+      ['castle', {}],
+    ].forEach(([word, opts]) => {
+      const texts = SB.buildTiles(word, opts).map((t) => t.text);
+      assert.ok(SB.canSpell(word, texts), `${word} not spellable from ${JSON.stringify(texts)}`);
+    });
   });
 });
 

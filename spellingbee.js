@@ -113,11 +113,20 @@
     distinct.forEach(function (c) { present[c] = 1; });
     var out = [];
 
-    // A confusable absent vowel-cluster decoy when the word uses a vowel cluster.
-    if (inWord.some(function (c) { return VOWEL_CLUSTERS.indexOf(c) >= 0; })) {
+    // A confusable absent vowel-cluster decoy when the word uses a vowel cluster —
+    // prefer one that SHARES a letter with the in-word cluster (ou↔au, ee↔ea) over
+    // an arbitrary one like "eau", so the trap actually looks plausible.
+    var inWordVowel = inWord.filter(function (c) { return VOWEL_CLUSTERS.indexOf(c) >= 0; });
+    if (inWordVowel.length) {
+      var letters = inWordVowel.join('');
+      var pick = null, firstAbsent = null;
       for (var v = 0; v < VOWEL_CLUSTERS.length; v++) {
-        if (n.indexOf(VOWEL_CLUSTERS[v]) < 0) { out.push(VOWEL_CLUSTERS[v]); break; }
+        var vc = VOWEL_CLUSTERS[v];
+        if (n.indexOf(vc) >= 0) continue; // must be absent from the word
+        if (firstAbsent === null) firstAbsent = vc;
+        if (vc.length === 2 && vc.split('').some(function (ch) { return letters.indexOf(ch) >= 0; })) { pick = vc; break; }
       }
+      if (pick || firstAbsent) out.push(pick || firstAbsent);
     }
     // Fill with common confusable single letters absent from the word.
     var pool = ['e', 'a', 's', 'c', 'k', 'h', 't', 'r', 'n', 'o', 'i', 'l',
@@ -128,26 +137,56 @@
     return out.slice(0, count);
   }
 
-  // Build the display tiles for one word: distinct letters (always) + clusters
-  // (auto-detected in-word ones + valid author clusterTiles) + distractor tiles.
-  // Each tile is { text, distractor } where distractor === (text not a substring
-  // of the target) — that flag drives the red-flash-and-don't-insert behaviour.
+  // Can `target` be spelled by repeatedly using tiles from `tileTexts`? (Tiles are
+  // reusable — tapping the same key twice is allowed.) Simple reachability DP over
+  // string positions. Used to prune redundant single-letter tiles.
+  function canSpell(target, tileTexts) {
+    var n = normalize(target), L = n.length;
+    if (!L) return true;
+    var reach = new Array(L + 1); reach[0] = true;
+    for (var i = 0; i < L; i++) {
+      if (!reach[i]) continue;
+      for (var k = 0; k < tileTexts.length; k++) {
+        var tt = tileTexts[k];
+        if (tt && n.substr(i, tt.length) === tt) reach[i + tt.length] = true;
+      }
+    }
+    return !!reach[L];
+  }
+
+  // Build the display tiles for one word, aiming for a compact NYT-style hive of
+  // ~7 keys. Keys = the valid author clusterTiles + only the single letters STILL
+  // NEEDED once those clusters are in play (a letter that only ever appears inside
+  // a cluster, like the k/n of "kn", is dropped) + distractors. In-word clusters
+  // are NOT auto-added — they just bloat the hive; the author picks the meaningful
+  // ones per word. Each tile is { text, distractor } where distractor === (text not
+  // a substring of the target) — that flag drives the red-flash-don't-insert nudge.
   function buildTiles(word, opts) {
     opts = opts || {};
     var n = normalize(word);
-    var texts = [];
-    var push = function (s) { if (s && texts.indexOf(s) < 0) texts.push(s); };
 
-    distinctLetters(word).forEach(push);
-    inWordClusters(word).forEach(push);
+    var clusters = [];
     (opts.clusterTiles || []).forEach(function (c) {
       var cc = normalize(c);
-      if (cc.length >= 2 && CLUSTERS.indexOf(cc) >= 0 && n.indexOf(cc) >= 0) push(cc);
+      if (cc.length >= 2 && CLUSTERS.indexOf(cc) >= 0 && n.indexOf(cc) >= 0 && clusters.indexOf(cc) < 0) clusters.push(cc);
     });
-    var distract = (opts.distractors && opts.distractors.length)
-      ? opts.distractors.map(normalize).filter(Boolean).slice(0, MAX_DISTRACTORS)
-      : autoDistractors(word);
-    distract.forEach(push);
+
+    // Start from clusters + every distinct letter, then greedily drop any single
+    // whose removal still leaves the word spellable (i.e. a cluster covers it).
+    var working = clusters.concat(distinctLetters(word));
+    distinctLetters(word).forEach(function (s) {
+      var without = working.filter(function (x) { return x !== s; });
+      if (canSpell(n, without)) working = without;
+    });
+
+    var texts = working.slice();
+    var push = function (s) { if (s && texts.indexOf(s) < 0) texts.push(s); };
+    if (opts.distractors && opts.distractors.length) {
+      opts.distractors.map(normalize).filter(Boolean).slice(0, MAX_DISTRACTORS).forEach(push);
+    } else {
+      // Auto-fill decoys only up to the ~7-key target given the core size.
+      autoDistractors(word).slice(0, Math.max(0, TILE_TARGET - texts.length)).forEach(push);
+    }
 
     return shuffle(texts.map(function (txt) {
       return { text: txt, distractor: n.indexOf(txt) < 0 };
@@ -409,6 +448,7 @@
     var startedAt = Date.now();
     var currentTiles = [];
     var tileBtns = {};
+    var keyBuffer = '';    // typed letters building toward a multi-letter cluster tile
 
     function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
     function button(cls, label) { var b = document.createElement('button'); b.type = 'button'; b.className = 'sb-btn ' + cls; b.textContent = label; return b; }
@@ -444,7 +484,9 @@
     var circleEl = el('div', 'sb-circle');
     var ladderEl = el('div', 'sb-ladder hidden');
     var feedbackEl = el('div', 'sb-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
-    root.append(header, audioRow, answerEl, controls, advanceRow, circleEl, ladderEl, feedbackEl);
+    // Order mirrors NYT Spelling Bee: clue/answer on top, the hive, then the action
+    // buttons (Backspace / Clear / Submit, or the advance button) BELOW the hive.
+    root.append(header, audioRow, answerEl, circleEl, controls, advanceRow, ladderEl, feedbackEl);
     container.appendChild(root);
 
     // Help escalates with the attempt number on the SAME word (no list-wide passes).
@@ -508,7 +550,7 @@
         var lab = el('span', 'sb-tile-label'); lab.textContent = tile.text;
         b.appendChild(lab);
         b.dataset.distractor = tile.distractor ? '1' : '0';
-        b.addEventListener('click', function () { onTile(tile, b); });
+        b.addEventListener('click', function () { keyBuffer = ''; onTile(tile, b); });
         tileBtns[tile.text] = b;
         circleEl.appendChild(b);
       });
@@ -539,8 +581,28 @@
       guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer(); pop(btn);
     }
 
-    // Physical keyboard: a letter matching a tile acts like tapping it; a letter
-    // NOT in the circle does nothing. Enter submits, Backspace deletes.
+    function tileByText(s) { for (var i = 0; i < currentTiles.length; i++) if (currentTiles[i].text === s) return currentTiles[i]; return null; }
+    function someTileStartsWith(prefix) { return currentTiles.some(function (t) { return t.text.length > prefix.length && t.text.indexOf(prefix) === 0; }); }
+
+    // Type a single physical letter. Single-letter tiles tap immediately; letters
+    // that only live inside a cluster tile (the k/n of "kn") buffer until they spell
+    // a whole cluster, so you can still type cluster words. Returns true if handled.
+    function typeLetter(letter) {
+      if (keyBuffer) {
+        var buf = keyBuffer + letter;
+        var exact = tileByText(buf);
+        if (exact) { keyBuffer = ''; onTile(exact, tileBtns[buf]); return true; }
+        if (someTileStartsWith(buf)) { keyBuffer = buf; return true; }
+        keyBuffer = ''; // dead end → fall through and treat this letter as fresh
+      }
+      var single = tileByText(letter);
+      if (single) { onTile(single, tileBtns[letter]); return true; }
+      if (someTileStartsWith(letter)) { keyBuffer = letter; return true; } // start a cluster
+      return false; // letter not in the circle → do nothing
+    }
+
+    // Physical keyboard: a letter matching a tile (or building one) acts like tapping
+    // it; a letter NOT in the circle does nothing. Enter submits, Backspace deletes.
     function onKey(e) {
       if (roundDone || current < 0) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -550,13 +612,9 @@
         return;
       }
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); return; }
-      if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
+      if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); keyBuffer = ''; if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
       if (k && k.length === 1 && /[a-z]/i.test(k)) {
-        var letter = normalize(k);
-        var tile = currentTiles.filter(function (x) { return x.text === letter; })[0];
-        if (!tile) return; // letter not in the circle → do nothing
-        e.preventDefault(); e.stopPropagation();
-        onTile(tile, tileBtns[letter]);
+        if (typeLetter(normalize(k))) { e.preventDefault(); e.stopPropagation(); }
       }
     }
 
@@ -567,7 +625,7 @@
 
     // Start (or retry) the current word at the current attempt's help level.
     function beginAttempt() {
-      guess = '';
+      guess = ''; keyBuffer = '';
       feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
       progressEl.textContent = t('Word {n} of {total}', { n: wordIdx + 1, total: cfg.words.length })
         + (attempt > 1 ? ' · ' + t('try {n}', { n: attempt }) : '');
@@ -602,6 +660,7 @@
 
     function submit() {
       if (roundDone || phase !== 'input' || current < 0) return;
+      keyBuffer = '';
       if (!normalize(guess)) { feedbackEl.textContent = t('Tap letters to spell the word first.'); feedbackEl.className = 'sb-feedback sb-bad'; return; }
       started = true;
       var w = cfg.words[current];
@@ -716,8 +775,8 @@
 
     playBtn.addEventListener('click', speak);
     repeatBtn.addEventListener('click', speak);
-    backBtn.addEventListener('click', function () { if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
-    clearBtn.addEventListener('click', function () { if (phase === 'input') { guess = ''; renderAnswer(); } });
+    backBtn.addEventListener('click', function () { keyBuffer = ''; if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
+    clearBtn.addEventListener('click', function () { keyBuffer = ''; if (phase === 'input') { guess = ''; renderAnswer(); } });
     submitBtn.addEventListener('click', submit);
     advanceBtn.addEventListener('click', advance);
     document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers
@@ -773,6 +832,7 @@
     inWordClusters: inWordClusters,
     autoDistractors: autoDistractors,
     buildTiles: buildTiles,
+    canSpell: canSpell,
     honeycombLayout: honeycombLayout,
     gradeWord: gradeWord,
     wordleStatuses: wordleStatuses,
