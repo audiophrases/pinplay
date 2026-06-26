@@ -1300,6 +1300,7 @@ body.question-active .join-title-row {
 
 .voice-record-btn kbd,
 .voice-record-stop-btn kbd,
+.sb-btn kbd,
 #joinSubmitBtn kbd {
   background: rgba(255,255,255,0.25);
   border: 1px solid rgba(255,255,255,0.45);

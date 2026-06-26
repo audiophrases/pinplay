@@ -346,8 +346,22 @@ function markAnswerDirty() {
   live.player.assignment.dirtyAnswer = true;
   if (joinSubmitBtn && joinSubmitBtn.dataset.mode === 'continue') {
     joinSubmitBtn.dataset.mode = 'save';
-    joinSubmitBtn.innerHTML = t('Save answer') + ' <kbd>\u21b5</kbd>';
+    joinSubmitBtn.innerHTML = t('Save answer') + joinSubmitEnterHint();
   }
+}
+
+// The \u21b5 keycap on the host submit button is suppressed while a Spelling Bee round
+// is capturing Enter; everywhere else it shows normally.
+function joinSubmitEnterHint() {
+  return _spellingBeeRoundActive ? '' : ' <kbd>\u21b5</kbd>';
+}
+
+// Re-apply the host submit button's \u21b5 once a Spelling Bee round ends (Enter now
+// operates Save/Continue/Finish again). Live mode's "Submit" carries no keycap.
+function restoreJoinSubmitEnterHint() {
+  if (!joinSubmitBtn) return;
+  const base = { save: t('Save answer'), continue: t('Continue'), finish: t('Finish quiz') }[joinSubmitBtn.dataset.mode];
+  if (base) joinSubmitBtn.innerHTML = base + ' <kbd>\u21b5</kbd>';
 }
 
 function pingEdgeTtsBridgeWarmup() {
@@ -3364,11 +3378,11 @@ function renderPlayerState(state) {
       && !assignmentSubmitted;
 
     if (isContinueMode) {
-      joinSubmitBtn.innerHTML = (live.player.assignment.pendingComplete ? t('Finish quiz') : t('Continue')) + ' <kbd>\u21b5</kbd>';
+      joinSubmitBtn.innerHTML = (live.player.assignment.pendingComplete ? t('Finish quiz') : t('Continue')) + joinSubmitEnterHint();
       joinSubmitBtn.dataset.mode = live.player.assignment.pendingComplete ? 'finish' : 'continue';
       joinSubmitBtn.disabled = false;
     } else {
-      joinSubmitBtn.innerHTML = isAssignment ? t('Save answer') + ' <kbd>\u21b5</kbd>' : t('Submit');
+      joinSubmitBtn.innerHTML = isAssignment ? t('Save answer') + joinSubmitEnterHint() : t('Submit');
       joinSubmitBtn.dataset.mode = isAssignment ? 'save' : 'submit';
       joinSubmitBtn.disabled = shouldDisable;
     }
@@ -3664,6 +3678,7 @@ function renderJoinQuestion(question) {
   // Tear down any previous Spelling Bee round (removes its document keydown listener)
   // before rendering the next question.
   if (_spellingBeeController) { try { _spellingBeeController.destroy(); } catch (e) { /* noop */ } _spellingBeeController = null; }
+  _spellingBeeRoundActive = false;
 
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) {
@@ -6717,6 +6732,10 @@ const studentEdgeTtsCache = new Map();
 // just host it: feed it our Edge-TTS player (sharing studentEdgeTtsCache) and
 // stash the live controller so readJoinAnswer can read the round result.
 let _spellingBeeController = null;
+// True while an interactive Spelling Bee round owns the Enter key (it captures
+// keydown for word submit/advance). The host "Save answer ↵" button can't fire
+// then, so we hide its keycap to keep the ↵ hint meaningful — see renderPlayerState.
+let _spellingBeeRoundActive = false;
 const _spellingBeeTtsPlayer = () => window.SpellingBee && window.SpellingBee.makeEdgeTtsPlayer({
   cache: studentEdgeTtsCache,
   getBackendUrl: () => loadBackendUrl() || DEFAULT_BACKEND_URL,
@@ -6724,6 +6743,7 @@ const _spellingBeeTtsPlayer = () => window.SpellingBee && window.SpellingBee.mak
 
 function renderSpellingBee(container, question) {
   _spellingBeeController = null;
+  _spellingBeeRoundActive = false;
   if (!window.SpellingBee) {
     const p = document.createElement('p');
     p.className = 'small';
@@ -6736,6 +6756,10 @@ function renderSpellingBee(container, question) {
   const answerObj = rawAnswers[String(live.player.assignment.currentIndex)];
   const savedResult = (answerObj && answerObj.answer && typeof answerObj.answer === 'object'
     && Array.isArray(answerObj.answer.words)) ? answerObj.answer : null;
+
+  // Review mode shows a static summary (no Enter capture); the interactive round
+  // owns Enter, so suppress the host button's duplicate ↵ for its duration.
+  _spellingBeeRoundActive = !(reviewMode && savedResult);
 
   // Duck the ambient/background loop while a word plays and resume after — same
   // behaviour as the standard question audio (mirrors the 🎧 replay path).
@@ -6754,6 +6778,7 @@ function renderSpellingBee(container, question) {
     reviewMode,
     savedResult,
     onChange: () => { markAnswerDirty(); },
+    onComplete: () => { _spellingBeeRoundActive = false; restoreJoinSubmitEnterHint(); },
   });
 }
 

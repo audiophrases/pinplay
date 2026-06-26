@@ -370,6 +370,15 @@
 
     function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
     function button(cls, label) { var b = document.createElement('button'); b.type = 'button'; b.className = 'sb-btn ' + cls; b.textContent = label; return b; }
+    // The ↵ keycap follows the Enter key: it sits on Submit while typing and on the
+    // advance button while a result is shown. Only one of those is ever visible at a
+    // time, so the hint always points at what Enter does right now.
+    function setEnterLabel(btn, label) {
+      btn.textContent = label;
+      btn.appendChild(document.createTextNode(' '));
+      var kb = document.createElement('kbd'); kb.className = 'sb-kbd'; kb.textContent = '↵';
+      btn.appendChild(kb);
+    }
 
     var root = el('div', 'sb-game');
     var header = el('div', 'sb-header');
@@ -385,6 +394,7 @@
     var backBtn = button('sb-backspace', t('⌫'));
     var clearBtn = button('sb-clear', t('Clear'));
     var submitBtn = button('sb-submit btn-primary', t('Submit'));
+    setEnterLabel(submitBtn, t('Submit'));
     controls.append(backBtn, clearBtn, submitBtn);
     var advanceRow = el('div', 'sb-advance-row hidden');
     var advanceBtn = button('sb-advance btn-primary', t('Next'));
@@ -409,7 +419,7 @@
       phase = 'reveal';
       controls.classList.add('hidden');
       circleEl.classList.add('hidden');
-      advanceBtn.textContent = label;
+      setEnterLabel(advanceBtn, label);
       advanceRow.classList.remove('hidden');
     }
 
