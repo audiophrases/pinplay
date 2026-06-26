@@ -154,6 +154,32 @@
     }));
   }
 
+  // Honeycomb placement: tile 0 sits in the centre, the rest fan out on concentric
+  // hex rings (6, then 12, …) so any tile count reads as a NYT-style flower instead
+  // of a wrapped grid. Returns {x,y} px offsets from centre + the box size to fit.
+  var TILE_PX = 54; // must match .sb-tile width in styles.css
+  function honeycombLayout(n) {
+    var pos = [{ x: 0, y: 0 }];
+    var rest = n - 1, ring = 1, gap = 6;
+    var step = TILE_PX * 0.92 + gap;
+    var maxAbs = 0;
+    while (rest > 0) {
+      var count = Math.min(ring * 6, rest);
+      var radius = ring * step;
+      var base = -Math.PI / 2;                                  // start at the top
+      var stagger = (ring % 2 === 0) ? Math.PI / count : 0;     // offset even rings
+      for (var k = 0; k < count; k++) {
+        var a = base + stagger + k * (2 * Math.PI / count);
+        var x = Math.round(radius * Math.cos(a));
+        var y = Math.round(radius * Math.sin(a));
+        pos.push({ x: x, y: y });
+        maxAbs = Math.max(maxAbs, Math.abs(x), Math.abs(y));
+      }
+      rest -= count; ring++;
+    }
+    return { positions: pos, size: Math.round(2 * (maxAbs + TILE_PX / 2) + 6) };
+  }
+
   // --------------------------------------------------------------------- grading
   function gradeWord(target, guess) {
     var t = normalize(target);
@@ -470,10 +496,17 @@
       circleEl.innerHTML = ''; tileBtns = {};
       var w = cfg.words[current];
       currentTiles = buildTiles(w.target, { distractors: w.distractors, clusterTiles: w.clusterTiles });
+      var layout = honeycombLayout(currentTiles.length);
+      circleEl.style.width = layout.size + 'px';
+      circleEl.style.height = layout.size + 'px';
       currentTiles.forEach(function (tile, i) {
         var b = el('button', 'sb-tile' + (i === 0 ? ' sb-tile-center' : ''));
         b.type = 'button';
-        b.textContent = tile.text;
+        var p = layout.positions[i];
+        b.style.setProperty('--tx', p.x + 'px');
+        b.style.setProperty('--ty', p.y + 'px');
+        var lab = el('span', 'sb-tile-label'); lab.textContent = tile.text;
+        b.appendChild(lab);
         b.dataset.distractor = tile.distractor ? '1' : '0';
         b.addEventListener('click', function () { onTile(tile, b); });
         tileBtns[tile.text] = b;
@@ -482,6 +515,8 @@
     }
 
     function flash(btn) { if (!btn) return; btn.classList.remove('sb-flash'); void btn.offsetWidth; btn.classList.add('sb-flash'); }
+    // Quick scale-pop when a tile's letter lands in the answer row — tactile juice.
+    function pop(btn) { if (!btn) return; btn.classList.remove('sb-pop'); void btn.offsetWidth; btn.classList.add('sb-pop'); }
 
     function onTile(tile, btn) {
       if (roundDone || phase !== 'input' || current < 0) return;
@@ -490,7 +525,7 @@
         var cand = normalize(guess + tile.text);
         var tgt = normalize(cfg.words[current].target);
         if (cand.length <= tgt.length && tgt.indexOf(cand) === 0) {
-          guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer();
+          guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer(); pop(btn);
         } else {
           flash(btn); feedbackEl.textContent = t('Not the next letter'); feedbackEl.className = 'sb-feedback sb-bad';
         }
@@ -501,7 +536,7 @@
         return;
       }
       if (normalize(guess).length >= 28) return;
-      guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer();
+      guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer(); pop(btn);
     }
 
     // Physical keyboard: a letter matching a tile acts like tapping it; a letter
@@ -738,6 +773,7 @@
     inWordClusters: inWordClusters,
     autoDistractors: autoDistractors,
     buildTiles: buildTiles,
+    honeycombLayout: honeycombLayout,
     gradeWord: gradeWord,
     wordleStatuses: wordleStatuses,
     passWeight: passWeight,

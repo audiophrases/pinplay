@@ -1389,6 +1389,32 @@ describe('SpellingBee.ladderRank', () => {
   });
 });
 
+describe('SpellingBee.honeycombLayout (circle placement)', () => {
+  const dist = (p) => Math.round(Math.hypot(p.x, p.y));
+  it('puts tile 0 at the centre', () => {
+    const r = SB.honeycombLayout(7);
+    assert.deepEqual(r.positions[0], { x: 0, y: 0 });
+  });
+  it('returns one position per tile and a positive box size', () => {
+    const r = SB.honeycombLayout(11);
+    assert.equal(r.positions.length, 11);
+    assert.ok(r.size > 0);
+  });
+  it('places the first ring (≤6) at a single radius', () => {
+    const r = SB.honeycombLayout(7); // centre + 6
+    const radii = r.positions.slice(1).map(dist);
+    assert.ok(radii.every((d) => d === radii[0]));
+  });
+  it('spills past 6 onto an outer ring (bigger box)', () => {
+    assert.ok(SB.honeycombLayout(12).size > SB.honeycombLayout(7).size);
+  });
+  it('handles a lone tile', () => {
+    const r = SB.honeycombLayout(1);
+    assert.equal(r.positions.length, 1);
+    assert.deepEqual(r.positions[0], { x: 0, y: 0 });
+  });
+});
+
 describe('SpellingBee.sanitizeResumeState (navigate-away resume)', () => {
   const cfg = { words: [{ target: 'cat' }, { target: 'dog' }, { target: 'fish' }] };
   const mid = {

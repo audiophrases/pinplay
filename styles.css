@@ -4834,47 +4834,71 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 
 .sb-controls { display: flex; gap: 8px; }
 
-/* The reduced letter "circle" (single + cluster tiles). */
+/* The reduced-letter honeycomb (single + cluster tiles), laid out as a NYT-style
+   flower: a gold centre tile with the rest on concentric hex rings. Tile offsets
+   (--tx/--ty) and the box size are computed in spellingbee.js (honeycombLayout). */
 .sb-circle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  max-width: 420px;
+  position: relative;
+  margin: 6px auto 2px;
+  touch-action: manipulation;
 }
 .sb-tile {
-  cursor: pointer;
-  min-width: 48px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
   height: 48px;
-  padding: 0 10px;
-  font-size: 1.2rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 800;
   text-transform: lowercase;
-  border: 2px solid var(--primary);
-  background: var(--card);
   color: var(--text);
-  border-radius: 12px;
-  transition: transform 0.06s ease;
+  background: color-mix(in srgb, var(--primary) 14%, var(--card));
+  border: none;
+  padding: 0;
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.18));
+  transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0));
+  transition: transform 0.08s ease, filter 0.1s ease, background 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.sb-tile:hover { transform: translateY(-2px); }
-.sb-tile:active { transform: translateY(0); }
+.sb-tile:hover {
+  transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(1.12);
+  filter: brightness(1.06) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.22));
+  z-index: 2;
+}
+.sb-tile:active {
+  transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(0.95);
+}
 .sb-tile-center {
-  background: var(--primary);
-  color: #fff;
+  background: #f5d000; /* honey gold — ties to the Genius rank badge */
+  color: #4a3a00;
 }
-.sb-tile.sb-flash {
-  animation: sb-flash-red 0.45s ease;
+.sb-tile-label { pointer-events: none; line-height: 1; }
+.sb-tile.sb-pop { animation: sb-tile-pop 0.18s ease; }
+@keyframes sb-tile-pop {
+  0% { transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(0.95); }
+  55% { transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(1.16); }
+  100% { transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(1); }
 }
+.sb-tile.sb-flash { animation: sb-flash-red 0.45s ease; }
 @keyframes sb-flash-red {
-  0%, 100% { background: var(--card); border-color: var(--primary); color: var(--text); }
-  30%, 70% { background: var(--bad); border-color: var(--bad); color: #fff; }
+  0%, 100% { background: color-mix(in srgb, var(--primary) 14%, var(--card)); color: var(--text); }
+  30%, 70% { background: var(--bad); color: #fff; }
 }
-.sb-tile-center.sb-flash {
-  animation: sb-flash-red-center 0.45s ease;
-}
+.sb-tile-center.sb-flash { animation: sb-flash-red-center 0.45s ease; }
 @keyframes sb-flash-red-center {
-  0%, 100% { background: var(--primary); border-color: var(--primary); }
-  30%, 70% { background: var(--bad); border-color: var(--bad); }
+  0%, 100% { background: #f5d000; color: #4a3a00; }
+  30%, 70% { background: var(--bad); color: #fff; }
+}
+.sb-tile.sb-flash .sb-tile-label { animation: sb-shake 0.4s ease; }
+@keyframes sb-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
 }
 
 .sb-feedback { min-height: 22px; text-align: center; font-weight: 600; }
@@ -4917,6 +4941,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sb-tile.sb-flash, .sb-tile-center.sb-flash { animation: none; }
+  .sb-tile.sb-flash, .sb-tile-center.sb-flash, .sb-tile.sb-pop,
+  .sb-tile.sb-flash .sb-tile-label { animation: none; }
   .sb-game.sb-speaking .sb-play { animation: none; }
 }
