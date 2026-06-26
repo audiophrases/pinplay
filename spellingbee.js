@@ -448,7 +448,6 @@
     var startedAt = Date.now();
     var currentTiles = [];
     var tileBtns = {};
-    var keyBuffer = '';    // typed letters building toward a multi-letter cluster tile
 
     function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
     function button(cls, label) { var b = document.createElement('button'); b.type = 'button'; b.className = 'sb-btn ' + cls; b.textContent = label; return b; }
@@ -550,7 +549,7 @@
         var lab = el('span', 'sb-tile-label'); lab.textContent = tile.text;
         b.appendChild(lab);
         b.dataset.distractor = tile.distractor ? '1' : '0';
-        b.addEventListener('click', function () { keyBuffer = ''; onTile(tile, b); });
+        b.addEventListener('click', function () { onTile(tile, b); });
         tileBtns[tile.text] = b;
         circleEl.appendChild(b);
       });
@@ -581,28 +580,34 @@
       guess += tile.text; feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback'; renderAnswer(); pop(btn);
     }
 
-    function tileByText(s) { for (var i = 0; i < currentTiles.length; i++) if (currentTiles[i].text === s) return currentTiles[i]; return null; }
-    function someTileStartsWith(prefix) { return currentTiles.some(function (t) { return t.text.length > prefix.length && t.text.indexOf(prefix) === 0; }); }
-
-    // Type a single physical letter. Single-letter tiles tap immediately; letters
-    // that only live inside a cluster tile (the k/n of "kn") buffer until they spell
-    // a whole cluster, so you can still type cluster words. Returns true if handled.
-    function typeLetter(letter) {
-      if (keyBuffer) {
-        var buf = keyBuffer + letter;
-        var exact = tileByText(buf);
-        if (exact) { keyBuffer = ''; onTile(exact, tileBtns[buf]); return true; }
-        if (someTileStartsWith(buf)) { keyBuffer = buf; return true; }
-        keyBuffer = ''; // dead end → fall through and treat this letter as fresh
+    // The hive tile whose key the typed letter should activate: an exact single
+    // tile if there is one, otherwise the (non-distractor) cluster tile that contains
+    // the letter — so typing the k of "kn" lights up the kn tile. null if the letter
+    // isn't available at all.
+    function displayTileForLetter(letter) {
+      var cluster = null;
+      for (var i = 0; i < currentTiles.length; i++) {
+        var tt = currentTiles[i];
+        if (tt.distractor) continue;
+        if (tt.text === letter) return tileBtns[tt.text];           // exact single tile
+        if (!cluster && tt.text.length > 1 && tt.text.indexOf(letter) >= 0) cluster = tt;
       }
-      var single = tileByText(letter);
-      if (single) { onTile(single, tileBtns[letter]); return true; }
-      if (someTileStartsWith(letter)) { keyBuffer = letter; return true; } // start a cluster
-      return false; // letter not in the circle → do nothing
+      return cluster ? tileBtns[cluster.text] : null;
     }
 
-    // Physical keyboard: a letter matching a tile (or building one) acts like tapping
-    // it; a letter NOT in the circle does nothing. Enter submits, Backspace deletes.
+    // Physical typing is forgiving: any letter that belongs to a non-distractor tile
+    // — including a letter that only lives inside a cluster (the k/n of "kn") — is
+    // appended one at a time, in any order, so the keystroke always visibly lands and
+    // its tile pops. Letters not available in the hive do nothing. Routed through
+    // onTile so trace mode + length limits still apply.
+    function typeLetter(letter) {
+      var host = displayTileForLetter(letter);
+      if (!host) return false;
+      onTile({ text: letter, distractor: false }, host);
+      return true;
+    }
+
+    // Physical keyboard. Enter submits, Backspace deletes, letters type (see above).
     function onKey(e) {
       if (roundDone || current < 0) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -612,7 +617,7 @@
         return;
       }
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); return; }
-      if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); keyBuffer = ''; if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
+      if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
       if (k && k.length === 1 && /[a-z]/i.test(k)) {
         if (typeLetter(normalize(k))) { e.preventDefault(); e.stopPropagation(); }
       }
@@ -625,7 +630,7 @@
 
     // Start (or retry) the current word at the current attempt's help level.
     function beginAttempt() {
-      guess = ''; keyBuffer = '';
+      guess = '';
       feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
       progressEl.textContent = t('Word {n} of {total}', { n: wordIdx + 1, total: cfg.words.length })
         + (attempt > 1 ? ' · ' + t('try {n}', { n: attempt }) : '');
@@ -660,7 +665,6 @@
 
     function submit() {
       if (roundDone || phase !== 'input' || current < 0) return;
-      keyBuffer = '';
       if (!normalize(guess)) { feedbackEl.textContent = t('Tap letters to spell the word first.'); feedbackEl.className = 'sb-feedback sb-bad'; return; }
       started = true;
       var w = cfg.words[current];
@@ -775,8 +779,8 @@
 
     playBtn.addEventListener('click', speak);
     repeatBtn.addEventListener('click', speak);
-    backBtn.addEventListener('click', function () { keyBuffer = ''; if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
-    clearBtn.addEventListener('click', function () { keyBuffer = ''; if (phase === 'input') { guess = ''; renderAnswer(); } });
+    backBtn.addEventListener('click', function () { if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
+    clearBtn.addEventListener('click', function () { if (phase === 'input') { guess = ''; renderAnswer(); } });
     submitBtn.addEventListener('click', submit);
     advanceBtn.addEventListener('click', advance);
     document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers

@@ -4759,7 +4759,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
@@ -4805,14 +4805,17 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-game.sb-speaking .sb-play { animation: sb-pulse 0.9s ease-in-out infinite; }
 @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
-/* The typed-letters answer row (Wordle-coloured on submit). */
+/* The typed-letters answer row (Wordle-coloured on submit). Collapses to nothing
+   while empty so the hive sits right under the audio buttons; it grows as letters
+   are typed. */
 .sb-answer {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  min-height: 48px;
+  min-height: 0;
 }
+.sb-answer:empty { display: none; }
 .sb-cell {
   width: 40px;
   height: 48px;
@@ -4839,7 +4842,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
    (--tx/--ty) and the box size are computed in spellingbee.js (honeycombLayout). */
 .sb-circle {
   position: relative;
-  margin: 6px auto 2px;
+  margin: 0 auto;
   touch-action: manipulation;
 }
 .sb-tile {
