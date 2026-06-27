@@ -664,7 +664,8 @@
         advanceAction = 'next';
         showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
       } else if (attempt < MAX_PASSES) {
-        feedbackEl.textContent = t('Not quite — try again with a hint.'); feedbackEl.className = 'sb-feedback sb-bad';
+        // No "not quite" line — the red cells + the "Try again →" button say it.
+        feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
         advanceAction = 'retry';
         showRevealPhase(t('Try again →'));
       } else {
