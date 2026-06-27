@@ -86,6 +86,52 @@
     return out;
   }
 
+  function isVowel(ch) { return 'aeiou'.indexOf(ch) >= 0; }
+
+  // The single letter that anchors the hive centre across the whole question: the
+  // one appearing in the MOST words (ties → most total occurrences → vowel →
+  // alphabetical). null for an empty set.
+  function mostCommonLetter(words) {
+    if (!words || !words.length) return null;
+    var doc = {}, tot = {}, order = [];
+    words.forEach(function (w) {
+      var n = normalize(w && w.target != null ? w.target : w), seen = {};
+      for (var i = 0; i < n.length; i++) {
+        var ch = n[i];
+        if (tot[ch] == null) order.push(ch);
+        tot[ch] = (tot[ch] || 0) + 1;
+        if (!seen[ch]) { seen[ch] = 1; doc[ch] = (doc[ch] || 0) + 1; }
+      }
+    });
+    var best = null;
+    order.forEach(function (ch) {
+      if (best === null) { best = ch; return; }
+      if (doc[ch] > doc[best]) { best = ch; return; }
+      if (doc[ch] !== doc[best]) return;
+      if (tot[ch] > tot[best]) { best = ch; return; }
+      if (tot[ch] !== tot[best]) return;
+      if (isVowel(ch) && !isVowel(best)) { best = ch; return; }
+      if (isVowel(ch) === isVowel(best) && ch < best) best = ch;
+    });
+    return best;
+  }
+
+  // Which letter centres a single word's hive: the question-wide centre if the word
+  // has it, otherwise the letter that repeats most WITHIN this word (only if one
+  // actually repeats — "more common than the rest"), else null (no anchor).
+  function centerLetterForWord(word, globalCenter) {
+    var n = normalize(word);
+    if (globalCenter && n.indexOf(globalCenter) >= 0) return globalCenter;
+    var freq = {}, order = [];
+    for (var i = 0; i < n.length; i++) { if (freq[n[i]] == null) order.push(n[i]); freq[n[i]] = (freq[n[i]] || 0) + 1; }
+    var best = null;
+    order.forEach(function (ch) {
+      if (best === null || freq[ch] > freq[best] ||
+        (freq[ch] === freq[best] && isVowel(ch) && !isVowel(best))) best = ch;
+    });
+    return (best && freq[best] > 1) ? best : null;
+  }
+
   function passWeight(p) { return PASS_WEIGHTS[p] || 0; }
 
   // Clusters from the inventory that occur in the target, with any cluster fully
@@ -175,9 +221,12 @@
     });
 
     // Start from clusters + every distinct letter, then greedily drop any single
-    // whose removal still leaves the word spellable (i.e. a cluster covers it).
+    // whose removal still leaves the word spellable (i.e. a cluster covers it). The
+    // question's centre letter is protected so it always survives as a single tile.
+    var protect = opts.centerLetter ? normalize(opts.centerLetter) : '';
     var working = clusters.concat(distinctLetters(word));
     distinctLetters(word).forEach(function (s) {
+      if (s === protect) return;
       var without = working.filter(function (x) { return x !== s; });
       if (canSpell(n, without)) working = without;
     });
@@ -425,6 +474,7 @@
     var cfg = normalizeConfig(question);
     var voice = options.voice || question.language || 'en-US';
     var playWord = options.playWord || function () { return Promise.resolve(false); };
+    var centerLetterGlobal = mostCommonLetter(cfg.words); // shared hive-centre anchor
 
     container.innerHTML = '';
     container.classList.add('sb-host');
@@ -547,7 +597,17 @@
     function renderCircle() {
       circleEl.innerHTML = ''; tileBtns = {};
       var w = cfg.words[current];
-      currentTiles = buildTiles(w.target, { distractors: w.distractors, clusterTiles: w.clusterTiles });
+      var centerLetter = centerLetterForWord(w.target, centerLetterGlobal);
+      currentTiles = buildTiles(w.target, { distractors: w.distractors, clusterTiles: w.clusterTiles, centerLetter: centerLetter });
+      // Pull the chosen centre letter to index 0 so it lands on the gold centre hex.
+      if (centerLetter) {
+        for (var ci = 1; ci < currentTiles.length; ci++) {
+          if (currentTiles[ci].text === centerLetter) {
+            currentTiles.unshift(currentTiles.splice(ci, 1)[0]);
+            break;
+          }
+        }
+      }
       var layout = honeycombLayout(currentTiles.length);
       circleEl.style.width = layout.size + 'px';
       circleEl.style.height = layout.size + 'px';
@@ -849,6 +909,8 @@
     autoDistractors: autoDistractors,
     buildTiles: buildTiles,
     canSpell: canSpell,
+    mostCommonLetter: mostCommonLetter,
+    centerLetterForWord: centerLetterForWord,
     honeycombLayout: honeycombLayout,
     gradeWord: gradeWord,
     wordleStatuses: wordleStatuses,

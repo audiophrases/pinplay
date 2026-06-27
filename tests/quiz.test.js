@@ -1427,6 +1427,28 @@ describe('SpellingBee.ladderRank', () => {
   });
 });
 
+describe('SpellingBee centre letter (honeycomb anchor)', () => {
+  const words = (a) => a.map((t) => ({ target: t }));
+  it('picks the letter in the most words as the question centre', () => {
+    // e is in 5/6, more than any other
+    assert.equal(SB.mostCommonLetter(words(['knowledge', 'wrapper', 'foreign', 'doubt', 'rhythm', 'castle'])), 'e');
+    assert.equal(SB.mostCommonLetter(words(['amount', 'allowed', 'announce', 'power', 'surround'])), 'o');
+  });
+  it('uses the global centre when the word has it', () => {
+    assert.equal(SB.centerLetterForWord('castle', 'e'), 'e');
+  });
+  it('falls back to the most-repeated letter when the word lacks the global centre', () => {
+    assert.equal(SB.centerLetterForWord('rhythm', 'e'), 'h'); // h repeats; no e
+  });
+  it('returns null when the word lacks the centre and no letter repeats', () => {
+    assert.equal(SB.centerLetterForWord('doubt', 'e'), null);
+  });
+  it('protects the centre letter from cluster-pruning so it stays a single tile', () => {
+    const texts = SB.buildTiles('succeed', { clusterTiles: ['ee'], centerLetter: 'e' }).map((t) => t.text);
+    assert.ok(texts.includes('e'));
+  });
+});
+
 describe('SpellingBee.honeycombLayout (circle placement)', () => {
   const dist = (p) => Math.round(Math.hypot(p.x, p.y));
   it('puts tile 0 at the centre', () => {
