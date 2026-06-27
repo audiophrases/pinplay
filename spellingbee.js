@@ -504,12 +504,15 @@
       audioRow.classList.remove('hidden');
       controls.classList.remove('hidden');
       circleEl.classList.remove('hidden');
+      circleEl.classList.remove('sb-locked');
       advanceRow.classList.add('hidden');
     }
     function showRevealPhase(label) {
       phase = 'reveal';
       controls.classList.add('hidden');
-      circleEl.classList.add('hidden');
+      // Keep the hive on screen (just locked) so the answer row stays put instead of
+      // the whole block reflowing/recentring when the keys vanish.
+      circleEl.classList.add('sb-locked');
       setEnterLabel(advanceBtn, label);
       advanceRow.classList.remove('hidden');
     }

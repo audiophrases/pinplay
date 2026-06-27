@@ -4845,6 +4845,12 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   margin: 0 auto;
   touch-action: manipulation;
 }
+/* During the answer reveal the hive stays in place (so the typed word doesn't move)
+   but is locked: dimmed and non-interactive. */
+.sb-circle.sb-locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
 .sb-tile {
   position: absolute;
   left: 50%;
