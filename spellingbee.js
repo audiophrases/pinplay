@@ -35,6 +35,7 @@
   var MAX_PASSES = 3;
   var MAX_DISTRACTORS = 3;
   var TILE_TARGET = 7;          // aim each circle toward ~7 tiles total (NYT-style)
+  var TILE_MIN = 6;             // top short hives up to at least this many keys
   var MIN_TARGET_LETTERS = 2;
   // Points multiplier by the pass a word was first spelled correctly on.
   var PASS_WEIGHTS = { 1: 1, 2: 0.66, 3: 0.33 };
@@ -97,26 +98,17 @@
     });
   }
 
-  // Up to MAX_DISTRACTORS decoy tiles (strings absent from the word), filling the
-  // circle toward ~7 keys. Fires only for targets with < 7 distinct letters. May
-  // include one absent vowel-cluster decoy when the word itself uses a vowel
-  // cluster (the classic ee/ea kind of trap), then absent single letters.
-  function autoDistractors(target) {
-    var distinct = distinctLetters(target);
-    if (distinct.length >= TILE_TARGET) return [];
-    var inWord = inWordClusters(target);
-    var count = Math.max(0, Math.min(MAX_DISTRACTORS, TILE_TARGET - (distinct.length + inWord.length)));
-    if (count <= 0) return [];
-
+  // Ordered list of plausible decoy tiles (strings ABSENT from the word): a
+  // confusable vowel-cluster first (one SHARING a letter with an in-word vowel
+  // cluster — ou↔au, ee↔ea — not an arbitrary "eau"), then common absent single
+  // letters. Length-unbounded; callers slice to taste.
+  function distractorCandidates(target) {
     var n = normalize(target);
     var present = {};
-    distinct.forEach(function (c) { present[c] = 1; });
+    distinctLetters(target).forEach(function (c) { present[c] = 1; });
     var out = [];
 
-    // A confusable absent vowel-cluster decoy when the word uses a vowel cluster —
-    // prefer one that SHARES a letter with the in-word cluster (ou↔au, ee↔ea) over
-    // an arbitrary one like "eau", so the trap actually looks plausible.
-    var inWordVowel = inWord.filter(function (c) { return VOWEL_CLUSTERS.indexOf(c) >= 0; });
+    var inWordVowel = inWordClusters(target).filter(function (c) { return VOWEL_CLUSTERS.indexOf(c) >= 0; });
     if (inWordVowel.length) {
       var letters = inWordVowel.join('');
       var pick = null, firstAbsent = null;
@@ -128,13 +120,24 @@
       }
       if (pick || firstAbsent) out.push(pick || firstAbsent);
     }
-    // Fill with common confusable single letters absent from the word.
     var pool = ['e', 'a', 's', 'c', 'k', 'h', 't', 'r', 'n', 'o', 'i', 'l',
       'd', 'm', 'u', 'y', 'g', 'b', 'p', 'w', 'f', 'v', 'z'];
-    for (var i = 0; i < pool.length && out.length < count; i++) {
+    for (var i = 0; i < pool.length; i++) {
       if (!present[pool[i]] && out.indexOf(pool[i]) < 0) out.push(pool[i]);
     }
-    return out.slice(0, count);
+    return out;
+  }
+
+  // Up to MAX_DISTRACTORS decoys, filling the circle toward ~7 keys; fires only for
+  // targets with < 7 distinct letters. (Standalone helper; buildTiles does its own
+  // count-aware fill that accounts for cluster-pruned single letters.)
+  function autoDistractors(target) {
+    var distinct = distinctLetters(target);
+    if (distinct.length >= TILE_TARGET) return [];
+    var inWord = inWordClusters(target);
+    var count = Math.max(0, Math.min(MAX_DISTRACTORS, TILE_TARGET - (distinct.length + inWord.length)));
+    if (count <= 0) return [];
+    return distractorCandidates(target).slice(0, count);
   }
 
   // Can `target` be spelled by repeatedly using tiles from `tileTexts`? (Tiles are
@@ -180,13 +183,18 @@
     });
 
     var texts = working.slice();
-    var push = function (s) { if (s && texts.indexOf(s) < 0) texts.push(s); };
-    if (opts.distractors && opts.distractors.length) {
-      opts.distractors.map(normalize).filter(Boolean).slice(0, MAX_DISTRACTORS).forEach(push);
-    } else {
-      // Auto-fill decoys only up to the ~7-key target given the core size.
-      autoDistractors(word).slice(0, Math.max(0, TILE_TARGET - texts.length)).forEach(push);
+    var distractorCount = 0;
+    // forced = an author-supplied decoy (deliberate contrast) → always kept, capped
+    // only by MAX_DISTRACTORS. Auto decoys only top the hive up to TILE_MIN keys.
+    function addDecoy(s, forced) {
+      s = normalize(s);
+      if (!s || texts.indexOf(s) >= 0) return;            // empty or already a tile
+      if (distractorCount >= MAX_DISTRACTORS) return;
+      if (!forced && texts.length >= TILE_MIN) return;     // enough keys already
+      texts.push(s); distractorCount++;
     }
+    (opts.distractors || []).forEach(function (s) { addDecoy(s, true); });
+    distractorCandidates(word).forEach(function (s) { addDecoy(s, false); });
 
     return shuffle(texts.map(function (txt) {
       return { text: txt, distractor: n.indexOf(txt) < 0 };

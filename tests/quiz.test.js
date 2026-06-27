@@ -1330,6 +1330,19 @@ describe('SpellingBee.buildTiles', () => {
     assert.ok(texts.includes('h'));
     assert.ok(!texts.includes('t'));
   });
+  it('tops a short hive up to at least 6 keys with decoys', () => {
+    // "wrapper" prunes to wr/pp/a/e/r (5); its author distractor "r" is already in
+    // the word, so auto decoys must fill it back up to ≥6.
+    const tiles = SB.buildTiles('wrapper', { distractors: ['r'], clusterTiles: ['wr', 'pp'] });
+    assert.ok(tiles.length >= 6, `expected ≥6 tiles, got ${tiles.length}`);
+    assert.ok(tiles.some((t) => t.distractor === true), 'should have added at least one decoy');
+  });
+  it('keeps author distractors even when the word is already long', () => {
+    // delicious has 8 distinct letters; the author "t" decoy (-tion trap) stays.
+    const tiles = SB.buildTiles('delicious', { distractors: ['t'] });
+    const t = tiles.find((x) => x.text === 't');
+    assert.ok(t && t.distractor === true);
+  });
   it('always yields a tile set that can spell the target', () => {
     [
       ['knowledge', { clusterTiles: ['kn', 'dge'] }],
