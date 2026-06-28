@@ -551,6 +551,7 @@
     function showInputPhase() {
       phase = 'input';
       playBtn.classList.remove('hidden');
+      answerEl.classList.remove('hidden');
       controls.classList.remove('hidden');
       circleEl.classList.remove('hidden');
       circleEl.classList.remove('sb-locked');
@@ -766,6 +767,8 @@
       playBtn.classList.add('hidden');
       controls.classList.add('hidden');
       advanceRow.classList.add('hidden');
+      circleEl.classList.add('hidden');
+      answerEl.classList.add('hidden');
       circleEl.innerHTML = '';
       answerEl.innerHTML = '';
       renderLadder(getResult());

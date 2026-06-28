@@ -4805,17 +4805,17 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-game.sb-speaking .sb-play { animation: sb-pulse 0.9s ease-in-out infinite; }
 @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
-/* The typed-letters answer row (Wordle-coloured on submit). Collapses to nothing
-   while empty so the hive sits right under the audio buttons; it grows as letters
-   are typed. */
+/* The typed-letters answer row (Wordle-coloured on submit). Its full one-row height
+   is RESERVED up front (= a cell's height) so the header and hive never shift as
+   letters fill in — the space is already allocated, empty or not. */
 .sb-answer {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  min-height: 0;
+  align-items: center;
+  min-height: 48px;
 }
-.sb-answer:empty { display: none; }
 .sb-cell {
   width: 40px;
   height: 48px;
@@ -4835,7 +4835,9 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-cell.sb-present { background: #d4a017; border-color: #d4a017; color: #fff; }
 .sb-cell.sb-miss { background: #8a8f98; border-color: #8a8f98; color: #fff; }
 
-.sb-controls { display: flex; gap: 8px; }
+/* Controls and the advance button swap places between input/reveal — give them the
+   same reserved height so that swap doesn't nudge the layout either. */
+.sb-controls { display: flex; gap: 8px; align-items: center; min-height: 48px; }
 
 /* The reduced-letter honeycomb (single + cluster tiles), laid out as a NYT-style
    flower: a gold centre tile with the rest on concentric hex rings. Tile offsets
@@ -4916,12 +4918,12 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-interstitial-msg { margin: 6px 0 12px; color: var(--text); font-weight: 600; }
 
 /* Student-controlled advance between attempts / words (no auto-clear). */
-.sb-advance-row { display: flex; justify-content: center; }
+.sb-advance-row { display: flex; justify-content: center; align-items: center; min-height: 48px; }
 .sb-advance { font-weight: 700; padding: 12px 28px; }
 
 /* Final ladder + score. */
 .sb-ladder.hidden, .sb-timer.hidden, .sb-play.hidden, .sb-controls.hidden,
-.sb-circle.hidden, .sb-advance-row.hidden { display: none; }
+.sb-circle.hidden, .sb-advance-row.hidden, .sb-answer.hidden { display: none; }
 .sb-ladder { text-align: center; }
 .sb-rank-badge {
   display: inline-block;
