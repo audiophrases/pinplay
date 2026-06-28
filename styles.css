@@ -4913,6 +4913,10 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 }
 
 .sb-feedback { min-height: 22px; text-align: center; font-weight: 600; }
+/* Collapse the feedback line when it has nothing to say (correct/retry reveal, and
+   normal typing) so it reclaims the row; it only takes space for the final-fail
+   spelling or a transient input warning. The common success path stays gap-free. */
+.sb-feedback:empty { display: none; }
 .sb-feedback.sb-good { color: var(--ok); }
 .sb-feedback.sb-bad { color: var(--bad); }
 .sb-interstitial-msg { margin: 6px 0 12px; color: var(--text); font-weight: 600; }

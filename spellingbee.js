@@ -720,9 +720,11 @@
       renderAnswer(wordleStatuses(guess, w.target));
       var lastWord = wordIdx >= cfg.words.length - 1;
       if (ok) {
-        feedbackEl.textContent = t('✓ Correct!'); feedbackEl.className = 'sb-feedback sb-good';
+        // "Correct!" rides on the advance button itself (no separate line) — saves a
+        // whole row of vertical space; the green cells reinforce it.
+        feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
         advanceAction = 'next';
-        showRevealPhase(lastWord ? t('See results →') : t('Next word →'));
+        showRevealPhase(t('✓ Correct!') + ' ' + (lastWord ? t('See results →') : t('Next word →')));
       } else if (attempt < MAX_PASSES) {
         // No "not quite" line — the red cells + the "Try again →" button say it.
         feedbackEl.textContent = ''; feedbackEl.className = 'sb-feedback';
