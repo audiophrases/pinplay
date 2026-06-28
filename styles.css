@@ -4787,7 +4787,6 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 }
 .sb-timer.sb-timer-low { color: #fff; background: var(--bad); border-color: var(--bad); }
 
-.sb-audio { display: flex; gap: 10px; }
 .sb-btn {
   cursor: pointer;
   border: 1px solid var(--line);
@@ -4801,7 +4800,8 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-btn:hover:not(:disabled) { border-color: var(--primary); }
 .sb-btn:disabled { opacity: 0.5; cursor: default; }
 .sb-btn.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-.sb-play { font-weight: 700; }
+/* Inline "Play word" — a compact pill sitting next to the "Word n of m" progress. */
+.sb-play { font-weight: 700; padding: 5px 12px; font-size: 0.85rem; border-radius: 999px; }
 .sb-game.sb-speaking .sb-play { animation: sb-pulse 0.9s ease-in-out infinite; }
 @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
@@ -4920,7 +4920,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-advance { font-weight: 700; padding: 12px 28px; }
 
 /* Final ladder + score. */
-.sb-ladder.hidden, .sb-timer.hidden, .sb-audio.hidden, .sb-controls.hidden,
+.sb-ladder.hidden, .sb-timer.hidden, .sb-play.hidden, .sb-controls.hidden,
 .sb-circle.hidden, .sb-advance-row.hidden { display: none; }
 .sb-ladder { text-align: center; }
 .sb-rank-badge {

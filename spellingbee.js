@@ -523,11 +523,10 @@
     var header = el('div', 'sb-header');
     var featureEl = el('span', 'sb-feature'); featureEl.textContent = cfg.feature || '';
     var progressEl = el('span', 'sb-progress');
-    header.append(featureEl, progressEl);
-    var audioRow = el('div', 'sb-audio');
+    // Play word lives inline, right of the "Word n of m" progress (Repeat removed —
+    // it did the exact same thing).
     var playBtn = button('sb-play', t('🔊 Play word'));
-    var repeatBtn = button('sb-repeat', t('↻ Repeat'));
-    audioRow.append(playBtn, repeatBtn);
+    header.append(featureEl, progressEl, playBtn);
     var answerEl = el('div', 'sb-answer');
     var controls = el('div', 'sb-controls');
     var backBtn = button('sb-backspace', t('⌫'));
@@ -543,7 +542,7 @@
     var feedbackEl = el('div', 'sb-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     // Order mirrors NYT Spelling Bee: clue/answer on top, the hive, then the action
     // buttons (Backspace / Clear / Submit, or the advance button) BELOW the hive.
-    root.append(header, audioRow, answerEl, circleEl, controls, advanceRow, ladderEl, feedbackEl);
+    root.append(header, answerEl, circleEl, controls, advanceRow, ladderEl, feedbackEl);
     container.appendChild(root);
 
     // Help escalates with the attempt number on the SAME word (no list-wide passes).
@@ -551,7 +550,7 @@
 
     function showInputPhase() {
       phase = 'input';
-      audioRow.classList.remove('hidden');
+      playBtn.classList.remove('hidden');
       controls.classList.remove('hidden');
       circleEl.classList.remove('hidden');
       circleEl.classList.remove('sb-locked');
@@ -570,11 +569,11 @@
     function speak() {
       var w = cfg.words[current];
       if (!w) return;
-      playBtn.disabled = repeatBtn.disabled = true;
+      playBtn.disabled = true;
       root.classList.add('sb-speaking');
       var spoken = (w.audioText && w.audioText.trim()) ? w.audioText : w.target;
       Promise.resolve(playWord(spoken, voice)).then(function () {
-        playBtn.disabled = repeatBtn.disabled = false;
+        playBtn.disabled = false;
         root.classList.remove('sb-speaking');
       });
     }
@@ -764,7 +763,7 @@
     function showFinalized() {
       roundDone = true;
       phase = 'reveal';
-      audioRow.classList.add('hidden');
+      playBtn.classList.add('hidden');
       controls.classList.add('hidden');
       advanceRow.classList.add('hidden');
       circleEl.innerHTML = '';
@@ -850,7 +849,6 @@
     }
 
     playBtn.addEventListener('click', speak);
-    repeatBtn.addEventListener('click', speak);
     backBtn.addEventListener('click', function () { if (phase === 'input' && guess) { guess = guess.slice(0, -1); renderAnswer(); } });
     clearBtn.addEventListener('click', function () { if (phase === 'input') { guess = ''; renderAnswer(); } });
     submitBtn.addEventListener('click', submit);
