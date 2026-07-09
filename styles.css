@@ -4949,12 +4949,12 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-result-list li.sb-no { color: var(--bad); }
 
 /* ===================== Wordle (wordle type) ===================== */
-/* Mobile-first: everything stacks in one column (header, hints, board,
-   keyboard). From 680px up (see the breakpoint at the end of this section —
-   kept LAST in source order so it reliably wins over the base rules it
-   overrides), the board and keyboard sit SIDE BY SIDE instead of stacking,
-   which was the single biggest cause of needing to zoom out to fit the whole
-   game on screen. */
+/* Mobile-first: everything stacks in one column (header, board, keyboard).
+   Hints append inside the header's progress line. From 680px up (see the
+   breakpoint at the end of this section — kept LAST in source order so it
+   reliably wins over the base rules it overrides), the board and keyboard sit
+   SIDE BY SIDE instead of stacking, which was the single biggest cause of
+   needing to zoom out to fit the whole game on screen. */
 .wd-game {
   display: flex;
   flex-direction: column;
@@ -4966,6 +4966,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 }
 .wd-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -4973,7 +4974,15 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   font-size: 0.9rem;
   color: var(--muted);
 }
-.wd-progress { font-weight: 700; color: var(--text); }
+.wd-progress {
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 .wd-btn {
   cursor: pointer;
   border: 1px solid var(--line);
@@ -4987,21 +4996,6 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 }
 .wd-btn:hover:not(:disabled) { border-color: var(--primary); }
 .wd-btn:disabled { opacity: 0.45; cursor: default; }
-
-/* Authored text hints (synonyms/clues), revealed one line at a time. */
-.wd-hints { display: flex; flex-direction: column; gap: 4px; align-items: center; width: 100%; }
-.wd-hints:empty { display: none; }
-.wd-hint-line {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
-  text-align: center;
-  background: color-mix(in srgb, #d4a017 16%, var(--card));
-  border: 1px solid color-mix(in srgb, #d4a017 45%, var(--card));
-  border-radius: 8px;
-  padding: 4px 12px;
-  max-width: 460px;
-}
 
 /* Wraps the grid + feedback line as one column, so it can sit beside the
    keyboard as a unit in the two-column layout above. */
@@ -5029,6 +5023,11 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .wd-cell.wd-hit { background: #1f9d55; border-color: #1f9d55; color: #fff; }
 .wd-cell.wd-present { background: #d4a017; border-color: #d4a017; color: #fff; }
 .wd-cell.wd-miss { background: #8a8f98; border-color: #8a8f98; color: #fff; }
+.wd-cell.wd-invalid {
+  background: color-mix(in srgb, var(--bad) 10%, var(--card));
+  border-color: var(--bad);
+  color: var(--bad);
+}
 .wd-grid-mini .wd-cell { width: 30px; height: 30px; font-size: 1rem; }
 .wd-row.wd-shake { animation: wd-shake 0.35s ease; }
 @keyframes wd-shake {
@@ -5103,7 +5102,7 @@ body:not(.guest-mode) .guest-only { display: none !important; }
     row-gap: 10px;
     column-gap: 28px;
   }
-  .wd-header, .wd-hints { flex: 1 1 100%; }
+  .wd-header { flex: 1 1 100%; }
   .wd-board-col, .wd-keyboard { flex: 0 0 auto; margin-top: 6px; }
   .wd-keyboard { width: 380px; max-width: 380px; }
 }

@@ -220,6 +220,7 @@
     var input = '';          // current row being typed
     var hintsUsed = 0;
     var revealed = {};       // position (int) -> letter, from hints
+    var invalidInput = false; // full current guess failed the lexicon check
     var done = false;
     var solved = false;
     var startedAt = Date.now();
@@ -234,11 +235,6 @@
     hintBtn.textContent = t('💡 Hint (−25%)');
     header.append(progressEl, hintBtn);
 
-    // Hints bought so far appear here, one compact line each — either the
-    // author's text clues or, in letter-reveal fallback mode, "Letter n: X"
-    // lines. No separate word-length row: the grid already shows the length.
-    var hintsListEl = el('div', 'wd-hints');
-
     var gridEl = el('div', 'wd-grid');
     var feedbackEl = el('div', 'wd-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     var keyboardEl = el('div', 'wd-keyboard');
@@ -246,7 +242,7 @@
     // the two-column CSS grid has stable areas regardless of DOM order).
     var boardCol = el('div', 'wd-board-col');
     boardCol.append(gridEl, feedbackEl);
-    root.append(header, hintsListEl, boardCol, keyboardEl);
+    root.append(header, boardCol, keyboardEl);
     container.appendChild(root);
 
     // --- board ---------------------------------------------------------------
@@ -273,11 +269,15 @@
     }
 
     function paintInputRow() {
-      if (guesses.length < maxA) paintRow(guesses.length, input, null);
+      if (guesses.length >= maxA) return;
+      if (!invalidInput) { paintRow(guesses.length, input, null); return; }
+      var st = [];
+      for (var i = 0; i < len; i++) st.push('invalid');
+      paintRow(guesses.length, input, st);
     }
 
-    // Hints bought so far, as display lines — authored clues in order when the
-    // question has them, else "Letter n: X" for each letter-reveal hint (in the
+    // Hints bought so far, as an inline progress suffix — authored clues in
+    // order when the question has them, else "Letter n: X" for each hint (in the
     // order they were revealed; reveal positions only ever increase, see
     // useHint, so the sorted keys of `revealed` ARE the reveal order).
     function hintLines() {
@@ -286,13 +286,11 @@
         .map(function (pos) { return t('Letter {n}: {letter}', { n: pos + 1, letter: (target[pos] || '').toUpperCase() }); });
     }
 
-    function paintHintTexts() {
-      hintsListEl.innerHTML = '';
-      hintLines().forEach(function (text) {
-        var line = el('div', 'wd-hint-line');
-        line.textContent = '💡 ' + text;
-        hintsListEl.appendChild(line);
-      });
+    function progressText(n) {
+      var text = t('Guess {n} of {total}', { n: n, total: maxA });
+      var lines = hintLines();
+      if (lines.length) text += ' · ' + lines.map(function (line) { return '💡 ' + line; }).join(' · ');
+      return text;
     }
 
     // --- keyboard --------------------------------------------------------------
@@ -345,7 +343,7 @@
     }
 
     function updateHeader() {
-      progressEl.textContent = t('Guess {n} of {total}', { n: Math.min(guesses.length + 1, maxA), total: maxA });
+      progressEl.textContent = progressText(Math.min(guesses.length + 1, maxA));
       hintBtn.disabled = done || hintsUsed >= hintCap;
     }
 
@@ -353,6 +351,7 @@
     function typeLetter(letter, btn) {
       if (done || input.length >= len) return;
       input += letter;
+      invalidInput = false;
       feedbackEl.textContent = ''; feedbackEl.className = 'wd-feedback';
       paintInputRow();
       pop(btn || keyBtns[letter]);
@@ -361,6 +360,8 @@
     function backspace() {
       if (done || !input) return;
       input = input.slice(0, -1);
+      invalidInput = false;
+      feedbackEl.textContent = ''; feedbackEl.className = 'wd-feedback';
       paintInputRow();
     }
 
@@ -373,8 +374,10 @@
         return;
       }
       if (isRealWord && normalize(input) !== target && !isRealWord(normalize(input))) {
-        feedbackEl.textContent = t('Not in the word list');
-        feedbackEl.className = 'wd-feedback wd-bad';
+        invalidInput = true;
+        feedbackEl.textContent = '';
+        feedbackEl.className = 'wd-feedback';
+        paintInputRow();
         shakeRow(guesses.length);
         return;
       }
@@ -383,6 +386,7 @@
       guesses.push(input);
       solved = normalize(input) === target;
       input = '';
+      invalidInput = false;
       paintKeyboard();
       if (solved || guesses.length >= maxA) { finalize(); }
       else { updateHeader(); paintInputRow(); }
@@ -397,7 +401,6 @@
       if (done || hintsUsed >= hintCap) return;
       if (textHints.length) {
         hintsUsed++;
-        paintHintTexts();
         updateHeader();
         if (options.onChange) options.onChange();
         return;
@@ -413,7 +416,6 @@
       if (pos < 0) return;
       revealed[pos] = target[pos];
       hintsUsed++;
-      paintHintTexts();
       updateHeader();
       if (options.onChange) options.onChange();
     }
@@ -424,7 +426,7 @@
       done = true;
       keyboardEl.classList.add('wd-locked');
       hintBtn.disabled = true;
-      progressEl.textContent = t('Guess {n} of {total}', { n: guesses.length, total: maxA });
+      progressEl.textContent = progressText(guesses.length);
       if (solved) {
         var pct = Math.round(Math.max(0, 1 - HINT_PENALTY * hintsUsed) * 100);
         feedbackEl.textContent = t('✓ Correct!') + (hintsUsed ? ' · ' + pct + '%' : '');
@@ -491,7 +493,6 @@
       startedAt = s.startedAt || Date.now();
       guesses.forEach(function (g, r) { paintRow(r, g, statuses(g, target)); });
       paintKeyboard();
-      paintHintTexts();
       if (s.done || solved || guesses.length >= maxA) { showFinalizedView(); return; }
       updateHeader();
       paintInputRow();
