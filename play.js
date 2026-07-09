@@ -24,6 +24,7 @@ const QUESTION_TYPE_ICONS = {
   slider: '📐',
   pin: '📍',
   spellingbee: '🐝',
+  wordle: '🟩',
 };
 function questionTypeIcon(type) {
   return QUESTION_TYPE_ICONS[String(type || '').toLowerCase()] || '❓';
@@ -350,14 +351,14 @@ function markAnswerDirty() {
   }
 }
 
-// The \u21b5 keycap on the host submit button is suppressed while a Spelling Bee round
-// is capturing Enter; everywhere else it shows normally.
+// The \u21b5 keycap on the host submit button is suppressed while an in-question game
+// (Spelling Bee / Wordle) is capturing Enter; everywhere else it shows normally.
 function joinSubmitEnterHint() {
-  return _spellingBeeRoundActive ? '' : ' <kbd>\u21b5</kbd>';
+  return (_spellingBeeRoundActive || _wordleRoundActive) ? '' : ' <kbd>\u21b5</kbd>';
 }
 
-// Re-apply the host submit button's \u21b5 once a Spelling Bee round ends (Enter now
-// operates Save/Continue/Finish again). Live mode's "Submit" carries no keycap.
+// Re-apply the host submit button's \u21b5 once an in-question game round ends (Enter
+// now operates Save/Continue/Finish again). Live mode's "Submit" carries no keycap.
 function restoreJoinSubmitEnterHint() {
   if (!joinSubmitBtn) return;
   const base = { save: t('Save answer'), continue: t('Continue'), finish: t('Finish quiz') }[joinSubmitBtn.dataset.mode];
@@ -1415,6 +1416,7 @@ async function proceedWithAssignmentStart(code, studentKey, username, password) 
   lastAssignmentAudioKey = '';
   live.player.assignment.suppressAmbientResume = false;
   _spellingBeeProgress.clear(); // fresh attempt → drop any prior in-progress rounds
+  _wordleProgress.clear();
   if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
   hideLoginError();
   if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -2345,7 +2347,7 @@ const SELF_CORRECTING_TYPES = new Set([
   'text', 'voice_text',
   'context_gap', 'error_hunt',
   'slider', 'puzzle', 'match_pairs',
-  'spellingbee',
+  'spellingbee', 'wordle',
 ]);
 
 function isSelfCorrectingQuestion(question) {
@@ -2390,6 +2392,9 @@ function isSelfCorrectingQuestion(question) {
     const words = (Array.isArray(question.words) ? question.words : [])
       .filter((w) => String((w && w.target) || w || '').trim());
     return words.length > 0;
+  }
+  if (t === 'wordle') {
+    return String(question.word || '').replace(/[^a-zA-Z]/g, '').length >= 3;
   }
   return false;
 }
@@ -2490,6 +2495,10 @@ function gradeSelfCorrectAnswer(question, userAnswer) {
     if (!window.SpellingBee) return false;
     const r = window.SpellingBee.scoreRound(question, userAnswer);
     return !!r.correct;
+  }
+  if (t === 'wordle') {
+    if (!window.Wordle) return false;
+    return !!window.Wordle.scoreRound(question, userAnswer).correct;
   }
   return false;
 }
@@ -2704,6 +2713,7 @@ function enterRetakeMode(state) {
   const retake = live.player.assignment.retake;
   retake.active = true;
   _spellingBeeProgress.clear(); // retake is a fresh pass — don't resume original-attempt rounds
+  _wordleProgress.clear();
   retake.eligible = eligible.slice();
   retake.cleared = cleared.slice();
   retake.previousIndex = Number(live.player.assignment.currentIndex || 0);
@@ -3693,6 +3703,18 @@ function renderJoinQuestion(question) {
   }
   _spellingBeeProgressIndex = null;
   _spellingBeeRoundActive = false;
+  if (_wordleController) {
+    if (_wordleProgressIndex != null && typeof _wordleController.getState === 'function') {
+      try {
+        const snap = _wordleController.getState();
+        if (snap) _wordleProgress.set(_wordleProgressIndex, snap);
+      } catch (e) { /* noop */ }
+    }
+    try { _wordleController.destroy(); } catch (e) { /* noop */ }
+    _wordleController = null;
+  }
+  _wordleProgressIndex = null;
+  _wordleRoundActive = false;
 
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) {
@@ -4184,6 +4206,13 @@ function renderJoinQuestion(question) {
 
   if (question.type === 'spellingbee') {
     renderSpellingBee(joinAnswersEl, question);
+    appendRiskBetBar();
+    appendReactionBar();
+    return;
+  }
+
+  if (question.type === 'wordle') {
+    renderWordle(joinAnswersEl, question);
     appendRiskBetBar();
     appendReactionBar();
     return;
@@ -4814,6 +4843,11 @@ function readJoinAnswer() {
     // Answerable once the learn pass is complete; getResult() returns the round
     // result (server re-grades it). null until then so it counts as unanswered.
     return _spellingBeeController ? _spellingBeeController.getResult() : null;
+  }
+
+  if (q.type === 'wordle') {
+    // null until the first guess is submitted (counts as unanswered until then).
+    return _wordleController ? _wordleController.getResult() : null;
   }
 
   return null;
@@ -6812,6 +6846,54 @@ function renderSpellingBee(container, question) {
   // A resumed round that was already finished hands Enter back to the host button.
   if (_spellingBeeController && _spellingBeeController.isComplete && _spellingBeeController.isComplete()) {
     _spellingBeeRoundActive = false;
+  }
+}
+
+// ============================================================
+// Wordle question type — host wiring. The engine + UI lives in wordle.js
+// (window.Wordle); this mirrors the Spelling Bee host pattern: stash the live
+// controller for readJoinAnswer, keep unsaved progress client-side across
+// arrow-navigation, and suppress the host ↵ while the game captures Enter.
+// ============================================================
+let _wordleController = null;
+let _wordleRoundActive = false;
+const _wordleProgress = new Map(); // unsaved in-progress rounds by question index (client-only)
+let _wordleProgressIndex = null;
+
+function renderWordle(container, question) {
+  _wordleController = null;
+  _wordleRoundActive = false;
+  _wordleProgressIndex = null;
+  if (!window.Wordle) {
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = t('Word puzzle could not load.');
+    container.appendChild(p);
+    return;
+  }
+  const currentIndex = live.player.assignment.currentIndex;
+  const reviewMode = !!live.player.assignment.reviewMode;
+  const rawAnswers = live.player.assignment.state?.attempt?.answersByQ || {};
+  const answerObj = rawAnswers[String(currentIndex)];
+  const savedResult = (answerObj && answerObj.answer && typeof answerObj.answer === 'object'
+    && Array.isArray(answerObj.answer.guesses)) ? answerObj.answer : null;
+
+  _wordleProgressIndex = currentIndex;
+  const resumeState = reviewMode ? undefined : _wordleProgress.get(currentIndex);
+  _wordleRoundActive = !(reviewMode && savedResult);
+
+  _wordleController = window.Wordle.render(container, question, {
+    t,
+    reviewMode,
+    savedResult,
+    resumeState,
+    onChange: () => { markAnswerDirty(); },
+    onComplete: () => { _wordleRoundActive = false; restoreJoinSubmitEnterHint(); },
+  });
+
+  // A resumed round that was already finished hands Enter back to the host button.
+  if (_wordleController && _wordleController.isComplete && _wordleController.isComplete()) {
+    _wordleRoundActive = false;
   }
 }
 

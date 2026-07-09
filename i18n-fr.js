@@ -169,6 +169,18 @@ window.PINPLAY_FR_DICT = {
   'Great': 'Très bien',
   'Genius': 'Génie',
   'you wrote': 'vous avez écrit',
+
+  /* --- Word Guess game (wordle type) --- */
+  'Word guess': 'Mot mystère',
+  'Word puzzle could not load.': 'Le mot mystère n\'a pas pu se charger.',
+  'This word puzzle has no word yet.': 'Ce mot mystère n\'a pas encore de mot.',
+  'Guess {n} of {total}': 'Essai {n} sur {total}',
+  '💡 Hint (−25%)': '💡 Indice (−25 %)',
+  'Enter': 'Entrée',
+  'Not enough letters': 'Pas assez de lettres',
+  'The word was: {word}': 'Le mot était : {word}',
+  'Solved in {n} tries': 'Résolu en {n} essais',
+  '{n} hint(s) used': '{n} indice(s) utilisé(s)',
   'Auto-graded': 'Correction automatique',
   'Auto-graded or teacher-graded fallback': "Correction automatique ou par l'enseignant à défaut",
   'Language task': 'Tâche linguistique',

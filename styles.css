@@ -4948,6 +4948,152 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-result-list li.sb-ok { color: var(--ok); }
 .sb-result-list li.sb-no { color: var(--bad); }
 
+/* ===================== Wordle (wordle type) ===================== */
+.wd-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.wd-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.wd-progress { font-weight: 700; color: var(--text); }
+.wd-btn {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.wd-btn:hover:not(:disabled) { border-color: var(--primary); }
+.wd-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Hint slots: one dashed cell per letter, hint-revealed letters fill in green.
+   Always present so using a hint never shifts the layout. */
+.wd-hint-slots { display: flex; gap: 4px; justify-content: center; }
+.wd-slot {
+  width: 26px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: lowercase;
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+.wd-slot.wd-revealed { border: 2px solid #1f9d55; color: #1f9d55; background: var(--card); }
+
+/* The guess board: full maxAttempts × wordLength grid from the start, so the
+   block height is constant for the whole round (stable header). */
+.wd-grid { display: flex; flex-direction: column; gap: 5px; }
+.wd-row { display: flex; gap: 5px; justify-content: center; }
+.wd-cell {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-transform: lowercase;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+}
+.wd-cell.wd-filled { border-color: var(--muted); }
+.wd-cell.wd-hit { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+.wd-cell.wd-present { background: #d4a017; border-color: #d4a017; color: #fff; }
+.wd-cell.wd-miss { background: #8a8f98; border-color: #8a8f98; color: #fff; }
+.wd-grid-mini .wd-cell { width: 30px; height: 30px; font-size: 1rem; }
+.wd-row.wd-shake { animation: wd-shake 0.35s ease; }
+@keyframes wd-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.wd-feedback { min-height: 22px; text-align: center; font-weight: 600; }
+.wd-feedback:empty { display: none; }
+.wd-feedback.wd-good { color: var(--ok); }
+.wd-feedback.wd-bad { color: var(--bad); }
+
+/* On-screen QWERTY keyboard with per-letter best-known state colouring. */
+.wd-keyboard { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 500px; }
+.wd-key-row { display: flex; gap: 5px; justify-content: center; }
+.wd-key {
+  cursor: pointer;
+  flex: 1;
+  max-width: 42px;
+  height: 46px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: lowercase;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s ease, background 0.12s ease;
+}
+.wd-key:active { transform: scale(0.94); }
+.wd-key-wide { max-width: 66px; flex: 1.6; font-size: 0.78rem; text-transform: none; }
+.wd-key.wd-hit { background: #1f9d55; color: #fff; }
+.wd-key.wd-present { background: #d4a017; color: #fff; }
+.wd-key.wd-miss { background: #8a8f98; color: #fff; }
+.wd-key.wd-pop { animation: wd-key-pop 0.16s ease; }
+@keyframes wd-key-pop {
+  0% { transform: scale(0.94); }
+  55% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.wd-kbd {
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-bottom-width: 2px;
+  border-radius: 0.2rem;
+  padding: 0 4px;
+  font-size: 0.65em;
+  font-family: monospace;
+  margin-left: 0.3em;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Round over: keyboard stays in place (constant height) but locked. */
+.wd-keyboard.wd-locked { opacity: 0.45; pointer-events: none; }
+
+.wd-summary-head { font-weight: 700; text-align: center; }
+.wd-review { gap: 6px; }
+
+@media (max-width: 480px) {
+  .wd-cell { width: 36px; height: 36px; font-size: 1.1rem; }
+  .wd-key { height: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wd-row.wd-shake, .wd-key.wd-pop { animation: none; }
+}
+
 /* Teacher authoring: stacked word rows. */
 .sb-word-rows { display: flex; flex-direction: column; gap: 8px; }
 .sb-word-row { display: grid; grid-template-columns: 1.2fr 2fr 1.3fr 1.3fr; gap: 6px; }

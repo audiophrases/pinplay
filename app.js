@@ -299,6 +299,21 @@ const TEMPLATE_ALL_13_TYPES = {
         { "target": "green", "clusterTiles": ["ee"], "distractors": ["ea"] },
         { "target": "bottle", "audioText": "a glass or plastic container for liquids" }
       ]
+    },
+    {
+      "id": "q17-wordle",
+      "type": "wordle",
+      "prompt": "Guess the animal: a large grey animal with a trunk.",
+      "points": 1000,
+      "timeLimit": 0,
+      "word": "elephant",
+      "maxAttempts": 6,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "EN",
+      "imageKeyword": "",
+      "imageData": ""
     }
   ]
 };
@@ -321,7 +336,8 @@ const QUESTION_TYPE_CATALOG = [
   { type: 'voice_text', label: 'Voice Answer', inTemplate: true, supportsAudio: true },
   // Spelling Bee carries its own per-word audio (the target word or a clue), so it
   // opts out of the generic audioText attach UI (supportsAudio:false).
-  { type: 'spellingbee', label: 'Spelling Bee', inTemplate: true, supportsAudio: false }
+  { type: 'spellingbee', label: 'Spelling Bee', inTemplate: true, supportsAudio: false },
+  { type: 'wordle', label: 'Word Guess', inTemplate: true, supportsAudio: true }
 ];
 
 const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
@@ -472,6 +488,15 @@ const QUESTION_TYPE_EXPLANATIONS = {
     "ttsStrategy": "Audio IS the question. Leave per-word 'audioText' empty to speak the target word; fill it with a definition or synonym to make the student retrieve the word from a clue.",
     "differentiationTips": ["Group words by a shared feature so the round drills it 5+ times.", "Use 'clusterTiles' to surface the feature being taught (e.g. 'tt' on a doubling round).", "Use 'distractors' to plant the confusable form (e.g. 'ea' as a decoy on an 'ee' round)."],
     "commonPitfalls": ["Mixing unrelated words so no feature is drilled.", "Putting single-consonant words in a doubling round (the doubling tile then has nothing to teach).", "Targets under 2 letters (dropped)."]
+  },
+  "wordle": {
+    "name": "Word Guess (Wordle)",
+    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. The student may reveal a correct letter with a Hint button, but each hint deducts 25% of the question's points (max 3 hints). Scoring: solved = 100% minus 25% per hint; not solved = 0. Any full-length letter combination is accepted as a guess (no dictionary check). Grading is case- and accent-insensitive. Use the 'prompt' as the clue (a definition, translation or riddle for the hidden word).",
+    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPenaltyPercent": 25 },
+    "pedagogicalUses": ["Vocabulary retrieval from a definition or translation clue.", "Spelling reinforcement through letter-position feedback.", "Warm-up or exit-ticket puzzles with high engagement."],
+    "ttsStrategy": "audioText can read the clue aloud for weaker readers; the hidden word itself is never spoken.",
+    "differentiationTips": ["Write the prompt clue at the right difficulty: a direct translation is easiest, a riddle hardest.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners."],
+    "commonPitfalls": ["Words with spaces, hyphens or accents-only differences.", "A prompt that gives away the word ('It starts with ele-').", "Words outside 5-8 letters."]
   }
 };
 
@@ -504,6 +529,7 @@ const addPuzzleAudioBtn = document.getElementById('addPuzzleAudioBtn');
 const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const addSpellingBeeBtn = document.getElementById('addSpellingBeeBtn');
+const addWordleBtn = document.getElementById('addWordleBtn');
 const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -668,6 +694,7 @@ normalizeQuizAudioDefaults(quiz);
 collapseAllQuestions(quiz);
 let soloGame = null;
 let soloSpellingBeeController = null; // live SpellingBee controller in solo/preview play
+let soloWordleController = null; // live Wordle controller in solo/preview play
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
@@ -1256,6 +1283,12 @@ function bindBuilderEvents() {
   if (addSpellingBeeBtn) {
     addSpellingBeeBtn.addEventListener('click', () => {
       addQuestionToBuilder(makeSpellingBeeQuestion());
+    });
+  }
+
+  if (addWordleBtn) {
+    addWordleBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeWordleQuestion());
     });
   }
 
@@ -2572,6 +2605,26 @@ function renderBuilder() {
       `;
     }
 
+    if (q.type === 'wordle') {
+      const attempts = [3, 4, 5, 6, 7, 8];
+      const cur = attempts.includes(Number(q.maxAttempts)) ? Number(q.maxAttempts) : 6;
+      specific += `
+        <div class="row gap top-space">
+          <div style="flex:1;min-width:200px;">
+            <label>Hidden word (5–8 letters, letters only)</label>
+            <input data-q="${idx}" data-field="wdWord" maxlength="16" value="${escapeHtml(q.word || '')}" placeholder="e.g. elephant" />
+          </div>
+          <div style="min-width:120px;">
+            <label>Attempts</label>
+            <select data-q="${idx}" data-field="wdAttempts">
+              ${attempts.map((n) => `<option value="${n}" ${cur === n ? 'selected' : ''}>${n}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <p class="small">Wordle-style: the student guesses the word on an on-screen keyboard with green/yellow/grey letter feedback. Write the clue in the question prompt (a definition, translation or riddle). Hints reveal a correct letter but each deducts 25% of the points (max 3). Auto-graded, case- and accent-insensitive.</p>
+      `;
+    }
+
     if (q.type === 'slider') {
       specific += `
         <div class="row gap top-space">
@@ -3532,6 +3585,12 @@ function syncQuizFromUI() {
       q.ttsLanguage = ['EN', 'FR', 'CA', 'OTHER'].includes(bucket) ? bucket : 'EN';
       // Keep a concrete Edge-TTS voice: reuse the quiz voice for OTHER, else the bucket default.
       q.language = (q.ttsLanguage === 'OTHER' && quiz.language) ? quiz.language : (EDGE_TTS_LANGUAGE_DEFAULTS[q.ttsLanguage] || DEFAULT_EDGE_TTS_VOICE);
+    }
+
+    if (q.type === 'wordle') {
+      q.word = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdWord"]`)?.value || '').trim().slice(0, 16);
+      const att = parseInt(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdAttempts"]`)?.value, 10);
+      q.maxAttempts = Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6;
     }
 
     if (q.type === 'slider') {
@@ -12273,7 +12332,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs'].includes(question.type);
+    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'wordle'].includes(question.type);
 
     if (!show || !needsReveal) {
       if (revealEl) revealEl.remove();
@@ -12288,6 +12347,7 @@ function renderPlayerState(state) {
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
       if (question.type === 'spellingbee') correctText = (question.words || []).map(w => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
+      if (question.type === 'wordle') correctText = String(question.word || '');
     }
 
     if (!correctText) {
@@ -13590,6 +13650,7 @@ function buildPreviewHostQuestion(q) {
       language: q.language || '',
     };
   }
+  if (q.type === 'wordle') return { ...base, word: q.word || '', maxAttempts: Number(q.maxAttempts) || 6 };
   return base;
 }
 
@@ -13661,6 +13722,11 @@ function evaluatePreviewAnswer(q, answer) {
   if (q.type === 'spellingbee') {
     if (!window.SpellingBee) return { correct: false };
     const r = window.SpellingBee.scoreRound(q, answer);
+    return { correct: r.correct, partialScore: r.partialScore, partialTotal: r.partialTotal };
+  }
+  if (q.type === 'wordle') {
+    if (!window.Wordle) return { correct: false };
+    const r = window.Wordle.scoreRound(q, answer);
     return { correct: r.correct, partialScore: r.partialScore, partialTotal: r.partialTotal };
   }
   return { correct: false };
@@ -13865,6 +13931,7 @@ function summarizePreviewStudentAnswer(question, player, openResponseMap = null)
   if (question.type === 'pin') return ok ? 'pin: inside valid zone' : 'pin: outside valid zone';
   if (question.type === 'puzzle') return ok ? 'puzzle: correct order' : 'puzzle: wrong order';
   if (question.type === 'spellingbee') return ok ? 'spelling bee: all words spelled' : 'spelling bee: some words missed';
+  if (question.type === 'wordle') return ok ? 'word guess: solved' : 'word guess: not solved';
   return ok ? 'correct submission' : 'incorrect submission';
 }
 
@@ -14128,6 +14195,7 @@ function renderSoloQuestion() {
   soloGame.puzzleOptions = null;
   // Tear down a previous Spelling Bee preview (removes its document keydown listener).
   if (soloSpellingBeeController) { try { soloSpellingBeeController.destroy(); } catch (e) { /* noop */ } soloSpellingBeeController = null; }
+  if (soloWordleController) { try { soloWordleController.destroy(); } catch (e) { /* noop */ } soloWordleController = null; }
 
   // FIX: Reset bet button cleanly
   live.player.selectedBet = 0;
@@ -14376,6 +14444,14 @@ function renderSoloQuestion() {
     return;
   }
 
+  if (q.type === 'wordle') {
+    soloWordleController = null;
+    if (window.Wordle) {
+      soloWordleController = window.Wordle.render(answersEl, q, { t });
+    }
+    return;
+  }
+
   if (q.type === 'slider') {
     const wrap = document.createElement('div');
     wrap.className = 'slider-inline-wrap';
@@ -14594,11 +14670,26 @@ function evaluateSoloQuestion(q) {
     };
   }
 
+  if (q.type === 'wordle') {
+    const result = soloWordleController ? soloWordleController.getResult() : null;
+    if (!result) return { correct: false, hint: 'Submit at least one guess first.' };
+    const scored = window.Wordle
+      ? window.Wordle.scoreRound(q, result)
+      : { correct: false, partialScore: 0, partialTotal: 1 };
+    return {
+      correct: scored.correct,
+      partialScore: scored.partialScore,
+      partialTotal: scored.partialTotal,
+      hint: scored.correct ? `Solved in ${result.attemptsUsed} tries` : `The word was: ${q.word}`,
+    };
+  }
+
   return { correct: false };
 }
 
 function finishSoloGame() {
   if (soloSpellingBeeController) { try { soloSpellingBeeController.destroy(); } catch (e) { /* noop */ } soloSpellingBeeController = null; }
+  if (soloWordleController) { try { soloWordleController.destroy(); } catch (e) { /* noop */ } soloWordleController = null; }
   gameCard.classList.add('hidden');
   resultCard.classList.remove('hidden');
 
@@ -14954,6 +15045,23 @@ function makeSpellingBeeQuestion() {
   });
 }
 
+function makeWordleQuestion() {
+  const ttsLanguage = quiz.ttsLanguage && quiz.ttsLanguage !== 'NONE' ? quiz.ttsLanguage : DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.language || EDGE_TTS_LANGUAGE_DEFAULTS[ttsLanguage] || DEFAULT_EDGE_TTS_VOICE;
+  const base = (window.Wordle && window.Wordle.defaultQuestion)
+    ? window.Wordle.defaultQuestion()
+    : { type: 'wordle', prompt: 'Guess the word!', points: 1000, timeLimit: 0, word: '', maxAttempts: 6 };
+  return Object.assign({ id: crypto.randomUUID() }, base, {
+    audioEnabled: false,
+    audioMode: 'tts',
+    audioText: '',
+    audioData: '',
+    ttsLanguage,
+    language,
+    media: makeDefaultQuestionMedia(),
+  });
+}
+
 function makeSliderQuestion() {
   return {
     id: crypto.randomUUID(),
@@ -15206,6 +15314,18 @@ function normalizeQuizForLive(raw) {
         words,
         feature: String(q.feature || '').slice(0, 80),
         ...(lad ? { ladderThresholds: lad } : {}),
+      });
+      return;
+    }
+
+    if (q.type === 'wordle') {
+      const word = String(q.word || '').trim().slice(0, 16);
+      if (word.replace(/[^a-zA-Z]/g, '').length < 3) return;
+      const att = parseInt(q.maxAttempts, 10);
+      normalized.questions.push({
+        ...base,
+        word,
+        maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
       });
       return;
     }
@@ -15953,6 +16073,7 @@ function iconForType(type) {
       voice_text: '🎤',
       pin: '📍',
       spellingbee: '🐝',
+      wordle: '🟩',
     }[type] || ''
   );
 }
@@ -15960,6 +16081,7 @@ function iconForType(type) {
 function minTimeByType(type) {
   if (type === 'slider') return 10;
   if (type === 'spellingbee') return 60;
+  if (type === 'wordle') return 30;
   if (['text', 'voice_text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
 }

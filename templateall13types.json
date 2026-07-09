@@ -322,7 +322,11 @@
       "ttsLanguage": "EN",
       "language": "en-US-AriaNeural",
       "answerLanguage": "es-ES",
-      "accepted": ["manzana", "una manzana", "la manzana"],
+      "accepted": [
+        "manzana",
+        "una manzana",
+        "la manzana"
+      ],
       "imageKeyword": "red apple",
       "imageData": ""
     },
@@ -357,9 +361,18 @@
       "imageData": "",
       "readingText": "Each autumn, monarch butterflies travel up to 4,800 km from Canada and the United States to central Mexico. The trigger is not a single weather event but a combination of shorter day length, falling temperatures, and the aging of milkweed — their only larval food plant. The southbound trip takes one super-generation several weeks; the return north is staged across three or four successive generations, none of which ever completes the full round trip.",
       "answers": [
-        { "text": "Shorter daylight and food-plant decline", "correct": true },
-        { "text": "Predator pressure in northern habitats", "correct": false },
-        { "text": "Shifts in the Earth's magnetic field", "correct": false }
+        {
+          "text": "Shorter daylight and food-plant decline",
+          "correct": true
+        },
+        {
+          "text": "Predator pressure in northern habitats",
+          "correct": false
+        },
+        {
+          "text": "Shifts in the Earth's magnetic field",
+          "correct": false
+        }
       ]
     },
     {
@@ -373,11 +386,46 @@
       "ttsLanguage": "EN",
       "language": "en-US-AriaNeural",
       "words": [
-        { "target": "letter", "clusterTiles": ["tt"] },
-        { "target": "spelling", "clusterTiles": ["ll"] },
-        { "target": "green", "clusterTiles": ["ee"], "distractors": ["ea"] },
-        { "target": "bottle", "audioText": "a glass or plastic container for liquids" }
+        {
+          "target": "letter",
+          "clusterTiles": [
+            "tt"
+          ]
+        },
+        {
+          "target": "spelling",
+          "clusterTiles": [
+            "ll"
+          ]
+        },
+        {
+          "target": "green",
+          "clusterTiles": [
+            "ee"
+          ],
+          "distractors": [
+            "ea"
+          ]
+        },
+        {
+          "target": "bottle",
+          "audioText": "a glass or plastic container for liquids"
+        }
       ]
+    },
+    {
+      "id": "q18-wordle",
+      "type": "wordle",
+      "prompt": "Guess the animal: a large grey animal with a trunk.",
+      "points": 1000,
+      "timeLimit": 0,
+      "isPoll": false,
+      "word": "elephant",
+      "maxAttempts": 6,
+      "audioEnabled": false,
+      "audioMode": "tts",
+      "audioText": "",
+      "ttsLanguage": "EN"
     }
   ],
   "language": "en-US-JennyNeural"

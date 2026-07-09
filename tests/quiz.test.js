@@ -1510,3 +1510,97 @@ describe('SpellingBee.sanitizeResumeState (navigate-away resume)', () => {
     assert.equal(SB.sanitizeResumeState({ results: 'nope' }, cfg), null);
   });
 });
+
+// =============================== Wordle (wordle type) ===============================
+const WD = require('../wordle.js').Wordle;
+
+describe('Wordle.statuses (per-letter colours)', () => {
+  it('marks hits, presents and misses', () => {
+    assert.deepEqual(WD.statuses('crane', 'whale'), ['miss', 'miss', 'hit', 'miss', 'hit']);
+  });
+  it('all green on the exact word', () => {
+    assert.deepEqual(WD.statuses('whale', 'whale'), ['hit', 'hit', 'hit', 'hit', 'hit']);
+  });
+  it('duplicate letters only count as many times as in the target', () => {
+    // target "abbey" has two b's; guess "babes": b→present, a→present, b→present, e→hit? let's assert canonically
+    assert.deepEqual(WD.statuses('bbbbb', 'abbey'), ['miss', 'hit', 'hit', 'miss', 'miss']);
+  });
+  it('is case- and accent-insensitive', () => {
+    assert.deepEqual(WD.statuses('CAFÉ', 'cafe'), ['hit', 'hit', 'hit', 'hit']);
+  });
+});
+
+describe('Wordle.keyStates (keyboard colouring)', () => {
+  it('keeps the best-known state per letter', () => {
+    const st = WD.keyStates(['crane', 'whale'], 'whale');
+    assert.equal(st.e, 'hit');    // e was hit in both
+    assert.equal(st.c, 'miss');
+    assert.equal(st.w, 'hit');
+  });
+  it('upgrades present → hit across guesses', () => {
+    const st = WD.keyStates(['ahead', 'whale'], 'whale');
+    assert.equal(st.a, 'hit'); // present in "ahead" (pos 0), hit in "whale"
+  });
+});
+
+describe('Wordle.scoreRound (server-mirrored scoring)', () => {
+  const q = { word: 'whale', maxAttempts: 6 };
+  it('solved with no hints = full score', () => {
+    const r = WD.scoreRound(q, { guesses: ['crane', 'whale'] });
+    assert.equal(r.correct, true);
+    assert.equal(r.partialScore, 1);
+    assert.equal(r.partialTotal, 1);
+  });
+  it('each hint deducts 25%', () => {
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 1 }).partialScore, 0.75);
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 2 }).partialScore, 0.5);
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 3 }).partialScore, 0.25);
+  });
+  it('not solved = 0 even with hints claimed', () => {
+    assert.equal(WD.scoreRound(q, { guesses: ['crane'], hintsUsed: 1 }).partialScore, 0);
+  });
+  it('caps client-reported hints at maxHintsFor', () => {
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 99 }).partialScore, 0.25); // cap 3
+  });
+  it('ignores guesses beyond maxAttempts (no cheating by extra tries)', () => {
+    const r = WD.scoreRound({ word: 'whale', maxAttempts: 3 }, { guesses: ['aaaaa', 'bbbbb', 'ccccc', 'whale'] });
+    assert.equal(r.correct, false);
+  });
+  it('never trusts a client "solved" flag', () => {
+    const r = WD.scoreRound(q, { guesses: ['wrong'], solved: true });
+    assert.equal(r.correct, false);
+  });
+  it('grades case- and accent-insensitively', () => {
+    assert.equal(WD.scoreRound({ word: 'Café' }, { guesses: ['CAFE'] }).correct, true);
+  });
+});
+
+describe('Wordle.validateConfig / maxHintsFor', () => {
+  it('accepts a 5-8 letter word', () => {
+    assert.deepEqual(WD.validateConfig({ word: 'elephant' }), []);
+    assert.deepEqual(WD.validateConfig({ word: 'whale' }), []);
+  });
+  it('rejects a missing or too-short word', () => {
+    assert.ok(WD.validateConfig({}).length > 0);
+    assert.ok(WD.validateConfig({ word: 'ab' }).length > 0);
+  });
+  it('maxHintsFor caps at 3, less for short words', () => {
+    assert.equal(WD.maxHintsFor('elephant'), 3);
+    assert.equal(WD.maxHintsFor('cat'), 1);
+  });
+});
+
+describe('Wordle.sanitizeResumeState (navigate-away resume)', () => {
+  const cfg = { word: 'whale', maxAttempts: 6 };
+  const mid = { v: 1, word: 'whale', guesses: ['crane'], input: 'wh', hintsUsed: 1, revealed: { 0: 'w' }, done: false, solved: false, startedAt: 1 };
+  it('accepts a snapshot for the same word', () => {
+    assert.equal(WD.sanitizeResumeState(mid, cfg), mid);
+  });
+  it('rejects a snapshot for a different word (edited quiz)', () => {
+    assert.equal(WD.sanitizeResumeState(mid, { word: 'zebra' }), null);
+  });
+  it('rejects junk', () => {
+    assert.equal(WD.sanitizeResumeState(null, cfg), null);
+    assert.equal(WD.sanitizeResumeState({ word: 'whale', guesses: 'nope' }, cfg), null);
+  });
+});

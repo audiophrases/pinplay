@@ -4719,6 +4719,14 @@ function summarizeHistoryAnswer(question, answer) {
     }
     return '(none)';
   }
+  if (question.type === 'wordle') {
+    if (answer && typeof answer === 'object' && Array.isArray(answer.guesses)) {
+      const scored = scoreWordleRound(question, answer);
+      const hints = scored.hintsUsed ? ` (${scored.hintsUsed} hint${scored.hintsUsed > 1 ? 's' : ''})` : '';
+      return scored.solved ? `🟩 solved in ${scored.attemptsUsed}${hints}` : `⬜ not solved (${scored.attemptsUsed} tries)`;
+    }
+    return '(none)';
+  }
   return String(answer || '');
 }
 
@@ -5152,6 +5160,23 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
     };
   }
 
+  if (question.type === 'wordle') {
+    // The word must reach the client: the board colours every guess instantly and
+    // hints reveal letters, so the target is needed for local play (same trust
+    // model as spellingbee). The server still re-grades authoritatively.
+    return {
+      type: question.type,
+      prompt: question.prompt,
+      points: question.points,
+      timeLimit: question.timeLimit,
+      isPoll: !!question.isPoll,
+      word: String(question.word || ''),
+      maxAttempts: Number(question.maxAttempts) || 6,
+      media: publicQuestionMediaPayload(question),
+      ...publicAudioPayload(question),
+    };
+  }
+
   return {
     type: question.type,
     prompt: question.prompt,
@@ -5306,6 +5331,10 @@ function evaluate(question, answer) {
 
   if (question.type === 'spellingbee') {
     return scoreSpellingBeeRound(question, answer);
+  }
+
+  if (question.type === 'wordle') {
+    return scoreWordleRound(question, answer);
   }
 
   return { correct: false };
@@ -5503,6 +5532,18 @@ function normalizeQuiz(quiz) {
       return;
     }
 
+    if (q.type === 'wordle') {
+      const word = String(q.word || '').trim().slice(0, 16);
+      if (normalizeWordle(word).length < 3) return;
+      const att = parseInt(q.maxAttempts, 10);
+      normalized.questions.push({
+        ...base,
+        word,
+        maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
+      });
+      return;
+    }
+
     if (q.type === 'pin') {
       if (!q.imageData) return;
       const zonesSource = Array.isArray(q.zones) && q.zones.length ? q.zones : [q.zone || {}];
@@ -5625,6 +5666,33 @@ function scoreSpellingBeeRound(question, answer) {
     }
   });
   return { correct: correctCount === total, partialScore: score, partialTotal: total };
+}
+
+// Wordle: case- AND accent-insensitive, letters only. Mirrors Wordle.normalize()
+// in wordle.js (browser engine).
+function normalizeWordle(s) {
+  return String(s == null ? '' : s)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+}
+
+// Recompute the round from stored guesses vs the question's word — never trust a
+// client-reported "solved". Solved → 1 minus 25% per hint (floor 0). The hint
+// count is client-reported (like spellingbee's solvedPass) but a round with no
+// correct guess always earns 0. Mirrors Wordle.scoreRound() in wordle.js.
+function scoreWordleRound(question, answer) {
+  const target = normalizeWordle(question && question.word);
+  if (!target) return { correct: false, partialScore: 0, partialTotal: 1, solved: false, hintsUsed: 0, attemptsUsed: 0 };
+  const rawA = parseInt(question && question.maxAttempts, 10);
+  const maxA = Number.isFinite(rawA) ? Math.max(3, Math.min(8, rawA)) : 6;
+  const guesses = (answer && Array.isArray(answer.guesses) ? answer.guesses : []).slice(0, maxA);
+  const solved = guesses.some((g) => normalizeWordle(g) === target);
+  const maxHints = Math.max(0, Math.min(3, target.length - 2));
+  const rawHints = Number(answer && answer.hintsUsed);
+  const hintsUsed = Math.max(0, Math.min(maxHints, Number.isFinite(rawHints) ? Math.floor(rawHints) : 0));
+  const score = solved ? Math.max(0, 1 - 0.25 * hintsUsed) : 0;
+  return { correct: solved, partialScore: score, partialTotal: 1, solved, hintsUsed, attemptsUsed: guesses.length };
 }
 
 function stripDiacritics(text) {
@@ -7188,6 +7256,11 @@ function summarizePoll(question, responses) {
     answers.forEach((a) => pushCount(Array.isArray(a) ? a.join(' | ') : String(a || '')));
   } else if (question?.type === 'spellingbee') {
     answers.forEach((a) => pushCount((a && typeof a === 'object') ? `${Number(a.correctCount || 0)}/${Number(a.total || 0)} correct` : '(none)'));
+  } else if (question?.type === 'wordle') {
+    answers.forEach((a) => {
+      const s = (a && typeof a === 'object') ? scoreWordleRound(question, a) : null;
+      pushCount(s ? (s.solved ? `solved in ${s.attemptsUsed}` : 'not solved') : '(none)');
+    });
   } else {
     answers.forEach((a) => pushCount(String(a || '')));
   }
@@ -7254,6 +7327,10 @@ function hostCorrectSummary(question) {
 
   if (question.type === 'spellingbee') {
     return (question.words || []).map((w) => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
+  }
+
+  if (question.type === 'wordle') {
+    return String(question.word || '');
   }
 
   if (question.type === 'slider') {
