@@ -4982,6 +4982,21 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .wd-btn:hover:not(:disabled) { border-color: var(--primary); }
 .wd-btn:disabled { opacity: 0.45; cursor: default; }
 
+/* Authored text hints (synonyms/clues), revealed one line at a time. */
+.wd-hints { display: flex; flex-direction: column; gap: 4px; align-items: center; width: 100%; }
+.wd-hints:empty { display: none; }
+.wd-hint-line {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  background: color-mix(in srgb, #d4a017 16%, var(--card));
+  border: 1px solid color-mix(in srgb, #d4a017 45%, var(--card));
+  border-radius: 8px;
+  padding: 4px 12px;
+  max-width: 460px;
+}
+
 /* Hint slots: one dashed cell per letter, hint-revealed letters fill in green.
    Always present so using a hint never shifts the layout. */
 .wd-hint-slots { display: flex; gap: 4px; justify-content: center; }

@@ -416,7 +416,7 @@
     {
       "id": "q18-wordle",
       "type": "wordle",
-      "prompt": "Guess the animal: a large grey animal with a trunk.",
+      "prompt": "Guess the animal.",
       "points": 1000,
       "timeLimit": 0,
       "isPoll": false,
@@ -425,7 +425,13 @@
       "audioEnabled": false,
       "audioMode": "tts",
       "audioText": "",
-      "ttsLanguage": "EN"
+      "ttsLanguage": "EN",
+      "lexicon": "en",
+      "hints": [
+        "It is a mammal.",
+        "It is the largest land animal.",
+        "It has a long trunk and big ears."
+      ]
     }
   ],
   "language": "en-US-JennyNeural"

@@ -16,8 +16,10 @@
  * wordLength - 2 letter reveals).
  *
  * Scoring: solved → 100% minus 25% per hint used (floor 0); not solved → 0.
- * Grading is case- AND accent-insensitive; any full-length letter combination
- * is accepted as a guess (no dictionary check — ESL-friendly).
+ * Grading is case- AND accent-insensitive. Guesses are validated against a word
+ * list when the question sets 'lexicon' ('en' | 'ca') — a made-up string is
+ * rejected without costing an attempt (the target word is always accepted). With
+ * lexicon 'none' (or a missing list) any full-length string is allowed (ESL mode).
  *
  * This file is a classic <script> (no modules) shared by the student app
  * (play.js), the teacher app (app.js) and the test harness; it attaches
@@ -108,7 +110,20 @@
         .map(function (h) { return String(h || '').trim(); })
         .filter(Boolean)
         .slice(0, MAX_HINTS),
+      // Word list used to reject made-up guesses; 'none' = accept any letters.
+      lexicon: ['en', 'ca'].indexOf(String(question.lexicon || '')) >= 0 ? String(question.lexicon) : 'none',
     };
+  }
+
+  // Build a real-word validator for a lexicon id from the loaded lexicon globals
+  // (window.WordleLexiconEN / WordleLexiconCA). Returns null when there is nothing
+  // to check against (id 'none', or the list script isn't loaded) → any guess ok.
+  function wordChecker(lexicon) {
+    var lex = null;
+    if (lexicon === 'en' && global.WordleLexiconEN) lex = global.WordleLexiconEN;
+    else if (lexicon === 'ca' && global.WordleLexiconCA) lex = global.WordleLexiconCA;
+    if (!lex || typeof lex.has !== 'function') return null;
+    return function (w) { return lex.has(w); };
   }
 
   function validateConfig(question) {
@@ -181,6 +196,9 @@
     var maxA = cfg.maxAttempts;
     var textHints = cfg.hints; // authored clues (less → more obvious); empty = letter reveals
     var hintCap = hintCapFor(cfg);
+    // Guess validator: option override wins (tests), else derive from the lexicon
+    // id. null = accept any full-length string. The target is always allowed.
+    var isRealWord = typeof options.isRealWord === 'function' ? options.isRealWord : wordChecker(cfg.lexicon);
 
     container.innerHTML = '';
     container.classList.add('wd-host');
@@ -348,6 +366,12 @@
       if (done) return;
       if (input.length < len) {
         feedbackEl.textContent = t('Not enough letters');
+        feedbackEl.className = 'wd-feedback wd-bad';
+        shakeRow(guesses.length);
+        return;
+      }
+      if (isRealWord && normalize(input) !== target && !isRealWord(normalize(input))) {
+        feedbackEl.textContent = t('Not in the word list');
         feedbackEl.className = 'wd-feedback wd-bad';
         shakeRow(guesses.length);
         return;
@@ -537,6 +561,7 @@
     keyStates: keyStates,
     maxHintsFor: maxHintsFor,
     hintCapFor: hintCapFor,
+    wordChecker: wordChecker,
     scoreRound: scoreRound,
     normalizeConfig: normalizeConfig,
     validateConfig: validateConfig,

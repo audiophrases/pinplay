@@ -178,6 +178,7 @@ window.PINPLAY_FR_DICT = {
   '💡 Hint (−25%)': '💡 Indice (−25 %)',
   'Enter': 'Entrée',
   'Not enough letters': 'Pas assez de lettres',
+  'Not in the word list': 'Pas dans la liste de mots',
   'The word was: {word}': 'Le mot était : {word}',
   'Solved in {n} tries': 'Résolu en {n} essais',
   '{n} hint(s) used': '{n} indice(s) utilisé(s)',

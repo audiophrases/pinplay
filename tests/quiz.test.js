@@ -1575,6 +1575,33 @@ describe('Wordle.scoreRound (server-mirrored scoring)', () => {
   });
 });
 
+describe('Wordle hints (authored synonyms vs letter reveal)', () => {
+  it('caps hints at the authored hint count', () => {
+    const q = { word: 'elephant', hints: ['a', 'b'] };
+    assert.equal(WD.hintCapFor(WD.normalizeConfig(q)), 2);
+    assert.equal(WD.scoreRound(q, { guesses: ['elephant'], hintsUsed: 99 }).partialScore, 0.5); // 2 hints × 25%
+  });
+  it('falls back to letter-reveal cap when no hints authored', () => {
+    assert.equal(WD.hintCapFor(WD.normalizeConfig({ word: 'whale' })), 3);   // min(3, len-2)
+    assert.equal(WD.hintCapFor(WD.normalizeConfig({ word: 'cat' })), 1);
+  });
+  it('normalizeConfig trims/limits hints to 3 and drops blanks', () => {
+    assert.deepEqual(WD.normalizeConfig({ word: 'x', hints: ['', ' a ', 'b', 'c', 'd'] }).hints, ['a', 'b', 'c']);
+  });
+});
+
+describe('Wordle lexicon (guess validation)', () => {
+  it('normalizeConfig only accepts en/ca lexicon ids', () => {
+    assert.equal(WD.normalizeConfig({ word: 'whale', lexicon: 'en' }).lexicon, 'en');
+    assert.equal(WD.normalizeConfig({ word: 'whale', lexicon: 'de' }).lexicon, 'none');
+    assert.equal(WD.normalizeConfig({ word: 'whale' }).lexicon, 'none');
+  });
+  it('wordChecker returns null for none / unloaded lists', () => {
+    assert.equal(WD.wordChecker('none'), null);
+    assert.equal(WD.wordChecker('de'), null);
+  });
+});
+
 describe('Wordle.validateConfig / maxHintsFor', () => {
   it('accepts a 5-8 letter word', () => {
     assert.deepEqual(WD.validateConfig({ word: 'elephant' }), []);

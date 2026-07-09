@@ -5172,6 +5172,8 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       isPoll: !!question.isPoll,
       word: String(question.word || ''),
       maxAttempts: Number(question.maxAttempts) || 6,
+      hints: Array.isArray(question.hints) ? question.hints.map((h) => String(h || '')).filter(Boolean).slice(0, 3) : [],
+      lexicon: ['en', 'ca'].includes(question.lexicon) ? question.lexicon : 'none',
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
@@ -5536,10 +5538,14 @@ function normalizeQuiz(quiz) {
       const word = String(q.word || '').trim().slice(0, 16);
       if (normalizeWordle(word).length < 3) return;
       const att = parseInt(q.maxAttempts, 10);
+      const hints = (Array.isArray(q.hints) ? q.hints : [])
+        .map((h) => String(h || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3);
       normalized.questions.push({
         ...base,
         word,
         maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
+        ...(hints.length ? { hints } : {}),
+        lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
       });
       return;
     }
@@ -5688,7 +5694,11 @@ function scoreWordleRound(question, answer) {
   const maxA = Number.isFinite(rawA) ? Math.max(3, Math.min(8, rawA)) : 6;
   const guesses = (answer && Array.isArray(answer.guesses) ? answer.guesses : []).slice(0, maxA);
   const solved = guesses.some((g) => normalizeWordle(g) === target);
-  const maxHints = Math.max(0, Math.min(3, target.length - 2));
+  // Hint cap mirrors Wordle.hintCapFor: authored text hints cap at their count,
+  // else the letter-reveal fallback caps at wordLength - 2 (both max 3).
+  const authored = (Array.isArray(question && question.hints) ? question.hints : [])
+    .map((h) => String(h || '').trim()).filter(Boolean).length;
+  const maxHints = authored ? Math.min(3, authored) : Math.max(0, Math.min(3, target.length - 2));
   const rawHints = Number(answer && answer.hintsUsed);
   const hintsUsed = Math.max(0, Math.min(maxHints, Number.isFinite(rawHints) ? Math.floor(rawHints) : 0));
   const score = solved ? Math.max(0, 1 - 0.25 * hintsUsed) : 0;

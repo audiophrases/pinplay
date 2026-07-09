@@ -303,11 +303,17 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q17-wordle",
       "type": "wordle",
-      "prompt": "Guess the animal: a large grey animal with a trunk.",
+      "prompt": "Guess the animal.",
       "points": 1000,
       "timeLimit": 0,
       "word": "elephant",
       "maxAttempts": 6,
+      "lexicon": "en",
+      "hints": [
+        "It is a mammal.",
+        "It is the largest land animal.",
+        "It has a long trunk and big ears."
+      ],
       "audioEnabled": false,
       "audioMode": "tts",
       "audioText": "",
@@ -491,12 +497,12 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "wordle": {
     "name": "Word Guess (Wordle)",
-    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. The student may reveal a correct letter with a Hint button, but each hint deducts 25% of the question's points (max 3 hints). Scoring: solved = 100% minus 25% per hint; not solved = 0. Any full-length letter combination is accepted as a guess (no dictionary check). Grading is case- and accent-insensitive. Use the 'prompt' as the clue (a definition, translation or riddle for the hidden word).",
-    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPenaltyPercent": 25 },
-    "pedagogicalUses": ["Vocabulary retrieval from a definition or translation clue.", "Spelling reinforcement through letter-position feedback.", "Warm-up or exit-ticket puzzles with high engagement."],
+    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. HINTS (each deducts 25% of the points, max 3): provide a 'hints' array of 1-3 short text clues ORDERED FROM LESS OBVIOUS TO MORE OBVIOUS (synonyms, category, then a near-giveaway) — the student buys them in order. If 'hints' is omitted, the Hint button instead reveals a correct letter. Scoring: solved = 100% minus 25% per hint; not solved = 0. Set 'lexicon' to 'en' (English) or 'ca' (Catalan) to reject made-up guesses against a real-word list (the answer word is always accepted); use 'none' (default) to allow any letters — best for other languages or made-up-friendly rounds. Grading is case- and accent-insensitive. Use the 'prompt' as the main clue (a definition, translation or riddle for the hidden word); the 'hints' escalate from there.",
+    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPenaltyPercent": 25, "hintsOrder": "less obvious → more obvious", "lexiconValues": ["none", "en", "ca"] },
+    "pedagogicalUses": ["Vocabulary retrieval from a definition or translation clue.", "Spelling reinforcement through letter-position feedback.", "Warm-up or exit-ticket puzzles with high engagement.", "Scaffolded retrieval: weaker students buy escalating synonym hints at a points cost."],
     "ttsStrategy": "audioText can read the clue aloud for weaker readers; the hidden word itself is never spoken.",
-    "differentiationTips": ["Write the prompt clue at the right difficulty: a direct translation is easiest, a riddle hardest.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners."],
-    "commonPitfalls": ["Words with spaces, hyphens or accents-only differences.", "A prompt that gives away the word ('It starts with ele-').", "Words outside 5-8 letters."]
+    "differentiationTips": ["Write the prompt clue at the right difficulty: a direct translation is easiest, a riddle hardest.", "Author 'hints' as a gentle ramp — synonym, then category, then a near-giveaway — so struggling students can self-scaffold for a points cost.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners.", "Set 'lexicon':'en' for English so guessing stays honest; 'none' for other languages."],
+    "commonPitfalls": ["Words with spaces, hyphens or accents-only differences.", "A prompt that gives away the word ('It starts with ele-').", "Words outside 5-8 letters.", "Hints ordered most-obvious first (they must go LESS → MORE obvious).", "Setting lexicon 'en'/'ca' for a word not in that language (the answer is still accepted, but it's confusing)."]
   }
 };
 
@@ -2608,20 +2614,36 @@ function renderBuilder() {
     if (q.type === 'wordle') {
       const attempts = [3, 4, 5, 6, 7, 8];
       const cur = attempts.includes(Number(q.maxAttempts)) ? Number(q.maxAttempts) : 6;
+      const lexicons = [['none', 'None (any letters)'], ['en', 'English'], ['ca', 'Catalan']];
+      const curLex = lexicons.some(([v]) => v === q.lexicon) ? q.lexicon : 'none';
+      const hints = Array.isArray(q.hints) ? q.hints.map((h) => String(h || '')) : [];
+      while (hints.length < 3) hints.push('');
       specific += `
         <div class="row gap top-space">
           <div style="flex:1;min-width:200px;">
             <label>Hidden word (5–8 letters, letters only)</label>
             <input data-q="${idx}" data-field="wdWord" maxlength="16" value="${escapeHtml(q.word || '')}" placeholder="e.g. elephant" />
           </div>
-          <div style="min-width:120px;">
+          <div style="min-width:110px;">
             <label>Attempts</label>
             <select data-q="${idx}" data-field="wdAttempts">
               ${attempts.map((n) => `<option value="${n}" ${cur === n ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
           </div>
+          <div style="min-width:150px;">
+            <label>Guess word list</label>
+            <select data-q="${idx}" data-field="wdLexicon">
+              ${lexicons.map(([v, lbl]) => `<option value="${v}" ${curLex === v ? 'selected' : ''}>${lbl}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        <p class="small">Wordle-style: the student guesses the word on an on-screen keyboard with green/yellow/grey letter feedback. Write the clue in the question prompt (a definition, translation or riddle). Hints reveal a correct letter but each deducts 25% of the points (max 3). Auto-graded, case- and accent-insensitive.</p>
+        <label class="top-space">Hints (optional, ordered less obvious → more obvious). Leave blank to hint by revealing a letter instead.</label>
+        <div class="wd-hint-rows">
+          ${hints.slice(0, 3).map((h, i) => `
+            <input data-q="${idx}" data-wd-hint="${i}" maxlength="120" value="${escapeHtml(h)}" placeholder="Hint ${i + 1} (${i === 0 ? 'vaguest' : i === 2 ? 'most obvious' : 'clearer'})" />
+          `).join('')}
+        </div>
+        <p class="small">Wordle-style: the student guesses the word on an on-screen keyboard with green/yellow/grey letter feedback. Write the clue in the question prompt. Each hint deducts 25% of the points (max 3). "Guess word list" rejects made-up guesses (the answer is always accepted); use None for made-up-friendly / other-language rounds. Auto-graded, case- and accent-insensitive.</p>
       `;
     }
 
@@ -3591,6 +3613,14 @@ function syncQuizFromUI() {
       q.word = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdWord"]`)?.value || '').trim().slice(0, 16);
       const att = parseInt(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdAttempts"]`)?.value, 10);
       q.maxAttempts = Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6;
+      const lex = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdLexicon"]`)?.value || 'none');
+      q.lexicon = ['en', 'ca'].includes(lex) ? lex : 'none';
+      const hints = [];
+      for (let i = 0; i < 3; i++) {
+        const h = String(questionListEl.querySelector(`[data-q="${idx}"][data-wd-hint="${i}"]`)?.value || '').trim().slice(0, 120);
+        if (h) hints.push(h);
+      }
+      q.hints = hints;
     }
 
     if (q.type === 'slider') {
@@ -13650,7 +13680,15 @@ function buildPreviewHostQuestion(q) {
       language: q.language || '',
     };
   }
-  if (q.type === 'wordle') return { ...base, word: q.word || '', maxAttempts: Number(q.maxAttempts) || 6 };
+  if (q.type === 'wordle') {
+    return {
+      ...base,
+      word: q.word || '',
+      maxAttempts: Number(q.maxAttempts) || 6,
+      hints: Array.isArray(q.hints) ? q.hints.filter(Boolean).slice(0, 3) : [],
+      lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
+    };
+  }
   return base;
 }
 
@@ -15322,10 +15360,14 @@ function normalizeQuizForLive(raw) {
       const word = String(q.word || '').trim().slice(0, 16);
       if (word.replace(/[^a-zA-Z]/g, '').length < 3) return;
       const att = parseInt(q.maxAttempts, 10);
+      const hints = (Array.isArray(q.hints) ? q.hints : [])
+        .map((h) => String(h || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3);
       normalized.questions.push({
         ...base,
         word,
         maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
+        ...(hints.length ? { hints } : {}),
+        lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
       });
       return;
     }
