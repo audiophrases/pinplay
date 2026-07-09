@@ -8,15 +8,17 @@
  * the word — on the board AND on an on-screen QWERTY keyboard that remembers
  * the best-known state of every letter.
  *
- * Hints (each deducts HINT_PENALTY (25%) of the question's points, max
- * MAX_HINTS (3)): if the author supplied 'hints' — up to 3 text clues ordered
- * from less obvious to more obvious (synonyms, definitions) — the Hint button
- * reveals the next one as a compact line. When no hints are authored, the
- * button falls back to revealing a correct letter instead, shown the same way
- * ("Letter n: X"); never more than wordLength - 2 letter reveals. There is no
- * separate word-length indicator — the grid already shows the length.
+ * Hints (max MAX_HINTS (3), pricing via HINT_WEIGHTS): the FIRST hint is free,
+ * then each of the next two costs HINT_PENALTY (33%). If the author supplied
+ * 'hints' — up to 3 text clues ordered from less obvious to more obvious
+ * (synonyms, definitions) — the Hint button reveals the next one as a compact
+ * line. When no hints are authored, the button falls back to revealing a
+ * correct letter instead, shown the same way ("Letter n: X"); never more than
+ * wordLength - 2 letter reveals. There is no separate word-length indicator —
+ * the grid already shows the length.
  *
- * Scoring: solved → 100% minus 25% per hint used (floor 0); not solved → 0.
+ * Scoring: solved → HINT_WEIGHTS[hintsUsed] (100% / 100% / 67% / 34%); not
+ * solved → 0.
  * Grading is case- AND accent-insensitive. Guesses are validated against a word
  * list when the question sets 'lexicon' ('en' | 'ca') — a made-up string is
  * rejected without costing an attempt (the target word is always accepted). With
@@ -38,7 +40,10 @@
   var MIN_LEN = 3;   // hard floor (engine tolerance); authoring guideline is 5–8
   var MAX_LEN = 12;  // hard ceiling
   var MAX_HINTS = 3;
-  var HINT_PENALTY = 0.25;
+  // The first hint is free; each of the next two costs 33% of the points.
+  var HINT_PENALTY = 0.33;
+  var HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.67, 3: 0.34 };
+  function hintWeight(hintsUsed) { return HINT_WEIGHTS[hintsUsed] != null ? HINT_WEIGHTS[hintsUsed] : 0; }
   var KEY_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
   // ------------------------------------------------------------------- helpers
@@ -150,9 +155,10 @@
 
   // --------------------------------------------------------------------- score
   // Recompute the round from stored guesses vs the question's word — never trust
-  // a client-reported "solved". Solved → 1 minus 25% per hint (floor 0); the
-  // hint count itself is client-reported (like spellingbee's solvedPass) but a
-  // round with no correct guess always earns 0. Mirrored in cloudflare/worker.js.
+  // a client-reported "solved". Solved → HINT_WEIGHTS[hintsUsed] (1st hint free,
+  // then 33% off for each of the next two); the hint count itself is
+  // client-reported (like spellingbee's solvedPass) but a round with no correct
+  // guess always earns 0. Mirrored in cloudflare/worker.js.
   function scoreRound(question, answer) {
     var cfg = normalizeConfig(question);
     var target = normalize(cfg.word);
@@ -162,7 +168,7 @@
     var solved = guesses.some(function (g) { return normalize(g) === target; });
     var rawHints = Number(answer && answer.hintsUsed);
     var hintsUsed = Math.max(0, Math.min(hintCapFor(cfg), Number.isFinite(rawHints) ? Math.floor(rawHints) : 0));
-    var score = solved ? Math.max(0, 1 - HINT_PENALTY * hintsUsed) : 0;
+    var score = solved ? hintWeight(hintsUsed) : 0;
     return {
       correct: solved,
       partialScore: score,
@@ -232,7 +238,7 @@
     var progressEl = el('span', 'wd-progress');
     var hintBtn = el('button', 'wd-btn wd-hint');
     hintBtn.type = 'button';
-    hintBtn.textContent = t('💡 Hint (−25%)');
+    hintBtn.textContent = t('💡 Hint (free)'); // hintsUsed is 0 at creation; updateHeader() keeps it current
     header.append(progressEl, hintBtn);
 
     var gridEl = el('div', 'wd-grid');
@@ -342,9 +348,15 @@
       rowEl.classList.remove('wd-shake'); void rowEl.offsetWidth; rowEl.classList.add('wd-shake');
     }
 
+    // The NEXT hint's price: the 1st is free, the 2nd and 3rd cost 33% each.
+    function nextHintLabel() {
+      return hintsUsed === 0 ? t('💡 Hint (free)') : t('💡 Hint (−33%)');
+    }
+
     function updateHeader() {
       progressEl.textContent = progressText(Math.min(guesses.length + 1, maxA));
       hintBtn.disabled = done || hintsUsed >= hintCap;
+      hintBtn.textContent = nextHintLabel();
     }
 
     // --- actions ---------------------------------------------------------------
@@ -428,8 +440,10 @@
       hintBtn.disabled = true;
       progressEl.textContent = progressText(guesses.length);
       if (solved) {
-        var pct = Math.round(Math.max(0, 1 - HINT_PENALTY * hintsUsed) * 100);
-        feedbackEl.textContent = t('✓ Correct!') + (hintsUsed ? ' · ' + pct + '%' : '');
+        var pct = Math.round(hintWeight(hintsUsed) * 100);
+        // Only show the percentage once it's actually below 100% (the free 1st
+        // hint doesn't cost anything, so nothing to report at hintsUsed===1).
+        feedbackEl.textContent = t('✓ Correct!') + (pct < 100 ? ' · ' + pct + '%' : '');
         feedbackEl.className = 'wd-feedback wd-good';
       } else {
         feedbackEl.textContent = t('The word was: {word}', { word: target });
@@ -557,6 +571,8 @@
     MAX_ATTEMPTS: MAX_ATTEMPTS,
     MAX_HINTS: MAX_HINTS,
     HINT_PENALTY: HINT_PENALTY,
+    HINT_WEIGHTS: HINT_WEIGHTS,
+    hintWeight: hintWeight,
     normalize: normalize,
     statuses: statuses,
     keyStates: keyStates,

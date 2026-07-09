@@ -5685,10 +5685,16 @@ function normalizeWordle(s) {
     .replace(/[^a-z]/g, '');
 }
 
+// Hint pricing: the 1st hint is free, the next two cost 33% each. Mirrors
+// Wordle.HINT_WEIGHTS / hintWeight() in wordle.js.
+const WORDLE_HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.67, 3: 0.34 };
+function wordleHintWeight(hintsUsed) { return WORDLE_HINT_WEIGHTS[hintsUsed] ?? 0; }
+
 // Recompute the round from stored guesses vs the question's word — never trust a
-// client-reported "solved". Solved → 1 minus 25% per hint (floor 0). The hint
-// count is client-reported (like spellingbee's solvedPass) but a round with no
-// correct guess always earns 0. Mirrors Wordle.scoreRound() in wordle.js.
+// client-reported "solved". Solved → wordleHintWeight(hintsUsed) (1st hint free,
+// then 33% off for each of the next two). The hint count is client-reported
+// (like spellingbee's solvedPass) but a round with no correct guess always earns
+// 0. Mirrors Wordle.scoreRound() in wordle.js.
 function scoreWordleRound(question, answer) {
   const target = normalizeWordle(question && question.word);
   if (!target) return { correct: false, partialScore: 0, partialTotal: 1, solved: false, hintsUsed: 0, attemptsUsed: 0 };
@@ -5703,7 +5709,7 @@ function scoreWordleRound(question, answer) {
   const maxHints = authored ? Math.min(3, authored) : Math.max(0, Math.min(3, target.length - 2));
   const rawHints = Number(answer && answer.hintsUsed);
   const hintsUsed = Math.max(0, Math.min(maxHints, Number.isFinite(rawHints) ? Math.floor(rawHints) : 0));
-  const score = solved ? Math.max(0, 1 - 0.25 * hintsUsed) : 0;
+  const score = solved ? wordleHintWeight(hintsUsed) : 0;
   return { correct: solved, partialScore: score, partialTotal: 1, solved, hintsUsed, attemptsUsed: guesses.length };
 }
 
