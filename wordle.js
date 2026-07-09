@@ -9,7 +9,7 @@
  * the best-known state of every letter.
  *
  * Hints (max MAX_HINTS (3), pricing via HINT_WEIGHTS): the FIRST hint is free,
- * then each of the next two costs HINT_PENALTY (33%). If the author supplied
+ * then each of the next two costs HINT_PENALTY (15%). If the author supplied
  * 'hints' — up to 3 text clues ordered from less obvious to more obvious
  * (synonyms, definitions) — the Hint button reveals the next one as a compact
  * line. When no hints are authored, the button falls back to revealing a
@@ -17,7 +17,7 @@
  * wordLength - 2 letter reveals. There is no separate word-length indicator —
  * the grid already shows the length.
  *
- * Scoring: solved → HINT_WEIGHTS[hintsUsed] (100% / 100% / 67% / 34%); not
+ * Scoring: solved → HINT_WEIGHTS[hintsUsed] (100% / 100% / 85% / 70%); not
  * solved → 0.
  * Grading is case- AND accent-insensitive. Guesses are validated against a word
  * list when the question sets 'lexicon' ('en' | 'ca') — a made-up string is
@@ -40,9 +40,9 @@
   var MIN_LEN = 3;   // hard floor (engine tolerance); authoring guideline is 5–8
   var MAX_LEN = 12;  // hard ceiling
   var MAX_HINTS = 3;
-  // The first hint is free; each of the next two costs 33% of the points.
-  var HINT_PENALTY = 0.33;
-  var HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.67, 3: 0.34 };
+  // The first hint is free; each of the next two costs 15% of the points.
+  var HINT_PENALTY = 0.15;
+  var HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.85, 3: 0.70 };
   function hintWeight(hintsUsed) { return HINT_WEIGHTS[hintsUsed] != null ? HINT_WEIGHTS[hintsUsed] : 0; }
   var KEY_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
@@ -156,7 +156,7 @@
   // --------------------------------------------------------------------- score
   // Recompute the round from stored guesses vs the question's word — never trust
   // a client-reported "solved". Solved → HINT_WEIGHTS[hintsUsed] (1st hint free,
-  // then 33% off for each of the next two); the hint count itself is
+  // then 15% off for each of the next two); the hint count itself is
   // client-reported (like spellingbee's solvedPass) but a round with no correct
   // guess always earns 0. Mirrored in cloudflare/worker.js.
   function scoreRound(question, answer) {
@@ -348,9 +348,9 @@
       rowEl.classList.remove('wd-shake'); void rowEl.offsetWidth; rowEl.classList.add('wd-shake');
     }
 
-    // The NEXT hint's price: the 1st is free, the 2nd and 3rd cost 33% each.
+    // The NEXT hint's price: the 1st is free, the 2nd and 3rd cost 15% each.
     function nextHintLabel() {
-      return hintsUsed === 0 ? t('💡 Hint (free)') : t('💡 Hint (−33%)');
+      return hintsUsed === 0 ? t('💡 Hint (free)') : t('💡 Hint (−15%)');
     }
 
     function updateHeader() {
@@ -408,7 +408,8 @@
     // Buy the next hint — an authored clue when the question has them (shown in
     // order, less obvious → more obvious), otherwise reveal a correct letter:
     // leftmost position not already revealed and not already solved green in a
-    // submitted guess. Either way it costs 25% of the points.
+    // submitted guess. The first hint is free; the second and third each cost
+    // 15% of the points.
     function useHint() {
       if (done || hintsUsed >= hintCap) return;
       if (textHints.length) {
