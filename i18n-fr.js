@@ -179,6 +179,7 @@ window.PINPLAY_FR_DICT = {
   'Enter': 'Entrée',
   'Not enough letters': 'Pas assez de lettres',
   'Not in the word list': 'Pas dans la liste de mots',
+  'Letter {n}: {letter}': 'Lettre {n} : {letter}',
   'The word was: {word}': 'Le mot était : {word}',
   'Solved in {n} tries': 'Résolu en {n} essais',
   '{n} hint(s) used': '{n} indice(s) utilisé(s)',

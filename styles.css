@@ -4949,6 +4949,12 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 .sb-result-list li.sb-no { color: var(--bad); }
 
 /* ===================== Wordle (wordle type) ===================== */
+/* Mobile-first: everything stacks in one column (header, hints, board,
+   keyboard). From 680px up (see the breakpoint at the end of this section —
+   kept LAST in source order so it reliably wins over the base rules it
+   overrides), the board and keyboard sit SIDE BY SIDE instead of stacking,
+   which was the single biggest cause of needing to zoom out to fit the whole
+   game on screen. */
 .wd-game {
   display: flex;
   flex-direction: column;
@@ -4997,24 +5003,9 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   max-width: 460px;
 }
 
-/* Hint slots: one dashed cell per letter, hint-revealed letters fill in green.
-   Always present so using a hint never shifts the layout. */
-.wd-hint-slots { display: flex; gap: 4px; justify-content: center; }
-.wd-slot {
-  width: 26px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  font-weight: 700;
-  text-transform: lowercase;
-  border: 2px dashed var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-}
-.wd-slot.wd-revealed { border: 2px solid #1f9d55; color: #1f9d55; background: var(--card); }
+/* Wraps the grid + feedback line as one column, so it can sit beside the
+   keyboard as a unit in the two-column layout above. */
+.wd-board-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
 /* The guess board: full maxAttempts × wordLength grid from the start, so the
    block height is constant for the whole round (stable header). */
@@ -5099,6 +5090,23 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 
 .wd-summary-head { font-weight: 700; text-align: center; }
 .wd-review { gap: 6px; }
+
+/* Side-by-side board + keyboard once there's room. Kept LAST in source order
+   (after the base rules above) so its overrides reliably win at this width. */
+@media (min-width: 680px) {
+  .wd-game {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    max-width: 860px;
+    row-gap: 10px;
+    column-gap: 28px;
+  }
+  .wd-header, .wd-hints { flex: 1 1 100%; }
+  .wd-board-col, .wd-keyboard { flex: 0 0 auto; margin-top: 6px; }
+  .wd-keyboard { width: 380px; max-width: 380px; }
+}
 
 @media (max-width: 480px) {
   .wd-cell { width: 36px; height: 36px; font-size: 1.1rem; }

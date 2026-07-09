@@ -11,9 +11,10 @@
  * Hints (each deducts HINT_PENALTY (25%) of the question's points, max
  * MAX_HINTS (3)): if the author supplied 'hints' — up to 3 text clues ordered
  * from less obvious to more obvious (synonyms, definitions) — the Hint button
- * shows the next one. When no hints are authored, the button falls back to
- * revealing a correct letter in the hint-slots row (never more than
- * wordLength - 2 letter reveals).
+ * reveals the next one as a compact line. When no hints are authored, the
+ * button falls back to revealing a correct letter instead, shown the same way
+ * ("Letter n: X"); never more than wordLength - 2 letter reveals. There is no
+ * separate word-length indicator — the grid already shows the length.
  *
  * Scoring: solved → 100% minus 25% per hint used (floor 0); not solved → 0.
  * Grading is case- AND accent-insensitive. Guesses are validated against a word
@@ -233,18 +234,19 @@
     hintBtn.textContent = t('💡 Hint (−25%)');
     header.append(progressEl, hintBtn);
 
-    // Authored text hints appear here as they are bought, one line per hint.
+    // Hints bought so far appear here, one compact line each — either the
+    // author's text clues or, in letter-reveal fallback mode, "Letter n: X"
+    // lines. No separate word-length row: the grid already shows the length.
     var hintsListEl = el('div', 'wd-hints');
-
-    // Hint slots: one dashed cell per letter; letter-reveal hints fill in green.
-    // Always present so using a hint never shifts the layout (also doubles as
-    // the word-length indicator).
-    var hintRow = el('div', 'wd-hint-slots');
 
     var gridEl = el('div', 'wd-grid');
     var feedbackEl = el('div', 'wd-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     var keyboardEl = el('div', 'wd-keyboard');
-    root.append(header, hintsListEl, hintRow, gridEl, feedbackEl, keyboardEl);
+    // Board + keyboard sit side by side on wide viewports (wd-board wraps them so
+    // the two-column CSS grid has stable areas regardless of DOM order).
+    var boardCol = el('div', 'wd-board-col');
+    boardCol.append(gridEl, feedbackEl);
+    root.append(header, hintsListEl, boardCol, keyboardEl);
     container.appendChild(root);
 
     // --- board ---------------------------------------------------------------
@@ -274,23 +276,23 @@
       if (guesses.length < maxA) paintRow(guesses.length, input, null);
     }
 
-    function paintHintSlots() {
-      hintRow.innerHTML = '';
-      for (var c = 0; c < len; c++) {
-        var cell = el('span', 'wd-slot' + (revealed[c] ? ' wd-revealed' : ''));
-        cell.textContent = revealed[c] || '';
-        hintRow.appendChild(cell);
-      }
+    // Hints bought so far, as display lines — authored clues in order when the
+    // question has them, else "Letter n: X" for each letter-reveal hint (in the
+    // order they were revealed; reveal positions only ever increase, see
+    // useHint, so the sorted keys of `revealed` ARE the reveal order).
+    function hintLines() {
+      if (textHints.length) return textHints.slice(0, hintsUsed);
+      return Object.keys(revealed).map(Number).sort(function (a, b) { return a - b; })
+        .map(function (pos) { return t('Letter {n}: {letter}', { n: pos + 1, letter: (target[pos] || '').toUpperCase() }); });
     }
 
-    // Authored clues bought so far, in order (less obvious first).
     function paintHintTexts() {
       hintsListEl.innerHTML = '';
-      for (var i = 0; i < hintsUsed && i < textHints.length; i++) {
+      hintLines().forEach(function (text) {
         var line = el('div', 'wd-hint-line');
-        line.textContent = '💡 ' + textHints[i];
+        line.textContent = '💡 ' + text;
         hintsListEl.appendChild(line);
-      }
+      });
     }
 
     // --- keyboard --------------------------------------------------------------
@@ -411,7 +413,7 @@
       if (pos < 0) return;
       revealed[pos] = target[pos];
       hintsUsed++;
-      paintHintSlots();
+      paintHintTexts();
       updateHeader();
       if (options.onChange) options.onChange();
     }
@@ -489,7 +491,6 @@
       startedAt = s.startedAt || Date.now();
       guesses.forEach(function (g, r) { paintRow(r, g, statuses(g, target)); });
       paintKeyboard();
-      paintHintSlots();
       paintHintTexts();
       if (s.done || solved || guesses.length >= maxA) { showFinalizedView(); return; }
       updateHeader();
@@ -498,7 +499,6 @@
 
     buildGrid();
     buildKeyboard();
-    paintHintSlots();
     hintBtn.addEventListener('click', useHint);
     document.addEventListener('keydown', onKey, true); // capture so it beats host key handlers
 
