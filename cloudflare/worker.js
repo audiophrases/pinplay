@@ -4380,21 +4380,23 @@ export class QuizRoom {
           verdict = evaluate(question, body?.answer);
           const basePoints = Number(question.points || 1000);
 
+          const scoreFraction = verdictScoreFraction(verdict);
+
           if (!lock.lockedCorrect && verdict.correct) {
             const correctCountSoFar = Object.values(room.responsesByQuestion[qIndex] || {})
               .filter((r) => !!r?.correct)
               .length;
             const rank = correctCountSoFar + 1;
             const multiplier = rank <= 2 ? 1 : (rank <= 4 ? 0.9 : 0.8);
-            pointsAwarded = Math.round(basePoints * multiplier);
+            pointsAwarded = Math.floor(basePoints * multiplier * scoreFraction);
             pointsAwarded = applyBetScore(basePoints, pointsAwarded, true, bet);
 
             lock.lockedCorrect = true;
             lock.awardedPoints = pointsAwarded;
             lock.awardedAt = Date.now();
             room.scoreLocksByQuestion[qIndex][playerId] = lock;
-          } else if (Number(verdict.partialScore || 0) > 0 && Number(verdict.partialTotal || 0) > 0) {
-            const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
+          } else if (!verdict.correct && scoreFraction > 0) {
+            const proportional = Math.floor(basePoints * scoreFraction);
             pointsAwarded = proportional + applyBetScore(basePoints, 0, false, bet);
           } else {
             // FIX: Actually apply the penalty math for incorrect answers!
@@ -6418,11 +6420,13 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     autoGradedCount += 1;
     const basePoints = Math.round(Number(question.points || 1000));
 
+    const scoreFraction = verdictScoreFraction(verdict);
+
     if (verdict?.correct) {
       correctCount += 1;
-      autoScore += applyBetScore(basePoints, basePoints, true, item?.bet); // <-- FIXED: Uses bet bonus
-    } else if (Number(verdict?.partialScore || 0) > 0 && Number(verdict?.partialTotal || 0) > 0) {
-      const proportional = Math.floor(basePoints * (verdict.partialScore / verdict.partialTotal));
+      autoScore += applyBetScore(basePoints, Math.floor(basePoints * scoreFraction), true, item?.bet); // <-- FIXED: Uses bet bonus
+    } else if (scoreFraction > 0) {
+      const proportional = Math.floor(basePoints * scoreFraction);
       autoScore += proportional + applyBetScore(basePoints, 0, false, item?.bet);
     } else {
       autoScore += applyBetScore(basePoints, 0, false, item?.bet); // <-- FIXED: Uses bet penalty
@@ -6463,13 +6467,12 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
       if (!question || isAssignmentTeacherGradedQuestion(question)) return null;
       const verdict = evaluate(question, item?.answer);
       const basePoints = Number(question?.points || 0);
-      let points = verdict?.correct ? basePoints : 0;
-      if (!verdict?.correct) {
-        const partialScore = Number(verdict?.partialScore || 0);
-        const partialTotal = Number(verdict?.partialTotal || 0);
-        if (partialScore > 0 && partialTotal > 0) {
-          points = Math.floor(basePoints * (partialScore / partialTotal));
-        }
+      const scoreFraction = verdictScoreFraction(verdict);
+      let points = verdict?.correct
+        ? applyBetScore(basePoints, Math.floor(basePoints * scoreFraction), true, item?.bet)
+        : 0;
+      if (!verdict?.correct && scoreFraction > 0) {
+        points = Math.floor(basePoints * scoreFraction) + applyBetScore(basePoints, 0, false, item?.bet);
       }
       return {
         qIndex,
@@ -6997,6 +7000,18 @@ function sanitizeReaction(emoji) {
 function sanitizeBet(value) {
   const n = Number(value || 0);
   return n === 1 || n === 2 || n === 3 ? n : 0;
+}
+
+function verdictScoreFraction(verdict) {
+  const hasPartial = !!verdict
+    && Object.prototype.hasOwnProperty.call(verdict, 'partialScore')
+    && Object.prototype.hasOwnProperty.call(verdict, 'partialTotal');
+  const partialScore = Number(verdict?.partialScore || 0);
+  const partialTotal = Number(verdict?.partialTotal || 0);
+  if (hasPartial && Number.isFinite(partialScore) && Number.isFinite(partialTotal) && partialTotal > 0) {
+    return Math.max(0, Math.min(1, partialScore / partialTotal));
+  }
+  return verdict?.correct ? 1 : 0;
 }
 
 function applyBetScore(questionPoints, baseAwarded, isCorrect, bet) {

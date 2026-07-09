@@ -14169,14 +14169,16 @@ function bindSoloEvents() {
 
     const basePoints = Number(q.points || 1000);
     let pts = 0;
+    const scoreFraction = verdictScoreFraction(result);
 
     // FIX: Apply Solo Mode Bet Math
     if (result.correct) {
-      pts = live.player.selectedBet === 3 ? Math.round(basePoints * 1.4) : basePoints;
+      const earnedBase = Math.floor(basePoints * scoreFraction);
+      pts = live.player.selectedBet === 3 ? Math.round(earnedBase * 1.4) : earnedBase;
       soloGame.score += pts;
       setStatus(feedbackEl, t('Correct ✅ (+{n})', { n: pts }), 'ok');
-    } else if (Number(result.partialScore || 0) > 0 && Number(result.partialTotal || 0) > 0) {
-      const proportional = Math.floor(basePoints * (result.partialScore / result.partialTotal));
+    } else if (scoreFraction > 0) {
+      const proportional = Math.floor(basePoints * scoreFraction);
       const betPenalty = live.player.selectedBet === 3 ? Math.round(basePoints * 0.4) : 0;
       pts = proportional - betPenalty;
       soloGame.score += pts;
@@ -16224,6 +16226,18 @@ function stripDiacritics(text) {
 function formatPartialScore(n) {
   const x = Number(n) || 0;
   return Number.isInteger(x) ? String(x) : x.toFixed(1);
+}
+
+function verdictScoreFraction(result) {
+  const hasPartial = !!result
+    && Object.prototype.hasOwnProperty.call(result, 'partialScore')
+    && Object.prototype.hasOwnProperty.call(result, 'partialTotal');
+  const partialScore = Number(result?.partialScore || 0);
+  const partialTotal = Number(result?.partialTotal || 0);
+  if (hasPartial && Number.isFinite(partialScore) && Number.isFinite(partialTotal) && partialTotal > 0) {
+    return Math.max(0, Math.min(1, partialScore / partialTotal));
+  }
+  return result?.correct ? 1 : 0;
 }
 
 function parseAcceptedGapOptions(value) {
