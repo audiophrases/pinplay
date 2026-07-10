@@ -1551,16 +1551,16 @@ describe('Wordle.scoreRound (server-mirrored scoring)', () => {
     assert.equal(r.partialScore, 1);
     assert.equal(r.partialTotal, 1);
   });
-  it('1st hint is free, then 33% off each of the next two', () => {
+  it('1st hint is free, then 15% off each of the next two', () => {
     assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 1 }).partialScore, 1);    // free
-    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 2 }).partialScore, 0.67);
-    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 3 }).partialScore, 0.34);
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 2 }).partialScore, 0.85);
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 3 }).partialScore, 0.70);
   });
   it('not solved = 0 even with hints claimed', () => {
     assert.equal(WD.scoreRound(q, { guesses: ['crane'], hintsUsed: 1 }).partialScore, 0);
   });
   it('caps client-reported hints at maxHintsFor', () => {
-    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 99 }).partialScore, 0.34); // cap 3
+    assert.equal(WD.scoreRound(q, { guesses: ['whale'], hintsUsed: 99 }).partialScore, 0.70); // cap 3
   });
   it('ignores guesses beyond maxAttempts (no cheating by extra tries)', () => {
     const r = WD.scoreRound({ word: 'whale', maxAttempts: 3 }, { guesses: ['aaaaa', 'bbbbb', 'ccccc', 'whale'] });
@@ -1579,13 +1579,13 @@ describe('Wordle hints (authored synonyms vs letter reveal)', () => {
   it('caps hints at the authored hint count', () => {
     const q = { word: 'elephant', hints: ['a', 'b'] };
     assert.equal(WD.hintCapFor(WD.normalizeConfig(q)), 2);
-    assert.equal(WD.scoreRound(q, { guesses: ['elephant'], hintsUsed: 99 }).partialScore, 0.67); // capped at 2: free + 33% off
+    assert.equal(WD.scoreRound(q, { guesses: ['elephant'], hintsUsed: 99 }).partialScore, 0.85); // capped at 2: free + 15% off
   });
-  it('hintWeight table: free 1st hint, −33% each for the 2nd/3rd', () => {
+  it('hintWeight table: free 1st hint, −15% each for the 2nd/3rd', () => {
     assert.equal(WD.hintWeight(0), 1);
     assert.equal(WD.hintWeight(1), 1);
-    assert.equal(WD.hintWeight(2), 0.67);
-    assert.equal(WD.hintWeight(3), 0.34);
+    assert.equal(WD.hintWeight(2), 0.85);
+    assert.equal(WD.hintWeight(3), 0.70);
   });
   it('falls back to letter-reveal cap when no hints authored', () => {
     assert.equal(WD.hintCapFor(WD.normalizeConfig({ word: 'whale' })), 3);   // min(3, len-2)

@@ -5685,14 +5685,14 @@ function normalizeWordle(s) {
     .replace(/[^a-z]/g, '');
 }
 
-// Hint pricing: the 1st hint is free, the next two cost 33% each. Mirrors
+// Hint pricing: the 1st hint is free, the next two cost 15% each. Mirrors
 // Wordle.HINT_WEIGHTS / hintWeight() in wordle.js.
-const WORDLE_HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.67, 3: 0.34 };
+const WORDLE_HINT_WEIGHTS = { 0: 1, 1: 1, 2: 0.85, 3: 0.70 };
 function wordleHintWeight(hintsUsed) { return WORDLE_HINT_WEIGHTS[hintsUsed] ?? 0; }
 
 // Recompute the round from stored guesses vs the question's word — never trust a
 // client-reported "solved". Solved → wordleHintWeight(hintsUsed) (1st hint free,
-// then 33% off for each of the next two). The hint count is client-reported
+// then 15% off for each of the next two). The hint count is client-reported
 // (like spellingbee's solvedPass) but a round with no correct guess always earns
 // 0. Mirrors Wordle.scoreRound() in wordle.js.
 function scoreWordleRound(question, answer) {
