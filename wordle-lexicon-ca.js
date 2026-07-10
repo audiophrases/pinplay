@@ -5,8 +5,10 @@
  * dictionary-ca data GPL-2.0 OR LGPL-2.1
  * Generation/filtering rule: lowercase, strip accents/diacritics, keep a-z only, 5-8 letters after
  * normalization; wordfreq Zipf >= 3.0; source token must contain only letters and be accepted as
- * lowercase Catalan by Hunspell; excludes apostrophes, hyphens, spaces, digits, symbols, middle dots,
- * source-rejected proper nouns/acronyms, and duplicate forms after normalization.
+ * lowercase Catalan by Hunspell; base list excludes apostrophes, hyphens, spaces, digits, symbols,
+ * middle dots, source-rejected proper nouns/acronyms, and duplicate forms after normalization.
+ * Manual additions: common 5-8 letter proper nouns (geographic names + common given names),
+ * normalized to lowercase ASCII.
  */
 (function (global) {
   'use strict';
@@ -1570,7 +1572,25 @@
     'zebra', 'zenit', 'zombi', 'zombis', 'zones', 'zoologic'
   ];
 
-  var WORD_SET = new Set(WORDS);
+  var EXTRA_PROPER_NOUNS = [
+    'africa', 'alemanya', 'america', 'andorra', 'angola', 'ariadna', 'armenia', 'arnau',
+    'atenes', 'austria', 'belgica', 'berlin', 'bhutan', 'brasil', 'canada', 'carla',
+    'clara', 'corea', 'croacia', 'david', 'didac', 'dublin', 'egipte', 'enric',
+    'escocia', 'espanya', 'estonia', 'eulalia', 'europa', 'ferran', 'franca', 'gales',
+    'gemma', 'georgia', 'ghana', 'ginebra', 'granada', 'grecia', 'hector', 'hongria',
+    'irene', 'irlanda', 'isabel', 'islandia', 'israel', 'italia', 'jamaica', 'joaquim',
+    'jordania', 'jordi', 'josep', 'judith', 'julia', 'kenya', 'laura', 'letonia',
+    'liban', 'libia', 'lisboa', 'lluis', 'londres', 'madrid', 'malaga', 'malaisia',
+    'malawi', 'malta', 'maria', 'marroc', 'marta', 'martina', 'mexico', 'miquel',
+    'mireia', 'monaco', 'monica', 'namibia', 'napols', 'nepal', 'nigeria', 'noruega',
+    'nuria', 'oriol', 'oscar', 'panama', 'paris', 'polonia', 'praga', 'portugal',
+    'raquel', 'roger', 'romania', 'russia', 'rwanda', 'senegal', 'serbia', 'sergi',
+    'sevilla', 'silvia', 'siria', 'somalia', 'suecia', 'suissa', 'taiwan', 'tania',
+    'tunisia', 'turquia', 'ucraina', 'uganda', 'uruguai', 'valencia', 'varsovia', 'venecia',
+    'victor', 'viena', 'vietnam', 'xavier', 'zambia', 'zuric'
+  ];
+
+  var WORD_SET = new Set(WORDS.concat(EXTRA_PROPER_NOUNS));
 
   function has(word) {
     var w = normalize(word);
@@ -1582,6 +1602,6 @@
     MAX_LEN: MAX_LEN,
     normalize: normalize,
     has: has,
-    size: WORDS.length
+    size: WORD_SET.size
   };
 })(typeof window !== 'undefined' ? window : this);

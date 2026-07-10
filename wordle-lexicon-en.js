@@ -3,9 +3,11 @@
  * Source URL: https://github.com/en-wl/wordlist
  * License: MIT-like license; see https://raw.githubusercontent.com/en-wl/wordlist/v2/Copyright
  * Generation/filtering rule: lowercase a-z words only, 5-8 letters; size <= 35; American spellings;
- * excludes source-marked proper names/places, uppercase/acronyms, abbreviations, trademarks,
- * nonwords/word parts/special entries, usage-flagged vulgar/offensive/nonstandard terms, and any
- * word containing apostrophes, hyphens, spaces, digits, symbols, or diacritics.
+ * base ESDB list excludes source-marked proper names/places, uppercase/acronyms, abbreviations,
+ * trademarks, nonwords/word parts/special entries, usage-flagged vulgar/offensive/nonstandard terms,
+ * and any word containing apostrophes, hyphens, spaces, digits, symbols, or diacritics.
+ * Manual additions: common 5-8 letter proper nouns (geographic names + common given names),
+ * normalized to lowercase ASCII.
  */
 (function (global) {
   'use strict';
@@ -2736,7 +2738,27 @@
     "zoned", "zones", "zoning", "zoology", "zoomed", "zooming", "zooms", "zucchini"
   ];
 
-  var WORD_SET = new Set(WORDS);
+  var EXTRA_PROPER_NOUNS = [
+    "africa", "albania", "algeria", "alice", "america", "andorra", "andrew", "angola",
+    "armenia", "athens", "austria", "balkans", "bavaria", "belgium", "benjamin", "berlin",
+    "bhutan", "brazil", "canada", "catalan", "charles", "charlie", "chile", "china",
+    "croatia", "cyprus", "daniel", "david", "denmark", "dublin", "edward", "egypt",
+    "elena", "emily", "england", "estonia", "europe", "finland", "france", "freddie",
+    "geneva", "george", "georgia", "germany", "ghana", "grace", "granada", "greece",
+    "harry", "helen", "henry", "hungary", "iceland", "india", "ireland", "isabella",
+    "israel", "italy", "jacob", "jamaica", "james", "japan", "jordan", "joseph",
+    "julia", "kenya", "korea", "latvia", "laura", "lebanon", "liberia", "libya",
+    "lisbon", "london", "lucas", "madrid", "malaga", "malawi", "malaysia", "malta",
+    "maria", "martin", "mason", "mexico", "michael", "milan", "monaco", "morocco",
+    "namibia", "naples", "nepal", "nigeria", "norway", "oliver", "panama", "paris",
+    "paula", "peter", "poland", "prague", "portugal", "robert", "romania", "russia",
+    "rwanda", "sarah", "scotland", "senegal", "serbia", "seville", "sofia", "somalia",
+    "sophia", "spain", "sudan", "sweden", "syria", "taiwan", "thomas", "tunisia",
+    "turkey", "uganda", "ukraine", "uruguay", "valencia", "venice", "victoria", "vienna",
+    "vietnam", "wales", "warsaw", "william", "zambia", "zurich"
+  ];
+
+  var WORD_SET = new Set(WORDS.concat(EXTRA_PROPER_NOUNS));
 
   function has(word) {
     var w = normalize(word);
@@ -2748,6 +2770,6 @@
     MAX_LEN: MAX_LEN,
     normalize: normalize,
     has: has,
-    size: WORDS.length
+    size: WORD_SET.size
   };
 })(typeof window !== 'undefined' ? window : this);
