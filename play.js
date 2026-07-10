@@ -6888,13 +6888,39 @@ function renderWordle(container, question) {
     savedResult,
     resumeState,
     onChange: () => { markAnswerDirty(); },
-    onComplete: () => { _wordleRoundActive = false; restoreJoinSubmitEnterHint(); },
+    onComplete: () => {
+      _wordleRoundActive = false;
+      restoreJoinSubmitEnterHint();
+      maybeAutoSaveWordleRound();
+    },
   });
 
   // A resumed round that was already finished hands Enter back to the host button.
   if (_wordleController && _wordleController.isComplete && _wordleController.isComplete()) {
     _wordleRoundActive = false;
   }
+}
+
+// A finished Wordle round leaves nothing more to input, so in flows where saving
+// shows the verdict IN PLACE — assignment instant mode, retake, and live mode —
+// the final Enter saves automatically: the student goes straight from the last
+// guess to the feedback, and the next Enter is already "Continue". Deferred
+// assignments keep the manual save: there Enter=Save advances to the next
+// question immediately, which would yank a failed round off its
+// "The word was: X" toast. (Fires only from onComplete, which a restored
+// already-finished round never re-triggers.)
+function maybeAutoSaveWordleRound() {
+  if (live.player.mode === 'assignment' && !live.player.assignment?.retake?.active) {
+    const fb = String(live.player.assignment.state?.attempt?.assignment?.feedbackMode || '');
+    if (fb !== 'instant') return;
+  }
+  // Short beat so the final row's colouring registers before the verdict lands.
+  setTimeout(() => {
+    if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
+    const mode = joinSubmitBtn.dataset.mode;
+    if (mode === 'continue' || mode === 'finish') return; // already saved meanwhile
+    submitLiveAnswer();
+  }, 650);
 }
 
 async function speakText(text, lang = 'en-US-Wave') {
