@@ -5036,13 +5036,31 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   75% { transform: translateX(5px); }
 }
 
-.wd-feedback { min-height: 22px; text-align: center; font-weight: 600; }
+/* End-of-round toast ("The word was: X") — overlaid on the locked keyboard so it
+   takes zero vertical space (the keyboard is dimmed, dead space at that point). */
+.wd-feedback {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  max-width: 92%;
+  padding: 8px 18px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
 .wd-feedback:empty { display: none; }
-.wd-feedback.wd-good { color: var(--ok); }
-.wd-feedback.wd-bad { color: var(--bad); }
+.wd-feedback.wd-good { color: var(--ok); border-color: var(--ok); }
+.wd-feedback.wd-bad { color: var(--bad); border-color: var(--bad); }
 
-/* On-screen QWERTY keyboard with per-letter best-known state colouring. */
-.wd-keyboard { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 500px; }
+/* On-screen QWERTY keyboard with per-letter best-known state colouring. Also the
+   positioning context for the end-of-round toast above. */
+.wd-keyboard { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 500px; }
 .wd-key-row { display: flex; gap: 5px; justify-content: center; }
 .wd-key {
   cursor: pointer;
@@ -5084,8 +5102,11 @@ body:not(.guest-mode) .guest-only { display: none !important; }
   user-select: none;
 }
 
-/* Round over: keyboard stays in place (constant height) but locked. */
-.wd-keyboard.wd-locked { opacity: 0.45; pointer-events: none; }
+/* Round over: keyboard stays in place (constant height) but locked. Dim the key
+   rows only — NOT the whole keyboard — so the end-of-round toast overlaid on it
+   stays fully opaque. */
+.wd-keyboard.wd-locked { pointer-events: none; }
+.wd-keyboard.wd-locked .wd-key-row { opacity: 0.45; }
 
 .wd-summary-head { font-weight: 700; text-align: center; }
 .wd-review { gap: 6px; }

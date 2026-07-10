@@ -242,12 +242,17 @@
     header.append(progressEl, hintBtn);
 
     var gridEl = el('div', 'wd-grid');
+    // End-of-round message ("The word was: X") — an overlay toast centred on the
+    // locked keyboard, NOT a flow element, so it costs zero vertical space. On a
+    // solved round it stays empty: the green row says it, and the host shows the
+    // real verdict (HUD + FX) after Save — no correct→save→correct-again double.
     var feedbackEl = el('div', 'wd-feedback'); feedbackEl.setAttribute('aria-live', 'polite');
     var keyboardEl = el('div', 'wd-keyboard');
+    keyboardEl.appendChild(feedbackEl); // buildKeyboard() re-appends it after wiping
     // Board + keyboard sit side by side on wide viewports (wd-board wraps them so
     // the two-column CSS grid has stable areas regardless of DOM order).
     var boardCol = el('div', 'wd-board-col');
-    boardCol.append(gridEl, feedbackEl);
+    boardCol.append(gridEl);
     root.append(header, boardCol, keyboardEl);
     container.appendChild(root);
 
@@ -332,6 +337,7 @@
         }
         keyboardEl.appendChild(rowEl);
       });
+      keyboardEl.appendChild(feedbackEl); // keep the end-of-round toast overlay attached
     }
 
     function paintKeyboard() {
@@ -364,7 +370,6 @@
       if (done || input.length >= len) return;
       input += letter;
       invalidInput = false;
-      feedbackEl.textContent = ''; feedbackEl.className = 'wd-feedback';
       paintInputRow();
       pop(btn || keyBtns[letter]);
     }
@@ -373,22 +378,20 @@
       if (done || !input) return;
       input = input.slice(0, -1);
       invalidInput = false;
-      feedbackEl.textContent = ''; feedbackEl.className = 'wd-feedback';
       paintInputRow();
     }
 
     function submit() {
       if (done) return;
+      // Rejections are deliberately wordless (game-native feedback): a too-short
+      // guess just shakes; a non-word additionally paints the row red until the
+      // student edits it. No toast/message to read — the shake says "not accepted".
       if (input.length < len) {
-        feedbackEl.textContent = t('Not enough letters');
-        feedbackEl.className = 'wd-feedback wd-bad';
         shakeRow(guesses.length);
         return;
       }
       if (isRealWord && normalize(input) !== target && !isRealWord(normalize(input))) {
         invalidInput = true;
-        feedbackEl.textContent = '';
-        feedbackEl.className = 'wd-feedback';
         paintInputRow();
         shakeRow(guesses.length);
         return;
@@ -435,18 +438,16 @@
 
     // Finished-round view WITHOUT completion callbacks, so a restored round
     // doesn't spuriously re-mark the answer dirty (same split as spellingbee).
+    // Solved rounds show NO engine verdict — the all-green row already says it
+    // and the host shows the real correct/points feedback after Save (avoids the
+    // correct → save → correct-again double). Failed rounds must reveal the word
+    // (the host never does for wordle): a toast overlaid on the dimmed keyboard.
     function showFinalizedView() {
       done = true;
       keyboardEl.classList.add('wd-locked');
       hintBtn.disabled = true;
       progressEl.textContent = progressText(guesses.length);
-      if (solved) {
-        var pct = Math.round(hintWeight(hintsUsed) * 100);
-        // Only show the percentage once it's actually below 100% (the free 1st
-        // hint doesn't cost anything, so nothing to report at hintsUsed===1).
-        feedbackEl.textContent = t('✓ Correct!') + (pct < 100 ? ' · ' + pct + '%' : '');
-        feedbackEl.className = 'wd-feedback wd-good';
-      } else {
+      if (!solved) {
         feedbackEl.textContent = t('The word was: {word}', { word: target });
         feedbackEl.className = 'wd-feedback wd-bad';
       }
