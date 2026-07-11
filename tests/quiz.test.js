@@ -1343,6 +1343,23 @@ describe('SpellingBee.buildTiles', () => {
     const t = tiles.find((x) => x.text === 't');
     assert.ok(t && t.distractor === true);
   });
+  it('long words merge adjacent letters down to a FIXED 7-key comb (no extra tiles)', () => {
+    const tiles = SB.buildTiles('hippopotamus', { clusterTiles: ['pp'] });
+    assert.equal(tiles.length, 7, `expected exactly 7 tiles, got ${tiles.length}`);
+    assert.ok(tiles.every((t) => t.distractor === false), 'a full comb gets no distractors');
+    assert.ok(SB.canSpell('hippopotamus', tiles.map((t) => t.text)));
+  });
+  it('short words fill UP to 7 with decoys', () => {
+    assert.equal(SB.buildTiles('elephant', {}).length, 7);
+    assert.equal(SB.buildTiles('rhythm', { clusterTiles: ['th'] }).length, 7);
+  });
+  it('reserves comb room for author distractors when merging', () => {
+    const tiles = SB.buildTiles('delicious', { distractors: ['t'] }); // 8 distinct letters
+    assert.equal(tiles.length, 7);
+    const t = tiles.find((x) => x.text === 't');
+    assert.ok(t && t.distractor === true, 'authored trap decoy must survive');
+    assert.ok(SB.canSpell('delicious', tiles.map((x) => x.text)));
+  });
   it('always yields a tile set that can spell the target', () => {
     [
       ['knowledge', { clusterTiles: ['kn', 'dge'] }],

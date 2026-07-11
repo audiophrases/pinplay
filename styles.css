@@ -4807,22 +4807,27 @@ body:not(.guest-mode) .guest-only { display: none !important; }
 
 /* The typed-letters answer row (Wordle-coloured on submit). Its full one-row height
    is RESERVED up front (= a cell's height) so the header and hive never shift as
-   letters fill in — the space is already allocated, empty or not. */
+   letters fill in — the space is already allocated, empty or not. The row NEVER
+   wraps: cells shrink (via the --sb-cells count set in spellingbee.js) so even an
+   11-letter word stays on one line within the page width. */
 .sb-answer {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
   min-height: 48px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
 }
 .sb-cell {
-  width: 40px;
+  --sb-cell-w: clamp(20px, calc((min(100vw, 720px) - 40px) / var(--sb-cells, 8) - 6px), 40px);
+  width: var(--sb-cell-w);
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
+  font-size: min(1.4rem, calc(var(--sb-cell-w) * 0.6));
   font-weight: 700;
   text-transform: lowercase;
   border: 2px solid var(--line);

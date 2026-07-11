@@ -34,8 +34,9 @@
   // ----------------------------------------------------------------- constants
   var MAX_PASSES = 3;
   var MAX_DISTRACTORS = 3;
-  var TILE_TARGET = 7;          // aim each circle toward ~7 tiles total (NYT-style)
-  var TILE_MIN = 6;             // top short hives up to at least this many keys
+  var TILE_TARGET = 7;          // the comb is a FIXED 7 keys (NYT-style): long words
+                                // merge adjacent letters into 2-letter tiles to get
+                                // DOWN to 7; short words add decoys to fill UP to 7
   var MIN_TARGET_LETTERS = 2;
   // Points multiplier by the pass a word was first spelled correctly on.
   var PASS_WEIGHTS = { 1: 1, 2: 0.66, 3: 0.33 };
@@ -231,23 +232,56 @@
       if (canSpell(n, without)) working = without;
     });
 
+    // The comb is a FIXED 7 keys. A long word doesn't get extra tiles — adjacent
+    // letters are merged into 2-letter tiles (e.g. hippopotamus → hi/pp/p/o/ta/mu/s)
+    // until the word's own keys fit. When the author supplied distractors, reserve
+    // room for them (their contrast is the lesson) and merge one step further.
+    var authored = (opts.distractors || [])
+      .map(normalize)
+      .filter(function (s) { return s && n.indexOf(s) < 0; })
+      .slice(0, MAX_DISTRACTORS);
+    var coreTarget = Math.max(2, TILE_TARGET - authored.length);
+    while (working.length > Math.max(coreTarget, TILE_TARGET - authored.length)) {
+      var merged = mergeAdjacentPair(working, n, protect);
+      if (!merged) break;
+      working = merged;
+    }
+
     var texts = working.slice();
     var distractorCount = 0;
-    // forced = an author-supplied decoy (deliberate contrast) → always kept, capped
-    // only by MAX_DISTRACTORS. Auto decoys only top the hive up to TILE_MIN keys.
-    function addDecoy(s, forced) {
+    // Decoys only fill the comb UP to its fixed 7 keys — author-supplied ones first
+    // (deliberate contrasts), then auto candidates; never past 7, max 3 decoys.
+    function addDecoy(s) {
       s = normalize(s);
       if (!s || texts.indexOf(s) >= 0) return;            // empty or already a tile
       if (distractorCount >= MAX_DISTRACTORS) return;
-      if (!forced && texts.length >= TILE_MIN) return;     // enough keys already
+      if (texts.length >= TILE_TARGET) return;             // comb is full
       texts.push(s); distractorCount++;
     }
-    (opts.distractors || []).forEach(function (s) { addDecoy(s, true); });
-    distractorCandidates(word).forEach(function (s) { addDecoy(s, false); });
+    authored.forEach(addDecoy);
+    distractorCandidates(word).forEach(addDecoy);
 
     return shuffle(texts.map(function (txt) {
       return { text: txt, distractor: n.indexOf(txt) < 0 };
     }));
+  }
+
+  // One merge step toward the fixed comb size: find two letters that sit next to
+  // each other in the word, are both currently single tiles (and not the protected
+  // centre letter), and whose fusion into one 2-letter tile keeps the word
+  // spellable. Returns the merged tile set, or null when no safe pair exists.
+  function mergeAdjacentPair(working, n, protect) {
+    for (var i = 0; i < n.length - 1; i++) {
+      var a = n[i], b = n[i + 1];
+      if (a === b) continue; // fusing a double is count-neutral (1 out, 1 in)
+      if (a === protect || b === protect) continue;
+      if (working.indexOf(a) < 0 || working.indexOf(b) < 0) continue;
+      var bigram = a + b;
+      if (working.indexOf(bigram) >= 0) continue;
+      var merged = working.filter(function (x) { return x !== a && x !== b; }).concat([bigram]);
+      if (canSpell(n, merged)) return merged;
+    }
+    return null;
   }
 
   // Honeycomb placement: tile 0 sits in the centre, the rest fan out on concentric
@@ -582,6 +616,7 @@
     function renderAnswer(statuses) {
       answerEl.innerHTML = '';
       var letters = guess.split('');
+      var count = letters.length;
       for (var i = 0; i < letters.length; i++) {
         var cell = el('span', 'sb-cell');
         cell.textContent = letters[i];
@@ -591,7 +626,11 @@
       if (passHelp() !== 'none') { // pass 2 & 3 reveal the letter count
         var remain = normalize(cfg.words[current].target).length - normalize(guess).length;
         for (var j = 0; j < remain; j++) answerEl.appendChild(el('span', 'sb-cell sb-empty'));
+        count += Math.max(0, remain);
       }
+      // Cell count drives CSS sizing: long words shrink their cells to keep the
+      // whole answer on ONE line (no wrapping mid-word) within the page width.
+      answerEl.style.setProperty('--sb-cells', Math.max(1, count));
     }
 
     function renderCircle() {
@@ -690,7 +729,11 @@
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); return; }
       if (k === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (guess) { guess = guess.slice(0, -1); renderAnswer(); } return; }
       if (k && k.length === 1 && /[a-z]/i.test(k)) {
-        if (typeLetter(normalize(k))) { e.preventDefault(); e.stopPropagation(); }
+        // Swallow EVERY letter while spelling — even off-hive ones that insert
+        // nothing. A leaked letter would otherwise trigger the host's single-key
+        // hotkeys ('p' replays the question audio and ducks the ambient loop).
+        e.preventDefault(); e.stopPropagation();
+        typeLetter(normalize(k));
       }
     }
 

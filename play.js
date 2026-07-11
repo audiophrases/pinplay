@@ -213,6 +213,11 @@ function init() {
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+    // Space during an active game round (Spelling Bee / Wordle) is a stray key
+    // while typing an answer — don't yank the student to the next question.
+    // Arrow-key navigation stays available.
+    if (e.key === ' ' && (_spellingBeeRoundActive || _wordleRoundActive)) return;
+
     if (e.key === 'ArrowRight' || e.key === ' ') {
       e.preventDefault();
       moveAssignmentIndex(1);
@@ -257,6 +262,10 @@ function init() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'p' || e.key === 'P') {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      // 'p' is an answer letter while a game round is typing — never a hotkey.
+      // Without this, a leaked 'p' restarts the question audio and pauses the
+      // ambient loop mid-game.
+      if (_spellingBeeRoundActive || _wordleRoundActive) return;
       const q = live.player.currentQuestion;
       if (!q) return;
       // Mirror the 🎧 replay button: duck (don't kill) the ambient loop and
@@ -272,6 +281,7 @@ function init() {
     if (e.key !== 'r' && e.key !== 'R') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (_spellingBeeRoundActive || _wordleRoundActive) return; // 'r' is an answer letter mid-game
     const stopBtn = document.querySelector('.voice-record-stop-btn:not(.hidden):not(:disabled), .voice-text-stop-btn:not(.hidden):not(:disabled)');
     if (stopBtn) { e.preventDefault(); stopBtn.click(); return; }
     const recBtn = document.querySelector('.voice-record-btn:not(.hidden):not(:disabled), .voice-text-mic-btn:not(.hidden):not(:disabled)');
@@ -286,6 +296,7 @@ function init() {
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (_spellingBeeRoundActive || _wordleRoundActive) return; // 't' is an answer letter mid-game
     const input = firstBlankAnswerInput() || answerTextInputs()[0];
     if (input) {
       e.preventDefault();
@@ -2979,7 +2990,7 @@ function renderPlayerState(state) {
     const question = state.question;
     const isPoll = !!question?.isPoll;
     const show = !!state.questionClosed && !isPoll;
-    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap'].includes(question.type);
+    const needsReveal = question && ['text', 'voice_text', 'puzzle', 'error_hunt', 'match_pairs', 'context_gap', 'spellingbee', 'wordle'].includes(question.type);
 
     if (!show || !needsReveal) {
       // Preserve reveal box placed by immediate live-mode answer reveal
@@ -3015,6 +3026,8 @@ function renderPlayerState(state) {
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
       if (question.type === 'error_hunt') correctText = question.corrected || '';
       if (question.type === 'context_gap') correctText = (question.gaps || []).map((g, i) => `Gap ${i + 1}: ${g}`).join(' | ');
+      if (question.type === 'spellingbee') correctText = (question.words || []).map((w) => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
+      if (question.type === 'wordle') correctText = String(question.word || '');
     }
 
     if (!correctText) {
@@ -4593,7 +4606,15 @@ async function submitLiveAnswer(opts = {}) {
       return;
     }
 
-    const answer = readJoinAnswer();
+    let answer = readJoinAnswer();
+    // Giving up mid-round via "Show answer?" (allowEmpty): a half-finished game
+    // round still submits its partial result — the student keeps the credit for
+    // the words/guesses they already got instead of saving a blank.
+    if ((answer === null || answer === '') && opts.allowEmpty) {
+      const qType = live.player.currentQuestion?.type;
+      if (qType === 'spellingbee' && _spellingBeeController) answer = _spellingBeeController.getResult();
+      else if (qType === 'wordle' && _wordleController) answer = _wordleController.getResult();
+    }
     if (answer === null || answer === '') {
       const isAssignment = live.player.mode === 'assignment';
       const isInstant = String(live.player.assignment?.state?.attempt?.assignment?.feedbackMode || '') === 'instant';
@@ -4840,14 +4861,18 @@ function readJoinAnswer() {
   }
 
   if (q.type === 'spellingbee') {
-    // Answerable once the learn pass is complete; getResult() returns the round
-    // result (server re-grades it). null until then so it counts as unanswered.
-    return _spellingBeeController ? _spellingBeeController.getResult() : null;
+    // null until the ROUND is complete, so a mid-round Save doesn't silently grade
+    // a half-finished round as wrong — it routes to the "Show answer?" flow instead
+    // (which pulls the partial result via readGameRoundPartial, keeping any credit
+    // already earned).
+    return (_spellingBeeController && _spellingBeeController.isComplete && _spellingBeeController.isComplete())
+      ? _spellingBeeController.getResult() : null;
   }
 
   if (q.type === 'wordle') {
-    // null until the first guess is submitted (counts as unanswered until then).
-    return _wordleController ? _wordleController.getResult() : null;
+    // Same contract as spellingbee: only a finished round reads as an answer.
+    return (_wordleController && _wordleController.isComplete && _wordleController.isComplete())
+      ? _wordleController.getResult() : null;
   }
 
   return null;
