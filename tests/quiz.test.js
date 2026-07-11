@@ -1597,14 +1597,28 @@ describe('Wordle hints (authored synonyms vs letter reveal)', () => {
 });
 
 describe('Wordle lexicon (guess validation)', () => {
-  it('normalizeConfig only accepts en/ca lexicon ids', () => {
+  it('normalizeConfig only accepts en/ca/fr/es lexicon ids', () => {
     assert.equal(WD.normalizeConfig({ word: 'whale', lexicon: 'en' }).lexicon, 'en');
+    assert.equal(WD.normalizeConfig({ word: 'whale', lexicon: 'ca' }).lexicon, 'ca');
+    assert.equal(WD.normalizeConfig({ word: 'maison', lexicon: 'fr' }).lexicon, 'fr');
+    assert.equal(WD.normalizeConfig({ word: 'perro', lexicon: 'es' }).lexicon, 'es');
     assert.equal(WD.normalizeConfig({ word: 'whale', lexicon: 'de' }).lexicon, 'none');
     assert.equal(WD.normalizeConfig({ word: 'whale' }).lexicon, 'none');
   });
   it('wordChecker returns null for none / unloaded lists', () => {
     assert.equal(WD.wordChecker('none'), null);
     assert.equal(WD.wordChecker('de'), null);
+  });
+});
+
+describe('Wordle.normalize (French ligatures)', () => {
+  it('expands œ→oe and æ→ae so ligature words are typeable on a QWERTY board', () => {
+    assert.equal(WD.normalize('sœur'), 'soeur');
+    assert.equal(WD.normalize('CŒUR'), 'coeur');
+    assert.equal(WD.normalize('curæ'), 'curae');
+  });
+  it('grades a ligature target against its typed-out guess', () => {
+    assert.equal(WD.scoreRound({ word: 'sœur' }, { guesses: ['soeur'] }).correct, true);
   });
 });
 

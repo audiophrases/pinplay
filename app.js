@@ -497,12 +497,12 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "wordle": {
     "name": "Word Guess (Wordle)",
-    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. THE 'prompt' MUST BE GENERIC — always just \"Guess the word.\" (or an equivalent instruction, translated if the quiz language isn't English) — NEVER a definition, translation, category or riddle for the hidden word. A prompt like \"What's the capital of France?\" is a dead giveaway that hands the student the answer before they've even started — MORE obvious than any hint, which defeats the whole point of a guessing game. ALL clue content belongs in HINTS instead: provide a 'hints' array of 1-3 short text clues ORDERED FROM LESS OBVIOUS TO MORE OBVIOUS (synonyms, category, then a near-giveaway) — the student buys them in order, only if they choose to. PRICING: the 1st hint is FREE (no points lost); the 2nd and 3rd each cost 15% of the points. If 'hints' is omitted, the Hint button instead reveals a correct letter under the same free-then-15%-each pricing (still no clue text needed). Scoring if solved: 0 hints or just the free 1st hint = 100%; +2nd hint = 85%; +3rd hint = 70%. Not solved = 0. Set 'lexicon' to 'en' (English) or 'ca' (Catalan) to reject made-up guesses against a real-word list (the answer word is always accepted); use 'none' (default) to allow any letters — best for other languages or made-up-friendly rounds. Grading is case- and accent-insensitive.",
-    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPricing": "1st hint free, 2nd and 3rd each −15%", "hintScoreByCount": { "0": "100%", "1": "100% (free)", "2": "85%", "3": "70%" }, "hintsOrder": "less obvious → more obvious", "lexiconValues": ["none", "en", "ca"], "promptStyle": "generic only, e.g. 'Guess the word.' — never a clue" },
+    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. THE 'prompt' MUST BE GENERIC — always just \"Guess the word.\" (or an equivalent instruction, translated if the quiz language isn't English) — NEVER a definition, translation, category or riddle for the hidden word. A prompt like \"What's the capital of France?\" is a dead giveaway that hands the student the answer before they've even started — MORE obvious than any hint, which defeats the whole point of a guessing game. ALL clue content belongs in HINTS instead: provide a 'hints' array of 1-3 short text clues ORDERED FROM LESS OBVIOUS TO MORE OBVIOUS (synonyms, category, then a near-giveaway) — the student buys them in order, only if they choose to. PRICING: the 1st hint is FREE (no points lost); the 2nd and 3rd each cost 15% of the points. If 'hints' is omitted, the Hint button instead reveals a correct letter under the same free-then-15%-each pricing (still no clue text needed). Scoring if solved: 0 hints or just the free 1st hint = 100%; +2nd hint = 85%; +3rd hint = 70%. Not solved = 0. Set 'lexicon' to 'en' (English), 'ca' (Catalan), 'fr' (French), or 'es' (Spanish) to reject made-up guesses against a real-word list (the answer word is always accepted); use 'none' (default) to allow any letters — best for other languages or made-up-friendly rounds. Grading is case- and accent-insensitive.",
+    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPricing": "1st hint free, 2nd and 3rd each −15%", "hintScoreByCount": { "0": "100%", "1": "100% (free)", "2": "85%", "3": "70%" }, "hintsOrder": "less obvious → more obvious", "lexiconValues": ["none", "en", "ca", "fr", "es"], "promptStyle": "generic only, e.g. 'Guess the word.' — never a clue" },
     "pedagogicalUses": ["Vocabulary retrieval from escalating synonym/category hints.", "Spelling reinforcement through letter-position feedback.", "Warm-up or exit-ticket puzzles with high engagement.", "Scaffolded retrieval: every student can safely take the free 1st hint; weaker students can buy the 2nd/3rd hints for support, stronger students solve unaided for full points."],
     "ttsStrategy": "The prompt is generic ('Guess the word.') so there is normally nothing worth reading aloud via audioText; leave it empty unless translating the generic instruction itself. The hidden word is never spoken.",
-    "differentiationTips": ["Author 'hints' as a gentle ramp — synonym, then category, then a near-giveaway — so struggling students can self-scaffold: the 1st is free, so encourage using it; the 2nd/3rd cost more, for students who need more support.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners.", "Set 'lexicon':'en' for English so guessing stays honest; 'none' for other languages."],
-    "commonPitfalls": ["Putting the clue/definition in the 'prompt' instead of 'hints' (e.g. 'What's the capital of France?', 'Name this large grey animal with a trunk') — this gives away the answer before the round even starts, which is more obvious than any hint. Keep 'prompt' generic ('Guess the word.') and put ALL clue content in 'hints'.", "Words with spaces, hyphens or accents-only differences.", "A hint that gives away the word directly ('It starts with ele-').", "Words outside 5-8 letters.", "Hints ordered most-obvious first (they must go LESS → MORE obvious).", "Setting lexicon 'en'/'ca' for a word not in that language (the answer is still accepted, but it's confusing)."]
+    "differentiationTips": ["Author 'hints' as a gentle ramp — synonym, then category, then a near-giveaway — so struggling students can self-scaffold: the 1st is free, so encourage using it; the 2nd/3rd cost more, for students who need more support.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners.", "Set 'lexicon':'en', 'ca', 'fr', or 'es' for English, Catalan, French, or Spanish so guessing stays honest; use 'none' for made-up-friendly / other-language rounds."],
+    "commonPitfalls": ["Putting the clue/definition in the 'prompt' instead of 'hints' (e.g. 'What's the capital of France?', 'Name this large grey animal with a trunk') — this gives away the answer before the round even starts, which is more obvious than any hint. Keep 'prompt' generic ('Guess the word.') and put ALL clue content in 'hints'.", "Words with spaces, hyphens or accents-only differences.", "A hint that gives away the word directly ('It starts with ele-').", "Words outside 5-8 letters.", "Hints ordered most-obvious first (they must go LESS → MORE obvious).", "Setting lexicon 'en'/'ca'/'fr'/'es' for a word not in that language (the answer is still accepted, but it's confusing)."]
   }
 };
 
@@ -2614,7 +2614,7 @@ function renderBuilder() {
     if (q.type === 'wordle') {
       const attempts = [3, 4, 5, 6, 7, 8];
       const cur = attempts.includes(Number(q.maxAttempts)) ? Number(q.maxAttempts) : 6;
-      const lexicons = [['none', 'None (any letters)'], ['en', 'English'], ['ca', 'Catalan']];
+      const lexicons = [['none', 'None (any letters)'], ['en', 'English'], ['ca', 'Catalan'], ['fr', 'French'], ['es', 'Spanish']];
       const curLex = lexicons.some(([v]) => v === q.lexicon) ? q.lexicon : 'none';
       const hints = Array.isArray(q.hints) ? q.hints.map((h) => String(h || '')) : [];
       while (hints.length < 3) hints.push('');
@@ -3614,7 +3614,7 @@ function syncQuizFromUI() {
       const att = parseInt(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdAttempts"]`)?.value, 10);
       q.maxAttempts = Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6;
       const lex = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdLexicon"]`)?.value || 'none');
-      q.lexicon = ['en', 'ca'].includes(lex) ? lex : 'none';
+      q.lexicon = ['en', 'ca', 'fr', 'es'].includes(lex) ? lex : 'none';
       const hints = [];
       for (let i = 0; i < 3; i++) {
         const h = String(questionListEl.querySelector(`[data-q="${idx}"][data-wd-hint="${i}"]`)?.value || '').trim().slice(0, 120);
@@ -13686,7 +13686,7 @@ function buildPreviewHostQuestion(q) {
       word: q.word || '',
       maxAttempts: Number(q.maxAttempts) || 6,
       hints: Array.isArray(q.hints) ? q.hints.filter(Boolean).slice(0, 3) : [],
-      lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
+      lexicon: ['en', 'ca', 'fr', 'es'].includes(q.lexicon) ? q.lexicon : 'none',
     };
   }
   return base;
@@ -15369,7 +15369,7 @@ function normalizeQuizForLive(raw) {
         word,
         maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
         ...(hints.length ? { hints } : {}),
-        lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
+        lexicon: ['en', 'ca', 'fr', 'es'].includes(q.lexicon) ? q.lexicon : 'none',
       });
       return;
     }

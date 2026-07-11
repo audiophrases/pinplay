@@ -20,7 +20,7 @@
  * Scoring: solved → HINT_WEIGHTS[hintsUsed] (100% / 100% / 85% / 70%); not
  * solved → 0.
  * Grading is case- AND accent-insensitive. Guesses are validated against a word
- * list when the question sets 'lexicon' ('en' | 'ca') — a made-up string is
+ * list when the question sets 'lexicon' ('en' | 'ca' | 'fr' | 'es') — a made-up string is
  * rejected without costing an attempt (the target word is always accepted). With
  * lexicon 'none' (or a missing list) any full-length string is allowed (ESL mode).
  *
@@ -51,6 +51,8 @@
   // Mirrored in cloudflare/worker.js.
   function normalize(s) {
     return String(s == null ? '' : s)
+      .replace(/[œŒ]/g, 'oe')
+      .replace(/[æÆ]/g, 'ae')
       .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip diacritics
       .toLowerCase()
       .replace(/[^a-z]/g, '');
@@ -117,17 +119,19 @@
         .filter(Boolean)
         .slice(0, MAX_HINTS),
       // Word list used to reject made-up guesses; 'none' = accept any letters.
-      lexicon: ['en', 'ca'].indexOf(String(question.lexicon || '')) >= 0 ? String(question.lexicon) : 'none',
+      lexicon: ['en', 'ca', 'fr', 'es'].indexOf(String(question.lexicon || '')) >= 0 ? String(question.lexicon) : 'none',
     };
   }
 
   // Build a real-word validator for a lexicon id from the loaded lexicon globals
-  // (window.WordleLexiconEN / WordleLexiconCA). Returns null when there is nothing
+  // (window.WordleLexiconEN / WordleLexiconCA / WordleLexiconFR / WordleLexiconES). Returns null when there is nothing
   // to check against (id 'none', or the list script isn't loaded) → any guess ok.
   function wordChecker(lexicon) {
     var lex = null;
     if (lexicon === 'en' && global.WordleLexiconEN) lex = global.WordleLexiconEN;
     else if (lexicon === 'ca' && global.WordleLexiconCA) lex = global.WordleLexiconCA;
+    else if (lexicon === 'fr' && global.WordleLexiconFR) lex = global.WordleLexiconFR;
+    else if (lexicon === 'es' && global.WordleLexiconES) lex = global.WordleLexiconES;
     if (!lex || typeof lex.has !== 'function') return null;
     return function (w) { return lex.has(w); };
   }

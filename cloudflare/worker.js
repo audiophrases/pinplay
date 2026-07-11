@@ -5175,7 +5175,7 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       word: String(question.word || ''),
       maxAttempts: Number(question.maxAttempts) || 6,
       hints: Array.isArray(question.hints) ? question.hints.map((h) => String(h || '')).filter(Boolean).slice(0, 3) : [],
-      lexicon: ['en', 'ca'].includes(question.lexicon) ? question.lexicon : 'none',
+      lexicon: ['en', 'ca', 'fr', 'es'].includes(question.lexicon) ? question.lexicon : 'none',
       media: publicQuestionMediaPayload(question),
       ...publicAudioPayload(question),
     };
@@ -5547,7 +5547,7 @@ function normalizeQuiz(quiz) {
         word,
         maxAttempts: Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6,
         ...(hints.length ? { hints } : {}),
-        lexicon: ['en', 'ca'].includes(q.lexicon) ? q.lexicon : 'none',
+        lexicon: ['en', 'ca', 'fr', 'es'].includes(q.lexicon) ? q.lexicon : 'none',
       });
       return;
     }
@@ -5680,6 +5680,8 @@ function scoreSpellingBeeRound(question, answer) {
 // in wordle.js (browser engine).
 function normalizeWordle(s) {
   return String(s == null ? '' : s)
+    .replace(/[œŒ]/g, 'oe')
+    .replace(/[æÆ]/g, 'ae')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z]/g, '');
