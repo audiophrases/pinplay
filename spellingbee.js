@@ -515,14 +515,14 @@
 
     if (options.reviewMode && options.savedResult) {
       renderSummary(container, t, options.savedResult);
-      return { getResult: function () { return options.savedResult; }, getState: function () { return null; }, isComplete: function () { return true; }, isAnswered: function () { return true; }, destroy: function () {} };
+      return { getResult: function () { return options.savedResult; }, getState: function () { return null; }, isComplete: function () { return true; }, isAnswered: function () { return true; }, lock: function () {}, destroy: function () {} };
     }
     if (!cfg.words.length) {
       var warn = document.createElement('p');
       warn.className = 'small';
       warn.textContent = t('This Spelling Bee has no words yet.');
       container.appendChild(warn);
-      return { getResult: function () { return null; }, getState: function () { return null; }, isComplete: function () { return false; }, isAnswered: function () { return false; }, destroy: function () {} };
+      return { getResult: function () { return null; }, getState: function () { return null; }, isComplete: function () { return false; }, isAnswered: function () { return false; }, lock: function () {}, destroy: function () {} };
     }
 
     var results = cfg.words.map(function (w) {
@@ -911,6 +911,11 @@
       getState: getState,
       isComplete: function () { return roundDone; },
       isAnswered: function () { return started || roundDone; },
+      // Host-forced round end (question locked: "Show answer?" mid-round, live
+      // question close, post-submit). Jumps to the finished-round view WITHOUT
+      // firing onComplete/onChange; onKey stops swallowing keys once roundDone,
+      // so Enter falls through to the host's Continue button.
+      lock: function () { if (!roundDone) showFinalized(); },
       destroy: function () { document.removeEventListener('keydown', onKey, true); container.classList.remove('sb-host'); },
     };
   }

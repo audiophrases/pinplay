@@ -1641,6 +1641,20 @@ body.question-active .join-title-row {
   transform: none;
 }
 
+/* While a Spelling Bee / Wordle round is in play, Save answer is only the
+   give-up path ("Show answer?") — muted so the game's own Submit reads as the
+   button to press. Still enabled; hover restores full colour so it clearly
+   remains clickable. */
+#joinSubmitBtn.join-submit-muted {
+  opacity: 0.55;
+  filter: saturate(0.5);
+}
+
+#joinSubmitBtn.join-submit-muted:hover {
+  opacity: 1;
+  filter: none;
+}
+
 /* Pin interaction specific fixes (strictly scoped to Student UI) */
 #joinCard.question-active[data-qtype="pin"] .pin-preview {
   position: fixed;

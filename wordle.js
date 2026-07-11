@@ -216,14 +216,14 @@
 
     if (options.reviewMode && options.savedResult) {
       renderSummary(container, t, options.savedResult, cfg);
-      return { getResult: function () { return options.savedResult; }, getState: function () { return null; }, isComplete: function () { return true; }, isAnswered: function () { return true; }, destroy: function () {} };
+      return { getResult: function () { return options.savedResult; }, getState: function () { return null; }, isComplete: function () { return true; }, isAnswered: function () { return true; }, lock: function () {}, destroy: function () {} };
     }
     if (!target || len < MIN_LEN) {
       var warn = document.createElement('p');
       warn.className = 'small';
       warn.textContent = t('This word puzzle has no word yet.');
       container.appendChild(warn);
-      return { getResult: function () { return null; }, getState: function () { return null; }, isComplete: function () { return false; }, isAnswered: function () { return false; }, destroy: function () {} };
+      return { getResult: function () { return null; }, getState: function () { return null; }, isComplete: function () { return false; }, isAnswered: function () { return false; }, lock: function () {}, destroy: function () {} };
     }
 
     var guesses = [];        // submitted guesses (normalized strings)
@@ -531,6 +531,11 @@
       getState: getState,
       isComplete: function () { return done; },
       isAnswered: function () { return guesses.length > 0 || done; },
+      // Host-forced round end (question locked: "Show answer?" mid-round, live
+      // question close, post-submit). Locks the board WITHOUT firing onComplete;
+      // onKey stops swallowing keys once done, so Enter falls through to the
+      // host's Continue button.
+      lock: function () { if (!done) showFinalizedView(); },
       destroy: function () { document.removeEventListener('keydown', onKey, true); container.classList.remove('wd-host'); },
     };
   }

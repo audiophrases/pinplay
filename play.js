@@ -359,6 +359,7 @@ function markAnswerDirty() {
   if (joinSubmitBtn && joinSubmitBtn.dataset.mode === 'continue') {
     joinSubmitBtn.dataset.mode = 'save';
     joinSubmitBtn.innerHTML = t('Save answer') + joinSubmitEnterHint();
+    syncJoinSubmitGameMute();
   }
 }
 
@@ -372,8 +373,36 @@ function joinSubmitEnterHint() {
 // now operates Save/Continue/Finish again). Live mode's "Submit" carries no keycap.
 function restoreJoinSubmitEnterHint() {
   if (!joinSubmitBtn) return;
+  syncJoinSubmitGameMute();
   const base = { save: t('Save answer'), continue: t('Continue'), finish: t('Finish quiz') }[joinSubmitBtn.dataset.mode];
   if (base) joinSubmitBtn.innerHTML = base + ' <kbd>\u21b5</kbd>';
+}
+
+// While a game round (Spelling Bee / Wordle) is in play, the host Save answer
+// button is only the give-up path ("Show answer?") \u2014 mute it so the game's own
+// Submit reads as the primary action. It stays enabled and clickable.
+function syncJoinSubmitGameMute() {
+  if (!joinSubmitBtn) return;
+  const mode = joinSubmitBtn.dataset.mode;
+  joinSubmitBtn.classList.toggle('join-submit-muted',
+    (_spellingBeeRoundActive || _wordleRoundActive) && (mode === 'save' || mode === 'submit'));
+}
+
+// A locked question (instant-mode save via "Show answer?", live question close,
+// post-submit) must also end any still-playable game round: Spelling Bee /
+// Wordle capture Enter while active \u2014 the Continue button would be unreachable
+// by keyboard \u2014 and the board would still accept play after the reveal.
+function freezeActiveGameRound() {
+  if (_spellingBeeRoundActive && _spellingBeeController) {
+    try { if (typeof _spellingBeeController.lock === 'function') _spellingBeeController.lock(); } catch (e) { /* noop */ }
+    _spellingBeeRoundActive = false;
+    restoreJoinSubmitEnterHint();
+  }
+  if (_wordleRoundActive && _wordleController) {
+    try { if (typeof _wordleController.lock === 'function') _wordleController.lock(); } catch (e) { /* noop */ }
+    _wordleRoundActive = false;
+    restoreJoinSubmitEnterHint();
+  }
 }
 
 function pingEdgeTtsBridgeWarmup() {
@@ -3394,6 +3423,12 @@ function renderPlayerState(state) {
     || (!!state.answeredCurrent && !isEditableSavedAnswer)
     || isAnswerFullscreenLocked();
 
+  // Same conditions minus the (temporary) fullscreen lock: a locked question
+  // ends any still-playable game round so Enter reaches the Continue button.
+  if (questionClosed || assignmentSubmitted || (!!state.answeredCurrent && !isEditableSavedAnswer)) {
+    freezeActiveGameRound();
+  }
+
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
     // After a saved answer, show Continue so the student can advance. If they edit the
@@ -3411,6 +3446,7 @@ function renderPlayerState(state) {
       joinSubmitBtn.dataset.mode = isAssignment ? 'save' : 'submit';
       joinSubmitBtn.disabled = shouldDisable;
     }
+    syncJoinSubmitGameMute();
 
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
     joinSubmitBtn.title = isPoll ? t('Poll question (no points)') : t('{pts} points', { pts });
@@ -6843,9 +6879,20 @@ function renderSpellingBee(container, question) {
   _spellingBeeProgressIndex = currentIndex;
   const resumeState = reviewMode ? undefined : _spellingBeeProgress.get(currentIndex);
 
-  // Review mode shows a static summary (no Enter capture); the interactive round
-  // owns Enter, so suppress the host button's duplicate ↵ for its duration.
-  _spellingBeeRoundActive = !(reviewMode && savedResult);
+  // A locked question (instant feedback already saved, or attempt submitted)
+  // must never come back as a playable round — it would recapture Enter and
+  // strand the Continue button. A finished round still restores its final view
+  // via the resume snapshot; without one (page reload, or the round was
+  // abandoned via "Show answer?"), fall back to the read-only summary.
+  const attemptInfo = live.player.assignment.state?.attempt;
+  const answerLocked = !!savedResult
+    && (String(attemptInfo?.assignment?.feedbackMode || '') === 'instant' || !!attemptInfo?.submitted);
+  const summaryMode = (reviewMode && !!savedResult)
+    || (answerLocked && !(resumeState && resumeState.roundDone));
+
+  // The summary is static (no Enter capture); the interactive round owns Enter,
+  // so suppress the host button's duplicate ↵ for its duration.
+  _spellingBeeRoundActive = !summaryMode;
 
   // Duck the ambient/background loop while a word plays and resume after — same
   // behaviour as the standard question audio (mirrors the 🎧 replay path).
@@ -6861,9 +6908,9 @@ function renderSpellingBee(container, question) {
     t,
     voice: question.language || 'en-US',
     playWord,
-    reviewMode,
+    reviewMode: summaryMode,
     savedResult,
-    resumeState,
+    resumeState: summaryMode ? undefined : resumeState,
     onChange: () => { markAnswerDirty(); },
     onComplete: () => { _spellingBeeRoundActive = false; restoreJoinSubmitEnterHint(); },
   });
@@ -6905,13 +6952,23 @@ function renderWordle(container, question) {
 
   _wordleProgressIndex = currentIndex;
   const resumeState = reviewMode ? undefined : _wordleProgress.get(currentIndex);
-  _wordleRoundActive = !(reviewMode && savedResult);
+
+  // Locked question (instant feedback saved / attempt submitted) → never rebuild
+  // a playable round. A finished round restores its final board via the resume
+  // snapshot; without one (page reload, or abandoned via "Show answer?"), fall
+  // back to the read-only summary. Mirrors renderSpellingBee.
+  const attemptInfo = live.player.assignment.state?.attempt;
+  const answerLocked = !!savedResult
+    && (String(attemptInfo?.assignment?.feedbackMode || '') === 'instant' || !!attemptInfo?.submitted);
+  const summaryMode = (reviewMode && !!savedResult)
+    || (answerLocked && !(resumeState && (resumeState.done || resumeState.solved)));
+  _wordleRoundActive = !summaryMode;
 
   _wordleController = window.Wordle.render(container, question, {
     t,
-    reviewMode,
+    reviewMode: summaryMode,
     savedResult,
-    resumeState,
+    resumeState: summaryMode ? undefined : resumeState,
     onChange: () => { markAnswerDirty(); },
     onComplete: () => {
       _wordleRoundActive = false;
