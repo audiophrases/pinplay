@@ -55,7 +55,11 @@ const UPDATE_TARBALL_TOPDIR = 'pinplay-main'; // top-level folder inside the tar
 const REPO_WEB_URL = 'https://github.com/audiophrases/pinplay'; // public repo, used for the Render bridge deploy
 const RENDER_DEPLOY_URL = 'https://render.com/deploy?repo=' + REPO_WEB_URL; // one-click Deploy to Render (reads root render.yaml)
 
-// Canonical frontend assets to publish (the assets worker serves _site/).
+// Baseline frontend assets to publish (the assets worker serves _site/). The
+// real published set is derived per deploy by collectFrontendAssets(), which
+// scans the HTML entry points — this list is only the guaranteed floor. A
+// hardcoded-only list rots: i18n.js/spellingbee.js/wordle*.js were added to
+// index.html after this list was written and silently 404'd on teacher sites.
 const FRONTEND_ASSETS = ['index.html', 'app.js', 'play.js', 'styles.css', 'favicon.svg', 'question-bank-ui.js'];
 const FRONTEND_DIRS = ['create', 'music'];
 const FRONTEND_GLOB_JSON = true; // also copy *.json templates at repo root
@@ -284,6 +288,32 @@ function copyDirRecursive(srcDir, destDir) {
     else copyFileSafe(src, dest);
   }
 }
+// The frontend files to publish: the FRONTEND_ASSETS baseline plus every local
+// script/stylesheet/icon the two HTML entry points actually reference, so root
+// files added upstream (i18n, game engines, lexicons, …) ship automatically.
+// `rootDir` is the tree to scan — REPO_ROOT when building _site, the unpacked
+// update tarball when refreshing local files.
+function collectFrontendAssets(rootDir) {
+  const found = new Set(FRONTEND_ASSETS);
+  const pages = [
+    { file: path.join(rootDir, 'index.html'), base: '' },
+    { file: path.join(rootDir, 'create', 'index.html'), base: 'create' },
+  ];
+  for (const { file, base } of pages) {
+    let html = '';
+    try { html = fs.readFileSync(file, 'utf8'); } catch { continue; } // tolerate partial trees
+    for (const m of html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/gi)) {
+      const ref = m[1].split(/[?#]/)[0].trim(); // drop ?v= cache-busters
+      if (!ref || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith('//')) continue; // https:, data:, mailto:, protocol-relative
+      const rel = path.posix.normalize(path.posix.join(base, ref)).replace(/^\/+/, '');
+      if (rel.startsWith('..')) continue; // escapes the repo tree
+      if (!/\.(?:js|css|svg|png|ico|json|webmanifest)$/i.test(rel)) continue; // assets only, not page links
+      if (FRONTEND_DIRS.some((d) => rel === d || rel.startsWith(d + '/'))) continue; // whole dirs copied separately
+      found.add(rel);
+    }
+  }
+  return [...found];
+}
 // Replace every occurrence of `from` with `to` in a UTF-8 file, in place.
 function replaceInFile(file, from, to) {
   const text = fs.readFileSync(file, 'utf8');
@@ -405,10 +435,15 @@ async function fetchLatestCode() {
     // Includes the setup/ deploy inputs (self-host worker route module + the
     // join-page / admin UI scripts) — these are bundled/copied at deploy time, so
     // omitting them left `--update` shipping a new worker.js with stale UI/routes.
+    // Frontend assets are derived from the TARBALL's html (not a local list), so
+    // scripts added upstream reach the teacher without editing anything here. The
+    // wizard also refreshes itself — Node read this file fully before running, so
+    // overwriting is safe; the new version takes effect on the next run.
     const files = [
       'cloudflare/worker.js', 'cloudflare/wrangler.toml', 'cloudflare/edge_tts_bridge.py',
       'setup/student-accounts.js', 'setup/student-accounts-ui.js', 'setup/student-admin-ui.js',
-      ...FRONTEND_ASSETS,
+      'setup/pinplay-setup.mjs',
+      ...collectFrontendAssets(srcRoot),
     ];
     for (const rel of files) {
       const from = path.join(srcRoot, rel);
@@ -942,7 +977,7 @@ async function buildAndDeployFrontend(apiUrl, state, siteHint = '') {
   console.log(head('Step 11 — Publishing your PinPlay website'));
   // Populate _site/ from canonical root files (git-ignored payload).
   ensureDir(SITE_DIR);
-  for (const f of FRONTEND_ASSETS) {
+  for (const f of collectFrontendAssets(REPO_ROOT)) {
     const src = path.join(REPO_ROOT, f);
     if (fs.existsSync(src)) copyFileSafe(src, path.join(SITE_DIR, f));
   }
