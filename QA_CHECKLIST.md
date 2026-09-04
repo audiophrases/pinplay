@@ -50,6 +50,22 @@
 - [ ] Teacher answer history panel mirrors simulated entries for current question
 - [ ] Teacher grading actions work locally in preview (grade/correction/model/hide) with immediate UI refresh
 
+## 6c) Student sign-in and roster
+- [ ] Join page shows the Google button only for login-required games/assignments
+- [ ] Signing in with a school account works; the chip shows name and class
+- [ ] "Not you?" clears the session and offers the Google button again
+- [ ] Session survives a reload (no second sign-in on the same device)
+- [ ] A personal (non-school) account is refused with a clear message
+- [ ] A brand-new school account auto-enrols and appears in Students with no class
+- [ ] Assignment: previous attempts still listed after switching from the old login
+- [ ] Live game: hall list shows the class, e.g. "(4B)"
+- [ ] Live game: the same student cannot join twice from two devices
+- [ ] Results: class badge and notify address resolve without a roster sheet
+- [ ] Students panel: add by email, edit class inline, rename, remove
+- [ ] Students panel: CSV import (merge and replace) and export round-trip
+- [ ] Sign-in rules: roster-only mode refuses an unlisted school account
+- [ ] Random-name games and assignments still need no sign-in at all
+
 ## 7) Reliability
 - [ ] Question close reasons (timeout/all_answered/manual) are consistent
 - [ ] State polling survives intermittent failures

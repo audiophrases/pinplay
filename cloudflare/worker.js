@@ -3,7 +3,7 @@ const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS,DELETE',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Player-Token,X-Student-Token',
 };
 
 const RANDOM_NAME_ADJECTIVES = [
@@ -434,20 +434,19 @@ export default {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
       const name = sanitizeName(body?.name);
-      const password = String(body?.password || '').slice(0, 120);
       const clientId = sanitizeId(body?.clientId);
+      const studentToken = String(body?.studentToken || request.headers.get('X-Student-Token') || '').slice(0, 2048);
 
       if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
-      // Live-mode login is verified inside the Durable Object via
-      // lookupAndVerifyStudent(this.env, ...) — the same path assignment login
-      // uses — so no verify config needs to be forwarded here.
+      // Identity for login-required games is verified inside the Durable Object
+      // from the signed student session token, the same one assignments use.
       return withCors(
         await stub.fetch('https://room/join', {
           method: 'POST',
           headers: {},
-          body: JSON.stringify({ name, password, clientId }),
+          body: JSON.stringify({ name, studentToken, clientId }),
         }),
       );
     }
@@ -1372,6 +1371,162 @@ export default {
       }));
     }
 
+    // ---------- Student sign-in (Google) ----------
+
+    // Public: tells the join page whether to show the Google button, and which
+    // client ID to render it with. Never exposes anything secret.
+    if (url.pathname === '/api/student/config' && request.method === 'GET') {
+      const enabled = studentLoginEnabled(env);
+      let allowedDomains = [];
+      if (enabled) {
+        try { allowedDomains = (await rosterGetSettings(env)).allowedDomains; } catch { allowedDomains = []; }
+      }
+      return withCors(json({
+        ok: true,
+        loginEnabled: enabled,
+        googleClientId: String(env.GOOGLE_CLIENT_ID || '').trim(),
+        allowedDomains,
+      }));
+    }
+
+    // Public: exchange a Google ID token for a PinPlay student session token.
+    if (url.pathname === '/api/student/login' && request.method === 'POST') {
+      const body = await safeJson(request);
+      if (!studentLoginEnabled(env)) {
+        return withCors(json({ error: 'Student sign-in is not set up on this site yet.', reason: 'not-configured' }, 501));
+      }
+
+      const profile = await verifyGoogleIdToken(body?.googleIdToken, env.GOOGLE_CLIENT_ID);
+      if (!profile) {
+        return withCors(json({ error: 'Google sign-in could not be verified. Please try again.', reason: 'token' }, 401));
+      }
+
+      // The DO owns the policy decision so allow-list and roster checks happen
+      // in one round trip, against the same rows the teacher edits.
+      const { ok, status, data } = await rosterCall(env, 'login', {
+        method: 'POST',
+        body: JSON.stringify({ email: profile.email, name: profile.name }),
+      });
+      if (!ok) {
+        return withCors(json({ error: data?.error || 'Sign-in refused.', reason: data?.reason || 'refused' }, status || 403));
+      }
+
+      const student = data.student || {};
+      const studentToken = await mintStudentToken(env, {
+        email: student.email,
+        name: student.displayName || '',
+        cls: student.className || '',
+        exp: Math.floor(Date.now() / 1000) + STUDENT_TOKEN_TTL_SECONDS,
+      });
+
+      return withCors(json({
+        ok: true,
+        studentToken,
+        expiresAt: Date.now() + (STUDENT_TOKEN_TTL_SECONDS * 1000),
+        student: {
+          email: student.email,
+          displayName: student.displayName || '',
+          className: student.className || '',
+        },
+        enrolled: !!data.enrolled,
+      }));
+    }
+
+    // ---------- Teacher roster admin (create password) ----------
+    // The in-app replacement for editing a roster spreadsheet: who exists, what
+    // they are called, and which class they are in.
+
+    if (url.pathname.startsWith('/api/students')) {
+      const isGet = request.method === 'GET';
+      const body = isGet ? {} : await safeJson(request);
+      const password = String(
+        body?.password
+        || (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+        || url.searchParams.get('password')
+        || '',
+      ).trim();
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
+
+      if (url.pathname === '/api/students' && isGet) {
+        // One-time, idempotent: fold any accounts created by the old
+        // self-service student-accounts module into the roster.
+        const migrated = await migrateLegacyStudentAccounts(env);
+        const { data } = await rosterCall(env, 'list', { method: 'GET' });
+        return withCors(json({ ok: true, students: data?.students || [], migrated }));
+      }
+
+      if (url.pathname === '/api/students/upsert' && request.method === 'POST') {
+        const { ok, status, data } = await rosterCall(env, 'upsert', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: body?.email,
+            displayName: body?.displayName,
+            className: body?.className,
+            legacyUsername: body?.legacyUsername,
+            notes: body?.notes,
+            source: body?.source || 'manual',
+          }),
+        });
+        return withCors(json(data, ok ? 200 : (status || 400)));
+      }
+
+      if (url.pathname === '/api/students/delete' && request.method === 'POST') {
+        const { ok, status, data } = await rosterCall(env, 'delete', {
+          method: 'POST',
+          body: JSON.stringify({ email: body?.email }),
+        });
+        return withCors(json(data, ok ? 200 : (status || 400)));
+      }
+
+      if (url.pathname === '/api/students/import' && request.method === 'POST') {
+        const rows = Array.isArray(body?.rows) ? body.rows : parseRosterCsv(String(body?.csv || ''));
+        if (!rows.length) return json({ error: 'Nothing to import — no rows with a valid email were found.' }, 400);
+        const { ok, status, data } = await rosterCall(env, 'import', {
+          method: 'POST',
+          body: JSON.stringify({ rows, mode: String(body?.mode || 'merge') }),
+        });
+        return withCors(json(data, ok ? 200 : (status || 400)));
+      }
+
+      if (url.pathname === '/api/students/export.csv' && isGet) {
+        const { data } = await rosterCall(env, 'list', { method: 'GET' });
+        const rows = Array.isArray(data?.students) ? data.students : [];
+        const esc = (v) => {
+          const s = String(v ?? '');
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const lines = ['email,name,class,username,lastLogin'];
+        rows.forEach((r) => lines.push([
+          r.email, r.displayName || '', r.className || '', r.legacyUsername || '',
+          r.lastLoginAt ? new Date(Number(r.lastLoginAt)).toISOString() : '',
+        ].map(esc).join(',')));
+        return withCors(new Response(lines.join('\n'), {
+          headers: { 'Content-Type': 'text/csv; charset=utf-8', ...CORS_HEADERS },
+        }));
+      }
+
+      if (url.pathname === '/api/students/settings') {
+        if (isGet) {
+          const { data } = await rosterCall(env, 'settings', { method: 'GET' });
+          return withCors(json(data));
+        }
+        const { ok, status, data } = await rosterCall(env, 'settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            allowedDomains: sanitizeAllowedDomains(body?.allowedDomains),
+            policy: sanitizeRosterPolicy(body?.policy),
+          }),
+        });
+        return withCors(json(data, ok ? 200 : (status || 400)));
+      }
+
+      return json({ error: 'Unknown roster route.' }, 404);
+    }
+
+    // Resolve display names / legacy usernames on old attempts to roster emails
+    // and classes, so the notify flow and class badges keep working for work
+    // recorded before Google sign-in. Response shape is unchanged.
     if (url.pathname === '/api/assignments/lookup-emails' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -1387,33 +1542,16 @@ export default {
       const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
-      const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
-      const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
-      if (!lookupUrl) return json({ error: 'Roster lookup is not configured.' }, 501);
-
-      try {
-        const lookupRes = await fetch(lookupUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          redirect: 'follow',
-          body: JSON.stringify({ usernames, secret: lookupSecret }),
-        });
-        const text = await lookupRes.text();
-        let parsed = {};
-        try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
-        if (!lookupRes.ok || !parsed?.ok) {
-          return withCors(json({ error: parsed?.error || 'Roster lookup failed.' }, 502));
-        }
-        const results = Array.isArray(parsed.results) ? parsed.results : [];
-        return withCors(json({ ok: true, results }));
-      } catch (err) {
-        return withCors(json({ error: 'Roster lookup unavailable.' }, 502));
-      }
+      const { data } = await rosterCall(env, 'resolve-names', {
+        method: 'POST',
+        body: JSON.stringify({ names: usernames }),
+      });
+      return withCors(json({ ok: true, results: Array.isArray(data?.results) ? data.results : [] }));
     }
 
     // One-time migration: rewrite every attempt.studentKey from username-derived
-    // to email-derived. Defaults to dry-run; pass dryRun:false to actually apply.
-    // Idempotent — safe to run again.
+    // to email-derived, using the roster's display names and legacy usernames.
+    // Defaults to dry-run; pass dryRun:false to actually apply. Idempotent.
     if (url.pathname === '/api/assignments/rekey-by-email' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -1422,10 +1560,6 @@ export default {
 
       const ok = await verifyCreatePassword(env, password, request);
       if (!ok) return json({ error: 'Wrong password.' }, 401);
-
-      const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
-      const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
-      if (!lookupUrl) return json({ error: 'Roster lookup is not configured.' }, 501);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
 
@@ -1438,38 +1572,21 @@ export default {
       }
 
       const emailMap = {};
-      const unmatchedNames = [];
+      const matched = new Set();
       const BATCH = 200;
       for (let i = 0; i < studentNames.length; i += BATCH) {
         const slice = studentNames.slice(i, i + BATCH);
-        try {
-          const lookupRes = await fetch(lookupUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            redirect: 'follow',
-            body: JSON.stringify({ usernames: slice, secret: lookupSecret }),
-          });
-          const text = await lookupRes.text();
-          let parsed = {};
-          try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
-          if (!lookupRes.ok || !parsed?.ok) {
-            return withCors(json({ error: parsed?.error || 'Roster lookup failed mid-batch.' }, 502));
-          }
-          const results = Array.isArray(parsed.results) ? parsed.results : [];
-          const matched = new Set();
-          results.forEach((r) => {
-            const name = String(r?.username || '').trim().toLowerCase();
-            const email = String(r?.email || '').trim().toLowerCase();
-            if (name && email) {
-              emailMap[name] = email;
-              matched.add(name);
-            }
-          });
-          slice.forEach((n) => { if (!matched.has(n)) unmatchedNames.push(n); });
-        } catch (err) {
-          return withCors(json({ error: 'Roster lookup unavailable.' }, 502));
-        }
+        const { data } = await rosterCall(env, 'resolve-names', {
+          method: 'POST',
+          body: JSON.stringify({ names: slice }),
+        });
+        (Array.isArray(data?.results) ? data.results : []).forEach((r) => {
+          const name = String(r?.username || '').trim().toLowerCase();
+          const email = String(r?.email || '').trim().toLowerCase();
+          if (name && email) { emailMap[name] = email; matched.add(name); }
+        });
       }
+      const unmatchedNames = studentNames.filter((n) => !matched.has(n));
 
       const applyRes = await stub.fetch('https://room/assignments/rekey-bulk', {
         method: 'POST',
@@ -1550,48 +1667,52 @@ export default {
       return withCors(json({ ok: true, name: pickRandomName({}) }));
     }
 
+    // ---------- Student-facing assignment routes ----------
+    // Identity comes from the signed student session token (Google sign-in), so
+    // none of these take a username or password any more. The email-derived key
+    // is authoritative; `legacyStudentKey` keeps pre-Google attempts visible.
+
     if (url.pathname === '/api/assignment/check-status' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
-      const usernameKey = sanitizeAssignmentStudentKey(body?.studentKey);
-      const username = String(body?.username || body?.studentName || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
-      if (!usernameKey && !username) return json({ error: 'Student key or username required.' }, 400);
 
-      const { emailKey } = await lookupAndVerifyStudent(env, username, null);
-      const primaryKey = emailKey || usernameKey;
-      const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
+      const assignment = await fetchAssignmentBase(env, code);
+      if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+      let studentKey = '';
+      let legacyStudentKey = '';
+      if (assignment.randomNames) {
+        // Anonymous mode has no account; the client's own key is all there is,
+        // and it still finds that player's attempts within their session.
+        studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      } else {
+        const student = await resolveStudent(env, body, request);
+        if (!student) return json({ error: 'Please sign in to continue.', reason: 'signin' }, 401);
+        studentKey = student.studentKey;
+        legacyStudentKey = student.legacyStudentKey;
+      }
+      if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/check-status', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey: primaryKey, legacyStudentKey: legacyKey }),
+        body: JSON.stringify({ code, studentKey, legacyStudentKey }),
       }));
     }
 
     // Student-facing: delete one of the caller's own attempts (completed or open).
-    // Auth: studentKey ownership is enforced in the DO; for non-random-names
-    // assignments we additionally verify the student's password.
+    // Ownership is enforced in the DO against the caller's own signed identity.
     if (url.pathname === '/api/assignment/delete-my-attempt' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
       const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
-      const usernameKey = sanitizeAssignmentStudentKey(body?.studentKey);
-      const username = sanitizeName(body?.studentName || body?.username || '');
-      const password = String(body?.password || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
-      if (!usernameKey && !username) return json({ error: 'Student key or username required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
 
-      // Check assignment login mode and verify password when required.
-      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
-        method: 'GET',
-      });
-      if (!getRes.ok) return withCors(getRes);
-      const getData = await getRes.json();
-      const assignment = getData?.assignment || null;
+      const assignment = await fetchAssignmentBase(env, code);
       if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
       // Exam mode with a single allowed attempt: deleting would reset the limit
@@ -1602,68 +1723,54 @@ export default {
         return json({ error: 'Attempts cannot be deleted for this exam.' }, 403);
       }
 
-      const passwordRequired = assignment.randomNames === false;
-      if (passwordRequired) {
-        if (!password) return json({ error: 'Password required.' }, 401);
-        if (!username) return json({ error: 'Username required.' }, 400);
+      let studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+      let legacyStudentKey = '';
+      if (!assignment.randomNames) {
+        const student = await resolveStudent(env, body, request);
+        if (!student) return json({ error: 'Please sign in to continue.', reason: 'signin' }, 401);
+        studentKey = student.studentKey;
+        legacyStudentKey = student.legacyStudentKey;
       }
-
-      // Single Apps Script call: resolve email and (when required) verify the
-      // password in the same round trip.
-      const lookup = await lookupAndVerifyStudent(env, username, passwordRequired ? password : null);
-      if (passwordRequired && lookup.passwordOk !== true) {
-        return json({ error: 'Invalid username or password.' }, 401);
-      }
-
-      const emailKey = lookup.emailKey;
-      const primaryKey = emailKey || usernameKey;
-      const legacyKey = (emailKey && usernameKey && usernameKey !== emailKey) ? usernameKey : '';
+      if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
       return withCors(await stub.fetch('https://room/assignments/delete-attempt-by-student', {
         method: 'POST',
-        body: JSON.stringify({ code, attemptId, studentKey: primaryKey, legacyStudentKey: legacyKey }),
+        body: JSON.stringify({ code, attemptId, studentKey, legacyStudentKey }),
       }));
     }
 
     if (url.pathname === '/api/assignment/start' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
-      const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
-      const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
-      const password = String(body?.password || request.headers.get('X-Student-Password') || '').trim();
       if (!code) return json({ error: 'Assignment code required.' }, 400);
-      if (!studentKey) return json({ error: 'Student key required.' }, 400);
+
+      const assignment = await fetchAssignmentBase(env, code);
+      if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+      let studentKey = '';
+      let legacyStudentKey = '';
+      let studentName = sanitizeName(body?.studentName || body?.username || 'Student');
+      let studentEmail = '';
+      let className = '';
+
+      if (assignment.randomNames) {
+        // Anonymous mode keeps the client-supplied key: there is no account.
+        studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
+        if (!studentKey) return json({ error: 'Student key required.' }, 400);
+      } else {
+        const student = await resolveStudent(env, body, request);
+        if (!student) return json({ error: 'Please sign in to continue.', reason: 'signin' }, 401);
+        studentKey = student.studentKey;
+        legacyStudentKey = student.legacyStudentKey;
+        studentName = student.displayName;
+        studentEmail = student.email;
+        className = student.className;
+      }
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-
-      // Check assignment login mode and verify password if needed
-      const getRes = await stub.fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, {
-        method: 'GET',
-      });
-      if (!getRes.ok) return withCors(getRes);
-      const getData = await getRes.json();
-      const assignment = getData?.assignment || null;
-
-      const passwordRequired = !!(assignment && assignment.randomNames === false);
-      if (passwordRequired && !password) {
-        return withCors(json({ error: 'Username and password are required.' }, 401));
-      }
-
-      // Single Apps Script call: resolve email and (when required) verify the
-      // password in the same round trip. Email-derived studentKey gives stable
-      // identity across username changes and disambiguates same-username students.
-      const lookup = await lookupAndVerifyStudent(env, studentName, passwordRequired ? password : null);
-      if (passwordRequired && lookup.passwordOk !== true) {
-        return withCors(json({ error: 'Invalid username or password.' }, 401));
-      }
-
-      const emailKey = lookup.emailKey;
-      const primaryKey = emailKey || studentKey;
-      const legacyKey = (emailKey && studentKey && studentKey !== emailKey) ? studentKey : '';
-
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey: primaryKey, legacyStudentKey: legacyKey, studentName }),
+        body: JSON.stringify({ code, studentKey, legacyStudentKey, studentName, studentEmail, className }),
       }));
     }
 
@@ -1682,8 +1789,20 @@ export default {
     // Student-facing attempt history endpoint
     if (url.pathname === '/api/assignment/attempts' && request.method === 'GET') {
       const code = sanitizeAssignmentCode(url.searchParams.get('code'));
-      const studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
       if (!code) return json({ error: 'Assignment code required.' }, 400);
+
+      const assignment = await fetchAssignmentBase(env, code);
+      if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+
+      let studentKey = '';
+      if (assignment.randomNames) {
+        studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
+      } else {
+        // History is personal data: only the signed-in owner may read it.
+        const student = await resolveStudent(env, null, request);
+        if (!student) return json({ error: 'Please sign in to continue.', reason: 'signin' }, 401);
+        studentKey = student.studentKey;
+      }
       if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
@@ -2767,6 +2886,10 @@ export class QuizRoom {
         const studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
         const legacyStudentKey = sanitizeAssignmentStudentKey(body?.legacyStudentKey);
         const studentName = sanitizeName(body?.studentName || body?.username || 'Student');
+        // Stamped on the attempt so the teacher dashboard can show a class badge
+        // and resolve a notify address without a second roster lookup.
+        const studentEmail = sanitizeEmail(body?.studentEmail);
+        const className = sanitizeClassName(body?.className);
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
 
@@ -2802,6 +2925,8 @@ export class QuizRoom {
           id: randomId('at_'),
           studentKey,
           studentName,
+          studentEmail,
+          className,
           startedAt: now,
           updatedAt: now,
           submitted: false,
@@ -3403,6 +3528,184 @@ export class QuizRoom {
         return json({ ok: true, notifiedAt: now, notified });
       }
 
+      // ---------- Student roster ----------
+      // The roster is a directory, not a credential store: identity is proven by
+      // Google sign-in, and these rows only say who an address belongs to and
+      // which class they are in. Keyed by verified email (`rs:<email>`), which is
+      // the same key attempts use, so a rename never orphans anyone's work.
+
+      if (url.pathname === '/roster/settings' && request.method === 'GET') {
+        return json({ ok: true, settings: await loadRosterSettings(this.state.storage) });
+      }
+
+      if (url.pathname === '/roster/settings' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const settings = {
+          allowedDomains: Array.isArray(body?.allowedDomains) ? body.allowedDomains : [],
+          policy: String(body?.policy || 'open'),
+          updatedAt: Date.now(),
+        };
+        await this.state.storage.put('rsettings', settings);
+        return json({ ok: true, settings });
+      }
+
+      if (url.pathname === '/roster/list' && request.method === 'GET') {
+        return json({ ok: true, students: await loadRosterRows(this.state.storage) });
+      }
+
+      if (url.pathname === '/roster/get' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (!email) return json({ error: 'A valid email is required.' }, 400);
+        return json({ ok: true, student: (await this.state.storage.get(rosterKey(email))) || null });
+      }
+
+      if (url.pathname === '/roster/upsert' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (!email) return json({ error: 'A valid email is required.' }, 400);
+        const existing = (await this.state.storage.get(rosterKey(email))) || null;
+        const row = mergeRosterRow(existing, body, email);
+        await this.state.storage.put(rosterKey(email), row);
+        return json({ ok: true, student: row });
+      }
+
+      if (url.pathname === '/roster/delete' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (!email) return json({ error: 'A valid email is required.' }, 400);
+        await this.state.storage.delete(rosterKey(email));
+        return json({ ok: true });
+      }
+
+      // Bulk add/replace. `mode: 'replace'` clears rows not present in the payload
+      // (their attempts are untouched — only the directory entry goes away).
+      if (url.pathname === '/roster/import' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const rows = Array.isArray(body?.rows) ? body.rows.slice(0, 2000) : [];
+        const replace = String(body?.mode || 'merge') === 'replace';
+        // `fillOnly` never overwrites a field that already has a value — used by
+        // the one-time migration so a teacher's manual edits always win.
+        const fillOnly = !!body?.fillOnly;
+
+        const existingRows = await loadRosterRows(this.state.storage);
+        const existingByEmail = new Map(existingRows.map((r) => [r.email, r]));
+
+        let created = 0;
+        let updated = 0;
+        const seen = new Set();
+        for (const raw of rows) {
+          const email = sanitizeEmail(raw?.email);
+          if (!email || seen.has(email)) continue;
+          seen.add(email);
+          const prior = existingByEmail.get(email) || null;
+          if (prior && fillOnly) {
+            const merged = { ...prior };
+            let touched = false;
+            for (const [field, sanitize] of [['displayName', sanitizeName], ['className', sanitizeClassName]]) {
+              if (!merged[field] && raw?.[field]) { merged[field] = sanitize(raw[field]); touched = true; }
+            }
+            if (!merged.legacyUsername && raw?.legacyUsername) {
+              merged.legacyUsername = sanitizeName(raw.legacyUsername);
+              touched = true;
+            }
+            if (!touched) continue;
+            merged.updatedAt = Date.now();
+            await this.state.storage.put(rosterKey(email), merged);
+            updated += 1;
+            continue;
+          }
+          const row = mergeRosterRow(prior, raw, email);
+          await this.state.storage.put(rosterKey(email), row);
+          if (prior) updated += 1; else created += 1;
+        }
+
+        let removed = 0;
+        if (replace) {
+          for (const r of existingRows) {
+            if (seen.has(r.email)) continue;
+            await this.state.storage.delete(rosterKey(r.email));
+            removed += 1;
+          }
+        }
+
+        return json({ ok: true, created, updated, removed, total: seen.size });
+      }
+
+      // Sign-in: applies the login policy, auto-enrolls when policy is 'open',
+      // and stamps lastLoginAt. The Google token was already verified upstream.
+      if (url.pathname === '/roster/login' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (!email) return json({ error: 'A valid email is required.' }, 400);
+
+        const settings = await loadRosterSettings(this.state.storage);
+        if (!isEmailAllowed(email, settings.allowedDomains)) {
+          return json({
+            error: 'That account is not allowed here. Sign in with your school account.',
+            reason: 'domain',
+          }, 403);
+        }
+
+        const existing = (await this.state.storage.get(rosterKey(email))) || null;
+        if (!existing && settings.policy === 'roster') {
+          return json({
+            error: 'You are not on this teacher\'s student list yet. Ask them to add you.',
+            reason: 'not-listed',
+          }, 403);
+        }
+
+        const now = Date.now();
+        const row = existing
+          ? { ...existing, lastLoginAt: now, updatedAt: now }
+          : {
+            email,
+            // Google's profile name is the friendliest default; the teacher can
+            // shorten it, and students cannot rename themselves.
+            displayName: sanitizeName(body?.name || email.split('@')[0]),
+            className: '',
+            legacyUsername: '',
+            notes: '',
+            source: 'google',
+            createdAt: now,
+            updatedAt: now,
+            lastLoginAt: now,
+          };
+        // Backfill a display name for rows imported with an empty one.
+        if (!row.displayName) row.displayName = sanitizeName(body?.name || email.split('@')[0]);
+        await this.state.storage.put(rosterKey(email), row);
+        return json({ ok: true, student: row, enrolled: !existing });
+      }
+
+      // Map historical usernames (and display names) to roster rows. Backs the
+      // teacher notify flow and the one-time attempt rekey, both of which only
+      // know a `studentName` recorded before Google sign-in existed.
+      if (url.pathname === '/roster/resolve-names' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const names = Array.isArray(body?.names) ? body.names.slice(0, 500) : [];
+        const rows = await loadRosterRows(this.state.storage);
+
+        const index = new Map();
+        const add = (value, row) => {
+          const k = String(value || '').trim().toLowerCase();
+          if (k && !index.has(k)) index.set(k, row);
+        };
+        // Least specific first so a more specific match can never be shadowed.
+        rows.forEach((r) => add(r.displayName, r));
+        rows.forEach((r) => add(r.legacyUsername, r));
+        rows.forEach((r) => add(r.email, r));
+
+        const results = [];
+        for (const raw of names) {
+          const key = String(raw || '').trim().toLowerCase();
+          const row = key ? index.get(key) : null;
+          if (!row) continue;
+          results.push({ username: key, email: row.email, class: row.className || '' });
+        }
+        return json({ ok: true, results });
+      }
+
+
       // Returns every distinct, lowercased studentName found across all
       // assignments' attempts. Used by the rekey orchestrator to build the
       // username→email map.
@@ -3754,7 +4057,6 @@ export class QuizRoom {
       if (url.pathname === '/join' && request.method === 'POST') {
         const body = await safeJson(request);
         const rawName = sanitizeName(body?.name);
-        const password = String(body?.password || '').slice(0, 120);
         const clientId = sanitizeId(body?.clientId);
 
         if (clientId) {
@@ -3775,57 +4077,34 @@ export class QuizRoom {
         let verifiedIdentity = null;
         if (room.settings?.randomNames) {
           name = pickRandomName(room.players);
-        }
-
-        if (!name) return json({ error: 'Name is required.' }, 400);
-        if (hasBlockedNickname(name)) {
-          return json({ error: 'Nickname not allowed. Please choose another one.' }, 400);
+          if (!name) return json({ error: 'Name is required.' }, 400);
+          if (hasBlockedNickname(name)) {
+            return json({ error: 'Nickname not allowed. Please choose another one.' }, 400);
+          }
         }
 
         if (!room.settings?.randomNames) {
-          if (!password) return json({ error: 'Username and password are required.' }, 401);
+          // Login-required games identify students by the same signed Google
+          // session the assignment flow uses, so a live game and its homework
+          // land under one key and the roster's class travels with the player.
+          const student = await resolveStudent(this.env, body, request);
+          if (!student) return json({ error: 'Please sign in to join this game.', reason: 'signin' }, 401);
 
-          // Verify against the SAME roster helper that assignment login uses
-          // (lookupAndVerifyStudent -> STUDENT_ROSTER_LOOKUP_URL). Live mode used
-          // to have its own divergent path keyed on STUDENT_LOGIN_VERIFY_URL, which
-          // the wizard never provisions and which broke whenever that endpoint's
-          // response shape differed from the roster lookup's. One code path now.
-          try {
-            const verifyNames = [name];
-            const lowerName = sanitizeName(name).toLowerCase();
-            if (lowerName && !verifyNames.includes(lowerName)) {
-              verifyNames.push(lowerName);
-            }
-
-            let lookup = null;
-            let verifiedWithName = name;
-            for (const candidateName of verifyNames) {
-              const res = await lookupAndVerifyStudent(this.env, candidateName, password);
-              if (res && res.passwordOk === true) {
-                lookup = res;
-                verifiedWithName = candidateName;
-                break;
-              }
-            }
-
-            if (!lookup) return json({ error: 'Invalid username or password.' }, 401);
-
-            verifiedIdentity = await normalizeStudentIdentity(
-              { username: verifiedWithName, email: lookup.email, studentKey: lookup.emailKey },
-              verifiedWithName,
-            );
-            name = sanitizeName(verifiedIdentity?.displayName || verifiedWithName) || name;
-          } catch {
-            return json({ error: 'Login verification service unavailable.' }, 502);
-          }
+          verifiedIdentity = {
+            username: sanitizeName(student.displayName),
+            displayName: sanitizeName(student.displayName),
+            className: student.className,
+            email: student.email,
+            studentKey: student.studentKey,
+            source: 'google',
+          };
+          name = sanitizeName(student.displayName) || name;
 
           const nameTaken = Object.values(room.players || {}).some((p) => normalizeNameKey(p.name) === normalizeNameKey(name));
           if (nameTaken) return json({ error: 'Name already in use in this game.' }, 409);
 
-          if (verifiedIdentity?.studentKey) {
-            const sameStudentAlreadyIn = Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '') === verifiedIdentity.studentKey);
-            if (sameStudentAlreadyIn) return json({ error: 'Student already joined in this game.' }, 409);
-          }
+          const sameStudentAlreadyIn = Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '') === verifiedIdentity.studentKey);
+          if (sameStudentAlreadyIn) return json({ error: 'You have already joined this game on another device.' }, 409);
         }
 
         const playerId = randomId('p_');
@@ -6247,110 +6526,305 @@ function makeStudentKeyFromEmail(email) {
   return base ? `usr_${base}`.slice(0, 96) : '';
 }
 
-// Isolate-scoped cache mapping lowercase username -> roster email. Survives
-// across requests within a warm worker isolate; cold isolates re-fetch.
-const STUDENT_EMAIL_CACHE = new Map();
-const STUDENT_EMAIL_TTL_MS = 6 * 60 * 60 * 1000;
+// ---------- Student identity: Google sign-in + roster ----------
+//
+// Students prove who they are with "Sign in with Google". The worker verifies the
+// Google ID token once, then mints its own signed session token that the client
+// replays on every identity-bearing call. There is no student password anywhere,
+// and no external call after that first sign-in.
+//
+// The stable primary key stays the verified email (`usr_<email>`), so every
+// attempt recorded under the previous username+password scheme stays attached.
 
-function cachedRosterEmail(username) {
-  const key = String(username || '').trim().toLowerCase();
-  if (!key) return null;
-  const entry = STUDENT_EMAIL_CACHE.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    STUDENT_EMAIL_CACHE.delete(key);
+const STUDENT_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
+function studentSessionSecret(env) {
+  // CREATOR_SIGNING_KEY is the fallback so a deployment that already provisioned
+  // guest workspaces gets working student sessions before STUDENT_SESSION_KEY is set.
+  return String(env.STUDENT_SESSION_KEY || env.CREATOR_SIGNING_KEY || '').trim();
+}
+
+// Is student sign-in usable on this deployment? Needs a Google client ID (to
+// verify the audience of an ID token) and a signing secret (to mint sessions).
+function studentLoginEnabled(env) {
+  return Boolean(String(env.GOOGLE_CLIENT_ID || '').trim() && studentSessionSecret(env));
+}
+
+async function mintStudentToken(env, claim) {
+  const secret = studentSessionSecret(env);
+  if (!secret) throw new Error('Student sign-in is not configured.');
+  const payloadB64 = b64urlEncodeBytes(new TextEncoder().encode(JSON.stringify(claim)));
+  const sig = await hmacSignBytes(secret, payloadB64);
+  return `${payloadB64}.${b64urlEncodeBytes(sig)}`;
+}
+
+// Returns { email, name, cls, exp } or null when missing/tampered/expired.
+async function verifyStudentToken(env, token) {
+  const secret = studentSessionSecret(env);
+  if (!secret || !token) return null;
+  const parts = String(token).split('.');
+  if (parts.length !== 2) return null;
+  try {
+    const expected = await hmacSignBytes(secret, parts[0]);
+    if (!constantTimeEqual(expected, b64urlDecodeBytes(parts[1]))) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecodeBytes(parts[0])));
+    if (!payload || typeof payload !== 'object') return null;
+    const email = sanitizeEmail(payload.email);
+    if (!email) return null;
+    if (!payload.exp || Date.now() / 1000 > Number(payload.exp)) return null;
+    return { email, name: sanitizeName(payload.name || ''), cls: sanitizeClassName(payload.cls || ''), exp: Number(payload.exp) };
+  } catch {
     return null;
   }
-  return entry.email;
 }
 
-function rememberRosterEmail(username, email) {
-  const key = String(username || '').trim().toLowerCase();
-  if (!key) return;
-  STUDENT_EMAIL_CACHE.set(key, {
-    email: String(email || ''),
-    expiresAt: Date.now() + STUDENT_EMAIL_TTL_MS,
-  });
-}
-
-// Merged roster lookup + (optional) password verify in a single Apps Script
-// round trip. Pass password=null/'' for lookup-only (uses cache). Pass a
-// non-empty password to also verify against the roster sheet — the bridge
-// returns email and passwordOk in one call, replacing the older two-call
-// (verify + resolve) flow that dominated student-login latency.
-//
-// Returns { email, emailKey, passwordOk } where passwordOk is null when no
-// password was supplied, true/false otherwise.
-async function lookupAndVerifyStudent(env, username, password) {
-  const name = String(username || '').trim();
-  const wantsVerify = typeof password === 'string' && password.length > 0;
-  if (!name) return { email: '', emailKey: '', passwordOk: wantsVerify ? false : null };
-
-  // Test-account override (skip Apps Script entirely when both match).
-  let forceVerified = false;
-  if (wantsVerify) {
-    const ou = String(env.STUDENT_LOGIN_OVERRIDE_USER || '').trim();
-    const op = String(env.STUDENT_LOGIN_OVERRIDE_PASS || '').trim();
-    if (ou && op && name === ou && password === op) forceVerified = true;
-  }
-
-  // Cache hit short-circuits the Apps Script call for lookup-only or
-  // override-verified requests.
-  if (!wantsVerify || forceVerified) {
-    const cachedEmail = cachedRosterEmail(name);
-    if (cachedEmail !== null) {
-      return {
-        email: cachedEmail,
-        emailKey: makeStudentKeyFromEmail(cachedEmail),
-        passwordOk: forceVerified ? true : null,
-      };
-    }
-  }
-
-  const lookupUrl = String(env.STUDENT_ROSTER_LOOKUP_URL || '').trim();
-  const lookupSecret = String(env.STUDENT_ROSTER_LOOKUP_SECRET || '').trim();
-  if (!lookupUrl) {
-    return {
-      email: '',
-      emailKey: '',
-      passwordOk: forceVerified ? true : (wantsVerify ? false : null),
-    };
-  }
-
-  const reqBody = { usernames: [name], secret: lookupSecret };
-  if (wantsVerify && !forceVerified) reqBody.password = password;
-
+// Verify a Google ID token and return the verified email + profile name.
+// Uses Google's tokeninfo endpoint: no key material to manage, and it validates
+// the signature, issuer and expiry for us. We additionally pin the audience to
+// this deployment's own client ID so a token minted for another site is refused.
+async function verifyGoogleIdToken(idToken, clientId) {
+  const token = String(idToken || '').trim();
+  const aud = String(clientId || '').trim();
+  if (!token || !aud) return null;
   try {
-    const res = await fetch(lookupUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      redirect: 'follow',
-      body: JSON.stringify(reqBody),
-    });
-    const text = await res.text();
-    let parsed = {};
-    try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = {}; }
-    if (!res.ok || !parsed?.ok) {
-      return {
-        email: '',
-        emailKey: '',
-        passwordOk: forceVerified ? true : (wantsVerify ? false : null),
-      };
-    }
-    const r = (Array.isArray(parsed.results) ? parsed.results : [])[0] || {};
-    const email = String(r.email || '').trim().toLowerCase();
-    rememberRosterEmail(name, email);
-    return {
-      email,
-      emailKey: makeStudentKeyFromEmail(email),
-      passwordOk: forceVerified ? true : (wantsVerify ? (r.passwordOk === true) : null),
-    };
+    const res = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token));
+    if (!res.ok) return null;
+    const p = await res.json();
+    if (String(p?.aud || '') !== aud) return null;
+    if (p?.email_verified !== true && p?.email_verified !== 'true') return null;
+    const email = sanitizeEmail(p?.email);
+    if (!email) return null;
+    return { email, name: String(p?.name || '').trim().slice(0, 80) };
   } catch {
-    return {
-      email: '',
-      emailKey: '',
-      passwordOk: forceVerified ? true : (wantsVerify ? false : null),
-    };
+    return null;
+  }
+}
+
+// Login policy. `allowedDomains` entries are either a bare domain ("school.cat",
+// matching every address on it) or a full address ("teacher@gmail.com", matching
+// just that one). An empty list allows any verified Google account.
+function sanitizeAllowedDomains(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\s,;]+/);
+  const out = [];
+  for (const item of raw) {
+    const v = String(item || '').trim().toLowerCase().replace(/^@/, '');
+    if (!v) continue;
+    if (!/^[a-z0-9._%+-]*@?[a-z0-9.-]+\.[a-z]{2,}$/.test(v)) continue;
+    if (!out.includes(v)) out.push(v);
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
+function isEmailAllowed(email, allowedDomains) {
+  const e = sanitizeEmail(email);
+  if (!e) return false;
+  const list = Array.isArray(allowedDomains) ? allowedDomains : [];
+  if (!list.length) return true; // no restriction configured
+  const domain = e.slice(e.indexOf('@') + 1);
+  return list.some((entry) => (entry.includes('@') ? entry === e : entry === domain));
+}
+
+function sanitizeRosterPolicy(value) {
+  return String(value || '').trim().toLowerCase() === 'roster' ? 'roster' : 'open';
+}
+
+// ---------- Roster access (worker side -> assignments DO) ----------
+
+function assignmentsStub(env) {
+  return env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+}
+
+async function rosterCall(env, path, init) {
+  const res = await assignmentsStub(env).fetch(`https://room/roster/${path}`, init);
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function rosterGetSettings(env) {
+  const { data } = await rosterCall(env, 'settings', { method: 'GET' });
+  return {
+    allowedDomains: sanitizeAllowedDomains(data?.settings?.allowedDomains),
+    policy: sanitizeRosterPolicy(data?.settings?.policy),
+  };
+}
+
+async function rosterGetStudent(env, email) {
+  const { data } = await rosterCall(env, 'get', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  return data?.student || null;
+}
+
+// Read one assignment's settings (not its attempts) from the assignments DO.
+// Student routes need randomNames/examMode/attemptsLimit before deciding what
+// identity to require, so this runs ahead of the identity check.
+async function fetchAssignmentBase(env, code) {
+  try {
+    const res = await assignmentsStub(env).fetch(`https://room/assignments/get?code=${encodeURIComponent(code)}`, { method: 'GET' });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    return data?.assignment || null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve the caller's student identity from their session token. Enriches from
+// the roster so a class the teacher assigned AFTER the student signed in takes
+// effect immediately instead of waiting for the token to expire.
+//
+// Returns null when there is no valid token. `legacyStudentKey` is the
+// username-derived key of any pre-Google attempts, so history stays visible.
+async function resolveStudent(env, body, request) {
+  const token = String(
+    body?.studentToken
+    || request?.headers?.get('X-Student-Token')
+    || '',
+  ).trim();
+  const claim = await verifyStudentToken(env, token);
+  if (!claim) return null;
+
+  let displayName = claim.name;
+  let className = claim.cls;
+  let legacyUsername = '';
+  try {
+    const row = await rosterGetStudent(env, claim.email);
+    if (row) {
+      displayName = sanitizeName(row.displayName || displayName);
+      className = sanitizeClassName(row.className || '');
+      legacyUsername = String(row.legacyUsername || '').trim();
+    }
+  } catch {
+    // Roster unavailable: the signed token's own claims are still trustworthy.
+  }
+
+  return {
+    email: claim.email,
+    displayName: displayName || claim.email.split('@')[0],
+    className,
+    studentKey: makeStudentKeyFromEmail(claim.email),
+    legacyStudentKey: legacyUsername ? makeStudentKeyFromUsername(legacyUsername) : '',
+  };
+}
+
+// Username-derived key: the pre-Google scheme, kept only so old attempts match.
+function makeStudentKeyFromUsername(name) {
+  const base = String(name || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '');
+  return base ? `usr_${base}`.slice(0, 96) : '';
+}
+
+// Parse a pasted/uploaded roster CSV into roster rows. Accepts a header line in
+// any column order; recognised headers are email, name, class and username.
+// Without a recognised header the columns are read positionally in that order.
+function parseRosterCsv(text) {
+  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+
+  const splitLine = (line) => {
+    const out = [];
+    let cur = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (quoted) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; continue; }
+        if (c === '"') { quoted = false; continue; }
+        cur += c;
+        continue;
+      }
+      if (c === '"') { quoted = true; continue; }
+      if (c === ',' || c === ';' || c === '\t') { out.push(cur.trim()); cur = ''; continue; }
+      cur += c;
+    }
+    out.push(cur.trim());
+    return out;
+  };
+
+  const HEADERS = {
+    email: 'email', 'e-mail': 'email', correu: 'email', mail: 'email',
+    name: 'displayName', nom: 'displayName', fullname: 'displayName', 'display name': 'displayName', student: 'displayName',
+    class: 'className', classe: 'className', grup: 'className', group: 'className', curs: 'className',
+    username: 'legacyUsername', user: 'legacyUsername', usuari: 'legacyUsername', login: 'legacyUsername',
+  };
+
+  const first = splitLine(lines[0]).map((h) => h.toLowerCase());
+  const mapped = first.map((h) => HEADERS[h] || null);
+  const hasHeader = mapped.some(Boolean) && !first.some((h) => /@/.test(h));
+  const columns = hasHeader ? mapped : ['email', 'displayName', 'className', 'legacyUsername'];
+
+  const rows = [];
+  for (const line of lines.slice(hasHeader ? 1 : 0)) {
+    const cells = splitLine(line);
+    const row = { source: 'import' };
+    cells.forEach((cell, i) => {
+      const field = columns[i];
+      if (field && cell) row[field] = cell;
+    });
+    // Tolerate an email that landed in an unexpected column, and never emit a
+    // row whose "email" isn't one — otherwise a stray line inflates the import
+    // count and the teacher is told rows were added that never were.
+    const looksLikeEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+    if (!looksLikeEmail(row.email)) {
+      const found = cells.find(looksLikeEmail);
+      if (!found) continue;
+      row.email = found;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// One-time, idempotent fold-in of accounts created by the previous self-service
+// student-accounts module (R2 `students/accounts/*.json`) so a teacher who ran
+// the old wizard keeps every name and can carry attempt history across. Their
+// usernames become `legacyUsername`, which is what old attempts are keyed by.
+// A marker object stops this from re-listing R2 on every roster load.
+async function migrateLegacyStudentAccounts(env) {
+  if (!env.QUIZ_MEDIA) return 0;
+  const MARKER = 'students/_roster_migrated.json';
+  try {
+    if (await env.QUIZ_MEDIA.head(MARKER)) return 0;
+
+    const rows = [];
+    let cursor;
+    do {
+      const listed = await env.QUIZ_MEDIA.list({ prefix: 'students/accounts/', cursor, limit: 1000 });
+      for (const obj of (listed.objects || [])) {
+        const stored = await env.QUIZ_MEDIA.get(obj.key);
+        if (!stored) continue;
+        let acct = null;
+        try { acct = JSON.parse(await stored.text()); } catch { acct = null; }
+        const email = sanitizeEmail(acct?.email);
+        if (!email) continue;
+        const username = sanitizeName(acct?.username || '');
+        rows.push({
+          email,
+          displayName: username || email.split('@')[0],
+          legacyUsername: username,
+          className: '',
+          source: 'migrated',
+        });
+      }
+      cursor = listed.truncated ? listed.cursor : null;
+    } while (cursor);
+
+    if (rows.length) {
+      // fillOnly: never overwrite a name or class the teacher already set.
+      await rosterCall(env, 'import', {
+        method: 'POST',
+        body: JSON.stringify({ rows, mode: 'merge', fillOnly: true }),
+      });
+    }
+    await env.QUIZ_MEDIA.put(MARKER, JSON.stringify({ migratedAt: Date.now(), count: rows.length }), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    return rows.length;
+  } catch {
+    return 0; // never block the roster UI on a migration hiccup
   }
 }
 
@@ -6508,6 +6982,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     code: sanitizeAssignmentCode(assignment?.code),
     studentKey: sanitizeAssignmentStudentKey(attempt?.studentKey),
     studentName: sanitizeName(attempt?.studentName || 'Student'),
+    studentEmail: sanitizeEmail(attempt?.studentEmail),
+    className: sanitizeClassName(attempt?.className),
     startedAt: Number(attempt?.startedAt || 0) || null,
     updatedAt: Number(attempt?.updatedAt || 0) || null,
     submitted: !!attempt?.submitted,
@@ -6612,6 +7088,8 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     id: full.id,
     studentKey: full.studentKey,
     studentName: full.studentName,
+    studentEmail: full.studentEmail,
+    className: full.className,
     startedAt: full.startedAt,
     updatedAt: full.updatedAt,
     submitted: full.submitted,
@@ -6684,6 +7162,57 @@ function buildTeacherGradingItems(assignment, attempt) {
 // Legacy layouts handled by lazy migration:
 //   * `assignments` (single-blob) → split on first read.
 //   * `a:<code>`    (old base key) → relocated to `ab:<code>` on first read.
+
+// ---------- Roster storage (assignments DO) ----------
+
+const ROSTER_PREFIX = 'rs:';
+const rosterKey = (email) => `${ROSTER_PREFIX}${String(email || '').trim().toLowerCase()}`;
+
+async function loadRosterSettings(storage) {
+  const stored = await storage.get('rsettings');
+  return {
+    allowedDomains: sanitizeAllowedDomains(stored?.allowedDomains),
+    policy: sanitizeRosterPolicy(stored?.policy),
+  };
+}
+
+async function loadRosterRows(storage) {
+  const rows = [];
+  const listed = await storage.list({ prefix: ROSTER_PREFIX });
+  for (const value of listed.values()) {
+    if (value && typeof value === 'object' && value.email) rows.push(value);
+  }
+  rows.sort((a, b) => {
+    const byClass = String(a.className || '').localeCompare(String(b.className || ''));
+    if (byClass !== 0) return byClass;
+    return String(a.displayName || a.email).localeCompare(String(b.displayName || b.email));
+  });
+  return rows;
+}
+
+// Build a roster row from an incoming payload, preserving fields the caller
+// didn't send and never letting the email drift from the storage key.
+function mergeRosterRow(existing, input, email) {
+  const now = Date.now();
+  const prior = existing && typeof existing === 'object' ? existing : null;
+  const pick = (field, sanitize, fallback = '') => (
+    input && Object.prototype.hasOwnProperty.call(input, field)
+      ? sanitize(input[field])
+      : (prior ? (prior[field] ?? fallback) : fallback)
+  );
+  return {
+    email,
+    displayName: pick('displayName', sanitizeName) || (prior?.displayName || email.split('@')[0]),
+    className: pick('className', sanitizeClassName),
+    legacyUsername: pick('legacyUsername', (v) => sanitizeName(v)),
+    notes: pick('notes', (v) => String(v || '').trim().slice(0, 200)),
+    source: prior?.source || String(input?.source || 'manual'),
+    createdAt: prior?.createdAt || now,
+    updatedAt: now,
+    lastLoginAt: prior?.lastLoginAt || null,
+  };
+}
+
 
 async function loadAssignmentBase(storage, code) {
   const fresh = await storage.get(`ab:${code}`);
@@ -6972,33 +7501,6 @@ function normalizeStudentKeyInput(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9@._|:-]+/g, '');
 }
 
-async function normalizeStudentIdentity(verifyData, fallbackName) {
-  const data = verifyData && typeof verifyData === 'object' ? verifyData : {};
-
-  const username = sanitizeName(data.username || data.user || fallbackName || '');
-  const displayName = sanitizeName(data.displayName || data.display_name || username || fallbackName || '');
-  const email = sanitizeEmail(data.email || data.schoolEmail || data.mail || data.userEmail);
-  const className = sanitizeClassName(data.class || data.className || data.group || data.section);
-  const studentIdRaw = sanitizeId(data.studentId || data.student_id || data.id || '');
-  const keySeed = normalizeStudentKeyInput(
-    data.studentKey
-    || data.student_key
-    || studentIdRaw
-    || email
-    || `${normalizeNameKey(username)}|${normalizeNameKey(className)}`,
-  );
-
-  const studentKey = keySeed ? `stu_${(await sha256Hex(`pinplay:${keySeed}`)).slice(0, 20)}` : '';
-
-  return {
-    username,
-    displayName,
-    className,
-    email,
-    studentKey,
-    source: 'verified-login',
-  };
-}
 
 function sanitizeReaction(emoji) {
   const value = String(emoji || '').trim();

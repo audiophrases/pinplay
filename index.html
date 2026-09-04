@@ -26,18 +26,17 @@
 
           <div id="joinStepIdentity" class="hidden top-space">
             <p id="joinModeHint" class="small"></p>
-            <div id="joinNameWrap">
-              <label data-i18n>Username</label>
-              <input id="joinName" type="text" maxlength="40" placeholder="Username" data-i18n-ph autocomplete="off" autocapitalize="none" />
+            <div id="joinIdentityBox" class="top-space hidden">
+              <div id="joinSignedInRow" class="hidden">
+                <span id="joinSignedInName" class="signed-in-name"></span>
+                <button id="joinSignOutBtn" type="button" class="link-btn" data-i18n>Not you?</button>
+              </div>
+              <div id="joinSignInRow">
+                <p id="joinSignInHint" class="small" data-i18n>Sign in with your school account to continue.</p>
+                <div id="joinGoogleBtn"></div>
+                <p id="joinSignInError" class="small bad"></p>
+              </div>
             </div>
-            <div id="joinPasswordWrap" class="top-space hidden">
-              <label data-i18n>Password</label>
-              <input id="joinPassword" type="password" maxlength="80" placeholder="Password" data-i18n-ph autocomplete="new-password" data-lpignore="true" />
-            </div>
-            <p id="joinSignupHint" class="small top-space hidden">
-              <span data-i18n>No account?</span> <a href="https://docs.google.com/forms/d/e/1FAIpQLSeTNwOWzYnSR6V6fsSghUkyZLvbhnE5vvcxBYxlj0b0FWpY-g/viewform" target="_blank" rel="noopener" data-i18n>Sign up</a>
-              · <a id="loginLookupLink" href="#" target="_blank" rel="noopener" data-i18n>Forgot username/password?</a>
-            </p>
             <button id="joinBtn" class="btn primary top-space" data-i18n>Join live game</button>
           </div>
 

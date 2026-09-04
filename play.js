@@ -1,9 +1,37 @@
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
 const CLIENT_ID_KEY = 'pinplay.client.v1';
-// Self-service login lookup (Apps Script web app, deployed with "Anyone in iecomaruga.cat" access).
-// Empty string = link is hidden. Paste the deployment URL after publishing login-lookup.gs.
-const LOGIN_LOOKUP_URL = 'https://script.google.com/macros/s/AKfycbz5lL1e-bzNT8moViNmCzYEf2tiyCEU_j8BmHlQ_8Lvqhryj7dsoAo8yCiFoS4WWc7mqw/exec';
+const STUDENT_SESSION_KEY = 'pinplay.student.v1';
+
+// Student identity is one signed token from our own backend, obtained by
+// signing in with Google. It is cached per device so a student signs in once
+// rather than once per assignment, and it carries no password of any kind.
+const studentSession = {
+  _data: undefined,
+  read() {
+    if (this._data !== undefined) return this._data;
+    try {
+      const raw = localStorage.getItem(STUDENT_SESSION_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      this._data = (parsed && parsed.studentToken && Number(parsed.expiresAt || 0) > Date.now()) ? parsed : null;
+    } catch { this._data = null; }
+    return this._data;
+  },
+  save(payload) {
+    this._data = payload;
+    try { localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(payload)); } catch { /* storage disabled */ }
+  },
+  clear() {
+    this._data = null;
+    try { localStorage.removeItem(STUDENT_SESSION_KEY); } catch { /* storage disabled */ }
+    try { window.google?.accounts?.id?.disableAutoSelect?.(); } catch { /* GSI not loaded */ }
+  },
+  get token() { return this.read()?.studentToken || ''; },
+  get displayName() { return String(this.read()?.student?.displayName || '').trim(); },
+  get className() { return String(this.read()?.student?.className || '').trim(); },
+  get email() { return String(this.read()?.student?.email || '').trim(); },
+  get signedIn() { return Boolean(this.token); },
+};
 const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
 const QUESTION_TYPE_ICONS = {
@@ -72,22 +100,18 @@ function answerDisplayOrder(question) {
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
-const joinNameWrapEl = document.getElementById('joinNameWrap');
-const joinPasswordWrapEl = document.getElementById('joinPasswordWrap');
-const joinSignupHintEl = document.getElementById('joinSignupHint');
-const loginLookupLinkEl = document.getElementById('loginLookupLink');
-if (loginLookupLinkEl) {
-  if (LOGIN_LOOKUP_URL) {
-    loginLookupLinkEl.href = LOGIN_LOOKUP_URL;
-  } else {
-    loginLookupLinkEl.style.display = 'none';
-  }
-}
+const joinIdentityBoxEl = document.getElementById('joinIdentityBox');
+const joinSignedInRowEl = document.getElementById('joinSignedInRow');
+const joinSignedInNameEl = document.getElementById('joinSignedInName');
+const joinSignOutBtn = document.getElementById('joinSignOutBtn');
+const joinSignInRowEl = document.getElementById('joinSignInRow');
+const joinSignInHintEl = document.getElementById('joinSignInHint');
+const joinGoogleBtnEl = document.getElementById('joinGoogleBtn');
+const joinSignInErrorEl = document.getElementById('joinSignInError');
 
 const joinPinEl = document.getElementById('joinPin');
 const validatePinBtn = document.getElementById('validatePinBtn');
-const joinNameEl = document.getElementById('joinName');
-const joinPasswordEl = document.getElementById('joinPassword');
+
 const joinBtn = document.getElementById('joinBtn');
 const joinStatusEl = document.getElementById('joinStatus');
 const rerollNameBtn = document.getElementById('rerollNameBtn');
@@ -188,6 +212,15 @@ function init() {
   initLivePreviewFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
+  if (joinSignOutBtn) {
+    joinSignOutBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      studentSession.clear();
+      googleButtonRendered = false;
+      setStatus(joinStatusEl, '', 'ok');
+      await applyIdentityMode(true);
+    });
+  }
   if (joinSubmitBtn) joinSubmitBtn.addEventListener('click', submitLiveAnswer);
   if (rerollNameBtn) rerollNameBtn.addEventListener('click', rerollRandomName);
   if (assignmentPrevBtn) assignmentPrevBtn.addEventListener('click', () => moveAssignmentIndex(-1));
@@ -310,17 +343,6 @@ function init() {
     });
   }
 
-  if (joinNameEl) {
-    joinNameEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') joinLiveGame();
-    });
-  }
-
-  if (joinPasswordEl) {
-    joinPasswordEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') joinLiveGame();
-    });
-  }
 
   if (joinAnswersEl) {
     joinAnswersEl.addEventListener('keydown', (e) => {
@@ -456,6 +478,144 @@ function initLivePreviewFromUrl() {
   }, 0);
 }
 
+// ---------- Student sign-in (Google) ----------
+// Login-required games and assignments identify students by a verified school
+// email. The button below is the only credential UI the student ever sees.
+
+let studentConfigPromise = null;
+let gsiScriptPromise = null;
+let googleButtonRendered = false;
+
+function fetchStudentConfig() {
+  if (!studentConfigPromise) {
+    studentConfigPromise = api('/api/student/config', { method: 'GET' }).catch(() => null);
+  }
+  return studentConfigPromise;
+}
+
+function loadGoogleIdentityScript() {
+  if (gsiScriptPromise) return gsiScriptPromise;
+  gsiScriptPromise = new Promise((resolve) => {
+    if (window.google?.accounts?.id) { resolve(true); return; }
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  return gsiScriptPromise;
+}
+
+function setSignInError(message) {
+  if (!joinSignInErrorEl) return;
+  joinSignInErrorEl.textContent = message || '';
+}
+
+// Show the identity block only when the game or assignment requires a login.
+// Random-name modes stay completely anonymous, exactly as before.
+async function applyIdentityMode(requiresLogin) {
+  if (!joinIdentityBoxEl) return;
+  joinIdentityBoxEl.classList.toggle('hidden', !requiresLogin);
+  if (!requiresLogin) return;
+  await renderStudentIdentity();
+}
+
+// Renders either "signed in as …" or the Google button, depending on session.
+async function renderStudentIdentity() {
+  const signedIn = studentSession.signedIn;
+  if (joinSignedInRowEl) joinSignedInRowEl.classList.toggle('hidden', !signedIn);
+  if (joinSignInRowEl) joinSignInRowEl.classList.toggle('hidden', signedIn);
+
+  if (signedIn) {
+    if (joinSignedInNameEl) {
+      const cls = studentSession.className;
+      joinSignedInNameEl.textContent = t('Signed in as {name}{cls}', {
+        name: studentSession.displayName || studentSession.email,
+        cls: cls ? ` (${cls})` : '',
+      });
+    }
+    setSignInError('');
+    return;
+  }
+
+  const cfg = await fetchStudentConfig();
+  if (!cfg?.loginEnabled) {
+    if (joinSignInHintEl) {
+      joinSignInHintEl.textContent = t('Student sign-in is not set up on this site yet. Ask your teacher.');
+    }
+    return;
+  }
+  if (joinSignInHintEl) {
+    const domains = Array.isArray(cfg.allowedDomains) ? cfg.allowedDomains.filter((d) => !d.includes('@')) : [];
+    joinSignInHintEl.textContent = domains.length
+      ? t('Sign in with your {domain} school account to continue.', { domain: domains[0] })
+      : t('Sign in with your school account to continue.');
+  }
+  await renderGoogleButton(cfg.googleClientId);
+}
+
+async function renderGoogleButton(clientId) {
+  if (!joinGoogleBtnEl || !clientId) return;
+  if (googleButtonRendered) return;
+  const loaded = await loadGoogleIdentityScript();
+  if (!loaded) {
+    setSignInError(t('Google sign-in could not load. Check your connection and reload.'));
+    return;
+  }
+  try {
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (resp) => { handleGoogleCredential(resp?.credential || ''); },
+    });
+    joinGoogleBtnEl.innerHTML = '';
+    window.google.accounts.id.renderButton(joinGoogleBtnEl, {
+      theme: 'filled_blue', size: 'large', text: 'continue_with', width: 260,
+    });
+    googleButtonRendered = true;
+  } catch {
+    setSignInError(t('Google sign-in could not load. Check your connection and reload.'));
+  }
+}
+
+async function handleGoogleCredential(credential) {
+  if (!credential) return;
+  setSignInError('');
+  setStatus(joinStatusEl, t('⏳ Signing you in…'), 'ok');
+  try {
+    const data = await api('/api/student/login', {
+      method: 'POST',
+      body: { googleIdToken: credential },
+    });
+    studentSession.save({
+      studentToken: data.studentToken,
+      expiresAt: Number(data.expiresAt || 0),
+      student: data.student || {},
+    });
+    await renderStudentIdentity();
+    setStatus(joinStatusEl, t('Signed in ✅'), 'ok');
+    hideLoginError();
+  } catch (err) {
+    // The backend distinguishes "wrong kind of account" from "not on the list";
+    // both arrive here as a plain message the student can act on.
+    setSignInError(err.message);
+    setStatus(joinStatusEl, err.message, 'bad');
+  }
+}
+
+// Called when a student route rejects the session (expired or revoked).
+async function handleStudentAuthLoss(message) {
+  studentSession.clear();
+  googleButtonRendered = false;
+  await applyIdentityMode(true);
+  setSignInError(message || t('Your sign-in expired. Please sign in again.'));
+}
+
+function requiresStudentLogin() {
+  return !live.player.randomNamesMode;
+}
+
 async function validatePin() {
   try {
     const raw = String(joinPinEl?.value || '').trim();
@@ -488,10 +648,8 @@ async function validatePin() {
         rerollNameBtn.classList.toggle('hidden', !show);
       }
 
+      await applyIdentityMode(!live.player.randomNamesMode);
       if (live.player.randomNamesMode) {
-        if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
-        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-        if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
         if (joinModeHintEl) {
           const dueAt = Number(a?.dueAt || 0);
           const dueText = dueAt ? t(' · Due: {d}', { d: new Date(dueAt).toLocaleString() }) : '';
@@ -508,13 +666,10 @@ async function validatePin() {
         }
         setJoinTitle(live.player.displayName);
       } else {
-        if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-        if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
-        if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
         if (joinModeHintEl) {
           const dueAt = Number(a?.dueAt || 0);
           const dueText = dueAt ? t(' · Due: {d}', { d: new Date(dueAt).toLocaleString() }) : '';
-          joinModeHintEl.textContent = t('Assignment: {title}{due} · Login required', { title: a?.title || code, due: dueText });
+          joinModeHintEl.textContent = t('Assignment: {title}{due} · Sign-in required', { title: a?.title || code, due: dueText });
         }
       }
       if (joinBtn) joinBtn.textContent = t('Start assignment');
@@ -535,23 +690,13 @@ async function validatePin() {
     if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
     if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
 
+    await applyIdentityMode(!live.player.randomNamesMode);
     if (live.player.randomNamesMode) {
-      if (joinNameWrapEl) joinNameWrapEl.classList.add('hidden');
-      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.add('hidden');
-      if (joinSignupHintEl) joinSignupHintEl.classList.add('hidden');
       if (joinModeHintEl) {
         joinModeHintEl.textContent = t('Random names mode: your nickname is assigned automatically.');
       }
-    } else {
-      if (joinNameWrapEl) joinNameWrapEl.classList.remove('hidden');
-      if (joinPasswordWrapEl) joinPasswordWrapEl.classList.remove('hidden');
-      if (joinSignupHintEl) joinSignupHintEl.classList.remove('hidden');
-      if (joinModeHintEl) {
-        joinModeHintEl.textContent = t('Login required mode: enter valid username and password.');
-      }
-      if (data.alreadyJoined && data.joinedPlayer?.name && joinNameEl && !joinNameEl.value.trim()) {
-        joinNameEl.value = data.joinedPlayer.name;
-      }
+    } else if (joinModeHintEl) {
+      joinModeHintEl.textContent = t('Sign in with your school account to join.');
     }
 
     if (joinBtn) joinBtn.textContent = data.alreadyJoined ? 'Rejoin game' : 'Join live game';
@@ -605,13 +750,11 @@ async function joinLiveGame() {
       if (!live.player.pin) return;
     }
 
-    const username = String(joinNameEl?.value || '').trim();
-    const password = String(joinPasswordEl?.value || '').trim();
-
-    if (!live.player.randomNamesMode) {
-      if (!username || !password) throw new Error('Enter valid username and password.');
-      if (username.length < 2 || password.length < 4) throw new Error('Enter valid username and password.');
+    if (!live.player.randomNamesMode && !studentSession.signedIn) {
+      await applyIdentityMode(true);
+      throw new Error('Please sign in with your school account first.');
     }
+    const username = studentSession.displayName;
 
     setBusyState();
 
@@ -620,7 +763,6 @@ async function joinLiveGame() {
       body: {
         pin: live.player.pin,
         name: username,
-        password,
         clientId: live.player.clientId,
       },
     });
@@ -646,8 +788,13 @@ async function joinLiveGame() {
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
-    setStatus(joinStatusEl, err.message, 'bad');
-    showLoginError(err.message);
+    if (isStudentAuthError(err)) {
+      await handleStudentAuthLoss(err.message);
+      setStatus(joinStatusEl, err.message, 'bad');
+    } else {
+      setStatus(joinStatusEl, err.message, 'bad');
+      showLoginError(err.message);
+    }
   } finally {
     clearBusyState();
   }
@@ -1387,7 +1534,8 @@ async function startAssignmentAttempt(skipCheck) {
   const code = String(live.player.assignment.code || '').trim();
   if (!code) throw new Error('Assignment code required.');
 
-  let username = String(joinNameEl?.value || '').trim();
+  let username = '';
+  let studentKey = '';
 
   if (live.player.randomNamesMode) {
     if (!live.player.displayName) {
@@ -1399,48 +1547,56 @@ async function startAssignmentAttempt(skipCheck) {
       }
     }
     username = live.player.displayName;
+    // Anonymous mode has no account, so the client still derives a local key.
+    studentKey = makeAssignmentStudentKey(username);
+    if (!studentKey) throw new Error('Could not create a player name. Please reload.');
+  } else {
+    if (!studentSession.signedIn) {
+      await applyIdentityMode(true);
+      throw new Error('Please sign in with your school account first.');
+    }
+    // The backend derives the real key from the signed session; anything sent
+    // from here would be ignored.
+    username = studentSession.displayName;
   }
-
-  if (!username || username.length < 2) throw new Error('Enter your username.');
-
-  const password = live.player.randomNamesMode ? '' : String(joinPasswordEl?.value || '').trim();
-  if (!live.player.randomNamesMode && !password) throw new Error('Enter your password.');
-
-  const studentKey = makeAssignmentStudentKey(username);
-  if (!studentKey) throw new Error('Invalid username.');
 
   // Check if student has previous attempts (unless skipping check for retake)
   if (!skipCheck) {
     try {
       const checkData = await api('/api/assignment/check-status', {
         method: 'POST',
-        body: { code, studentKey, username },
+        body: { code, studentKey },
       });
 
       if (checkData?.hasSubmittedAttempts) {
         // Student has at least one completed attempt — always show choice modal
         // to allow them to "Review" past work even if they have an "Open" one to continue.
-        showReviewRetakeChoice(checkData, code, studentKey, username, password);
+        showReviewRetakeChoice(checkData, code, studentKey, username);
         return;
       }
       // If there's an open (unsubmitted) attempt, fall through to /start which will resume it
     } catch (e) {
-      // If check-status fails (e.g. old backend), just continue silently
+      if (isStudentAuthError(e)) { await handleStudentAuthLoss(e.message); return; }
+      // If check-status fails for another reason, just continue silently
       console.warn('check-status failed, continuing:', e?.message);
     }
   }
 
-  await proceedWithAssignmentStart(code, studentKey, username, password);
+  await proceedWithAssignmentStart(code, studentKey, username);
 }
 
-async function proceedWithAssignmentStart(code, studentKey, username, password) {
+// A student route rejected our session (expired, revoked, or never present).
+function isStudentAuthError(err) {
+  return String(err?.code || '') === 'signin';
+}
+
+async function proceedWithAssignmentStart(code, studentKey, username) {
   const data = await api('/api/assignment/start', {
     method: 'POST',
     body: {
       code,
       studentKey,
       studentName: username,
-      password,
     },
   });
 
@@ -1494,11 +1650,11 @@ function dismissReviewRetakeModal() {
   if (overlay) overlay.remove();
 }
 
-async function deleteOwnAttempt(code, attemptId, studentKey, username, password, prevCheckData) {
+async function deleteOwnAttempt(code, attemptId, studentKey, username, prevCheckData) {
   try {
     await api('/api/assignment/delete-my-attempt', {
       method: 'POST',
-      body: { code, attemptId, studentKey, studentName: username, password },
+      body: { code, attemptId, studentKey },
     });
   } catch (err) {
     window.alert(t('Could not delete attempt: {msg}', { msg: err.message }));
@@ -1508,11 +1664,11 @@ async function deleteOwnAttempt(code, attemptId, studentKey, username, password,
   try {
     const fresh = await api('/api/assignment/check-status', {
       method: 'POST',
-      body: { code, studentKey, username },
+      body: { code, studentKey },
     });
     dismissReviewRetakeModal();
     if (fresh?.hasSubmittedAttempts || fresh?.hasOpenAttempt) {
-      showReviewRetakeChoice(fresh, code, studentKey, username, password);
+      showReviewRetakeChoice(fresh, code, studentKey, username);
     } else {
       // Nothing left to manage — return the student to the identity step
       // so they can start a fresh attempt.
@@ -1526,7 +1682,7 @@ async function deleteOwnAttempt(code, attemptId, studentKey, username, password,
   }
 }
 
-function showReviewRetakeChoice(checkData, code, studentKey, username, password) {
+function showReviewRetakeChoice(checkData, code, studentKey, username) {
   dismissReviewRetakeModal();
 
   const overlay = document.createElement('div');
@@ -1569,7 +1725,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
       e.preventDefault();
       const ok = window.confirm(t('Delete {label}? This cannot be undone.', { label: attemptLabel }));
       if (!ok) return;
-      deleteOwnAttempt(code, attemptId, studentKey, username, password, checkData);
+      deleteOwnAttempt(code, attemptId, studentKey, username, checkData);
     };
     del.addEventListener('click', trigger);
     del.addEventListener('keydown', (e) => {
@@ -1728,7 +1884,7 @@ function showReviewRetakeChoice(checkData, code, studentKey, username, password)
     actionBtn.addEventListener('click', async () => {
       dismissReviewRetakeModal();
       try {
-        await proceedWithAssignmentStart(code, studentKey, username, password);
+        await proceedWithAssignmentStart(code, studentKey, username);
       } catch (err) {
         setStatus(joinStatusEl, err.message, 'bad');
         showLoginError(err.message);
@@ -1846,9 +2002,10 @@ function exitAssignmentReviewMode(code, checkData) {
 
   // Show the choice modal again if we have check data
   if (checkData) {
-    const studentKey = makeAssignmentStudentKey(live.player.displayName || '');
-    const password = live.player.randomNamesMode ? '' : String(joinPasswordEl?.value || '').trim();
-    showReviewRetakeChoice(checkData, code, studentKey, live.player.displayName || '', password);
+    const studentKey = live.player.randomNamesMode
+      ? makeAssignmentStudentKey(live.player.displayName || '')
+      : '';
+    showReviewRetakeChoice(checkData, code, studentKey, live.player.displayName || '');
   } else {
     // Fallback — show identity step
     if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
@@ -5423,6 +5580,9 @@ async function api(path, opts = {}) {
   const method = opts.method || 'GET';
   const headers = {
     ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    // Every identity-bearing student route reads this; sending it globally
+    // keeps call sites from having to thread the token through by hand.
+    ...(studentSession.token ? { 'X-Student-Token': studentSession.token } : {}),
     ...(opts.headers || {}),
   };
 
@@ -5442,7 +5602,13 @@ async function api(path, opts = {}) {
     }
   }
 
-  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const err = new Error(data.error || `${res.status} ${res.statusText}`);
+    // The backend flags an unusable student session so callers can re-prompt
+    // for sign-in instead of showing a dead-end error.
+    if (data.reason) err.code = String(data.reason);
+    throw err;
+  }
   return data;
 }
 

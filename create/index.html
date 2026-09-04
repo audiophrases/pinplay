@@ -451,6 +451,37 @@
               </div>
             </div>
 
+            <div class="top-space assignment-section owner-only" id="studentsSection">
+              <button id="studentsSectionToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                <span data-i18n>👥 Students</span>
+                <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </button>
+              <div id="studentsSectionBody" class="section-collapsible-body hidden">
+                <p class="small muted" data-i18n>Students sign in with Google. This list is who they are: their name and class. Renaming never affects past work, which is keyed to the email address.</p>
+                <div class="row gap top-space" style="flex-wrap:wrap;">
+                  <input id="studentAddEmail" type="email" placeholder="student@school.org" data-i18n-ph style="max-width:230px;" />
+                  <input id="studentAddName" type="text" placeholder="Name (optional)" data-i18n-ph style="max-width:170px;" />
+                  <input id="studentAddClass" type="text" placeholder="Class e.g. 4B" data-i18n-ph style="max-width:110px;" />
+                  <button id="studentAddBtn" class="btn" type="button" data-i18n>Add student</button>
+                  <button id="studentsRefreshBtn" class="btn" type="button" data-i18n>Refresh</button>
+                  <button id="studentsImportBtn" class="btn" type="button" title="Paste or upload a CSV with email, name, class" data-i18n-title data-i18n>Import CSV</button>
+                  <button id="studentsExportBtn" class="btn" type="button" data-i18n>Export CSV</button>
+                  <button id="studentsSettingsBtn" class="btn" type="button" title="Which accounts may sign in" data-i18n-title data-i18n>Sign-in rules</button>
+                </div>
+                <div class="row gap top-space" style="flex-wrap:wrap;">
+                  <input id="studentsFilter" type="search" placeholder="Filter by name, email or class" data-i18n-ph style="max-width:260px;" />
+                  <select id="studentsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class" data-i18n-title data-i18n-aria>
+                    <option value="" data-i18n>All classes</option>
+                  </select>
+                  <label class="small" style="display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                    <input type="checkbox" id="studentsNoClassOnly" /> <span data-i18n>Needs a class</span>
+                  </label>
+                </div>
+                <p id="studentsStatus" class="small muted"></p>
+                <ul id="studentsList" class="list"></ul>
+              </div>
+            </div>
+
 
             <div class="host-live-status-grid owner-only">
               <div class="status-card pin-highlight" title="Current session PIN" data-i18n-title>

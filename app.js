@@ -1028,6 +1028,7 @@ function getTeacherCollapsibleSectionPairs() {
     [liveScreenSectionToggleEl, liveScreenCardBodyEl],
     [gameControlsSectionToggleEl, gameControlsCardBodyEl],
     [assignmentSectionToggleEl, assignmentSectionBodyEl],
+    [studentsSectionToggleEl, studentsSectionBodyEl],
     [workspacesSectionToggleEl, workspacesCardBodyEl],
   ].filter(([triggerEl, bodyEl]) => !!triggerEl && !!bodyEl);
 }
@@ -1060,10 +1061,21 @@ function bindCollapsibleSections() {
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
   bindSectionToggle(workspacesSectionToggleEl, workspacesCardBodyEl, { defaultCollapsed: true, keyboard: true });
 
+  bindSectionToggle(studentsSectionToggleEl, studentsSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+
   if (assignmentSectionToggleEl && assignmentSectionBodyEl) {
     assignmentSectionToggleEl.addEventListener('click', () => {
       const justExpanded = !assignmentSectionBodyEl.classList.contains('hidden');
       if (justExpanded) refreshAssignmentsList();
+    });
+  }
+
+  setupStudentsPanel();
+  if (studentsSectionToggleEl && studentsSectionBodyEl) {
+    // Load lazily: the roster is only fetched when the teacher opens the panel.
+    studentsSectionToggleEl.addEventListener('click', () => {
+      const justExpanded = !studentsSectionBodyEl.classList.contains('hidden');
+      if (justExpanded) refreshStudents();
     });
   }
 }
@@ -8899,6 +8911,413 @@ function buildAssignmentJoinLink(code) {
   return `https://audiophrases.github.io/pinplay/?assignment=${safeCode}`;
 }
 
+// ==================== Students (roster) ====================
+// The in-app replacement for keeping a roster spreadsheet. Students prove who
+// they are with Google sign-in; this panel says who those addresses belong to
+// and which class they're in. Every record (live game or assignment) keys to
+// the email, so renaming a student never detaches their past work.
+
+const studentsSectionToggleEl = document.getElementById('studentsSectionToggle');
+const studentsSectionBodyEl = document.getElementById('studentsSectionBody');
+const studentsListEl = document.getElementById('studentsList');
+const studentsStatusEl = document.getElementById('studentsStatus');
+const studentsFilterEl = document.getElementById('studentsFilter');
+const studentsClassFilterEl = document.getElementById('studentsClassFilter');
+const studentsNoClassOnlyEl = document.getElementById('studentsNoClassOnly');
+const studentAddEmailEl = document.getElementById('studentAddEmail');
+const studentAddNameEl = document.getElementById('studentAddName');
+const studentAddClassEl = document.getElementById('studentAddClass');
+const studentAddBtn = document.getElementById('studentAddBtn');
+const studentsRefreshBtn = document.getElementById('studentsRefreshBtn');
+const studentsImportBtn = document.getElementById('studentsImportBtn');
+const studentsExportBtn = document.getElementById('studentsExportBtn');
+const studentsSettingsBtn = document.getElementById('studentsSettingsBtn');
+
+let studentsCache = [];
+
+function setupStudentsPanel() {
+  if (studentsRefreshBtn) studentsRefreshBtn.addEventListener('click', () => refreshStudents());
+  if (studentAddBtn) studentAddBtn.addEventListener('click', addStudentFromForm);
+  if (studentsImportBtn) studentsImportBtn.addEventListener('click', openStudentsImportDialog);
+  if (studentsExportBtn) studentsExportBtn.addEventListener('click', exportStudentsCsv);
+  if (studentsSettingsBtn) studentsSettingsBtn.addEventListener('click', openStudentsSettingsDialog);
+  if (studentsFilterEl) studentsFilterEl.addEventListener('input', renderStudentsList);
+  if (studentsClassFilterEl) studentsClassFilterEl.addEventListener('change', renderStudentsList);
+  if (studentsNoClassOnlyEl) studentsNoClassOnlyEl.addEventListener('change', renderStudentsList);
+
+  if (studentAddClassEl) {
+    studentAddClassEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addStudentFromForm();
+    });
+  }
+}
+
+// The roster endpoints authenticate with the teacher password like every other
+// create-side call: in the body for writes, as a query param for reads.
+async function studentsApi(path, opts = {}) {
+  if (!createSessionPassword) throw new Error('Teacher password missing.');
+  const method = opts.method || 'GET';
+  if (method === 'GET') {
+    const sep = path.includes('?') ? '&' : '?';
+    return api(`${path}${sep}password=${encodeURIComponent(createSessionPassword)}`, { method });
+  }
+  return api(path, { method, body: { ...(opts.body || {}), password: createSessionPassword } });
+}
+
+async function refreshStudents() {
+  if (!createSessionPassword) return;
+  setStatus(studentsStatusEl, t('Loading students…'), 'ok');
+  try {
+    const data = await studentsApi('/api/students', { method: 'GET' });
+    studentsCache = Array.isArray(data?.students) ? data.students : [];
+    renderStudentsList();
+    const migrated = Number(data?.migrated || 0);
+    setStatus(
+      studentsStatusEl,
+      migrated
+        ? t('{n} student(s) · imported {m} from your old student accounts', { n: studentsCache.length, m: migrated })
+        : t('{n} student(s)', { n: studentsCache.length }),
+      'ok',
+    );
+  } catch (err) {
+    setStatus(studentsStatusEl, t('Could not load students: {msg}', { msg: err.message }), 'bad');
+  }
+}
+
+function renderStudentsList() {
+  if (!studentsListEl) return;
+
+  // Keep the class dropdown in sync with the classes actually in use.
+  if (studentsClassFilterEl) {
+    const current = String(studentsClassFilterEl.value || '');
+    const classes = [...new Set(studentsCache.map((s) => String(s?.className || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    studentsClassFilterEl.innerHTML = t('<option value="">All classes</option>');
+    classes.forEach((c) => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      studentsClassFilterEl.appendChild(opt);
+    });
+    if (current && classes.includes(current)) studentsClassFilterEl.value = current;
+  }
+
+  const query = String(studentsFilterEl?.value || '').trim().toLowerCase();
+  const classFilter = String(studentsClassFilterEl?.value || '').trim();
+  const noClassOnly = !!studentsNoClassOnlyEl?.checked;
+
+  const rows = studentsCache.filter((s) => {
+    if (classFilter && String(s?.className || '').trim() !== classFilter) return false;
+    if (noClassOnly && String(s?.className || '').trim()) return false;
+    if (!query) return true;
+    return [s?.displayName, s?.email, s?.className, s?.legacyUsername]
+      .some((v) => String(v || '').toLowerCase().includes(query));
+  });
+
+  studentsListEl.innerHTML = '';
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.className = 'small muted';
+    li.textContent = studentsCache.length
+      ? t('No students match this filter.')
+      : t('No students yet. They appear here the first time they sign in, or you can import a CSV.');
+    studentsListEl.appendChild(li);
+    return;
+  }
+
+  rows.forEach((s) => studentsListEl.appendChild(renderStudentRow(s)));
+}
+
+function renderStudentRow(student) {
+  const li = document.createElement('li');
+
+  const row = document.createElement('div');
+  row.className = 'row spread gap';
+
+  const info = document.createElement('div');
+  const name = document.createElement('strong');
+  name.textContent = student.displayName || student.email;
+  info.appendChild(name);
+
+  const meta = document.createElement('div');
+  meta.className = 'small muted';
+  const bits = [student.email];
+  if (student.legacyUsername) bits.push(t('was @{u}', { u: student.legacyUsername }));
+  if (student.lastLoginAt) bits.push(t('last sign-in {d}', { d: new Date(Number(student.lastLoginAt)).toLocaleDateString() }));
+  else bits.push(t('never signed in'));
+  meta.textContent = bits.join(' · ');
+  info.appendChild(meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'row gap';
+
+  // The class is the field teachers change most, so it is editable inline
+  // rather than behind a dialog. Auto-enrolled students arrive without one.
+  const classInput = document.createElement('input');
+  classInput.type = 'text';
+  classInput.value = String(student.className || '');
+  classInput.placeholder = t('Class');
+  classInput.title = t('Class, e.g. 4B');
+  classInput.style.maxWidth = '90px';
+  if (!String(student.className || '').trim()) classInput.style.borderColor = '#f0a500';
+  const saveClass = async () => {
+    const next = classInput.value.trim();
+    if (next === String(student.className || '')) return;
+    try {
+      await studentsApi('/api/students/upsert', { method: 'POST', body: { email: student.email, className: next } });
+      student.className = next;
+      classInput.style.borderColor = next ? '' : '#f0a500';
+      setStatus(studentsStatusEl, t('Saved {name} → {cls}', { name: student.displayName || student.email, cls: next || t('(no class)') }), 'ok');
+      renderStudentsList();
+    } catch (err) {
+      classInput.value = String(student.className || '');
+      setStatus(studentsStatusEl, t('Could not save: {msg}', { msg: err.message }), 'bad');
+    }
+  };
+  classInput.addEventListener('blur', saveClass);
+  classInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') classInput.blur(); });
+
+  const renameBtn = document.createElement('button');
+  renameBtn.className = 'btn';
+  renameBtn.type = 'button';
+  renameBtn.textContent = t('Rename');
+  renameBtn.addEventListener('click', async () => {
+    const next = window.prompt(t('Display name for {email}:', { email: student.email }), student.displayName || '');
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed) return;
+    try {
+      await studentsApi('/api/students/upsert', { method: 'POST', body: { email: student.email, displayName: trimmed } });
+      student.displayName = trimmed;
+      setStatus(studentsStatusEl, t('Renamed to {name}. Past work is unaffected.', { name: trimmed }), 'ok');
+      renderStudentsList();
+    } catch (err) {
+      setStatus(studentsStatusEl, t('Could not rename: {msg}', { msg: err.message }), 'bad');
+    }
+  });
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'btn';
+  removeBtn.type = 'button';
+  removeBtn.textContent = t('Remove');
+  removeBtn.addEventListener('click', async () => {
+    const ok = window.confirm(t('Remove {name} from the student list? Their past attempts stay. If sign-in is open they can re-appear by signing in again.', { name: student.displayName || student.email }));
+    if (!ok) return;
+    try {
+      await studentsApi('/api/students/delete', { method: 'POST', body: { email: student.email } });
+      studentsCache = studentsCache.filter((x) => x.email !== student.email);
+      renderStudentsList();
+      setStatus(studentsStatusEl, t('Removed {name}.', { name: student.displayName || student.email }), 'ok');
+    } catch (err) {
+      setStatus(studentsStatusEl, t('Could not remove: {msg}', { msg: err.message }), 'bad');
+    }
+  });
+
+  actions.append(classInput, renameBtn, removeBtn);
+  row.append(info, actions);
+  li.appendChild(row);
+  return li;
+}
+
+async function addStudentFromForm() {
+  const email = String(studentAddEmailEl?.value || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    setStatus(studentsStatusEl, t('Enter a valid email address.'), 'bad');
+    return;
+  }
+  try {
+    await studentsApi('/api/students/upsert', {
+      method: 'POST',
+      body: {
+        email,
+        displayName: String(studentAddNameEl?.value || '').trim(),
+        className: String(studentAddClassEl?.value || '').trim(),
+      },
+    });
+    if (studentAddEmailEl) studentAddEmailEl.value = '';
+    if (studentAddNameEl) studentAddNameEl.value = '';
+    await refreshStudents();
+  } catch (err) {
+    setStatus(studentsStatusEl, t('Could not add student: {msg}', { msg: err.message }), 'bad');
+  }
+}
+
+function openStudentsImportDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const title = document.createElement('strong');
+  title.textContent = t('Import students from CSV');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('Close');
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(title, closeBtn);
+
+  const hint = document.createElement('p');
+  hint.className = 'small muted top-space';
+  hint.textContent = t('One student per line: email, name, class. A header row is optional. The old username column is imported too, so past work stays linked.');
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.csv,.txt,text/csv,text/plain';
+  fileInput.className = 'top-space';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'top-space';
+  textarea.rows = 10;
+  textarea.style.width = '100%';
+  textarea.placeholder = 'email,name,class\nstudent@school.org,Alex Rivera,4B'; // i18n-ignore (sample data)
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    textarea.value = await file.text();
+  });
+
+  const modeLabel = document.createElement('label');
+  modeLabel.className = 'small top-space';
+  modeLabel.style.display = 'flex';
+  modeLabel.style.alignItems = 'center';
+  modeLabel.style.gap = '6px';
+  const modeCheck = document.createElement('input');
+  modeCheck.type = 'checkbox';
+  const modeText = document.createElement('span');
+  modeText.textContent = t('Replace the whole list (remove students not in this file)');
+  modeLabel.append(modeCheck, modeText);
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+
+  const importBtn = document.createElement('button');
+  importBtn.className = 'btn primary top-space';
+  importBtn.type = 'button';
+  importBtn.textContent = t('Import');
+  importBtn.addEventListener('click', async () => {
+    const csv = textarea.value.trim();
+    if (!csv) { status.textContent = t('Paste some rows or choose a file first.'); return; }
+    importBtn.disabled = true;
+    status.textContent = t('Importing…');
+    try {
+      const data = await studentsApi('/api/students/import', {
+        method: 'POST',
+        body: { csv, mode: modeCheck.checked ? 'replace' : 'merge' },
+      });
+      status.textContent = t('Added {c}, updated {u}, removed {r}.', {
+        c: Number(data?.created || 0), u: Number(data?.updated || 0), r: Number(data?.removed || 0),
+      });
+      await refreshStudents();
+    } catch (err) {
+      status.textContent = t('Import failed: {msg}', { msg: err.message });
+    } finally {
+      importBtn.disabled = false;
+    }
+  });
+
+  dialog.append(head, hint, fileInput, textarea, modeLabel, importBtn, status);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+async function exportStudentsCsv() {
+  if (!createSessionPassword) return;
+  try {
+    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    const res = await fetch(`${base}/api/students/export.csv?password=${encodeURIComponent(createSessionPassword)}`);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const blob = new Blob([await res.text()], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pinplay-students.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (err) {
+    setStatus(studentsStatusEl, t('Export failed: {msg}', { msg: err.message }), 'bad');
+  }
+}
+
+function openStudentsSettingsDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const title = document.createElement('strong');
+  title.textContent = t('Who may sign in');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('Close');
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(title, closeBtn);
+
+  const domainsLabel = document.createElement('p');
+  domainsLabel.className = 'small muted top-space';
+  domainsLabel.textContent = t('Allowed accounts: one school domain (e.g. school.org) or full address per line. Leave empty to allow any Google account.');
+
+  const domainsArea = document.createElement('textarea');
+  domainsArea.rows = 5;
+  domainsArea.style.width = '100%';
+  domainsArea.placeholder = 'school.org'; // i18n-ignore (sample data)
+
+  const policyLabel = document.createElement('label');
+  policyLabel.className = 'small top-space';
+  policyLabel.style.display = 'flex';
+  policyLabel.style.alignItems = 'center';
+  policyLabel.style.gap = '6px';
+  const policyCheck = document.createElement('input');
+  policyCheck.type = 'checkbox';
+  const policyText = document.createElement('span');
+  policyText.textContent = t('Only students already on my list may sign in');
+  policyLabel.append(policyCheck, policyText);
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn primary top-space';
+  saveBtn.type = 'button';
+  saveBtn.textContent = t('Save');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    status.textContent = t('Saving…');
+    try {
+      await studentsApi('/api/students/settings', {
+        method: 'POST',
+        body: {
+          allowedDomains: domainsArea.value.split(/[\s,;]+/).filter(Boolean),
+          policy: policyCheck.checked ? 'roster' : 'open',
+        },
+      });
+      status.textContent = t('Saved ✅');
+    } catch (err) {
+      status.textContent = t('Could not save: {msg}', { msg: err.message });
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  dialog.append(head, domainsLabel, domainsArea, policyLabel, saveBtn, status);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+
+  studentsApi('/api/students/settings', { method: 'GET' })
+    .then((data) => {
+      domainsArea.value = (data?.settings?.allowedDomains || []).join('\n');
+      policyCheck.checked = String(data?.settings?.policy || 'open') === 'roster';
+    })
+    .catch(() => { status.textContent = t('Could not load current rules.'); });
+}
+
 function applyNotifyTemplate(template, vars) {
   return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : ''));
 }
@@ -9147,7 +9566,7 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
     missingNames = resolvedAttempts.filter((a) => !a._email).map((a) => a.studentName || 'Student');
 
     if (missingNames.length) {
-      missingNote.textContent = t("No email found for: {p1} (check the roster sheet)", { p1: missingNames.join(', ') });
+      missingNote.textContent = t("No email found for: {p1} (add them in the Students panel)", { p1: missingNames.join(', ') });
     } else {
       missingNote.textContent = '';
     }
@@ -9194,23 +9613,33 @@ async function enrichAssignmentAttemptsWithClass(safeCode, data) {
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   if (!attempts.length) return;
 
-  const usernames = attempts
-    .map((a) => String(a?.studentName || '').trim())
-    .filter(Boolean);
-  if (!usernames.length) return;
-
-  const map = await lookupRosterByUsernames(usernames);
-  if (!map.size) return;
-
   let changed = false;
+
+  // Attempts started after Google sign-in carry their own class, stamped at
+  // start time. Only the older ones need a roster lookup by name.
+  const needLookup = [];
   attempts.forEach((a) => {
-    const key = String(a?.studentName || '').trim().toLowerCase();
-    const record = map.get(key);
-    if (record?.class && a._class !== record.class) {
-      a._class = record.class;
-      changed = true;
+    const stamped = String(a?.className || '').trim();
+    if (stamped) {
+      if (a._class !== stamped) { a._class = stamped; changed = true; }
+      return;
     }
+    const name = String(a?.studentName || '').trim();
+    if (name) needLookup.push(name);
   });
+
+  if (needLookup.length) {
+    const map = await lookupRosterByUsernames(needLookup);
+    attempts.forEach((a) => {
+      if (String(a?.className || '').trim()) return;
+      const key = String(a?.studentName || '').trim().toLowerCase();
+      const record = map.get(key);
+      if (record?.class && a._class !== record.class) {
+        a._class = record.class;
+        changed = true;
+      }
+    });
+  }
 
   if (changed && assignmentResultsCache?.code === safeCode && assignmentResultsCache?.data === data) {
     renderAssignmentResults(safeCode, data);

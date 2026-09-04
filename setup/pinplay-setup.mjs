@@ -46,7 +46,6 @@ const OWNER_API_HOST = 'https://pinplay-api.eugenime.workers.dev'; // stamped in
 const OWNER_FRONTEND_BASE = 'https://api.pinplay.win';             // DEFAULT_BACKEND_URL in app.js/play.js
 const OWNER_GH_PAGES = 'https://audiophrases.github.io/pinplay';   // owner's frontend host baked into QR/join/assignment links
 const OWNER_STUDENT_ALIAS = 'PinPlayGame';                         // owner's hardcoded tinyurl alias on the live-host screen (create/index.html)
-const OWNER_LOGIN_LOOKUP_URL = 'https://script.google.com/macros/s/AKfycbz5lL1e-bzNT8moViNmCzYEf2tiyCEU_j8BmHlQ_8Lvqhryj7dsoAo8yCiFoS4WWc7mqw/exec'; // owner's Apps Script "look up login" (play.js); cleared for teachers
 const R2_BUCKET = 'pinplay-quiz-media';
 
 // Public source for self-update (--update downloads + unpacks this, then redeploys).
@@ -355,29 +354,7 @@ function repointSiteFiles(dir, apiUrl, siteUrl, teacherAlias) {
       if (isJs) replaceInFile(p, OWNER_GH_PAGES, siteUrl);
     }
     if (teacherAlias) replaceInFile(p, OWNER_STUDENT_ALIAS, teacherAlias);
-    // Clear the owner's "look up login" Apps Script (play.js hides the link when
-    // empty). New teachers get self-service recovery via the student-accounts UI.
-    if (isJs) replaceInFile(p, OWNER_LOGIN_LOOKUP_URL, '');
   }
-}
-
-// When self-service student accounts are enabled, publish + load the enhancement
-// scripts: the student signup/login/forgotten UI on the join page (index.html), and
-// the teacher "Students" admin panel on the create dashboard (create/index.html).
-// Both self-gate at runtime on /api/students/config and read window.__PINPLAY_API.
-function injectStudentAccountsUi(siteDir, apiUrl) {
-  copyFileSafe(path.join(SETUP_DIR, 'student-accounts-ui.js'), path.join(siteDir, 'student-accounts-ui.js'));
-  injectScriptTag(path.join(siteDir, 'index.html'), 'student-accounts-ui.js', apiUrl);
-  copyFileSafe(path.join(SETUP_DIR, 'student-admin-ui.js'), path.join(siteDir, 'student-admin-ui.js'));
-  injectScriptTag(path.join(siteDir, 'create', 'index.html'), '../student-admin-ui.js', apiUrl);
-}
-function injectScriptTag(htmlPath, src, apiUrl) {
-  if (!fs.existsSync(htmlPath)) return;
-  let html = fs.readFileSync(htmlPath, 'utf8');
-  if (html.includes(src)) return; // already injected
-  const inject = `<script>window.__PINPLAY_API=${JSON.stringify(apiUrl)};</script>\n  <script src="${src}" defer></script>`;
-  html = html.includes('</body>') ? html.replace('</body>', `  ${inject}\n</body>`) : `${html}\n${inject}\n`;
-  fs.writeFileSync(htmlPath, html);
 }
 
 // Parse the workers.dev URL wrangler prints on deploy.
@@ -441,7 +418,6 @@ async function fetchLatestCode() {
     // overwriting is safe; the new version takes effect on the next run.
     const files = [
       'cloudflare/worker.js', 'cloudflare/wrangler.toml', 'cloudflare/edge_tts_bridge.py',
-      'setup/student-accounts.js', 'setup/student-accounts-ui.js', 'setup/student-admin-ui.js',
       'setup/pinplay-setup.mjs',
       ...collectFrontendAssets(srcRoot),
     ];
@@ -638,62 +614,20 @@ function step5Bucket(state) {
 
 function generateTeacherConfig() {
   // Owner-safe worker setup: the canonical worker.js is copied VERBATIM to
-  // worker.original.js (this is the file the media-host repoint edits), and the
-  // teacher's entry point (worker.teacher.js) is a thin WRAPPER that handles the
-  // additive self-service student routes first, then falls through to the owner's
-  // unmodified worker for everything else. So worker.js itself is never changed.
+  // worker.original.js, and that copy IS the teacher's entry point. The only
+  // edit ever made to it is the media-host repoint in pass 2, so the repo's own
+  // cloudflare/worker.js is never modified.
   ensureDir(GEN_DIR);
   const workerOriginal = path.join(GEN_DIR, 'worker.original.js');
   copyFileSafe(path.join(CF_DIR, 'worker.js'), workerOriginal);
-  // Self-service student-accounts module (only runs when STUDENT_ACCOUNTS=self).
-  copyFileSafe(path.join(SETUP_DIR, 'student-accounts.js'), path.join(GEN_DIR, 'student-accounts.js'));
-  // Wrapper entry point. Re-exports the Durable Object class so the binding resolves.
-  // Cloudflare blocks a Worker from fetch()ing its OWN hostname, which would break
-  // the owner worker's lookupAndVerifyStudent() self-call to /api/students/lookup
-  // (that's why assignment login failed). So we intercept that one self-call here and
-  // serve it in-process. `capturedEnv` is refreshed each request; bindings/secrets are
-  // identical across requests, so reusing it for the interception is concurrency-safe.
-  fs.writeFileSync(path.join(GEN_DIR, 'worker.teacher.js'), [
-    "import base, { QuizRoom } from './worker.original.js';",
-    "import { handleStudentRoutes } from './student-accounts.js';",
-    'export { QuizRoom };',
-    '',
-    'let capturedEnv = null;',
-    'let capturedCtx = null;',
-    'const __origFetch = globalThis.fetch.bind(globalThis);',
-    'globalThis.fetch = async function (input, init) {',
-    '  try {',
-    '    if (capturedEnv) {',
-    "      const u = typeof input === 'string' ? input : (input && input.url) || '';",
-    "      if (u && u.indexOf('/api/students/') !== -1 && new URL(u).pathname.startsWith('/api/students/')) {",
-    '        const req = input instanceof Request ? input : new Request(u, init);',
-    '        const handled = await handleStudentRoutes(req, capturedEnv, capturedCtx);',
-    '        if (handled) return handled;',
-    '      }',
-    '    }',
-    '  } catch (e) { /* fall through to the network */ }',
-    '  return __origFetch(input, init);',
-    '};',
-    '',
-    'export default {',
-    '  async fetch(request, env, ctx) {',
-    '    capturedEnv = env;',
-    '    capturedCtx = ctx;',
-    '    const handled = await handleStudentRoutes(request, env, ctx);',
-    '    if (handled) return handled;',
-    '    return base.fetch(request, env, ctx);',
-    '  },',
-    '};',
-    '',
-  ].join('\n'));
 
   // Line-based + CRLF-safe (the repo toml uses \r\n): drop the owner's account_id
-  // (wrangler infers it from the logged-in session) and repoint `main` at the wrapper.
+  // (wrangler infers it from the logged-in session) and repoint `main` at the copy.
   const ownerToml = fs.readFileSync(path.join(CF_DIR, 'wrangler.toml'), 'utf8');
   const outLines = [];
   for (const rawLine of ownerToml.split(/\r?\n/)) {
     if (/^\s*account_id\s*=/.test(rawLine)) continue;
-    if (/^\s*main\s*=/.test(rawLine)) { outLines.push('main = "worker.teacher.js"'); continue; }
+    if (/^\s*main\s*=/.test(rawLine)) { outLines.push('main = "worker.original.js"'); continue; }
     outLines.push(rawLine);
   }
   const teacherToml = outLines.join('\n');
@@ -840,30 +774,44 @@ async function step9OptionalSecrets(tomlPath, state, mode = 'first', setNames = 
   }
 }
 
-// Ask (once) whether to enable self-service student accounts. Persisted; in
-// "continue" mode the saved choice is reused. Determines whether the build injects
-// the student-accounts UI and whether the secrets step runs.
+// Ask (once) whether students sign in with Google. Persisted; in "continue"
+// mode the saved choice is reused. Determines whether the secrets step runs.
 async function stepStudentAccountsPref(state, mode) {
   if (mode === 'continue') return;
-  console.log(head('Student accounts (optional)'));
-  console.log('Let students self-register (email + username + password), verify their email');
-  console.log('with "Sign in with Google", and recover their own login. Assignments key to the');
-  console.log('email, so you can rename usernames without losing anyone\'s work. Needs a one-time,');
-  console.log('wizard-guided Google sign-in setup. If off, students just type a name to join.');
-  const def = state.studentAccounts === true;
-  state.studentAccounts = await confirm('Enable self-service student accounts?', def);
+  console.log(head('Student sign-in (recommended)'));
+  console.log('Students sign in with their school Google account — no usernames or passwords');
+  console.log('to hand out or reset, and nothing for them to forget. Their work is filed under');
+  console.log('their verified email, and you name them and set their class (e.g. 4B) from the');
+  console.log('Students panel in your teacher page.');
+  console.log('Needs a one-time, wizard-guided Google setup (about 5 minutes, free).');
+  console.log(dim('If you skip this, only random-name games work — assignments need sign-in.'));
+  const def = state.studentAccounts !== false;
+  state.studentAccounts = await confirm('Set up student sign-in with Google?', def);
   saveState(state);
 }
 
-// When student accounts are enabled, wire the worker secrets after the site is live
-// (the OAuth client needs the site URL as its authorized origin). Idempotent: skips
-// entirely once fully configured, and never re-prompts for an existing Client ID.
+// Wire the sign-in secrets after the site is live (the OAuth client needs the
+// site URL as its authorized origin). Idempotent: skips entirely once fully
+// configured, and never re-prompts for an existing Client ID.
 async function stepStudentAccountsSecrets(tomlPath, state, apiUrl, siteUrl, setNames) {
   if (!state.studentAccounts) return;
-  if (setNames.has('STUDENT_ACCOUNTS') && setNames.has('GOOGLE_CLIENT_ID')) return; // already set up
-  console.log(head('Student accounts — one-time Google sign-in setup'));
-  console.log('To verify student emails with "Sign in with Google", create a free Google OAuth');
-  console.log('Client ID (about 5 minutes, no recurring cost):');
+
+  // The session key signs student logins. Internal, so we always generate it.
+  if (!setNames.has('STUDENT_SESSION_KEY')) {
+    const key = randomHex(32);
+    if (npxStdin(['secret', 'put', 'STUDENT_SESSION_KEY', '--config', tomlPath], key + '\n', { cwd: CF_DIR }).code === 0) {
+      markSecret(state, 'STUDENT_SESSION_KEY');
+    }
+  }
+
+  if (setNames.has('GOOGLE_CLIENT_ID')) {
+    console.log(ok('✓ Student sign-in with Google is already set up.'));
+    saveState(state);
+    return;
+  }
+
+  console.log(head('Student sign-in — one-time Google setup'));
+  console.log('Create a free Google OAuth Client ID (about 5 minutes, no recurring cost):');
   console.log('  1. Open ' + bold('https://console.cloud.google.com/apis/credentials') + ' (create a project if asked).');
   console.log('  2. Configure the ' + bold('OAuth consent screen') + ': User type ' + bold('External') + ', add an app name +');
   console.log('     your email, keep the default email/profile scopes, then ' + bold('Publish app') + ' (email scope needs no review).');
@@ -874,29 +822,21 @@ async function stepStudentAccountsSecrets(tomlPath, state, apiUrl, siteUrl, setN
   openInBrowser('https://console.cloud.google.com/apis/credentials');
   await pause('When you have your Client ID, press ENTER.');
 
-  if (!setNames.has('GOOGLE_CLIENT_ID')) {
-    const id = (await ask('Paste your Google Client ID (or leave blank to add later):')).trim();
-    if (id) {
-      const r = npxStdin(['secret', 'put', 'GOOGLE_CLIENT_ID', '--config', tomlPath], id + '\n', { cwd: CF_DIR });
-      if (r.code === 0) markSecret(state, 'GOOGLE_CLIENT_ID');
-    } else {
-      console.log(warn('No Client ID yet — students can still type+confirm their email; add Google later by re-running.'));
-    }
+  const id = (await ask('Paste your Google Client ID (or leave blank to add later):')).trim();
+  if (!id) {
+    console.log(warn('No Client ID yet — students cannot sign in until you add one.'));
+    console.log(warn('Run the wizard again when you have it; nothing else changes.'));
+    saveState(state);
+    return;
   }
-  if (!setNames.has('STUDENT_ROSTER_LOOKUP_SECRET')) {
-    const sec = randomHex(16);
-    if (npxStdin(['secret', 'put', 'STUDENT_ROSTER_LOOKUP_SECRET', '--config', tomlPath], sec + '\n', { cwd: CF_DIR }).code === 0) {
-      markSecret(state, 'STUDENT_ROSTER_LOOKUP_SECRET');
-    }
+  const r = npxStdin(['secret', 'put', 'GOOGLE_CLIENT_ID', '--config', tomlPath], id + '\n', { cwd: CF_DIR });
+  if (r.code !== 0) {
+    console.log(warn('Could not save the Client ID; re-run the wizard to retry.'));
+    return;
   }
-  const lookupUrl = apiUrl.replace(/\/+$/, '') + '/api/students/lookup';
-  if (npxStdin(['secret', 'put', 'STUDENT_ROSTER_LOOKUP_URL', '--config', tomlPath], lookupUrl + '\n', { cwd: CF_DIR }).code === 0) {
-    markSecret(state, 'STUDENT_ROSTER_LOOKUP_URL');
-  }
-  if (npxStdin(['secret', 'put', 'STUDENT_ACCOUNTS', '--config', tomlPath], 'self\n', { cwd: CF_DIR }).code === 0) {
-    markSecret(state, 'STUDENT_ACCOUNTS');
-  }
-  console.log(ok('✓ Self-service student accounts enabled (sign-up, login & self-recovery).'));
+  markSecret(state, 'GOOGLE_CLIENT_ID');
+  console.log(ok('✓ Student sign-in with Google is ready.'));
+  console.log(dim('   Open your teacher page -> Students to set who may sign in and their classes.'));
   saveState(state);
 }
 
@@ -1006,8 +946,6 @@ async function buildAndDeployFrontend(apiUrl, state, siteHint = '') {
   // Teacher deployments hide the Question Bank by default (owner-oriented import
   // library). Only kept if the teacher explicitly opted in (hideQuestionBank===false).
   if (state.hideQuestionBank !== false) hideQuestionBankInSite(SITE_DIR);
-  // Self-service student accounts: publish + load the enhancement UI when enabled.
-  if (state.studentAccounts) injectStudentAccountsUi(SITE_DIR, apiUrl);
   const res = await deployWithRetry('Website publish', ['deploy'], { cwd: REPO_ROOT });
   if (res.code !== 0) {
     console.log(err('\nThe website didn\'t publish. Wait a moment and run the wizard again — it'));

@@ -74,6 +74,25 @@ Run it whenever you're told a new version is out (or every now and then to stay
 current). If your internet hiccups during the download, it safely re-publishes
 the version you already have, and you can simply run it again later.
 
+## Your students
+
+Students sign in with their **school Google account** — you never create, hand
+out, or reset a student password.
+
+During setup the wizard walks you through making a free Google Client ID (about
+five minutes, once). After that, open your teacher page and click **Students**:
+
+- **Sign-in rules** — type your school's email domain (e.g. `myschool.org`) so
+  only your students can sign in. Leave it empty to allow any Google account.
+- **The list** — everyone who has signed in, with their name and class. Set a
+  class like `4B` by typing straight into the box next to a student.
+- **Import CSV** — if you already have a class list, paste it in: one student per
+  line as email, name, class.
+
+Students who sign in for the first time appear straight away with no class yet,
+marked so you can spot them. Renaming a student never affects work they have
+already handed in.
+
 ## Notes
 
 - Everything the wizard generates for you lives in `setup/.generated/` and is

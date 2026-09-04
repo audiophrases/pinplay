@@ -6,7 +6,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 
 - ✅ 100% free hosting (GitHub Pages + optional Cloudflare Worker)
 - ✅ No ads, no tracking, no paywall
-- ✅ No student accounts needed (PIN + username, optional email for results)
+- ✅ Students sign in with their school Google account — no passwords to hand out or reset
 - ✅ Teacher can create quiz in-app or import from JSON
 - ✅ Assignment mode with due dates, attempt limits, exam mode, and deferred-feedback
 - ✅ Full audio support with Edge TTS neural voices in multiple languages
@@ -78,7 +78,7 @@ Audio (file upload or Edge TTS) is a per-question feature available on every typ
 - **Mute music** toggle that pauses/resumes the current track seamlessly
 
 ### Student UI (`/`)
-- Two-step join: validate 6-digit PIN → enter username (or random name) + password
+- Two-step join: validate 6-digit PIN → sign in with Google (or auto-assigned random name)
 - Compact single-line header: player name · mode · progress · time · score
 - Header disappears when game starts for maximum screen space
 - Questions and answer options displayed large and centered
@@ -90,7 +90,7 @@ Audio (file upload or Edge TTS) is a per-question feature available on every typ
 - Bet system: selectable +40% bonus/penalty toggle (live mode only, hidden in assignments)
 - Question feedback as inline text with ✅/❌ emoji and correct answer reveal
 - Live scoring + leaderboard at game end with "Game finished 🎉" header
-- **Self-service login lookup**: students who forget their username/password can recover via email link
+- **One sign-in per device**: the session lasts 30 days, so students sign in once and just tap Join after that
 
 ### Assignment Mode (`/?assignment=CODE`)
 - Self-paced quiz with due date set by teacher
@@ -113,12 +113,12 @@ Audio (file upload or Edge TTS) is a per-question feature available on every typ
 - Per-question grading with onSavedRefresh; pending grading badge on each assignment title
 - Teacher feedback overlay with student answer + structured correction diff
 - Class filter, best-attempt filter, notified / not-notified filters, sortable results
-- Roster cache for fast username lookups; host attempts enriched with class data
+- Class shown on every attempt (stamped at start time from the student roster)
 - Archived assignments toggle to keep the list clean
 
 ### Notify Students
 - One-click selection of attempts → opens a pre-filled **Gmail compose** window per recipient
-- Roster email lookup (single-call verified) so addresses come from the trusted student list
+- Addresses come from the verified Google email on each attempt, so there is nothing to type
 - Notify state stored on the attempt so you can filter "still needs notifying" next time
 - Email-based **rekeying** for migrating attempts when a student username changes (with dry-run)
 
@@ -133,6 +133,25 @@ Put these in `/music/` (git-tracked with placeholders):
 - `counter.mp3` → countdown tick sound
 - `drumrollwinner.mp3` → winner reveal drumroll
 - `final.mp3` → game over fanfare
+
+## Student sign-in and the roster
+
+Students identify themselves with **Sign in with Google** using their school
+account. There are no student usernames or passwords anywhere in PinPlay.
+
+- The verified email is the permanent key for all of a student's work, so
+  renaming someone never detaches their past attempts.
+- The **Students** panel on the teacher page is the roster: name, class (e.g.
+  `4B`), last sign-in. Add a student by email, edit a class inline, import or
+  export CSV.
+- **Sign-in rules** (same panel) set which accounts may sign in: list your school
+  domain, and choose whether unknown accounts on it auto-enrol (default) or must
+  already be on the list.
+- A student who signs in for the first time appears immediately with an empty
+  class, highlighted so you can file them into one.
+
+Setup needs two Worker secrets, `GOOGLE_CLIENT_ID` and `STUDENT_SESSION_KEY`.
+See `cloudflare/SECRETS.md`. The setup wizard provisions both for you.
 
 ## Deploy Frontend (GitHub Pages)
 
@@ -185,9 +204,8 @@ wrangler secret put GOOGLE_CSE_KEY        # Google Custom Search API key (image 
 wrangler secret put GOOGLE_CSE_CX         # Google Custom Search Engine ID
 wrangler secret put GIPHY_API_KEY         # GIPHY API key (per-question GIF search)
 wrangler secret put TEACHER_PASSWORD      # Required to create live games / host
-wrangler secret put LOGIN_LOOKUP_URL      # Self-service username/password lookup endpoint
-wrangler secret put ROSTER_LOOKUP_URL     # Student roster email lookup (for notify flow)
-wrangler secret put ROSTER_LOOKUP_SECRET  # Shared secret for roster lookup
+wrangler secret put GOOGLE_CLIENT_ID      # Google OAuth client ID for student sign-in
+wrangler secret put STUDENT_SESSION_KEY   # HMAC key for student session tokens
 ```
 
 The Worker also binds:
@@ -325,7 +343,7 @@ pinplay/
 - **Exam mode** for assignments: focus-loss tracking with styled count display and configurable start notice (audio gated until notice dismissed)
 - **Teacher password** required for live game creation and host control, with IP-based rate limiting for failed attempts; token-based API authorization
 - **Self-service login lookup**: students can recover their username/password via email link
-- **Notify flow**: select attempts → opens pre-filled Gmail compose; roster email lookup; notified / not-notified filters
+- **Notify flow**: select attempts → opens pre-filled Gmail compose; addresses come from each attempt's verified email; notified / not-notified filters
 - **Email-based rekeying** for migrating attempts when a student's username changes (with dry-run)
 - **Grading focus modal**: grade by question or by student with keyboard shortcuts and autoplay audio
 - Pending-grading badge on assignment titles; archived assignments toggle; class filter; best-attempt filter; sortable results
@@ -345,7 +363,7 @@ pinplay/
 - Context-gap: generic cue with gap count, enhanced grading
 - YouTube iframe state preserved across re-renders; staged question-intro animations
 - "Apply quiz to existing assignment" without invalidating prior attempts
-- New Worker secrets: `GIPHY_API_KEY`, `TEACHER_PASSWORD`, `LOGIN_LOOKUP_URL`, `ROSTER_LOOKUP_URL`, `ROSTER_LOOKUP_SECRET`; new R2 + AUTH_RL bindings
+- New Worker secrets: `GIPHY_API_KEY`, `TEACHER_PASSWORD`, `GOOGLE_CLIENT_ID`, `STUDENT_SESSION_KEY`; new R2 + AUTH_RL bindings
 
 ### v0.5 (March 2026) — Student UI & Audio Overhaul
 - Redesigned student UI: compact header, maximum screen space for questions
