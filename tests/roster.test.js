@@ -2,7 +2,7 @@ const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
+const { loadDeclarations } = require('./helpers/extract-declaration');
 
 // These tests run the REAL functions out of cloudflare/worker.js rather than a
 // copy, so they cannot drift from what ships. We pull the named declarations we
@@ -11,34 +11,6 @@ const WORKER_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'cloudflare', 'worker.js'),
   'utf8',
 );
-
-// Extract `function name(...) { ... }` or `const name = ...;` by brace matching.
-function extractDeclaration(source, name) {
-  const patterns = [
-    new RegExp(`^(?:async )?function ${name}\\s*\\(`, 'm'),
-    new RegExp(`^const ${name}\\s*=`, 'm'),
-  ];
-  for (const re of patterns) {
-    const m = re.exec(source);
-    if (!m) continue;
-    const start = m.index;
-    const open = source.indexOf('{', start);
-    const semi = source.indexOf(';', start);
-    // Single-line const (e.g. an arrow or literal) has no block before the `;`.
-    if (open === -1 || (semi !== -1 && semi < open)) {
-      return source.slice(start, semi + 1);
-    }
-    let depth = 0;
-    for (let i = open; i < source.length; i++) {
-      if (source[i] === '{') depth += 1;
-      else if (source[i] === '}') {
-        depth -= 1;
-        if (depth === 0) return source.slice(start, i + 1);
-      }
-    }
-  }
-  throw new Error(`Could not extract ${name} from worker.js`);
-}
 
 const NEEDED = [
   'sanitizeEmail',
@@ -53,11 +25,7 @@ const NEEDED = [
 
 let W;
 before(() => {
-  const src = NEEDED.map((n) => extractDeclaration(WORKER_SRC, n)).join('\n\n');
-  const sandbox = {};
-  vm.createContext(sandbox);
-  vm.runInContext(`${src}\n;globalThis.__exports = { ${NEEDED.join(', ')} };`, sandbox);
-  W = sandbox.__exports;
+  W = loadDeclarations(WORKER_SRC, NEEDED);
 });
 
 describe('student key derivation', () => {

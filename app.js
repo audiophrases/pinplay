@@ -5159,6 +5159,13 @@ most. Don't pad. Don't praise.
   - \`open\` — free-form typed response (long-form). Grade on content.
   - \`voice_record\` — student recorded audio (see \`answers[].audio\`).
     Listen and grade. \`transcript\` is auto-generated and unreliable.
+- \`attempts[].status\` — \`"submitted"\` or \`"in_progress"\`. An in-progress
+  attempt is still being edited: every answer under it is a draft, and a
+  blank one just means the student hasn't reached that question yet. For
+  each answer of an in-progress attempt return \`verdict: "needs_review"\` and
+  \`points: 0\`, with \`correction\` and \`correctedText\` empty. Do not correct
+  or complete a draft. (Packs built with "Submitted attempts only" contain
+  no in-progress attempts, so you may never see this value.)
 - \`attempts[].answers[]\` — one student's answer to one question.
   - \`text\` — typed answer or auto-transcript, may be empty.
   - \`audio\` — relative path to a recording (voice_record only). **Listen
@@ -5201,6 +5208,7 @@ it's known to be sparse and wrong on pronunciation tasks.
 ## When to use \`needs_review\`
 
 Use \`verdict: "needs_review"\` (and \`points: 0\`) when:
+- The attempt's \`status\` is \`"in_progress"\` (see above).
 - Audio is unintelligible or cut off.
 - The answer is off-topic in a way you can't confidently score.
 - Question depends on media you couldn't open.
@@ -5380,6 +5388,8 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     answerImageUrl: String(answer?.imageUrl || ''),
     answerTranscript: String(answer?.transcript || ''),
     answerDurationMs: Number(answer?.durationMs || 0) || null,
+    // Whole-attempt state: an in-progress attempt's answers are still drafts.
+    submitted: !!item?.submitted,
     submittedAt: item?.submittedAt || null,
     currentGrade: grade
       ? {
@@ -5391,7 +5401,7 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
   };
 }
 
-async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
+async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submittedOnly }) {
   const safeCode = String(code || '').trim().toUpperCase();
   if (!safeCode) throw new Error('Missing assignment code.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
@@ -5407,9 +5417,15 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
     });
     const items = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
     const studentName = String(data?.studentName || data?.attempt?.studentName || '');
+    const attemptSubmitted = !!data?.attempt?.submitted;
+    const attemptSubmittedAt = data?.attempt?.submittedAt || null;
     items.forEach((it) => {
       if (!it?.teacherGraded) return;
-      const entry = aiGradePackEntryFromItem(it, safeAttempt, studentName);
+      const entry = aiGradePackEntryFromItem(
+        { ...it, submitted: attemptSubmitted, submittedAt: attemptSubmittedAt },
+        safeAttempt,
+        studentName,
+      );
       if (entry) entries.push(entry);
     });
     meta.title = String(data?.assignment?.title || data?.title || '');
@@ -5503,6 +5519,23 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex }) {
     throw new Error(`Unknown scope: ${scope}`);
   }
 
+  // Grading a draft is wasted work: the next save by the student resets the
+  // teacher grade to pending. Leave in-progress attempts out unless asked.
+  meta.excludedInProgress = 0;
+  if (submittedOnly) {
+    const kept = entries.filter((e) => e.submitted);
+    meta.excludedInProgress = entries.length - kept.length;
+    if (!kept.length && entries.length) {
+      throw new Error(
+        entries.length === 1
+          ? 'That attempt is still in progress. Untick "Submitted attempts only" to grade the draft anyway.'
+          : `All ${entries.length} answers belong to attempts still in progress. Untick "Submitted attempts only" to grade drafts anyway.`,
+      );
+    }
+    entries.length = 0;
+    entries.push(...kept);
+  }
+
   return { entries, meta };
 }
 
@@ -5533,6 +5566,9 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       attemptsMap.set(e.attemptId, {
         attemptId: e.attemptId,
         studentDisplayName: e.studentName || null,
+        // "in_progress" means the student can still edit every answer below.
+        status: e.submitted ? 'submitted' : 'in_progress',
+        submittedAt: e.submitted ? (e.submittedAt || null) : null,
         answers: [],
       });
     }
@@ -5544,7 +5580,6 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       image: null,
       transcript: e.answerTranscript || '',
       durationMs: e.answerDurationMs,
-      submittedAt: e.submittedAt,
       currentGrade: e.currentGrade,
     });
   });
@@ -5663,6 +5698,22 @@ function saveAiGradeDepth(mode) {
   } catch {}
 }
 
+// "Submitted attempts only" in the picker. Default on: grading a draft is
+// wasted work (the student's next save resets the grade) and in instant-
+// feedback mode would show them a correction mid-sentence.
+const AI_GRADE_SUBMITTED_ONLY_KEY = 'pinplay.aiGradeSubmittedOnly.v1';
+function loadAiGradeSubmittedOnly() {
+  try {
+    const v = localStorage.getItem(AI_GRADE_SUBMITTED_ONLY_KEY);
+    return v == null ? true : v === '1';
+  } catch {
+    return true;
+  }
+}
+function saveAiGradeSubmittedOnly(on) {
+  try { localStorage.setItem(AI_GRADE_SUBMITTED_ONLY_KEY, on ? '1' : '0'); } catch {}
+}
+
 function aiGradePackBuildFinalPrompt(teacherNote, correctionMode) {
   const mode = AI_GRADE_CORRECTION_MODES[correctionMode] ? correctionMode : AI_GRADE_DEFAULT_MODE;
   const base = AI_GRADE_PROMPT_TEMPLATE.replace('{{CORRECTION_DEPTH}}', AI_GRADE_CORRECTION_MODES[mode].block);
@@ -5686,13 +5737,13 @@ function aiGradePackToast(msg, isError = false) {
   }
 }
 
-async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, correctionMode }) {
+async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, correctionMode, submittedOnly }) {
   if (typeof window === 'undefined' || !window.JSZip) {
     throw new Error('JSZip not loaded — check that the CDN script tag is present in index.html.');
   }
 
   aiGradePackToast('Building AI grade pack — loading answers…');
-  const { entries, meta } = await aiGradePackLoadEntries({ scope, code, attemptId, qIndex });
+  const { entries, meta } = await aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submittedOnly });
   if (!entries.length) throw new Error('Nothing to grade in this scope.');
 
   aiGradePackToast(`Building AI grade pack — fetching media for ${entries.length} answer${entries.length === 1 ? '' : 's'}…`);
@@ -5731,8 +5782,12 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, c
   }
 
   const finalMb = (zipBlob.size / (1024 * 1024)).toFixed(2);
+  const skippedNote = meta.excludedInProgress
+    ? `${meta.excludedInProgress} draft answer${meta.excludedInProgress === 1 ? '' : 's'} from students still working left out. `
+    : '';
   aiGradePackToast(
     `AI grade pack ready (${finalMb} MB, ${entries.length} answer${entries.length === 1 ? '' : 's'}). ` +
+    skippedNote +
     (copied ? 'Prompt copied to clipboard. ' : 'Prompt is also inside the ZIP as prompt.md. ') +
     'Drop the ZIP into ChatGPT/Claude/Gemini and paste the prompt.'
   );
@@ -5754,6 +5809,7 @@ async function openAiGradePackPicker(code) {
   document.getElementById('aiGradePackPickerModal')?.remove();
 
   const aiGradeDepthDefault = loadAiGradeDepth();
+  const aiGradeSubmittedOnlyDefault = loadAiGradeSubmittedOnly();
   const attempts = Array.isArray(assignmentResultsCache?.data?.attempts)
     ? assignmentResultsCache.data.attempts
     : [];
@@ -5837,6 +5893,10 @@ async function openAiGradePackPicker(code) {
               ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
               : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
           </select>
+          <label class="agp-row" style="margin-top:12px;" title="Students still working can change their answers; grading a draft is wasted.">
+            <input type="checkbox" id="aiGradePackSubmittedOnly" ${aiGradeSubmittedOnlyDefault ? 'checked' : ''} />
+            <span>Submitted attempts only <span class="small muted">(skip students still working)</span></span>
+          </label>
         </div>
         <div>
           <div class="agp-col-title">AI settings</div>
@@ -5903,6 +5963,8 @@ async function openAiGradePackPicker(code) {
     args.teacherNote = String(modal.querySelector('#aiGradePackTeacherNote')?.value || '').trim();
     args.correctionMode = String(modal.querySelector('#aiGradePackDepth')?.value || AI_GRADE_DEFAULT_MODE);
     saveAiGradeDepth(args.correctionMode);
+    args.submittedOnly = !!modal.querySelector('#aiGradePackSubmittedOnly')?.checked;
+    saveAiGradeSubmittedOnly(args.submittedOnly);
     close();
     runAiGradePack(args);
   }
@@ -5968,6 +6030,7 @@ async function aiGradeImportLoadContext(safeCode, qIndexesNeeded) {
   const currentGrades = new Map();
   const studentNames = new Map();
   const answerData = new Map();
+  const attemptSubmitted = new Map();
   gradeData.forEach((data, i) => {
     if (!data) return;
     const qi = teacherQIndexes[i];
@@ -5984,6 +6047,7 @@ async function aiGradeImportLoadContext(safeCode, qIndexesNeeded) {
         correction: String(it?.grade?.correction || ''),
       });
       if (it?.studentName) studentNames.set(attemptId, String(it.studentName));
+      if (it?.submitted !== undefined) attemptSubmitted.set(attemptId, !!it.submitted);
       const ans = it?.answer && typeof it.answer === 'object' ? it.answer : null;
       answerData.set(key, {
         qType: String(data?.question?.qType || ''),
@@ -5996,7 +6060,7 @@ async function aiGradeImportLoadContext(safeCode, qIndexesNeeded) {
     });
   });
 
-  return { questionMap, currentGrades, studentNames, answerData };
+  return { questionMap, currentGrades, studentNames, answerData, attemptSubmitted };
 }
 
 function aiGradeImportBucketRow(result, ctx) {
@@ -6016,6 +6080,7 @@ function aiGradeImportBucketRow(result, ctx) {
     qType: '',
     bucket: 'apply',
     rejectionReason: '',
+    skipReason: '',
     isOverwrite: false,
   };
 
@@ -6039,7 +6104,13 @@ function aiGradeImportBucketRow(result, ctx) {
   if (current.graded) row.isOverwrite = true;
   row.answer = ctx.answerData.get(`${row.attemptId}::${row.qIndex}`) || null;
 
-  if (row.verdict === 'needs_review') { row.bucket = 'skip'; return row; }
+  // The student can still change this answer, and their next save resets any
+  // grade. Park it regardless of what the model returned; the teacher can
+  // still tick it in the preview to apply anyway.
+  if (ctx.attemptSubmitted?.get(row.attemptId) === false) {
+    row.bucket = 'skip'; row.skipReason = 'in_progress'; return row;
+  }
+  if (row.verdict === 'needs_review') { row.bucket = 'skip'; row.skipReason = 'needs_review'; return row; }
   if (!['correct', 'partial', 'wrong'].includes(row.verdict)) {
     row.bucket = 'rejected'; row.rejectionReason = `unknown verdict: ${row.verdict}`; return row;
   }
@@ -6166,7 +6237,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const editableDisabled = r.bucket === 'rejected';
     const checked = r.included ? 'checked' : '';
     const subLabel = r.bucket === 'skip'
-      ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">⏸ needs_review</div>'
+      ? `<div class="small muted" style="margin-top:4px;font-size:0.7rem;">${r.skipReason === 'in_progress' ? '✎ still in progress' : '⏸ needs_review'}</div>`
       : r.isOverwrite
         ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">↻ overwrites</div>'
         : '';
