@@ -5265,7 +5265,7 @@ else — no preamble, no closing remarks:
     {
       "attemptId": "<from data.json>",
       "qIndex": <number, from data.json>,
-      "qId": "<from data.json — must match the question at that qIndex>",
+      "qId": "<copy questions[].id for this qIndex: a string, or null when the pack has null>",
       "points": <integer, 0..maxPoints>,
       "verdict": "correct" | "partial" | "wrong" | "needs_review",
       "confidence": <number, 0..1>,
@@ -5280,14 +5280,27 @@ else — no preamble, no closing remarks:
 
 Valid \`flags\` values: \`audio_unclear\`, \`off_topic\`, \`language_mismatch\`, \`media_missing\`.
 
-## Hard rules
+## How the app imports your results
 
-- Never invent \`attemptId\`, \`qIndex\`, or \`qId\`. Copy them verbatim from
-  \`data.json\`. If \`qId\` and \`qIndex\` disagree with the pack, omit that row.
-- One result per (attemptId, qIndex) pair. No duplicates, no extras.
-- If \`data.json\` has 30 answers, \`results\` must have 30 entries (some may
-  be \`needs_review\`). Do not skip rows silently.
-- Do not include any prose outside the JSON block.
+The importer is strict and never guesses. Know these rules so nothing you
+grade is thrown away:
+
+- **Matching key is \`(attemptId, qIndex)\`.** Copy both verbatim from
+  \`data.json\`. A pair that isn't in the pack is rejected.
+- **\`qId\` is a cross-check, not a key.** Copy it from the question's \`id\` in
+  \`data.json\`. When that \`id\` is \`null\`, return \`null\`. A \`qId\` that
+  contradicts the question at that \`qIndex\` gets the row rejected, so never
+  invent or "fix" one. If something looks inconsistent, copy what the pack
+  says and mark the row \`needs_review\`.
+- **One row per pair.** If you send duplicates, only the one with the highest
+  \`confidence\` is kept.
+- **\`needs_review\` rows are not applied.** They are listed for the teacher to
+  grade by hand. Use them freely when unsure.
+- **Out-of-range values are rejected, not clamped.** \`points\` outside
+  \`0..maxPoints\`, or a \`verdict\` other than the four listed, drops the row.
+- **Complete set.** If \`data.json\` has 30 answers, \`results\` has 30 rows.
+  Do not skip rows silently.
+- No prose outside the JSON block.
 `;
 
 function aiGradePackResolveMediaUrl(value) {
