@@ -1432,6 +1432,22 @@ export default {
       }));
     }
 
+    // Shared student identity for classroom apps such as Dictation Time.
+    // They use a service binding so the signing secret and roster stay here.
+    if (url.pathname === '/api/student/me' && request.method === 'GET') {
+      const student = await resolveStudent(env, null, request);
+      const response = withCors(student
+        ? json({ ok: true, student: {
+          email: student.email,
+          displayName: student.displayName,
+          className: student.className,
+          studentKey: student.studentKey,
+        } })
+        : json({ error: 'Please sign in with your school account again.', reason: 'signin' }, 401));
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
+    }
+
     // ---------- Teacher roster admin (create password) ----------
     // The in-app replacement for editing a roster spreadsheet: who exists, what
     // they are called, and which class they are in.

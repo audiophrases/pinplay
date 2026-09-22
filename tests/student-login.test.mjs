@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createHmac } from 'node:crypto';
 
 const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GOOGLE_CLIENT_ID = 'test-client.apps.googleusercontent.com';
@@ -104,6 +105,51 @@ before(async () => {
 
 const teacherSettings = (allowedDomains, policy) =>
   post('/api/students/settings', { password: TEACHER_PW, allowedDomains, policy });
+
+describe('shared student identity endpoint', () => {
+  let token;
+  before(async () => {
+    await teacherSettings(['iecomaruga.cat'], 'open');
+    token = (await post('/api/student/login', { googleIdToken: 'tok-marta' })).body.studentToken;
+  });
+
+  it('returns only the verified student profile and never caches it', async () => {
+    const r = await call('/api/student/me?email=impostor@iecomaruga.cat', { headers: { 'X-Student-Token': token } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(Object.keys(r.body.student).sort(), ['className', 'displayName', 'email', 'studentKey']);
+    assert.equal(r.body.student.email, 'marta@iecomaruga.cat');
+    assert.equal(r.body.student.studentKey, 'usr_marta@iecomaruga.cat');
+    assert.equal(r.headers.get('cache-control'), 'no-store');
+  });
+
+  it('uses the current roster even when the session has an older class', async () => {
+    await post('/api/students/upsert', { password: TEACHER_PW, email: 'marta@iecomaruga.cat', className: '3C' });
+    const r = await call('/api/student/me', { headers: { 'X-Student-Token': token } });
+    assert.equal(r.body.student.className, '3C');
+    await post('/api/students/delete', { password: TEACHER_PW, email: 'marta@iecomaruga.cat' });
+  });
+
+  it('rejects missing, tampered and expired sessions', async () => {
+    const payload = Buffer.from(JSON.stringify({ email: 'marta@iecomaruga.cat', exp: Math.floor(Date.now() / 1000) - 10 })).toString('base64url');
+    const expired = `${payload}.${createHmac('sha256', env.STUDENT_SESSION_KEY).update(payload).digest('base64url')}`;
+    for (const invalid of ['', `${token}tampered`, expired]) {
+      const r = await call('/api/student/me', { headers: { 'X-Student-Token': invalid } });
+      assert.equal(r.status, 401);
+      assert.equal(r.body.reason, 'signin');
+      assert.equal(r.headers.get('cache-control'), 'no-store');
+    }
+  });
+
+  it('invalidates shared sessions when the PinPlay signing key is rotated', async () => {
+    const originalKey = env.STUDENT_SESSION_KEY;
+    try {
+      env.STUDENT_SESSION_KEY = 'rotated-test-key';
+      assert.equal((await call('/api/student/me', { headers: { 'X-Student-Token': token } })).status, 401);
+    } finally {
+      env.STUDENT_SESSION_KEY = originalKey;
+    }
+  });
+});
 
 describe('student sign-in configuration', () => {
   it('reports sign-in as available and names the client id', async () => {
