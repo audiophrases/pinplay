@@ -950,4 +950,5 @@ window.PINPLAY_FR_DICT = {
   'Saved ✅': 'Enregistré ✅',
   'Could not load current rules.': 'Impossible de charger les règles actuelles.',
   'No email found for: {p1} (add them in the Students panel)': 'Aucun e-mail trouvé pour : {p1} (ajoutez-les dans le panneau Élèves)',
+  'Example answer:': 'Exemple de réponse :',
 };

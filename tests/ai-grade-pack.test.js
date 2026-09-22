@@ -13,10 +13,21 @@ const NEEDED = [
   'aiGradePackBuildData',
   'aiGradeImportBucketRow',
   'aiGradeImportDedupe',
+  'aiGradeImportIsTextDiffType',
+  'aiGradeImportComposeNote',
+  'aiGradeImportResolveCorrection',
+  'CORRECTION_DIFF_PREFIX',
+  'CORRECTION_NOTE_PREFIX',
+  'joinCorrectionNote',
+  'splitCorrectionNote',
+  'computeWordDiff',
 ];
 
 let A;
-before(() => { A = loadDeclarations(APP_SRC, NEEDED); });
+before(() => {
+  // `t()` is the app's i18n helper; in tests the English source is the answer.
+  A = loadDeclarations(APP_SRC, NEEDED, { t: (k) => k });
+});
 
 const item = (over = {}) => ({
   teacherGraded: true,
@@ -122,5 +133,61 @@ describe('importer: bucketing', () => {
     ]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].points, 1000);
+  });
+});
+
+describe('corrections vs sample answers', () => {
+  const openRow = (over = {}) => ({
+    qType: 'open',
+    answer: { answerText: 'I go to beach.' },
+    correction: '',
+    correctedText: '',
+    sampleAnswer: '',
+    comment: '',
+    ...over,
+  });
+
+  it('puts a real correction in the diff body, where the student reads it as their own words', () => {
+    const stored = A.aiGradeImportResolveCorrection(openRow({ correctedText: 'I went to the beach.' }));
+    const { body, note } = A.splitCorrectionNote(stored);
+    assert.ok(body.startsWith(A.CORRECTION_DIFF_PREFIX));
+    assert.equal(note, '');
+  });
+
+  it('keeps a sample answer out of the diff and in the note channel', () => {
+    const stored = A.aiGradeImportResolveCorrection(openRow({
+      answer: { answerText: '' },
+      sampleAnswer: 'Last weekend I visited my grandmother.',
+    }));
+    const { body, note } = A.splitCorrectionNote(stored);
+    // Nothing of the student's to correct, so no diff is fabricated.
+    assert.equal(body, '');
+    assert.match(note, /Example answer:/);
+    assert.match(note, /visited my grandmother/);
+  });
+
+  it('carries a correction and an example at once, comment first', () => {
+    const stored = A.aiGradeImportResolveCorrection(openRow({
+      correctedText: 'I went to the beach.',
+      sampleAnswer: 'I went to the beach with my family and we swam.',
+      comment: 'Watch your past tenses.',
+    }));
+    const { body, note } = A.splitCorrectionNote(stored);
+    assert.ok(body.startsWith(A.CORRECTION_DIFF_PREFIX));
+    assert.ok(note.indexOf('Watch your past tenses.') < note.indexOf('Example answer:'));
+  });
+
+  it('composes an empty note when there is neither comment nor example', () => {
+    assert.equal(A.aiGradeImportComposeNote('', ''), '');
+    assert.equal(A.aiGradeImportComposeNote('  ', '  '), '');
+  });
+
+  it('reads sampleAnswer off the model response into the row', () => {
+    const row = A.aiGradeImportBucketRow(result({ sampleAnswer: 'A model answer.' }), ctx());
+    assert.equal(row.sampleAnswer, 'A model answer.');
+  });
+
+  it('defaults sampleAnswer to empty when the model omits it', () => {
+    assert.equal(A.aiGradeImportBucketRow(result(), ctx()).sampleAnswer, '');
   });
 });

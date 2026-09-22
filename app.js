@@ -5230,11 +5230,13 @@ grading — be liberal with \`needs_review\` rather than guessing.
 
 ### \`open\` questions — return a corrected version, not just a comment
 
-For \`open\` (typed long-form) answers, **you must always return a
-\`correctedText\`** unless the answer is already polished. The student
-will see a red/green visual diff between their original text and your
-corrected version. The diff is the feedback — don't bounce the work
-back to the teacher with a meta-comment.
+For \`open\` (typed long-form) answers, **return a \`correctedText\`**
+whenever the student wrote something that can be improved — i.e. unless
+their text is already polished, or they wrote nothing at all (see
+"Missing content" below). The student sees a red/green visual diff
+between their original text and your corrected version. The diff is the
+feedback — don't bounce the work back to the teacher with a
+meta-comment.
 
 **\`points\` and \`correctedText\` are independent.** \`points\` measures
 **content correctness** (did the student answer the question?).
@@ -5245,20 +5247,38 @@ too. Conversely a student can get partial points for incomplete content
 but write their incomplete answer in perfect English.
 
 - {{CORRECTION_DEPTH}}
-- Whatever the depth above, also write out the missing content when the
-  student left it out: if they didn't answer the prompt (or answered only
-  part of it), put what a complete answer would say into \`correctedText\`.
-- When the student wrote almost nothing useful (blank, single period,
-  one unrelated word), write what a good answer to the prompt would
-  look like in \`correctedText\` anyway. The app always renders the
-  word-by-word diff, even for near-total rewrites — the student sees
-  exactly what they wrote vs. what they should have written.
+- **Never invent facts about the student.** \`correctedText\` is the student's
+  own sentences with the language fixed — not a different, better answer.
+  If the question asks what they did at the weekend, do not decide who they
+  went with, what they cooked, or where they went. Correct
+  "I go to beach" to "I went to the beach", never to "I went to the beach
+  with my cousins". The student reads the diff as a correction of their own
+  words, so anything you add there is something they will believe they
+  should have written about their own life.
 - Only leave \`correctedText\` as \`""\` if the student's text is **fully
   polished** — content correct AND no spelling/grammar/phrasing issues.
 - Leave \`correction\` as \`""\` for \`open\` questions. The corrected text
   IS the feedback. Only use \`correction\` for non-\`open\` questions.
 - For non-\`open\` questions (e.g. \`voice_record\`), always leave
-  \`correctedText\` as \`""\`. The visual diff only applies to typed text.
+  \`correctedText\` and \`sampleAnswer\` as \`""\`. The visual diff only applies
+  to typed text.
+
+### Missing content goes in \`sampleAnswer\`, never in \`correctedText\`
+
+When the student answered only part of the question, or nothing at all,
+that is a **content** problem and \`points\` already reflects it. Show them
+what a full answer looks like in \`sampleAnswer\`:
+
+- \`sampleAnswer\` is a short model answer to the question — 1–3 sentences,
+  in the student's language. The app shows it to the student as a separate,
+  clearly-labelled example below the correction, so it is never mistaken for
+  their own writing.
+- Invented details are fine **here**. That is what an example is for.
+- Leave \`sampleAnswer\` as \`""\` whenever the student did answer the
+  question. A complete answer needs no example, however clumsily written.
+- Blank or near-blank answer (empty, a single period, one unrelated word):
+  \`correctedText\` stays \`""\` — there is nothing of theirs to correct —
+  and \`sampleAnswer\` carries the example.
 
 ## Output
 
@@ -5278,7 +5298,8 @@ else — no preamble, no closing remarks:
       "verdict": "correct" | "partial" | "wrong" | "needs_review",
       "confidence": <number, 0..1>,
       "correction": "<student-facing, in their language>",
-      "correctedText": "<for open questions: minimally-edited corrected version of the student's text; '' otherwise>",
+      "correctedText": "<open questions: the student's own text with the language fixed, inventing nothing; '' otherwise>",
+      "sampleAnswer": "<open questions: a short model answer, only when content is missing; '' otherwise>",
       "rationale": "<teacher-facing, English, one sentence>",
       "flags": []
     }
@@ -6073,6 +6094,7 @@ function aiGradeImportBucketRow(result, ctx) {
     confidence: Number(result?.confidence || 0),
     correction: String(result?.correction || ''),
     correctedText: String(result?.correctedText || ''),
+    sampleAnswer: String(result?.sampleAnswer || ''),
     rationale: String(result?.rationale || ''),
     flags: Array.isArray(result?.flags) ? result.flags.map(String) : [],
     studentName: '',
@@ -6138,10 +6160,23 @@ function aiGradeImportEditRatio(original, edited) {
   return 1 - (same / total);
 }
 
+// A sample answer is illustrative, not the student's own words, so it rides
+// the teacher-note channel (rendered separately below the diff) instead of
+// being folded into the correction the student reads as "what I should have
+// written". Both can be present; the teacher's own comment comes first.
+function aiGradeImportComposeNote(comment, sampleAnswer) {
+  const parts = [];
+  const c = String(comment || '').trim();
+  const sample = String(sampleAnswer || '').trim();
+  if (c) parts.push(c);
+  if (sample) parts.push(`${t('Example answer:')} ${sample}`);
+  return parts.join('\n\n');
+}
+
 function aiGradeImportResolveCorrection(row) {
   const studentText = String(row?.answer?.answerText || '').trim();
   const correctedText = String(row?.correctedText || '').trim();
-  const note = String(row?.comment || '').trim();
+  const note = aiGradeImportComposeNote(row?.comment, row?.sampleAnswer);
   let body;
   if (aiGradeImportIsTextDiffType(row?.qType) && correctedText && correctedText !== studentText && studentText) {
     body = CORRECTION_DIFF_PREFIX + computeWordDiff(studentText, correctedText);
@@ -6211,12 +6246,24 @@ function aiGradeImportRenderPreview(modal, response, rows) {
   const renderCorrectionCell = (r, disabled) => {
     const isOpen = aiGradeImportIsTextDiffType(r.qType);
     const studentText = String(r?.answer?.answerText || '').trim();
+    const sampleBox = `<textarea data-edit-sample data-autosize rows="1" maxlength="1000" placeholder="✍️ Example answer (optional) — shown to the student as an example, not as their own words" style="width:100%;margin-top:4px;font-size:0.8rem;line-height:1.4;resize:none;overflow:hidden;color:#374151;" ${disabled ? 'disabled' : ''}>${escapeHtml(String(r.sampleAnswer || ''))}</textarea>`;
+    const commentBox = `<textarea data-edit-comment data-autosize rows="1" maxlength="500" placeholder="💬 Comment to student (optional) — shown below the diff" style="width:100%;margin-top:4px;font-size:0.8rem;line-height:1.4;resize:none;overflow:hidden;color:#374151;" ${disabled ? 'disabled' : ''}>${escapeHtml(String(r.comment || ''))}</textarea>`;
     if (isOpen && studentText) {
       const initialCorrected = r.correctedText && r.correctedText.trim() ? r.correctedText : studentText;
       return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
         <textarea data-edit-corrected data-autosize rows="1" placeholder="Corrected text" style="width:100%;font-size:0.85rem;line-height:1.4;resize:none;overflow:hidden;" ${disabled ? 'disabled' : ''}>${escapeHtml(initialCorrected)}</textarea>
         <div data-diff-preview style="margin-top:4px;padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
-        <textarea data-edit-comment data-autosize rows="1" maxlength="500" placeholder="💬 Comment to student (optional) — shown below the diff" style="width:100%;margin-top:4px;font-size:0.8rem;line-height:1.4;resize:none;overflow:hidden;color:#374151;" ${disabled ? 'disabled' : ''}>${escapeHtml(String(r.comment || ''))}</textarea>
+        ${sampleBox}
+        ${commentBox}
+      </td>`;
+    }
+    // A blank open answer has nothing to diff, but it is exactly the case an
+    // example answer is for — so still offer the sample and comment boxes.
+    if (isOpen) {
+      return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+        <div data-diff-preview style="padding:6px 8px;background:#f9fafb;border-radius:4px;font-size:0.85rem;line-height:1.4;min-height:1.4em;"></div>
+        ${sampleBox}
+        ${commentBox}
       </td>`;
     }
     return `<td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;">
@@ -6400,6 +6447,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const corrInput = tr.querySelector('[data-edit-correction]');
     const correctedInput = tr.querySelector('[data-edit-corrected]');
     const commentInput = tr.querySelector('[data-edit-comment]');
+    const sampleInput = tr.querySelector('[data-edit-sample]');
     const diffPreviewEl = tr.querySelector('[data-diff-preview]');
     const includeCb = tr.querySelector('[data-include-row]');
     const autoInclude = () => {
@@ -6413,7 +6461,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       if (!diffPreviewEl) return;
       const studentText = String(row?.answer?.answerText || '').trim();
       const correctedText = String(row.correctedText || '').trim();
-      const noteHtml = renderCorrectionNoteHtml(row.comment);
+      const noteHtml = renderCorrectionNoteHtml(aiGradeImportComposeNote(row.comment, row.sampleAnswer));
       if (!studentText || !correctedText || studentText === correctedText) {
         diffPreviewEl.innerHTML = noteHtml
           ? noteHtml
@@ -6426,6 +6474,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
       row.correctedText = String(correctedInput.value || '');
     }
     if (commentInput) row.comment = String(commentInput.value || '');
+    if (sampleInput) row.sampleAnswer = String(sampleInput.value || '');
     renderDiff();
     tr.querySelectorAll('textarea[data-autosize]').forEach((el) => autosize(el));
     pointsInput?.addEventListener('input', () => {
@@ -6447,6 +6496,12 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     commentInput?.addEventListener('input', () => {
       row.comment = String(commentInput.value || '');
       autosize(commentInput);
+      renderDiff();
+      autoInclude();
+    });
+    sampleInput?.addEventListener('input', () => {
+      row.sampleAnswer = String(sampleInput.value || '');
+      autosize(sampleInput);
       renderDiff();
       autoInclude();
     });
