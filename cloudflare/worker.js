@@ -417,6 +417,15 @@ export default {
       return json({ error: 'Could not allocate PIN. Try again.' }, 503);
     }
 
+    // Arena live mode: one hibernating WebSocket per student/teacher board.
+    // The PIN only picks the room; auth is the socket's first message.
+    if (url.pathname === '/api/arena/ws' && request.method === 'GET') {
+      const pin = sanitizePin(url.searchParams.get('pin'));
+      if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return stub.fetch(new Request('https://room/arena/ws', request));
+    }
+
     if (url.pathname === '/api/pin/check' && request.method === 'GET') {
       const pin = sanitizePin(url.searchParams.get('pin'));
       const clientId = sanitizeId(url.searchParams.get('clientId'));
@@ -2586,6 +2595,11 @@ export class QuizRoom {
     //     (acceptable: hibernation only happens after idle periods).
     // Live-game polling went from ~48 row reads per poll to 0 after warm-up.
     this.roomCache = null;
+    // Arena keep-alive pings are answered by the runtime without waking a
+    // hibernated room (no duration billed for idle sockets).
+    try {
+      this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    } catch { /* older runtime — pings just wake the DO */ }
   }
 
   async fetch(request) {
@@ -4018,8 +4032,20 @@ export class QuizRoom {
           eventLog: [],
           settings: {
             randomNames: !!options.randomNames,
+            gameMode: options.gameMode === 'arena' ? 'arena' : 'classic',
           },
         };
+        if (room.settings.gameMode === 'arena') {
+          const dur = Number(options.arenaDurationSec);
+          room.arena = {
+            status: 'lobby',
+            durationSec: ARENA_DURATIONS_SEC.includes(dur) ? dur : ARENA_DEFAULT_DURATION_SEC,
+            startedAt: null,
+            endsAt: null,
+            players: {},
+            feed: [],
+          };
+        }
 
         appendRoomEvent(room, 'room_created', {
           pin: room.pin,
@@ -4049,6 +4075,18 @@ export class QuizRoom {
 
       if (!Array.isArray(room.eventLog)) room.eventLog = [];
 
+      if (url.pathname === '/arena/ws') {
+        if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'Expected WebSocket.' }, 426);
+        if (room.settings?.gameMode !== 'arena') return json({ error: 'Not an arena game.' }, 409);
+        const pair = new WebSocketPair();
+        const [client, server] = Object.values(pair);
+        // Auth arrives as the first message (browsers can't set WS headers and
+        // tokens don't belong in URLs); until then the socket has no role.
+        this.state.acceptWebSocket(server);
+        server.serializeAttachment({});
+        return new Response(null, { status: 101, webSocket: client });
+      }
+
       if (url.pathname === '/pin/check' && request.method === 'GET') {
         const clientId = sanitizeId(url.searchParams.get('clientId'));
         const existing = findPlayerByClientId(room, clientId);
@@ -4058,6 +4096,7 @@ export class QuizRoom {
           phase: room.phase,
           settings: {
             randomNames: !!room.settings?.randomNames,
+            gameMode: room.settings?.gameMode || 'classic',
           },
           alreadyJoined: !!existing,
           joinedPlayer: existing
@@ -4084,6 +4123,7 @@ export class QuizRoom {
               pin: room.pin,
               name: existing.name,
               identity: existing.identity || null,
+              gameMode: room.settings?.gameMode || 'classic',
               alreadyJoined: true,
             });
           }
@@ -4152,6 +4192,7 @@ export class QuizRoom {
 
         room.updatedAt = Date.now();
         await this.#setRoom(room);
+        if (room.arena) this.#arenaBroadcastBoard(room);
 
         return json({
           playerId,
@@ -4159,6 +4200,7 @@ export class QuizRoom {
           pin: room.pin,
           name,
           identity: room.players[playerId].identity || null,
+          gameMode: room.settings?.gameMode || 'classic',
           alreadyJoined: false,
         });
       }
@@ -4816,6 +4858,238 @@ export class QuizRoom {
   //   r:react:<qIndex>  → one question's reactions
   // A non-enumerable __snapshot on the returned room records per-key JSON so
   // #setRoom can skip writing slices that didn't change.
+
+  // ---------- Arena WebSocket (hibernation API) ----------
+  // Sockets carry { role, pid } as their attachment. While a round is running a
+  // 1s ticker (which keeps the DO awake for those few minutes) resolves card
+  // timeouts, ends the round, pushes the teacher board and persists every
+  // ARENA_PERSIST_EVERY_MS — play itself is in-memory, so a student's answer is
+  // one small message and zero storage writes.
+  #arenaSockets(filter) {
+    return this.state.getWebSockets().filter((ws) => {
+      try { return filter(ws.deserializeAttachment() || {}); } catch { return false; }
+    });
+  }
+
+  #arenaSend(ws, msg) {
+    try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
+  }
+
+  #arenaFlush(out) {
+    for (const { to, msg } of out) {
+      const sockets = to === 'host'
+        ? this.#arenaSockets((a) => a.role === 'host')
+        : this.#arenaSockets((a) => a.role === 'player' && a.pid === to);
+      sockets.forEach((ws) => this.#arenaSend(ws, msg));
+    }
+  }
+
+  #arenaBroadcastBoard(room) {
+    if (!room?.arena) return;
+    const board = arenaBoard(room);
+    this.#arenaSockets((a) => a.role === 'host').forEach((ws) => this.#arenaSend(ws, board));
+    // Lobby: players see who else has joined (avatars) — cheap, lobby only.
+    if (room.arena.status === 'lobby') {
+      this.#arenaSockets((a) => a.role === 'player').forEach((ws) => this.#arenaSend(ws, board));
+    }
+  }
+
+  #arenaEnsureTicker(room) {
+    if (this.arenaTicker || room?.arena?.status !== 'playing') return;
+    this.arenaTicker = setInterval(() => { this.#arenaTick().catch(() => {}); }, 1000);
+  }
+
+  #arenaStopTicker() {
+    if (this.arenaTicker) clearInterval(this.arenaTicker);
+    this.arenaTicker = null;
+  }
+
+  async #arenaPersist(room, force = false) {
+    const now = Date.now();
+    if (!force && now - (this.arenaPersistedAt || 0) < ARENA_PERSIST_EVERY_MS) return;
+    this.arenaPersistedAt = now;
+    room.updatedAt = now;
+    await this.#setRoom(room);
+  }
+
+  async #arenaTick() {
+    const room = await this.#getRoom();
+    if (!room?.arena || room.arena.status !== 'playing') { this.#arenaStopTicker(); return; }
+    const now = Date.now();
+    const out = [];
+    for (const pid of Object.keys(room.arena.players)) {
+      const ps = room.arena.players[pid];
+      if (ps.cards && now >= ps.cards.expiresAt) {
+        out.push({ to: pid, msg: { t: 'autopick', stage: 'chest' } });
+        arenaOpenChest(room, pid, null, out);
+        this.arenaDirty = true;
+      } else if (ps.power && now >= ps.power.expiresAt) {
+        const card = ps.power.options[Math.floor(Math.random() * ps.power.options.length)];
+        out.push({ to: pid, msg: { t: 'autopick', stage: 'power', card } });
+        arenaResolveCard(room, pid, card, out);
+        this.arenaDirty = true;
+      } else if (ps.target && now >= ps.target.expiresAt) {
+        arenaResolveTarget(room, pid, null, out);
+        this.arenaDirty = true;
+      }
+    }
+    if (now >= room.arena.endsAt) {
+      this.#arenaFlush(out);
+      await this.#arenaFinish(room);
+      return;
+    }
+    if (this.arenaDirty) {
+      this.arenaDirty = false;
+      out.push({ to: 'host', msg: arenaBoard(room) });
+      // Ranks shift whenever anyone scores, so refresh every player's HUD.
+      Object.keys(room.players).forEach((pid) => out.push({ to: pid, msg: arenaYou(room, pid) }));
+      this.arenaUnsaved = true;
+    }
+    this.#arenaFlush(out);
+    if (this.arenaUnsaved) {
+      await this.#arenaPersist(room);
+      if (this.arenaPersistedAt === now) this.arenaUnsaved = false;
+    }
+  }
+
+  async #arenaFinish(room) {
+    this.#arenaStopTicker();
+    if (room.arena.status === 'finished') return;
+    const now = Date.now();
+    room.arena.status = 'finished';
+    room.arena.endsAt = Math.min(Number(room.arena.endsAt || now), now);
+    room.phase = 'results';
+    room.questionClosed = true;
+    room.questionClosedAt = now;
+    room.questionCloseReason = 'finished';
+    Object.values(room.arena.players).forEach((ps) => { ps.cards = null; ps.power = null; ps.target = null; });
+    appendRoomEvent(room, 'game_finished', { mode: 'arena', finishedAt: now });
+    await maybeSnapshotLiveGame(room, this.env);
+    await this.#arenaPersist(room, true);
+    const podium = arenaPodium(room);
+    this.#arenaSockets((a) => a.role === 'host').forEach((ws) => this.#arenaSend(ws, { ...arenaBoard(room), podium }));
+    for (const ws of this.#arenaSockets((a) => a.role === 'player')) {
+      const pid = ws.deserializeAttachment().pid;
+      this.#arenaSend(ws, { ...arenaYou(room, pid), t: 'end', podium });
+    }
+  }
+
+  async webSocketMessage(ws, raw) {
+    let data;
+    try { data = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
+    if (!data || typeof data !== 'object') return;
+    const room = await this.#getRoom();
+    if (!room?.arena) { try { ws.close(4004, 'Game over'); } catch { /* */ } return; }
+    const att = ws.deserializeAttachment() || {};
+    // A DO restart mid-round drops the ticker; any message revives it.
+    this.#arenaEnsureTicker(room);
+
+    if (data.t === 'ping') { this.#arenaSend(ws, { t: 'pong', now: Date.now() }); return; }
+
+    if (data.t === 'auth') {
+      if (data.role === 'host') {
+        if (String(data.token || '') !== room.hostToken) { try { ws.close(4001, 'Unauthorized'); } catch { /* */ } return; }
+        ws.serializeAttachment({ role: 'host' });
+        this.#arenaSend(ws, { t: 'hello', role: 'host', durations: ARENA_DURATIONS_SEC });
+        this.#arenaSend(ws, { ...arenaBoard(room), podium: room.arena.status === 'finished' ? arenaPodium(room) : undefined });
+        return;
+      }
+      const pid = sanitizeId(data.playerId);
+      const player = room.players[pid];
+      if (!player || player.token !== String(data.playerToken || '')) { try { ws.close(4001, 'Unauthorized'); } catch { /* */ } return; }
+      // One live socket per student: a reconnect (or a second tab) replaces the old one.
+      this.#arenaSockets((a) => a.role === 'player' && a.pid === pid)
+        .forEach((old) => { if (old !== ws) try { old.close(4000, 'Replaced'); } catch { /* */ } });
+      ws.serializeAttachment({ role: 'player', pid });
+      const hadState = !!room.arena.players[pid];
+      this.#arenaSend(ws, { t: 'hello', role: 'player' });
+      arenaResumeMessages(room, pid).forEach((m) => this.#arenaSend(ws, m));
+      if (room.arena.status === 'lobby') this.#arenaSend(ws, arenaBoard(room));
+      if (room.arena.status === 'finished') this.#arenaSend(ws, { ...arenaYou(room, pid), t: 'end', podium: arenaPodium(room) });
+      if (!hadState) { this.arenaDirty = true; if (room.arena.status !== 'playing') await this.#arenaPersist(room, true); }
+      return;
+    }
+
+    if (att.role === 'host') {
+      if (data.t === 'duration' && room.arena.status === 'lobby') {
+        const dur = Number(data.sec);
+        if (ARENA_DURATIONS_SEC.includes(dur)) room.arena.durationSec = dur;
+        await this.#arenaPersist(room, true);
+        this.#arenaBroadcastBoard(room);
+      } else if (data.t === 'start' && room.arena.status === 'lobby') {
+        if (!arenaEligibleIndexes(room).length) {
+          this.#arenaSend(ws, { t: 'error', error: 'This quiz has no auto-graded questions to play.' });
+          return;
+        }
+        const now = Date.now();
+        room.arena.status = 'playing';
+        room.arena.startedAt = now;
+        room.arena.endsAt = now + room.arena.durationSec * 1000;
+        room.phase = 'arena';
+        appendRoomEvent(room, 'arena_started', { durationSec: room.arena.durationSec, players: Object.keys(room.players).length });
+        const out = [];
+        for (const pid of Object.keys(room.players)) {
+          out.push({ to: pid, msg: arenaYou(room, pid) });
+          const q = arenaDeal(room, pid);
+          if (q) out.push({ to: pid, msg: q });
+        }
+        out.push({ to: 'host', msg: arenaBoard(room) });
+        this.#arenaFlush(out);
+        await this.#arenaPersist(room, true);
+        this.#arenaEnsureTicker(room);
+      } else if (data.t === 'end' && room.arena.status === 'playing') {
+        await this.#arenaFinish(room);
+      }
+      return;
+    }
+
+    if (att.role !== 'player') return;
+    const pid = att.pid;
+    if (!room.players[pid]) { try { ws.close(4003, 'Removed'); } catch { /* */ } return; }
+    const ps = arenaPlayerState(room, pid);
+    const out = [];
+
+    if (data.t === 'avatar') {
+      const avatar = arenaSanitizeAvatar(data.avatar);
+      if (!avatar) return;
+      ps.avatar = avatar;
+      this.#arenaSend(ws, arenaYou(room, pid));
+      if (room.arena.status === 'lobby') {
+        await this.#arenaPersist(room, true);
+        this.#arenaBroadcastBoard(room);
+      } else {
+        this.arenaDirty = true;
+      }
+      return;
+    }
+
+    if (room.arena.status !== 'playing') return;
+    if (Date.now() >= room.arena.endsAt) { await this.#arenaTick(); return; }
+
+    if (data.t === 'answer') {
+      arenaHandleAnswer(room, pid, data, out);
+    } else if (data.t === 'chest' && ps.cards) {
+      const i = Number(data.i);
+      if (!ps.cards.chests[i]) return;
+      arenaOpenChest(room, pid, i, out);
+    } else if (data.t === 'power' && ps.power) {
+      const card = ps.power.options[Number(data.i)];
+      if (!card) return;
+      arenaResolveCard(room, pid, card, out);
+    } else if (data.t === 'target' && ps.target) {
+      arenaResolveTarget(room, pid, sanitizeId(data.playerId), out);
+    } else {
+      return;
+    }
+    this.arenaDirty = true;
+    this.#arenaFlush(out);
+  }
+
+  async webSocketClose(ws, code) {
+    try { ws.close(code === 1005 ? 1000 : code, 'bye'); } catch { /* already closed */ }
+  }
+
+  async webSocketError() { /* the client reconnects; nothing to clean up */ }
 
   async #getRoom() {
     if (this.roomCache) return this.roomCache;
@@ -7584,6 +7858,417 @@ function appendRoomEvent(room, type, payload = {}) {
 // (DO-to-DO call to the assignments DO). Idempotent via room.snapshotted; only
 // runs for login-required games (random-name games stay ephemeral). Mutates
 // room.snapshotted / room.assignmentCode on success — caller must persist room.
+// ---------- Arena: self-paced rush live mode ----------
+// Internal id `arena`; the student/teacher display name lives in the clients
+// (ARENA_DISPLAY_NAME) so it can be renamed without touching the backend.
+// One shared countdown; each student answers auto-graded questions at their own
+// pace over a hibernating WebSocket. Every ARENA_CARD_EVERY correct answers they
+// pick one of three face-up reward cards. Scores live on room.players[*].score so
+// the existing attempts snapshot / assignment import keep working unchanged.
+// Modular avatar: one index per part. Counts must match AVATAR_PARTS in arena.js.
+const ARENA_AVATAR_PARTS = { skin: 6, hair: 8, hairColor: 8, eyes: 4, mouth: 4, glasses: 5, hat: 7, shirt: 8 };
+const ARENA_DURATIONS_SEC = [120, 180, 300, 420, 600];
+const ARENA_DEFAULT_DURATION_SEC = 300;
+const ARENA_BASE_POINTS = 100;
+const ARENA_CARD_EVERY = 2;
+const ARENA_PICK_MS = 10000;    // choose a chest, else auto-pick (unhurried: the shared clock is the pressure)
+const ARENA_POWER_MS = 12000;   // choose a power (incl. ~1s reveal beat), else auto-pick
+const ARENA_TARGET_MS = 10000;  // choose a steal target, else random
+const ARENA_BOOST_MS = 20000;
+const ARENA_SHIELD_MS = 60000;
+const ARENA_FEED_MAX = 12;
+const ARENA_PERSIST_EVERY_MS = 3000;
+const ARENA_REPEAT_WRONG_SHARE = 0.6; // reshuffled decks lean 60/40 toward missed questions
+// Rewards are two steps: luck, then strategy. The student opens one of three
+// face-down chests; points are simply banked (no "pick the biggest number"
+// non-choice), while a POWER lets them choose one of three tactics, one per
+// slot: attack / gamble / protect.
+const ARENA_CHEST_WEIGHTS = { points: 57, power: 40, jackpot: 3 };
+const ARENA_POWER_SLOTS = [
+  { steal: 60, pickpocket: 40 },            // attack (you choose who)
+  { swap: 60, double: 40 },                 // gamble (swap target is random)
+  { shield: 60, boost: 25, second: 15 },    // protect / invest
+];
+const ARENA_SOLO_SLOTS = [{ double: 1 }, { boost: 1 }, { shield: 50, second: 50 }];
+const ARENA_TARGETED = new Set(['steal', 'pickpocket']);
+
+function arenaEligibleIndexes(room) {
+  return (room.quiz?.questions || [])
+    .map((q, i) => ({ q, i }))
+    .filter(({ q }) => q && !q.isPoll
+      && !['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)
+      && !isTeacherGradedTextQuestion(q))
+    .map(({ i }) => i);
+}
+
+function arenaShuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// First pass: every question once. Later passes: same length, ~60% drawn from
+// questions the student last got wrong, the rest from ones they got right.
+function arenaBuildDeck(ps, eligible) {
+  const n = eligible.length;
+  if (!n) return [];
+  let deck;
+  if (!ps.passes) {
+    deck = arenaShuffle(eligible);
+  } else {
+    const wrong = eligible.filter((qi) => ps.lastResult?.[qi] !== true);
+    const right = eligible.filter((qi) => ps.lastResult?.[qi] === true);
+    const take = (pool, count) => {
+      const out = [];
+      while (pool.length && out.length < count) out.push(...arenaShuffle(pool).slice(0, count - out.length));
+      return out;
+    };
+    let nWrong = wrong.length ? Math.round(n * ARENA_REPEAT_WRONG_SHARE) : 0;
+    if (!right.length) nWrong = n;
+    deck = arenaShuffle([...take(wrong, nWrong), ...take(right, n - nWrong)]);
+  }
+  // Don't serve the question they just answered twice in a row.
+  if (deck.length > 1 && deck[0] === ps.current?.qi) [deck[0], deck[1]] = [deck[1], deck[0]];
+  ps.passes = (ps.passes || 0) + 1;
+  return deck;
+}
+
+function arenaPlayerState(room, pid) {
+  if (!room.arena.players[pid]) {
+    room.arena.players[pid] = {
+      avatar: arenaDefaultAvatar(pid),
+      power: null,
+      correct: 0,
+      answered: 0,
+      correctSinceCard: 0,
+      deck: [],
+      passes: 0,
+      lastResult: {},
+      current: null,
+      cards: null,
+      target: null,
+      fx: { double: false, boostUntil: 0, second: false, shieldUntil: 0 },
+    };
+  }
+  return room.arena.players[pid];
+}
+
+function arenaRanking(room) {
+  return Object.values(room.players || {})
+    .map((p) => ({ id: p.id, name: p.name, score: Number(p.score || 0), avatar: room.arena.players[p.id]?.avatar || arenaDefaultAvatar(p.id) }))
+    .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
+}
+
+function arenaBoard(room) {
+  const now = Date.now();
+  return {
+    t: 'board',
+    status: room.arena.status,
+    durationSec: room.arena.durationSec,
+    endsAt: room.arena.endsAt || null,
+    now,
+    players: arenaRanking(room).map((r) => {
+      const ps = room.arena.players[r.id];
+      return {
+        ...r,
+        correct: ps?.correct || 0,
+        answered: ps?.answered || 0,
+        shield: !!(ps && ps.fx.shieldUntil > now),
+      };
+    }),
+    feed: room.arena.feed.slice(-ARENA_FEED_MAX),
+  };
+}
+
+function arenaYou(room, pid) {
+  const ps = arenaPlayerState(room, pid);
+  const ranking = arenaRanking(room);
+  const now = Date.now();
+  return {
+    t: 'you',
+    status: room.arena.status,
+    endsAt: room.arena.endsAt || null,
+    now,
+    name: room.players[pid]?.name || '',
+    avatar: ps.avatar,
+    score: Number(room.players[pid]?.score || 0),
+    rank: ranking.findIndex((r) => r.id === pid) + 1,
+    total: ranking.length,
+    correct: ps.correct,
+    answered: ps.answered,
+    fx: {
+      double: !!ps.fx.double,
+      boostLeftMs: Math.max(0, ps.fx.boostUntil - now),
+      second: !!ps.fx.second,
+      shieldLeftMs: Math.max(0, ps.fx.shieldUntil - now),
+    },
+  };
+}
+
+function arenaQuestionMsg(room, pid, { retry = false } = {}) {
+  const ps = arenaPlayerState(room, pid);
+  const q = room.quiz.questions[ps.current.qi];
+  return { t: 'q', qi: ps.current.qi, seq: ps.current.seq, retry, question: publicQuestion(q) };
+}
+
+function arenaDeal(room, pid) {
+  const ps = arenaPlayerState(room, pid);
+  if (!ps.deck.length) ps.deck = arenaBuildDeck(ps, arenaEligibleIndexes(room));
+  const qi = ps.deck.shift();
+  if (qi == null) { ps.current = null; return null; }
+  ps.current = { qi, seq: (ps.current?.seq || 0) + 1, servedAt: Date.now() };
+  return arenaQuestionMsg(room, pid);
+}
+
+function arenaFeed(room, entry) {
+  room.arena.feed.push({ ...entry, at: Date.now() });
+  if (room.arena.feed.length > ARENA_FEED_MAX * 2) room.arena.feed = room.arena.feed.slice(-ARENA_FEED_MAX);
+}
+
+// Bottom third of the board gets slightly better odds on the big cards so
+// weaker students stay in the race.
+function arenaIsTrailing(room, pid) {
+  const ranking = arenaRanking(room);
+  if (ranking.length < 3) return false;
+  const rank = ranking.findIndex((r) => r.id === pid) + 1;
+  return rank > Math.ceil(ranking.length * 2 / 3);
+}
+
+function arenaWeighted(weights) {
+  const entries = Object.entries(weights);
+  let roll = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
+  for (const [id, w] of entries) if ((roll -= w) < 0) return id;
+  return entries[entries.length - 1][0];
+}
+
+function arenaRollPoints(room, pid) {
+  const roll = () => 50 + Math.floor(Math.random() * 10) * 50; // 50..500
+  return arenaIsTrailing(room, pid) ? Math.max(roll(), roll()) : roll();
+}
+
+// Contents of the three chests, decided up front so the reveal can show what
+// the other two held.
+function arenaDrawChests(room, pid) {
+  const trailing = arenaIsTrailing(room, pid);
+  const weights = { ...ARENA_CHEST_WEIGHTS, jackpot: ARENA_CHEST_WEIGHTS.jackpot * (trailing ? 2 : 1) };
+  return [0, 1, 2].map(() => {
+    const kind = arenaWeighted(weights);
+    if (kind === 'points') return { kind, amount: arenaRollPoints(room, pid) };
+    if (kind === 'jackpot') return { kind, amount: 1000 };
+    return { kind };
+  });
+}
+
+function arenaDrawPowers(room) {
+  const slots = Object.keys(room.players || {}).length > 1 ? ARENA_POWER_SLOTS : ARENA_SOLO_SLOTS;
+  return slots.map(arenaWeighted);
+}
+
+function arenaDefaultAvatar(pid) {
+  let h = hash(String(pid || ''));
+  const out = {};
+  for (const [part, n] of Object.entries(ARENA_AVATAR_PARTS)) {
+    out[part] = h % n;
+    h = Math.floor(h / n) || hash(String(h) + part);
+  }
+  return out;
+}
+
+function arenaSanitizeAvatar(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const [part, n] of Object.entries(ARENA_AVATAR_PARTS)) {
+    const v = Number(raw[part]);
+    if (!Number.isInteger(v) || v < 0 || v >= n) return null;
+    out[part] = v;
+  }
+  return out;
+}
+
+function arenaAward(room, pid, amount) {
+  const p = room.players[pid];
+  if (p) p.score = Math.max(0, Math.round(Number(p.score || 0) + amount));
+}
+
+// Resolves a steal/pickpocket/swap against `targetId`. Returns the reward
+// message for the thief; also queues fx messages for the victim.
+function arenaApplyAttack(room, pid, card, targetId, out) {
+  const me = room.players[pid];
+  const victim = room.players[targetId];
+  const vs = victim ? arenaPlayerState(room, targetId) : null;
+  if (!me || !victim || targetId === pid) return { t: 'reward', card, amount: 0, note: 'miss' };
+  const now = Date.now();
+  if (vs.fx.shieldUntil > now) {
+    vs.fx.shieldUntil = 0;
+    arenaFeed(room, { kind: 'blocked', card, a: me.name, b: victim.name });
+    out.push({ to: targetId, msg: { t: 'fx', kind: 'blocked', card, by: me.name } });
+    return { t: 'reward', card, amount: 0, note: 'blocked', target: victim.name };
+  }
+  if (card === 'swap') {
+    const mine = Number(me.score || 0);
+    me.score = Number(victim.score || 0);
+    victim.score = mine;
+    arenaFeed(room, { kind: 'swap', a: me.name, b: victim.name });
+    out.push({ to: targetId, msg: { t: 'fx', kind: 'swapped', by: me.name, amount: victim.score - me.score } });
+    return { t: 'reward', card, amount: me.score - mine, target: victim.name };
+  }
+  const vScore = Number(victim.score || 0);
+  const amount = card === 'steal' ? Math.floor(vScore * 0.1) : Math.min(200, vScore);
+  victim.score = vScore - amount;
+  me.score = Number(me.score || 0) + amount;
+  arenaFeed(room, { kind: card, a: me.name, b: victim.name, amount });
+  out.push({ to: targetId, msg: { t: 'fx', kind: 'robbed', card, by: me.name, amount } });
+  return { t: 'reward', card, amount, target: victim.name };
+}
+
+function arenaTargets(room, pid) {
+  return arenaRanking(room).filter((r) => r.id !== pid);
+}
+
+// Apply the chosen card. Targeted cards park the player in a target picker.
+function arenaResolveCard(room, pid, card, out) {
+  const ps = arenaPlayerState(room, pid);
+  const me = room.players[pid];
+  const now = Date.now();
+  ps.power = null;
+  let reward = { t: 'reward', card, amount: 0 };
+  if (card === 'double') {
+    ps.fx.double = true;
+  } else if (card === 'boost') {
+    ps.fx.boostUntil = now + ARENA_BOOST_MS;
+  } else if (card === 'second') {
+    ps.fx.second = true;
+  } else if (card === 'shield') {
+    ps.fx.shieldUntil = now + ARENA_SHIELD_MS;
+  } else if (card === 'swap') {
+    const targets = arenaTargets(room, pid);
+    const pick = targets[Math.floor(Math.random() * targets.length)];
+    reward = arenaApplyAttack(room, pid, 'swap', pick?.id, out);
+  } else if (ARENA_TARGETED.has(card)) {
+    const targets = arenaTargets(room, pid);
+    if (targets.length) {
+      ps.target = { card, expiresAt: now + ARENA_TARGET_MS };
+      out.push({ to: pid, msg: { t: 'target', card, expiresAt: ps.target.expiresAt, now, players: targets } });
+      return;
+    }
+  }
+  arenaFinishReward(room, pid, reward, out);
+}
+
+// Step 1: open a chest. Points bank immediately; a power moves on to step 2.
+function arenaOpenChest(room, pid, index, out) {
+  const ps = arenaPlayerState(room, pid);
+  if (!ps.cards) return;
+  const chests = ps.cards.chests;
+  const i = Number.isInteger(index) && chests[index] ? index : Math.floor(Math.random() * chests.length);
+  const chest = chests[i];
+  const me = room.players[pid];
+  ps.cards = null;
+  out.push({ to: pid, msg: { t: 'reveal', i, chests } });
+  if (chest.kind === 'power') {
+    const now = Date.now();
+    ps.power = { options: arenaDrawPowers(room), expiresAt: now + ARENA_POWER_MS };
+    out.push({ to: pid, msg: { t: 'power', options: ps.power.options, expiresAt: ps.power.expiresAt, now } });
+    return;
+  }
+  arenaAward(room, pid, chest.amount);
+  if (chest.kind === 'jackpot') arenaFeed(room, { kind: 'jackpot', a: me?.name, amount: chest.amount });
+  else if (chest.amount >= 400) arenaFeed(room, { kind: 'lucky', a: me?.name, amount: chest.amount });
+  arenaFinishReward(room, pid, { t: 'reward', card: chest.kind === 'jackpot' ? 'jackpot' : 'lucky', amount: chest.amount }, out);
+}
+
+function arenaFinishReward(room, pid, reward, out) {
+  out.push({ to: pid, msg: reward });
+  const next = arenaDeal(room, pid);
+  if (next) out.push({ to: pid, msg: next });
+}
+
+function arenaResolveTarget(room, pid, targetId, out) {
+  const ps = arenaPlayerState(room, pid);
+  if (!ps.target) return;
+  const { card } = ps.target;
+  ps.target = null;
+  const valid = arenaTargets(room, pid);
+  const chosen = valid.find((r) => r.id === targetId) || valid[Math.floor(Math.random() * valid.length)];
+  arenaFinishReward(room, pid, arenaApplyAttack(room, pid, card, chosen?.id, out), out);
+}
+
+function arenaHandleAnswer(room, pid, data, out) {
+  const ps = arenaPlayerState(room, pid);
+  if (!ps.current || ps.cards || ps.power || ps.target) return;
+  if (Number(data.seq) !== ps.current.seq) return; // stale double-submit
+  const qi = ps.current.qi;
+  const q = room.quiz.questions[qi];
+  const res = evaluate(q, data.answer);
+  const fraction = res.partialTotal ? clamp(Number(res.partialScore || 0) / Number(res.partialTotal), 0, 1) : (res.correct ? 1 : 0);
+  const correct = !!res.correct || fraction >= 0.5;
+  const now = Date.now();
+
+  // Keep one answer per question for the assignment snapshot: the latest
+  // correct one wins, otherwise the latest attempt.
+  const perQ = room.responsesByQuestion[qi] || (room.responsesByQuestion[qi] = {});
+  if (correct || !perQ[pid]?.correct) {
+    perQ[pid] = { answer: sanitizeAssignmentAnswer(q, data.answer), submittedAt: now, correct };
+  }
+
+  if (!correct && ps.fx.second) {
+    ps.fx.second = false;
+    out.push({ to: pid, msg: { t: 'result', correct: false, points: 0, retry: true } });
+    out.push({ to: pid, msg: arenaQuestionMsg(room, pid, { retry: true }) });
+    return;
+  }
+
+  ps.answered += 1;
+  ps.lastResult[qi] = correct;
+  let points = 0;
+  if (fraction > 0) {
+    let mult = 1;
+    if (ps.fx.double) { mult *= 2; ps.fx.double = false; }
+    if (ps.fx.boostUntil > now) mult *= 1.5;
+    points = Math.round(ARENA_BASE_POINTS * fraction * mult);
+    arenaAward(room, pid, points);
+  }
+  if (correct) {
+    ps.correct += 1;
+    ps.correctSinceCard += 1;
+  }
+  out.push({ to: pid, msg: { t: 'result', correct, points, answer: correct ? '' : hostCorrectSummary(q) } });
+
+  if (correct && ps.correctSinceCard >= ARENA_CARD_EVERY) {
+    ps.correctSinceCard = 0;
+    ps.cards = { chests: arenaDrawChests(room, pid), expiresAt: now + ARENA_PICK_MS };
+    out.push({ to: pid, msg: { t: 'chests', n: ps.cards.chests.length, expiresAt: ps.cards.expiresAt, now } });
+    return;
+  }
+  const next = arenaDeal(room, pid);
+  if (next) out.push({ to: pid, msg: next });
+}
+
+// Messages a (re)connecting player needs to resume exactly where they were.
+function arenaResumeMessages(room, pid) {
+  const msgs = [arenaYou(room, pid)];
+  if (room.arena.status !== 'playing') return msgs;
+  const ps = arenaPlayerState(room, pid);
+  const now = Date.now();
+  if (ps.cards) {
+    msgs.push({ t: 'chests', n: ps.cards.chests.length, expiresAt: ps.cards.expiresAt, now });
+  } else if (ps.power) {
+    msgs.push({ t: 'power', options: ps.power.options, expiresAt: ps.power.expiresAt, now });
+  } else if (ps.target) {
+    msgs.push({ t: 'target', card: ps.target.card, expiresAt: ps.target.expiresAt, now, players: arenaTargets(room, pid) });
+  } else {
+    msgs.push(ps.current ? arenaQuestionMsg(room, pid) : arenaDeal(room, pid));
+  }
+  return msgs.filter(Boolean);
+}
+
+function arenaPodium(room) {
+  return arenaRanking(room).slice(0, 3);
+}
+
 async function maybeSnapshotLiveGame(room, env) {
   if (!room || room.snapshotted) return false;
   if (room.settings?.randomNames) return false;

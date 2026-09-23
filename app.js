@@ -4779,7 +4779,9 @@ async function customPasswordPrompt(message) {
 
 // ---------- Live mode ----------
 function bindLiveEvents() {
-  if (createLiveBtn) createLiveBtn.addEventListener('click', createLiveGame);
+  if (createLiveBtn) createLiveBtn.addEventListener('click', () => createLiveGame());
+  const createArenaBtn = document.getElementById('createArenaBtn');
+  if (createArenaBtn) createArenaBtn.addEventListener('click', () => createLiveGame({ gameMode: 'arena' }));
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (applyAssignmentBtn) applyAssignmentBtn.addEventListener('click', applyQuizToAssignment);
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
@@ -4969,7 +4971,8 @@ function bindLiveEvents() {
   });
 }
 
-async function createLiveGame() {
+async function createLiveGame(opts = {}) {
+  const arenaMode = !!(opts && opts.gameMode === 'arena');
   try {
     syncQuizFromUI();
 
@@ -4993,6 +4996,7 @@ async function createLiveGame() {
         password: createSessionPassword,
         options: {
           randomNames: isRandomNamesEnabled(),
+          gameMode: arenaMode ? 'arena' : 'classic',
         },
       },
     });
@@ -5035,6 +5039,13 @@ async function createLiveGame() {
     }
 
     setStatus(hostStatusEl, t('Live game created. Share the PIN with students.'), 'ok');
+
+    if (arenaMode && window.PinArena) {
+      // Arena drives its own projected board over a WebSocket; no host polling.
+      stopHostPolling();
+      window.PinArena.openHost({ pin: data.pin, token: data.hostToken });
+      return;
+    }
 
     startHostPolling();
     await pollHostState();

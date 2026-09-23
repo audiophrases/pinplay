@@ -785,6 +785,11 @@ async function joinLiveGame() {
 
     if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
 
+    if (data.gameMode === 'arena' && window.PinArena) {
+      window.PinArena.startPlayer({ pin: live.player.pin, playerId: data.playerId, playerToken: data.playerToken });
+      return;
+    }
+
     startPlayerPolling();
     await pollPlayerState();
   } catch (err) {
@@ -4781,6 +4786,11 @@ async function sendReaction(emoji) {
 }
 
 async function submitLiveAnswer(opts = {}) {
+  // Arena rounds grade over their own socket (arena.js).
+  if (window.PinArena && window.PinArena.active) {
+    window.PinArena.submit();
+    return;
+  }
   try {
     // Retake mode short-circuit: all grading is client-side, no server roundtrip.
     if (live.player.assignment?.retake?.active) {
