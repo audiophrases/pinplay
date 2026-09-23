@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PinPlay Cup — avatar part template.
+  Open in Figma / Illustrator / Inkscape / Recraft (import as SVG).
+
+  RULES (so every part lines up in the game):
+  1. Keep the canvas exactly as is: viewBox "0 -4 100 104" (100 wide, 104 tall).
+     Don't move or scale anything in the GUIDES layer.
+  2. Draw ONE option per file, e.g. hat-crown.svg, hair-spiky.svg, glasses-round.svg,
+     on this same canvas, then delete the GUIDES and REFERENCE layers before exporting.
+  3. Export as plain SVG (no embedded PNGs, no fonts, outlines only).
+     Keep each file small (< 8 KB); flat shapes + a highlight/shadow look best at small sizes.
+  4. Colour-changeable parts: paint HAIR with #FF00FF and SKIN with #00FFFF
+     (placeholder colours). The game swaps them for the chosen hair colour/skin tone.
+     Everything else (hats, glasses, eyes) keeps the colours you choose.
+  5. Stacking order in the game (bottom → top):
+     body/shirt → neck → hair-back → ears → head → cheeks → eyes → mouth → hair-front → glasses → hat
+     A hairstyle may need two files: hair-NAME-back.svg (behind the head, e.g. long hair)
+     and hair-NAME-front.svg (fringe on top).
+  6. Hats may go up to y = -4 (top edge). Nothing should go past the canvas edges.
+
+  Deliver: a folder of SVGs named <part>-<option>.svg, plus a colours.txt listing
+  the skin tones and hair colours (hex) you want in the palettes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104" width="600" height="624">
+  <g id="GUIDES" fill="none" stroke-width="0.4">
+    <!-- canvas -->
+    <rect x="0" y="-4" width="100" height="104" stroke="#999" stroke-dasharray="1 1"/>
+    <!-- centre line -->
+    <line x1="50" y1="-4" x2="50" y2="100" stroke="#ff4d4f" stroke-dasharray="1.5 1"/>
+    <!-- head: circle centre (50,45) radius 24 -->
+    <circle cx="50" cy="45" r="24" stroke="#1677ff"/>
+    <!-- ears -->
+    <circle cx="27" cy="47" r="5" stroke="#1677ff"/>
+    <circle cx="73" cy="47" r="5" stroke="#1677ff"/>
+    <!-- eye line y=45, eyes centred at x=41 and x=59 -->
+    <line x1="30" y1="45" x2="70" y2="45" stroke="#52c41a"/>
+    <circle cx="41" cy="45" r="1" fill="#52c41a" stroke="none"/>
+    <circle cx="59" cy="45" r="1" fill="#52c41a" stroke="none"/>
+    <!-- mouth line y=56 -->
+    <line x1="40" y1="56" x2="60" y2="56" stroke="#52c41a"/>
+    <!-- hairline / hat brim zone: hats sit on y≈32–38 -->
+    <rect x="22" y="30" width="56" height="8" stroke="#fa8c16" stroke-dasharray="2 1"/>
+    <!-- neck + body/shirt area -->
+    <rect x="43" y="58" width="14" height="16" rx="5" stroke="#1677ff"/>
+    <path d="M16 100 C16 78 32 70 50 70 C68 70 84 78 84 100 Z" stroke="#1677ff"/>
+    <!-- labels -->
+    <g font-family="sans-serif" font-size="3" fill="#666" stroke="none">
+      <text x="2" y="-0.5">hat zone (up to top edge)</text>
+      <text x="79" y="35">brim y≈32–38</text>
+      <text x="71" y="44">eyes y=45</text>
+      <text x="61" y="57">mouth y=56</text>
+      <text x="2" y="96">shirt</text>
+    </g>
+  </g>
+
+  <!-- REFERENCE: the current placeholder character, for scale. Delete before export. -->
+  <g id="REFERENCE" opacity="0.35">
+    <path d="M16 100 C16 78 32 70 50 70 C68 70 84 78 84 100 Z" fill="#605dff"/>
+    <rect x="43" y="58" width="14" height="16" rx="5" fill="#00FFFF"/>
+    <circle cx="27" cy="47" r="5" fill="#00FFFF"/>
+    <circle cx="73" cy="47" r="5" fill="#00FFFF"/>
+    <circle cx="50" cy="45" r="24" fill="#00FFFF"/>
+    <circle cx="41" cy="45" r="3" fill="#2a2230"/>
+    <circle cx="59" cy="45" r="3" fill="#2a2230"/>
+    <path d="M43 55 Q50 61 57 55" stroke="#2a2230" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <path d="M26 42 C26 17 74 17 74 42 C66 31 40 29 26 42 Z" fill="#FF00FF"/>
+  </g>
+
+  <!-- DRAW HERE: one part per file -->
+  <g id="PART"></g>
+</svg>
