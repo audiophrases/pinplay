@@ -72,4 +72,15 @@ const counts = {
   hat: parts.hat.length, shirt: parts.shirt.length,
 };
 console.log('avatar-parts.js', fs.statSync(path.join(OUT, 'avatar-parts.js')).size, 'bytes');
-console.log('ARENA_AVATAR_PARTS =', JSON.stringify(counts).replace(/"/g, '').replace(/,/g, ', ').replace(/:/g, ': '));
+const line = `const ARENA_AVATAR_PARTS = { ${Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(', ')} };`;
+console.log(line);
+
+// --write-worker: keep the server's accepted part counts in sync automatically.
+if (process.argv.includes('--write-worker')) {
+  const wf = path.join(ROOT, 'cloudflare', 'worker.js');
+  const src = fs.readFileSync(wf, 'utf8');
+  const re = /^const ARENA_AVATAR_PARTS = \{[^\r\n]*\};/m;
+  if (!re.test(src)) { console.error('ARENA_AVATAR_PARTS line not found in worker.js'); process.exit(2); }
+  fs.writeFileSync(wf, src.replace(re, line));
+  console.log('updated cloudflare/worker.js');
+}

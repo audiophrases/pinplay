@@ -1,0 +1,57 @@
+@echo off
+setlocal
+REM PinPlay Cup: rebuild art from the design folder, sync the server's avatar
+REM part counts, publish the site files and deploy the Cloudflare worker.
+REM   update-cup-assets.bat                 (uses the default design folder)
+REM   update-cup-assets.bat "D:\OtherDesignFolder"
+REM Only generated files are committed (avatars, chests, icons, logo, fx, worker.js).
+REM Sounds in cup\sounds are never touched here.
+
+cd /d "%~dp0"
+set "DESIGN=%~1"
+if "%DESIGN%"=="" set "DESIGN=C:\Users\Admin\PinPlayCupMediaDesign"
+
+echo.
+echo [1/4] Building PinPlay Cup assets from "%DESIGN%" ...
+node scripts\build-cup-assets.mjs "%DESIGN%" --write-worker
+if errorlevel 1 goto :fail
+
+echo.
+echo [2/4] Committing generated files ...
+git add cup/avatar-parts.js cup/chests cup/icons cup/logo cup/fx
+git add -f cloudflare/worker.js
+git diff --cached --quiet
+if errorlevel 1 (
+  git commit -q -m "chore(cup): rebuild PinPlay Cup assets from design packs"
+  if errorlevel 1 goto :fail
+) else (
+  echo     No changes to commit.
+)
+
+echo.
+echo [3/4] Pushing to GitHub ...
+git push origin main
+if errorlevel 1 goto :fail
+
+echo.
+echo [4/4] Deploying the Cloudflare worker ...
+cd /d "%~dp0cloudflare"
+REM Prefer the installer's pinned wrangler (the npx cache is unreliable here).
+set "WRANGLER=%~dp0setup\.generated\wrangler\node_modules\.bin\wrangler.cmd"
+if exist "%WRANGLER%" (
+  call "%WRANGLER%" deploy --config wrangler.toml
+) else (
+  call npx wrangler deploy --config wrangler.toml
+)
+if errorlevel 1 goto :fail
+
+echo.
+echo Done. Site files pushed and worker deployed.
+pause
+exit /b 0
+
+:fail
+echo.
+echo *** Something failed - see the messages above. Nothing after that step ran.
+pause
+exit /b 1
