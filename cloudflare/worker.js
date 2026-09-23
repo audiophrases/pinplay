@@ -7867,7 +7867,7 @@ function appendRoomEvent(room, type, payload = {}) {
 // the existing attempts snapshot / assignment import keep working unchanged.
 // Modular avatar: one index per part. Counts come from cup/avatar-parts.js —
 // scripts/build-cup-assets.mjs prints the line to paste here after a rebuild.
-const ARENA_AVATAR_PARTS = { skin: 8, hair: 25, hairColor: 11, eyes: 21, mouth: 21, glasses: 12, hat: 14, shirt: 23 };
+const ARENA_AVATAR_PARTS = { skin: 8, hair: 27, hairColor: 11, eyes: 21, mouth: 25, glasses: 16, hat: 28, shirt: 26 };
 const ARENA_DURATIONS_SEC = [120, 180, 300, 420, 600];
 const ARENA_DEFAULT_DURATION_SEC = 300;
 const ARENA_BASE_POINTS = 100;
