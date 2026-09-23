@@ -7865,8 +7865,9 @@ function appendRoomEvent(room, type, payload = {}) {
 // pace over a hibernating WebSocket. Every ARENA_CARD_EVERY correct answers they
 // pick one of three face-up reward cards. Scores live on room.players[*].score so
 // the existing attempts snapshot / assignment import keep working unchanged.
-// Modular avatar: one index per part. Counts must match AVATAR_PARTS in arena.js.
-const ARENA_AVATAR_PARTS = { skin: 6, hair: 8, hairColor: 8, eyes: 4, mouth: 4, glasses: 5, hat: 7, shirt: 8 };
+// Modular avatar: one index per part. Counts come from cup/avatar-parts.js —
+// scripts/build-cup-assets.mjs prints the line to paste here after a rebuild.
+const ARENA_AVATAR_PARTS = { skin: 8, hair: 25, hairColor: 11, eyes: 21, mouth: 21, glasses: 12, hat: 14, shirt: 23 };
 const ARENA_DURATIONS_SEC = [120, 180, 300, 420, 600];
 const ARENA_DEFAULT_DURATION_SEC = 300;
 const ARENA_BASE_POINTS = 100;

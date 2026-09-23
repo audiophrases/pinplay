@@ -5354,3 +5354,15 @@ body.arena-board-open { overflow: hidden; }
   .arena-board-body { grid-template-columns: 1fr; }
   .arena-board-clock { font-size: 36px; }
 }
+
+/* PinPlay Cup art (cup/) */
+.arena-ico { width: 1.25em; height: 1.25em; vertical-align: -0.28em; }
+.arena-card-img { width: 64px; height: 64px; }
+.arena-chest-img { width: 96px; height: 80px; object-fit: contain; }
+.arena-chest.revealed .arena-chest-img { width: 88px; height: 76px; }
+.arena-logo { height: 44px; width: auto; display: block; }
+.arena-logo-wrap .arena-logo { height: 64px; margin: 0 auto; }
+.arena-board-title .arena-logo { height: 56px; }
+.arena-sound-btn { background: none; border: 0; font-size: 20px; cursor: pointer; padding: 2px 4px; color: inherit; }
+.arena-fx { position: fixed; left: 50%; top: 50%; width: min(70vmin, 520px); height: min(70vmin, 520px); transform: translate(-50%, -50%); z-index: 2100; pointer-events: none; }
+.arena-board-podium .arena-fx { position: absolute; }

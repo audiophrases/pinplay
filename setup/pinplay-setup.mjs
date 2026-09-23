@@ -60,7 +60,7 @@ const RENDER_DEPLOY_URL = 'https://render.com/deploy?repo=' + REPO_WEB_URL; // o
 // hardcoded-only list rots: i18n.js/spellingbee.js/wordle*.js were added to
 // index.html after this list was written and silently 404'd on teacher sites.
 const FRONTEND_ASSETS = ['index.html', 'app.js', 'play.js', 'styles.css', 'favicon.svg', 'question-bank-ui.js'];
-const FRONTEND_DIRS = ['create', 'music'];
+const FRONTEND_DIRS = ['create', 'music', 'cup'];
 const FRONTEND_GLOB_JSON = true; // also copy *.json templates at repo root
 
 // Optional worker secrets the wizard can set (name → human description).
