@@ -11,14 +11,17 @@ cd /d "%~dp0"
 set "DESIGN=%~1"
 if "%DESIGN%"=="" set "DESIGN=C:\Users\Admin\PinPlayCupMediaDesign"
 
+echo [1/5] Starting Local Studio Server in background...
+start /b node scripts\studio-server.js
+
 echo.
-echo [1/4] Building PinPlay Cup assets from "%DESIGN%" ...
+echo [2/5] Building PinPlay Cup assets from "%DESIGN%" ...
 node scripts\build-cup-assets.mjs "%DESIGN%" --write-worker
 if errorlevel 1 goto :fail
 
 echo.
-echo [2/4] Committing generated files ...
-git add cup/avatar-parts.js cup/chests cup/icons cup/logo cup/fx
+echo [3/5] Committing generated files ...
+git add cup/avatar-parts.js cup/chests cup/icons cup/logo cup/fx avatar-preview.html scripts/build-cup-assets.mjs scripts/studio-server.js start-studio.bat
 git add -f cloudflare/worker.js
 git diff --cached --quiet
 if errorlevel 1 (
