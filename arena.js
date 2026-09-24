@@ -53,6 +53,7 @@
   }
   function setMuted(next) {
     muted = !!next;
+    if (H.root && !H.root.classList.contains('hidden')) hallMusic(H.board?.status === 'lobby');
     try { localStorage.setItem(SOUND_KEY, muted ? '1' : '0'); } catch { /* blocked storage */ }
     document.querySelectorAll('[data-sound-toggle]').forEach((b) => { b.textContent = muted ? '🔇' : '🔊'; });
   }
@@ -725,6 +726,7 @@
       : '';
     if (lobby) $h('clock').textContent = fmtClock(msg.durationSec * 1000);
     H.root.classList.toggle('is-lobby', lobby);
+    hallMusic(lobby);
     renderRanking(msg.players, msg.status);
     $h('feed').innerHTML = (msg.feed || []).slice().reverse().map((f) => `<div class="arena-feed-item">${feedText(f)}</div>`).join('');
     // Celebrate each new jackpot on the projector once.
@@ -738,6 +740,13 @@
       renderPodium(msg.podium || msg.players.slice(0, 3));
       if (!H.celebrated) { H.celebrated = true; playFx('podium', $h('podium')); sfx('jackpot', 0.7); }
     }
+  }
+
+  // Same hall music as regular live mode, driven by the app's host audio.
+  function hallMusic(on) {
+    const m = window.PinHallMusic;
+    if (!m) return;
+    if (on && !muted) m.play(); else m.stop();
   }
 
   function openHost({ pin, token }) {
@@ -764,6 +773,7 @@
   }
 
   function closeHost() {
+    hallMusic(false);
     if (H.sock) H.sock.close();
     H.sock = null;
     clearInterval(H.tick);

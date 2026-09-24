@@ -12493,6 +12493,9 @@ function stopHallMusic() {
   audioFx.hall.pause();
 }
 
+// PinPlay Cup reuses the regular live-mode hall music while in its lobby.
+window.PinHallMusic = { play: playHallMusic, stop: stopHallMusic };
+
 // Every ambient/game music element the host controls: the answering loop pool
 // plus the hall/answered/counter/drumroll/final stings. Question audio is
 // created separately via new Audio() in the media-playback path and is
