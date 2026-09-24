@@ -7867,7 +7867,7 @@ function appendRoomEvent(room, type, payload = {}) {
 // the existing attempts snapshot / assignment import keep working unchanged.
 // Modular avatar: one index per part. Counts come from cup/avatar-parts.js —
 // scripts/build-cup-assets.mjs prints the line to paste here after a rebuild.
-const ARENA_AVATAR_PARTS = { skin: 8, hair: 27, hairColor: 11, eyes: 21, mouth: 25, glasses: 16, hat: 28, shirt: 26 };
+const ARENA_AVATAR_PARTS = { skin: 20, hair: 28, hairColor: 25, eyes: 37, mouth: 41, glasses: 16, hat: 28, shirt: 26, head: 17 };
 const ARENA_DURATIONS_SEC = [120, 180, 300, 420, 600];
 const ARENA_DEFAULT_DURATION_SEC = 300;
 const ARENA_BASE_POINTS = 100;
@@ -8072,7 +8072,7 @@ function arenaDefaultAvatar(pid) {
   let h = hash(String(pid || ''));
   const out = {};
   for (const [part, n] of Object.entries(ARENA_AVATAR_PARTS)) {
-    out[part] = h % n;
+    out[part] = part === 'head' ? 0 : h % n;
     h = Math.floor(h / n) || hash(String(h) + part);
   }
   return out;
@@ -8082,7 +8082,7 @@ function arenaSanitizeAvatar(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const out = {};
   for (const [part, n] of Object.entries(ARENA_AVATAR_PARTS)) {
-    const v = Number(raw[part]);
+    const v = Number(part === 'head' && raw[part] === undefined ? 0 : raw[part]);
     if (!Number.isInteger(v) || v < 0 || v >= n) return null;
     out[part] = v;
   }

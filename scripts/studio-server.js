@@ -1,220 +1,60 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { exec } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const PORT = 3005;
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DESIGN_DIR = 'C:\\Users\\Admin\\PinPlayCupMediaDesign';
-
-const json = (res, data, code = 200) => {
-  res.writeHead(code, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  });
-  res.end(JSON.stringify(data));
-};
-
-function rebuild() {
-  return new Promise((resolve) => {
-    // Commit & push design changes so other machine syncs
-    exec(`git add -A && git commit -m "chore(design): update assets via studio" && git push origin main`, { cwd: DESIGN_DIR }, () => {
-      exec(`node scripts/build-cup-assets.mjs "${DESIGN_DIR}" --write-worker`, { cwd: ROOT }, (err) => {
-        resolve(!err);
-      });
-    });
-  });
+import {execFile} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {buildCatalog} from './avatar-catalog.mjs';
+const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const DESIGN=fs.realpathSync(process.env.PINPLAY_DESIGN_DIR || path.join(ROOT,'../PinPlayCupMediaDesign'));
+const PORT=Number(process.env.STUDIO_PORT ?? 3005);
+const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
+const staticFiles=new Set(['/avatar-preview.html','/studio.js','/arena.js','/styles.css','/scripts/avatar-runtime.js','/tests/fixtures/cup-student.html','/tests/fixtures/cup-student.js','/cup/logo/pinplay-cup-logo.svg','/cup/avatar-parts.js']);
+function safeSvg(content){
+ if(typeof content!=='string'||Buffer.byteLength(content)>65536)throw Error('SVG must be text under 64 KiB');
+ const clean=content.replace(/<!--[\s\S]*?-->/g,'');
+ if(/<!|<\?|\bon\w+\s*=|\b(?:href|src)\s*=|url\s*\(|javascript:|<\s*\/?\s*(?!g\b|path\b|circle\b|ellipse\b|rect\b|polygon\b|polyline\b|line\b|defs\b|linearGradient\b|radialGradient\b|stop\b|clipPath\b|title\b|desc\b)[a-z]/i.test(clean))throw Error('Only inert SVG geometry is allowed (no scripts, links, styles or embeds)');
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104">${content}</svg>\n`;
 }
-
-function findSetDirectories(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const results = [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (['base', 'parts', 'game', 'animations', 'sounds', 'vendor', 'photo-avatar-test'].includes(entry.name)) continue;
-      const fullPath = path.join(dir, entry.name);
-      const hasSvgs = fs.readdirSync(fullPath).some((f) => f.endsWith('.svg'));
-      if (hasSvgs) results.push(fullPath);
-      results.push(...findSetDirectories(fullPath));
-    }
+async function body(req){let data='';for await(const chunk of req){data+=chunk;if(Buffer.byteLength(data)>70000)throw Error('Request too large');}return JSON.parse(data);}
+const server=http.createServer(async(req,res)=>{
+ const own=`127.0.0.1:${server.address().port}`;
+ if(req.headers.host!==own)return json(res,{error:'Use the loopback URL printed by Studio'},403);
+ const origin=`http://${own}`;
+ if(req.headers.origin && req.headers.origin!==origin)return json(res,{error:'Foreign origin denied'},403);
+ if(req.headers['sec-fetch-site']==='cross-site')return json(res,{error:'Cross-site denied'},403);
+ const url=new URL(req.url,origin),pathname=url.pathname==='/'?'/avatar-preview.html':url.pathname;
+ try{
+  if(req.method==='GET'&&pathname==='/api/health')return json(res,{app:'pinplay-studio',version:2});
+  if(req.method==='GET'&&pathname==='/api/catalog')return json(res,buildCatalog(DESIGN));
+  if(req.method==='GET'&&staticFiles.has(pathname)){
+   const file=path.join(ROOT,pathname);
+   if(!fs.existsSync(file))return json(res,{error:'Not found'},404);
+   const content=fs.readFileSync(file),mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml'};
+   res.writeHead(200,{'Content-Type':`${mime[path.extname(file)]||'text/plain'}; charset=utf-8`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});return res.end(content);
   }
-  return results;
-}
-
-function getCatalog() {
-  const PACK = path.join(DESIGN_DIR, 'PinPlay-Cup-Asset-Pack');
-  const SETS = Array.from(new Set([
-    path.join(PACK, 'avatars'),
-    ...findSetDirectories(DESIGN_DIR),
-  ]));
-
-  const catalog = {
-    hair: [], eyes: [], mouth: [], glasses: [{ id: 'none', name: 'None' }], hat: [{ id: 'none', name: 'None' }], shirt: [], presets: [], animals: []
-  };
-
-  for (const dir of SETS) {
-    if (!fs.existsSync(dir)) continue;
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.svg') && !f.startsWith('base-')).sort();
-    for (const f of files) {
-      const filePath = path.join(dir, f);
-      const svgContent = fs.readFileSync(filePath, 'utf8')
-        .replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
-
-      // Full character preset previews (e.g. Celebrities, Fantasy, Music presets)
-      if (path.basename(dir) === 'previews') {
-        const id = f.replace('.svg', '');
-        catalog.presets.push({
-          id,
-          name: id.replace(/-/g, ' '),
-          filePath,
-          svg: svgContent
-        });
-        continue;
-      }
-
-      // Check if this directory is the PinPlay-Cup-Animal-Heads full-character heads
-      if (path.basename(dir) === 'PinPlay-Cup-Animal-Heads') {
-        const id = f.replace('.svg', '');
-        catalog.animals.push({
-          id,
-          name: id.replace(/-/g, ' '),
-          filePath,
-          svg: svgContent
-        });
-        continue;
-      }
-
-      const m = f.match(/^(hair|eyes|mouth|glasses|hat|shirt)-(.+)\.svg$/);
-      if (!m) continue;
-      const [, cat, rest] = m;
-
-      if (cat === 'hair') {
-        const pair = rest.match(/^(.+)-(back|front)$/);
-        const id = pair ? pair[1] : rest;
-        let entry = catalog.hair.find((h) => h.id === id);
-        if (!entry) {
-          entry = { id, name: id.replace(/-/g, ' '), filePath };
-          catalog.hair.push(entry);
-        }
-        entry[pair ? pair[2] : 'front'] = svgContent;
-      } else {
-        catalog[cat].push({
-          id: rest,
-          name: rest.replace(/-/g, ' '),
-          filePath,
-          svg: svgContent,
-        });
-      }
-    }
+  if(req.method==='POST'){
+   if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))return json(res,{error:'Same-origin JSON required'},403);
+   if(pathname==='/api/save-part'){
+    const {filePath,content}=await body(req);
+    const catalog=buildCatalog(DESIGN),allowed=new Set(Object.values(catalog.parts).flat().flatMap(p=>Object.values(p.files||{})));
+    if(!allowed.has(filePath))return json(res,{error:'Not an editable catalog layer'},400);
+    const target=fs.realpathSync(path.resolve(DESIGN,filePath));
+    if(!target.startsWith(DESIGN+path.sep)||path.extname(target)!=='.svg')return json(res,{error:'Invalid target'},400);
+    const svg=safeSvg(content);fs.writeFileSync(target,svg,'utf8');
+    if(fs.readFileSync(target,'utf8')!==svg)throw Error('Save readback failed');
+    return json(res,{success:true,filePath,message:'Saved locally. Build and repository sync are separate actions.'});
+   }
+   if(pathname==='/api/build'){
+    await body(req);
+    const output=await new Promise((resolve,reject)=>execFile(process.execPath,['scripts/build-cup-assets.mjs',DESIGN,'--write-worker'],{cwd:ROOT},(e,out,err)=>e?reject(Error(err||e.message)):resolve(out)));
+    return json(res,{success:true,output});
+   }
   }
-  return catalog;
-}
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    });
-    return res.end();
-  }
-
-  const url = new URL(req.url, `http://${req.headers.host}`);
-
-  // Serve static files (HTML, JS, CSS, SVG) from pinplay root
-  if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
-    let relPath = url.pathname === '/' ? '/avatar-preview.html' : url.pathname;
-    const filePath = path.join(ROOT, relPath);
-
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        '.html': 'text/html; charset=utf-8',
-        '.js': 'application/javascript; charset=utf-8',
-        '.css': 'text/css; charset=utf-8',
-        '.json': 'application/json; charset=utf-8',
-        '.svg': 'image/svg+xml',
-        '.png': 'image/png',
-      };
-      res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
-      return fs.createReadStream(filePath).pipe(res);
-    }
-  }
-
-  if (url.pathname === '/api/catalog' && req.method === 'GET') {
-    return json(res, getCatalog());
-  }
-
-  if (url.pathname === '/api/save-part' && req.method === 'POST') {
-    let body = '';
-    req.on('data', (chunk) => body += chunk);
-    req.on('end', async () => {
-      try {
-        const { filePath, content } = JSON.parse(body);
-        if (!filePath || !filePath.startsWith(DESIGN_DIR)) {
-          return json(res, { error: 'Invalid file path' }, 400);
-        }
-        const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104" width="500" height="520">${content}</svg>`;
-        fs.writeFileSync(filePath, fullSvg, 'utf8');
-        await rebuild();
-        return json(res, { success: true });
-      } catch (err) {
-        return json(res, { error: err.message }, 500);
-      }
-    });
-    return;
-  }
-
-  if (url.pathname === '/api/delete-part' && req.method === 'POST') {
-    let body = '';
-    req.on('data', (chunk) => body += chunk);
-    req.on('end', async () => {
-      try {
-        const { filePath } = JSON.parse(body);
-        if (!filePath || !filePath.startsWith(DESIGN_DIR)) {
-          return json(res, { error: 'Invalid file path' }, 400);
-        }
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-        await rebuild();
-        return json(res, { success: true });
-      } catch (err) {
-        return json(res, { error: err.message }, 500);
-      }
-    });
-    return;
-  }
-
-  if (url.pathname === '/api/create-part' && req.method === 'POST') {
-    let body = '';
-    req.on('data', (chunk) => body += chunk);
-    req.on('end', async () => {
-      try {
-        const { category, itemId, content } = JSON.parse(body);
-        const fileName = `${category}-${itemId}.svg`;
-        const destDir = path.join(DESIGN_DIR, 'PinPlay-Cup-Avatars-Expansion', 'custom');
-        fs.mkdirSync(destDir, { recursive: true });
-        const filePath = path.join(destDir, fileName);
-        const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104" width="500" height="520">${content || ''}</svg>`;
-        fs.writeFileSync(filePath, fullSvg, 'utf8');
-        await rebuild();
-        return json(res, { success: true, filePath });
-      } catch (err) {
-        return json(res, { error: err.message }, 500);
-      }
-    });
-    return;
-  }
-
-  json(res, { error: 'Not found' }, 404);
+  return json(res,{error:'Not found'},404);
+ }catch(e){return json(res,{error:e.message},400);}
 });
-
-server.listen(PORT, () => {
-  console.log(`⚡ PinPlay Cup Local Studio Server running on http://localhost:${PORT}`);
+server.on('error',e=>{console.error(`Studio did not start: ${e.message}. Existing services are NOT reused or terminated. Choose STUDIO_PORT or close the old Studio yourself.`);process.exitCode=1;});
+server.listen(PORT,'127.0.0.1',()=>{
+ const url=`http://127.0.0.1:${server.address().port}`;console.log(`STUDIO_READY ${url}`);
+ if(process.argv.includes('--open')&&process.platform==='win32')execFile('cmd.exe',['/c','start','',url]);
 });

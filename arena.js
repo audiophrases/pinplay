@@ -88,6 +88,7 @@
   // cloudflare/worker.js — the build script prints them.
   const AV = window.CUP_AVATAR;
   const AVATAR_PARTS = {
+    head: AV.parts.head.length,
     skin: AV.skins.length,
     hair: AV.parts.hair.length,
     hairColor: AV.hairColors.length,
@@ -97,7 +98,7 @@
     hat: AV.parts.hat.length,
     shirt: AV.parts.shirt.length,
   };
-  const AVATAR_LABELS = { skin: 'Skin', hair: 'Hair', hairColor: 'Hair colour', eyes: 'Eyes', mouth: 'Mouth', glasses: 'Glasses', hat: 'Hat', shirt: 'Shirt' };
+  const AVATAR_LABELS = { head: 'Head', skin: 'Skin', hair: 'Hair', hairColor: 'Hair colour', eyes: 'Eyes', mouth: 'Mouth', glasses: 'Glasses', hat: 'Hat', shirt: 'Shirt' };
   const AVATAR_KEY = 'pinplay.cup.avatar.v2';
 
   function randomAvatar() {
@@ -116,28 +117,16 @@
     const key = Object.keys(AVATAR_PARTS).map(g).join('.');
     let body = avatarCache.get(key);
     if (!body) {
-      const hair = AV.parts.hair[g('hair')];
-      body = [
-        AV.parts.shirt[g('shirt')].svg,
-        AV.base.neck,
-        hair.back || '',
-        AV.base.ears,
-        AV.base.head,
-        AV.base.cheeks,
-        AV.parts.eyes[g('eyes')].svg,
-        AV.parts.mouth[g('mouth')].svg,
-        hair.front || '',
-        AV.parts.glasses[g('glasses')].svg || '',
-        AV.parts.hat[g('hat')].svg || '',
-      ].join('').replace(/#00FFFF/gi, AV.skins[g('skin')]).replace(/#FF00FF/gi, AV.hairColors[g('hairColor')]);
+      body = window.CupAvatar.render(Object.fromEntries(Object.keys(AVATAR_PARTS).map(k => [k, g(k)])), AV);
       avatarCache.set(key, body);
     }
-    return `<svg class="${cls}" viewBox="${AV.viewBox}" aria-hidden="true">${body}</svg>`;
+    return body.replace('<svg ', `<svg class="${cls}" aria-hidden="true" `);
   }
 
   function loadSavedAvatar() {
     try {
       const a = JSON.parse(localStorage.getItem(AVATAR_KEY) || 'null');
+      if (a && a.head === undefined) a.head = 0; // pre-modular saved avatars
       if (a && Object.keys(AVATAR_PARTS).every((k) => Number.isInteger(a[k]) && a[k] >= 0 && a[k] < AVATAR_PARTS[k])) return a;
     } catch { /* blocked storage */ }
     return null;
@@ -236,6 +225,9 @@
           <h2 class="arena-logo-wrap">${LOGO}</h2>
           <p class="arena-sub" data-a="lobbyName"></p>
           <p class="small">${esc(tr('Build your avatar'))}</p>
+          <label class="arena-character-picker">${esc(tr('Character'))}
+            <select data-a="characterPicker" aria-label="Character"><option value="">${esc(tr('Custom / current avatar'))}</option>${AV.presets.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+          </label>
           <div class="arena-avatar-editor">
             <div class="arena-avatar-preview" data-a="avatarPreview"></div>
             <div class="arena-avatar-parts" data-a="avatarParts"></div>
@@ -328,6 +320,8 @@
   // Local preview updates instantly; the server gets one debounced update.
   function setAvatar(a) {
     P.avatar = a;
+    const preset = AV.presets.find(p => Object.keys(AVATAR_PARTS).every(k => (p.avatar[k] || 0) === (a[k] || 0)));
+    $p('characterPicker').value = preset?.id || '';
     saveAvatar(a);
     $p('avatarPreview').innerHTML = avatarSvg(a, 'arena-av arena-av-big');
     clearTimeout(P.avatarTimer);
@@ -580,13 +574,18 @@
     P.active = true;
     document.body.classList.add('arena-mode');
     if (typeof stopPlayerPolling === 'function') stopPlayerPolling();
+    P.root.addEventListener('change', (e) => {
+      if (!e.target.matches('[data-a="characterPicker"]')) return;
+      const preset = AV.presets.find(p => p.id === e.target.value);
+      if (preset) setAvatar({ ...preset.avatar });
+    });
     P.root.addEventListener('click', (e) => {
       const part = e.target.closest('[data-part]');
       if (part) {
         const k = part.dataset.part;
         const n = AVATAR_PARTS[k];
         const cur = { ...(P.avatar || randomAvatar()) };
-        cur[k] = (cur[k] + Number(part.dataset.dir) + n) % n;
+        cur[k] = ((cur[k] || 0) + Number(part.dataset.dir) + n) % n;
         setAvatar(cur);
         return;
       }

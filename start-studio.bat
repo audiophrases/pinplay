@@ -1,27 +1,18 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-
-echo.
-echo [1/3] Syncing latest code and design assets from GitHub ...
-git pull --rebase origin main
-
-if exist "C:\Users\Admin\PinPlayCupMediaDesign\.git" (
-  echo Syncing PinPlayCupMediaDesign repository...
-  pushd "C:\Users\Admin\PinPlayCupMediaDesign"
-  git pull --rebase origin main
-  popd
-) else (
-  echo PinPlayCupMediaDesign repo not found locally. Cloning...
-  git clone https://github.com/audiophrases/PinPlayCupMediaDesign.git "C:\Users\Admin\PinPlayCupMediaDesign"
+if not defined PINPLAY_DESIGN_DIR set "PINPLAY_DESIGN_DIR=%~dp0..\PinPlayCupMediaDesign"
+echo Building local assets only. No automatic pull, sync, commit, push or deployment.
+node scripts\build-cup-assets.mjs "%PINPLAY_DESIGN_DIR%" --write-worker
+if errorlevel 1 (
+ echo Build failed. Studio was not started.
+ pause
+ exit /b 1
 )
-
-echo.
-echo [2/3] Building local avatar assets...
-node scripts\build-cup-assets.mjs "C:\Users\Admin\PinPlayCupMediaDesign" --write-worker
-
-echo.
-echo [3/3] Starting PinPlay Cup Local Studio Server...
-start "" "C:\Users\Admin\pinplay\avatar-preview.html"
-node scripts\studio-server.js
-pause
+node scripts\studio-server.js --open
+if errorlevel 1 (
+ echo Studio failed to start. Existing servers were not reused or terminated.
+ echo Close your old Studio, or set STUDIO_PORT to another port.
+ pause
+ exit /b 1
+)
