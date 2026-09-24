@@ -17,9 +17,14 @@
    const row=document.createElement('div');row.className='control';
    row.style.justifyContent='center'; row.style.gap='20px';
    
-   const btnLeft = document.createElement('button'); btnLeft.textContent = '❮';
-   const label=document.createElement('button');label.textContent=name;label.className=category===key?'active':'';label.style.flex='1';label.style.textAlign='center';
-   const btnRight = document.createElement('button'); btnRight.textContent = '❯';
+   const styleArrow = b => { b.style.padding='4px 16px'; b.style.background='#24314d'; b.style.border='1px solid #455475'; b.style.borderRadius='8px'; b.style.color='#fff'; b.style.fontSize='16px'; };
+   const btnLeft = document.createElement('button'); btnLeft.textContent = '❮'; styleArrow(btnLeft);
+   const label=document.createElement('button');label.textContent=name;
+   label.className=category===key?'active':'';
+   label.style.flex='1';label.style.textAlign='center';
+   label.style.color=category===key?'#a8aaff':'#8b9dc3';
+   label.style.fontWeight=category===key?'bold':'normal';
+   const btnRight = document.createElement('button'); btnRight.textContent = '❯'; styleArrow(btnRight);
    
    label.onclick=()=>{if(catalog.parts[key]){category=key;editor();controls();}};
    const changeOption = (delta) => {
