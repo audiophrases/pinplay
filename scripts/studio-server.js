@@ -20,8 +20,11 @@ const json = (res, data, code = 200) => {
 
 function rebuild() {
   return new Promise((resolve) => {
-    exec(`node scripts/build-cup-assets.mjs "${DESIGN_DIR}" --write-worker`, { cwd: ROOT }, (err) => {
-      resolve(!err);
+    // Commit & push design changes so other machine syncs
+    exec(`git add -A && git commit -m "chore(design): update assets via studio" && git push origin main`, { cwd: DESIGN_DIR }, () => {
+      exec(`node scripts/build-cup-assets.mjs "${DESIGN_DIR}" --write-worker`, { cwd: ROOT }, (err) => {
+        resolve(!err);
+      });
     });
   });
 }
