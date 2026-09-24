@@ -69,6 +69,19 @@ const server=http.createServer(async(req,res)=>{
      return json(res,{success:true,message:`Deleted ${deleted} file(s). Rebuild to sync.`});
     }
    }
+   if(pathname==='/api/sync'){
+    await body(req);
+    return new Promise(resolve=>{
+     import('node:child_process').then(({exec})=>{
+      const run=cmd=>new Promise((r,rj)=>exec(cmd,{cwd:DESIGN},(e,so)=>e?rj(e):r(so)));
+      const runR=cmd=>new Promise((r,rj)=>exec(cmd,{cwd:ROOT},(e,so)=>e?rj(e):r(so)));
+      const script=`git add -A && (git diff-index --quiet HEAD || git commit -am "Avatar Studio Auto Sync") && git push`;
+      Promise.all([run(script).catch(()=>null),runR(script).catch(()=>null)])
+       .then(()=>resolve(json(res,{success:true,message:'Successfully pushed to cloud!'})))
+       .catch(e=>resolve(json(res,{error:'Sync failed: '+e.message},500)));
+     });
+    });
+   }
   }
   return json(res,{error:'Not found'},404);
  }catch(e){return json(res,{error:e.message},400);}
