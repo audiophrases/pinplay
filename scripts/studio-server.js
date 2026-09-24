@@ -35,7 +35,7 @@ function findSetDirectories(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (['base', 'previews', 'parts', 'game', 'animations', 'sounds', 'vendor', 'photo-avatar-test'].includes(entry.name)) continue;
+      if (['base', 'parts', 'game', 'animations', 'sounds', 'vendor', 'photo-avatar-test'].includes(entry.name)) continue;
       const fullPath = path.join(dir, entry.name);
       const hasSvgs = fs.readdirSync(fullPath).some((f) => f.endsWith('.svg'));
       if (hasSvgs) results.push(fullPath);
@@ -53,7 +53,7 @@ function getCatalog() {
   ]));
 
   const catalog = {
-    hair: [], eyes: [], mouth: [], glasses: [{ id: 'none', name: 'None' }], hat: [{ id: 'none', name: 'None' }], shirt: [], animals: []
+    hair: [], eyes: [], mouth: [], glasses: [{ id: 'none', name: 'None' }], hat: [{ id: 'none', name: 'None' }], shirt: [], presets: [], animals: []
   };
 
   for (const dir of SETS) {
@@ -63,6 +63,18 @@ function getCatalog() {
       const filePath = path.join(dir, f);
       const svgContent = fs.readFileSync(filePath, 'utf8')
         .replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
+
+      // Full character preset previews (e.g. Celebrities, Fantasy, Music presets)
+      if (path.basename(dir) === 'previews') {
+        const id = f.replace('.svg', '');
+        catalog.presets.push({
+          id,
+          name: id.replace(/-/g, ' '),
+          filePath,
+          svg: svgContent
+        });
+        continue;
+      }
 
       // Check if this directory is the PinPlay-Cup-Animal-Heads full-character heads
       if (path.basename(dir) === 'PinPlay-Cup-Animal-Heads') {

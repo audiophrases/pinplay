@@ -393,7 +393,7 @@
     let catalog = null; // Live file list from server
 
     const state = {
-      skin: 0, hair: 0, hairColor: 0, eyes: 0, mouth: 0, glasses: 0, hat: 0, shirt: 0, animals: -1
+      skin: 0, hair: 0, hairColor: 0, eyes: 0, mouth: 0, glasses: 0, hat: 0, shirt: 0, presets: -1, animals: -1
     };
 
     let activeCat = 'hat';
@@ -405,6 +405,7 @@
       { key: 'eyes', label: 'Eyes', items: [] },
       { key: 'mouth', label: 'Mouth', items: [] },
       { key: 'shirt', label: 'Shirt', items: [] },
+      { key: 'presets', label: 'Character Presets (Full)', items: [] },
       { key: 'animals', label: 'Animal Heads (Full)', items: [] },
     ];
 
@@ -434,11 +435,13 @@
       categories.forEach(cat => {
         cat.items = catalog[cat.key] || [];
       });
-      // Add 'None' option to animals category
-      const animCat = categories.find(c => c.key === 'animals');
-      if (animCat && !animCat.items.some(i => i.id === 'none')) {
-        animCat.items.unshift({ id: 'none', name: 'None (Modular Avatar)' });
-      }
+      // Add 'None' option to presets and animals categories
+      ['presets', 'animals'].forEach(key => {
+        const cat = categories.find(c => c.key === key);
+        if (cat && !cat.items.some(i => i.id === 'none')) {
+          cat.items.unshift({ id: 'none', name: 'None (Modular Avatar)' });
+        }
+      });
       createControls();
       selectCategory(activeCat);
       renderAvatar();
@@ -456,6 +459,15 @@
 
     function renderAvatar() {
       const AV = window.CUP_AVATAR;
+
+      // Check if full character preset is selected
+      const presetIdx = state.presets;
+      const presetObj = presetIdx > 0 ? categories.find(c => c.key === 'presets')?.items[presetIdx] : null;
+      if (presetObj && presetObj.svg) {
+        document.getElementById('avatarDisplay').innerHTML =
+          `<svg viewBox="${AV.viewBox}">${presetObj.svg}</svg>`;
+        return;
+      }
 
       // Check if full animal head is selected
       const animIdx = state.animals;
@@ -519,7 +531,7 @@
         prevBtn.onclick = () => {
           const itemLen = Math.max(1, cat.items.length);
           state[cat.key] = (state[cat.key] - 1 + itemLen) % itemLen;
-          if (cat.key === 'animals') state[cat.key] = Math.max(0, state[cat.key]);
+          if (cat.key === 'animals' || cat.key === 'presets') state[cat.key] = Math.max(0, state[cat.key]);
           selectCategory(cat.key);
           renderAvatar();
         };
