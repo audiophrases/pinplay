@@ -5374,3 +5374,25 @@ body.arena-board-open { overflow: hidden; }
 .arena-part-row.active .arena-part-btn { border-color: var(--primary); }
 #arenaCards .arena-wait { margin-top: 10px; animation: arena-pulse 1.4s ease-in-out infinite; }
 @keyframes arena-pulse { 50% { opacity: .45; } }
+/* Cup lobby is a full page (same look as the projected board), not a card. */
+#arenaLobby { padding: 0; background: radial-gradient(circle at 20% 0%, #2d2a6e, #14132b 70%); align-items: stretch; }
+#arenaLobby .arena-panel {
+  width: 100%; max-height: none; height: 100%; border-radius: 0; background: transparent; color: #fff;
+  display: flex; flex-direction: column; align-items: center; gap: 1.2vh; padding: 3vh 4vw; overflow: auto;
+}
+#arenaLobby .arena-logo { height: clamp(48px, 9vh, 96px); width: auto; }
+#arenaLobby .arena-sub { font-size: clamp(18px, 3vh, 30px); }
+#arenaLobby .small, #arenaLobby .arena-wait { color: rgba(255,255,255,.7); font-size: clamp(14px, 2vh, 20px); }
+#arenaLobby .arena-avatar-editor { flex: 1; width: 100%; gap: 5vw; min-height: 0; }
+#arenaLobby .arena-av-big { width: clamp(160px, 45vh, 440px); height: clamp(160px, 45vh, 440px); }
+#arenaLobby .arena-avatar-parts { min-width: min(360px, 90vw); gap: clamp(4px, 1vh, 10px); }
+#arenaLobby .arena-part-row { grid-template-columns: 48px 1fr 48px; font-size: clamp(15px, 2.3vh, 22px); color: rgba(255,255,255,.6); }
+#arenaLobby .arena-part-row.active { color: #fff; }
+#arenaLobby .arena-part-btn { width: 48px; height: clamp(32px, 5vh, 46px); font-size: 24px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); color: #fff; }
+#arenaLobby .arena-part-row.active .arena-part-btn { border-color: #ffd54f; background: rgba(255,213,79,.18); }
+#arenaLobby .arena-chip { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); color: #fff; }
+@media (max-width: 700px) {
+  #arenaLobby .arena-avatar-editor { flex-direction: column; flex: none; }
+  #arenaLobby .arena-av-big { width: min(60vw, 30vh); height: min(60vw, 30vh); }
+}
+#arenaLobby .btn { color: #1c1b3a; background: #fff; }
