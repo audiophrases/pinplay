@@ -5396,3 +5396,6 @@ body.arena-board-open { overflow: hidden; }
   #arenaLobby .arena-av-big { width: min(60vw, 30vh); height: min(60vw, 30vh); }
 }
 #arenaLobby .btn { color: #1c1b3a; background: #fff; }
+.arena-power-result { grid-column: 1 / -1; font-size: 26px; font-weight: 800; padding: 20px 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.arena-power-result .arena-ico { width: 44px; height: 44px; }
+#arenaPower .arena-wait { margin-top: 10px; animation: arena-pulse 1.4s ease-in-out infinite; }

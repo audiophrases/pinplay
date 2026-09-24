@@ -225,6 +225,8 @@
     P.waitDismiss = false;
     P.holdUntil = 0;
     show('arenaCards', false);
+    show('arenaPower', false);
+    show('arenaTarget', false);
     const q = P.queue.splice(0);
     q.forEach((fn) => fn());
   }
@@ -271,14 +273,14 @@
         <div class="arena-panel">
           <h2>⚡ ${esc(tr('POWER! Choose your move'))}</h2>
           <div class="arena-card-row" data-a="powerRow"></div>
-          <div class="arena-countdown"><i data-a="powerBar"></i></div>
+          <p class="arena-wait hidden" data-a="powerHint">${esc(tr('Tap or press any key to continue'))}</p>
         </div>
       </div>
       <div id="arenaTarget" class="arena-overlay hidden">
         <div class="arena-panel">
           <h2 data-a="targetTitle"></h2>
           <div class="arena-target-list" data-a="targetList"></div>
-          <div class="arena-countdown"><i data-a="targetBar"></i></div>
+
         </div>
       </div>
       <div id="arenaEnd" class="arena-overlay hidden">
@@ -410,16 +412,6 @@
     P.sock.send({ t: 'answer', seq: P.seq, answer });
   }
 
-  function countdownBar(bar, expiresAt) {
-    const total = Math.max(1, expiresAt - playerNow());
-    bar.style.transition = 'none';
-    bar.style.width = '100%';
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      bar.style.transition = `width ${total}ms linear`;
-      bar.style.width = '0%';
-    }));
-  }
-
   function showChests(msg) {
     $p('cardsTitle').textContent = tr('Open a chest!');
     $p('cardRow').innerHTML = Array.from({ length: msg.n }, (_, i) => `<button type="button" class="arena-card arena-chest" data-chest="${i}" style="--i:${i}">
@@ -457,7 +449,8 @@
     }).join('');
     show('arenaCards', false);
     show('arenaPower', true);
-    countdownBar($p('powerBar'), msg.expiresAt);
+    $p('powerHint').classList.add('hidden');
+    P.powerFlow = true;
   }
 
   function showTarget(msg) {
@@ -469,7 +462,7 @@
     $p('targetList').innerHTML = msg.players.map((p) => `<button type="button" class="arena-target" data-target="${esc(p.id)}">
       ${avatarSvg(p.avatar, 'arena-av arena-av-row')}<b>${esc(p.name)}</b><small>${Number(p.score || 0).toLocaleString()}</small></button>`).join('');
     show('arenaTarget', true);
-    countdownBar($p('targetBar'), msg.expiresAt);
+
   }
 
   function rewardText(msg) {
@@ -571,6 +564,19 @@
         showTarget(msg);
         break;
       case 'reward':
+        // A power's outcome stays up until the student taps or presses a key.
+        if (P.powerFlow) {
+          P.powerFlow = false;
+          show('arenaTarget', false);
+          $p('powerRow').innerHTML = `<div class="arena-power-result">${rewardText(msg)}</div>`;
+          $p('powerHint').classList.remove('hidden');
+          show('arenaPower', true);
+          P.waitDismiss = true;
+          if (msg.note === 'blocked') sfx('shield-block');
+          else if (msg.card === 'steal' || msg.card === 'pickpocket') sfx('steal');
+          else if (msg.card === 'swap') sfx('swap');
+          break;
+        }
         afterHold(() => {
           show('arenaCards', false); show('arenaPower', false); show('arenaTarget', false);
           P.holdUntil = Date.now() + 500;
@@ -586,6 +592,7 @@
         else if (msg.kind === 'swapped') { toast(`${iconImg('swap')} ${esc(tr('{name} swapped scores with you!', { name: msg.by }))}`, 'bad'); sfx('swap'); }
         break;
       case 'end':
+        P.powerFlow = false;
         P.waitDismiss = false;
         P.queue = [];
         P.status = 'finished';
@@ -653,7 +660,7 @@
     } catch { /* unsupported */ }
     document.addEventListener('keydown', onPlayerKey);
     P.root.addEventListener('click', (e) => {
-      if (P.waitDismiss && e.target.closest('#arenaCards')) { dismissReveal(); return; }
+      if (P.waitDismiss && e.target.closest('#arenaCards, #arenaPower')) { dismissReveal(); return; }
       const part = e.target.closest('[data-part]');
       if (part) {
         const row = part.closest('[data-row]');
