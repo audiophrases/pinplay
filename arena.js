@@ -225,9 +225,6 @@
           <h2 class="arena-logo-wrap">${LOGO}</h2>
           <p class="arena-sub" data-a="lobbyName"></p>
           <p class="small">${esc(tr('Build your avatar'))}</p>
-          <label class="arena-character-picker">${esc(tr('Character'))}
-            <select data-a="characterPicker" aria-label="Character"><option value="">${esc(tr('Custom / current avatar'))}</option>${AV.presets.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
-          </label>
           <div class="arena-avatar-editor">
             <div class="arena-avatar-preview" data-a="avatarPreview"></div>
             <div class="arena-avatar-parts" data-a="avatarParts"></div>
@@ -310,9 +307,10 @@
   function renderAvatarEditor() {
     const a = P.avatar || P.you?.avatar || {};
     $p('avatarPreview').innerHTML = avatarSvg(a, 'arena-av arena-av-big');
-    $p('avatarParts').innerHTML = Object.keys(AVATAR_PARTS).map((k) => `<div class="arena-part-row">
+    const categories = ['character', ...Object.keys(AVATAR_PARTS)];
+    $p('avatarParts').innerHTML = categories.map((k) => `<div class="arena-part-row">
       <button type="button" class="arena-part-btn" data-part="${k}" data-dir="-1" aria-label="${esc(tr('Previous'))}">◀</button>
-      <span>${esc(tr(AVATAR_LABELS[k]))}</span>
+      <span>${esc(tr(k === 'character' ? 'Character' : AVATAR_LABELS[k]))}</span>
       <button type="button" class="arena-part-btn" data-part="${k}" data-dir="1" aria-label="${esc(tr('Next'))}">▶</button>
     </div>`).join('');
   }
@@ -320,8 +318,6 @@
   // Local preview updates instantly; the server gets one debounced update.
   function setAvatar(a) {
     P.avatar = a;
-    const preset = AV.presets.find(p => Object.keys(AVATAR_PARTS).every(k => (p.avatar[k] || 0) === (a[k] || 0)));
-    $p('characterPicker').value = preset?.id || '';
     saveAvatar(a);
     $p('avatarPreview').innerHTML = avatarSvg(a, 'arena-av arena-av-big');
     clearTimeout(P.avatarTimer);
@@ -574,15 +570,19 @@
     P.active = true;
     document.body.classList.add('arena-mode');
     if (typeof stopPlayerPolling === 'function') stopPlayerPolling();
-    P.root.addEventListener('change', (e) => {
-      if (!e.target.matches('[data-a="characterPicker"]')) return;
-      const preset = AV.presets.find(p => p.id === e.target.value);
-      if (preset) setAvatar({ ...preset.avatar });
-    });
     P.root.addEventListener('click', (e) => {
       const part = e.target.closest('[data-part]');
       if (part) {
         const k = part.dataset.part;
+        if (k === 'character') {
+          const defaultAvatar = P.avatar || P.you?.avatar || {};
+          const currentPresetIndex = AV.presets.findIndex(p => Object.keys(AVATAR_PARTS).every(key => (p.avatar[key] || 0) === (defaultAvatar[key] || 0)));
+          const currentIndex = Math.max(0, currentPresetIndex);
+          const dir = Number(part.dataset.dir);
+          const nextIndex = (currentIndex + dir + AV.presets.length) % AV.presets.length;
+          setAvatar({ ...AV.presets[nextIndex].avatar });
+          return;
+        }
         const n = AVATAR_PARTS[k];
         const cur = { ...(P.avatar || randomAvatar()) };
         cur[k] = ((cur[k] || 0) + Number(part.dataset.dir) + n) % n;
