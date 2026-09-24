@@ -15,13 +15,45 @@
  function controls(){const container=$('controlsContainer');container.replaceChildren();
   for(const [key,name] of Object.entries(names)){
    const row=document.createElement('div');row.className='control';
-   const label=document.createElement('button');label.textContent=name;label.className=category===key?'active':'';label.onclick=()=>{if(catalog.parts[key]){category=key;editor();controls();}};
-   const select=document.createElement('select');select.id=`part-${key}`;select.setAttribute('aria-label',name);
-   const items=key==='skin'?catalog.skins:key==='hairColor'?catalog.hairColors:catalog.parts[key];
-   items.forEach((p,i)=>select.add(new Option(typeof p==='string'?p:p.name||p.id,i)));select.value=state[key]||0;
-   select.onchange=()=>{state[key]=Number(select.value);$('characterPicker').value='';if(catalog.parts[key]){category=key;editor();}controls();render();};row.append(label,select);container.append(row);
+   row.style.justifyContent='center'; row.style.gap='20px';
+   
+   const btnLeft = document.createElement('button'); btnLeft.textContent = '❮';
+   const label=document.createElement('button');label.textContent=name;label.className=category===key?'active':'';label.style.flex='1';label.style.textAlign='center';
+   const btnRight = document.createElement('button'); btnRight.textContent = '❯';
+   
+   label.onclick=()=>{if(catalog.parts[key]){category=key;editor();controls();}};
+   const changeOption = (delta) => {
+     const items=key==='skin'?catalog.skins:key==='hairColor'?catalog.hairColors:catalog.parts[key];
+     if(!items) return;
+     let val = (state[key]||0) + delta;
+     if(val < 0) val = items.length - 1;
+     if(val >= items.length) val = 0;
+     state[key] = val; $('characterPicker').value = '';
+     if(catalog.parts[key]){category=key;editor();}
+     controls();render();
+   };
+   btnLeft.onclick=()=>changeOption(-1);
+   btnRight.onclick=()=>changeOption(1);
+   
+   row.append(btnLeft,label,btnRight);container.append(row);
   }
  }
+ document.addEventListener('keydown', e => {
+   if(document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') return;
+   const catKeys = ['head','skin','hair','hairColor','eyes','mouth','glasses','hat','shirt'];
+   const catIdx = catKeys.indexOf(category);
+   if(e.key==='ArrowUp'){e.preventDefault();category=catKeys[catIdx>0?catIdx-1:catKeys.length-1];editor();controls();}
+   else if(e.key==='ArrowDown'){e.preventDefault();category=catKeys[catIdx<catKeys.length-1?catIdx+1:0];editor();controls();}
+   else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();
+     const items=category==='skin'?catalog.skins:category==='hairColor'?catalog.hairColors:catalog.parts[category];
+     if(!items) return;
+     let val = (state[category]||0) + (e.key==='ArrowLeft'?-1:1);
+     if(val < 0) val = items.length - 1;
+     if(val >= items.length) val = 0;
+     state[category] = val; $('characterPicker').value = '';
+     editor();controls();render();
+   }
+ });
  function editor(){const item=current(),keys=Object.keys(item?.files||{});if(!keys.includes(layer))layer=keys[0]||'svg';
   $('layerPicker').replaceChildren(...keys.map(k=>new Option(k,k)));$('layerPicker').value=layer;
   $('activePartTitle').textContent=`${names[category]}: ${item?.name||item?.id||'None'}`;
