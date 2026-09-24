@@ -11,28 +11,27 @@ for /f "tokens=5" %%a in ('netstat -aon ^| find ":%STUDIO_PORT_NUM%" ^| find "LI
 echo Checking for remote updates in code repo...
 git fetch >nul 2>&1
 git status -uno | find /i "is behind" >nul 2>&1
-if not errorlevel 1 (
-    echo.
-    echo *** UPDATE AVAILABLE FOR PINPLAY CODE ***
-    choice /c YN /m "Pull new code changes from cloud now?"
-    if errorlevel 2 goto :skipCodePull
-    if errorlevel 1 git pull
-    :skipCodePull
-)
+if errorlevel 1 goto codeUpToDate
+echo.
+echo *** UPDATE AVAILABLE FOR PINPLAY CODE ***
+choice /c YN /m "Pull new code changes from cloud now?"
+if errorlevel 2 goto codeUpToDate
+git pull
+:codeUpToDate
 
 echo Checking for remote updates in asset repo...
 pushd "%PINPLAY_DESIGN_DIR%"
 git fetch >nul 2>&1
 git status -uno | find /i "is behind" >nul 2>&1
-if not errorlevel 1 (
-    echo.
-    echo *** UPDATE AVAILABLE FOR AVATAR ASSETS ***
-    choice /c YN /m "Pull new assets from cloud now?"
-    if errorlevel 2 goto :skipAssetPull
-    if errorlevel 1 git pull
-    :skipAssetPull
-)
+if errorlevel 1 goto assetUpToDate
+echo.
+echo *** UPDATE AVAILABLE FOR AVATAR ASSETS ***
+choice /c YN /m "Pull new assets from cloud now?"
+if errorlevel 2 goto assetUpToDate
+git pull
+:assetUpToDate
 popd
+
 echo.
 echo Building assets...
 node scripts\build-cup-assets.mjs "%PINPLAY_DESIGN_DIR%" --write-worker
