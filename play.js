@@ -786,7 +786,7 @@ async function joinLiveGame() {
     if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
 
     if (data.gameMode === 'arena' && window.PinArena) {
-      window.PinArena.startPlayer({ pin: live.player.pin, playerId: data.playerId, playerToken: data.playerToken });
+      window.PinArena.startPlayer({ pin: live.player.pin, playerId: data.playerId, playerToken: data.playerToken, randomNames: live.player.randomNamesMode });
       return;
     }
 

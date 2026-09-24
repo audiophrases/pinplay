@@ -206,9 +206,28 @@
     pendingQ: null,
     tick: null,
     root: null,
+    waitDismiss: false,
+    queue: [],
+    partIdx: 0,
+    randomNames: false,
   };
 
   function playerNow() { return Date.now() + P.skew; }
+
+  // After a chest reveal the student dismisses it (tap/click/any key); until
+  // then follow-up steps (power pick, reward, next question) wait in order.
+  function afterHold(fn) {
+    if (P.waitDismiss) { P.queue.push(fn); return; }
+    setTimeout(fn, Math.max(0, P.holdUntil - Date.now()));
+  }
+  function dismissReveal() {
+    if (!P.waitDismiss) return;
+    P.waitDismiss = false;
+    P.holdUntil = 0;
+    show('arenaCards', false);
+    const q = P.queue.splice(0);
+    q.forEach((fn) => fn());
+  }
 
   function ensurePlayerDom() {
     if (P.root) return;
@@ -245,6 +264,7 @@
           <h2 data-a="cardsTitle">${esc(tr('Open a chest!'))}</h2>
           <div class="arena-card-row" data-a="cardRow"></div>
           <div class="arena-countdown"><i data-a="cardsBar"></i></div>
+          <p class="arena-wait hidden" data-a="cardsHint">${esc(tr('Tap or press any key to continue'))}</p>
         </div>
       </div>
       <div id="arenaPower" class="arena-overlay hidden">
@@ -303,7 +323,7 @@
   function renderLobby(board) {
     const y = P.you || {};
     $p('lobbyName').textContent = y.name ? tr('You are {name}', { name: y.name }) : '';
-    $p('rerollName').classList.toggle('hidden', !y.randomNames);
+    $p('rerollName').classList.toggle('hidden', !(y.randomNames || P.randomNames));
     $p('rerollName').disabled = false;
     renderAvatarEditor();
     if (board?.players) {
@@ -316,7 +336,8 @@
     const a = P.avatar || P.you?.avatar || {};
     $p('avatarPreview').innerHTML = avatarSvg(a, 'arena-av arena-av-big');
     const categories = ['character', ...Object.keys(AVATAR_PARTS)];
-    $p('avatarParts').innerHTML = categories.map((k) => `<div class="arena-part-row">
+    P.partIdx = Math.min(P.partIdx, categories.length - 1);
+    $p('avatarParts').innerHTML = categories.map((k, i) => `<div class="arena-part-row${i === P.partIdx ? ' active' : ''}" data-row="${i}">
       <button type="button" class="arena-part-btn" data-part="${k}" data-dir="-1" aria-label="${esc(tr('Previous'))}">‹</button>
       <span>${esc(tr(k === 'character' ? 'Character' : AVATAR_LABELS[k]))}</span>
       <button type="button" class="arena-part-btn" data-part="${k}" data-dir="1" aria-label="${esc(tr('Next'))}">›</button>
@@ -349,6 +370,11 @@
   }
 
   function showQuestion(msg) {
+    if (P.waitDismiss) {
+      P.pendingQ = msg;
+      P.queue.push(() => { if (P.pendingQ === msg) { P.pendingQ = null; showQuestion(msg); } });
+      return;
+    }
     if (Date.now() < P.holdUntil) {
       P.pendingQ = msg;
       setTimeout(() => { if (P.pendingQ === msg) { P.pendingQ = null; showQuestion(msg); } }, P.holdUntil - Date.now() + 20);
@@ -399,16 +425,15 @@
     $p('cardRow').innerHTML = Array.from({ length: msg.n }, (_, i) => `<button type="button" class="arena-card arena-chest" data-chest="${i}" style="--i:${i}">
       ${chestImg('closed')}</button>`).join('');
     show('arenaCards', true);
-    countdownBar($p('cardsBar'), msg.expiresAt);
+    // No chest timer: open one whenever you're ready.
+    $p('cardsBar').parentElement.classList.add('hidden');
+    $p('cardsHint').classList.add('hidden');
   }
 
   // Flip all three: the picked one pops, the other two show what was missed.
   function revealChests(msg) {
     const label = (c) => (c.kind === 'power' ? ['open-power', tr('POWER')] : c.kind === 'jackpot' ? ['open-jackpot', `+${c.amount}`] : ['open-coins', `+${c.amount}`]);
     $p('cardsTitle').textContent = msg.chests[msg.i].kind === 'power' ? tr('POWER!') : tr('Points!');
-    const bar = $p('cardsBar');
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
     $p('cardRow').innerHTML = msg.chests.map((c, i) => {
       const [icon, text] = label(c);
       return `<div class="arena-card arena-chest revealed${i === msg.i ? ' picked' : ' missed'} kind-${c.kind}">
@@ -419,6 +444,8 @@
     sfx('chest-open');
     if (picked.kind === 'jackpot') { sfx('jackpot', 0.7); playFx('jackpot'); }
     else if (picked.kind === 'power') playFx('power-reveal');
+    P.waitDismiss = true;
+    $p('cardsHint').classList.remove('hidden');
   }
 
   function showPower(msg) {
@@ -521,15 +548,14 @@
         }
         break;
       case 'chests':
-        setTimeout(() => showChests(msg), Math.max(0, P.holdUntil - Date.now()));
+        afterHold(() => showChests(msg));
         break;
       case 'reveal':
         revealChests(msg);
-        P.holdUntil = Date.now() + 1100;
         break;
       case 'power':
-        // Let the flipped chests register before the choice appears.
-        setTimeout(() => showPower(msg), Math.max(0, P.holdUntil - Date.now()));
+        // Shown once the student dismisses the flipped chests.
+        afterHold(() => showPower(msg));
         break;
       case 'autopick': {
         if (msg.stage === 'power') {
@@ -544,23 +570,24 @@
       case 'target':
         showTarget(msg);
         break;
-      case 'reward': {
-        // Points: keep the flipped chests up for a beat before closing.
-        const delay = Math.max(0, P.holdUntil - Date.now());
-        setTimeout(() => { show('arenaCards', false); show('arenaPower', false); show('arenaTarget', false); }, delay);
-        P.holdUntil = Date.now() + delay + 500;
-        toast(rewardText(msg), msg.note ? 'bad' : 'reward');
-        if (msg.note === 'blocked') sfx('shield-block');
-        else if (msg.card === 'steal' || msg.card === 'pickpocket') sfx('steal');
-        else if (msg.card === 'swap') sfx('swap');
+      case 'reward':
+        afterHold(() => {
+          show('arenaCards', false); show('arenaPower', false); show('arenaTarget', false);
+          P.holdUntil = Date.now() + 500;
+          toast(rewardText(msg), msg.note ? 'bad' : 'reward');
+          if (msg.note === 'blocked') sfx('shield-block');
+          else if (msg.card === 'steal' || msg.card === 'pickpocket') sfx('steal');
+          else if (msg.card === 'swap') sfx('swap');
+        });
         break;
-      }
       case 'fx':
         if (msg.kind === 'robbed') { toast(`${iconImg(msg.card || 'steal')} ${esc(tr('{name} took {n} from you!', { name: msg.by, n: msg.amount }))}`, 'bad'); sfx('steal'); }
         else if (msg.kind === 'blocked') { toast(`${iconImg('shield')} ${esc(tr('Your shield blocked {name}!', { name: msg.by }))}`, 'good'); sfx('shield-block'); }
         else if (msg.kind === 'swapped') { toast(`${iconImg('swap')} ${esc(tr('{name} swapped scores with you!', { name: msg.by }))}`, 'bad'); sfx('swap'); }
         break;
       case 'end':
+        P.waitDismiss = false;
+        P.queue = [];
         P.status = 'finished';
         clearInterval(P.tick);
         $p('clock').textContent = '0:00';
@@ -573,28 +600,65 @@
     }
   }
 
-  function startPlayer({ pin, playerId, playerToken }) {
+  function stepPart(k, dir) {
+    if (k === 'character') {
+      const defaultAvatar = P.avatar || P.you?.avatar || {};
+      const currentPresetIndex = AV.presets.findIndex(p => Object.keys(AVATAR_PARTS).every(key => (p.avatar[key] || 0) === (defaultAvatar[key] || 0)));
+      const currentIndex = Math.max(0, currentPresetIndex);
+      const nextIndex = (currentIndex + dir + AV.presets.length) % AV.presets.length;
+      setAvatar({ ...AV.presets[nextIndex].avatar });
+      return;
+    }
+    const n = AVATAR_PARTS[k];
+    const cur = { ...(P.avatar || randomAvatar()) };
+    cur[k] = ((cur[k] || 0) + dir + n) % n;
+    setAvatar(cur);
+  }
+
+  function setPartIdx(i) {
+    const rows = P.root.querySelectorAll('[data-row]');
+    if (!rows.length) return;
+    P.partIdx = (i + rows.length) % rows.length;
+    rows.forEach((r, j) => r.classList.toggle('active', j === P.partIdx));
+  }
+
+  // Keyboard: in the lobby ↑/↓ pick a category and ←/→ change it (like the
+  // Avatar Studio); after a chest reveal any key continues.
+  function onPlayerKey(e) {
+    if (!P.active) return;
+    if (P.waitDismiss) { e.preventDefault(); dismissReveal(); return; }
+    const lobby = document.getElementById('arenaLobby');
+    if (!lobby || lobby.classList.contains('hidden')) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    const rows = P.root.querySelectorAll('[data-row]');
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setPartIdx(P.partIdx + (e.key === 'ArrowDown' ? 1 : -1));
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && rows[P.partIdx]) {
+      e.preventDefault();
+      stepPart(rows[P.partIdx].querySelector('[data-part]').dataset.part, e.key === 'ArrowRight' ? 1 : -1);
+    }
+  }
+
+  function startPlayer({ pin, playerId, playerToken, randomNames }) {
     ensurePlayerDom();
     P.active = true;
+    P.randomNames = !!randomNames;
     document.body.classList.add('arena-mode');
     if (typeof stopPlayerPolling === 'function') stopPlayerPolling();
+    // Joining is a tap, so the browser allows going fullscreen here.
+    try {
+      const d = document.documentElement;
+      if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(() => { /* denied */ });
+    } catch { /* unsupported */ }
+    document.addEventListener('keydown', onPlayerKey);
     P.root.addEventListener('click', (e) => {
+      if (P.waitDismiss && e.target.closest('#arenaCards')) { dismissReveal(); return; }
       const part = e.target.closest('[data-part]');
       if (part) {
-        const k = part.dataset.part;
-        if (k === 'character') {
-          const defaultAvatar = P.avatar || P.you?.avatar || {};
-          const currentPresetIndex = AV.presets.findIndex(p => Object.keys(AVATAR_PARTS).every(key => (p.avatar[key] || 0) === (defaultAvatar[key] || 0)));
-          const currentIndex = Math.max(0, currentPresetIndex);
-          const dir = Number(part.dataset.dir);
-          const nextIndex = (currentIndex + dir + AV.presets.length) % AV.presets.length;
-          setAvatar({ ...AV.presets[nextIndex].avatar });
-          return;
-        }
-        const n = AVATAR_PARTS[k];
-        const cur = { ...(P.avatar || randomAvatar()) };
-        cur[k] = ((cur[k] || 0) + Number(part.dataset.dir) + n) % n;
-        setAvatar(cur);
+        const row = part.closest('[data-row]');
+        if (row) setPartIdx(Number(row.dataset.row));
+        stepPart(part.dataset.part, Number(part.dataset.dir));
         return;
       }
       if (e.target.closest('[data-a="avatarRandom"]')) { setAvatar(randomAvatar()); return; }

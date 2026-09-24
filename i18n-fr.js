@@ -320,6 +320,7 @@ window.PINPLAY_FR_DICT = {
   'Previous': 'Précédent',
   'Next': 'Suivant',
   'New random name': 'Nouveau nom aléatoire',
+  'Tap or press any key to continue': 'Touchez l’écran ou appuyez sur une touche pour continuer',
   'Open this question': 'Ouvrir cette question',
   'Close to review the rest of the quiz': 'Fermez pour revoir le reste du quiz',
   '{cur} of {total}': '{cur} sur {total}',

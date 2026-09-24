@@ -5370,3 +5370,7 @@ body.arena-board-open { overflow: hidden; }
 .arena-sound-btn { background: none; border: 0; font-size: 20px; cursor: pointer; padding: 2px 4px; color: inherit; }
 .arena-fx { position: fixed; left: 50%; top: 50%; width: min(70vmin, 520px); height: min(70vmin, 520px); transform: translate(-50%, -50%); z-index: 2100; pointer-events: none; }
 .arena-board-podium .arena-fx { position: absolute; }
+.arena-part-row.active { color: var(--text); font-weight: 700; }
+.arena-part-row.active .arena-part-btn { border-color: var(--primary); }
+#arenaCards .arena-wait { margin-top: 10px; animation: arena-pulse 1.4s ease-in-out infinite; }
+@keyframes arena-pulse { 50% { opacity: .45; } }

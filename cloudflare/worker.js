@@ -7889,8 +7889,8 @@ const ARENA_DURATIONS_SEC = [120, 180, 300, 420, 600];
 const ARENA_DEFAULT_DURATION_SEC = 300;
 const ARENA_BASE_POINTS = 100;
 const ARENA_CARD_EVERY = 2;
-const ARENA_PICK_MS = 10000;    // choose a chest, else auto-pick (unhurried: the shared clock is the pressure)
-const ARENA_POWER_MS = 12000;   // choose a power (incl. ~1s reveal beat), else auto-pick
+const ARENA_PICK_MS = 60 * 60 * 1000; // no chest timer: the student opens one when ready (the shared clock is the pressure)
+const ARENA_POWER_MS = 30000;   // choose a power (incl. ~1s reveal beat), else auto-pick
 const ARENA_TARGET_MS = 10000;  // choose a steal target, else random
 const ARENA_BOOST_MS = 20000;
 const ARENA_SHIELD_MS = 60000;
@@ -7954,6 +7954,14 @@ function arenaBuildDeck(ps, eligible) {
   return deck;
 }
 
+// Signed-in students show by first name only on the Cup screens; random
+// nicknames stay whole. Reports still use the full stored name.
+function arenaName(p) {
+  const name = String(p?.name || '');
+  if (!name || p?.identity?.source === 'random') return name;
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 function arenaPlayerState(room, pid) {
   if (!room.arena.players[pid]) {
     room.arena.players[pid] = {
@@ -7976,7 +7984,7 @@ function arenaPlayerState(room, pid) {
 
 function arenaRanking(room) {
   return Object.values(room.players || {})
-    .map((p) => ({ id: p.id, name: p.name, score: Number(p.score || 0), avatar: room.arena.players[p.id]?.avatar || arenaDefaultAvatar(p.id) }))
+    .map((p) => ({ id: p.id, name: arenaName(p), score: Number(p.score || 0), avatar: room.arena.players[p.id]?.avatar || arenaDefaultAvatar(p.id) }))
     .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
 }
 
@@ -8010,7 +8018,7 @@ function arenaYou(room, pid) {
     status: room.arena.status,
     endsAt: room.arena.endsAt || null,
     now,
-    name: room.players[pid]?.name || '',
+    name: arenaName(room.players[pid]),
     randomNames: !!room.settings?.randomNames,
     avatar: ps.avatar,
     score: Number(room.players[pid]?.score || 0),
@@ -8122,25 +8130,25 @@ function arenaApplyAttack(room, pid, card, targetId, out) {
   const now = Date.now();
   if (vs.fx.shieldUntil > now) {
     vs.fx.shieldUntil = 0;
-    arenaFeed(room, { kind: 'blocked', card, a: me.name, b: victim.name });
-    out.push({ to: targetId, msg: { t: 'fx', kind: 'blocked', card, by: me.name } });
-    return { t: 'reward', card, amount: 0, note: 'blocked', target: victim.name };
+    arenaFeed(room, { kind: 'blocked', card, a: arenaName(me), b: arenaName(victim) });
+    out.push({ to: targetId, msg: { t: 'fx', kind: 'blocked', card, by: arenaName(me) } });
+    return { t: 'reward', card, amount: 0, note: 'blocked', target: arenaName(victim) };
   }
   if (card === 'swap') {
     const mine = Number(me.score || 0);
     me.score = Number(victim.score || 0);
     victim.score = mine;
-    arenaFeed(room, { kind: 'swap', a: me.name, b: victim.name });
-    out.push({ to: targetId, msg: { t: 'fx', kind: 'swapped', by: me.name, amount: victim.score - me.score } });
-    return { t: 'reward', card, amount: me.score - mine, target: victim.name };
+    arenaFeed(room, { kind: 'swap', a: arenaName(me), b: arenaName(victim) });
+    out.push({ to: targetId, msg: { t: 'fx', kind: 'swapped', by: arenaName(me), amount: victim.score - me.score } });
+    return { t: 'reward', card, amount: me.score - mine, target: arenaName(victim) };
   }
   const vScore = Number(victim.score || 0);
   const amount = card === 'steal' ? Math.floor(vScore * 0.1) : Math.min(200, vScore);
   victim.score = vScore - amount;
   me.score = Number(me.score || 0) + amount;
-  arenaFeed(room, { kind: card, a: me.name, b: victim.name, amount });
-  out.push({ to: targetId, msg: { t: 'fx', kind: 'robbed', card, by: me.name, amount } });
-  return { t: 'reward', card, amount, target: victim.name };
+  arenaFeed(room, { kind: card, a: arenaName(me), b: arenaName(victim), amount });
+  out.push({ to: targetId, msg: { t: 'fx', kind: 'robbed', card, by: arenaName(me), amount } });
+  return { t: 'reward', card, amount, target: arenaName(victim) };
 }
 
 function arenaTargets(room, pid) {
