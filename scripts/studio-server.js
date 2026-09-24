@@ -52,18 +52,33 @@ function getCatalog() {
     ...findSetDirectories(DESIGN_DIR),
   ]));
 
-  const catalog = { hair: [], eyes: [], mouth: [], glasses: [{ id: 'none', name: 'None' }], hat: [{ id: 'none', name: 'None' }], shirt: [] };
+  const catalog = {
+    hair: [], eyes: [], mouth: [], glasses: [{ id: 'none', name: 'None' }], hat: [{ id: 'none', name: 'None' }], shirt: [], animals: []
+  };
 
   for (const dir of SETS) {
     if (!fs.existsSync(dir)) continue;
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.svg') && !f.startsWith('base-')).sort();
     for (const f of files) {
       const filePath = path.join(dir, f);
+      const svgContent = fs.readFileSync(filePath, 'utf8')
+        .replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
+
+      // Check if this directory is the PinPlay-Cup-Animal-Heads full-character heads
+      if (path.basename(dir) === 'PinPlay-Cup-Animal-Heads') {
+        const id = f.replace('.svg', '');
+        catalog.animals.push({
+          id,
+          name: id.replace(/-/g, ' '),
+          filePath,
+          svg: svgContent
+        });
+        continue;
+      }
+
       const m = f.match(/^(hair|eyes|mouth|glasses|hat|shirt)-(.+)\.svg$/);
       if (!m) continue;
       const [, cat, rest] = m;
-      const svgContent = fs.readFileSync(filePath, 'utf8')
-        .replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
 
       if (cat === 'hair') {
         const pair = rest.match(/^(.+)-(back|front)$/);

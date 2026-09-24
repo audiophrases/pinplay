@@ -393,7 +393,7 @@
     let catalog = null; // Live file list from server
 
     const state = {
-      skin: 0, hair: 0, hairColor: 0, eyes: 0, mouth: 0, glasses: 0, hat: 0, shirt: 0
+      skin: 0, hair: 0, hairColor: 0, eyes: 0, mouth: 0, glasses: 0, hat: 0, shirt: 0, animals: -1
     };
 
     let activeCat = 'hat';
@@ -405,6 +405,7 @@
       { key: 'eyes', label: 'Eyes', items: [] },
       { key: 'mouth', label: 'Mouth', items: [] },
       { key: 'shirt', label: 'Shirt', items: [] },
+      { key: 'animals', label: 'Animal Heads (Full)', items: [] },
     ];
 
     // Check backend connection
@@ -433,6 +434,11 @@
       categories.forEach(cat => {
         cat.items = catalog[cat.key] || [];
       });
+      // Add 'None' option to animals category
+      const animCat = categories.find(c => c.key === 'animals');
+      if (animCat && !animCat.items.some(i => i.id === 'none')) {
+        animCat.items.unshift({ id: 'none', name: 'None (Modular Avatar)' });
+      }
       createControls();
       selectCategory(activeCat);
       renderAvatar();
@@ -450,6 +456,16 @@
 
     function renderAvatar() {
       const AV = window.CUP_AVATAR;
+
+      // Check if full animal head is selected
+      const animIdx = state.animals;
+      const animalObj = animIdx > 0 ? categories.find(c => c.key === 'animals')?.items[animIdx] : null;
+      if (animalObj && animalObj.svg) {
+        document.getElementById('avatarDisplay').innerHTML =
+          `<svg viewBox="${AV.viewBox}">${animalObj.svg}</svg>`;
+        return;
+      }
+
       const getSvg = (catKey, idx) => {
         const cat = categories.find(c => c.key === catKey);
         if (!cat || !cat.items[idx]) return '';
@@ -501,7 +517,9 @@
         prevBtn.className = 'nav-btn';
         prevBtn.textContent = '◀';
         prevBtn.onclick = () => {
-          state[cat.key] = (state[cat.key] - 1 + cat.items.length) % Math.max(1, cat.items.length);
+          const itemLen = Math.max(1, cat.items.length);
+          state[cat.key] = (state[cat.key] - 1 + itemLen) % itemLen;
+          if (cat.key === 'animals') state[cat.key] = Math.max(0, state[cat.key]);
           selectCategory(cat.key);
           renderAvatar();
         };
@@ -509,14 +527,16 @@
         const nameLabel = document.createElement('span');
         nameLabel.className = 'item-name';
         nameLabel.id = `label-${cat.key}`;
-        const curItem = cat.items[state[cat.key]];
+        const curIdx = state[cat.key] < 0 ? 0 : state[cat.key];
+        const curItem = cat.items[curIdx];
         nameLabel.textContent = curItem?.name || curItem?.id || 'None';
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'nav-btn';
         nextBtn.textContent = '▶';
         nextBtn.onclick = () => {
-          state[cat.key] = (state[cat.key] + 1) % Math.max(1, cat.items.length);
+          const itemLen = Math.max(1, cat.items.length);
+          state[cat.key] = (state[cat.key] + 1) % itemLen;
           selectCategory(cat.key);
           renderAvatar();
         };
@@ -535,7 +555,8 @@
       createControls();
 
       const cat = categories.find(c => c.key === catKey);
-      const item = cat?.items[state[catKey]];
+      const curIdx = state[catKey] < 0 ? 0 : state[catKey];
+      const item = cat?.items[curIdx];
 
       document.getElementById('activePartTitle').textContent = `${cat?.label}: ${item?.name || item?.id || 'None'}`;
       document.getElementById('activePartPath').textContent = item?.filePath ? `Path: ${item.filePath}` : 'Path: Inlined JS';
@@ -641,6 +662,20 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#090D16';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Render selected SVG onto canvas for visual touch-up preview
+      const svgCode = document.getElementById('svgCodeInput')?.value || '';
+      if (!svgCode) return;
+
+      const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104" width="250" height="260">${svgCode}</svg>`;
+      const img = new Image();
+      const blob = new Blob([fullSvg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, 250, 260);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
     }
 
     canvas.onmousedown = (e) => { isDrawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); };
