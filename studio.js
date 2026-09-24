@@ -104,7 +104,43 @@
  $('savePartBtn').onclick=async()=>{const target=file(),code=$('svgCodeInput').value;if(!target)return;try{valid(code);await post('/api/save-part',{filePath:target,content:code});const res=await fetch('/api/catalog');if(!res.ok)throw Error('Saved, but catalog readback failed');const fresh=await res.json();const saved=Object.values(fresh.parts).flat().some(p=>Object.entries(p.files||{}).some(([k,f])=>f===target&&p[k]===code.trim()));if(!saved)throw Error('Save readback mismatch');catalog=fresh;drafts.delete(target);render();status('Saved selected layer locally. Student bundle not rebuilt; no sync or deployment.');}catch(e){status('Save failed: '+e.message);}};
  $('deletePartBtn').onclick=async()=>{const item=category==='character'?catalog.presets[characterIndex]:current();if(!item||item.id==='none'||item.id==='default')return status('Cannot delete base templates.');if(!confirm(`Are you sure you want to completely delete ${item.name||item.id}? This cannot be undone.`))return;try{const r=await post('/api/delete',{category,id:item.id});status(r.message);setTimeout(()=>$('rebuildBtn').click(),800);}catch(e){status('Delete failed: '+e.message);}};
  $('rebuildBtn').onclick=async()=>{try{const r=await post('/api/build',{});status('Local bundle built. Unsaved drafts not included. '+r.output);}catch(e){status('Build failed: '+e.message);}};
- $('syncBtn').onclick=async()=>{try{status('Syncing and deploying to Cloudflare (takes ~15 seconds)...');const r=await post('/api/sync',{});status(r.message);}catch(e){status('Cloud Sync/Deploy failed: '+e.message);}};
+ $('syncBtn').onclick=async()=>{
+  try{
+   status('Checking cloud status...');
+   const s=await fetch('/api/sync-status').then(r=>r.json());
+   if(!s.success)throw Error(s.error||'Status check failed');
+   const code=s.code,assets=s.assets;
+   const codeDiverged=code.ahead>0&&code.behind>0;
+   const assetsDiverged=assets.ahead>0&&assets.behind>0;
+   const codeAhead=code.ahead>0&&code.behind===0;
+   const codesBehind=code.behind>0&&code.ahead===0;
+   const assetsAhead=assets.ahead>0&&assets.behind===0;
+   const assetsBehind=assets.behind>0&&assets.ahead===0;
+   const upToDate=code.ahead===0&&code.behind===0&&assets.ahead===0&&assets.behind===0&&!code.dirty&&!assets.dirty;
+
+   if(upToDate){return status('✓ Already in sync with cloud. No action needed.');}
+
+   if(codeDiverged||assetsDiverged){
+    return status('⚠️ CONFLICT: Both local and cloud have unique changes. Please resolve manually via git before syncing. Do NOT use the Sync button now.');
+   }
+
+   if(codesBehind||assetsBehind){
+    const msg=`Cloud has newer changes (code: ${code.behind} commit(s) behind, assets: ${assets.behind} commit(s) behind). Pull from cloud?`;
+    if(!confirm(msg))return status('Pull cancelled.');
+    status('Pulling from cloud and rebuilding...');
+    const r=await post('/api/sync-pull',{});
+    return status('✓ '+r.message+' Refresh the page to load new assets.');
+   }
+
+   if(codeAhead||assetsAhead||code.dirty||assets.dirty){
+    const msg=`You have local changes (code: ${code.ahead} commit(s) ahead, assets: ${assets.ahead} commit(s) ahead). Push and deploy to cloud?`;
+    if(!confirm(msg))return status('Push cancelled.');
+    status('Syncing and deploying to Cloudflare (takes ~15 seconds)...');
+    const r=await post('/api/sync-push',{});
+    return status('✓ '+r.message);
+   }
+  }catch(e){status('Sync failed: '+e.message);}
+ };
  $('randomBtn').onclick=()=>{characterIndex = Math.floor(Math.random()*catalog.presets.length); state = { ...catalog.presets[characterIndex].avatar }; category='character'; editor(); controls(); render();};
  (async()=>{try{const health=await fetch('/api/health').then(r=>r.json());if(health.app!=='pinplay-studio'||health.version!==2)throw Error('Incompatible Studio server');const res=await fetch('/api/catalog');if(!res.ok)throw Error('Catalog unavailable');catalog=await res.json();connected=true;status('Connected. Drafts are local to this tab.');}catch(e){status('Read-only preview: '+e.message);$('rebuildBtn').disabled=true;}
   characterIndex=catalog.presets.findIndex(p=>p.id==='trump');if(characterIndex<0)characterIndex=0;state={...catalog.presets[characterIndex].avatar};controls();editor();render();})();

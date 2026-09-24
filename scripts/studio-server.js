@@ -12,10 +12,28 @@ const staticFiles=new Set(['/avatar-preview.html','/studio.js','/arena.js','/sty
 function safeSvg(content){
  if(typeof content!=='string'||Buffer.byteLength(content)>65536)throw Error('SVG must be text under 64 KiB');
  const clean=content.replace(/<!--[\s\S]*?-->/g,'');
- if(/<!|<\?|\bon\w+\s*=|\b(?:href|src)\s*=|url\s*\(|javascript:|<\s*\/?\s*(?!g\b|path\b|circle\b|ellipse\b|rect\b|polygon\b|polyline\b|line\b|defs\b|linearGradient\b|radialGradient\b|stop\b|clipPath\b|title\b|desc\b)[a-z]/i.test(clean))throw Error('Only inert SVG geometry is allowed (no scripts, links, styles or embeds)');
+ if(/<!\|<\?|\bon\w+\s*=|\b(?:href|src)\s*=|url\s*\(|javascript:|<\s*\/?s*(?!g\b|path\b|circle\b|ellipse\b|rect\b|polygon\b|polyline\b|line\b|defs\b|linearGradient\b|radialGradient\b|stop\b|clipPath\b|title\b|desc\b)[a-z]/i.test(clean))throw Error('Only inert SVG geometry is allowed (no scripts, links, styles or embeds)');
  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -4 100 104">${content}</svg>\n`;
 }
 async function body(req){let data='';for await(const chunk of req){data+=chunk;if(Buffer.byteLength(data)>70000)throw Error('Request too large');}return JSON.parse(data);}
+
+/* --- git helpers --- */
+async function gitExec(cmd,cwd){
+ const {exec}=await import('node:child_process');
+ return new Promise((r,rj)=>exec(cmd,{cwd},(e,o,er)=>e?rj(Error((er||o||e.message).trim())):r(o.trim())));
+}
+async function repoStatus(cwd){
+ await gitExec('git fetch origin',cwd).catch(()=>{});
+ const [local,remote,ahead,behind,dirty]=await Promise.all([
+  gitExec('git log -1 --format=%ct HEAD',cwd),
+  gitExec('git log -1 --format=%ct origin/main',cwd),
+  gitExec('git rev-list --count origin/main..HEAD',cwd),
+  gitExec('git rev-list --count HEAD..origin/main',cwd),
+  gitExec('git status --porcelain',cwd),
+ ]);
+ return {local:Number(local),remote:Number(remote),ahead:Number(ahead),behind:Number(behind),dirty:dirty.length>0};
+}
+
 const server=http.createServer(async(req,res)=>{
  const own=`127.0.0.1:${server.address().port}`;
  if(req.headers.host!==own)return json(res,{error:'Use the loopback URL printed by Studio'},403);
@@ -26,6 +44,10 @@ const server=http.createServer(async(req,res)=>{
  try{
   if(req.method==='GET'&&pathname==='/api/health')return json(res,{app:'pinplay-studio',version:2});
   if(req.method==='GET'&&pathname==='/api/catalog')return json(res,buildCatalog(DESIGN));
+  if(req.method==='GET'&&pathname==='/api/sync-status'){
+   const [code,assets]=await Promise.all([repoStatus(ROOT),repoStatus(DESIGN)]);
+   return json(res,{success:true,code,assets});
+  }
   if(req.method==='GET'&&staticFiles.has(pathname)){
    const file=path.join(ROOT,pathname);
    if(!fs.existsSync(file))return json(res,{error:'Not found'},404);
@@ -69,19 +91,18 @@ const server=http.createServer(async(req,res)=>{
      return json(res,{success:true,message:`Deleted ${deleted} file(s). Rebuild to sync.`});
     }
    }
-   if(pathname==='/api/sync'){
+   if(pathname==='/api/sync-push'){
     await body(req);
-    return new Promise(resolve=>{
-     import('node:child_process').then(({exec})=>{
-      const run=cmd=>new Promise((r,rj)=>exec(cmd,{cwd:DESIGN},(e,so)=>e?rj(e):r(so)));
-      const runR=cmd=>new Promise((r,rj)=>exec(cmd,{cwd:ROOT},(e,so)=>e?rj(e):r(so)));
-      const script=`git add -A && (git diff-index --quiet HEAD || git commit -am "Avatar Studio Auto Sync") && git push`;
-      Promise.all([run(script).catch(()=>null),runR(script).catch(()=>null)])
-       .then(()=>runR(`cd cloudflare && npx wrangler deploy`))
-       .then(()=>resolve(json(res,{success:true,message:'Successfully pushed to cloud and deployed to Cloudflare!'})))
-       .catch(e=>resolve(json(res,{error:'Cloud Sync/Deploy failed: '+e.message},500)));
-     });
-    });
+    const pushCmd=`git add -A && (git diff-index --quiet HEAD || git commit -am "Avatar Studio Auto Sync") && git push`;
+    await Promise.all([gitExec(pushCmd,DESIGN),gitExec(pushCmd,ROOT)]);
+    await gitExec(`cd cloudflare && npx wrangler deploy`,ROOT);
+    return json(res,{success:true,message:'Pushed to cloud and deployed to Cloudflare!'});
+   }
+   if(pathname==='/api/sync-pull'){
+    await body(req);
+    await Promise.all([gitExec('git pull',DESIGN),gitExec('git pull',ROOT)]);
+    await new Promise((resolve,reject)=>execFile(process.execPath,['scripts/build-cup-assets.mjs',DESIGN,'--write-worker'],{cwd:ROOT},(e,out,err)=>e?reject(Error(err||e.message)):resolve(out)));
+    return json(res,{success:true,message:'Pulled from cloud and rebuilt local bundle!'});
    }
   }
   return json(res,{error:'Not found'},404);
