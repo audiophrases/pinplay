@@ -15,12 +15,32 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'cup');
 
 const PACK = path.join(SRC, 'PinPlay-Cup-Asset-Pack');
-const SETS = [
+
+// Helper to recursively find subdirectories with SVGs or search top-level folders
+function findSetDirectories(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const results = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (['base', 'previews', 'parts', 'game', 'animations', 'sounds', 'vendor', 'photo-avatar-test'].includes(entry.name)) continue;
+      const fullPath = path.join(dir, entry.name);
+      // Check if this directory directly contains .svg files
+      const hasSvgs = fs.readdirSync(fullPath).some(f => f.endsWith('.svg'));
+      if (hasSvgs) {
+        results.push(fullPath);
+      }
+      // Recursively scan deeper subdirectories
+      results.push(...findSetDirectories(fullPath));
+    }
+  }
+  return results;
+}
+
+const SETS = Array.from(new Set([
   path.join(PACK, 'avatars'),
-  path.join(SRC, 'PinPlay-Cup-Avatars-Expansion', 'fantasy'),
-  path.join(SRC, 'PinPlay-Cup-Avatars-Expansion', 'music'),
-  path.join(SRC, 'PinPlay-Cup-Avatars-Expansion', 'celebrities'),
-];
+  ...findSetDirectories(SRC),
+]));
 // Recreates a copyrighted character's signature items (scar glasses, house scarf).
 const EXCLUDE = new Set(['glasses-wizard-round-scar.svg', 'shirt-wizard-robe-scarf.svg']);
 
