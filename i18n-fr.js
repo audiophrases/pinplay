@@ -319,6 +319,7 @@ window.PINPLAY_FR_DICT = {
   '💬 Teacher:': '💬 Enseignant :',
   'Previous': 'Précédent',
   'Next': 'Suivant',
+  'New random name': 'Nouveau nom aléatoire',
   'Open this question': 'Ouvrir cette question',
   'Close to review the rest of the quiz': 'Fermez pour revoir le reste du quiz',
   '{cur} of {total}': '{cur} sur {total}',

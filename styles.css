@@ -5238,13 +5238,17 @@ body.arena-mode #reactionRow { display: none !important; }
 .arena-av-chip { width: 22px; height: 22px; }
 .arena-av-row { width: 36px; height: 36px; }
 .arena-av-big { width: 150px; height: 150px; background: #ecebff; border-radius: 50%; }
-.arena-avatar-editor { display: flex; gap: 16px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
-.arena-avatar-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
-.arena-part-row { display: flex; align-items: center; gap: 6px; justify-content: space-between; font-size: 14px; }
+.arena-avatar-editor { display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
+.arena-avatar-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.arena-avatar-parts { display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+.arena-part-row { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.arena-part-row span { text-align: center; }
 .arena-part-btn {
-  width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px;
+  width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); cursor: pointer; font-size: 18px; font-weight: 700; line-height: 1;
 }
+.arena-name-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.arena-name-row .arena-sub { margin: 0; }
 .arena-part-btn:hover { border-color: var(--primary); }
 .arena-chip { display: inline-flex; align-items: center; gap: 4px; }
 .arena-lobby-players { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
@@ -5324,7 +5328,7 @@ body.arena-board-open { overflow: hidden; }
 /* One ranked column; the whole class scrolls (≈10 rows visible on a projector). */
 .arena-rank { list-style: none; margin: 0; padding: 0 6px 0 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .arena-rank.lobby { display: grid; }
-.arena-rank.lobby { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.arena-rank.lobby { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); grid-auto-rows: max-content; align-content: start; }
 .arena-rank li {
   display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 14px;
   background: rgba(255,255,255,.1); font-size: 22px;

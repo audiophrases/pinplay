@@ -5049,6 +5049,23 @@ export class QuizRoom {
     const ps = arenaPlayerState(room, pid);
     const out = [];
 
+    // Same reroll as /player/reroll-name in regular live mode: lobby only.
+    if (data.t === 'rename') {
+      const player = room.players[pid];
+      if (!player || !room.settings?.randomNames || room.arena.status !== 'lobby') return;
+      const nextName = pickRandomName(room.players);
+      player.name = nextName;
+      player.identity = player.identity || {};
+      player.identity.username = sanitizeName(nextName);
+      player.identity.displayName = sanitizeName(nextName);
+      player.identity.source = 'random';
+      room.updatedAt = Date.now();
+      this.#arenaSend(ws, arenaYou(room, pid));
+      await this.#arenaPersist(room, true);
+      this.#arenaBroadcastBoard(room);
+      return;
+    }
+
     if (data.t === 'avatar') {
       const avatar = arenaSanitizeAvatar(data.avatar);
       if (!avatar) return;
@@ -7994,6 +8011,7 @@ function arenaYou(room, pid) {
     endsAt: room.arena.endsAt || null,
     now,
     name: room.players[pid]?.name || '',
+    randomNames: !!room.settings?.randomNames,
     avatar: ps.avatar,
     score: Number(room.players[pid]?.score || 0),
     rank: ranking.findIndex((r) => r.id === pid) + 1,

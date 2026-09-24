@@ -224,13 +224,18 @@
       <div id="arenaLobby" class="arena-overlay hidden">
         <div class="arena-panel">
           <h2 class="arena-logo-wrap">${LOGO}</h2>
-          <p class="arena-sub" data-a="lobbyName"></p>
+          <div class="arena-name-row">
+            <p class="arena-sub" data-a="lobbyName"></p>
+            <button type="button" class="btn small hidden" data-a="rerollName" title="${esc(tr('New random name'))}" aria-label="${esc(tr('New random name'))}">🎲</button>
+          </div>
           <p class="small">${esc(tr('Build your avatar'))}</p>
           <div class="arena-avatar-editor">
-            <div class="arena-avatar-preview" data-a="avatarPreview"></div>
+            <div class="arena-avatar-side">
+              <div class="arena-avatar-preview" data-a="avatarPreview"></div>
+              <button type="button" class="btn small" data-a="avatarRandom">${esc(tr('Surprise me'))}</button>
+            </div>
             <div class="arena-avatar-parts" data-a="avatarParts"></div>
           </div>
-          <button type="button" class="btn small" data-a="avatarRandom">🎲 ${esc(tr('Surprise me'))}</button>
           <p class="arena-wait">${esc(tr('Waiting for the teacher to start…'))}</p>
           <div class="arena-lobby-players" data-a="lobbyPlayers"></div>
         </div>
@@ -298,6 +303,8 @@
   function renderLobby(board) {
     const y = P.you || {};
     $p('lobbyName').textContent = y.name ? tr('You are {name}', { name: y.name }) : '';
+    $p('rerollName').classList.toggle('hidden', !y.randomNames);
+    $p('rerollName').disabled = false;
     renderAvatarEditor();
     if (board?.players) {
       $p('lobbyPlayers').innerHTML = board.players
@@ -310,9 +317,9 @@
     $p('avatarPreview').innerHTML = avatarSvg(a, 'arena-av arena-av-big');
     const categories = ['character', ...Object.keys(AVATAR_PARTS)];
     $p('avatarParts').innerHTML = categories.map((k) => `<div class="arena-part-row">
-      <button type="button" class="arena-part-btn" data-part="${k}" data-dir="-1" aria-label="${esc(tr('Previous'))}">◀</button>
+      <button type="button" class="arena-part-btn" data-part="${k}" data-dir="-1" aria-label="${esc(tr('Previous'))}">‹</button>
       <span>${esc(tr(k === 'character' ? 'Character' : AVATAR_LABELS[k]))}</span>
-      <button type="button" class="arena-part-btn" data-part="${k}" data-dir="1" aria-label="${esc(tr('Next'))}">▶</button>
+      <button type="button" class="arena-part-btn" data-part="${k}" data-dir="1" aria-label="${esc(tr('Next'))}">›</button>
     </div>`).join('');
   }
 
@@ -591,6 +598,8 @@
         return;
       }
       if (e.target.closest('[data-a="avatarRandom"]')) { setAvatar(randomAvatar()); return; }
+      const reroll = e.target.closest('[data-a="rerollName"]');
+      if (reroll) { reroll.disabled = true; P.sock.send({ t: 'rename' }); return; }
       const chest = e.target.closest('[data-chest]');
       if (chest) {
         P.root.querySelectorAll('[data-chest]').forEach((b) => { b.disabled = true; });
