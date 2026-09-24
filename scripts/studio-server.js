@@ -49,6 +49,26 @@ const server=http.createServer(async(req,res)=>{
     const output=await new Promise((resolve,reject)=>execFile(process.execPath,['scripts/build-cup-assets.mjs',DESIGN,'--write-worker'],{cwd:ROOT},(e,out,err)=>e?reject(Error(err||e.message)):resolve(out)));
     return json(res,{success:true,output});
    }
+   if(pathname==='/api/delete'){
+    const {category, id}=await body(req);
+    if(category==='character'){
+     const manifestPath=path.join(DESIGN,'avatars','manifest.json');
+     if(fs.existsSync(manifestPath)){
+      const m=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+      const pIdx=m.previews?.findIndex(p=>p.name===id||p.id===id);
+      if(pIdx>-1){m.previews.splice(pIdx,1);fs.writeFileSync(manifestPath,JSON.stringify(m,null,2),'utf8');return json(res,{success:true,message:'Preset deleted. Rebuild to sync.'});}
+     }
+     return json(res,{error:'Preset not found in main manifest'},404);
+    }else{
+     const catalog=buildCatalog(DESIGN);const p=catalog.parts[category]?.find(x=>x.id===id);
+     if(!p)return json(res,{error:'Part not found'},404);
+     let deleted=0;
+     for(const f of Object.values(p.files||{})){
+      try{const target=fs.realpathSync(path.resolve(DESIGN,f));if(target.startsWith(DESIGN+path.sep)){fs.unlinkSync(target);deleted++;}}catch{}
+     }
+     return json(res,{success:true,message:`Deleted ${deleted} file(s). Rebuild to sync.`});
+    }
+   }
   }
   return json(res,{error:'Not found'},404);
  }catch(e){return json(res,{error:e.message},400);}
