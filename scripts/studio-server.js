@@ -77,8 +77,9 @@ const server=http.createServer(async(req,res)=>{
       const runR=cmd=>new Promise((r,rj)=>exec(cmd,{cwd:ROOT},(e,so)=>e?rj(e):r(so)));
       const script=`git add -A && (git diff-index --quiet HEAD || git commit -am "Avatar Studio Auto Sync") && git push`;
       Promise.all([run(script).catch(()=>null),runR(script).catch(()=>null)])
-       .then(()=>resolve(json(res,{success:true,message:'Successfully pushed to cloud!'})))
-       .catch(e=>resolve(json(res,{error:'Sync failed: '+e.message},500)));
+       .then(()=>runR(`cd cloudflare && npx wrangler deploy`))
+       .then(()=>resolve(json(res,{success:true,message:'Successfully pushed to cloud and deployed to Cloudflare!'})))
+       .catch(e=>resolve(json(res,{error:'Cloud Sync/Deploy failed: '+e.message},500)));
      });
     });
    }
