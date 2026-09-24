@@ -99,6 +99,26 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  // Serve static files (HTML, JS, CSS, SVG) from pinplay root
+  if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+    let relPath = url.pathname === '/' ? '/avatar-preview.html' : url.pathname;
+    const filePath = path.join(ROOT, relPath);
+
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeTypes = {
+        '.html': 'text/html; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+      };
+      res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+      return fs.createReadStream(filePath).pipe(res);
+    }
+  }
+
   if (url.pathname === '/api/catalog' && req.method === 'GET') {
     return json(res, getCatalog());
   }
