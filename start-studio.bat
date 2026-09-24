@@ -22,6 +22,6 @@ node scripts\build-cup-assets.mjs "C:\Users\Admin\PinPlayCupMediaDesign" --write
 
 echo.
 echo [3/3] Starting PinPlay Cup Local Studio Server...
-start "" http://localhost:3005/
+start "" "C:\Users\Admin\pinplay\avatar-preview.html"
 node scripts\studio-server.js
 pause
