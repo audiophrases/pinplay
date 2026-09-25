@@ -1,7 +1,7 @@
 # Adaptive mode: one multilevel quiz, a different path per student
 
-Status: **phase 1 (data + authoring) implemented 2026-09-25**, not yet committed
-or deployed. Phases 2–4 are still a plan. Design decisions settled with the
+Status: **phase 1 (data + authoring) and phase 2 (engine + PinPlay Cup)
+implemented 2026-09-25.** Phases 3–4 are still a plan. Design decisions settled with the
 owner on 2026-09-25 (section 8).
 
 Phase 1 as built (some details differ from section 3):
@@ -113,15 +113,16 @@ Rules. All numbers are constants to tune after a real class:
 | Situation | Effect |
 |---|---|
 | Start | `score = 0.8`, the top of the **lowest band present** (A1 on a full quiz): start easy |
-| Warm-up (first ~6 answers), correct | `+0.6`, so on a full quiz a strong student reaches B2 within about 6 questions |
+| Warm-up (until the first miss, at most 4 answers), correct | `+1`, a whole band per right answer: a strong student reaches C1 after 4 answers |
 | After warm-up, correct | `+0.34` (about 3 in a row to go up one band) |
-| Wrong | `−0.5` (two misses drop a band) |
+| Right answer on a question below the current band | half the gain |
+| Wrong | `−0.5` (two misses drop a band); half that on a question above the current band |
 | 3rd consecutive wrong | extra `−0.5` |
 | Floor / ceiling | Clamped to the first/last band present |
 
 Picking the next question:
 
-1. If a `retry` item is due (after 2–3 other questions), serve it. Missed questions come back with spacing, not straight away.
+1. If a `retry` item is due (after 2–3 other questions) **and the student is at or above that question's band**, serve it. Missed questions come back with spacing, not straight away, and a student who dropped isn't fed harder retries.
 2. Otherwise draw from the current band. Prefer questions not yet seen, then ones seen least often. Never repeat the one just answered (same rule as today).
 3. If the band has run out, reuse its questions and weight the ones the student missed (today's 60/40 rule, applied within the band). If the band is empty, use the nearest band, going down first.
 4. A student stuck at the floor who keeps missing questions naturally keeps getting the same A1 questions again. That is the consolidation loop from the discussion.
@@ -143,7 +144,8 @@ inspects the page code can find the tag, and that's fine.
 - `arenaDeal` calls the engine instead of `arenaBuildDeck` when `room.arena.adaptive` is on. The non-adaptive path is unchanged.
 - **Equal points at every level (decided).** Difficulty and scoring stay separate: an A1 correct answer and a C2 correct answer earn the same `ARENA_BASE_POINTS`, and chests/powers work as they do today.
 - **No levels on the board or on student phones.** Only the host sees them, after the game.
-- After the game, the host results show each student's highest band reached, final band, and accuracy per band.
+- After the game, the host board shows a **📥 Level report** button that downloads a CSV (never shown on the projector): questions answered, usual level (most answers in the second half), final and highest level, right/answered per level, and the level path. The history kept per student is capped at the last 200 answers; per-level totals are running counts.
+- Success for level movement is `correct`, or a partial round (Spelling Bee, Word Guess…) at ≥ 70%. Cup's own "correct" for points and chests stays at 50%.
 
 ## 6. Assignments
 

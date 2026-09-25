@@ -725,8 +725,11 @@
         <span class="arena-board-clock" data-h="clock">–:––</span>
         <span class="arena-board-actions">
           <span data-h="durations" class="arena-durations"></span>
+          <button type="button" class="btn small hidden" data-h="adaptive" aria-pressed="false"
+            title="${esc(tr('Each student gets easier or harder questions depending on how they answer. Students never see their level.'))}"></button>
           <button type="button" class="btn success" data-h="start">${esc(tr('Start'))}</button>
           <button type="button" class="btn danger hidden" data-h="end">${esc(tr('End now'))}</button>
+          <button type="button" class="btn hidden" data-h="levels">${esc(tr('📥 Level report'))}</button>
           <button type="button" class="btn" data-h="close">${esc(tr('Close'))}</button>
         </span>
       </header>
@@ -741,6 +744,11 @@
     H.root.addEventListener('click', (e) => {
       const d = e.target.closest('[data-dur]');
       if (d) { H.sock.send({ t: 'duration', sec: Number(d.dataset.dur) }); return; }
+      if (e.target.closest('[data-h="adaptive"]')) {
+        if (H.board?.status === 'lobby') H.sock.send({ t: 'adaptive', on: !H.board.adaptive });
+        return;
+      }
+      if (e.target.closest('[data-h="levels"]')) { downloadLevelReport(); return; }
       if (e.target.closest('[data-h="start"]')) H.sock.send({ t: 'start' });
       else if (e.target.closest('[data-h="end"]')) { if (confirm(tr('End the round now?'))) H.sock.send({ t: 'end' }); }
       else if (e.target.closest('[data-h="close"]')) closeHost();
@@ -806,6 +814,19 @@
       ? H.durations.map((s) => `<button type="button" class="btn small${s === msg.durationSec ? ' primary' : ''}" data-dur="${s}">${s / 60} min</button>`).join('')
       : '';
     if (lobby) $h('clock').textContent = fmtClock(msg.durationSec * 1000);
+    // Adaptive: a toggle in the lobby (only when the quiz has 2+ tagged
+    // levels), a plain label once the game runs. Never per-student levels.
+    const bands = msg.adaptiveBands || H.bands || [];
+    if (lobby) H.bands = bands;
+    const ab = $h('adaptive');
+    const canToggle = lobby && bands.length >= 2;
+    ab.classList.toggle('hidden', !canToggle && !msg.adaptive);
+    ab.classList.toggle('primary', !!msg.adaptive);
+    ab.disabled = !canToggle;
+    ab.setAttribute('aria-pressed', msg.adaptive ? 'true' : 'false');
+    ab.textContent = `🎯 ${tr('Adaptive')}${bands.length >= 2 ? ` ${bands[0]}–${bands[bands.length - 1]}` : ''}`;
+    H.levels = msg.levels || null;
+    $h('levels').classList.toggle('hidden', !(msg.status === 'finished' && H.levels?.length));
     H.root.classList.toggle('is-lobby', lobby);
     hallMusic(lobby);
     renderRanking(msg.players, msg.status);
@@ -823,6 +844,29 @@
     }
   }
 
+  // Teacher-only CSV of each student's adaptive path. Downloaded, never shown
+  // on the projected board.
+  function downloadLevelReport() {
+    const rows = H.levels || [];
+    if (!rows.length) return;
+    const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].filter((l) => rows.some((r) => r.perLevel?.[l]));
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const header = [tr('Student'), tr('Questions answered'), tr('Usual level'), tr('Final level'), tr('Highest level'),
+      ...levels.map((l) => `${l} ${tr('right/answered')}`), tr('Path')];
+    const lines = [header.map(cell).join(',')].concat(rows.map((r) => [
+      r.name, r.answered, r.usualLevel, r.finalLevel, r.peakLevel,
+      ...levels.map((l) => (r.perLevel?.[l] ? `${r.perLevel[l].right}/${r.perLevel[l].answered}` : '')),
+      r.path,
+    ].map(cell).join(',')));
+    const blob = new Blob([`﻿${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pinplay-cup-levels-${H.pin || 'game'}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
   // Same hall music as regular live mode, driven by the app's host audio.
   function hallMusic(on) {
     const m = window.PinHallMusic;
@@ -838,6 +882,8 @@
     H.celebrated = false;
     H.lastFeedAt = null;
     H.lastTick = null;
+    H.bands = [];
+    H.levels = null;
     H.root.classList.remove('hidden');
     document.body.classList.add('arena-board-open');
     if (H.sock) H.sock.close();

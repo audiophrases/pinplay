@@ -4967,7 +4967,7 @@ export class QuizRoom {
     await maybeSnapshotLiveGame(room, this.env);
     await this.#arenaPersist(room, true);
     const podium = arenaPodium(room);
-    this.#arenaSockets((a) => a.role === 'host').forEach((ws) => this.#arenaSend(ws, { ...arenaBoard(room), podium }));
+    this.#arenaSockets((a) => a.role === 'host').forEach((ws) => this.#arenaSend(ws, { ...arenaBoard(room), podium, levels: arenaLevelReport(room) }));
     for (const ws of this.#arenaSockets((a) => a.role === 'player')) {
       const pid = ws.deserializeAttachment().pid;
       this.#arenaSend(ws, { ...arenaYou(room, pid), t: 'end', podium });
@@ -4991,7 +4991,8 @@ export class QuizRoom {
         if (String(data.token || '') !== room.hostToken) { try { ws.close(4001, 'Unauthorized'); } catch { /* */ } return; }
         ws.serializeAttachment({ role: 'host' });
         this.#arenaSend(ws, { t: 'hello', role: 'host', durations: ARENA_DURATIONS_SEC });
-        this.#arenaSend(ws, { ...arenaBoard(room), podium: room.arena.status === 'finished' ? arenaPodium(room) : undefined });
+        const finished = room.arena.status === 'finished';
+        this.#arenaSend(ws, { ...arenaBoard(room), podium: finished ? arenaPodium(room) : undefined, levels: finished ? arenaLevelReport(room) : undefined });
         return;
       }
       const pid = sanitizeId(data.playerId);
@@ -5016,17 +5017,23 @@ export class QuizRoom {
         if (ARENA_DURATIONS_SEC.includes(dur)) room.arena.durationSec = dur;
         await this.#arenaPersist(room, true);
         this.#arenaBroadcastBoard(room);
+      } else if (data.t === 'adaptive' && room.arena.status === 'lobby') {
+        // Needs at least two tagged levels to move between.
+        room.arena.adaptive = !!data.on && arenaAdaptivePool(room).bands.length >= 2;
+        await this.#arenaPersist(room, true);
+        this.#arenaBroadcastBoard(room);
       } else if (data.t === 'start' && room.arena.status === 'lobby') {
         if (!arenaEligibleIndexes(room).length) {
           this.#arenaSend(ws, { t: 'error', error: 'This quiz has no auto-graded questions to play.' });
           return;
         }
+        if (room.arena.adaptive && arenaAdaptivePool(room).bands.length < 2) room.arena.adaptive = false;
         const now = Date.now();
         room.arena.status = 'playing';
         room.arena.startedAt = now;
         room.arena.endsAt = now + room.arena.durationSec * 1000;
         room.phase = 'arena';
-        appendRoomEvent(room, 'arena_started', { durationSec: room.arena.durationSec, players: Object.keys(room.players).length });
+        appendRoomEvent(room, 'arena_started', { durationSec: room.arena.durationSec, players: Object.keys(room.players).length, adaptive: !!room.arena.adaptive });
         const out = [];
         for (const pid of Object.keys(room.players)) {
           out.push({ to: pid, msg: arenaYou(room, pid) });
@@ -7963,6 +7970,116 @@ function arenaBuildDeck(ps, eligible) {
   return deck;
 }
 
+// ---------------------------------------------------------------- adaptive
+// Adaptive mode (ADAPTIVE_MODE_PLAN.md §4): each student has a hidden,
+// continuous level score over the CEFR bands the quiz actually contains
+// (bands = distinct tagged levels, in order; gaps are skipped). Right answers
+// push it up, misses pull it down, and missed questions come back after a few
+// others. Pure functions over plain state so Cup and assignments can share them.
+const ADAPTIVE_START = 0.8;           // top of the lowest band: start easy
+const ADAPTIVE_WARMUP = 4;            // warm-up: until the first miss or 4 answers...
+const ADAPTIVE_UP_WARMUP = 1;         // ...each right answer climbs a whole band
+const ADAPTIVE_UP = 0.34;             // then ~3 in a row to go up a band
+const ADAPTIVE_DOWN = 0.5;            // 2 misses drop a band
+const ADAPTIVE_STREAK_DOWN = 0.5;     // extra drop from the 3rd miss in a row
+const ADAPTIVE_SUCCESS_FRACTION = 0.7; // partial-credit rounds count from 70%
+const ADAPTIVE_RETRY_GAPS = [2, 3];   // a miss returns after 2–3 other questions
+const ADAPTIVE_PATH_MAX = 200;        // answers kept for the report (room state stays small)
+
+// Eligible question indexes that carry a CEFR tag, with their band index.
+function adaptivePool(questions, eligible) {
+  const levels = CEFR_LEVELS.filter((l) => eligible.some((qi) => normalizeCefrLevel(questions[qi]?.cefr) === l));
+  const pool = eligible
+    .map((qi) => ({ qi, band: levels.indexOf(normalizeCefrLevel(questions[qi]?.cefr)) }))
+    .filter((p) => p.band >= 0);
+  return { bands: levels, pool };
+}
+
+function adaptiveInit(bands) {
+  return { bands: bands.slice(), score: ADAPTIVE_START, answered: 0, streak: 0, warm: true, retry: [], seen: {}, last: null, path: [], perLevel: {} };
+}
+
+function adaptiveBand(st) {
+  return clamp(Math.floor(st.score), 0, Math.max(0, st.bands.length - 1));
+}
+
+function adaptiveIsSuccess(verdict) {
+  if (verdict?.correct) return true;
+  const total = Number(verdict?.partialTotal || 0);
+  return total > 0 && Number(verdict?.partialScore || 0) / total >= ADAPTIVE_SUCCESS_FRACTION;
+}
+
+// Record one final answer. qBand is the band of the question that was served.
+function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
+  const band = adaptiveBand(st);
+  const level = st.bands[qBand] || '';
+  st.path.push({ qi, level, band: st.bands[band] || '', ok: !!success });
+  if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
+  const tally = st.perLevel[level] || (st.perLevel[level] = { answered: 0, right: 0 });
+  tally.answered += 1;
+  if (success) tally.right += 1;
+  const seen = st.seen[qi] || (st.seen[qi] = { n: 0, ok: false });
+  seen.n += 1;
+  seen.ok = !!success;
+  st.retry = st.retry.filter((r) => r.qi !== qi);
+  if (success) {
+    st.streak = Math.max(0, st.streak) + 1;
+    // An easier question than the current band proves less.
+    const up = st.warm ? ADAPTIVE_UP_WARMUP : ADAPTIVE_UP;
+    st.score += qBand >= band ? up : up / 2;
+  } else {
+    st.streak = Math.min(0, st.streak) - 1;
+    // The first miss roughly marks the ceiling: warm-up is over.
+    st.warm = false;
+    // Missing a harder question than the current band costs less.
+    let down = qBand <= band ? ADAPTIVE_DOWN : ADAPTIVE_DOWN / 2;
+    if (st.streak <= -3) down += ADAPTIVE_STREAK_DOWN;
+    st.score -= down;
+    const gap = ADAPTIVE_RETRY_GAPS[Math.floor(rng() * ADAPTIVE_RETRY_GAPS.length)];
+    st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
+  }
+  st.score = clamp(st.score, 0, st.bands.length - 0.01);
+  st.answered += 1;
+  if (st.answered >= ADAPTIVE_WARMUP) st.warm = false;
+  st.last = qi;
+}
+
+// The band a student spent most answers at in the second half of the game
+// (ties go to the higher band): steadier than the band after the last answer.
+function adaptiveUsualLevel(st) {
+  const half = st.path.slice(Math.floor(st.path.length / 2));
+  if (!half.length) return st.bands[adaptiveBand(st)] || '';
+  const counts = {};
+  half.forEach((p) => { counts[p.band] = (counts[p.band] || 0) + 1; });
+  return st.bands.slice().reverse().reduce((best, b) => ((counts[b] || 0) > (counts[best] || 0) ? b : best), half[half.length - 1].band);
+}
+
+// Next question index: a due retry first, else the current band (nearest
+// band below, then above, when it only holds the question just answered),
+// preferring questions seen least, then ones last missed.
+function adaptiveNext(st, pool, rng = Math.random) {
+  if (!pool.length) return null;
+  const band = adaptiveBand(st);
+  // Missed questions above the student's current band wait until they are
+  // back up there, so a student who dropped isn't fed harder retries.
+  const due = st.retry.find((r) => r.due <= st.answered && r.band <= band && r.qi !== st.last && pool.some((p) => p.qi === r.qi));
+  if (due) {
+    st.retry = st.retry.filter((r) => r !== due);
+    return due.qi;
+  }
+  const order = [band];
+  for (let d = 1; d < st.bands.length; d++) order.push(band - d, band + d);
+  for (const b of order) {
+    const cands = pool.filter((p) => p.band === b && p.qi !== st.last);
+    if (!cands.length) continue;
+    const rank = (p) => (st.seen[p.qi]?.n || 0) * 2 + (st.seen[p.qi]?.ok ? 1 : 0);
+    const best = Math.min(...cands.map(rank));
+    const top = cands.filter((p) => rank(p) === best);
+    return top[Math.floor(rng() * top.length)].qi;
+  }
+  return pool.length === 1 ? pool[0].qi : null;
+}
+
 // Signed-in students show by first name only on the Cup screens; random
 // nicknames stay whole. Reports still use the full stored name.
 function arenaName(p) {
@@ -8015,7 +8132,32 @@ function arenaBoard(room) {
       };
     }),
     feed: room.arena.feed.slice(-ARENA_FEED_MAX),
+    adaptive: !!room.arena.adaptive,
+    // Lobby only: the levels this quiz covers, so the host can offer Adaptive.
+    adaptiveBands: room.arena.status === 'lobby' ? arenaAdaptivePool(room).bands : undefined,
   };
+}
+
+// Teacher-only end-of-game summary of each student's adaptive path. Sent to
+// host sockets only; never part of the board players see.
+function arenaLevelReport(room) {
+  if (!room.arena.adaptive) return undefined;
+  return arenaRanking(room).map((r) => {
+    const st = room.arena.players[r.id]?.adaptive;
+    const path = st?.path || [];
+    const bandOrder = st?.bands || [];
+    const finalIdx = st ? adaptiveBand(st) : -1;
+    const peakIdx = Math.max(finalIdx, ...path.map((p) => bandOrder.indexOf(p.band)));
+    return {
+      name: r.name,
+      answered: st?.answered || 0,
+      usualLevel: st ? adaptiveUsualLevel(st) : '',
+      finalLevel: bandOrder[finalIdx] || '',
+      peakLevel: bandOrder[peakIdx] || '',
+      path: path.map((p) => `${p.level}${p.ok ? '✓' : '✗'}`).join(' '),
+      perLevel: st?.perLevel || {},
+    };
+  });
 }
 
 function arenaYou(room, pid) {
@@ -8050,10 +8192,21 @@ function arenaQuestionMsg(room, pid, { retry = false } = {}) {
   return { t: 'q', qi: ps.current.qi, seq: ps.current.seq, retry, question: publicQuestion(q) };
 }
 
+function arenaAdaptivePool(room) {
+  return adaptivePool(room.quiz?.questions || [], arenaEligibleIndexes(room));
+}
+
 function arenaDeal(room, pid) {
   const ps = arenaPlayerState(room, pid);
-  if (!ps.deck.length) ps.deck = arenaBuildDeck(ps, arenaEligibleIndexes(room));
-  const qi = ps.deck.shift();
+  let qi;
+  if (room.arena.adaptive) {
+    const { bands, pool } = arenaAdaptivePool(room);
+    if (!ps.adaptive) ps.adaptive = adaptiveInit(bands);
+    qi = adaptiveNext(ps.adaptive, pool);
+  } else {
+    if (!ps.deck.length) ps.deck = arenaBuildDeck(ps, arenaEligibleIndexes(room));
+    qi = ps.deck.shift();
+  }
   if (qi == null) { ps.current = null; return null; }
   ps.current = { qi, seq: (ps.current?.seq || 0) + 1, servedAt: Date.now() };
   return arenaQuestionMsg(room, pid);
@@ -8261,6 +8414,12 @@ function arenaHandleAnswer(room, pid, data, out) {
 
   ps.answered += 1;
   ps.lastResult[qi] = correct;
+  // Level movement uses the stricter adaptive rule (partial rounds from 70%);
+  // points and chests keep Cup's own "correct".
+  if (room.arena.adaptive && ps.adaptive) {
+    const band = ps.adaptive.bands.indexOf(normalizeCefrLevel(q.cefr));
+    if (band >= 0) adaptiveRecord(ps.adaptive, qi, band, adaptiveIsSuccess(res));
+  }
   let points = 0;
   if (fraction > 0) {
     let mult = 1;
