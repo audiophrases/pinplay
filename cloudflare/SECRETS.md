@@ -47,15 +47,20 @@ Checked against `cloudflare/worker.js` and the live worker on 2026-09-25.
 | `VIMEO_ACCESS_TOKEN` | Vimeo results in video search | Vimeo is skipped (not set on the live worker) |
 | `BUILDER_BASE_URL` | Teacher-page URL used in guest workspace links | Defaults to `https://audiophrases.github.io/pinplay/create/` (not set on the live worker) |
 
-### Left over on the live worker, no longer read
+### No longer needed (kept on purpose for now)
 
-`CREATE_PASSWORD`, `DRIVE_PUBLISH_URL`, `DRIVE_SHARED_SECRET`,
-`STUDENT_LOGIN_VERIFY_URL`, `STUDENT_ROSTER_LOOKUP_SECRET`,
-`STUDENT_ROSTER_LOOKUP_URL`.
+| Secret | Left over from |
+|--------|----------------|
+| `CREATE_PASSWORD` | Old plain-text teacher password, replaced by `CREATE_PASSWORD_HASH` |
+| `DRIVE_PUBLISH_URL` | Removed Google Drive publishing |
+| `DRIVE_SHARED_SECRET` | Removed Google Drive publishing |
+| `STUDENT_LOGIN_VERIFY_URL` | Old student username/password login |
+| `STUDENT_ROSTER_LOOKUP_SECRET` | Old Apps Script student roster |
+| `STUDENT_ROSTER_LOOKUP_URL` | Old Apps Script student roster |
 
-These are from the old password login, the Apps Script student roster and the
-removed Google Drive publishing. Nothing in the code reads them, so they can
-be deleted whenever you like:
+Nothing in the code reads these any more, and they don't need backing up or
+restoring. The owner decided on 2026-09-25 to keep them on the live worker for
+now. If you decide to remove one later:
 
 ```bash
 npx wrangler secret delete STUDENT_ROSTER_LOOKUP_URL --name pinplay-api
