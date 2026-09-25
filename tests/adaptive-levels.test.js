@@ -78,14 +78,18 @@ describe('default AI level mix', () => {
     });
   });
 
-  it('uses the default mix unless the teacher describes one', () => {
+  it('keeps the default mix alongside the teacher notes', () => {
     const def = A.buildAdaptiveLevelRules({ questionCount: 50 }).join('\n');
     assert.match(def, /"cefr"/);
     assert.match(def, /A1 11, A2 11, B1 9, B2 8, C1 6, C2 5/);
+    assert.doesNotMatch(def, /Teacher's notes/);
 
-    const custom = A.buildAdaptiveLevelRules({ questionCount: 50, levelMix: 'even across all levels' }).join('\n');
-    assert.match(custom, /even across all levels/);
-    assert.doesNotMatch(custom, /A1 11/);
+    // Notes usually describe what each level looks like, not how many: the
+    // default target stays, and the AI is told the notes win only on balance.
+    const notes = A.buildAdaptiveLevelRules({ questionCount: 50, levelNotes: 'more typing at higher levels' }).join('\n');
+    assert.match(notes, /Teacher's notes on the levels: "more typing at higher levels"/);
+    assert.match(notes, /A1 11, A2 11, B1 9, B2 8, C1 6, C2 5/);
+    assert.match(notes, /replaces the default target; otherwise keep the default target/);
 
     const brief = A.buildAdaptiveLevelRules({ questionCount: 'about 50 minutes' }).join('\n');
     assert.match(brief, /A1 ≈22%/);

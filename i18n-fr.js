@@ -956,8 +956,8 @@ window.PINPLAY_FR_DICT = {
 
   /* ===================== Adaptive mode (levels A1–C2) ===================== */
   '🎯 Adaptive quiz (all levels A1–C2)': '🎯 Quiz adaptatif (tous les niveaux A1–C2)',
-  'Level mix (optional)': 'Répartition des niveaux (facultatif)',
-  'Default: more easy questions than hard ones. e.g. mostly A2–B1, only a couple of C2': 'Par défaut : plus de questions faciles que difficiles. ex. surtout A2–B1, seulement deux ou trois C2',
+  'Notes on levels (optional)': 'Remarques sur les niveaux (facultatif)',
+  'e.g. more typing and Word Guess at higher levels, rarer verbs at C1–C2. Default: more easy questions than hard ones, unless you ask otherwise.': 'ex. plus de saisie et de Devinettes aux niveaux élevés, verbes plus rares en C1–C2. Par défaut : plus de questions faciles que difficiles, sauf indication contraire.',
   'Difficulty level used by adaptive mode': 'Niveau de difficulté utilisé par le mode adaptatif',
   '🎯 Levels': '🎯 Niveaux',
   'Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions, polls and teacher-graded questions are skipped in adaptive play.': 'Attribuez un niveau A1–C2 à chaque question pour que le mode adaptatif puisse faire monter ou descendre chaque élève. Les questions sans niveau, les sondages et les questions corrigées par l’enseignant sont ignorés en mode adaptatif.',

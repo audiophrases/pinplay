@@ -1169,7 +1169,7 @@ function syncCustomGoalFieldState() {
 function syncAdaptivePromptFields() {
   const adaptiveEl = document.getElementById('promptAdaptive');
   const levelEl = document.getElementById('promptLevel');
-  const mixWrap = document.getElementById('promptLevelMixWrap');
+  const mixWrap = document.getElementById('promptLevelNotesWrap');
   if (!(adaptiveEl instanceof HTMLInputElement)) return;
   const on = adaptiveEl.checked;
   if (levelEl instanceof HTMLInputElement) {
@@ -4219,7 +4219,7 @@ async function exportCreationPrompt() {
   const lang = document.getElementById('promptLanguage')?.value.trim();
   const adaptive = !!document.getElementById('promptAdaptive')?.checked;
   const level = adaptive ? '' : document.getElementById('promptLevel')?.value.trim();
-  const levelMix = adaptive ? document.getElementById('promptLevelMix')?.value.trim() : '';
+  const levelNotes = adaptive ? document.getElementById('promptLevelNotes')?.value.trim() : '';
   const timeLimit = document.getElementById('promptTimeLimit')?.value;
   const count = document.getElementById('promptQuestionCount')?.value.trim();
   const batchSize = document.getElementById('promptBatchSize')?.value;
@@ -4245,7 +4245,7 @@ async function exportCreationPrompt() {
   if (level) cleanRequest.level = level;
   if (adaptive) {
     cleanRequest.levels = 'Adaptive: all CEFR levels A1–C2, tagged per question';
-    if (levelMix) cleanRequest.levelMix = levelMix;
+    if (levelNotes) cleanRequest.levelNotes = levelNotes;
   }
   cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) {
@@ -15478,9 +15478,13 @@ function buildAdaptiveLevelRules(cleanRequest) {
     : CEFR_LEVELS.map((l) => `${l} ≈${ADAPTIVE_DEFAULT_LEVEL_SHARES[l]}%`).join(', ');
   return [
     'This is an ADAPTIVE multilevel quiz with no single level. Every question MUST include a "cefr" field set to exactly one of "A1", "A2", "B1", "B2", "C1", "C2". PinPlay moves each student up or down between levels based on their answers, so every tag must be accurate.',
-    cleanRequest.levelMix
-      ? `Level mix requested by the teacher: ${cleanRequest.levelMix}. Follow it.`
-      : `Level mix: cover all six levels, with more easy questions than hard ones (harder questions often require writing and take longer to answer). Target: ${defaultMix}.`,
+    `Level mix: cover all six levels, with more easy questions than hard ones (harder questions often require writing and take longer to answer). Default target: ${defaultMix}.`,
+    // Teachers mostly describe what each level should look like (task types,
+    // vocabulary); the default count target only yields when they ask for a
+    // different balance.
+    cleanRequest.levelNotes
+      ? `Teacher's notes on the levels: "${cleanRequest.levelNotes}". Follow them. If they ask for a different number or balance of questions per level, that replaces the default target; otherwise keep the default target.`
+      : undefined,
     'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
     'Where possible, practise the same skill or topic at several levels, so a student who moves up keeps working on the same thing at a harder level.',
     'If the quiz is not about learning a language, treat A1–C2 as six difficulty steps from easiest (A1) to hardest (C2).',

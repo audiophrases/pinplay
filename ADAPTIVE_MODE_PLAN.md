@@ -8,7 +8,7 @@ Phase 1 as built (some details differ from section 3):
 
 - `cefr` is kept by both normalizers (`normalizeQuizForLive` in `app.js`, `normalizeQuiz` in the worker). Import also accepts `cefrLevel`, `level` and lowercase values. Cloud save stores the raw quiz, so the tag was never at risk there.
 - Editor: Level dropdown next to Points, a level chip in each question header, and a **🎯 Levels** panel above the question list. The panel shows per-level counts in its header line and has two tools: a "From question … to … → level" range setter, which replaces the multi-select bulk tag idea, and the AI tagging round trip (copy prompt → paste reply → apply). The thin-band hint was dropped: the counts are enough information.
-- The AI creation form has an **🎯 Adaptive quiz (all levels A1–C2)** checkbox, which locks the Level field, and a **Level mix** text box. Default mix A1 22 / A2 22 / B1 18 / B2 15 / C1 12 / C2 11 %.
+- The AI creation form has an **🎯 Adaptive quiz (all levels A1–C2)** checkbox, which locks the Level field, and a **Notes on levels** text box. The default mix (A1 22 / A2 22 / B1 18 / B2 15 / C1 12 / C2 11 %) is always in the prompt. The notes add to it and only replace it when they ask for a different balance. The first version let any note replace the mix, so a note about task types gave an even split.
 - Question bank: `cefr` is stored in `pinplay_data` on ingest. A bank quiz whose level is a CEFR value seeds that level on imported questions.
 - Tests: `tests/adaptive-levels.test.js`. The `tests/` folder is gitignored, so add it with `git add -f`.
 
@@ -79,7 +79,7 @@ Because the reply only changes the level map, the AI can't rewrite or damage the
 - With **Adaptive** selected, the prompt stops saying "pitched at X". Instead it says:
   - every question MUST carry `cefr`
   - spread the requested question count across all six levels, **leaning toward the easy end by default**. Harder questions often involve writing and take longer to answer, even for strong students, so a session serves more easy questions than hard ones. Default target shares: A1 22%, A2 22%, B1 18%, B2 15%, C1 12%, C2 11% (so 50 questions ≈ 11/11/9/8/6/5)
-  - an optional **"Level mix"** text box next to the Level select (e.g. "mostly A2–B1, only a couple of C2", "even across all levels") **replaces** the default mix when filled in. It's free text so the teacher can describe any balance.
+  - an optional **"Notes on levels"** text box (e.g. "more typing and Word Guess at higher levels, rarer verbs at C1–C2", or "even across all levels"). The default mix stays in the prompt; the notes replace it only when they ask for a different number or balance of questions per level.
   - the same skill/topic should appear at several levels where possible, so a student who moves up keeps practising the same thing at a harder level
   - the question count stays exactly what the teacher typed. Nothing raises it automatically.
 - Add `cefr` to `exampleTemplate` and the output contract in both prompt builders (chatbot and agent).
@@ -178,7 +178,7 @@ Every phase also needs: i18n strings (EN in `i18n.js`, FR in `i18n-fr.js`), and 
 | Starting level | Everyone starts easy (lowest band present) and climbs fast. The teacher does not assign levels to students. |
 | Stopping rule | Cup: time. Assignment: N questions per student (e.g. 15 of 50). |
 | Cup points by level | Equal points at every level |
-| Questions per level | Up to the teacher. The app shows coverage but never forces a count. The AI prompt leans toward easier questions by default (hard ones take longer), and the optional "Level mix" text overrides that. |
+| Questions per level | Up to the teacher. The app shows coverage but never forces a count. The AI prompt leans toward easier questions by default (hard ones take longer), and the optional "Notes on levels" text overrides that only when it asks for a different balance. |
 | Students see their level? | Not shown anywhere on the board or student screens. No need to hide it from the page code. |
 | Partial quizzes (e.g. A2–B2 only) | Allowed. The engine adapts to whichever levels each quiz contains (full A1–C2 is the ideal) |
 | Level carries over to next session? | No. Every session starts fresh. |
