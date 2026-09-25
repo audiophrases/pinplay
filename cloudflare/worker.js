@@ -8157,7 +8157,9 @@ function arenaApplyAttack(room, pid, card, targetId, out) {
   me.score = Number(me.score || 0) + amount;
   arenaFeed(room, { kind: card, a: arenaName(me), b: arenaName(victim), amount });
   out.push({ to: targetId, msg: { t: 'fx', kind: 'robbed', card, by: arenaName(me), amount } });
-  return { t: 'reward', card, amount, target: arenaName(victim) };
+  // Pickpocket takes up to 200; flag when the victim had less so the thief sees why.
+  const capped = card === 'pickpocket' && amount < 200;
+  return { t: 'reward', card, amount, target: arenaName(victim), ...(capped ? { capped: true } : {}) };
 }
 
 function arenaTargets(room, pid) {
@@ -8271,7 +8273,7 @@ function arenaHandleAnswer(room, pid, data, out) {
     ps.correct += 1;
     ps.correctSinceCard += 1;
   }
-  out.push({ to: pid, msg: { t: 'result', correct, points, answer: correct ? '' : hostCorrectSummary(q) } });
+  out.push({ to: pid, msg: { t: 'result', correct, points, answer: correct ? '' : arenaCorrectSummary(q) } });
 
   if (correct && ps.correctSinceCard >= ARENA_CARD_EVERY) {
     ps.correctSinceCard = 0;
@@ -8551,6 +8553,19 @@ function summarizePoll(question, responses) {
     otherCount: hiddenCount + overflowCount,
     items,
   };
+}
+
+// Student-facing variant for PinPlay Cup: the student's options are shuffled,
+// so the host summary's original-order numbers ("1. Paris") would mislead.
+function arenaCorrectSummary(question) {
+  if (question && ['mcq', 'tf', 'multi'].includes(question.type)) {
+    return (question.answers || [])
+      .filter((a) => !!a.correct)
+      .map((a) => String(a.text || '').trim())
+      .filter(Boolean)
+      .join(' | ');
+  }
+  return hostCorrectSummary(question);
 }
 
 function hostCorrectSummary(question) {

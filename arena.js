@@ -473,7 +473,8 @@
     if (msg.note === 'miss') return `${ic} ${esc(tr('Missed!'))}`;
     switch (msg.card) {
       case 'lucky': case 'jackpot': return `${ic} +${msg.amount}!`;
-      case 'steal': case 'pickpocket': return `${ic} +${msg.amount} ${esc(tr('from'))} ${who}`;
+      case 'steal': case 'pickpocket': return `${ic} +${msg.amount} ${esc(tr('from'))} ${who}${msg.capped
+        ? `<br><small>${esc(tr('{name} only had {amount} points', { name: msg.target, amount: msg.amount }))}</small>` : ''}`;
       case 'swap': return `${ic} ${esc(tr('Swapped with'))} ${who} (${msg.amount >= 0 ? '+' : ''}${msg.amount})`;
       default: return `${ic} ${esc(tr(c.name))}!`;
     }
