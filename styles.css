@@ -5454,6 +5454,8 @@ body.arena-board-open { overflow: hidden; }
 .arena-durations { display: flex; gap: 4px; }
 .arena-board-error { min-height: 1em; margin: 4px 0; }
 .arena-board-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 38%); gap: 20px; min-height: 0; }
+/* During the game the ranking and the feed share the projector equally. */
+.arena-board:not(.is-lobby) .arena-board-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 /* One ranked column; the whole class scrolls (≈10 rows visible on a projector). */
 .arena-rank { list-style: none; margin: 0; padding: 0 6px 0 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .arena-rank.lobby { display: grid; }
@@ -5484,7 +5486,8 @@ body.arena-board-open { overflow: hidden; }
 .arena-board-podium .arena-podium-step.s3 { min-height: 160px; }
 .arena-board-podium .arena-podium-avatar { width: 110px; height: 110px; }
 @media (max-width: 800px) {
-  .arena-board-body { grid-template-columns: 1fr; }
+  .arena-board-body,
+  .arena-board:not(.is-lobby) .arena-board-body { grid-template-columns: 1fr; }
   .arena-board-clock { font-size: 36px; }
 }
 
