@@ -5065,6 +5065,11 @@ async function createLiveGame(opts = {}) {
     if (!createSessionPassword) throw new Error('Teacher password is required.');
 
     const payload = normalizeQuizForLive(quiz);
+    // PinPlay Cup follows the Assignments "🎯 Adaptive" checkbox (shown only
+    // for quizzes with 2+ tagged levels); the board itself has no toggle.
+    const arenaAdaptive = arenaMode
+      && !!document.getElementById('assignmentAdaptive')?.checked
+      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
     const data = await api('/api/create', {
       method: 'POST',
       body: {
@@ -5073,6 +5078,7 @@ async function createLiveGame(opts = {}) {
         options: {
           randomNames: isRandomNamesEnabled(),
           gameMode: arenaMode ? 'arena' : 'classic',
+          arenaAdaptive,
         },
       },
     });

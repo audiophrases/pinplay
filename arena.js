@@ -725,8 +725,6 @@
         <span class="arena-board-clock" data-h="clock">–:––</span>
         <span class="arena-board-actions">
           <span data-h="durations" class="arena-durations"></span>
-          <button type="button" class="btn small hidden" data-h="adaptive" aria-pressed="false"
-            title="${esc(tr('Each student gets easier or harder questions depending on how they answer. Students never see their level.'))}"></button>
           <button type="button" class="btn success" data-h="start">${esc(tr('Start'))}</button>
           <button type="button" class="btn danger hidden" data-h="end">${esc(tr('End now'))}</button>
           <button type="button" class="btn hidden" data-h="levels">${esc(tr('📥 Level report'))}</button>
@@ -744,10 +742,6 @@
     H.root.addEventListener('click', (e) => {
       const d = e.target.closest('[data-dur]');
       if (d) { H.sock.send({ t: 'duration', sec: Number(d.dataset.dur) }); return; }
-      if (e.target.closest('[data-h="adaptive"]')) {
-        if (H.board?.status === 'lobby') H.sock.send({ t: 'adaptive', on: !H.board.adaptive });
-        return;
-      }
       if (e.target.closest('[data-h="levels"]')) { downloadLevelReport(); return; }
       if (e.target.closest('[data-h="start"]')) H.sock.send({ t: 'start' });
       else if (e.target.closest('[data-h="end"]')) { if (confirm(tr('End the round now?'))) H.sock.send({ t: 'end' }); }
@@ -814,17 +808,7 @@
       ? H.durations.map((s) => `<button type="button" class="btn small${s === msg.durationSec ? ' primary' : ''}" data-dur="${s}">${s / 60} min</button>`).join('')
       : '';
     if (lobby) $h('clock').textContent = fmtClock(msg.durationSec * 1000);
-    // Adaptive: a toggle in the lobby (only when the quiz has 2+ tagged
-    // levels), a plain label once the game runs. Never per-student levels.
-    const bands = msg.adaptiveBands || H.bands || [];
-    if (lobby) H.bands = bands;
-    const ab = $h('adaptive');
-    const canToggle = lobby && bands.length >= 2;
-    ab.classList.toggle('hidden', !canToggle && !msg.adaptive);
-    ab.classList.toggle('primary', !!msg.adaptive);
-    ab.disabled = !canToggle;
-    ab.setAttribute('aria-pressed', msg.adaptive ? 'true' : 'false');
-    ab.textContent = `🎯 ${tr('Adaptive')}${bands.length >= 2 ? ` ${bands[0]}–${bands[bands.length - 1]}` : ''}`;
+    // Adaptive games (set on the create page) end with a teacher-only report.
     H.levels = msg.levels || null;
     $h('levels').classList.toggle('hidden', !(msg.status === 'finished' && H.levels?.length));
     H.root.classList.toggle('is-lobby', lobby);
@@ -882,7 +866,6 @@
     H.celebrated = false;
     H.lastFeedAt = null;
     H.lastTick = null;
-    H.bands = [];
     H.levels = null;
     H.root.classList.remove('hidden');
     document.body.classList.add('arena-board-open');

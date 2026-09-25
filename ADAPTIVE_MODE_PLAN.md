@@ -141,7 +141,7 @@ inspects the page code can find the tag, and that's fine.
 ## 5. PinPlay Cup (live)
 
 - **Limit = time.** The existing Cup duration (2–10 min) is the only stopping rule. The engine keeps serving questions until the clock runs out, repeating within bands as needed.
-- Host setup gets an **Adaptive** toggle next to duration. It is enabled only when the quiz has at least 2 tagged bands, and shows the coverage bar.
+- **Turning it on:** the Assignments row's **🎯 Adaptive** checkbox on the create page also applies to PinPlay Cup: a Cup game started while it is ticked is adaptive (needs at least 2 tagged levels). The projected board has no toggle and never shows "Adaptive" or the level range (owner's choice, 2026-09-25; the first version had a lobby toggle on the board).
 - `arenaDeal` calls the engine instead of `arenaBuildDeck` when `room.arena.adaptive` is on. The non-adaptive path is unchanged.
 - **Equal points at every level (decided).** Difficulty and scoring stay separate: an A1 correct answer and a C2 correct answer earn the same `ARENA_BASE_POINTS`, and chests/powers work as they do today.
 - **No levels on the board or on student phones.** Only the host sees them, after the game.

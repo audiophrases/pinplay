@@ -4112,6 +4112,9 @@ export class QuizRoom {
             players: {},
             feed: [],
           };
+          // Adaptive comes from the create page (the Assignments "Adaptive"
+          // checkbox) and needs at least two tagged levels to move between.
+          room.arena.adaptive = !!options.arenaAdaptive && arenaAdaptivePool(room).bands.length >= 2;
         }
 
         appendRoomEvent(room, 'room_created', {
@@ -5082,11 +5085,6 @@ export class QuizRoom {
       if (data.t === 'duration' && room.arena.status === 'lobby') {
         const dur = Number(data.sec);
         if (ARENA_DURATIONS_SEC.includes(dur)) room.arena.durationSec = dur;
-        await this.#arenaPersist(room, true);
-        this.#arenaBroadcastBoard(room);
-      } else if (data.t === 'adaptive' && room.arena.status === 'lobby') {
-        // Needs at least two tagged levels to move between.
-        room.arena.adaptive = !!data.on && arenaAdaptivePool(room).bands.length >= 2;
         await this.#arenaPersist(room, true);
         this.#arenaBroadcastBoard(room);
       } else if (data.t === 'start' && room.arena.status === 'lobby') {
@@ -8340,9 +8338,6 @@ function arenaBoard(room) {
       };
     }),
     feed: room.arena.feed.slice(-ARENA_FEED_MAX),
-    adaptive: !!room.arena.adaptive,
-    // Lobby only: the levels this quiz covers, so the host can offer Adaptive.
-    adaptiveBands: room.arena.status === 'lobby' ? arenaAdaptivePool(room).bands : undefined,
   };
 }
 
