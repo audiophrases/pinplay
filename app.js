@@ -357,6 +357,8 @@ const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 // Default AI level mix for adaptive quizzes (percent). Leans easy: harder
 // questions often need written production and take longer to answer.
 const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
+// Adaptive assignments: questions each student answers unless the teacher sets another number.
+const ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT = 20;
 
 const QUESTION_TYPE_EXPLANATIONS = {
   "mcq": {
@@ -9989,7 +9991,7 @@ function buildAssignmentListItem(a) {
     ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
     : '';
   const sizeTag = a?.adaptiveCount
-    ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} per student', { n: Number(a.adaptiveCount) }))}</span>`
+    ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} questions per student', { n: Number(a.adaptiveCount) }))}</span>`
     : `${Number(a?.totalQuestions || 0)}q`;
   title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${sizeTag}${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}`;
 
@@ -10202,7 +10204,7 @@ async function createAssignmentFromCurrentQuiz() {
     const adaptiveOn = !!document.getElementById('assignmentAdaptive')?.checked
       && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
     const adaptiveCount = adaptiveOn
-      ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || 15))
+      ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
       : 0;
 
     const data = await api('/api/assignments/create', {
@@ -10225,7 +10227,7 @@ async function createAssignmentFromCurrentQuiz() {
     const link = buildAssignmentJoinLink(code);
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
     const createdCount = Number(data?.assignment?.adaptiveCount || 0);
-    const adaptiveLabel = createdCount ? ` · ${t('🎯 Adaptive · {n} per student', { n: createdCount })}` : '';
+    const adaptiveLabel = createdCount ? ` · ${t('🎯 Adaptive · {n} questions per student', { n: createdCount })}` : '';
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}${adaptiveLabel}`;
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("{p1} · Link: {p2}", { p1: msg, p2: link });
@@ -15526,7 +15528,7 @@ function buildAdaptiveLevelRules(cleanRequest) {
 // still lands on the right questions if they were reordered in between.
 let levelTagSnapshot = null;
 
-// Assignments: "🎯 Adaptive · N per student" is offered only when the quiz has
+// Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
 // auto-graded questions tagged with at least two levels (the server checks too).
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
@@ -15541,8 +15543,14 @@ function syncAssignmentAdaptiveControl() {
   if (box && !available) box.checked = false;
   if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
   if (countEl) {
-    countEl.max = String(Math.max(1, tagged));
-    if (Number(countEl.value) > tagged) countEl.value = String(Math.max(1, tagged));
+    // The teacher's number (or the default), capped at what this quiz can
+    // serve. Only while the control is offered: with no levelled quiz loaded
+    // yet there is nothing to cap against, and the default must survive.
+    if (available) {
+      const wanted = Number(countEl.dataset.wanted) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT;
+      countEl.max = String(tagged);
+      countEl.value = String(Math.min(wanted, tagged));
+    }
     countEl.disabled = !box?.checked;
   }
 }
@@ -15550,6 +15558,9 @@ function syncAssignmentAdaptiveControl() {
 function initAssignmentAdaptiveControl() {
   const box = document.getElementById('assignmentAdaptive');
   if (!box) return;
+  const countEl = document.getElementById('assignmentAdaptiveCount');
+  // Remember what the teacher typed, so a smaller quiz only caps it for now.
+  countEl?.addEventListener('input', () => { countEl.dataset.wanted = countEl.value; });
   box.addEventListener('change', () => {
     // Adaptive pairs best with instant feedback; the teacher can still change it.
     if (box.checked) {
