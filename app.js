@@ -4464,11 +4464,11 @@ async function exportCreationPrompt() {
       : undefined,
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
-  const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
-  if (cleanRequest.levels) normalizedMustFollowRules.push(...buildAdaptiveLevelRules(cleanRequest));
   if (blockedTypesText) {
     mustFollowRules.push(`Do NOT use blocked types: ${blockedTypesText}.`);
   }
+  const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
+  if (cleanRequest.levels) normalizedMustFollowRules.push(...buildAdaptiveLevelRules(cleanRequest));
   const outputContract = [
     'Output only one JSON object.',
     'Follow exampleTemplate key shapes.',
