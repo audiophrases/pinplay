@@ -1,58 +1,104 @@
-# Cloudflare Worker Secrets
+# Cloudflare Worker Secrets (`pinplay-api`)
 
-## Required secrets for `pinplay-api`
+This covers the owner's worker, `pinplay-api`. Teacher instances created by the
+setup wizard provision their own secrets (`setup/pinplay-setup.mjs`).
 
-| Secret | Purpose |
-|--------|---------|
-| `CREATE_PASSWORD_HASH` | SHA-256 hash of teacher password (lowercase hex) |
-| `PEXELS_API_KEY` | Image search in quiz builder |
-| `EDGE_TTS_URL` | Text-to-speech bridge URL |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID used to verify student sign-in |
-| `STUDENT_SESSION_KEY` | HMAC key for student session tokens (e.g. `openssl rand -hex 32`) |
-| `CREATOR_SIGNING_KEY` | HMAC key for signing guest creator workspace tokens (e.g. `openssl rand -hex 32`) |
+## Deploying from more than one computer
 
-## Check secrets (IMPORTANT: use --name flag!)
+Secrets live in Cloudflare, not in this repo, and `wrangler deploy` never
+deletes or changes them. The deploy config (`cloudflare/wrangler.toml`) is in
+git, so every computer deploys the same bindings. Deploying from the desktop
+or the laptop is equally safe, with two rules:
+
+1. **`git pull` before you deploy.** The front-end is GitHub Pages, so it
+   updates as soon as `main` is pushed. The worker only changes when you
+   deploy. Deploying from a computer that hasn't pulled replaces the live
+   worker with older code.
+2. **Never add plain-text variables in the Cloudflare dashboard.** A deploy
+   wipes dashboard variables that aren't in `wrangler.toml`. Use a secret
+   (`wrangler secret put`) or a `[vars]` entry in `wrangler.toml` instead.
+   As of 2026-09-25 the live worker has no dashboard variables.
+
+Each computer needs `npx wrangler login` once, with the owner's Cloudflare
+account.
+
+## Secrets the worker reads
+
+Checked against `cloudflare/worker.js` and the live worker on 2026-09-25.
+
+### Required
+
+| Secret | Used for | If missing |
+|--------|----------|------------|
+| `CREATE_PASSWORD_HASH` | Teacher login: SHA-256 of the teacher password, lowercase hex | Nobody can log in to the teacher page |
+| `GOOGLE_CLIENT_ID` | Verifying student "Sign in with Google" | Student sign-in fails |
+| `STUDENT_SESSION_KEY` | Signing student session tokens (`openssl rand -hex 32`) | Falls back to `CREATOR_SIGNING_KEY`. Rotating it signs every student out, nothing else breaks. |
+| `CREATOR_SIGNING_KEY` | Signing guest creator workspace tokens (`openssl rand -hex 32`) | Guest workspaces can't be created |
+| `EDGE_TTS_URL` | Edge TTS bridge URL for question audio | No generated audio |
+| `EDGE_TTS_SECRET` | Bearer token sent to the TTS bridge. Must match the bridge's own `EDGE_TTS_SECRET`. | If the bridge has its own secret set, it rejects every audio request |
+
+### Optional (turn on search features)
+
+| Secret | Used for | If missing |
+|--------|----------|------------|
+| `PEXELS_API_KEY` | Image search and stock-video search in the builder | Image search and Pexels video results don't work |
+| `GIPHY_API_KEY` | GIF search in the builder | GIF search reports "not configured" |
+| `YOUTUBE_API_KEY` | YouTube results in video search | YouTube is skipped |
+| `VIMEO_ACCESS_TOKEN` | Vimeo results in video search | Vimeo is skipped (not set on the live worker) |
+| `BUILDER_BASE_URL` | Teacher-page URL used in guest workspace links | Defaults to `https://audiophrases.github.io/pinplay/create/` (not set on the live worker) |
+
+### Left over on the live worker, no longer read
+
+`CREATE_PASSWORD`, `DRIVE_PUBLISH_URL`, `DRIVE_SHARED_SECRET`,
+`STUDENT_LOGIN_VERIFY_URL`, `STUDENT_ROSTER_LOOKUP_SECRET`,
+`STUDENT_ROSTER_LOOKUP_URL`.
+
+These are from the old password login, the Apps Script student roster and the
+removed Google Drive publishing. Nothing in the code reads them, so they can
+be deleted whenever you like:
 
 ```bash
-# This returns EMPTY (wrangler bug/quirk):
-npx wrangler secret list
+npx wrangler secret delete STUDENT_ROSTER_LOOKUP_URL --name pinplay-api
+```
 
-# This shows the actual secrets:
+## Check which secrets are set
+
+Always pass `--name`; without it wrangler returns an empty list.
+
+```bash
 npx wrangler secret list --name pinplay-api
 ```
 
-## Set a secret
+This shows names only, never values.
+
+## Set or change one secret
 
 ```bash
 echo "value" | npx wrangler secret put SECRET_NAME --name pinplay-api
 ```
 
-## Restore all secrets at once
+## Back up and restore all secrets
 
-1. Copy the template: `cp cloudflare/secrets-template.json %USERPROFILE%\.pinplay-secrets.json`
-2. Fill in values in `cloudflare\restore-secrets.local.cmd` (gitignored):
-   ```
-   CREATE_PASSWORD_HASH=abc123...
-   PEXELS_API_KEY=xyz789...
-   EDGE_TTS_URL=https://...
-   GOOGLE_CLIENT_ID=....apps.googleusercontent.com
-   STUDENT_SESSION_KEY=...
-   ```
-3. Run: `cloudflare\restore-secrets.cmd`
+Cloudflare never shows a secret's value again after it is set, so keep your
+own copy of the values:
 
-## Current values location
+1. Create `cloudflare\restore-secrets.local.cmd` (gitignored) with one
+   `NAME=value` line per secret. `cloudflare/secrets-template.json` lists every
+   name. Lines starting with `#` are ignored.
+2. To restore, run `cloudflare\restore-secrets.cmd`. It uploads every line in
+   the file and then warns about any required secret the file doesn't contain.
 
-Store your current secret values in `~/.pinplay-secrets.json` (gitignored, outside repo).
+Keep the local file on each computer you might restore from, or keep the values
+in a password manager and recreate the file when needed.
 
 ## Student sign-in
 
-Students sign in with Google; there are no student passwords. Two secrets make
-that work:
+Students sign in with Google; there are no student passwords.
 
-- `GOOGLE_CLIENT_ID` — a Web application OAuth client. Its **Authorized
+- `GOOGLE_CLIENT_ID` is a Web application OAuth client. Its **Authorized
   JavaScript origins** must list every origin the student page is served from.
-- `STUDENT_SESSION_KEY` — signs the session token the browser replays on every
-  identity-bearing call. Rotating it signs everyone out; nothing else breaks.
+- `STUDENT_SESSION_KEY` signs the session token the browser sends with every
+  identity-bearing call.
 
 Who may sign in (allowed domains, and whether unknown students auto-enrol) is
 not a secret: set it in the teacher page under **Students -> Sign-in rules**.

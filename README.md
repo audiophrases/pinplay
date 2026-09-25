@@ -188,25 +188,30 @@ This prints a URL like `https://pinplay-api.<your-subdomain>.workers.dev`.
 
 Update `DEFAULT_BACKEND_URL` in `app.js` if deploying to a different Worker URL than the preconfigured one.
 
-### Required Environment Variables / Secrets
+### Secrets
+
+`cloudflare/SECRETS.md` lists every secret the Worker reads, what happens when
+one is missing, and how to back up and restore them. In short:
 
 ```bash
-wrangler secret put EDGE_TTS_URL        # Edge TTS bridge URL (e.g. https://your-host/tts)
-wrangler secret put EDGE_TTS_SECRET     # Shared secret for Edge TTS auth (optional)
-```
-
-### Optional Secrets
-
-```bash
-wrangler secret put DRIVE_SHARED_SECRET   # For Google Drive integration
-wrangler secret put DRIVE_PUBLISH_URL     # Apps Script Web App URL for Drive bridge
-wrangler secret put GOOGLE_CSE_KEY        # Google Custom Search API key (image search)
-wrangler secret put GOOGLE_CSE_CX         # Google Custom Search Engine ID
-wrangler secret put GIPHY_API_KEY         # GIPHY API key (per-question GIF search)
-wrangler secret put TEACHER_PASSWORD      # Required to create live games / host
+# Required
+wrangler secret put CREATE_PASSWORD_HASH  # SHA-256 (hex) of the teacher password
 wrangler secret put GOOGLE_CLIENT_ID      # Google OAuth client ID for student sign-in
 wrangler secret put STUDENT_SESSION_KEY   # HMAC key for student session tokens
+wrangler secret put CREATOR_SIGNING_KEY   # HMAC key for guest creator workspaces
+wrangler secret put EDGE_TTS_URL          # Edge TTS bridge URL (e.g. https://your-host/tts)
+wrangler secret put EDGE_TTS_SECRET       # Shared secret for the TTS bridge (if it has one)
+
+# Optional: search in the quiz builder
+wrangler secret put PEXELS_API_KEY        # Image and stock-video search
+wrangler secret put GIPHY_API_KEY         # GIF search
+wrangler secret put YOUTUBE_API_KEY       # YouTube video search
+wrangler secret put VIMEO_ACCESS_TOKEN    # Vimeo video search
 ```
+
+Deploying never deletes secrets, so you can deploy from any computer that is
+logged in to the Cloudflare account. `git pull` first, so you don't deploy
+older Worker code.
 
 The Worker also binds:
 
@@ -234,25 +239,6 @@ It exposes `POST /tts` with body:
 ```
 
 Then configure the Worker secrets (`EDGE_TTS_URL` and `EDGE_TTS_SECRET`) and redeploy.
-
-## Google Drive Integration (Optional)
-
-Enables **Publish to Drive**, **Open from Drive**, and **Delete from Drive** buttons in the quiz builder.
-
-### 1) Create Apps Script Bridge
-
-1. Go to https://script.google.com and create a new project.
-2. Paste the script from `cloudflare/drive-bridge.gs`.
-3. Set constants: `FOLDER_ID` (your Drive folder ID), `SHARED_SECRET` (long random string).
-4. Deploy as **Web app** (Execute as: Me, Access: Anyone).
-
-### 2) Configure Worker Secrets
-
-```bash
-wrangler secret put DRIVE_SHARED_SECRET  # paste same SHARED_SECRET
-wrangler secret put DRIVE_PUBLISH_URL    # paste Apps Script Web app URL
-wrangler deploy
-```
 
 ## Keyboard Shortcuts
 
