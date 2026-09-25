@@ -827,6 +827,14 @@ function deriveAssignmentCurrentIndex(state, fromIndex = 0) {
   return total - 1;
 }
 
+// Adaptive assignment in progress: the server serves one question at a time
+// (the attempt's quiz is the questions served so far), so there is no going
+// back or skipping ahead until the attempt is submitted.
+function isAdaptiveAssignmentOpen() {
+  const attempt = live.player.assignment?.state?.attempt;
+  return !!(attempt?.adaptive && !attempt.submitted && !live.player.assignment.reviewMode);
+}
+
 function clampAssignmentIndex(index, total) {
   if (!Number.isFinite(total) || total <= 0) return 0;
   return Math.max(0, Math.min(Math.round(Number(index || 0)), total - 1));
@@ -839,6 +847,15 @@ function moveAssignmentIndex(delta) {
   const step = Number(delta || 0);
   const currentIdx = Number(live.player.assignment.currentIndex || 0);
   const requested = currentIdx + step;
+  if (isAdaptiveAssignmentOpen()) {
+    // Forward only, and never past the question being served.
+    if (step <= 0) return;
+    const served = Number(live.player.assignment.state.attempt.adaptive.step || 0);
+    live.player.assignment.currentIndex = clampAssignmentIndex(Math.min(requested, served), total);
+    const mapped = mapAssignmentStateToPlayerState();
+    if (mapped) renderPlayerState(mapped);
+    return;
+  }
   // If the student advances past the last question while editing answers, drop the
   // bypass so the End-of-quiz screen reappears on the next render.
   if (step > 0 && requested >= total && live.player.assignment.bypassAllAnsweredScreen) {
@@ -1647,6 +1664,12 @@ async function proceedWithAssignmentStart(code, studentKey, username) {
     });
   }, 5000);
 
+  // Adaptive attempts resume on the question being served (there is no going
+  // back to earlier ones), not on question 1.
+  if (data?.attempt?.adaptive && !data.attempt.submitted) {
+    live.player.assignment.currentIndex = Number(data.attempt.adaptive.step || 0);
+  }
+
   await loadAssignmentState();
 }
 
@@ -2120,7 +2143,7 @@ function showUnansweredConfirmModal(blankIndexes) {
 // question locks and reveals. leaveBlank=true (deferred/exam): "Leave blank?" —
 // client-side advance only, no save, no server roundtrip. Question stays in the
 // blank set via answeredQIndexes for the finalize confirmation.
-function showSkipAnswerModal({ leaveBlank = false } = {}) {
+function showSkipAnswerModal({ leaveBlank = false, skip = false } = {}) {
   const existing = document.getElementById('skipAnswerModal');
   if (existing) existing.remove();
 
@@ -2148,7 +2171,7 @@ function showSkipAnswerModal({ leaveBlank = false } = {}) {
     'border:none',
     'cursor:pointer',
   ].join(';');
-  confirmBtn.textContent = leaveBlank ? 'Leave blank?' : 'Show answer?';
+  confirmBtn.textContent = skip ? t('Skip question?') : (leaveBlank ? 'Leave blank?' : 'Show answer?');
   const accept = () => {
     if (confirmBtn.disabled) return;
     confirmBtn.disabled = true;
@@ -3474,7 +3497,7 @@ function renderPlayerState(state) {
     }
     setJoinStatusHud(t('All answers saved ✅'), 'ok');
     setStatus(joinStatusEl, t('End of quiz reached. Submit assignment to finish.'), 'ok');
-    const allowEditing = state.feedbackMode !== 'instant';
+    const allowEditing = state.feedbackMode !== 'instant' && !live.player.assignment.state?.attempt?.adaptive;
     showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
       title: 'End of quiz 🎉',
       showFinishButton: true,
@@ -3632,16 +3655,19 @@ function renderPlayerState(state) {
     const hasUnanswered = [...Array(Math.max(0, total)).keys()].some((i) => !answered.has(i));
 
     const isReview = !!live.player.assignment.reviewMode;
+    const adaptiveOpen = isAdaptiveAssignmentOpen();
 
-    if (assignmentPrevBtn) {
+    if (adaptiveOpen) {
+      [assignmentPrevBtn, assignmentNextBtn, assignmentNextPendingBtn].forEach((btn) => btn?.classList.add('hidden'));
+    } else if (assignmentPrevBtn) {
       assignmentPrevBtn.classList.remove('hidden');
       assignmentPrevBtn.disabled = idx <= 0 || (assignmentSubmitted && !isReview);
     }
-    if (assignmentNextBtn) {
+    if (assignmentNextBtn && !adaptiveOpen) {
       assignmentNextBtn.classList.remove('hidden');
       assignmentNextBtn.disabled = idx >= Math.max(0, total - 1) || (assignmentSubmitted && !isReview);
     }
-    if (assignmentNextPendingBtn) {
+    if (assignmentNextPendingBtn && !adaptiveOpen) {
       assignmentNextPendingBtn.classList.remove('hidden');
       assignmentNextPendingBtn.disabled = !hasUnanswered || assignmentSubmitted;
     }
@@ -3652,7 +3678,9 @@ function renderPlayerState(state) {
         ? `Reviewing question ${idx + 1} of ${total}`
         : assignmentSubmitted
           ? 'Assignment submitted. Waiting for teacher review.'
-          : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
+          : adaptiveOpen
+            ? t('Answered {done}/{total}', { done: answered.size, total })
+            : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
     }
   } else {
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
@@ -4825,7 +4853,9 @@ async function submitLiveAnswer(opts = {}) {
       if (isAssignment && !isPoll && !opts.allowEmpty) {
         // Instant → "Show answer?" (saves empty + reveals).
         // Deferred/exam → "Leave blank?" (advance only, finalize confirms blanks).
-        showSkipAnswerModal({ leaveBlank: !isInstant });
+        // Adaptive has no "come back later": skipping saves an empty (wrong) answer.
+        const adaptive = isAdaptiveAssignmentOpen();
+        showSkipAnswerModal({ leaveBlank: !isInstant && !adaptive, skip: !isInstant && adaptive });
         return;
       }
       if (!opts.allowEmpty) throw new Error('Choose/type an answer first.');

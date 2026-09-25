@@ -993,4 +993,13 @@ window.PINPLAY_FR_DICT = {
   'Highest level': 'Niveau le plus haut',
   'right/answered': 'justes/répondues',
   'Path': 'Parcours',
+  '🎯 Adaptive': '🎯 Adaptatif',
+  'per student': 'par élève',
+  'Questions per student': 'Questions par élève',
+  'Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.': 'Chaque élève répond à ce nombre de questions, choisies une à une selon ses réussites. Les élèves ne voient jamais leur niveau.',
+  '🎯 Adaptive · {n} per student': '🎯 Adaptatif · {n} par élève',
+  'Usual level {usual} · final {final} · highest {peak}': 'Niveau habituel {usual} · final {final} · le plus haut {peak}',
+  '🎯 Usual level {usual} · final {final} · highest {peak}': '🎯 Niveau habituel {usual} · final {final} · le plus haut {peak}',
+  'Skip question?': 'Passer la question ?',
+  'Answered {done}/{total}': 'Répondu {done}/{total}',
 };

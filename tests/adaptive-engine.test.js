@@ -188,3 +188,93 @@ describe('simulated 5-minute Cup on the irregular-verbs quiz', () => {
     assert.ok(share(levels, ['A2', 'B1', 'B2']) >= 0.75, levels.join(' '));
   });
 });
+
+describe('adaptive assignments', () => {
+  const quiz = () => ({
+    questions: [
+      ...['A1', 'A1', 'A2', 'A2', 'B1', 'B1'].map((cefr, i) => ({ id: `q${i}`, type: 'mcq', cefr })),
+      { id: 'open', type: 'open', cefr: 'B1' },
+    ],
+  });
+  const assignment = (count) => ({ quiz: quiz(), adaptive: { count } });
+
+  it('starts an attempt only with 2+ tagged levels and a count', () => {
+    assert.equal(E.adaptiveAttemptInit({ quiz: quiz() }), null);
+    assert.equal(E.adaptiveAttemptInit({ quiz: { questions: [{ type: 'mcq', cefr: 'A1' }] }, adaptive: { count: 3 } }), null);
+    const st = E.adaptiveAttemptInit(assignment(4));
+    assert.equal(st.count, 4);
+    assert.equal(st.items.length, 0);
+    assert.equal(quiz().questions[st.current].cefr, 'A1');
+  });
+
+  it('shows students only the served questions, with N as the goal', () => {
+    const a = assignment(4);
+    const st = E.adaptiveAttemptInit(a);
+    const first = st.current;
+    st.items.push({ qi: first, answer: 0, at: 1 });
+    E.adaptiveRecord(st, first, 0, true, seeded(1));
+    E.adaptiveAttemptAdvance(a, st);
+    const v = E.adaptiveAttemptView(a, { id: 'at_1', adaptive: st, answersByQ: { [first]: { answer: 0 } } });
+    assert.equal(v.assignment.quiz.questions.length, 2); // answered + current
+    assert.equal(v.assignment.quiz.questions[0].id, a.quiz.questions[first].id);
+    assert.deepEqual(Object.keys(v.attempt.answersByQ), ['0']);
+    assert.equal(v.attempt.adaptive, undefined);
+    const done = E.adaptiveAttemptView(a, { adaptive: st, answersByQ: {} }, { includeCurrent: false });
+    assert.equal(done.assignment.quiz.questions.length, 1);
+  });
+
+  it('finishes after N answers and never serves the open question', () => {
+    const a = assignment(5);
+    const st = E.adaptiveAttemptInit(a);
+    const rng = seeded(4);
+    while (!st.done) {
+      const qi = st.current;
+      assert.notEqual(a.quiz.questions[qi].type, 'open');
+      st.items.push({ qi, answer: 0, at: 1 });
+      E.adaptiveRecord(st, qi, st.bands.indexOf(a.quiz.questions[qi].cefr), true, rng);
+      E.adaptiveAttemptAdvance(a, st);
+    }
+    assert.equal(st.items.length, 5);
+    assert.equal(st.current, null);
+  });
+
+  it('follows questions to their new place after a quiz edit', () => {
+    const a = assignment(4);
+    const st = E.adaptiveAttemptInit(a);
+    const answered = st.current;
+    st.items.push({ qi: answered, answer: 0, at: 1 });
+    E.adaptiveRecord(st, answered, 0, true, seeded(1));
+    E.adaptiveAttemptAdvance(a, st);
+    const servedId = a.quiz.questions[st.current].id;
+    const answeredId = a.quiz.questions[answered].id;
+    // Reverse the quiz: every index changes.
+    const edited = { ...a, quiz: { questions: a.quiz.questions.slice().reverse() } };
+    const n = a.quiz.questions.length;
+    E.adaptiveAttemptRemap(edited, st, (qi) => n - 1 - qi);
+    assert.equal(edited.quiz.questions[st.items[0].qi].id, answeredId);
+    assert.equal(edited.quiz.questions[st.current].id, servedId);
+    // Delete the served question: a new one is served in its place.
+    E.adaptiveAttemptRemap(edited, st, (qi) => (edited.quiz.questions[qi].id === servedId ? null : qi));
+    assert.notEqual(st.current, null);
+    assert.notEqual(edited.quiz.questions[st.current].id, servedId);
+  });
+
+  it('keeps the student level when the quiz changes its levels', () => {
+    const st = E.adaptiveInit(['A1', 'A2', 'B1', 'B2']);
+    st.score = 2.5; // B1
+    st.retry.push({ qi: 1, band: 1, due: 0 });
+    E.adaptiveRebase(st, ['A2', 'B1', 'C1']);
+    assert.equal(st.bands[E.adaptiveBand(st)], 'B1');
+    assert.equal(st.retry.length, 0);
+  });
+
+  it('summarises the path for the teacher', () => {
+    const st = E.adaptiveInit(['A1', 'A2', 'B1']);
+    [true, true, false, true].forEach((ok, i) => E.adaptiveRecord(st, i, E.adaptiveBand(st), ok, seeded(i)));
+    const sum = E.adaptiveSummary(st);
+    assert.equal(sum.answered, 4);
+    assert.equal(sum.path.split(' ').length, 4);
+    assert.ok(['A1', 'A2', 'B1'].includes(sum.usualLevel));
+    assert.equal(sum.perLevel.A1.answered + (sum.perLevel.A2?.answered || 0) + (sum.perLevel.B1?.answered || 0), 4);
+  });
+});

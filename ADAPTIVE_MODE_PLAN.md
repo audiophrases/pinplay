@@ -1,8 +1,8 @@
 # Adaptive mode: one multilevel quiz, a different path per student
 
-Status: **phase 1 (data + authoring) and phase 2 (engine + PinPlay Cup)
-implemented 2026-09-25.** Phases 3–4 are still a plan. Design decisions settled with the
-owner on 2026-09-25 (section 8).
+Status: **phases 1–3 implemented 2026-09-25**: data + authoring, the engine +
+PinPlay Cup, and adaptive assignments. Phase 4 (class-level reports) is still a
+plan. Design decisions settled with the owner on 2026-09-25 (section 8).
 
 Phase 1 as built (some details differ from section 3):
 
@@ -149,19 +149,16 @@ inspects the page code can find the tag, and that's fine.
 
 ## 6. Assignments
 
-This is the biggest change, because assignments today are a fixed list that
-students browse freely.
+As built (phase 3):
 
-- New assignment option **Adaptive**, off by default. Turning it on:
-  - replaces free navigation with a **served sequence**: `/assignments/next` returns the next question the engine picks, and the student can't skip or go back
-  - asks for **"Questions per student" (N)**. This is the stopping rule. Example: a 50-question quiz with N = 15. Each student answers exactly 15, the engine picks each one according to how they're doing, and the attempt ends at question 15. A missed question that comes back counts toward the 15. N defaults to 15 and is capped at the number of eligible tagged questions.
-  - shows the student progress as "7 / 15" (never the level)
-  - finishes the attempt automatically after the Nth answer, replacing the "every quiz question answered" submit rule
-- The engine state lives on the attempt in the Durable Object, so a student who reloads or changes device continues from the same point and level.
-- Storage: `attempt.adaptive` (section 4) holds the served log. `answersByQ[qi]` still keeps the **latest** answer per question, so grading, review and the teacher's view keep working. Repeats are recorded in `path`.
-- Metrics: when adaptive is on, `evaluateAssignmentAttempt` uses the served questions as the denominator (not the whole quiz), and adds `finalBand`, `peakBand` and per-band accuracy.
-- Feedback: **Instant** is pre-selected when Adaptive is turned on, but the teacher can change it. Exam mode + adaptive works: the engine still adapts, the student just doesn't see verdicts.
-- Teacher-graded types (open, speaking, voice) are excluded from adaptive serving, the same as Cup's `arenaEligibleIndexes` does today.
+- **Creating:** the assignment row on the create page shows **🎯 Adaptive A1–C2 · N per student** when the quiz has auto-graded questions tagged with at least two levels. Ticking it switches feedback to Instant (the teacher can still change it). N defaults to 15; the server caps it at the number of questions it can serve and refuses Adaptive for a quiz with fewer than two levels. Stored as `assignment.adaptive = { count: N }`.
+- **The attempt** carries the engine state (`attempt.adaptive`): section 4's fields plus `count`, `items` (served questions in order, with the answer), `current` (the question being served) and `done`. `answersByQ[qi]` still keeps the latest answer per real question for the per-question grading views.
+- **The virtual quiz:** students and results views see a quiz made of the served questions (repeats included, plus the current one for students) with N as the total. The existing flow therefore works unchanged: progress "7 / 15", instant feedback, end screen, submit, review, self-correct. This happens inside `publicAssignmentAttempt`, `evaluateAssignmentAttempt`, `buildTeacherGradingItems` and `publicAssignmentAttemptSummary`, so no call site changes.
+- **Answering:** the answer route accepts only the served question (virtual index = answers so far), records the result (70% rule for partial rounds), and serves the next one; after the Nth the attempt is `done`. Submitting needs all N answered unless the student confirmed stopping early (`force`, same as other assignments).
+- **Student page:** no back/next arrows and no "Edit answers" while the attempt is open; arrow keys only move forward to the served question. In end-of-quiz/exam modes an empty answer offers **Skip question?**, which saves it as wrong (there is no "come back later"). A reload or another device resumes on the served question (signed-in students; random-name players get a new identity per visit, as before).
+- **Teacher results:** each attempt shows a 🎯 level badge and a line with usual/final/highest level and right/answered per level; the detail view lists the served questions in order. Adaptive attempts can't be hand-graded (they only hold auto-graded questions).
+- **Quiz edits** ("Apply to assignment") follow each question by id: answers to deleted questions are dropped (as for normal assignments), and a deleted current question is replaced by a new one. If the quiz's levels change, the student keeps their level (`adaptiveRebase`).
+- Teacher-graded types (open, speaking, voice) and polls are never served.
 
 ## 7. Phasing
 

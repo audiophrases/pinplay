@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20260925-levels" />
+    <link rel="stylesheet" href="../styles.css?v=20260925-assign" />
   </head>
   <body>
     <header class="topbar">
@@ -445,6 +445,13 @@
                   <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
                   <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
                   <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
+                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level." data-i18n-title>
+                    <input id="assignmentAdaptive" type="checkbox" />
+                    <span data-i18n>🎯 Adaptive</span>
+                    <span id="assignmentAdaptiveRange" class="small muted"></span>
+                    <input id="assignmentAdaptiveCount" type="number" min="1" value="15" disabled aria-label="Questions per student" data-i18n-aria />
+                    <span class="small" data-i18n>per student</span>
+                  </label>
                   <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
                 </div>
                 <p id="assignmentStatus" class="small muted"></p>
@@ -578,7 +585,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20260925-adaptive"></script>
+    <script src="../i18n-fr.js?v=20260925-assign"></script>
     <script src="../i18n.js"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
@@ -586,7 +593,7 @@
     <script src="../wordle-lexicon-fr.js"></script>
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
-    <script src="../app.js?v=20260925-levels2"></script>
+    <script src="../app.js?v=20260925-assign"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20260925-adaptive"></script>

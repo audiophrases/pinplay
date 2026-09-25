@@ -2857,6 +2857,40 @@ button.review-retake-attempt-row:active {
   vertical-align: baseline;
 }
 
+/* Adaptive assignments: level badge (teacher views) and the create-form control */
+.badge-adaptive {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #ecebff;
+  color: var(--primary);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.assignment-adaptive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.assignment-adaptive input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.assignment-adaptive input[type="number"] {
+  width: 4.5rem;
+  margin: 0;
+}
+
 .assignment-archived {
   opacity: 0.72;
 }

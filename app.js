@@ -4886,6 +4886,7 @@ function bindLiveEvents() {
   if (assignmentInstantFeedbackBtn) assignmentInstantFeedbackBtn.addEventListener('click', toggleInstantFeedbackMode);
   if (assignmentExamModeBtn) assignmentExamModeBtn.addEventListener('click', toggleAssignmentExamMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
+  initAssignmentAdaptiveControl();
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
     showArchivedAssignments = !showArchivedAssignments;
@@ -9035,7 +9036,12 @@ function renderAssignmentResults(safeCode, data) {
 
     const nameWrap = document.createElement('span');
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
+    const lv = a?.adaptive;
+    const levelBadge = lv?.usualLevel
+      ? `<span class="badge-adaptive" title="${escapeHtml(t('Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' }))}${lv.path ? `
+${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
+      : '';
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${levelBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -9051,6 +9057,16 @@ function renderAssignmentResults(safeCode, data) {
     const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
     const completion = total ? `${Math.round((answered / total) * 100)}%` : '—';
     meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
+    let levelsLine = null;
+    if (lv?.usualLevel) {
+      levelsLine = document.createElement('div');
+      levelsLine.className = 'small muted';
+      const perLevel = CEFR_LEVELS
+        .filter((l) => lv.perLevel?.[l])
+        .map((l) => `${l} ${lv.perLevel[l].right}/${lv.perLevel[l].answered}`)
+        .join(' · ');
+      levelsLine.textContent = `${t('🎯 Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' })}${perLevel ? ` · ${perLevel}` : ''}`;  // i18n-ignore (text is t()-wrapped)
+    }
 
     const row = document.createElement('div');
     row.className = 'row gap';
@@ -9100,7 +9116,7 @@ function renderAssignmentResults(safeCode, data) {
     });
     row.appendChild(deleteAttemptBtn);
 
-    li.append(top, meta, row);
+    li.append(...[top, meta, levelsLine, row].filter(Boolean));
     assignmentResultsListEl.appendChild(li);
   });
 }
@@ -9972,7 +9988,10 @@ function buildAssignmentListItem(a) {
   const attemptsCountTag = attemptsCount > 0
     ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
     : '';
-  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${Number(a?.totalQuestions || 0)}q${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}`;
+  const sizeTag = a?.adaptiveCount
+    ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} per student', { n: Number(a.adaptiveCount) }))}</span>`
+    : `${Number(a?.totalQuestions || 0)}q`;
+  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${sizeTag}${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}`;
 
   const meta = document.createElement('div');
   meta.className = 'small muted';
@@ -10180,6 +10199,12 @@ async function createAssignmentFromCurrentQuiz() {
       if (Number.isFinite(t) && t > 0) dueAt = Math.round(t);
     }
 
+    const adaptiveOn = !!document.getElementById('assignmentAdaptive')?.checked
+      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
+    const adaptiveCount = adaptiveOn
+      ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || 15))
+      : 0;
+
     const data = await api('/api/assignments/create', {
       method: 'POST',
       body: {
@@ -10191,6 +10216,7 @@ async function createAssignmentFromCurrentQuiz() {
         randomNames: randomNamesEnabled,
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
+        adaptiveCount,
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -10198,7 +10224,9 @@ async function createAssignmentFromCurrentQuiz() {
     const code = String(data?.assignment?.code || '').trim();
     const link = buildAssignmentJoinLink(code);
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
-    const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}`;
+    const createdCount = Number(data?.assignment?.adaptiveCount || 0);
+    const adaptiveLabel = createdCount ? ` · ${t('🎯 Adaptive · {n} per student', { n: createdCount })}` : '';
+    const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}${adaptiveLabel}`;
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("{p1} · Link: {p2}", { p1: msg, p2: link });
     setStatus(hostStatusEl, msg, 'ok');
@@ -15498,7 +15526,42 @@ function buildAdaptiveLevelRules(cleanRequest) {
 // still lands on the right questions if they were reordered in between.
 let levelTagSnapshot = null;
 
+// Assignments: "🎯 Adaptive · N per student" is offered only when the quiz has
+// auto-graded questions tagged with at least two levels (the server checks too).
+function syncAssignmentAdaptiveControl() {
+  const wrap = document.getElementById('assignmentAdaptiveWrap');
+  if (!wrap) return;
+  const { counts, tagged } = cefrCoverage(quiz?.questions);
+  const levels = CEFR_LEVELS.filter((l) => counts[l] > 0);
+  const available = levels.length >= 2;
+  wrap.classList.toggle('hidden', !available);
+  const box = document.getElementById('assignmentAdaptive');
+  const countEl = document.getElementById('assignmentAdaptiveCount');
+  const rangeEl = document.getElementById('assignmentAdaptiveRange');
+  if (box && !available) box.checked = false;
+  if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
+  if (countEl) {
+    countEl.max = String(Math.max(1, tagged));
+    if (Number(countEl.value) > tagged) countEl.value = String(Math.max(1, tagged));
+    countEl.disabled = !box?.checked;
+  }
+}
+
+function initAssignmentAdaptiveControl() {
+  const box = document.getElementById('assignmentAdaptive');
+  if (!box) return;
+  box.addEventListener('change', () => {
+    // Adaptive pairs best with instant feedback; the teacher can still change it.
+    if (box.checked) {
+      for (let i = 0; i < 3 && assignmentFeedbackMode !== 'instant'; i++) toggleInstantFeedbackMode();
+    }
+    syncAssignmentAdaptiveControl();
+  });
+  syncAssignmentAdaptiveControl();
+}
+
 function renderLevelCoverage() {
+  syncAssignmentAdaptiveControl();
   const el = document.getElementById('levelCoverage');
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);

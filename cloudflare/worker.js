@@ -1111,7 +1111,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), quiz }),
       }));
     }
 
@@ -2634,6 +2634,16 @@ export class QuizRoom {
           pendingAttemptsCount: 0,
         };
 
+        // Adaptive: N questions per student, capped at the questions it can serve.
+        const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
+        if (adaptiveCount > 0) {
+          const { bands, pool } = assignmentAdaptivePool(assignment);
+          if (bands.length < 2) {
+            return json({ error: 'Adaptive mode needs auto-graded questions tagged with at least two levels.' }, 400);
+          }
+          assignment.adaptive = { count: clamp(adaptiveCount, 1, pool.length) };
+        }
+
         await saveAssignmentBase(this.state.storage, assignment.code, assignment);
 
         return json({
@@ -2876,7 +2886,7 @@ export class QuizRoom {
               attemptNumber: studentAttempts.indexOf(a) + 1,
               totalScore: Number(metrics?.totalScore ?? 0),
               accuracy: metrics?.accuracy ?? null,
-              totalQuestions: Number(assignment?.quiz?.questions?.length || 0),
+              totalQuestions: a?.adaptive ? Number(a.adaptive.count || 0) : Number(assignment?.quiz?.questions?.length || 0),
               answeredCount: Number(metrics?.answeredCount || 0),
               submittedAt: Number(a?.submittedAt || 0) || null,
               startedAt: Number(a?.startedAt || 0) || null,
@@ -2964,6 +2974,8 @@ export class QuizRoom {
           answersByQ: {},
           autoScore: 0,
         };
+        const adaptive = adaptiveAttemptInit(assignment);
+        if (adaptive) attempt.adaptive = adaptive;
 
         assignment.attempts[attempt.id] = attempt;
         assignment.updatedAt = now;
@@ -3027,6 +3039,9 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
+        // Adaptive attempts only hold auto-graded questions, indexed by serve
+        // order rather than quiz position: nothing to grade by hand.
+        if (attempt.adaptive) return json({ error: 'Adaptive attempts are auto-graded.' }, 409);
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
         if (!isAssignmentTeacherGradedQuestion(question)) {
@@ -3203,6 +3218,39 @@ export class QuizRoom {
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
         if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
 
+        // Adaptive: the student answers the served question (virtual index =
+        // answers so far), the engine records the result and serves the next.
+        if (attempt.adaptive) {
+          const st = attempt.adaptive;
+          if (st.done || st.current == null) return json({ error: 'All questions are answered.', code: 'ADAPTIVE_DONE' }, 409);
+          if (qIndex !== st.items.length) return json({ error: 'That question is no longer open.', code: 'NOT_CURRENT' }, 409);
+          const qi = st.current;
+          const served = assignment.quiz?.questions?.[qi];
+          if (!served) return json({ error: 'Question not found.' }, 404);
+          const safeAnswer = sanitizeAssignmentAnswer(served, body?.answer);
+          const bet = sanitizeBet(body?.bet);
+          st.items.push({ qi, answer: safeAnswer, bet, at: now });
+          attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+          attempt.answersByQ[String(qi)] = { answer: safeAnswer, bet, teacherGrade: null, updatedAt: now };
+          const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
+          adaptiveRecord(st, qi, band >= 0 ? band : adaptiveBand(st), adaptiveIsSuccess(evaluate(served, safeAnswer)));
+          adaptiveAttemptAdvance(assignment, st);
+
+          const metrics = evaluateAssignmentAttempt(assignment, attempt);
+          attempt.autoScore = metrics.autoScore;
+          attempt.updatedAt = now;
+          assignment.updatedAt = now;
+          await saveAttempt(this.state.storage, code, attemptId, attempt);
+          await saveAssignmentBase(this.state.storage, code, assignment);
+          return json({
+            ok: true,
+            saved: true,
+            qIndex,
+            metrics,
+            attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers: assignment.feedbackMode === 'instant' }),
+          });
+        }
+
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
 
@@ -3271,7 +3319,18 @@ export class QuizRoom {
         // answered before the student finalizes — UNLESS the client passes
         // `force: true`, signalling the student knowingly confirmed they're leaving
         // some blank. Instant mode keeps the legacy ≥1 rule.
-        if (String(assignment.feedbackMode || 'none') !== 'instant' && !body?.force) {
+        if (attempt.adaptive) {
+          const st = attempt.adaptive;
+          const remaining = Math.max(0, Number(st.count || 0) - (st.items || []).length);
+          if (!st.done && remaining > 0 && !body?.force) {
+            return json({
+              error: `Answer all questions before submitting (${remaining} unanswered).`,
+              code: 'UNANSWERED_REMAINING',
+              remaining,
+              totalQuestions: Number(st.count || 0),
+            }, 409);
+          }
+        } else if (String(assignment.feedbackMode || 'none') !== 'instant' && !body?.force) {
           const totalQuestions = Math.max(0, Math.round(Number(assignment.totalQuestions
             || (Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions.length : 0))));
           if (totalQuestions > 0 && Number(metrics.answeredCount || 0) < totalQuestions) {
@@ -3951,6 +4010,14 @@ export class QuizRoom {
           attempt.answersByQ = newAnswers;
           attempt.updatedAt = now;
           remappedAttempts += 1;
+
+          if (attempt.adaptive) {
+            adaptiveAttemptRemap({ ...assignment, quiz }, attempt.adaptive, (oldIdx) => {
+              const qid = oldIndexToId.get(Number(oldIdx));
+              const newIdx = qid ? newIdToIndex.get(qid) : undefined;
+              return newIdx == null ? null : newIdx;
+            });
+          }
 
           const metrics = evaluateAssignmentAttempt({ ...assignment, quiz }, attempt);
           attempt.autoScore = metrics.autoScore;
@@ -7185,7 +7252,87 @@ function isAssignmentTeacherGradedQuestion(question) {
     || isTeacherGradedTextQuestion(question);
 }
 
+// ---------------------------------------------------------------- adaptive assignments
+// An adaptive assignment (assignment.adaptive.count = N) serves each student N
+// questions, picked one at a time by the adaptive engine. The attempt keeps the
+// engine state plus the served items in order. Students and results views see a
+// "virtual" quiz made of the served questions (repeats included) with N as the
+// total, so the normal flow (progress, instant feedback, end screen, review)
+// works unchanged. answersByQ still keeps the latest answer per real question
+// for the per-question grading views.
+function assignmentAdaptiveCount(assignment) {
+  const n = Math.round(Number(assignment?.adaptive?.count || 0));
+  return n > 0 ? n : 0;
+}
+
+function assignmentAdaptivePool(assignment) {
+  const questions = assignment?.quiz?.questions || [];
+  return adaptivePool(questions, autoGradedQuestionIndexes(questions));
+}
+
+function adaptiveAttemptInit(assignment) {
+  const count = assignmentAdaptiveCount(assignment);
+  const { bands, pool } = assignmentAdaptivePool(assignment);
+  if (!count || bands.length < 2) return null;
+  const st = adaptiveInit(bands);
+  st.count = count;
+  st.items = [];
+  st.done = false;
+  st.current = adaptiveNext(st, pool);
+  return st;
+}
+
+function adaptiveAttemptAdvance(assignment, st) {
+  if (st.items.length >= st.count) {
+    st.done = true;
+    st.current = null;
+    return;
+  }
+  const { bands, pool } = assignmentAdaptivePool(assignment);
+  adaptiveRebase(st, bands);
+  st.current = adaptiveNext(st, pool);
+  if (st.current == null) st.done = true;
+}
+
+// After a quiz edit: follow each question to its new index (by id); drop what
+// was deleted, and serve a new question if the current one is gone.
+function adaptiveAttemptRemap(assignment, st, mapQi) {
+  const keep = (list) => list.map((x) => ({ ...x, qi: mapQi(x.qi) })).filter((x) => x.qi != null);
+  st.items = keep(st.items || []);
+  st.path = keep(st.path || []);
+  st.retry = keep(st.retry || []);
+  st.seen = Object.fromEntries(Object.entries(st.seen || {})
+    .map(([k, v]) => [mapQi(Number(k)), v])
+    .filter(([k]) => k != null));
+  st.last = st.last == null ? null : mapQi(st.last);
+  if (!st.done) {
+    st.current = st.current == null ? null : mapQi(st.current);
+    if (st.current == null) adaptiveAttemptAdvance(assignment, st);
+  }
+}
+
+function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}) {
+  const st = attempt.adaptive;
+  const questions = assignment?.quiz?.questions || [];
+  const items = (st.items || []).filter((it) => questions[it.qi]);
+  const served = items.map((it) => questions[it.qi]);
+  if (includeCurrent && !st.done && questions[st.current]) served.push(questions[st.current]);
+  const answersByQ = {};
+  items.forEach((it, i) => {
+    answersByQ[String(i)] = { answer: it.answer, bet: it.bet || 0, teacherGrade: null, updatedAt: it.at || null };
+  });
+  const { adaptive, ...rest } = attempt;
+  return {
+    assignment: { ...assignment, quiz: { ...(assignment?.quiz || {}), questions: served } },
+    attempt: { ...rest, answersByQ },
+  };
+}
+
 function evaluateAssignmentAttempt(assignment, attempt) {
+  if (attempt?.adaptive) {
+    const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
+    return { ...evaluateAssignmentAttempt(v.assignment, v.attempt), totalQuestions: Number(attempt.adaptive.count || 0) };
+  }
   const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
   const quizQuestions = assignment?.quiz?.questions || [];
 
@@ -7258,6 +7405,16 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 }
 
 function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false } = {}) {
+  if (attempt?.adaptive) {
+    const st = attempt.adaptive;
+    const v = adaptiveAttemptView(assignment, attempt);
+    const out = publicAssignmentAttempt(v.assignment, v.attempt, { includeAnswers });
+    out.metrics = evaluateAssignmentAttempt(assignment, attempt);
+    out.assignment.totalQuestions = st.count;
+    // Progress only: levels stay teacher-side.
+    out.adaptive = { step: (st.items || []).length, total: st.count, done: !!st.done };
+    return out;
+  }
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
   const hasTeacherGraded = Array.isArray(assignment?.quiz?.questions)
     ? assignment.quiz.questions.some((q) => isAssignmentTeacherGradedQuestion(q))
@@ -7424,10 +7581,17 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     answeredQIndexes: full.answeredQIndexes,
     focusEventsCount: full.focusEventsCount,
     focusEventsTotalMs: full.focusEventsTotalMs,
+    adaptive: attempt?.adaptive
+      ? { ...full.adaptive, ...adaptiveSummary(attempt.adaptive) }
+      : undefined,
   };
 }
 
 function buildTeacherGradingItems(assignment, attempt) {
+  if (attempt?.adaptive) {
+    const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
+    return buildTeacherGradingItems(v.assignment, v.attempt);
+  }
   const questions = assignment?.quiz?.questions || [];
   const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
 
@@ -7793,7 +7957,8 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     origin: String(assignment.origin || ''),
     liveMediaPin: String(assignment.liveMediaPin || ''),
     quizTitle: String(assignment.quiz?.title || ''),
-    totalQuestions: Number(assignment.quiz?.questions?.length || 0),
+    totalQuestions: assignmentAdaptiveCount(assignment) || Number(assignment.quiz?.questions?.length || 0),
+    adaptiveCount: assignmentAdaptiveCount(assignment) || undefined,
   };
   if (includeQuiz) {
     const quiz = normalizeQuiz(assignment.quiz || {});
@@ -7926,13 +8091,18 @@ const ARENA_POWER_SLOTS = [
 const ARENA_SOLO_SLOTS = [{ double: 1 }, { boost: 1 }, { shield: 50, second: 50 }];
 const ARENA_TARGETED = new Set(['steal', 'pickpocket']);
 
-function arenaEligibleIndexes(room) {
-  return (room.quiz?.questions || [])
+// Auto-graded, non-poll questions: what Cup and adaptive assignments can serve.
+function autoGradedQuestionIndexes(questions) {
+  return (questions || [])
     .map((q, i) => ({ q, i }))
     .filter(({ q }) => q && !q.isPoll
       && !['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)
       && !isTeacherGradedTextQuestion(q))
     .map(({ i }) => i);
+}
+
+function arenaEligibleIndexes(room) {
+  return autoGradedQuestionIndexes(room.quiz?.questions);
 }
 
 function arenaShuffle(arr) {
@@ -8054,6 +8224,38 @@ function adaptiveUsualLevel(st) {
   return st.bands.slice().reverse().reduce((best, b) => ((counts[b] || 0) > (counts[best] || 0) ? b : best), half[half.length - 1].band);
 }
 
+// The quiz was edited and now covers different levels: keep the student at
+// the same level (or the nearest one above it), drop pending retries.
+function adaptiveRebase(st, bands) {
+  if (!bands.length || bands.join() === st.bands.join()) return;
+  const cur = st.bands[adaptiveBand(st)];
+  const frac = st.score - Math.floor(st.score);
+  let idx = bands.indexOf(cur);
+  if (idx < 0) idx = bands.findIndex((b) => CEFR_LEVELS.indexOf(b) > CEFR_LEVELS.indexOf(cur));
+  if (idx < 0) idx = bands.length - 1;
+  st.bands = bands.slice();
+  st.score = clamp(idx + frac, 0, bands.length - 0.01);
+  st.retry = [];
+}
+
+// Teacher-only summary of one student's adaptive path (Cup report and
+// assignment results). Never sent to students.
+function adaptiveSummary(st) {
+  if (!st) return null;
+  const path = st.path || [];
+  const bands = st.bands || [];
+  const finalIdx = adaptiveBand(st);
+  const peakIdx = Math.max(finalIdx, ...path.map((p) => bands.indexOf(p.band)));
+  return {
+    answered: st.answered || 0,
+    usualLevel: adaptiveUsualLevel(st),
+    finalLevel: bands[finalIdx] || '',
+    peakLevel: bands[peakIdx] || '',
+    path: path.map((p) => `${p.level}${p.ok ? '✓' : '✗'}`).join(' '),
+    perLevel: st.perLevel || {},
+  };
+}
+
 // Next question index: a due retry first, else the current band (nearest
 // band below, then above, when it only holds the question just answered),
 // preferring questions seen least, then ones last missed.
@@ -8142,22 +8344,11 @@ function arenaBoard(room) {
 // host sockets only; never part of the board players see.
 function arenaLevelReport(room) {
   if (!room.arena.adaptive) return undefined;
-  return arenaRanking(room).map((r) => {
-    const st = room.arena.players[r.id]?.adaptive;
-    const path = st?.path || [];
-    const bandOrder = st?.bands || [];
-    const finalIdx = st ? adaptiveBand(st) : -1;
-    const peakIdx = Math.max(finalIdx, ...path.map((p) => bandOrder.indexOf(p.band)));
-    return {
-      name: r.name,
-      answered: st?.answered || 0,
-      usualLevel: st ? adaptiveUsualLevel(st) : '',
-      finalLevel: bandOrder[finalIdx] || '',
-      peakLevel: bandOrder[peakIdx] || '',
-      path: path.map((p) => `${p.level}${p.ok ? '✓' : '✗'}`).join(' '),
-      perLevel: st?.perLevel || {},
-    };
-  });
+  return arenaRanking(room).map((r) => ({
+    name: r.name,
+    ...(adaptiveSummary(room.arena.players[r.id]?.adaptive)
+      || { answered: 0, usualLevel: '', finalLevel: '', peakLevel: '', path: '', perLevel: {} }),
+  }));
 }
 
 function arenaYou(room, pid) {
@@ -8202,6 +8393,7 @@ function arenaDeal(room, pid) {
   if (room.arena.adaptive) {
     const { bands, pool } = arenaAdaptivePool(room);
     if (!ps.adaptive) ps.adaptive = adaptiveInit(bands);
+    adaptiveRebase(ps.adaptive, bands);
     qi = adaptiveNext(ps.adaptive, pool);
   } else {
     if (!ps.deck.length) ps.deck = arenaBuildDeck(ps, arenaEligibleIndexes(room));
