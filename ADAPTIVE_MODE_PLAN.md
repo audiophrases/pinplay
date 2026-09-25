@@ -115,6 +115,7 @@ Rules. All numbers are constants to tune after a real class:
 | Start | `score = 0.8`, the top of the **lowest band present** (A1 on a full quiz): start easy |
 | Warm-up (until the first miss, at most 4 answers), correct | `+1`, a whole band per right answer: a strong student reaches C1 after 4 answers |
 | After warm-up, correct | `+0.34` (about 3 in a row to go up one band) |
+| After dropping a band, correct (until back up) | `+0.28`: usually 2 right answers to climb back, sometimes 1. Added after the first class test: a student stuck between A1 and A2 was failing every other question (~43% of questions above their level; now ~38%) |
 | Right answer on a question below the current band | half the gain |
 | Wrong | `−0.5` (two misses drop a band); half that on a question above the current band |
 | 3rd consecutive wrong | extra `−0.5` |

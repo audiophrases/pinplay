@@ -88,6 +88,19 @@ describe('level movement', () => {
     assert.equal(levelOf(st), 'A2'); // 3rd miss in a row: extra drop
   });
 
+  it('after a drop, a struggling student spends fewer questions on the level above', () => {
+    // Right at A1, wrong at A2 (the pattern from the owner's first Cup test).
+    const st = E.adaptiveInit(['A1', 'A2', 'B1']);
+    let above = 0;
+    for (let i = 0; i < 40; i++) {
+      const band = E.adaptiveBand(st);
+      if (band > 0) above += 1;
+      E.adaptiveRecord(st, i, band, band === 0, seeded(i));
+    }
+    assert.ok(above / 40 < 0.4, `share above level ${above / 40}`);
+    assert.ok(above / 40 > 0.33, `share above level ${above / 40}`);
+  });
+
   it('counts partial rounds as a success from 70%', () => {
     assert.equal(E.adaptiveIsSuccess({ correct: true }), true);
     assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 4, partialTotal: 5 }), true);

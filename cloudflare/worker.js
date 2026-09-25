@@ -8150,6 +8150,9 @@ const ADAPTIVE_START = 0.8;           // top of the lowest band: start easy
 const ADAPTIVE_WARMUP = 4;            // warm-up: until the first miss or 4 answers...
 const ADAPTIVE_UP_WARMUP = 1;         // ...each right answer climbs a whole band
 const ADAPTIVE_UP = 0.34;             // then ~3 in a row to go up a band
+const ADAPTIVE_UP_AFTER_DROP = 0.28;  // after dropping a band, climbing back takes a bit more
+                                      // (usually 2 right answers, sometimes 1), so a struggling
+                                      // student isn't sent straight back to the level they failed
 const ADAPTIVE_DOWN = 0.5;            // 2 misses drop a band
 const ADAPTIVE_STREAK_DOWN = 0.5;     // extra drop from the 3rd miss in a row
 const ADAPTIVE_SUCCESS_FRACTION = 0.7; // partial-credit rounds count from 70%
@@ -8195,7 +8198,7 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
   if (success) {
     st.streak = Math.max(0, st.streak) + 1;
     // An easier question than the current band proves less.
-    const up = st.warm ? ADAPTIVE_UP_WARMUP : ADAPTIVE_UP;
+    const up = st.warm ? ADAPTIVE_UP_WARMUP : (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP);
     st.score += qBand >= band ? up : up / 2;
   } else {
     st.streak = Math.min(0, st.streak) - 1;
@@ -8209,6 +8212,9 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
     st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
   }
   st.score = clamp(st.score, 0, st.bands.length - 0.01);
+  const next = adaptiveBand(st);
+  if (next < band) st.dropped = true;
+  else if (next > band) st.dropped = false;
   st.answered += 1;
   if (st.answered >= ADAPTIVE_WARMUP) st.warm = false;
   st.last = qi;
