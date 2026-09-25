@@ -11,7 +11,7 @@ Free, no-ads classroom quiz web app. Built for teachers who want to play, engage
 - ✅ Assignment mode with due dates, attempt limits, exam mode, and deferred-feedback
 - ✅ Full audio support with Edge TTS neural voices in multiple languages
 - ✅ Built-in grading workflow (per-question and per-student focus modes)
-- ✅ PDF export, GIF/image search, Google Drive publish, email notify
+- ✅ PDF export, GIF/image search, email notify
 - ✅ Teacher password + rate-limited auth — safe to share quiz PINs publicly
 
 ## Features
@@ -52,7 +52,7 @@ Audio (file upload or Edge TTS) is a per-question feature available on every typ
 - Local save via localStorage + JSON import/export (`.json` and `.txt` accepted)
 - Multiple-file import with **append or replace** prompt, sorted by name
 - Goal selection + batch-size input when generating quizzes from prompts
-- Google Drive publish/open/delete (optional, via Apps Script bridge); cloud save skipped when quiz unchanged
+- Cloud save skipped when the quiz is unchanged
 - **PDF export** of the whole quiz (voice-record items rendered as written answers; pin questions skipped)
 - Unified preview with simulated students, re-roll, and jump-to-question
 - **Live preview** and **student preview** modes that auto-join in a new tab via URL parameter; auto-cleanup when tab closes
@@ -313,7 +313,7 @@ pinplay/
 │   ├── worker.js           # Cloudflare Worker backend (~2,500 lines)
 │   ├── wrangler.jsonc      # Wrangler deployment config
 │   ├── edge_tts_bridge.py  # Edge TTS bridge service
-│   ├── drive-bridge.gs     # Google Drive Apps Script bridge
+│   ├── drive-bridge.gs     # unused: old Google Drive bridge (feature removed)
 │   └── deploy.cmd          # One-click deploy script
 ├── pinplay-template.json   # Starter quiz template (all question types)
 ├── quiz-template-all-question-types.json  # Reference template with all features
@@ -366,7 +366,6 @@ pinplay/
 - 14 question types including poll mode, slider, pin answer
 - Live game hosting via Cloudflare Worker + Durable Objects
 - Assignment mode with due dates and attempt limits
-- Google Drive integration for quiz publishing
 - Edge TTS integration for teacher audio playback
 - Real-time reactions, leaderboard, timer system
 - Full-screen projector view with animations
