@@ -5930,6 +5930,14 @@ function evaluate(question, answer) {
   return { correct: false };
 }
 
+// Adaptive mode: per-question CEFR difficulty tag (ADAPTIVE_MODE_PLAN.md).
+const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+function normalizeCefrLevel(value) {
+  const v = String(value || '').trim().toUpperCase();
+  return CEFR_LEVELS.includes(v) ? v : '';
+}
+
 function normalizeQuiz(quiz) {
   const normalized = {
     version: 1,
@@ -5958,6 +5966,7 @@ function normalizeQuiz(quiz) {
       imageData: String(q.imageData || ''),
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
+      ...(normalizeCefrLevel(q.cefr) ? { cefr: normalizeCefrLevel(q.cefr) } : {}),
     };
 
     if (['mcq', 'multi'].includes(q.type)) {

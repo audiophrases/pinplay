@@ -10,6 +10,7 @@
   const BRIDGE_DEFAULT_URL = 'http://127.0.0.1:8789';
   const SEARCH_DEBOUNCE_MS = 280;
   const PAGE_SIZE = 50;
+  const CEFR_RE = /^(A1|A2|B1|B2|C1|C2)$/i;
 
   // ---------- bridge config ----------
 
@@ -156,7 +157,16 @@
     }
   }
 
+  // A bank quiz tagged with a CEFR level (e.g. "B1") seeds the imported
+  // question's adaptive-mode level; the teacher can change it in the editor.
   function bankToPinPlay(row) {
+    const q = bankToPinPlayByType(row);
+    const level = String(row?.level || '').trim();
+    if (q && CEFR_RE.test(level)) q.cefr = level.toUpperCase();
+    return q;
+  }
+
+  function bankToPinPlayByType(row) {
     const stem = stripHtml(row.question_text || '');
     const opts = parseOptions(row.options).map(stripHtml);
     const corrects = parseCorrectAnswer(row.correct_answer, opts).map(stripHtml);
@@ -1140,6 +1150,8 @@
     // For 'open', 'speaking', 'voice_record', 'image_open': stem + media is all we need.
 
     if (q.isPoll) base.pinplay_data = Object.assign({}, base.pinplay_data, { isPoll: true });
+    // Adaptive-mode level tag rides along so it isn't lost in the bank.
+    if (CEFR_RE.test(String(q.cefr || ''))) base.pinplay_data = Object.assign({}, base.pinplay_data, { cefr: String(q.cefr).toUpperCase() });
     return base;
   }
 

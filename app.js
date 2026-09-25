@@ -350,6 +350,14 @@ const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
 const TEMPLATE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.inTemplate).map((item) => item.type);
 const AUDIO_CAPABLE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.supportsAudio).map((item) => item.type);
 
+// Adaptive mode: each question can carry a CEFR difficulty tag (q.cefr). The
+// engine moves every student up or down the ladder of levels a quiz contains.
+// See ADAPTIVE_MODE_PLAN.md.
+const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+// Default AI level mix for adaptive quizzes (percent). Leans easy: harder
+// questions often need written production and take longer to answer.
+const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
+
 const QUESTION_TYPE_EXPLANATIONS = {
   "mcq": {
     "name": "Multiple Choice (Single)",
@@ -1156,6 +1164,26 @@ function syncCustomGoalFieldState() {
   customGoalEl.setAttribute('aria-hidden', isCustom ? 'false' : 'true');
 }
 
+// Adaptive quizzes span A1–C2, so the single-level field is cleared and locked
+// (its text is kept aside and restored if the box is unticked).
+function syncAdaptivePromptFields() {
+  const adaptiveEl = document.getElementById('promptAdaptive');
+  const levelEl = document.getElementById('promptLevel');
+  const mixWrap = document.getElementById('promptLevelMixWrap');
+  if (!(adaptiveEl instanceof HTMLInputElement)) return;
+  const on = adaptiveEl.checked;
+  if (levelEl instanceof HTMLInputElement) {
+    if (on && !levelEl.disabled) {
+      levelEl.dataset.savedValue = levelEl.value;
+      levelEl.value = '';
+    } else if (!on && levelEl.disabled) {
+      levelEl.value = levelEl.dataset.savedValue || '';
+    }
+    levelEl.disabled = on;
+  }
+  if (mixWrap) mixWrap.classList.toggle('hidden', !on);
+}
+
 function syncTypesGridVisibility() {
   const modeEl = document.getElementById('promptTypesMode');
   const typesListEl = document.getElementById('promptTypesList');
@@ -1176,6 +1204,11 @@ function bindBuilderEvents() {
   if (goalEl instanceof HTMLSelectElement) {
     goalEl.addEventListener('change', syncCustomGoalFieldState);
     syncCustomGoalFieldState();
+  }
+  const adaptiveEl = document.getElementById('promptAdaptive');
+  if (adaptiveEl instanceof HTMLInputElement) {
+    adaptiveEl.addEventListener('change', syncAdaptivePromptFields);
+    syncAdaptivePromptFields();
   }
   const typesModeEl = document.getElementById('promptTypesMode');
   if (typesModeEl instanceof HTMLSelectElement) {
@@ -1531,6 +1564,12 @@ function bindBuilderEvents() {
           if (!next.requiredErrors && next.prompt && next.corrected) {
             next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
           }
+          // Adaptive level tag: accept "b1", or the cefrLevel/level aliases AIs sometimes use.
+          const cefr = normalizeCefr(next.cefr) || normalizeCefr(next.cefrLevel) || normalizeCefr(next.level);
+          if (normalizeCefr(next.level)) delete next.level;
+          delete next.cefrLevel;
+          if (cefr) next.cefr = cefr;
+          else delete next.cefr;
           return next;
         });
 
@@ -1605,6 +1644,8 @@ function bindBuilderEvents() {
       renderBuilder();
     });
   }
+
+  initLevelTools();
 
   if (addMediaBatchBtn && addMediaBatchInput) {
     addMediaBatchBtn.addEventListener('click', () => addMediaBatchInput.click());
@@ -2315,6 +2356,7 @@ function renderBuilder() {
     }
   }
   questionListEl.innerHTML = '';
+  renderLevelCoverage();
 
   if (!quiz.questions.length) {
     questionListEl.innerHTML = t('<p class="muted">No questions yet. Add one above.</p>');
@@ -2340,6 +2382,7 @@ function renderBuilder() {
         <div class="q-header-left">
           <span class="q-type-icon">${iconForType(q.type)}</span>
           <strong>Q${idx + 1}</strong>
+          <span class="q-cefr-chip" data-cefr-chip="${idx}">${normalizeCefr(q.cefr)}</span>
           ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
         <div class="question-actions">
@@ -2365,7 +2408,14 @@ function renderBuilder() {
           <label>Time limit (sec)</label>
           <input data-q="${idx}" data-field="timeLimit" type="number" min="0" max="240" value="${Number.isFinite(Number(q.timeLimit)) ? Number(q.timeLimit) : 20}" />
         </div>
-        <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600;">
+        <div style="min-width:110px;">
+          <label title="${escapeHtml(t('Difficulty level used by adaptive mode'))}">${escapeHtml(t('Level'))}</label>
+          <select data-q="${idx}" data-field="cefr">
+            <option value="">—</option>
+            ${CEFR_LEVELS.map((l) => `<option value="${l}" ${normalizeCefr(q.cefr) === l ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600; white-space:nowrap;">
           <input data-q="${idx}" data-field="isPoll" type="checkbox" ${q.isPoll ? 'checked' : ''} /> Poll mode
         </label>
       </div>
@@ -3406,10 +3456,19 @@ function syncQuizFromUI() {
     const timeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
     const pollEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
 
+    const cefrEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="cefr"]`);
+
     if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 1200);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
+    if (cefrEl) {
+      const cefr = normalizeCefr(cefrEl.value);
+      if (cefr) q.cefr = cefr;
+      else delete q.cefr;
+      const chip = questionListEl.querySelector(`[data-cefr-chip="${idx}"]`);
+      if (chip) chip.textContent = cefr;
+    }
     const mediaUrlEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
     const mediaProviderEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
     const mediaStartEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaStartAt"]`);
@@ -3674,6 +3733,7 @@ function syncQuizFromUI() {
       if (q.pinMode !== 'any' && q.pinMode !== 'all') q.pinMode = String(q.pinMode);
     }
   });
+  renderLevelCoverage();
 }
 
 async function openImageSearchDialog(questionIdx) {
@@ -4157,7 +4217,9 @@ async function saveQuizToCloud() {
 async function exportCreationPrompt() {
   const theme = document.getElementById('promptTheme')?.value.trim();
   const lang = document.getElementById('promptLanguage')?.value.trim();
-  const level = document.getElementById('promptLevel')?.value.trim();
+  const adaptive = !!document.getElementById('promptAdaptive')?.checked;
+  const level = adaptive ? '' : document.getElementById('promptLevel')?.value.trim();
+  const levelMix = adaptive ? document.getElementById('promptLevelMix')?.value.trim() : '';
   const timeLimit = document.getElementById('promptTimeLimit')?.value;
   const count = document.getElementById('promptQuestionCount')?.value.trim();
   const batchSize = document.getElementById('promptBatchSize')?.value;
@@ -4181,6 +4243,10 @@ async function exportCreationPrompt() {
   const cleanRequest = { theme };
   if (lang) cleanRequest.language = lang;
   if (level) cleanRequest.level = level;
+  if (adaptive) {
+    cleanRequest.levels = 'Adaptive: all CEFR levels A1–C2, tagged per question';
+    if (levelMix) cleanRequest.levelMix = levelMix;
+  }
   cleanRequest.timeLimit = Number(timeLimit) || 0;
   if (count) {
     const asNum = Number(count);
@@ -4272,6 +4338,8 @@ async function exportCreationPrompt() {
   if (complexEx) pickedExamples.push(complexEx);
   // Fallback: if no match found, take first 2 filtered questions
   if (!pickedExamples.length) pickedExamples.push(...filteredTemplateQuestions.slice(0, 2));
+  // Show the per-question level tag in the example shapes.
+  if (adaptive) pickedExamples.forEach((q, i) => { q.cefr = ['A2', 'B2'][i] || 'B1'; });
 
   const allowedTypesText = allowedTypes.join(', ');
   const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
@@ -4397,6 +4465,7 @@ async function exportCreationPrompt() {
     'Do not repeat request fields verbatim inside the output JSON.'
   ];
   const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
+  if (cleanRequest.levels) normalizedMustFollowRules.push(...buildAdaptiveLevelRules(cleanRequest));
   if (blockedTypesText) {
     mustFollowRules.push(`Do NOT use blocked types: ${blockedTypesText}.`);
   }
@@ -4409,7 +4478,8 @@ async function exportCreationPrompt() {
     'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.',
     (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
       ? 'readingText shape: plain UTF-8 string, no markdown or HTML. Line breaks with \\n are fine and render preserved. When set, do not also set imageData/imageKeyword/gifKeyword on that question.'
-      : undefined
+      : undefined,
+    cleanRequest.levels ? 'Every question includes "cefr": "A1" | "A2" | "B1" | "B2" | "C1" | "C2".' : undefined
   ].filter(Boolean);
   const qualityGoals = [
     `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
@@ -4548,6 +4618,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
   // Brief — one paragraph of pedagogical intent synthesised from the form.
   let brief = `Build a PinPlay v3 quiz on "${cleanRequest.theme}"`;
   if (cleanRequest.level) brief += `, pitched at ${cleanRequest.level}`;
+  if (cleanRequest.levels) brief += ', as an adaptive multilevel quiz spanning CEFR A1–C2 (every question tagged with its level)';
   if (cleanRequest.language) brief += `, in ${cleanRequest.language}`;
   brief += `. Pedagogical aim: ${cleanRequest.goal || 'a balanced scaffold + retrieval-practice progression'}. `;
   brief += 'You are an agent, not a form-filler — read the intent, then decide how to reach a genuinely high-quality quiz. ';
@@ -4597,6 +4668,7 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
       ? `Use ONLY these question types AND include at least one question of EVERY one — treat the list as a required checklist, not a menu, so full coverage is mandatory: ${allowedTypesText}. Omit a listed type only if the question count is smaller than the number of listed types.`
       : `Use only these question types: ${allowedTypesText}.`);
   if (blockedTypesText) constraints.push(`Never use blocked types: ${blockedTypesText}.`);
+  if (cleanRequest.levels) constraints.push(...buildAdaptiveLevelRules(cleanRequest));
   if (wantsImages || wantsGifs) {
     constraints.push('Embed real, verified assets for any question whose content or answer depends on a specific image — do not ship imageKeyword/gifKeyword placeholders there and lean on save-time auto-search (that is the chatbot fallback). Keyword fields are only for purely decorative or generic-reaction visuals. Control storage by downscaling/compressing embeds (aim for a few hundred KB each), not by swapping them for keywords.');
   } else if (cleanRequest.images === 'no') {
@@ -4627,8 +4699,9 @@ function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, block
   const outputContract = [
     'Resolve and embed all assets first, then assemble.',
     'Output only one JSON object — no commentary, no markdown fences.',
-    'Follow exampleTemplate key shapes; prefer embedded imageData / media.url+startAt/endAt over keyword placeholders when you found the real asset.'
-  ];
+    'Follow exampleTemplate key shapes; prefer embedded imageData / media.url+startAt/endAt over keyword placeholders when you found the real asset.',
+    cleanRequest.levels ? 'Every question includes "cefr": "A1" | "A2" | "B1" | "B2" | "C1" | "C2".' : undefined
+  ].filter(Boolean);
 
   const promptText = [
     'Task',
@@ -15356,6 +15429,238 @@ async function api(path, opts = {}) {
 }
 
 // ---------- Data ----------
+function normalizeCefr(value) {
+  const v = String(value || '').trim().toUpperCase();
+  return CEFR_LEVELS.includes(v) ? v : '';
+}
+
+// Mirrors arenaEligibleIndexes in the worker: polls and teacher-graded
+// questions are never served in adaptive play.
+function isAdaptiveEligibleQuestion(q) {
+  if (!q || q.isPoll) return false;
+  if (['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)) return false;
+  if (q.type === 'text' && !(q.accepted || []).some((a) => String(a || '').trim())) return false;
+  return true;
+}
+
+function cefrCoverage(questions) {
+  const counts = Object.fromEntries(CEFR_LEVELS.map((l) => [l, 0]));
+  let untagged = 0;
+  (questions || []).forEach((q) => {
+    if (!isAdaptiveEligibleQuestion(q)) return;
+    const level = normalizeCefr(q.cefr);
+    if (level) counts[level] += 1;
+    else untagged += 1;
+  });
+  const tagged = CEFR_LEVELS.reduce((n, l) => n + counts[l], 0);
+  return { counts, untagged, tagged };
+}
+
+// Largest-remainder split of `total` questions across the default level shares.
+function adaptiveDefaultLevelCounts(total) {
+  const n = Math.max(0, Math.round(Number(total) || 0));
+  const exact = CEFR_LEVELS.map((l) => ({ l, v: (n * ADAPTIVE_DEFAULT_LEVEL_SHARES[l]) / 100 }));
+  const counts = Object.fromEntries(exact.map(({ l, v }) => [l, Math.floor(v)]));
+  let left = n - exact.reduce((s, { l }) => s + counts[l], 0);
+  [...exact].sort((a, b) => (b.v % 1) - (a.v % 1)).forEach(({ l }) => {
+    if (left > 0) { counts[l] += 1; left -= 1; }
+  });
+  return counts;
+}
+
+// Prompt rules shared by the chatbot and agent creation prompts when the
+// teacher ticks "Adaptive quiz".
+function buildAdaptiveLevelRules(cleanRequest) {
+  const qc = cleanRequest.questionCount;
+  const counts = typeof qc === 'number' ? adaptiveDefaultLevelCounts(qc) : null;
+  const defaultMix = counts
+    ? CEFR_LEVELS.map((l) => `${l} ${counts[l]}`).join(', ')
+    : CEFR_LEVELS.map((l) => `${l} ≈${ADAPTIVE_DEFAULT_LEVEL_SHARES[l]}%`).join(', ');
+  return [
+    'This is an ADAPTIVE multilevel quiz with no single level. Every question MUST include a "cefr" field set to exactly one of "A1", "A2", "B1", "B2", "C1", "C2". PinPlay moves each student up or down between levels based on their answers, so every tag must be accurate.',
+    cleanRequest.levelMix
+      ? `Level mix requested by the teacher: ${cleanRequest.levelMix}. Follow it.`
+      : `Level mix: cover all six levels, with more easy questions than hard ones (harder questions often require writing and take longer to answer). Target: ${defaultMix}.`,
+    'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
+    'Where possible, practise the same skill or topic at several levels, so a student who moves up keeps working on the same thing at a harder level.',
+    'If the quiz is not about learning a language, treat A1–C2 as six difficulty steps from easiest (A1) to hardest (C2).',
+    cleanRequest.batchSize ? 'Apply the level mix to the whole quiz; each batch may mix levels.' : undefined,
+  ].filter(Boolean);
+}
+
+// ---------- Levels panel (Questions section) ----------
+
+// Question number → id at the moment the tagging prompt was copied, so a reply
+// still lands on the right questions if they were reordered in between.
+let levelTagSnapshot = null;
+
+function renderLevelCoverage() {
+  const el = document.getElementById('levelCoverage');
+  if (!el) return;
+  const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);
+  if (!tagged) {
+    el.textContent = untagged ? t('none tagged yet') : '';
+    return;
+  }
+  const parts = CEFR_LEVELS.map((l) => `<span class="level-count${counts[l] ? '' : ' empty'}">${l} <strong>${counts[l]}</strong></span>`);
+  if (untagged) parts.push(`<span class="level-count untagged">${escapeHtml(t('untagged'))} <strong>${untagged}</strong></span>`);
+  el.innerHTML = parts.join(' ');
+}
+
+function setLevelToolsStatus(message, kind) {
+  const el = document.getElementById('levelToolsStatus');
+  if (!el) return;
+  el.textContent = message;
+  el.className = `small top-space${kind ? ` ${kind}` : ''}`;
+}
+
+function applyLevelToRange() {
+  syncQuizFromUI();
+  const total = quiz.questions.length;
+  if (!total) return;
+  const from = clamp(Math.round(Number(document.getElementById('levelRangeFrom')?.value)), 1, total);
+  const to = clamp(Math.round(Number(document.getElementById('levelRangeTo')?.value)), 1, total);
+  const level = normalizeCefr(document.getElementById('levelRangeLevel')?.value);
+  const [lo, hi] = from <= to ? [from, to] : [to, from];
+  for (let i = lo - 1; i <= hi - 1; i++) {
+    if (level) quiz.questions[i].cefr = level;
+    else delete quiz.questions[i].cefr;
+  }
+  renderBuilder();
+  setLevelToolsStatus(level
+    ? t('Q{from}–Q{to} set to {level}.', { from: lo, to: hi, level })
+    : t('Level cleared on Q{from}–Q{to}.', { from: lo, to: hi }), 'ok');
+}
+
+// Compact, media-free copy of a question for the tagging prompt: drops ids,
+// timing, audio/image/video data and editor state; clips long strings.
+function compactQuestionForLevelTagging(q) {
+  const DROP = new Set(['id', 'points', 'timeLimit', 'isPoll', 'cefr', 'collapsed', 'mediaExpand', 'media',
+    'imageData', 'imageKeyword', 'gifKeyword', 'videoKeyword', 'videoProviderPreference', 'audioEnabled',
+    'audioMode', 'audioText', 'audioData', 'ttsAudioKey', 'ttsLanguage', 'language', 'zones', 'zone']);
+  const clip = (value, depth) => {
+    if (typeof value === 'string') {
+      const s = value.replace(/\s+/g, ' ').trim();
+      const max = depth === 0 ? 400 : 160;
+      return s.length > max ? `${s.slice(0, max)}…` : s;
+    }
+    if (Array.isArray(value)) return value.slice(0, 12).map((v) => clip(v, depth + 1));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value)
+        .filter(([k, v]) => !k.startsWith('_') && !(depth === 0 && DROP.has(k)) && v !== '' && v != null)
+        .map(([k, v]) => [k, clip(v, depth + 1)]));
+    }
+    return value;
+  };
+  return clip(q, 0);
+}
+
+async function copyLevelTaggingPrompt() {
+  syncQuizFromUI();
+  const scope = document.getElementById('levelAiScope')?.value || 'untagged';
+  const picked = quiz.questions
+    .map((q, idx) => ({ q, n: idx + 1 }))
+    .filter(({ q }) => isAdaptiveEligibleQuestion(q) && (scope === 'all' || !normalizeCefr(q.cefr)));
+  if (!picked.length) {
+    setLevelToolsStatus(t('No questions to tag: every eligible question already has a level.'), 'ok');
+    return;
+  }
+  levelTagSnapshot = Object.fromEntries(quiz.questions.map((q, idx) => [String(idx + 1), q.id]));
+  const list = picked.map(({ q, n }) => ({ n, ...compactQuestionForLevelTagging(q) }));
+  const example = Object.fromEntries(picked.slice(0, 3).map(({ n }, i) => [String(n), ['A2', 'B1', 'A1'][i]]));
+  const prompt = [
+    `You are tagging the questions of an existing PinPlay quiz${quiz.title ? ` ("${quiz.title}")` : ''} with difficulty levels for adaptive mode.`,
+    '',
+    'Levels: A1, A2, B1, B2, C1, C2 (CEFR). A1 is the easiest, C2 the hardest.',
+    '- For language-learning questions, use the CEFR level of the language the student must understand and produce: vocabulary, grammar, sentence length, and the kind of task (recognising an answer is easier than writing one).',
+    '- If the quiz is not about learning a language, use the six levels as difficulty steps from easiest (A1) to hardest (C2).',
+    '- Judge each question on its own and be honest: do not put everything in the middle.',
+    '- Tag every question listed below.',
+    '',
+    'Reply with ONLY this JSON, no commentary. Keys are the question numbers ("n") below:',
+    JSON.stringify({ levels: example }),
+    '',
+    'Questions:',
+    JSON.stringify(list, null, 1),
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(prompt);
+    setLevelToolsStatus(t('Prompt for {n} question(s) copied 📋 Paste it into your AI, then paste the reply below.', { n: picked.length }), 'ok');
+  } catch {
+    downloadTextFile(prompt, `level-tagging-${toSafeFilename(quiz.title || 'quiz')}.md`);
+    setLevelToolsStatus(t('Clipboard unavailable: the prompt was downloaded as a file instead.'), 'ok');
+  }
+}
+
+// Accepts {"levels": {"3": "B1"}}, a bare {"3": "B1"} map, or
+// [{"n": 3, "cefr": "B1"}]; tolerates code fences and text around the JSON.
+function parseLevelTagReply(text) {
+  const raw = String(text || '');
+  const start = raw.search(/[[{]/);
+  const end = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
+  if (start < 0 || end <= start) throw new Error(t('No JSON found in the reply.'));
+  const parsed = JSON.parse(raw.slice(start, end + 1));
+  const source = parsed && !Array.isArray(parsed) && parsed.levels ? parsed.levels : parsed;
+  if (Array.isArray(source)) {
+    return source.map((item) => [String(item?.n ?? item?.id ?? ''), item?.cefr ?? item?.level]);
+  }
+  if (source && typeof source === 'object') return Object.entries(source);
+  throw new Error(t('No JSON found in the reply.'));
+}
+
+function applyLevelTagReply() {
+  syncQuizFromUI();
+  const replyEl = document.getElementById('levelAiReply');
+  let entries;
+  try {
+    entries = parseLevelTagReply(replyEl?.value);
+  } catch (err) {
+    setLevelToolsStatus(t('Could not read the reply: {msg}', { msg: err.message }), 'bad');
+    return;
+  }
+  let applied = 0;
+  let skipped = 0;
+  entries.forEach(([key, value]) => {
+    const level = normalizeCefr(value);
+    const snapId = levelTagSnapshot?.[key];
+    let idx = snapId ? quiz.questions.findIndex((q) => q.id === snapId) : -1;
+    if (idx < 0) idx = quiz.questions.findIndex((q) => q.id === key);
+    if (idx < 0 && /^\d+$/.test(key)) idx = Number(key) - 1;
+    if (!level || !quiz.questions[idx]) { skipped += 1; return; }
+    quiz.questions[idx].cefr = level;
+    applied += 1;
+  });
+  if (!applied) {
+    setLevelToolsStatus(t('No levels applied: the reply did not match any question.'), 'bad');
+    return;
+  }
+  if (replyEl) replyEl.value = '';
+  renderBuilder();
+  setLevelToolsStatus(skipped
+    ? t('Levels applied to {n} question(s); {skipped} entries skipped.', { n: applied, skipped })
+    : t('Levels applied to {n} question(s).', { n: applied }), 'ok');
+}
+
+function initLevelTools() {
+  const details = document.getElementById('levelTools');
+  if (!details) return;
+  const levelSelect = document.getElementById('levelRangeLevel');
+  if (levelSelect && !levelSelect.options.length) {
+    levelSelect.innerHTML = `<option value="">— ${escapeHtml(t('clear'))}</option>${CEFR_LEVELS.map((l) => `<option value="${l}">${l}</option>`).join('')}`; // i18n-ignore (text is t()-wrapped)
+  }
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    const fromEl = document.getElementById('levelRangeFrom');
+    const toEl = document.getElementById('levelRangeTo');
+    const total = Math.max(1, quiz.questions.length);
+    if (fromEl) { fromEl.max = String(total); fromEl.value = '1'; }
+    if (toEl) { toEl.max = String(total); toEl.value = String(total); }
+  });
+  document.getElementById('levelRangeApplyBtn')?.addEventListener('click', applyLevelToRange);
+  document.getElementById('levelAiCopyBtn')?.addEventListener('click', copyLevelTaggingPrompt);
+  document.getElementById('levelAiApplyBtn')?.addEventListener('click', applyLevelTagReply);
+}
+
 function createEmptyQuiz() {
   return {
     version: 1,
@@ -15772,6 +16077,7 @@ function normalizeQuizForLive(raw) {
       imageData: String(q.imageData || ''),
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q.media),
+      ...(normalizeCefr(q.cefr) ? { cefr: normalizeCefr(q.cefr) } : {}),
     };
 
     if (base.ttsLanguage === 'OTHER' && !String(q.language || '').trim() && !String(raw.language || '').trim()) {

@@ -104,6 +104,15 @@
                       <label><span data-i18n>Level</span>
                         <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" data-i18n-ph />
                       </label>
+                      <label class="prompt-adaptive-toggle">
+                        <input id="promptAdaptive" type="checkbox" />
+                        <span data-i18n>🎯 Adaptive quiz (all levels A1–C2)</span>
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width hidden" id="promptLevelMixWrap">
+                      <label><span data-i18n>Level mix (optional)</span>
+                        <input id="promptLevelMix" type="text" placeholder="Default: more easy questions than hard ones. e.g. mostly A2–B1, only a couple of C2" data-i18n-ph />
+                      </label>
                     </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Time limit (sec)</span>
@@ -299,6 +308,37 @@
                     <input id="addMediaBatchInput" type="file" accept="image/*,audio/*" multiple hidden />
                     <button id="bankSearchBtn" class="btn" type="button" hidden title="Search the local question bank and import questions into this quiz" data-i18n-title data-i18n>🔍 Search bank</button>
                   </div>
+                  <details id="levelTools" class="level-tools top-space">
+                    <summary><span data-i18n>🎯 Levels</span> <span id="levelCoverage" class="level-coverage"></span></summary>
+                    <div class="level-tools-body">
+                      <p class="small muted" data-i18n>Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions, polls and teacher-graded questions are skipped in adaptive play.</p>
+                      <div class="level-tools-row">
+                        <label><span data-i18n>From question</span>
+                          <input id="levelRangeFrom" type="number" min="1" value="1" />
+                        </label>
+                        <label><span data-i18n>to</span>
+                          <input id="levelRangeTo" type="number" min="1" value="1" />
+                        </label>
+                        <label><span data-i18n>Level</span>
+                          <select id="levelRangeLevel"></select>
+                        </label>
+                        <button id="levelRangeApplyBtn" class="btn" type="button" data-i18n>Set level</button>
+                      </div>
+                      <div class="level-tools-ai">
+                        <strong class="small" data-i18n>Tag with AI</strong>
+                        <div class="level-tools-row">
+                          <select id="levelAiScope">
+                            <option value="untagged" selected data-i18n>Only untagged questions</option>
+                            <option value="all" data-i18n>All questions (re-tag)</option>
+                          </select>
+                          <button id="levelAiCopyBtn" class="btn" type="button" data-i18n>📋 Copy tagging prompt</button>
+                        </div>
+                        <textarea id="levelAiReply" rows="3" placeholder="Paste the AI reply here" data-i18n-ph></textarea>
+                        <button id="levelAiApplyBtn" class="btn primary" type="button" data-i18n>Apply levels</button>
+                      </div>
+                      <div id="levelToolsStatus" class="small top-space"></div>
+                    </div>
+                  </details>
                   <div id="questionList" class="question-list"></div>
                 </div>
               </div>
