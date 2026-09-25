@@ -266,10 +266,17 @@ describe('adaptive assignments', () => {
     E.adaptiveAttemptRemap(edited, st, (qi) => n - 1 - qi);
     assert.equal(edited.quiz.questions[st.items[0].qi].id, answeredId);
     assert.equal(edited.quiz.questions[st.current].id, servedId);
-    // Delete the served question: a new one is served in its place.
-    E.adaptiveAttemptRemap(edited, st, (qi) => (edited.quiz.questions[qi].id === servedId ? null : qi));
+    // Delete the served question: a new one is served in its place, and the
+    // answered question still points at the right question.
+    const kept = edited.quiz.questions.filter((q) => q.id !== servedId);
+    const trimmed = { ...a, quiz: { questions: kept } };
+    E.adaptiveAttemptRemap(trimmed, st, (qi) => {
+      const idx = kept.findIndex((q) => q.id === edited.quiz.questions[qi]?.id);
+      return idx < 0 ? null : idx;
+    });
     assert.notEqual(st.current, null);
-    assert.notEqual(edited.quiz.questions[st.current].id, servedId);
+    assert.notEqual(trimmed.quiz.questions[st.current].id, servedId);
+    assert.equal(trimmed.quiz.questions[st.items[0].qi].id, answeredId);
   });
 
   it('keeps the student level when the quiz changes its levels', () => {
