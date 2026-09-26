@@ -15537,7 +15537,7 @@ function buildAdaptiveLevelRules(cleanRequest) {
       : undefined,
     'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
     'Where possible, practise the same skill or topic at several levels, so a student who moves up keeps working on the same thing at a harder level.',
-    'If the quiz is not about learning a language, treat A1–C2 as six difficulty steps from easiest (A1) to hardest (C2).',
+    'If the quiz (or a question) tests knowledge of another subject rather than the language (general knowledge, history, science, geography…), use the same six levels as difficulty steps: A1 = almost every student knows it; A2 = most students know it; B1 = typical school knowledge; B2 = needs solid study or some reasoning; C1 = only the best-read students know it; C2 = specialist or obscure.',
     cleanRequest.batchSize ? 'Apply the level mix to the whole quiz; each batch may mix levels.' : undefined,
   ].filter(Boolean);
 }
@@ -15670,8 +15670,9 @@ async function copyLevelTaggingPrompt() {
     `You are tagging the questions of an existing PinPlay quiz${quiz.title ? ` ("${quiz.title}")` : ''} with difficulty levels for adaptive mode.`,
     '',
     'Levels: A1, A2, B1, B2, C1, C2 (CEFR). A1 is the easiest, C2 the hardest.',
-    '- For language-learning questions, use the CEFR level of the language the student must understand and produce: vocabulary, grammar, sentence length, and the kind of task (recognising an answer is easier than writing one).',
-    '- If the quiz is not about learning a language, use the six levels as difficulty steps from easiest (A1) to hardest (C2).',
+    'Most of these quizzes are for students learning a second language, usually English (ESL). Decide for each question what it tests:',
+    '- The language itself (vocabulary, grammar, verb forms, spelling, reading, writing). This is the usual case. Use the CEFR level of the language the student must understand and produce: vocabulary, grammar, sentence length, and the kind of task (recognising an answer is easier than writing one).',
+    '- Knowledge of another subject (general knowledge, history, science, geography…). Use the same six levels as difficulty steps: A1 = almost every student knows it; A2 = most students know it; B1 = typical school knowledge; B2 = needs solid study or some reasoning; C1 = only the best-read students know it; C2 = specialist or obscure.',
     '- Judge each question on its own and be honest: do not put everything in the middle.',
     '- Tag every question listed below.',
     '',
