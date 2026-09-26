@@ -125,6 +125,7 @@ are the *settled* sizes (a level resting on ~50 answers); section 4a scales them
 | After dropping a band, correct (until back up) | `+0.28`: usually 2 right answers to climb back, sometimes 1. Added after the first class test: a student stuck between A1 and A2 was failing every other question (~43% of questions above their level; now ~38%) |
 | Right answer on a question below the current band | half the gain |
 | Wrong | `−0.5` (two misses drop a band); half that on a question above the current band |
+| Right on a question already seen this session (since 2026-09-27) | 40% less (`ADAPTIVE_REPEAT_DISCOUNT`): the answer may be remembered from the feedback. Simulated on a 120-question quiz (20 per level), with memory that fades over the 6–10-question retry gap, this keeps a student who memorises answers without knowing the material from climbing, and places genuine A1 and B1 students more accurately than before |
 | 3rd consecutive wrong | extra `−0.5` |
 | Floor / ceiling | Clamped to the first/last band present |
 
@@ -161,7 +162,7 @@ are the *settled* sizes (a level resting on ~50 answers); section 4a scales them
 
 Picking the next question:
 
-1. If a `retry` item is due (after 2–3 other questions) **and the student is at or above that question's band**, serve it. Missed questions come back with spacing, not straight away, and a student who dropped isn't fed harder retries.
+1. If a `retry` item is due (after 6–10 other questions; 2–3 before 2026-09-27) **and the student is at or above that question's band**, serve it. Missed questions come back with spacing, not straight away, and a student who dropped isn't fed harder retries.
 2. Otherwise draw from the current band. Prefer questions not yet seen, then ones seen least often. Never repeat the one just answered (same rule as today).
 3. If the band has run out, reuse its questions and weight the ones the student missed (today's 60/40 rule, applied within the band). If the band is empty, use the nearest band, going down first.
 4. A student stuck at the floor who keeps missing questions naturally keeps getting the same A1 questions again. That is the consolidation loop from the discussion.

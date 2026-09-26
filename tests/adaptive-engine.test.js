@@ -441,7 +441,7 @@ describe('question choice', () => {
     }
   });
 
-  it('brings a missed question back after 2–3 others', () => {
+  it('brings a missed question back after 6–10 others', () => {
     const qs = Array.from({ length: 12 }, () => q('A1'));
     const { bands, pool } = E.adaptivePool(qs, qs.map((_, i) => i));
     const st = E.adaptiveInit(bands);
@@ -454,9 +454,9 @@ describe('question choice', () => {
       if (qi === first) break;
       E.adaptiveRecord(st, qi, 0, true, rng);
       gap += 1;
-      assert.ok(gap <= 3, 'missed question should be back within 3');
+      assert.ok(gap <= 10, 'missed question should be back within 10');
     }
-    assert.ok(gap >= 2);
+    assert.ok(gap >= 6);
   });
 
   it('prefers questions the student has not seen yet', () => {
@@ -624,5 +624,41 @@ describe('adaptive assignments', () => {
     assert.equal(sum.path.split(' ').length, 4);
     assert.ok(['A1', 'A2', 'B1'].includes(sum.usualLevel));
     assert.equal(sum.perLevel.A1.answered + (sum.perLevel.A2?.answered || 0) + (sum.perLevel.B1?.answered || 0), 4);
+  });
+});
+
+describe('repeats and retry spacing (2026-09-27)', () => {
+  it('a right answer on a question seen before moves the level 40% less', () => {
+    const bands = ['A1', 'A2', 'B1'];
+    const fresh = E.adaptiveInit(bands);
+    const again = E.adaptiveInit(bands);
+    again.seen[5] = { n: 1, ok: false };
+    const before = fresh.score;
+    E.adaptiveRecord(fresh, 5, 0, true, seeded(1));
+    E.adaptiveRecord(again, 5, 0, true, seeded(1));
+    const gainFresh = fresh.score - before;
+    const gainAgain = again.score - before;
+    assert.ok(gainFresh > 0);
+    assert.ok(Math.abs(gainAgain - gainFresh * 0.6) < 1e-9, `${gainAgain} vs ${gainFresh * 0.6}`);
+  });
+
+  it('a wrong answer costs the same whether the question is new or repeated', () => {
+    const bands = ['A1', 'A2', 'B1'];
+    const fresh = E.adaptiveInit(bands);
+    const again = E.adaptiveInit(bands);
+    fresh.score = again.score = 1.5;
+    again.seen[5] = { n: 1, ok: true };
+    E.adaptiveRecord(fresh, 5, 1, false, seeded(1));
+    E.adaptiveRecord(again, 5, 1, false, seeded(1));
+    assert.equal(fresh.score, again.score);
+  });
+
+  it('a missed question comes back after 6–10 other questions', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const st = E.adaptiveInit(['A1', 'A2']);
+      E.adaptiveRecord(st, 3, 0, false, seeded(seed));
+      const gap = st.retry[0].due - st.answered;
+      assert.ok(gap >= 6 && gap <= 10, `gap ${gap}`);
+    }
   });
 });

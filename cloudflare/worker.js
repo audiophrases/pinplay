@@ -8330,7 +8330,12 @@ const ADAPTIVE_SETTLE_HALF = 10;      // answers at which the extra has halved
 // moving), below that it counts as wrong.
 const ADAPTIVE_SUCCESS_FRACTION = 0.7;
 const ADAPTIVE_NEUTRAL_FRACTION = 0.4;
-const ADAPTIVE_RETRY_GAPS = [2, 3];   // a miss returns after 2–3 other questions
+// A miss returns after 6–10 other questions: spaced far enough that the answer
+// shown in the feedback has partly faded, so a repeat tests recall, not echo.
+const ADAPTIVE_RETRY_GAPS = [6, 7, 8, 9, 10];
+// A right answer on a question already seen this session moves the level 40%
+// less: remembering an answer shown earlier is weaker evidence than a first try.
+const ADAPTIVE_REPEAT_DISCOUNT = 0.4;
 const ADAPTIVE_PATH_MAX = 200;        // answers kept for the report (room state stays small)
 
 // Eligible question indexes that carry a CEFR tag, with their band index.
@@ -8465,6 +8470,7 @@ function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
   st.path.push({ qi, level, band: st.bands[band] || '', ok: adaptivePathOk(result) });
   if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
   adaptiveTally(st, level, result).answered += 1;
+  const repeat = (st.seen[qi]?.n || 0) > 0;
   const seen = st.seen[qi] || (st.seen[qi] = { n: 0, ok: false });
   seen.n += 1;
   seen.ok = result === 'right';
@@ -8472,8 +8478,9 @@ function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
   const scale = adaptiveStepScale((st.prior || 0) + st.answered);
   if (result === 'right') {
     st.streak = Math.max(0, st.streak) + 1;
-    // An easier question than the current band proves less.
-    const up = (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP) * scale;
+    // An easier question than the current band proves less, and so does a
+    // question seen before (its answer may be remembered from the feedback).
+    const up = (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP) * scale * (repeat ? 1 - ADAPTIVE_REPEAT_DISCOUNT : 1);
     st.score += qBand >= band ? up : up / 2;
   } else if (result === 'wrong') {
     st.streak = Math.min(0, st.streak) - 1;

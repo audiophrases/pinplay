@@ -15,7 +15,7 @@ function loadEngine() {
     'autoGradedQuestionIndexes', 'arenaEligibleIndexes',
     'ADAPTIVE_START', 'ADAPTIVE_UP', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_DOWN',
     'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_STEP_NEW', 'ADAPTIVE_STEP_SETTLED', 'ADAPTIVE_SETTLE_HALF',
-    'ADAPTIVE_SUCCESS_FRACTION', 'ADAPTIVE_NEUTRAL_FRACTION', 'ADAPTIVE_RETRY_GAPS', 'ADAPTIVE_PATH_MAX',
+    'ADAPTIVE_SUCCESS_FRACTION', 'ADAPTIVE_NEUTRAL_FRACTION', 'ADAPTIVE_RETRY_GAPS', 'ADAPTIVE_REPEAT_DISCOUNT', 'ADAPTIVE_PATH_MAX',
     'adaptivePool', 'adaptiveInit', 'adaptiveBand', 'adaptiveStepScale', 'adaptiveScoreFromCefr', 'adaptiveCefr',
     'adaptiveSessionResult', 'adaptiveMergeSaved',
     'adaptiveOutcomeFromFraction', 'adaptiveOutcome', 'adaptivePathOk', 'adaptiveTally',
