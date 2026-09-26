@@ -2974,7 +2974,12 @@ export class QuizRoom {
           answersByQ: {},
           autoScore: 0,
         };
-        const adaptive = adaptiveAttemptInit(assignment);
+        // Signed-in students pick up their saved level (roster rows live in
+        // this DO); anonymous ones start at the bottom.
+        const savedLevel = assignmentAdaptiveCount(assignment) && studentEmail
+          ? (await this.state.storage.get(rosterKey(studentEmail)))?.level
+          : null;
+        const adaptive = adaptiveAttemptInit(assignment, savedLevel);
         if (adaptive) attempt.adaptive = adaptive;
 
         assignment.attempts[attempt.id] = attempt;
@@ -3235,6 +3240,7 @@ export class QuizRoom {
           const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
           adaptiveRecord(st, qi, band >= 0 ? band : adaptiveBand(st), adaptiveIsSuccess(evaluate(served, safeAnswer)));
           adaptiveAttemptAdvance(assignment, st);
+          if (st.done) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
 
           const metrics = evaluateAssignmentAttempt(assignment, attempt);
           attempt.autoScore = metrics.autoScore;
@@ -3348,6 +3354,8 @@ export class QuizRoom {
         attempt.submittedAt = Date.now();
         attempt.updatedAt = attempt.submittedAt;
         assignment.updatedAt = attempt.submittedAt;
+        // Stopped early: the answers so far still count toward the saved level.
+        if (attempt.adaptive) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
 
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -3657,6 +3665,14 @@ export class QuizRoom {
         const row = mergeRosterRow(existing, body, email);
         await this.state.storage.put(rosterKey(email), row);
         return json({ ok: true, student: row });
+      }
+
+      // Adaptive Cup results: [{ email, result }] from arenaSaveLevels.
+      if (url.pathname === '/roster/levels' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const entries = Array.isArray(body?.entries) ? body.entries.slice(0, 500) : [];
+        await saveRosterLevels(this.state.storage, entries.filter((e) => e?.result && Number.isFinite(Number(e.result.cefr))));
+        return json({ ok: true });
       }
 
       if (url.pathname === '/roster/delete' && request.method === 'POST') {
@@ -4201,6 +4217,7 @@ export class QuizRoom {
 
         let name = rawName;
         let verifiedIdentity = null;
+        let verifiedLevel = null;
         if (room.settings?.randomNames) {
           name = pickRandomName(room.players);
           if (!name) return json({ error: 'Name is required.' }, 400);
@@ -4231,6 +4248,8 @@ export class QuizRoom {
 
           const sameStudentAlreadyIn = Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '') === verifiedIdentity.studentKey);
           if (sameStudentAlreadyIn) return json({ error: 'You have already joined this game on another device.' }, 409);
+          // Adaptive Cup starts each signed-in student at their saved level.
+          if (room.arena?.adaptive && student.level) verifiedLevel = student.level;
         }
 
         const playerId = randomId('p_');
@@ -4251,6 +4270,7 @@ export class QuizRoom {
             studentKey: '',
             source: room.settings?.randomNames ? 'random' : 'manual',
           },
+          ...(verifiedLevel ? { savedLevel: verifiedLevel } : {}),
         };
 
         appendRoomEvent(room, 'player_joined', {
@@ -5035,6 +5055,7 @@ export class QuizRoom {
     Object.values(room.arena.players).forEach((ps) => { ps.cards = null; ps.power = null; ps.target = null; });
     appendRoomEvent(room, 'game_finished', { mode: 'arena', finishedAt: now });
     await maybeSnapshotLiveGame(room, this.env);
+    await arenaSaveLevels(room, this.env);
     await this.#arenaPersist(room, true);
     const podium = arenaPodium(room);
     this.#arenaSockets((a) => a.role === 'host').forEach((ws) => this.#arenaSend(ws, { ...arenaBoard(room), podium, levels: arenaLevelReport(room) }));
@@ -7079,12 +7100,14 @@ async function resolveStudent(env, body, request) {
   let displayName = claim.name;
   let className = claim.cls;
   let legacyUsername = '';
+  let level = null;
   try {
     const row = await rosterGetStudent(env, claim.email);
     if (row) {
       displayName = sanitizeName(row.displayName || displayName);
       className = sanitizeClassName(row.className || '');
       legacyUsername = String(row.legacyUsername || '').trim();
+      level = row.level || null;
     }
   } catch {
     // Roster unavailable: the signed token's own claims are still trustworthy.
@@ -7096,6 +7119,8 @@ async function resolveStudent(env, body, request) {
     className,
     studentKey: makeStudentKeyFromEmail(claim.email),
     legacyStudentKey: legacyUsername ? makeStudentKeyFromUsername(legacyUsername) : '',
+    // Saved adaptive level (teacher-only; not echoed by /api/student/me).
+    level,
   };
 }
 
@@ -7268,11 +7293,11 @@ function assignmentAdaptivePool(assignment) {
   return adaptivePool(questions, autoGradedQuestionIndexes(questions));
 }
 
-function adaptiveAttemptInit(assignment) {
+function adaptiveAttemptInit(assignment, saved = null) {
   const count = assignmentAdaptiveCount(assignment);
   const { bands, pool } = assignmentAdaptivePool(assignment);
   if (!count || bands.length < 2) return null;
-  const st = adaptiveInit(bands);
+  const st = adaptiveInit(bands, saved);
   st.count = count;
   st.items = [];
   st.done = false;
@@ -7307,6 +7332,20 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
     st.current = st.current == null ? null : mapQi(st.current);
     if (st.current == null) adaptiveAttemptAdvance(assignment, st);
   }
+}
+
+// Fold a finished (or stopped-early) adaptive attempt into the student's saved
+// level. Runs in the assignments DO, where roster rows live. `levelSaved`
+// counts the answers already credited, so a reopened attempt adds only its
+// new answers.
+async function adaptiveAttemptSaveLevel(storage, attempt) {
+  const st = attempt?.adaptive;
+  const email = sanitizeEmail(attempt?.studentEmail);
+  const result = email ? adaptiveSessionResult(st) : null;
+  const fresh = result ? result.answered - (Number(st.levelSaved) || 0) : 0;
+  if (fresh <= 0) return;
+  st.levelSaved = st.answered;
+  await saveRosterLevels(storage, [{ email, result: { ...result, answered: fresh } }]);
 }
 
 function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}) {
@@ -7695,7 +7734,25 @@ function mergeRosterRow(existing, input, email) {
     createdAt: prior?.createdAt || now,
     updatedAt: now,
     lastLoginAt: prior?.lastLoginAt || null,
+    // Saved adaptive level: written only by adaptive sessions, never by edits.
+    ...(prior?.level ? { level: prior.level } : {}),
   };
+}
+
+// Fold adaptive session results ([{ email, result }]) into roster rows. Only
+// existing rows are updated: finishing a session never re-adds a student the
+// teacher removed.
+async function saveRosterLevels(storage, entries) {
+  const now = Date.now();
+  for (const { email, result } of entries) {
+    const clean = sanitizeEmail(email);
+    if (!clean || !result) continue;
+    const key = rosterKey(clean);
+    const row = await storage.get(key);
+    if (!row || typeof row !== 'object') continue;
+    row.level = adaptiveMergeSaved(row.level, result, now);
+    await storage.put(key, row);
+  }
 }
 
 
@@ -8144,15 +8201,22 @@ function arenaBuildDeck(ps, eligible) {
 // (bands = distinct tagged levels, in order; gaps are skipped). Right answers
 // push it up, misses pull it down, and missed questions come back after a few
 // others. Pure functions over plain state so Cup and assignments can share them.
-const ADAPTIVE_START = 0.8;           // top of the lowest band: start easy
-const ADAPTIVE_WARMUP = 4;            // warm-up: until the first miss or 4 answers...
-const ADAPTIVE_UP_WARMUP = 1;         // ...each right answer climbs a whole band
-const ADAPTIVE_UP = 0.34;             // then ~3 in a row to go up a band
+// A signed-in student's level is saved on their roster row between sessions
+// (`level: { cefr, answered }`), so the next session starts where they left off.
+const ADAPTIVE_START = 0.8;           // new student: top of the lowest band (start easy)
+const ADAPTIVE_UP = 0.34;             // settled level: ~3 in a row to go up a band
 const ADAPTIVE_UP_AFTER_DROP = 0.28;  // after dropping a band, climbing back takes a bit more
                                       // (usually 2 right answers, sometimes 1), so a struggling
                                       // student isn't sent straight back to the level they failed
-const ADAPTIVE_DOWN = 0.5;            // 2 misses drop a band
+const ADAPTIVE_DOWN = 0.5;            // settled level: 2 misses drop a band
 const ADAPTIVE_STREAK_DOWN = 0.5;     // extra drop from the 3rd miss in a row
+// Every step above is scaled by how many answers the level rests on (saved +
+// this session). A new level moves fast both ways: at 0 answers a right answer
+// climbs a whole band, so a strong newcomer reaches C1 in ~4 answers. The steps
+// shrink as answers pile up: normal size by ~50 answers, then steadier still.
+const ADAPTIVE_STEP_NEW = 3;          // step multiplier with no answers yet
+const ADAPTIVE_STEP_SETTLED = 0.6;    // ...tends to this with many answers
+const ADAPTIVE_SETTLE_HALF = 10;      // answers at which the extra has halved
 const ADAPTIVE_SUCCESS_FRACTION = 0.7; // partial-credit rounds count from 70%
 const ADAPTIVE_RETRY_GAPS = [2, 3];   // a miss returns after 2–3 other questions
 const ADAPTIVE_PATH_MAX = 200;        // answers kept for the report (room state stays small)
@@ -8166,12 +8230,74 @@ function adaptivePool(questions, eligible) {
   return { bands: levels, pool };
 }
 
-function adaptiveInit(bands) {
-  return { bands: bands.slice(), score: ADAPTIVE_START, answered: 0, streak: 0, warm: true, retry: [], seen: {}, last: null, path: [], perLevel: {} };
+// `saved` is the student's saved level ({ cefr, answered }) or null for a new
+// or anonymous student, who starts at the bottom.
+function adaptiveInit(bands, saved = null) {
+  const st = { bands: bands.slice(), score: ADAPTIVE_START, answered: 0, streak: 0, retry: [], seen: {}, last: null, path: [], perLevel: {}, prior: 0 };
+  const cefr = Number(saved?.cefr);
+  if (saved && Number.isFinite(cefr) && bands.length) {
+    st.score = adaptiveScoreFromCefr(st.bands, cefr);
+    st.prior = Math.max(0, Math.round(Number(saved.answered) || 0));
+  }
+  return st;
 }
 
 function adaptiveBand(st) {
   return clamp(Math.floor(st.score), 0, Math.max(0, st.bands.length - 1));
+}
+
+// Step multiplier for a level that rests on n answers (see ADAPTIVE_STEP_*).
+function adaptiveStepScale(n) {
+  return ADAPTIVE_STEP_SETTLED + (ADAPTIVE_STEP_NEW - ADAPTIVE_STEP_SETTLED) * ADAPTIVE_SETTLE_HALF / (ADAPTIVE_SETTLE_HALF + Math.max(0, n));
+}
+
+// A saved level on the A1..C2 scale (0 = A1, 5.99 = top of C2) as a score over
+// this quiz's bands. A level the quiz lacks goes to the nearest one it has
+// (ties go easier), at the edge facing the saved level.
+function adaptiveScoreFromCefr(bands, cefr) {
+  const lvl = clamp(Math.floor(cefr), 0, CEFR_LEVELS.length - 1);
+  const frac = clamp(cefr - lvl, 0, 0.99);
+  const idxs = bands.map((b) => CEFR_LEVELS.indexOf(b));
+  const exact = idxs.indexOf(lvl);
+  if (exact >= 0) return exact + frac;
+  let best = 0;
+  idxs.forEach((x, i) => { if (Math.abs(x - lvl) < Math.abs(idxs[best] - lvl)) best = i; });
+  return idxs[best] < lvl ? best + 0.99 : best;
+}
+
+// The student's current level on the A1..C2 scale, for saving.
+function adaptiveCefr(st) {
+  const band = adaptiveBand(st);
+  return CEFR_LEVELS.indexOf(st.bands[band]) + clamp(st.score - band, 0, 0.99);
+}
+
+// What a finished session contributes to the saved level; null if nothing
+// was answered. bottom/top are the quiz's level range, for adaptiveMergeSaved.
+function adaptiveSessionResult(st) {
+  if (!st?.answered || !st.bands?.length) return null;
+  return {
+    cefr: adaptiveCefr(st),
+    answered: st.answered,
+    bottom: CEFR_LEVELS.indexOf(st.bands[0]),
+    top: CEFR_LEVELS.indexOf(st.bands[st.bands.length - 1]),
+  };
+}
+
+// New saved level from the stored one and a session result. A quiz can't
+// measure past its own range: a saved level above its top (or below its
+// bottom) stays unless the student ended the session off that edge band.
+function adaptiveMergeSaved(prev, result, now = Date.now()) {
+  let cefr = Number(result.cefr);
+  const was = Number(prev?.cefr);
+  if (prev && Number.isFinite(was)) {
+    if (was >= result.top + 1 && cefr >= result.top) cefr = was;
+    else if (was < result.bottom && cefr < result.bottom + 1) cefr = was;
+  }
+  return {
+    cefr: Math.round(clamp(cefr, 0, CEFR_LEVELS.length - 0.01) * 100) / 100,
+    answered: Math.max(0, Math.round(Number(prev?.answered) || 0)) + Math.max(0, Math.round(Number(result.answered) || 0)),
+    updatedAt: now,
+  };
 }
 
 function adaptiveIsSuccess(verdict) {
@@ -8193,19 +8319,18 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
   seen.n += 1;
   seen.ok = !!success;
   st.retry = st.retry.filter((r) => r.qi !== qi);
+  const scale = adaptiveStepScale((st.prior || 0) + st.answered);
   if (success) {
     st.streak = Math.max(0, st.streak) + 1;
     // An easier question than the current band proves less.
-    const up = st.warm ? ADAPTIVE_UP_WARMUP : (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP);
+    const up = (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP) * scale;
     st.score += qBand >= band ? up : up / 2;
   } else {
     st.streak = Math.min(0, st.streak) - 1;
-    // The first miss roughly marks the ceiling: warm-up is over.
-    st.warm = false;
     // Missing a harder question than the current band costs less.
     let down = qBand <= band ? ADAPTIVE_DOWN : ADAPTIVE_DOWN / 2;
     if (st.streak <= -3) down += ADAPTIVE_STREAK_DOWN;
-    st.score -= down;
+    st.score -= down * scale;
     const gap = ADAPTIVE_RETRY_GAPS[Math.floor(rng() * ADAPTIVE_RETRY_GAPS.length)];
     st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
   }
@@ -8214,7 +8339,6 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
   if (next < band) st.dropped = true;
   else if (next > band) st.dropped = false;
   st.answered += 1;
-  if (st.answered >= ADAPTIVE_WARMUP) st.warm = false;
   st.last = qi;
 }
 
@@ -8388,12 +8512,28 @@ function arenaAdaptivePool(room) {
   return adaptivePool(room.quiz?.questions || [], arenaEligibleIndexes(room));
 }
 
+// Adaptive Cup, game over: fold each signed-in student's session into their
+// saved level, in one call to the assignments DO for the whole class.
+async function arenaSaveLevels(room, env) {
+  if (!room.arena?.adaptive || room.arena.levelsSaved || !env?.ROOMS) return;
+  room.arena.levelsSaved = true;
+  const entries = Object.values(room.players || {})
+    .map((p) => ({ email: p?.identity?.email, result: adaptiveSessionResult(room.arena.players[p.id]?.adaptive) }))
+    .filter((e) => e.email && e.result);
+  if (!entries.length) return;
+  try {
+    await rosterCall(env, 'levels', { method: 'POST', body: JSON.stringify({ entries }) });
+  } catch {
+    // The game result stands; only the saved levels miss this session.
+  }
+}
+
 function arenaDeal(room, pid) {
   const ps = arenaPlayerState(room, pid);
   let qi;
   if (room.arena.adaptive) {
     const { bands, pool } = arenaAdaptivePool(room);
-    if (!ps.adaptive) ps.adaptive = adaptiveInit(bands);
+    if (!ps.adaptive) ps.adaptive = adaptiveInit(bands, room.players[pid]?.savedLevel);
     adaptiveRebase(ps.adaptive, bands);
     qi = adaptiveNext(ps.adaptive, pool);
   } else {

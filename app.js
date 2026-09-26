@@ -9286,12 +9286,26 @@ function renderStudentRow(student) {
   name.textContent = student.displayName || student.email;
   info.appendChild(name);
 
+  // Saved adaptive level: where their next adaptive Cup or assignment starts.
+  // Teacher-only; students never see it.
+  const savedCefr = Number(student.level?.cefr);
+  const savedAnswers = Number(student.level?.answered || 0);
+  if (student.level && Number.isFinite(savedCefr)) {
+    const chip = document.createElement('span');
+    chip.className = 'q-cefr-chip';
+    chip.style.marginLeft = '.4rem';
+    chip.textContent = CEFR_LEVELS[Math.min(CEFR_LEVELS.length - 1, Math.max(0, Math.floor(savedCefr)))];
+    chip.title = t('Adaptive level. Their next adaptive game or assignment starts here. It moves less as answers add up.');
+    info.appendChild(chip);
+  }
+
   const meta = document.createElement('div');
   meta.className = 'small muted';
   const bits = [student.email];
   if (student.legacyUsername) bits.push(t('was @{u}', { u: student.legacyUsername }));
   if (student.lastLoginAt) bits.push(t('last sign-in {d}', { d: new Date(Number(student.lastLoginAt)).toLocaleDateString() }));
   else bits.push(t('never signed in'));
+  if (student.level && Number.isFinite(savedCefr)) bits.push(t('level from {n} answers', { n: savedAnswers }));
   meta.textContent = bits.join(' · ');
   info.appendChild(meta);
 

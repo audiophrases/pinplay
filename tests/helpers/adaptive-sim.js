@@ -12,9 +12,12 @@ const WORKER_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'cloudflare'
 function loadEngine() {
   return loadDeclarations(WORKER_SRC, [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'isTeacherGradedTextQuestion', 'autoGradedQuestionIndexes', 'arenaEligibleIndexes',
-    'ADAPTIVE_START', 'ADAPTIVE_WARMUP', 'ADAPTIVE_UP_WARMUP', 'ADAPTIVE_UP', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_DOWN',
-    'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_SUCCESS_FRACTION', 'ADAPTIVE_RETRY_GAPS', 'ADAPTIVE_PATH_MAX',
-    'adaptivePool', 'adaptiveInit', 'adaptiveBand', 'adaptiveIsSuccess', 'adaptiveRecord', 'adaptiveNext', 'adaptiveUsualLevel',
+    'ADAPTIVE_START', 'ADAPTIVE_UP', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_DOWN',
+    'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_STEP_NEW', 'ADAPTIVE_STEP_SETTLED', 'ADAPTIVE_SETTLE_HALF',
+    'ADAPTIVE_SUCCESS_FRACTION', 'ADAPTIVE_RETRY_GAPS', 'ADAPTIVE_PATH_MAX',
+    'adaptivePool', 'adaptiveInit', 'adaptiveBand', 'adaptiveStepScale', 'adaptiveScoreFromCefr', 'adaptiveCefr',
+    'adaptiveSessionResult', 'adaptiveMergeSaved',
+    'adaptiveIsSuccess', 'adaptiveRecord', 'adaptiveNext', 'adaptiveUsualLevel',
     'adaptiveRebase', 'adaptiveSummary',
     'assignmentAdaptiveCount', 'assignmentAdaptivePool', 'adaptiveAttemptInit', 'adaptiveAttemptAdvance',
     'adaptiveAttemptRemap', 'adaptiveAttemptView',
@@ -43,11 +46,11 @@ function pSuccess(ability, level) {
   return 1 / (1 + Math.exp(-1.4 * (ability + 0.5 - level)));
 }
 
-function simulate(E, questions, { ability, seconds = 300, seed = 1 }) {
+function simulate(E, questions, { ability, seconds = 300, seed = 1, saved = null }) {
   const rng = seeded(seed);
   const eligible = E.arenaEligibleIndexes({ quiz: { questions } });
   const { bands, pool } = E.adaptivePool(questions, eligible);
-  const st = E.adaptiveInit(bands);
+  const st = E.adaptiveInit(bands, saved);
   let clock = 0;
   let rightSinceChest = 0;
   const served = [];

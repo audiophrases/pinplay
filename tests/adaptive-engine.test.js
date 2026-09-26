@@ -10,6 +10,7 @@ before(() => { E = loadEngine(); });
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const q = (cefr, type = 'mcq') => ({ type, cefr });
 const levelOf = (st) => st.bands[E.adaptiveBand(st)];
+const ALL = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 describe('bands come from the levels the quiz contains', () => {
   it('uses all six levels of a full quiz', () => {
@@ -53,33 +54,51 @@ describe('level movement', () => {
     assert.equal(levelOf(st), 'B2');
   });
 
-  it('climbs a whole level per right answer until the first miss or 4 answers', () => {
-    const st = E.adaptiveInit(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+  it('a new student climbs about a whole level per right answer', () => {
+    const st = E.adaptiveInit(ALL);
     const levels = [];
     for (let i = 0; i < 4; i++) {
       E.adaptiveRecord(st, i, E.adaptiveBand(st), true, seeded(1));
       levels.push(levelOf(st));
     }
     assert.deepEqual(levels, ['A2', 'B1', 'B2', 'C1']);
-    assert.equal(st.warm, false);
   });
 
-  it('after the first miss, needs about three right answers per level', () => {
-    const st = E.adaptiveInit(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
-    E.adaptiveRecord(st, 0, 0, true, seeded(1));  // A1 right -> A2
-    E.adaptiveRecord(st, 1, 1, false, seeded(1)); // A2 miss: warm-up over
-    assert.equal(levelOf(st), 'A2');
+  it('a new student also drops fast: one miss costs about a level', () => {
+    const st = E.adaptiveInit(ALL);
+    for (let i = 0; i < 3; i++) E.adaptiveRecord(st, i, E.adaptiveBand(st), true, seeded(1));
+    assert.equal(levelOf(st), 'B2');
+    E.adaptiveRecord(st, 3, 3, false, seeded(1));
+    assert.equal(levelOf(st), 'B1');
+  });
+
+  it('a settled level (~50 answers) needs about three right answers per level', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 1, answered: 50 }); // bottom of A2
     const levels = [];
-    for (let i = 2; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       E.adaptiveRecord(st, i, E.adaptiveBand(st), true, seeded(1));
       levels.push(levelOf(st));
     }
     assert.deepEqual(levels, ['A2', 'A2', 'B1']);
   });
 
-  it('two misses drop a level, and three in a row drop faster', () => {
-    const st = E.adaptiveInit(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
-    st.score = 3.9; // top of B2
+  it('steps keep shrinking as answers pile up', () => {
+    assert.ok(E.adaptiveStepScale(0) > E.adaptiveStepScale(10));
+    assert.ok(E.adaptiveStepScale(10) > E.adaptiveStepScale(50));
+    assert.ok(E.adaptiveStepScale(50) > E.adaptiveStepScale(500));
+    assert.ok(E.adaptiveStepScale(5000) >= E.ADAPTIVE_STEP_SETTLED);
+    // 200 answers in: three right answers from the bottom of A2 stay in A2,
+    // and two misses at the top of B2 stay in B2.
+    const up = E.adaptiveInit(ALL, { cefr: 1, answered: 200 });
+    for (let i = 0; i < 3; i++) E.adaptiveRecord(up, i, E.adaptiveBand(up), true, seeded(1));
+    assert.equal(levelOf(up), 'A2');
+    const down = E.adaptiveInit(ALL, { cefr: 3.9, answered: 200 });
+    for (let i = 0; i < 2; i++) E.adaptiveRecord(down, i, 3, false, seeded(1));
+    assert.equal(levelOf(down), 'B2');
+  });
+
+  it('two misses drop a settled level, and three in a row drop faster', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 3.9, answered: 50 }); // top of B2
     E.adaptiveRecord(st, 1, 3, false, seeded(1));
     assert.equal(levelOf(st), 'B2');
     E.adaptiveRecord(st, 2, 3, false, seeded(1));
@@ -107,6 +126,152 @@ describe('level movement', () => {
     assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 0.7, partialTotal: 1 }), true);
     assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 3, partialTotal: 5 }), false);
     assert.equal(E.adaptiveIsSuccess({ correct: false }), false);
+  });
+});
+
+describe('saved level carries over between sessions', () => {
+  it('starts a returning student at their saved level', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 2.4, answered: 30 });
+    assert.equal(levelOf(st), 'B1');
+    assert.equal(st.prior, 30);
+    assert.ok(Math.abs(E.adaptiveCefr(st) - 2.4) < 1e-9);
+  });
+
+  it('places a saved level the quiz lacks at the nearest level it has', () => {
+    // Above the quiz: top of its highest level.
+    const high = E.adaptiveInit(['A1', 'A2', 'B1'], { cefr: 4.5, answered: 40 });
+    assert.equal(levelOf(high), 'B1');
+    assert.equal(high.score, 2.99);
+    // Below the quiz: bottom of its lowest level.
+    const low = E.adaptiveInit(['B1', 'B2', 'C1'], { cefr: 0.5, answered: 40 });
+    assert.equal(levelOf(low), 'B1');
+    assert.equal(low.score, 0);
+    // In a gap: B1 on an A1 / B2 / C1 quiz goes to B2 (one step) not A1 (two).
+    assert.equal(levelOf(E.adaptiveInit(['A1', 'B2', 'C1'], { cefr: 2.5, answered: 40 })), 'B2');
+    // Equally far: the easier one.
+    assert.equal(levelOf(E.adaptiveInit(['A2', 'B2'], { cefr: 2.5, answered: 40 })), 'A2');
+  });
+
+  it('ignores a missing or broken saved level', () => {
+    for (const saved of [null, {}, { cefr: 'x' }]) {
+      const st = E.adaptiveInit(ALL, saved);
+      assert.equal(st.score, E.ADAPTIVE_START);
+      assert.equal(st.prior, 0);
+    }
+  });
+
+  it('saves nothing for a session without answers', () => {
+    assert.equal(E.adaptiveSessionResult(E.adaptiveInit(ALL)), null);
+  });
+
+  it('adds the session answers and takes the session level', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 1.5, answered: 12 });
+    for (let i = 0; i < 5; i++) E.adaptiveRecord(st, i, E.adaptiveBand(st), true, seeded(i));
+    const saved = E.adaptiveMergeSaved({ cefr: 1.5, answered: 12 }, E.adaptiveSessionResult(st), 99);
+    assert.equal(saved.answered, 17);
+    assert.equal(saved.updatedAt, 99);
+    assert.ok(saved.cefr > 1.5);
+    assert.equal(saved.cefr, Math.round(E.adaptiveCefr(st) * 100) / 100);
+    // A first session just takes the result.
+    assert.equal(E.adaptiveMergeSaved(null, { cefr: 2.345, answered: 8, bottom: 0, top: 5 }).cefr, 2.35);
+  });
+
+  it('keeps a saved level the quiz could not reach, unless the student fell off its edge', () => {
+    const quiz = { bottom: 1, top: 3 }; // A2–B2
+    const c1 = { cefr: 4.5, answered: 60 };
+    // Held the top level (B2): the quiz couldn't test C1, keep C1.
+    assert.equal(E.adaptiveMergeSaved(c1, { ...quiz, cefr: 3.99, answered: 15 }).cefr, 4.5);
+    assert.equal(E.adaptiveMergeSaved(c1, { ...quiz, cefr: 3.2, answered: 15 }).cefr, 4.5);
+    // Fell back to B1: that is real evidence, take it.
+    assert.equal(E.adaptiveMergeSaved(c1, { ...quiz, cefr: 2.6, answered: 15 }).cefr, 2.6);
+    const a1 = { cefr: 0.4, answered: 60 };
+    // Stayed in the bottom level (A2): keep A1.
+    assert.equal(E.adaptiveMergeSaved(a1, { ...quiz, cefr: 1.7, answered: 15 }).cefr, 0.4);
+    // Climbed to B1: take it.
+    assert.equal(E.adaptiveMergeSaved(a1, { ...quiz, cefr: 2.1, answered: 15 }).cefr, 2.1);
+  });
+
+  it('a strong returning student works at C1–C2 from the first questions', () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const { st } = simulate(E, VERBS, { ability: 5, seed, saved: { cefr: 4.5, answered: 60 } });
+      const first = st.path.slice(0, 5).map((p) => p.band);
+      assert.ok(first.every((b) => ['C1', 'C2'].includes(b)), first.join(' '));
+    }
+  });
+
+  it('over several Cups a student settles: fewer level changes than in the first', () => {
+    const changes = (st) => st.path.slice(1).filter((p, i) => p.band !== st.path[i].band).length;
+    let first = 0;
+    let fifth = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      let saved = null;
+      for (let k = 0; k < 5; k++) {
+        const { st } = simulate(E, VERBS, { ability: 2, seed: seed * 10 + k, saved });
+        if (k === 0) first += changes(st);
+        if (k === 4) fifth += changes(st);
+        saved = E.adaptiveMergeSaved(saved, E.adaptiveSessionResult(st));
+      }
+    }
+    assert.ok(fifth < first * 0.75, `first ${first}, fifth ${fifth}`);
+  });
+});
+
+describe('saved level storage (roster rows in the assignments DO)', () => {
+  let S;
+  before(() => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { loadDeclarations } = require('./helpers/extract-declaration');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'cloudflare', 'worker.js'), 'utf8');
+    // rosterKey is a one-line template-literal arrow the extractor can't lift.
+    S = loadDeclarations(src, [
+      'CEFR_LEVELS', 'clamp', 'sanitizeName', 'sanitizeEmail', 'sanitizeClassName',
+      'mergeRosterRow', 'saveRosterLevels', 'adaptiveBand', 'adaptiveCefr', 'adaptiveSessionResult', 'adaptiveMergeSaved',
+      'adaptiveAttemptSaveLevel',
+    ], { rosterKey: (email) => `rs:${String(email || '').trim().toLowerCase()}` });
+  });
+  const fakeStorage = (rows = {}) => {
+    const m = new Map(Object.entries(rows));
+    return { m, get: async (k) => m.get(k), put: async (k, v) => { m.set(k, v); } };
+  };
+  const session = (score, answered) => ({ bands: ALL.slice(), score, answered });
+
+  it('keeps the level when the teacher renames or re-classes a student', () => {
+    const prior = { email: 'a@s.cat', displayName: 'Ana', className: '4B', level: { cefr: 2.4, answered: 30 } };
+    const row = S.mergeRosterRow(prior, { className: '4C' }, 'a@s.cat');
+    assert.equal(row.className, '4C');
+    assert.deepEqual(plain(row.level), { cefr: 2.4, answered: 30 });
+    assert.equal('level' in S.mergeRosterRow(null, { displayName: 'New' }, 'n@s.cat'), false);
+  });
+
+  it('updates existing rows only', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', displayName: 'Ana' } });
+    await S.saveRosterLevels(storage, [
+      { email: 'A@S.cat', result: S.adaptiveSessionResult(session(3.5, 12)) },
+      { email: 'gone@s.cat', result: S.adaptiveSessionResult(session(1.5, 12)) },
+    ]);
+    assert.equal(storage.m.get('rs:a@s.cat').level.cefr, 3.5);
+    assert.equal(storage.m.get('rs:a@s.cat').level.answered, 12);
+    assert.equal(storage.m.has('rs:gone@s.cat'), false);
+  });
+
+  it('credits an assignment attempt once, and only new answers after a reopen', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 1.2, answered: 40 } } });
+    const attempt = { studentEmail: 'a@s.cat', adaptive: session(2.3, 15) };
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    await S.adaptiveAttemptSaveLevel(storage, attempt); // submit after done: no double count
+    assert.equal(storage.m.get('rs:a@s.cat').level.answered, 55);
+    attempt.adaptive.answered = 18; // reopened, 3 more answers
+    attempt.adaptive.score = 2.6;
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    assert.equal(storage.m.get('rs:a@s.cat').level.answered, 58);
+    assert.equal(storage.m.get('rs:a@s.cat').level.cefr, 2.6);
+  });
+
+  it('never saves for anonymous attempts', async () => {
+    const storage = fakeStorage();
+    await S.adaptiveAttemptSaveLevel(storage, { studentEmail: '', adaptive: session(2.3, 15) });
+    assert.equal(storage.m.size, 0);
   });
 });
 

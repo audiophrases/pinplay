@@ -925,6 +925,8 @@ window.PINPLAY_FR_DICT = {
   'was @{u}': 'anciennement @{u}',
   'last sign-in {d}': 'dernière connexion {d}',
   'never signed in': 'jamais connecté',
+  'level from {n} answers': 'niveau établi sur {n} réponses',
+  'Adaptive level. Their next adaptive game or assignment starts here. It moves less as answers add up.': 'Niveau adaptatif. Sa prochaine partie ou son prochain devoir adaptatif commence ici. Il bouge moins à mesure que les réponses s\'accumulent.',
   'Class': 'Classe',
   'Class, e.g. 4B': 'Classe, ex. 4B',
   'Saved {name} → {cls}': '{name} enregistré → {cls}',

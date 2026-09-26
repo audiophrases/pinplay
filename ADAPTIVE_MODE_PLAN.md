@@ -4,6 +4,12 @@ Status: **phases 1–3 implemented 2026-09-25**: data + authoring, the engine +
 PinPlay Cup, and adaptive assignments. Phase 4 (class-level reports) is still a
 plan. Design decisions settled with the owner on 2026-09-25 (section 8).
 
+**Changed 2026-09-26 (owner's request):** a signed-in student's level is now
+**saved on their roster row** and carries over, so intermediate and advanced
+students no longer restart at A1. The fixed warm-up is replaced by steps that
+shrink as the level rests on more answers (section 4a). Only the teacher sees
+the saved level (a chip in the Students list).
+
 Phase 1 as built (some details differ from section 3):
 
 - `cefr` is kept by both normalizers (`normalizeQuizForLive` in `app.js`, `normalizeQuiz` in the worker). Import also accepts `cefrLevel`, `level` and lowercase values. Cloud save stores the raw quiz, so the tag was never at risk there.
@@ -94,7 +100,7 @@ has six bands (A1…C2). A quiz tagged only A2, B1, B2 has three. A quiz with ga
 (A1, B1, C1) also has three, so moving up from A1 goes straight to B1. The
 engine works entirely in band indexes, so it adapts to whatever each quiz covers.
 
-State per student (fresh every session; nothing carries over):
+State per student per session (the saved level between sessions is in 4a):
 
 ```
 adaptive: {
@@ -108,18 +114,49 @@ adaptive: {
 }
 ```
 
-Rules. All numbers are constants to tune after a real class:
+Rules. All numbers are constants to tune after a real class. The steps below
+are the *settled* sizes (a level resting on ~50 answers); section 4a scales them.
 
 | Situation | Effect |
 |---|---|
-| Start | `score = 0.8`, the top of the **lowest band present** (A1 on a full quiz): start easy |
-| Warm-up (until the first miss, at most 4 answers), correct | `+1`, a whole band per right answer: a strong student reaches C1 after 4 answers |
-| After warm-up, correct | `+0.34` (about 3 in a row to go up one band) |
+| Start, new or anonymous student | `score = 0.8`, the top of the **lowest band present** (A1 on a full quiz): start easy |
+| Start, signed-in student with a saved level | at the saved level (4a) |
+| Correct | `+0.34` (about 3 in a row to go up one band) |
 | After dropping a band, correct (until back up) | `+0.28`: usually 2 right answers to climb back, sometimes 1. Added after the first class test: a student stuck between A1 and A2 was failing every other question (~43% of questions above their level; now ~38%) |
 | Right answer on a question below the current band | half the gain |
 | Wrong | `−0.5` (two misses drop a band); half that on a question above the current band |
 | 3rd consecutive wrong | extra `−0.5` |
 | Floor / ceiling | Clamped to the first/last band present |
+
+### 4a. Saved level and settling (2026-09-26)
+
+- **Saved on the roster row** (`rs:<email>` in the assignments DO) as
+  `level: { cefr, answered, updatedAt }`. `cefr` is on the absolute scale
+  (0 = bottom of A1, 5.99 = top of C2), so it means the same thing whatever
+  levels the next quiz covers. `answered` counts every adaptive answer so far.
+- **Settling:** every step is multiplied by
+  `0.6 + 2.4 × 10 / (10 + n)`, where `n` = saved answers + answers this session
+  (`ADAPTIVE_STEP_NEW` 3, `ADAPTIVE_STEP_SETTLED` 0.6, `ADAPTIVE_SETTLE_HALF` 10).
+  At 0 answers ×3: a right answer climbs a whole band and a miss costs about one
+  (this replaces the old warm-up, which stopped at the first miss). ×1.8 at 10
+  answers, ×1.4 at 20, ×1.0 at 50, ×0.7 at 200. Right and wrong scale alike.
+  Anonymous (random-name) players have no saved level, so `n` counts only the
+  current session.
+- **Starting a session:** the saved level maps onto the quiz's bands. A level
+  the quiz doesn't have goes to the nearest one it has (ties go easier), at the
+  edge facing the saved level (a C1 student on an A2–B2 quiz starts at the top
+  of B2).
+- **Saving:** Cup saves every signed-in player when the game ends (one call to
+  the assignments DO). Assignments save when the Nth answer is in, or on submit
+  when a student stops early; a reopened attempt adds only its new answers.
+  Only existing roster rows are updated. A session with no answers saves nothing.
+- **Out-of-range quizzes don't overwrite:** if the saved level is above the
+  quiz's top level and the student ends in that top band, the saved level stays
+  (the quiz couldn't test higher). The same applies below the bottom. Ending off
+  that edge band is real evidence and is saved.
+- Simulated (irregular-verbs quiz, 5-minute Cups): the first Cup lands on the
+  right level about as often as the old engine; by the 5th Cup the student
+  changes level about half as often as in the first.
 
 Picking the next question:
 
@@ -175,13 +212,13 @@ Every phase also needs: i18n strings (EN in `i18n.js`, FR in `i18n-fr.js`), and 
 | Question | Decision |
 |---|---|
 | Name | Adaptive mode |
-| Starting level | Everyone starts easy (lowest band present) and climbs fast. The teacher does not assign levels to students. |
+| Starting level | New students start easy (lowest band present) and climb fast. **Changed 2026-09-26:** signed-in students start at their saved level. The teacher still does not assign levels by hand. |
 | Stopping rule | Cup: time. Assignment: N questions per student (e.g. 15 of 50). |
 | Cup points by level | Equal points at every level |
 | Questions per level | Up to the teacher. The app shows coverage but never forces a count. The AI prompt leans toward easier questions by default (hard ones take longer), and the optional "Notes on levels" text overrides that only when it asks for a different balance. |
 | Students see their level? | Not shown anywhere on the board or student screens. No need to hide it from the page code. |
 | Partial quizzes (e.g. A2–B2 only) | Allowed. The engine adapts to whichever levels each quiz contains (full A1–C2 is the ideal) |
-| Level carries over to next session? | No. Every session starts fresh. |
+| Level carries over to next session? | ~~No.~~ **Yes, since 2026-09-26**, for signed-in students (section 4a). Only the teacher sees it. |
 | Feedback mode | Independent of adaptive. Instant is pre-selected but any mode works, including exam mode. |
 | Cup question order | Keep the current per-student shuffle and missed-question recycling (non-adaptive path unchanged) |
 
