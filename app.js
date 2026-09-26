@@ -15548,8 +15548,14 @@ function buildAdaptiveLevelRules(cleanRequest) {
 // still lands on the right questions if they were reordered in between.
 let levelTagSnapshot = null;
 
+// The quiz the Adaptive box was last ticked by default for. Loading a quiz
+// replaces the `quiz` object (edits change it in place), so each newly loaded
+// levelled quiz starts ticked while an untick sticks as the teacher edits.
+let adaptiveDefaultedFor = null;
+
 // Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
 // auto-graded questions tagged with at least two levels (the server checks too).
+// Ticked by default; the same box makes PinPlay Cup games adaptive.
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
   if (!wrap) return;
@@ -15560,7 +15566,13 @@ function syncAssignmentAdaptiveControl() {
   const box = document.getElementById('assignmentAdaptive');
   const countEl = document.getElementById('assignmentAdaptiveCount');
   const rangeEl = document.getElementById('assignmentAdaptiveRange');
-  if (box && !available) box.checked = false;
+  if (box && !available) {
+    box.checked = false;
+    adaptiveDefaultedFor = null;
+  } else if (box && adaptiveDefaultedFor !== quiz) {
+    adaptiveDefaultedFor = quiz;
+    box.checked = true;
+  }
   if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
   if (countEl) {
     // The teacher's number (or the default), capped at what this quiz can
