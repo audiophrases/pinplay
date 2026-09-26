@@ -15484,13 +15484,11 @@ function normalizeCefr(value) {
   return CEFR_LEVELS.includes(v) ? v : '';
 }
 
-// Mirrors arenaEligibleIndexes in the worker: polls and teacher-graded
-// questions are never served in adaptive play.
+// Mirrors assignmentAdaptivePool in the worker: every question but polls can
+// be served in an adaptive assignment. Teacher-graded ones move the level once
+// graded; PinPlay Cup skips them.
 function isAdaptiveEligibleQuestion(q) {
-  if (!q || q.isPoll) return false;
-  if (['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)) return false;
-  if (q.type === 'text' && !(q.accepted || []).some((a) => String(a || '').trim())) return false;
-  return true;
+  return !!q && !q.isPoll;
 }
 
 function cefrCoverage(questions) {
@@ -15554,7 +15552,7 @@ let levelTagSnapshot = null;
 let adaptiveDefaultedFor = null;
 
 // Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
-// auto-graded questions tagged with at least two levels (the server checks too).
+// questions tagged with at least two levels (the server checks too).
 // Ticked by default; the same box makes PinPlay Cup games adaptive.
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');

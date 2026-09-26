@@ -962,7 +962,7 @@ window.PINPLAY_FR_DICT = {
   'e.g. more typing and Word Guess at higher levels, rarer verbs at C1–C2. Default: more easy questions than hard ones, unless you ask otherwise.': 'ex. plus de saisie et de Devinettes aux niveaux élevés, verbes plus rares en C1–C2. Par défaut : plus de questions faciles que difficiles, sauf indication contraire.',
   'Difficulty level used by adaptive mode': 'Niveau de difficulté utilisé par le mode adaptatif',
   '🎯 Levels': '🎯 Niveaux',
-  'Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions, polls and teacher-graded questions are skipped in adaptive play.': 'Attribuez un niveau A1–C2 à chaque question pour que le mode adaptatif puisse faire monter ou descendre chaque élève. Les questions sans niveau, les sondages et les questions corrigées par l’enseignant sont ignorés en mode adaptatif.',
+  'Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions and polls are skipped. Teacher-graded questions move the level once you grade them (assignments only; PinPlay Cup skips them).': 'Attribuez un niveau A1–C2 à chaque question pour que le mode adaptatif puisse faire monter ou descendre chaque élève. Les questions sans niveau et les sondages sont ignorés. Les questions corrigées par l’enseignant font bouger le niveau une fois notées (devoirs uniquement ; la PinPlay Cup les ignore).',
   'From question': 'De la question',
   'to': 'à',
   'Set level': 'Appliquer le niveau',

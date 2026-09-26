@@ -2639,7 +2639,7 @@ export class QuizRoom {
         if (adaptiveCount > 0) {
           const { bands, pool } = assignmentAdaptivePool(assignment);
           if (bands.length < 2) {
-            return json({ error: 'Adaptive mode needs auto-graded questions tagged with at least two levels.' }, 400);
+            return json({ error: 'Adaptive mode needs questions tagged with at least two levels.' }, 400);
           }
           assignment.adaptive = { count: clamp(adaptiveCount, 1, pool.length) };
         }
@@ -3044,9 +3044,8 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        // Adaptive attempts only hold auto-graded questions, indexed by serve
-        // order rather than quiz position: nothing to grade by hand.
-        if (attempt.adaptive) return json({ error: 'Adaptive attempts are auto-graded.' }, 409);
+        // qIndex is the question's position in the quiz, adaptive attempts
+        // included (their teacher-graded questions are served once at most).
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
         if (!isAssignmentTeacherGradedQuestion(question)) {
@@ -3059,16 +3058,22 @@ export class QuizRoom {
         await ensurePendingCounts(this.state.storage, code, assignment);
         const prevPending = computeAttemptPending(assignment, attempt);
 
+        const teacherGrade = {
+          graded: true,
+          pointsAwarded,
+          correction,
+          correctionAudioKey,
+          gradedAt: Date.now(),
+        };
+        // Adaptive: the grade also moves the student's level (right from 70%
+        // of the points, neutral from 40%, wrong below).
+        if (attempt.adaptive && !(await adaptiveAttemptGrade(this.state.storage, attempt, qIndex, teacherGrade, maxPoints))) {
+          return json({ error: 'This student was not given that question.' }, 404);
+        }
         attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
         attempt.answersByQ[String(qIndex)] = {
           ...(attempt.answersByQ[String(qIndex)] || {}),
-          teacherGrade: {
-            graded: true,
-            pointsAwarded,
-            correction,
-            correctionAudioKey,
-            gradedAt: Date.now(),
-          },
+          teacherGrade,
           updatedAt: Date.now(),
         };
 
@@ -3234,17 +3239,25 @@ export class QuizRoom {
           if (!served) return json({ error: 'Question not found.' }, 404);
           const safeAnswer = sanitizeAssignmentAnswer(served, body?.answer);
           const bet = sanitizeBet(body?.bet);
-          st.items.push({ qi, answer: safeAnswer, bet, at: now });
+          const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
+          const qBand = band >= 0 ? band : adaptiveBand(st);
+          // A teacher-graded answer waits for its grade; keep the bands it was
+          // served at, so the grade moves the level from where it stood then.
+          const teacher = isAssignmentTeacherGradedQuestion(served);
+          await ensurePendingCounts(this.state.storage, code, assignment);
+          const prevPending = computeAttemptPending(assignment, attempt);
+          st.items.push({ qi, answer: safeAnswer, bet, at: now, ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
           attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
           attempt.answersByQ[String(qi)] = { answer: safeAnswer, bet, teacherGrade: null, updatedAt: now };
-          const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
-          adaptiveRecord(st, qi, band >= 0 ? band : adaptiveBand(st), adaptiveIsSuccess(evaluate(served, safeAnswer)));
+          if (teacher) adaptiveRecordPending(st, qi, qBand);
+          else adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
           adaptiveAttemptAdvance(assignment, st);
           if (st.done) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
 
           const metrics = evaluateAssignmentAttempt(assignment, attempt);
           attempt.autoScore = metrics.autoScore;
           attempt.updatedAt = now;
+          applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
           assignment.updatedAt = now;
           await saveAttempt(this.state.storage, code, attemptId, attempt);
           await saveAssignmentBase(this.state.storage, code, assignment);
@@ -7283,6 +7296,8 @@ function isAssignmentTeacherGradedQuestion(question) {
 // total, so the normal flow (progress, instant feedback, end screen, review)
 // works unchanged. answersByQ still keeps the latest answer per real question
 // for the per-question grading views.
+// Unlike PinPlay Cup, assignments also serve teacher-graded questions: they
+// don't move the level when answered, only once the teacher grades them.
 function assignmentAdaptiveCount(assignment) {
   const n = Math.round(Number(assignment?.adaptive?.count || 0));
   return n > 0 ? n : 0;
@@ -7290,7 +7305,7 @@ function assignmentAdaptiveCount(assignment) {
 
 function assignmentAdaptivePool(assignment) {
   const questions = assignment?.quiz?.questions || [];
-  return adaptivePool(questions, autoGradedQuestionIndexes(questions));
+  return adaptivePool(questions, questions.map((q, i) => (q && !q.isPoll ? i : -1)).filter((i) => i >= 0));
 }
 
 function adaptiveAttemptInit(assignment, saved = null) {
@@ -7337,15 +7352,34 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
 // Fold a finished (or stopped-early) adaptive attempt into the student's saved
 // level. Runs in the assignments DO, where roster rows live. `levelSaved`
 // counts the answers already credited, so a reopened attempt adds only its
-// new answers.
+// new answers. Teacher grades applied so far are now on the roster too.
 async function adaptiveAttemptSaveLevel(storage, attempt) {
   const st = attempt?.adaptive;
   const email = sanitizeEmail(attempt?.studentEmail);
   const result = email ? adaptiveSessionResult(st) : null;
-  const fresh = result ? result.answered - (Number(st.levelSaved) || 0) : 0;
-  if (fresh <= 0) return;
+  if (!result) return;
+  const fresh = result.answered - (Number(st.levelSaved) || 0);
+  const unsavedGrades = (st.items || []).filter((it) => it.levelEffect && !it.levelEffect.inRoster);
+  if (fresh <= 0 && !unsavedGrades.length) return;
   st.levelSaved = st.answered;
-  await saveRosterLevels(storage, [{ email, result: { ...result, answered: fresh } }]);
+  unsavedGrades.forEach((it) => { it.levelEffect.inRoster = true; });
+  await saveRosterLevels(storage, [{ email, result: { ...result, answered: Math.max(0, fresh) } }]);
+}
+
+// Record the teacher's grade for an adaptive attempt's teacher-graded
+// question (real quiz index `qi`: it is served once at most) and move the
+// level. Returns false when no served item matches.
+async function adaptiveAttemptGrade(storage, attempt, qi, grade, maxPoints) {
+  const st = attempt.adaptive;
+  const idx = (st.items || []).findIndex((it) => it.qi === qi);
+  if (idx < 0) return false;
+  st.items[idx].teacherGrade = grade;
+  const outcome = maxPoints > 0 ? adaptiveOutcomeFromFraction(grade.pointsAwarded / maxPoints) : 'neutral';
+  const saved = !!(st.done || attempt.submitted);
+  const change = adaptiveApplyGrade(st, idx, outcome, { saved });
+  const email = sanitizeEmail(attempt.studentEmail);
+  if (change && email) await saveRosterGradeChange(storage, email, change);
+  return true;
 }
 
 function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}) {
@@ -7356,7 +7390,7 @@ function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}
   if (includeCurrent && !st.done && questions[st.current]) served.push(questions[st.current]);
   const answersByQ = {};
   items.forEach((it, i) => {
-    answersByQ[String(i)] = { answer: it.answer, bet: it.bet || 0, teacherGrade: null, updatedAt: it.at || null };
+    answersByQ[String(i)] = { answer: it.answer, bet: it.bet || 0, teacherGrade: it.teacherGrade || null, updatedAt: it.at || null };
   });
   const { adaptive, ...rest } = attempt;
   return {
@@ -7626,8 +7660,13 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
 
 function buildTeacherGradingItems(assignment, attempt) {
   if (attempt?.adaptive) {
+    // Served order, but qIndex is the question's quiz position so a grade
+    // lands on the same question as from the by-question views.
+    const questions = assignment?.quiz?.questions || [];
+    const served = (attempt.adaptive.items || []).filter((it) => questions[it.qi]);
     const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
-    return buildTeacherGradingItems(v.assignment, v.attempt);
+    return buildTeacherGradingItems(v.assignment, v.attempt)
+      .map((item) => ({ ...item, qIndex: served[item.qIndex].qi, servedIndex: item.qIndex }));
   }
   const questions = assignment?.quiz?.questions || [];
   const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
@@ -7753,6 +7792,23 @@ async function saveRosterLevels(storage, entries) {
     row.level = adaptiveMergeSaved(row.level, result, now);
     await storage.put(key, row);
   }
+}
+
+// A teacher grade (or regrade) for an attempt whose level is already saved:
+// nudge the saved level by the grade's step ({ delta, answered }).
+async function saveRosterGradeChange(storage, email, change) {
+  const clean = sanitizeEmail(email);
+  if (!clean || !change) return;
+  const key = rosterKey(clean);
+  const row = await storage.get(key);
+  if (!row?.level || typeof row.level !== 'object') return;
+  row.level = {
+    ...row.level,
+    cefr: Math.round(clamp(Number(row.level.cefr) + Number(change.delta || 0), 0, CEFR_LEVELS.length - 0.01) * 100) / 100,
+    answered: Math.max(0, Math.round(Number(row.level.answered) || 0)) + Math.max(0, Math.round(Number(change.answered) || 0)),
+    updatedAt: Date.now(),
+  };
+  await storage.put(key, row);
 }
 
 
@@ -8217,15 +8273,21 @@ const ADAPTIVE_STREAK_DOWN = 0.5;     // extra drop from the 3rd miss in a row
 const ADAPTIVE_STEP_NEW = 3;          // step multiplier with no answers yet
 const ADAPTIVE_STEP_SETTLED = 0.6;    // ...tends to this with many answers
 const ADAPTIVE_SETTLE_HALF = 10;      // answers at which the extra has halved
-const ADAPTIVE_SUCCESS_FRACTION = 0.7; // partial-credit rounds count from 70%
+// Partial-credit rounds and teacher grades (share of the points): from 70% the
+// answer counts as right, from 40% it is neutral (the level steadies without
+// moving), below that it counts as wrong.
+const ADAPTIVE_SUCCESS_FRACTION = 0.7;
+const ADAPTIVE_NEUTRAL_FRACTION = 0.4;
 const ADAPTIVE_RETRY_GAPS = [2, 3];   // a miss returns after 2–3 other questions
 const ADAPTIVE_PATH_MAX = 200;        // answers kept for the report (room state stays small)
 
 // Eligible question indexes that carry a CEFR tag, with their band index.
+// Teacher-graded questions (assignments only) are flagged: their result waits
+// for the teacher's grade, and they are never served twice.
 function adaptivePool(questions, eligible) {
   const levels = CEFR_LEVELS.filter((l) => eligible.some((qi) => normalizeCefrLevel(questions[qi]?.cefr) === l));
   const pool = eligible
-    .map((qi) => ({ qi, band: levels.indexOf(normalizeCefrLevel(questions[qi]?.cefr)) }))
+    .map((qi) => ({ qi, band: levels.indexOf(normalizeCefrLevel(questions[qi]?.cefr)), ...(isAssignmentTeacherGradedQuestion(questions[qi]) ? { teacher: true } : {}) }))
     .filter((p) => p.band >= 0);
   return { bands: levels, pool };
 }
@@ -8300,32 +8362,56 @@ function adaptiveMergeSaved(prev, result, now = Date.now()) {
   };
 }
 
-function adaptiveIsSuccess(verdict) {
-  if (verdict?.correct) return true;
-  const total = Number(verdict?.partialTotal || 0);
-  return total > 0 && Number(verdict?.partialScore || 0) / total >= ADAPTIVE_SUCCESS_FRACTION;
+// 'right', 'neutral' or 'wrong' for a share of the points (0..1).
+function adaptiveOutcomeFromFraction(fraction) {
+  const f = Number(fraction) || 0;
+  if (f >= ADAPTIVE_SUCCESS_FRACTION) return 'right';
+  return f >= ADAPTIVE_NEUTRAL_FRACTION ? 'neutral' : 'wrong';
 }
 
-// Record one final answer. qBand is the band of the question that was served.
-function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
+// Outcome of an auto-graded answer: a correct one is right, a partial round
+// goes by its share of the points, anything else is wrong.
+function adaptiveOutcome(verdict) {
+  if (verdict?.correct) return 'right';
+  const total = Number(verdict?.partialTotal || 0);
+  return total > 0 ? adaptiveOutcomeFromFraction(Number(verdict?.partialScore || 0) / total) : 'wrong';
+}
+
+// Path entries store ok: true (right), false (wrong) or null (neutral).
+function adaptivePathOk(outcome) {
+  return outcome === 'right' ? true : (outcome === 'wrong' ? false : null);
+}
+
+// Per-level counts for the teacher report. sign -1 takes back an earlier
+// outcome (a regrade); the answer itself is counted by the caller.
+function adaptiveTally(st, level, outcome, sign = 1) {
+  const tally = st.perLevel[level] || (st.perLevel[level] = { answered: 0, right: 0 });
+  if (outcome === 'right') tally.right += sign;
+  else if (outcome === 'neutral') tally.neutral = (tally.neutral || 0) + sign;
+  return tally;
+}
+
+// Record one final answer. qBand is the band of the question that was served;
+// outcome is 'right', 'neutral' or 'wrong' (true / false also work). A neutral
+// answer counts toward the answers the level rests on but doesn't move it.
+function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
+  const result = outcome === true ? 'right' : (outcome === false ? 'wrong' : outcome);
   const band = adaptiveBand(st);
   const level = st.bands[qBand] || '';
-  st.path.push({ qi, level, band: st.bands[band] || '', ok: !!success });
+  st.path.push({ qi, level, band: st.bands[band] || '', ok: adaptivePathOk(result) });
   if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
-  const tally = st.perLevel[level] || (st.perLevel[level] = { answered: 0, right: 0 });
-  tally.answered += 1;
-  if (success) tally.right += 1;
+  adaptiveTally(st, level, result).answered += 1;
   const seen = st.seen[qi] || (st.seen[qi] = { n: 0, ok: false });
   seen.n += 1;
-  seen.ok = !!success;
+  seen.ok = result === 'right';
   st.retry = st.retry.filter((r) => r.qi !== qi);
   const scale = adaptiveStepScale((st.prior || 0) + st.answered);
-  if (success) {
+  if (result === 'right') {
     st.streak = Math.max(0, st.streak) + 1;
     // An easier question than the current band proves less.
     const up = (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP) * scale;
     st.score += qBand >= band ? up : up / 2;
-  } else {
+  } else if (result === 'wrong') {
     st.streak = Math.min(0, st.streak) - 1;
     // Missing a harder question than the current band costs less.
     let down = qBand <= band ? ADAPTIVE_DOWN : ADAPTIVE_DOWN / 2;
@@ -8333,6 +8419,8 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
     st.score -= down * scale;
     const gap = ADAPTIVE_RETRY_GAPS[Math.floor(rng() * ADAPTIVE_RETRY_GAPS.length)];
     st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
+  } else {
+    st.streak = 0;
   }
   st.score = clamp(st.score, 0, st.bands.length - 0.01);
   const next = adaptiveBand(st);
@@ -8340,6 +8428,66 @@ function adaptiveRecord(st, qi, qBand, success, rng = Math.random) {
   else if (next > band) st.dropped = false;
   st.answered += 1;
   st.last = qi;
+}
+
+// A teacher-graded question was answered: nothing moves until the teacher
+// grades it (adaptiveApplyGrade). It counts as seen, so it isn't served again.
+function adaptiveRecordPending(st, qi, qBand) {
+  st.path.push({ qi, level: st.bands[qBand] || '', band: st.bands[adaptiveBand(st)] || '', ok: null, teacher: true, pending: true });
+  if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
+  const seen = st.seen[qi] || (st.seen[qi] = { n: 0, ok: false });
+  seen.n += 1;
+  st.last = qi;
+}
+
+// Level change for a teacher grade: the same steps as adaptiveRecord, from
+// the student's and the question's bands when it was served, without streaks
+// or retries (grades arrive late and in any order).
+function adaptiveGradeStep(outcome, band, qBand, n) {
+  const scale = adaptiveStepScale(n);
+  if (outcome === 'right') return ADAPTIVE_UP * scale * (qBand >= band ? 1 : 0.5);
+  if (outcome === 'wrong') return -ADAPTIVE_DOWN * scale * (qBand <= band ? 1 : 0.5);
+  return 0;
+}
+
+// Apply the teacher's grade to served item `idx` of an adaptive attempt. A
+// regrade first takes back the previous grade's effect. `saved`: the
+// attempt's level is already on the roster (finished or submitted), so the
+// change has to reach it too. Returns the roster change ({ delta, answered })
+// or null when the roster is left alone.
+function adaptiveApplyGrade(st, idx, outcome, { saved = false } = {}) {
+  const it = st?.items?.[idx];
+  if (!it) return null;
+  const top = st.bands.length - 0.01;
+  const level = st.bands[it.qBand] || '';
+  const prev = it.levelEffect || null;
+  const roster = { delta: 0, answered: 0 };
+  const n = (st.prior || 0) + st.answered;
+  if (prev) {
+    st.score = clamp(st.score - prev.delta, 0, top);
+    if (prev.inRoster) roster.delta -= prev.delta;
+    adaptiveTally(st, level, prev.outcome, -1);
+  } else {
+    adaptiveTally(st, level, null).answered += 1;
+    st.answered += 1;
+    // Already on the roster: count it there now, not again at a later save.
+    if (saved) {
+      st.levelSaved = (Number(st.levelSaved) || 0) + 1;
+      roster.answered = 1;
+    }
+  }
+  const before = st.score;
+  st.score = clamp(st.score + adaptiveGradeStep(outcome, it.band, it.qBand, n), 0, top);
+  const delta = st.score - before;
+  if (saved) roster.delta += delta;
+  it.levelEffect = { outcome, delta, inRoster: saved };
+  adaptiveTally(st, level, outcome);
+  const entry = st.path.slice().reverse().find((p) => p.teacher && p.qi === it.qi);
+  if (entry) {
+    entry.pending = false;
+    entry.ok = adaptivePathOk(outcome);
+  }
+  return roster.delta || roster.answered ? roster : null;
 }
 
 // The band a student spent most answers at in the second half of the game
@@ -8379,14 +8527,16 @@ function adaptiveSummary(st) {
     usualLevel: adaptiveUsualLevel(st),
     finalLevel: bands[finalIdx] || '',
     peakLevel: bands[peakIdx] || '',
-    path: path.map((p) => `${p.level}${p.ok ? '✓' : '✗'}`).join(' '),
+    // ✓ right · ✗ wrong · ~ neutral · … waiting for the teacher's grade
+    path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? '✗' : '~'))}`).join(' '),
     perLevel: st.perLevel || {},
   };
 }
 
 // Next question index: a due retry first, else the current band (nearest
 // band below, then above, when it only holds the question just answered),
-// preferring questions seen least, then ones last missed.
+// preferring questions seen least, then ones last missed. Teacher-graded
+// questions are served once at most.
 function adaptiveNext(st, pool, rng = Math.random) {
   if (!pool.length) return null;
   const band = adaptiveBand(st);
@@ -8400,14 +8550,14 @@ function adaptiveNext(st, pool, rng = Math.random) {
   const order = [band];
   for (let d = 1; d < st.bands.length; d++) order.push(band - d, band + d);
   for (const b of order) {
-    const cands = pool.filter((p) => p.band === b && p.qi !== st.last);
+    const cands = pool.filter((p) => p.band === b && p.qi !== st.last && !(p.teacher && st.seen[p.qi]));
     if (!cands.length) continue;
     const rank = (p) => (st.seen[p.qi]?.n || 0) * 2 + (st.seen[p.qi]?.ok ? 1 : 0);
     const best = Math.min(...cands.map(rank));
     const top = cands.filter((p) => rank(p) === best);
     return top[Math.floor(rng() * top.length)].qi;
   }
-  return pool.length === 1 ? pool[0].qi : null;
+  return pool.length === 1 && !(pool[0].teacher && st.seen[pool[0].qi]) ? pool[0].qi : null;
 }
 
 // Signed-in students show by first name only on the Cup screens; random
@@ -8747,11 +8897,11 @@ function arenaHandleAnswer(room, pid, data, out) {
 
   ps.answered += 1;
   ps.lastResult[qi] = correct;
-  // Level movement uses the stricter adaptive rule (partial rounds from 70%);
-  // points and chests keep Cup's own "correct".
+  // Level movement uses the adaptive rule (partial rounds: right from 70%,
+  // neutral from 40%); points and chests keep Cup's own "correct".
   if (room.arena.adaptive && ps.adaptive) {
     const band = ps.adaptive.bands.indexOf(normalizeCefrLevel(q.cefr));
-    if (band >= 0) adaptiveRecord(ps.adaptive, qi, band, adaptiveIsSuccess(res));
+    if (band >= 0) adaptiveRecord(ps.adaptive, qi, band, adaptiveOutcome(res));
   }
   let points = 0;
   if (fraction > 0) {

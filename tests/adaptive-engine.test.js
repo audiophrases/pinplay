@@ -120,12 +120,51 @@ describe('level movement', () => {
     assert.ok(above / 40 > 0.33, `share above level ${above / 40}`);
   });
 
-  it('counts partial rounds as a success from 70%', () => {
-    assert.equal(E.adaptiveIsSuccess({ correct: true }), true);
-    assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 4, partialTotal: 5 }), true);
-    assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 0.7, partialTotal: 1 }), true);
-    assert.equal(E.adaptiveIsSuccess({ correct: false, partialScore: 3, partialTotal: 5 }), false);
-    assert.equal(E.adaptiveIsSuccess({ correct: false }), false);
+  it('partial rounds: right from 70%, neutral from 40%, wrong below', () => {
+    assert.equal(E.adaptiveOutcome({ correct: true }), 'right');
+    assert.equal(E.adaptiveOutcome({ correct: false, partialScore: 4, partialTotal: 5 }), 'right');
+    assert.equal(E.adaptiveOutcome({ correct: false, partialScore: 0.7, partialTotal: 1 }), 'right');
+    assert.equal(E.adaptiveOutcome({ correct: false, partialScore: 3, partialTotal: 5 }), 'neutral');
+    assert.equal(E.adaptiveOutcome({ correct: false, partialScore: 2, partialTotal: 5 }), 'neutral');
+    assert.equal(E.adaptiveOutcome({ correct: false, partialScore: 1, partialTotal: 5 }), 'wrong');
+    assert.equal(E.adaptiveOutcome({ correct: false }), 'wrong');
+  });
+
+  it('teacher grades use the same bands (a 1000-point question)', () => {
+    const at = (points) => E.adaptiveOutcomeFromFraction(points / 1000);
+    assert.equal(at(1000), 'right');
+    assert.equal(at(750), 'right');
+    assert.equal(at(700), 'right');
+    assert.equal(at(699), 'neutral');
+    assert.equal(at(500), 'neutral');
+    assert.equal(at(400), 'neutral');
+    assert.equal(at(399), 'wrong');
+    assert.equal(at(250), 'wrong');
+    assert.equal(at(0), 'wrong');
+  });
+
+  it('a neutral answer steadies the level without moving it', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 2.5, answered: 10 });
+    const scaleBefore = E.adaptiveStepScale(st.prior + st.answered);
+    E.adaptiveRecord(st, 1, 2, 'neutral', seeded(1));
+    assert.equal(st.score, 2.5);
+    assert.equal(st.answered, 1);
+    assert.ok(E.adaptiveStepScale(st.prior + st.answered) < scaleBefore, 'steps got smaller');
+    assert.equal(st.retry.length, 0, 'no retry for a neutral answer');
+    assert.equal(st.perLevel.B1.answered, 1);
+    assert.equal(st.perLevel.B1.right, 0);
+    assert.equal(st.perLevel.B1.neutral, 1);
+    assert.match(E.adaptiveSummary(st).path, /B1~/);
+  });
+
+  it('a neutral answer breaks a run of misses', () => {
+    const st = E.adaptiveInit(ALL, { cefr: 3.9, answered: 50 });
+    E.adaptiveRecord(st, 1, 3, false, seeded(1));
+    E.adaptiveRecord(st, 2, 3, false, seeded(1));
+    E.adaptiveRecord(st, 3, 2, 'neutral', seeded(1));
+    const before = st.score;
+    E.adaptiveRecord(st, 4, 2, false, seeded(1));
+    assert.ok(before - st.score < 0.6, 'no extra drop: not three misses in a row');
   });
 });
 
@@ -226,8 +265,11 @@ describe('saved level storage (roster rows in the assignments DO)', () => {
     // rosterKey is a one-line template-literal arrow the extractor can't lift.
     S = loadDeclarations(src, [
       'CEFR_LEVELS', 'clamp', 'sanitizeName', 'sanitizeEmail', 'sanitizeClassName',
-      'mergeRosterRow', 'saveRosterLevels', 'adaptiveBand', 'adaptiveCefr', 'adaptiveSessionResult', 'adaptiveMergeSaved',
-      'adaptiveAttemptSaveLevel',
+      'ADAPTIVE_UP', 'ADAPTIVE_DOWN', 'ADAPTIVE_STEP_NEW', 'ADAPTIVE_STEP_SETTLED', 'ADAPTIVE_SETTLE_HALF',
+      'ADAPTIVE_SUCCESS_FRACTION', 'ADAPTIVE_NEUTRAL_FRACTION',
+      'mergeRosterRow', 'saveRosterLevels', 'saveRosterGradeChange', 'adaptiveBand', 'adaptiveCefr', 'adaptiveSessionResult',
+      'adaptiveMergeSaved', 'adaptiveStepScale', 'adaptiveOutcomeFromFraction', 'adaptivePathOk', 'adaptiveTally',
+      'adaptiveGradeStep', 'adaptiveApplyGrade', 'adaptiveAttemptSaveLevel', 'adaptiveAttemptGrade',
     ], { rosterKey: (email) => `rs:${String(email || '').trim().toLowerCase()}` });
   });
   const fakeStorage = (rows = {}) => {
@@ -272,6 +314,63 @@ describe('saved level storage (roster rows in the assignments DO)', () => {
     const storage = fakeStorage();
     await S.adaptiveAttemptSaveLevel(storage, { studentEmail: '', adaptive: session(2.3, 15) });
     assert.equal(storage.m.size, 0);
+  });
+
+  // An attempt at B1 (2.5 on a full quiz, 50 saved answers) that was served a
+  // B1 open question (quiz position 7) as its first item.
+  const openAttempt = () => {
+    const st = { bands: ALL.slice(), score: 2.5, answered: 0, prior: 50, perLevel: {}, levelSaved: 0, done: false,
+      path: [{ qi: 7, level: 'B1', band: 'B1', ok: null, teacher: true, pending: true }],
+      items: [{ qi: 7, answer: 'essay', at: 1, band: 2, qBand: 2 }] };
+    return { studentEmail: 'a@s.cat', submitted: false, adaptive: st };
+  };
+  const grade = (points) => ({ graded: true, pointsAwarded: points, correction: '', gradedAt: 1 });
+  const row = (storage) => storage.m.get('rs:a@s.cat').level;
+
+  it('a grade during the attempt moves the live level, and reaches the roster when the attempt is saved', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 2.5, answered: 50 } } });
+    const attempt = openAttempt();
+    const st = attempt.adaptive;
+    assert.equal(await S.adaptiveAttemptGrade(storage, attempt, 7, grade(750), 1000), true);
+    assert.ok(Math.abs(st.score - (2.5 + 0.34)) < 1e-9, `live level ${st.score}`);
+    assert.equal(st.answered, 1);
+    assert.deepEqual(plain(row(storage)), { cefr: 2.5, answered: 50 }, 'roster untouched mid-attempt');
+    assert.equal(st.path[0].pending, false);
+    assert.equal(st.path[0].ok, true);
+    st.done = true;
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    assert.equal(row(storage).cefr, 2.84);
+    assert.equal(row(storage).answered, 51);
+    assert.equal(st.items[0].levelEffect.inRoster, true);
+  });
+
+  it('a regrade after the attempt was saved takes back the old grade on the roster', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 2.5, answered: 50 } } });
+    const attempt = openAttempt();
+    await S.adaptiveAttemptGrade(storage, attempt, 7, grade(750), 1000); // right: +0.34
+    attempt.adaptive.done = true;
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    await S.adaptiveAttemptGrade(storage, attempt, 7, grade(250), 1000); // now wrong
+    assert.ok(Math.abs(row(storage).cefr - 2.0) < 0.011, `roster ${row(storage).cefr}`);
+    assert.equal(row(storage).answered, 51, 'a regrade is not a new answer');
+    assert.equal(attempt.adaptive.perLevel.B1.right, 0);
+    assert.equal(attempt.adaptive.path[0].ok, false);
+  });
+
+  it('a first grade after the attempt was saved nudges the roster and counts once', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 2.5, answered: 50 } } });
+    const attempt = openAttempt();
+    attempt.submitted = true;
+    await S.adaptiveAttemptGrade(storage, attempt, 7, grade(500), 1000); // neutral
+    assert.deepEqual({ cefr: row(storage).cefr, answered: row(storage).answered }, { cefr: 2.5, answered: 51 });
+    assert.equal(attempt.adaptive.levelSaved, 1, 'a later save will not count it again');
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    assert.equal(row(storage).answered, 51);
+  });
+
+  it('refuses a question the student was never given', async () => {
+    const storage = fakeStorage();
+    assert.equal(await S.adaptiveAttemptGrade(storage, openAttempt(), 3, grade(1000), 1000), false);
   });
 });
 
@@ -401,19 +500,34 @@ describe('adaptive assignments', () => {
     assert.equal(done.assignment.quiz.questions.length, 1);
   });
 
-  it('finishes after N answers and never serves the open question', () => {
-    const a = assignment(5);
-    const st = E.adaptiveAttemptInit(a);
-    const rng = seeded(4);
-    while (!st.done) {
-      const qi = st.current;
-      assert.notEqual(a.quiz.questions[qi].type, 'open');
-      st.items.push({ qi, answer: 0, at: 1 });
-      E.adaptiveRecord(st, qi, st.bands.indexOf(a.quiz.questions[qi].cefr), true, rng);
-      E.adaptiveAttemptAdvance(a, st);
+  it('finishes after N answers and serves the open question once at most', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const a = assignment(7);
+      const st = E.adaptiveAttemptInit(a);
+      const rng = seeded(seed);
+      let opens = 0;
+      while (!st.done) {
+        const qi = st.current;
+        const qBand = st.bands.indexOf(a.quiz.questions[qi].cefr);
+        st.items.push({ qi, answer: 0, at: 1 });
+        if (a.quiz.questions[qi].type === 'open') {
+          opens += 1;
+          E.adaptiveRecordPending(st, qi, qBand);
+        } else {
+          E.adaptiveRecord(st, qi, qBand, true, rng);
+        }
+        E.adaptiveAttemptAdvance(a, st);
+      }
+      assert.equal(st.items.length, 7);
+      assert.equal(st.current, null);
+      assert.ok(opens <= 1, `open served ${opens} times`);
     }
-    assert.equal(st.items.length, 5);
-    assert.equal(st.current, null);
+  });
+
+  it('the Cup never serves teacher-graded questions', () => {
+    const qs = quiz().questions;
+    const { pool } = E.adaptivePool(qs, E.arenaEligibleIndexes({ quiz: { questions: qs } }));
+    assert.equal(pool.some((p) => qs[p.qi].type === 'open'), false);
   });
 
   it('follows questions to their new place after a quiz edit', () => {

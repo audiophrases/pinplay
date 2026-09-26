@@ -46,7 +46,7 @@ describe('CEFR tag normalization', () => {
 });
 
 describe('level coverage', () => {
-  it('counts only questions adaptive play can serve', () => {
+  it('counts every question but polls (teacher-graded ones included)', () => {
     const questions = [
       { type: 'mcq', cefr: 'A1' },
       { type: 'mcq', cefr: 'A1' },
@@ -60,10 +60,10 @@ describe('level coverage', () => {
     assert.equal(counts.A1, 2);
     assert.equal(counts.B1, 1);
     assert.equal(counts.A2, 0);
-    assert.equal(counts.C1, 0);
-    assert.equal(counts.C2, 0);
+    assert.equal(counts.C1, 1);
+    assert.equal(counts.C2, 1);
     assert.equal(untagged, 1);
-    assert.equal(tagged, 3);
+    assert.equal(tagged, 5);
   });
 });
 
