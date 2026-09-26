@@ -1531,6 +1531,15 @@ export default {
         }));
       }
 
+      // Teacher's level picker: { email, level: 'B1' } sets it, level null/'' resets it.
+      if (url.pathname === '/api/students/level' && request.method === 'POST') {
+        const { ok, status, data } = await rosterCall(env, 'set-level', {
+          method: 'POST',
+          body: JSON.stringify({ email: body?.email, level: body?.level || '' }),
+        });
+        return withCors(json(data, ok ? 200 : (status || 400)));
+      }
+
       if (url.pathname === '/api/students/settings') {
         if (isGet) {
           const { data } = await rosterCall(env, 'settings', { method: 'GET' });
@@ -3678,6 +3687,18 @@ export class QuizRoom {
         const row = mergeRosterRow(existing, body, email);
         await this.state.storage.put(rosterKey(email), row);
         return json({ ok: true, student: row });
+      }
+
+      // Teacher's level picker (see setRosterLevel).
+      if (url.pathname === '/roster/set-level' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (!email) return json({ error: 'A valid email is required.' }, 400);
+        const level = body?.level ? normalizeCefrLevel(body.level) : '';
+        if (body?.level && !level) return json({ error: 'Level must be one of A1, A2, B1, B2, C1, C2.' }, 400);
+        const student = await setRosterLevel(this.state.storage, email, level);
+        if (!student) return json({ error: 'Student not found.' }, 404);
+        return json({ ok: true, student });
       }
 
       // Adaptive Cup results: [{ email, result }] from arenaSaveLevels.
@@ -7363,7 +7384,7 @@ async function adaptiveAttemptSaveLevel(storage, attempt) {
   if (fresh <= 0 && !unsavedGrades.length) return;
   st.levelSaved = st.answered;
   unsavedGrades.forEach((it) => { it.levelEffect.inRoster = true; });
-  await saveRosterLevels(storage, [{ email, result: { ...result, answered: Math.max(0, fresh) } }]);
+  await saveRosterLevels(storage, [{ email, result: { ...result, answered: Math.max(0, fresh), startedAt: attempt.startedAt } }]);
 }
 
 // Record the teacher's grade for an adaptive attempt's teacher-graded
@@ -7378,7 +7399,7 @@ async function adaptiveAttemptGrade(storage, attempt, qi, grade, maxPoints) {
   const saved = !!(st.done || attempt.submitted);
   const change = adaptiveApplyGrade(st, idx, outcome, { saved });
   const email = sanitizeEmail(attempt.studentEmail);
-  if (change && email) await saveRosterGradeChange(storage, email, change);
+  if (change && email) await saveRosterGradeChange(storage, email, { ...change, startedAt: attempt.startedAt });
   return true;
 }
 
@@ -7773,9 +7794,17 @@ function mergeRosterRow(existing, input, email) {
     createdAt: prior?.createdAt || now,
     updatedAt: now,
     lastLoginAt: prior?.lastLoginAt || null,
-    // Saved adaptive level: written only by adaptive sessions, never by edits.
+    // Saved adaptive level: written by adaptive sessions and by the teacher's
+    // level picker (levelSetAt), never by these edits.
     ...(prior?.level ? { level: prior.level } : {}),
+    ...(prior?.levelSetAt ? { levelSetAt: prior.levelSetAt } : {}),
   };
+}
+
+// The teacher set or reset this level after a session began (result.startedAt,
+// ms): their choice stands over that session.
+function teacherLevelOverrides(row, startedAt, now = Date.now()) {
+  return Number(row?.levelSetAt) > (Number(startedAt) || now);
 }
 
 // Fold adaptive session results ([{ email, result }]) into roster rows. Only
@@ -7789,26 +7818,49 @@ async function saveRosterLevels(storage, entries) {
     const key = rosterKey(clean);
     const row = await storage.get(key);
     if (!row || typeof row !== 'object') continue;
-    row.level = adaptiveMergeSaved(row.level, result, now);
+    if (teacherLevelOverrides(row, result.startedAt, now)) {
+      // The teacher's level stays (a reset stays reset); the answers still count.
+      if (!row.level) continue;
+      row.level = { ...row.level, answered: (Number(row.level.answered) || 0) + Math.max(0, Math.round(Number(result.answered) || 0)), updatedAt: now };
+    } else {
+      row.level = adaptiveMergeSaved(row.level, result, now);
+    }
     await storage.put(key, row);
   }
 }
 
 // A teacher grade (or regrade) for an attempt whose level is already saved:
-// nudge the saved level by the grade's step ({ delta, answered }).
+// nudge the saved level by the grade's step ({ delta, answered, startedAt }).
 async function saveRosterGradeChange(storage, email, change) {
   const clean = sanitizeEmail(email);
   if (!clean || !change) return;
   const key = rosterKey(clean);
   const row = await storage.get(key);
   if (!row?.level || typeof row.level !== 'object') return;
+  const { setByTeacher, ...level } = row.level;
+  const keep = teacherLevelOverrides(row, change.startedAt);
   row.level = {
-    ...row.level,
-    cefr: Math.round(clamp(Number(row.level.cefr) + Number(change.delta || 0), 0, CEFR_LEVELS.length - 0.01) * 100) / 100,
-    answered: Math.max(0, Math.round(Number(row.level.answered) || 0)) + Math.max(0, Math.round(Number(change.answered) || 0)),
+    ...(keep ? row.level : level),
+    cefr: keep ? row.level.cefr : Math.round(clamp(Number(level.cefr) + Number(change.delta || 0), 0, CEFR_LEVELS.length - 0.01) * 100) / 100,
+    answered: Math.max(0, Math.round(Number(level.answered) || 0)) + Math.max(0, Math.round(Number(change.answered) || 0)),
     updatedAt: Date.now(),
   };
   await storage.put(key, row);
+}
+
+// The teacher's level picker: a CEFR level places the student there
+// (adaptiveTeacherLevel); '' or null clears it, so their next adaptive
+// session starts at the bottom. Returns the updated row, or null if unknown.
+async function setRosterLevel(storage, email, level, now = Date.now()) {
+  const key = rosterKey(email);
+  const row = await storage.get(key);
+  if (!row || typeof row !== 'object') return null;
+  if (level) row.level = adaptiveTeacherLevel(row.level, level, now);
+  else delete row.level;
+  row.levelSetAt = now;
+  row.updatedAt = now;
+  await storage.put(key, row);
+  return row;
 }
 
 
@@ -8362,6 +8414,18 @@ function adaptiveMergeSaved(prev, result, now = Date.now()) {
   };
 }
 
+// The teacher places a student at a level: the middle of it. Their answer
+// count (how steady the level is) stays, so a new student still moves fast
+// at first; only the starting point changes.
+function adaptiveTeacherLevel(prev, level, now = Date.now()) {
+  return {
+    cefr: CEFR_LEVELS.indexOf(level) + 0.5,
+    answered: Math.max(0, Math.round(Number(prev?.answered) || 0)),
+    updatedAt: now,
+    setByTeacher: true,
+  };
+}
+
 // 'right', 'neutral' or 'wrong' for a share of the points (0..1).
 function adaptiveOutcomeFromFraction(fraction) {
   const f = Number(fraction) || 0;
@@ -8668,7 +8732,11 @@ async function arenaSaveLevels(room, env) {
   if (!room.arena?.adaptive || room.arena.levelsSaved || !env?.ROOMS) return;
   room.arena.levelsSaved = true;
   const entries = Object.values(room.players || {})
-    .map((p) => ({ email: p?.identity?.email, result: adaptiveSessionResult(room.arena.players[p.id]?.adaptive) }))
+    .map((p) => {
+      const result = adaptiveSessionResult(room.arena.players[p.id]?.adaptive);
+      // The saved level was read when they joined, so that is when it began.
+      return { email: p?.identity?.email, result: result && { ...result, startedAt: p.joinedAt || room.arena.startedAt } };
+    })
     .filter((e) => e.email && e.result);
   if (!entries.length) return;
   try {

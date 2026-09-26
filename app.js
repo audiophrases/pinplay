@@ -9290,14 +9290,9 @@ function renderStudentRow(student) {
   // Teacher-only; students never see it.
   const savedCefr = Number(student.level?.cefr);
   const savedAnswers = Number(student.level?.answered || 0);
-  if (student.level && Number.isFinite(savedCefr)) {
-    const chip = document.createElement('span');
-    chip.className = 'q-cefr-chip';
-    chip.style.marginLeft = '.4rem';
-    chip.textContent = CEFR_LEVELS[Math.min(CEFR_LEVELS.length - 1, Math.max(0, Math.floor(savedCefr)))];
-    chip.title = t('Adaptive level. Their next adaptive game or assignment starts here. It moves less as answers add up.');
-    info.appendChild(chip);
-  }
+  const savedLevel = student.level && Number.isFinite(savedCefr)
+    ? CEFR_LEVELS[Math.min(CEFR_LEVELS.length - 1, Math.max(0, Math.floor(savedCefr)))]
+    : '';
 
   const meta = document.createElement('div');
   meta.className = 'small muted';
@@ -9305,12 +9300,42 @@ function renderStudentRow(student) {
   if (student.legacyUsername) bits.push(t('was @{u}', { u: student.legacyUsername }));
   if (student.lastLoginAt) bits.push(t('last sign-in {d}', { d: new Date(Number(student.lastLoginAt)).toLocaleDateString() }));
   else bits.push(t('never signed in'));
-  if (student.level && Number.isFinite(savedCefr)) bits.push(t('level from {n} answers', { n: savedAnswers }));
+  if (savedLevel) bits.push(student.level.setByTeacher ? t('level set by you') : t('level from {n} answers', { n: savedAnswers }));
   meta.textContent = bits.join(' · ');
   info.appendChild(meta);
 
   const actions = document.createElement('div');
   actions.className = 'row gap';
+
+  // The teacher can place a student at a level, change it, or reset it.
+  const levelSelect = document.createElement('select');
+  levelSelect.style.maxWidth = '130px';
+  levelSelect.title = t('Adaptive level: where their next adaptive game or assignment starts. Pick a level to change it, or "No level" to start them at the easiest level.');
+  [['', t('🎯 No level')], ...CEFR_LEVELS.map((l) => [l, `🎯 ${l}`])].forEach(([value, label]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    levelSelect.appendChild(opt);
+  });
+  levelSelect.value = savedLevel;
+  levelSelect.addEventListener('change', async () => {
+    const next = levelSelect.value;
+    const who = student.displayName || student.email;
+    if (!next && !window.confirm(t('Reset {name}’s level? Their next adaptive game or assignment starts at the easiest level.', { name: who }))) {
+      levelSelect.value = savedLevel;
+      return;
+    }
+    try {
+      const data = await studentsApi('/api/students/level', { method: 'POST', body: { email: student.email, level: next || null } });
+      if (data?.student?.level) student.level = data.student.level;
+      else delete student.level;
+      setStatus(studentsStatusEl, next ? t('Level for {name}: {level}.', { name: who, level: next }) : t('Level reset for {name}.', { name: who }), 'ok');
+      renderStudentsList();
+    } catch (err) {
+      levelSelect.value = savedLevel;
+      setStatus(studentsStatusEl, t('Could not change the level: {msg}', { msg: err.message }), 'bad');
+    }
+  });
 
   // The class is the field teachers change most, so it is editable inline
   // rather than behind a dialog. Auto-enrolled students arrive without one.
@@ -9374,7 +9399,7 @@ function renderStudentRow(student) {
     }
   });
 
-  actions.append(classInput, renameBtn, removeBtn);
+  actions.append(levelSelect, classInput, renameBtn, removeBtn);
   row.append(info, actions);
   li.appendChild(row);
   return li;

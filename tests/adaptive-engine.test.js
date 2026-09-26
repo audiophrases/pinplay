@@ -270,6 +270,7 @@ describe('saved level storage (roster rows in the assignments DO)', () => {
       'mergeRosterRow', 'saveRosterLevels', 'saveRosterGradeChange', 'adaptiveBand', 'adaptiveCefr', 'adaptiveSessionResult',
       'adaptiveMergeSaved', 'adaptiveStepScale', 'adaptiveOutcomeFromFraction', 'adaptivePathOk', 'adaptiveTally',
       'adaptiveGradeStep', 'adaptiveApplyGrade', 'adaptiveAttemptSaveLevel', 'adaptiveAttemptGrade',
+      'adaptiveTeacherLevel', 'teacherLevelOverrides', 'setRosterLevel',
     ], { rosterKey: (email) => `rs:${String(email || '').trim().toLowerCase()}` });
   });
   const fakeStorage = (rows = {}) => {
@@ -371,6 +372,54 @@ describe('saved level storage (roster rows in the assignments DO)', () => {
   it('refuses a question the student was never given', async () => {
     const storage = fakeStorage();
     assert.equal(await S.adaptiveAttemptGrade(storage, openAttempt(), 3, grade(1000), 1000), false);
+  });
+
+  it('the teacher places a student mid-level, keeping their answer count', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 1.2, answered: 30 } } });
+    const row = await S.setRosterLevel(storage, 'a@s.cat', 'B2', 1000);
+    assert.deepEqual(plain(row.level), { cefr: 3.5, answered: 30, updatedAt: 1000, setByTeacher: true });
+    assert.equal(row.levelSetAt, 1000);
+    // A student without a level starts from 0 answers.
+    const fresh = fakeStorage({ 'rs:n@s.cat': { email: 'n@s.cat' } });
+    assert.equal((await S.setRosterLevel(fresh, 'n@s.cat', 'A2', 5)).level.answered, 0);
+    assert.equal(await S.setRosterLevel(fresh, 'nobody@s.cat', 'A2', 5), null);
+  });
+
+  it('the teacher resets a level; renames and class edits keep the stamp', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', displayName: 'Ana', level: { cefr: 3.2, answered: 80 } } });
+    const row = await S.setRosterLevel(storage, 'a@s.cat', '', 2000);
+    assert.equal('level' in row, false);
+    assert.equal(row.levelSetAt, 2000);
+    assert.equal(S.mergeRosterRow(row, { className: '4C' }, 'a@s.cat').levelSetAt, 2000);
+  });
+
+  it('a change the teacher makes during a session wins over that session', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 1.5, answered: 20 } } });
+    await S.setRosterLevel(storage, 'a@s.cat', 'B2', 5000);
+    const result = { ...S.adaptiveSessionResult(session(0.5, 10)), startedAt: 4000 }; // began before the change
+    await S.saveRosterLevels(storage, [{ email: 'a@s.cat', result }]);
+    assert.equal(row(storage).cefr, 3.5, 'teacher level stays');
+    assert.equal(row(storage).answered, 30, 'the answers still count');
+    assert.equal(row(storage).setByTeacher, true);
+    // A later session moves it as usual and it is no longer "set by you".
+    await S.saveRosterLevels(storage, [{ email: 'a@s.cat', result: { ...S.adaptiveSessionResult(session(4.2, 5)), startedAt: 6000 } }]);
+    assert.equal(row(storage).cefr, 4.2);
+    assert.equal(row(storage).setByTeacher, undefined);
+  });
+
+  it('a reset during a session stays reset', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 3.5, answered: 40 } } });
+    await S.setRosterLevel(storage, 'a@s.cat', '', 5000);
+    await S.saveRosterLevels(storage, [{ email: 'a@s.cat', result: { ...S.adaptiveSessionResult(session(2.2, 10)), startedAt: 4000 } }]);
+    assert.equal(storage.m.get('rs:a@s.cat').level, undefined);
+  });
+
+  it('a late grade from before the teacher\'s change counts but does not move it', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 2.5, answered: 50 } } });
+    const attempt = { ...openAttempt(), submitted: true, startedAt: 4000 };
+    await S.setRosterLevel(storage, 'a@s.cat', 'C1', 5000);
+    await S.adaptiveAttemptGrade(storage, attempt, 7, grade(1000), 1000);
+    assert.deepEqual({ cefr: row(storage).cefr, answered: row(storage).answered }, { cefr: 4.5, answered: 51 });
   });
 });
 

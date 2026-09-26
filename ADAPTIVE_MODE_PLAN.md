@@ -150,6 +150,7 @@ are the *settled* sizes (a level resting on ~50 answers); section 4a scales them
   the assignments DO). Assignments save when the Nth answer is in, or on submit
   when a student stops early; a reopened attempt adds only its new answers.
   Only existing roster rows are updated. A session with no answers saves nothing.
+- **Teacher's level picker (2026-09-26):** each student in the Students list has a 🎯 level picker. Picking a level places the student in its middle (B2 → 3.5) and keeps their answer count, so a new student's level still moves fast at first; "No level" resets it (next session starts at the bottom). The row shows "level set by you" until a later session moves it. `levelSetAt` on the roster row makes the teacher's change win over any session (or late grade) that began before it: that session's answers still count, but it doesn't move or re-create the level.
 - **Out-of-range quizzes don't overwrite:** if the saved level is above the
   quiz's top level and the student ends in that top band, the saved level stays
   (the quiz couldn't test higher). The same applies below the bottom. Ending off
