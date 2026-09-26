@@ -444,6 +444,41 @@ textarea {
   display: none;
 }
 
+/* Students list row: name and email on the left take the free space; level,
+   class, Rename and Remove stay on one line on the right (on phones they
+   wrap under the name). Fixed control widths, because the global
+   input/select width:100% squeezes the group inside a flex row. */
+.student-row-info {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.student-row-actions {
+  flex: none;
+}
+
+.student-row-actions select {
+  width: auto;
+  max-width: 130px;
+}
+
+.student-row-actions input {
+  width: 90px;
+}
+
+@media (min-width: 641px) {
+  .row.gap.student-row-actions {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .student-row-actions {
+    flex: 1 1 100%;
+  }
+}
+
 .level-tools {
   border: 1px solid var(--line);
   border-radius: 10px;

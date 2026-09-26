@@ -9282,6 +9282,7 @@ function renderStudentRow(student) {
   row.className = 'row spread gap';
 
   const info = document.createElement('div');
+  info.className = 'student-row-info';
   const name = document.createElement('strong');
   name.textContent = student.displayName || student.email;
   info.appendChild(name);
@@ -9305,11 +9306,10 @@ function renderStudentRow(student) {
   info.appendChild(meta);
 
   const actions = document.createElement('div');
-  actions.className = 'row gap';
+  actions.className = 'row gap student-row-actions';
 
   // The teacher can place a student at a level, change it, or reset it.
   const levelSelect = document.createElement('select');
-  levelSelect.style.maxWidth = '130px';
   levelSelect.title = t('Adaptive level: where their next adaptive game or assignment starts. Pick a level to change it, or "No level" to start them at the easiest level.');
   [['', t('🎯 No level')], ...CEFR_LEVELS.map((l) => [l, `🎯 ${l}`])].forEach(([value, label]) => {
     const opt = document.createElement('option');
@@ -9344,7 +9344,6 @@ function renderStudentRow(student) {
   classInput.value = String(student.className || '');
   classInput.placeholder = t('Class');
   classInput.title = t('Class, e.g. 4B');
-  classInput.style.maxWidth = '90px';
   if (!String(student.className || '').trim()) classInput.style.borderColor = '#f0a500';
   const saveClass = async () => {
     const next = classInput.value.trim();
