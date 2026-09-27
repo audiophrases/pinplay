@@ -148,3 +148,14 @@ describe('AI prompt examples', () => {
     assert.ok(pick(allTypes()).length <= 4);
   });
 });
+
+describe('error_hunt answer reveal', () => {
+  it('lists every accepted fix, in the worker and in play.js', () => {
+    const W = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'cloudflare/worker.js'), 'utf8'),
+      ['getCorrectedVariantsList', 'isTeacherGradedTextQuestion', 'dedupeAcceptedForDisplay', 'hostCorrectSummary']);
+    const P = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'play.js'), 'utf8'), ['errorHuntAcceptedText']);
+    const q = { type: 'error_hunt', prompt: 'Ellos habla mucho.', corrected: 'Ellos hablan mucho.', correctedVariants: ['Ellos hablan mucho.', 'Él habla mucho.'] };
+    assert.equal(W.hostCorrectSummary(q), 'Ellos hablan mucho. | Él habla mucho.');
+    assert.equal(P.errorHuntAcceptedText(q), 'Ellos hablan mucho. | Él habla mucho.');
+  });
+});

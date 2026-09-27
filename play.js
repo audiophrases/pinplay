@@ -2807,6 +2807,12 @@ function renderRetakeRow(panel, state) {
   panel.appendChild(row);
 }
 
+// Every accepted fix of an error_hunt sentence (corrected ∪ correctedVariants), for answer reveals.
+function errorHuntAcceptedText(question) {
+  const all = [...String(question?.corrected || '').split(/\r?\n/), ...(Array.isArray(question?.correctedVariants) ? question.correctedVariants : [])];
+  return Array.from(new Set(all.map((v) => String(v || '').trim()).filter(Boolean))).join(' | ');
+}
+
 function clientCorrectAnswerText(question) {
   if (!question) return '';
   const t = question.type;
@@ -2832,7 +2838,7 @@ function clientCorrectAnswerText(question) {
     return (question.pairs || []).map((p) => `${p.left}→${p.right}`).join(' | ');
   }
   if (t === 'error_hunt') {
-    return String(question.corrected || '');
+    return errorHuntAcceptedText(question);
   }
   if (t === 'puzzle') {
     return (question.items || []).join(' > ');
@@ -3238,7 +3244,7 @@ function renderPlayerState(state) {
       if (question.type === 'text' || question.type === 'voice_text') correctText = (question.accepted || []).join(' | ');
       if (question.type === 'puzzle') correctText = (question.items || []).join(' ➔ ');
       if (question.type === 'match_pairs') correctText = (question.pairs || []).map(p => `${p.left} ➔ ${p.right}`).join(' | ');
-      if (question.type === 'error_hunt') correctText = question.corrected || '';
+      if (question.type === 'error_hunt') correctText = errorHuntAcceptedText(question);
       if (question.type === 'context_gap') correctText = (question.gaps || []).map((g, i) => `Gap ${i + 1}: ${g}`).join(' | ');
       if (question.type === 'spellingbee') correctText = (question.words || []).map((w) => (typeof w === 'string' ? w : (w && w.target) || '')).filter(Boolean).join(', ');
       if (question.type === 'wordle') correctText = String(question.word || '');

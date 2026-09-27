@@ -9323,7 +9323,8 @@ function hostCorrectSummary(question) {
   }
 
   if (question.type === 'error_hunt') {
-    return String(question.corrected || '');
+    // Every accepted fix, so a student who missed it sees all the right answers.
+    return getCorrectedVariantsList(question.corrected, question.correctedVariants).join(' | ');
   }
 
   if (question.type === 'open' || question.type === 'image_open' || question.type === 'speaking' || question.type === 'voice_record') {
