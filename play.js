@@ -5729,7 +5729,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Context gap
   if (question.type === 'context_gap') {
-    highlightContextGap(question, isCorrect);
+    highlightContextGap(question, isCorrect, state?.correctAnswer);
     return; // Text reveal handled inline
   }
 
@@ -5875,13 +5875,35 @@ function showPinFeedback(question, state) {
 
 
 // Context gap: highlight each input
-function highlightContextGap(question, isCorrect) {
-  // Highlight each individual gap input rather than the whole sentence wrap.
-  const fields = joinAnswersEl.querySelectorAll('[data-join-gap]');
+// Accepted answers per gap from the reveal text ("dreamed, dreamt | apples"):
+// gaps are joined with " | ", alternatives within a gap with commas.
+function contextGapAcceptedFromReveal(correctAnswer, question) {
+  const text = String(correctAnswer || '').trim()
+    || (Array.isArray(question?.gaps) ? question.gaps.filter(Boolean).join(' | ') : '');
+  if (!text) return [];
+  return text.split(' | ').map((gap) => gap.split(',').map((x) => x.trim()).filter(Boolean));
+}
+
+function highlightContextGap(question, isCorrect, correctAnswer) {
+  // Highlight each gap input on its own. When the answer was wrong, each wrong
+  // gap gets every accepted answer for it right beside it ("dreamed / dreamt").
+  const fields = [...joinAnswersEl.querySelectorAll('[data-join-gap]')];
+  joinAnswersEl.querySelectorAll('.context-gap-accepted').forEach((el) => el.remove());
+  const accepted = isCorrect === false ? contextGapAcceptedFromReveal(correctAnswer, question) : [];
   fields.forEach((field) => {
     field.classList.remove('correct-highlight', 'incorrect-highlight');
-    if (isCorrect === true) field.classList.add('correct-highlight');
-    else if (isCorrect === false) field.classList.add('incorrect-highlight');
+    if (isCorrect === true) { field.classList.add('correct-highlight'); return; }
+    if (isCorrect !== false) return;
+    const options = accepted[Number(field.dataset.joinGap)] || [];
+    if (!options.length) { field.classList.add('incorrect-highlight'); return; }
+    const guess = normalizeTextAnswer(field.value);
+    const right = !!guess && options.some((o) => normalizeTextAnswer(o) === guess);
+    field.classList.add(right ? 'correct-highlight' : 'incorrect-highlight');
+    if (right) return;
+    const hint = document.createElement('span');
+    hint.className = 'context-gap-accepted';
+    hint.textContent = `✓ ${options.join(' / ')}`;
+    field.insertAdjacentElement('afterend', hint);
   });
 }
 
