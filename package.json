@@ -1,5 +1,9 @@
 {
-  "dependencies": {
-    "wrangler": "^4.42.0"
+  "devDependencies": {
+    "wrangler": "^4.140.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260923.1": true
   }
 }
