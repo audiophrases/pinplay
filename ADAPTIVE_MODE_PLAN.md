@@ -39,7 +39,7 @@ PinPlay estimates a working level for the session. It does not diagnose.
 | Area | Current behaviour | File |
 |---|---|---|
 | Question level | None. No level field exists on questions or quizzes. | — |
-| AI prompt "Level" | Free-text input (`promptLevel`, "e.g. B1, Grade 5"). Only goes into the prompt ("pitched at B1"). Not stored on the quiz. | `create/index.html:105`, `app.js` `exportCreationPrompt` / `buildAgentArtifacts` |
+| AI prompt "Level" | Free-text input (`promptLevel`, "e.g. B1, Grade 5"). Only goes into the prompt ("pitched at B1"). Not stored on the quiz. | `create/index.html:105`, `app.js` `exportCreationPrompt` / `buildCreationPrompt` |
 | Client normalizer | Whitelists question fields, so any unknown field (e.g. a level tag) is **dropped on import**. | `app.js` ~15735 |
 | Worker normalizer | Same whitelist, so the field would also be **dropped on cloud save**. | `cloudflare/worker.js` `normalizeQuiz` |
 | Cup question feed | Per-student deck. Pass 1 is every eligible question in a per-student shuffle. Later passes are 60% last-wrong / 40% last-right, and never the same question twice in a row. | `worker.js` `arenaBuildDeck`, `arenaDeal`, `ARENA_REPEAT_WRONG_SHARE` |

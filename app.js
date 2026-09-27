@@ -19,14 +19,14 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q1-mcq",
       "type": "mcq",
-      "prompt": "What animal is this?",
+      "prompt": "Which animal says \"meow\"?",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "What animal is this?",
+      "audioText": "Which animal says meow?",
       "ttsLanguage": "EN",
-      "imageKeyword": "cat face",
+      "imageKeyword": "farm animals",
       "videoKeyword": "",
       "videoProviderPreference": "",
       "gifKeyword": "",
@@ -40,12 +40,12 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q2-multi",
       "type": "multi",
-      "prompt": "Select all fruits shown.",
+      "prompt": "Which of these are fruits?",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Select all fruits shown.",
+      "audioText": "Which of these are fruits?",
       "ttsLanguage": "EN",
       "imageKeyword": "basket of fruit",
       "videoKeyword": "",
@@ -62,12 +62,12 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q3-tf",
       "type": "tf",
-      "prompt": "True or False: This is a mountain.",
+      "prompt": "Mount Everest is the highest mountain on Earth.",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Is this a mountain?",
+      "audioText": "Mount Everest is the highest mountain on Earth.",
       "ttsLanguage": "EN",
       "imageKeyword": "snowy mountain peak",
       "videoKeyword": "",
@@ -82,15 +82,14 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q4-text",
       "type": "text",
-      "prompt": "Name the color of the car.",
+      "prompt": "What color is a ripe tomato?",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "What color is this car?",
-      "ttsLanguage": "FR",
-      "language": "fr-FR-DeniseNeural",
-      "imageKeyword": "red sports car",
+      "audioText": "What color is a ripe tomato?",
+      "ttsLanguage": "EN",
+      "imageKeyword": "vegetable garden",
       "videoKeyword": "",
       "videoProviderPreference": "",
       "gifKeyword": "",
@@ -123,8 +122,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "audioEnabled": true,
       "audioMode": "tts",
       "audioText": "Match these animals with their sounds.",
-      "ttsLanguage": "CA",
-      "language": "ca-ES-JoanaNeural",
+      "ttsLanguage": "EN",
       "imageKeyword": "farm animals group",
       "videoKeyword": "",
       "videoProviderPreference": "",
@@ -149,7 +147,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "imageKeyword": "",
       "videoKeyword": "",
       "videoProviderPreference": "",
-      "gifKeyword": "kid running to school",
+      "gifKeyword": "running late",
       "imageData": "",
       "corrected": "He goes to school every day.",
       "correctedVariants": ["He goes to school every day.", "They go to school every day."]
@@ -171,14 +169,14 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q9-speaking",
       "type": "speaking",
-      "prompt": "Say a sentence about this picture.",
+      "prompt": "Say one sentence about your weekend.",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Tell me something about this image.",
+      "audioText": "Say one sentence about your weekend.",
       "ttsLanguage": "EN",
-      "imageKeyword": "robot waving",
+      "imageKeyword": "weekend picnic",
       "imageData": ""
     },
     {
@@ -201,23 +199,23 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q11-slider",
       "type": "slider",
-      "prompt": "How many books do you read per year?",
+      "prompt": "In what year did the Berlin Wall fall?",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "How many books?",
+      "audioText": "In what year did the Berlin Wall fall?",
       "ttsLanguage": "EN",
-      "imageKeyword": "stack of books",
+      "imageKeyword": "Berlin Wall",
       "videoKeyword": "",
       "videoProviderPreference": "",
       "gifKeyword": "",
       "imageData": "",
-      "min": 0,
-      "max": 50,
-      "target": 12,
+      "min": 1950,
+      "max": 2010,
+      "target": 1989,
       "margin": "low",
-      "unit": "books"
+      "unit": ""
     },
     {
       "id": "q12-pin",
@@ -243,16 +241,16 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q13-voice-record",
       "type": "voice_record",
-      "prompt": "Record yourself describing this image in one sentence in Spanish.",
+      "prompt": "Record one sentence in Spanish about your favorite food.",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Record one sentence in Spanish describing the image.",
+      "audioText": "Record one sentence in Spanish about your favorite food.",
       "ttsLanguage": "EN",
       "language": "en-US-AriaNeural",
       "answerLanguage": "es-ES",
-      "imageKeyword": "student speaking into microphone",
+      "imageKeyword": "microphone",
       "imageData": ""
     },
     {
@@ -359,162 +357,6 @@ const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
 // Adaptive assignments: questions each student answers unless the teacher sets another number.
 const ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT = 20;
-
-const QUESTION_TYPE_EXPLANATIONS = {
-  "mcq": {
-    "name": "Multiple Choice (Single)",
-    "rules": "Standard question with up to 10 options. Only one correct answer.",
-    "constraints": { "maxAnswers": 10, "maxTextLength": 120 },
-    "pedagogicalUses": ["Fast checks of core concepts.", "Introduce retrieval with clear distractors."],
-    "ttsStrategy": "Use audioText to highlight key words or read a simplified stem.",
-    "differentiationTips": ["Offer one obvious distractor for lower confidence learners.", "Use paired near-miss distractors for advanced learners."],
-    "commonPitfalls": ["Too many trivial distractors.", "Answer length gives away the correct option."]
-  },
-  "multi": {
-    "name": "Multiple Choice (Select All)",
-    "rules": "Up to 10 options. Multiple correct answers possible.",
-    "constraints": { "maxAnswers": 10, "maxTextLength": 120 },
-    "pedagogicalUses": ["Check nuanced understanding with partial truth options.", "Promote justification and comparison."],
-    "ttsStrategy": "audioText can chunk long prompts into shorter listening cues.",
-    "differentiationTips": ["Keep 2 correct answers for access; increase to 3+ for challenge."],
-    "commonPitfalls": ["Single obvious answer turns this into MCQ.", "Too many options overloads working memory."]
-  },
-  "tf": {
-    "name": "True / False",
-    "rules": "Exactly 2 options: True and False.",
-    "constraints": { "maxAnswers": 2 },
-    "pedagogicalUses": ["Quick confidence check.", "Warm-up before deeper item types."],
-    "ttsStrategy": "Use audioText to stress qualifiers like always/never/sometimes.",
-    "differentiationTips": ["Start with concrete facts, then move to interpretation statements."],
-    "commonPitfalls": ["Overusing absolutes makes answers too easy.", "Binary format can inflate guessing."]
-  },
-  "text": {
-    "name": "Typed Answer",
-    "rules": "Students type the answer. Put every answer you accept as a plain string in \"accepted\", e.g. \"accepted\": [\"segunda\", \"2\"]. Do NOT use an \"answers\" array — that is only for mcq, multi and tf. Matching ignores case and punctuation, so do not list variants that differ only by those.",
-    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 },
-    "pedagogicalUses": ["Spelling and recall checks.", "Short constructed response without options."],
-    "ttsStrategy": "audioText may intentionally differ from prompt for dictation/listening contrast.",
-    "differentiationTips": ["Include common variant spellings in accepted.", "Use shorter expected targets for novice learners."],
-    "commonPitfalls": ["Too few accepted variants.", "Prompt expects long open-ended writing."]
-  },
-  "context_gap": {
-    "name": "Gap Fill (Fill in Blank)",
-    "rules": "Use four underscores (____) in the prompt to mark a gap. The 'gaps' array must contain the correct words in order. For multiple acceptable answers in one gap, separate with a comma (e.g. 'dreamed, dreamt').",
-    "constraints": { "maxGaps": 10, "maxTextLength": 120 },
-    "pedagogicalUses": ["Grammar and syntax practice in context.", "Focused vocabulary retrieval in sentences."],
-    "ttsStrategy": "audioText can read sentence with pauses where blanks appear.",
-    "differentiationTips": ["Use one gap for support; add multi-gap chains for challenge."],
-    "commonPitfalls": ["Prompt missing ____ markers.", "Gaps array not matching blank order."]
-  },
-  "match_pairs": {
-    "name": "Match Pairs",
-    "rules": "Students match items from the left col to the right col. Define as pairs.",
-    "constraints": { "maxPairs": 10, "maxTextLength": 120 },
-    "pedagogicalUses": ["Terminology linking (term-definition, symbol-meaning).", "Reinforce associations before transfer tasks."],
-    "ttsStrategy": "audioText can announce matching objective, not every pair.",
-    "differentiationTips": ["Keep semantic categories distinct for novices.", "Increase similarity between distractor pairs for experts."],
-    "commonPitfalls": ["Ambiguous pair mapping.", "Pairs too long for fast scanning."]
-  },
-  "error_hunt": {
-    "name": "Error Hunting",
-    "rules": "'prompt' is ONLY the sentence with the mistake — no instructions or labels. 'correctedVariants' lists every full corrected sentence you accept: the obvious fix, plus any other fix a student would naturally make, which may change a different word (e.g. 'Ellos habla mucho.' → ['Ellos hablan mucho.', 'Él habla mucho.']). The obvious fixes only, not every possible rewrite. Set 'corrected' to the first of them.",
-    "constraints": { "maxTokens": 40 },
-    "pedagogicalUses": ["Editing and proofreading routines.", "Metalinguistic awareness tasks."],
-    "ttsStrategy": "audioText can read the incorrect sentence to trigger listening-for-errors.",
-    "differentiationTips": ["Start with one error; increase to multi-error sentences."],
-    "commonPitfalls": ["corrected sentence missing.", "Too many errors at once obscures learning goal."]
-  },
-  "puzzle": {
-    "name": "Puzzle (Reorder)",
-    "rules": "Unordered list of words or items that students must drag into the correct order. MUST have at least 3 items — fewer than 3 makes the reorder trivial and the question is dropped on import. If the target answer is only 1–2 tokens (e.g. a two-word place name), use 'text' type instead of 'puzzle'.",
-    "constraints": { "minItems": 3, "maxItems": 12 },
-    "pedagogicalUses": ["Sentence structure and sequencing.", "Process/order understanding."],
-    "ttsStrategy": "audioText may preview intended final sentence before reconstruction.",
-    "differentiationTips": ["Use fewer chunks with punctuation scaffolds first.", "Remove punctuation cues for advanced challenge."],
-    "commonPitfalls": ["Fewer than 3 items (silently dropped on import).", "Items can form multiple valid sequences unintentionally.", "Too many tiny tokens create noise."]
-  },
-  "slider": {
-    "name": "Numeric Slider",
-    "rules": "Numeric target value on a range with a margin of error ('none', 'low', 'medium', 'high', 'maximum').",
-    "constraints": { "minValue": -1000000, "maxValue": 1000000 },
-    "pedagogicalUses": ["Estimation and number sense.", "Check approximate reasoning quickly."],
-    "ttsStrategy": "audioText should include unit and estimate expectation.",
-    "differentiationTips": ["Widen margin for emerging learners.", "Tighten margin for mastery checks."],
-    "commonPitfalls": ["Target outside min/max.", "Missing or unclear unit context."]
-  },
-  "pin": {
-    "name": "Pin the Spot",
-    "rules": "Click on specific areas (zones) of an image. Zones use x, y percentages (0-100) and r (radius).",
-    "constraints": { "maxZones": 12 },
-    "pedagogicalUses": ["Spatial identification (maps, diagrams, anatomy).", "Visual discrimination practice."],
-    "ttsStrategy": "audioText can cue region hints without giving exact coordinates.",
-    "differentiationTips": ["Use larger radius and single zone for support.", "Use multi-zone all-mode for challenge."],
-    "commonPitfalls": ["Zones off-image bounds.", "imageKeyword too vague for reliable visual target."]
-  },
-  "open": {
-    "name": "Open Answer",
-    "rules": "Critical thinking or research task. No auto-grading. Teacher grades manually later.",
-    "constraints": { "maxTextLength": 500 },
-    "pedagogicalUses": ["Explain reasoning in full sentences.", "Collect evidence of conceptual transfer."],
-    "ttsStrategy": "audioText can rephrase prompt in simpler language for accessibility.",
-    "differentiationTips": ["Add sentence starters for support.", "Require evidence/citation for advanced responses."],
-    "commonPitfalls": ["Prompt too broad for available time.", "No clear grading target."]
-  },
-  "speaking": {
-    "name": "Speaking Task",
-    "rules": "Voice-enabled answer. Students record/speak their answer in class. Teacher grades manually.",
-    "constraints": { "maxSpeakTime": 60 },
-    "pedagogicalUses": ["Oral fluency practice.", "Pronunciation and speaking confidence checks."],
-    "ttsStrategy": "audioText can model tone/register expected in student response.",
-    "differentiationTips": ["Use short sentence frames for support.", "Add argument or explanation requirements for challenge."],
-    "commonPitfalls": ["Task too long for time limit.", "Prompt unclear about expected speaking length."]
-  },
-  "voice_record": {
-    "name": "Voice Recording",
-    "rules": "Students record a spoken answer (max 2 min). Teacher grades manually by listening to the playback. The browser also runs silent background speech-to-text — the transcript is shown to the teacher next to the audio in the grading view to help triage. Set 'answerLanguage' to the BCP-47 tag of the expected spoken language (e.g. 'en-US', 'es-ES', 'ca-ES'). If left blank, the recognizer falls back to deriving from the question 'language' (Edge TTS voice).",
-    "constraints": { "maxDurationSec": 120, "maxSizeMB": 10, "answerLanguageFormat": "BCP-47 (xx or xx-XX)" },
-    "pedagogicalUses": ["Oral fluency and pronunciation practice.", "Extended spoken response for deeper assessment."],
-    "ttsStrategy": "audioText can model the expected response register.",
-    "differentiationTips": ["Allow shorter recordings for emerging speakers.", "Require longer, structured responses for advanced learners.", "Set 'answerLanguage' explicitly when the spoken response language differs from the question/quiz language (e.g. quiz in English, answer in Spanish)."],
-    "commonPitfalls": ["Prompt too open-ended without time guidance.", "No clear rubric for grading.", "Forgetting 'answerLanguage' on cross-language tasks — the transcript will use the question language and may be unintelligible."]
-  },
-  "image_open": {
-    "name": "Image Answer",
-    "rules": "Students submit an IMAGE as their answer — they upload a photo or capture one with their device camera. Teacher grades manually by viewing the submitted image (no auto-grading, like 'open' and 'voice_record'). Do NOT provide options, accepted answers, or gaps. The 'prompt' must tell students what to photograph, draw, or create (e.g. 'Photograph your handwritten solution', 'Draw a labelled diagram of a plant cell and upload a photo'). Optionally set 'imageKeyword' to attach a reference/prompt image to the question — this is NOT required; a text-only prompt is fine.",
-    "constraints": { "maxUploadMB": 12, "answerType": "single image (jpg/png/webp/gif/heic)" },
-    "pedagogicalUses": ["Collect handwritten work, drawings, diagrams, or lab setups that can't be typed.", "Assess process and visual evidence (math working, sketches, real-world objects).", "Bring offline/physical work into the digital quiz for grading."],
-    "ttsStrategy": "audioText can read the task aloud so students know what to capture without reading.",
-    "differentiationTips": ["Give a clear capture checklist for support (state exactly what must be visible in the photo).", "Require annotation or labels in the image for advanced learners."],
-    "commonPitfalls": ["Prompt doesn't say WHAT to photograph or create.", "Expecting a typed answer — use 'open' for text, or 'pin' for clicking on a provided image, instead.", "Asking for multiple images — only one image per answer is supported."]
-  },
-  "voice_text": {
-    "name": "Voice Answer (auto-graded)",
-    "rules": "Students speak their answer. The browser transcribes it via Web Speech API and it's auto-graded against the 'accepted' array (case- and punctuation-insensitive). Set 'answerLanguage' to the BCP-47 tag of the expected spoken language (e.g. 'en-US', 'es-ES', 'ca-ES'). If left blank, the recognizer falls back to deriving from the question 'language' (Edge TTS voice).",
-    "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120, "answerLanguageFormat": "BCP-47 (xx or xx-XX)" },
-    "pedagogicalUses": ["Pronunciation practice with instant feedback.", "Oral retrieval drills.", "Vocabulary checks across languages (question prompt in one language, expected spoken answer in another)."],
-    "ttsStrategy": "audioText can model the expected pronunciation.",
-    "differentiationTips": ["Add several accepted variants for spelling/phrasing flexibility (singular/plural, with/without article).", "Always set 'answerLanguage' when the question prompt language differs from the expected spoken response language."],
-    "commonPitfalls": ["Recognizer needs Chrome/Edge/Safari and an internet connection.", "Multi-word answers may pick up filler — keep accepted answers concise.", "Missing 'answerLanguage' on cross-language tasks causes mis-recognition."]
-  },
-  "spellingbee": {
-    "name": "Spelling Bee",
-    "rules": "Audio-first spelling game. A question is ONE ROUND — a list of words sharing a spelling feature. For each word the app pronounces it (Edge TTS) and the student spells it on a reduced NYT-Spelling-Bee-style letter circle (the word's own letters + any in-word multi-letter clusters + up to 3 distractor tiles, ~7 keys total). Auto-graded case- AND accent-insensitive. Difficulty is FIXED (no level): each word gets 3 passes with escalating help — pass 1 no help, pass 2 shows the letter count, pass 3 traces the spelling — and a word scores less the later it is solved (100% / 66% / 33% / 0). Provide 'words' as an array of objects with a required 'target'. Everything else is optional: per-word 'audioText' (a spoken CLUE — a definition or synonym — instead of the word itself), 'distractors' (extra wrong keys; auto-computed when omitted, max 3, only for targets under 7 distinct letters), and 'clusterTiles' (multi-letter convenience keys that occur in the word, drawn from the cluster inventory: vowel teams ai/ay/au/aw/ea/ee/ei/eu/ew/ey/ie/oa/oo/oi/oy/ou/ow/oe/ue/ui/igh/eau, consonant digraphs ch/sh/th/ph/wh/gh/ck/ng/qu/kn/wr/gn/sc/tch/dge/ght/sch, and doubled consonants bb/cc/dd/ff/gg/ll/mm/nn/pp/rr/ss/tt/zz). Question-level: 'feature' label and 'language' (Edge TTS voice — NOT limited to English). Use the standard 'timeLimit' for an optional round time limit (0 = none). Tiles can be single letters or clusters; the final string is graded, so 'b-e-tt-e-r' equals 'b-e-t-t-e-r'.",
-    "constraints": { "minWords": 1, "maxTargetLength": 40, "targetMinLetters": 2, "maxDistractors": 3, "passes": 3 },
-    "pedagogicalUses": ["Massed practice on one interference-prone spelling feature (e.g. all double-letter words, or all ea/ee words).", "Sound→spelling mapping for listening + orthography together.", "Anti-L1-interference drills (silent letters, vowel digraphs, consonant doubling)."],
-    "ttsStrategy": "Audio IS the question. Leave per-word 'audioText' empty to speak the target word; fill it with a definition or synonym to make the student retrieve the word from a clue.",
-    "differentiationTips": ["Group words by a shared feature so the round drills it 5+ times.", "Use 'clusterTiles' to surface the feature being taught (e.g. 'tt' on a doubling round).", "Use 'distractors' to plant the confusable form (e.g. 'ea' as a decoy on an 'ee' round)."],
-    "commonPitfalls": ["Mixing unrelated words so no feature is drilled.", "Putting single-consonant words in a doubling round (the doubling tile then has nothing to teach).", "Targets under 2 letters (dropped)."]
-  },
-  "wordle": {
-    "name": "Word Guess (Wordle)",
-    "rules": "Wordle-style word-guessing game. A question is ONE hidden word ('word' field, 5-8 letters, letters only — no spaces or hyphens) and the student gets 'maxAttempts' guesses (default 6, range 3-8) on an on-screen QWERTY keyboard. Each submitted guess is colour-coded per letter: green = right letter right position, yellow = in the word elsewhere, grey = not in the word; the keyboard remembers the best-known state of each letter. THE 'prompt' MUST BE GENERIC — always just \"Guess the word.\" (or an equivalent instruction, translated if the quiz language isn't English) — NEVER a definition, translation, category or riddle for the hidden word. A prompt like \"What's the capital of France?\" is a dead giveaway that hands the student the answer before they've even started — MORE obvious than any hint, which defeats the whole point of a guessing game. ALL clue content belongs in HINTS instead: provide a 'hints' array of 1-3 short text clues ORDERED FROM LESS OBVIOUS TO MORE OBVIOUS (synonyms, category, then a near-giveaway) — the student buys them in order, only if they choose to. PRICING: the 1st hint is FREE (no points lost); the 2nd and 3rd each cost 15% of the points. If 'hints' is omitted, the Hint button instead reveals a correct letter under the same free-then-15%-each pricing (still no clue text needed). Scoring if solved: 0 hints or just the free 1st hint = 100%; +2nd hint = 85%; +3rd hint = 70%. Not solved = 0. Set 'lexicon' to 'en' (English), 'ca' (Catalan), 'fr' (French), or 'es' (Spanish) to reject made-up guesses against a real-word list (the answer word is always accepted); use 'none' (default) to allow any letters — best for other languages or made-up-friendly rounds. Grading is case- and accent-insensitive.",
-    "constraints": { "wordMinLetters": 5, "wordMaxLetters": 8, "lettersOnly": true, "maxAttemptsRange": "3-8", "defaultAttempts": 6, "maxHints": 3, "hintPricing": "1st hint free, 2nd and 3rd each −15%", "hintScoreByCount": { "0": "100%", "1": "100% (free)", "2": "85%", "3": "70%" }, "hintsOrder": "less obvious → more obvious", "lexiconValues": ["none", "en", "ca", "fr", "es"], "promptStyle": "generic only, e.g. 'Guess the word.' — never a clue" },
-    "pedagogicalUses": ["Vocabulary retrieval from escalating synonym/category hints.", "Spelling reinforcement through letter-position feedback.", "Warm-up or exit-ticket puzzles with high engagement.", "Scaffolded retrieval: every student can safely take the free 1st hint; weaker students can buy the 2nd/3rd hints for support, stronger students solve unaided for full points."],
-    "ttsStrategy": "The prompt is generic ('Guess the word.') so there is normally nothing worth reading aloud via audioText; leave it empty unless translating the generic instruction itself. The hidden word is never spoken.",
-    "differentiationTips": ["Author 'hints' as a gentle ramp — synonym, then category, then a near-giveaway — so struggling students can self-scaffold: the 1st is free, so encourage using it; the 2nd/3rd cost more, for students who need more support.", "Shorter words (5 letters) are easier than 8-letter ones.", "Lower maxAttempts for advanced learners.", "Set 'lexicon':'en', 'ca', 'fr', or 'es' for English, Catalan, French, or Spanish so guessing stays honest; use 'none' for made-up-friendly / other-language rounds."],
-    "commonPitfalls": ["Putting the clue/definition in the 'prompt' instead of 'hints' (e.g. 'What's the capital of France?', 'Name this large grey animal with a trunk') — this gives away the answer before the round even starts, which is more obvious than any hint. Keep 'prompt' generic ('Guess the word.') and put ALL clue content in 'hints'.", "Words with spaces, hyphens or accents-only differences.", "A hint that gives away the word directly ('It starts with ele-').", "Words outside 5-8 letters.", "Hints ordered most-obvious first (they must go LESS → MORE obvious).", "Setting lexicon 'en'/'ca'/'fr'/'es' for a word not in that language (the answer is still accepted, but it's confusing)."]
-  }
-};
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -4208,369 +4050,227 @@ async function saveQuizToCloud() {
   }
 }
 
+// ---------------------------------------------------------------- AI creation prompt
+// One short instructions file for an AI chatbot or agent: the task, the rules
+// that apply to this request (each stated once), one line of fields per
+// allowed question type, and 2–4 examples shaped like the request.
+// buildCreationPrompt is pure (and tested); exportCreationPrompt only reads
+// the form and hands the file over.
+
+// Teacher-corrected types: left out by "Exclude teacher-corrected".
+const TEACHER_GRADED_TYPES = ['open', 'speaking', 'voice_record', 'image_open'];
+
+const PROMPT_VOICE = '"ttsLanguage": "EN", "CA" or "FR" — for any other language, "OTHER" plus "language": a voice id such as "es-ES-ElviraNeural"';
+
+// The fields each question type needs, as the AI should write them.
+const PROMPT_TYPE_FIELDS = {
+  mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
+  multi: '"answers" as in mcq — 3 to 10 options, at least two correct.',
+  tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
+  text: '"accepted": ["…", "…"] — every answer you accept, as plain strings (not "answers"). Capitals, punctuation and how an ordinal is written (2.ª, 2ª, 2a) don\'t matter, so don\'t list those variants.',
+  voice_text: 'the student says the answer: "accepted" as in text, plus "answerLanguage": the spoken language, e.g. "es-ES".',
+  context_gap: 'mark each gap in the prompt with ____; "gaps": ["…"] — the answers in order; two accepted answers for one gap: "dreamed, dreamt".',
+  match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs.',
+  error_hunt: 'the prompt is ONLY the sentence with the mistake. "correctedVariants": every full corrected sentence you accept — the obvious fix plus other natural fixes, which may change a different word ("Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho."). "corrected": the first of them.',
+  puzzle: '"items": the 3 to 12 pieces in the CORRECT order — PinPlay shuffles them. For 1–2 pieces use text instead.',
+  slider: 'a question with one right number (a fact, not an opinion): "min", "max", "target" (numbers), "unit", and "margin": "none", "low", "medium", "high" or "maximum" (how close counts as right).',
+  pin: 'needs a still picture: "imageKeyword" (1–3 English words). "zones": [{"x": 50, "y": 40, "r": 8}] in % of the picture; "pinMode": "all" (tap every zone) or "any". The picture is found later, so use pin only where positions are predictable (e.g. a world map); if nothing in the theme fits, leave pin out.',
+  open: 'the student writes an answer; the teacher grades it. No answer fields.',
+  speaking: 'the student speaks an answer in class; the teacher grades it. No answer fields.',
+  voice_record: 'the student records an answer; the teacher grades it. No answer fields; optional "answerLanguage", e.g. "es-ES".',
+  image_open: 'the student uploads a photo (e.g. of handwritten work); the teacher grades it. No answer fields; the prompt says exactly what to photograph.',
+  spellingbee: 'one round of words sharing a spelling pattern; PinPlay says each word aloud. "words": [{"target": "…"}] (optional per word: "audioText", a clue said instead of the word), "feature": the pattern, and the voice: ' + PROMPT_VOICE + '.',
+  wordle: '"word": 5 to 8 letters, no spaces. The prompt is exactly "Guess the word." (in the quiz language) — never a clue. "hints": 1 to 3 clues, least obvious first. "lexicon": the word\'s language — "es", "en", "ca", "fr" or "none".',
+};
+
+// Fields copied from a template question into an example.
+const PROMPT_EXAMPLE_FIELDS = ['answers', 'accepted', 'answerLanguage', 'gaps', 'pairs', 'corrected', 'correctedVariants',
+  'items', 'min', 'max', 'target', 'unit', 'margin', 'zones', 'pinMode', 'feature', 'words', 'word', 'maxAttempts', 'hints', 'lexicon'];
+
+// A template question reduced to what this request uses: no empty fields, the
+// request's picture/audio settings, its time limit and (adaptive) a level.
+function shapePromptExample(q, req, index) {
+  const ex = { id: q.id, type: q.type, prompt: q.prompt };
+  if (req.adaptive) ex.cefr = ['A2', 'B2', 'A1', 'B1'][index] || 'B1';
+  ex.points = 1000;
+  ex.timeLimit = req.timeLimit;
+  PROMPT_EXAMPLE_FIELDS.forEach((k) => { if (q[k] !== undefined) ex[k] = JSON.parse(JSON.stringify(q[k])); });
+  const pic = String(q.imageKeyword || '').trim();
+  const gif = String(q.gifKeyword || '').trim();
+  if (q.type === 'pin') ex.imageKeyword = pic;
+  else if (req.images === 'some' && pic) ex.imageKeyword = pic;
+  else if (req.images === 'gifs' && gif) ex.gifKeyword = gif;
+  else if (req.images === 'mix' && (gif || pic)) ex[gif ? 'gifKeyword' : 'imageKeyword'] = gif || pic;
+  if (req.audio === 'some' && q.audioText && q.type !== 'wordle') {
+    ex.audioEnabled = true;
+    ex.audioText = q.audioText;
+    ex.ttsLanguage = 'EN';
+  }
+  if (q.type === 'spellingbee') ex.ttsLanguage = 'EN';
+  return ex;
+}
+
+// Picture, video, audio and reading-passage rules for this request.
+function promptMediaRules(req, allowed, agent) {
+  const rules = [];
+  const pin = allowed.includes('pin');
+  if (req.images === 'no') {
+    rules.push(`No pictures: leave out "imageKeyword" and "gifKeyword"${pin ? ' — except on pin questions, which need one' : ''}.`);
+  } else if (agent) {
+    rules.push('Pictures: when a question is about one specific thing (a screen, a diagram, a map, a chart, a place), include that exact picture as base64 "imageData" (a few hundred KB). Use "imageKeyword" (1–3 concrete English nouns) or "gifKeyword" (1–3 English words for an action or emotion) only for decorative pictures.');
+  } else if (req.images === 'some') {
+    rules.push('Pictures: where one helps, add "imageKeyword": 1–3 concrete English nouns ("red apple", "world map"), no brand names or mood words. PinPlay finds the picture when the quiz is saved.');
+  } else if (req.images === 'gifs') {
+    rules.push(`GIFs: where a short animation helps (an action, an emotion, a reaction), add "gifKeyword": 1–3 English words ("thumbs up", "running", "facepalm"). PinPlay finds the GIF when the quiz is saved.${pin ? ' Pin questions use "imageKeyword" instead.' : ''}`);
+  } else if (req.images === 'mix') {
+    rules.push('Pictures: add "imageKeyword" (1–3 concrete English nouns: "world map") for things, or "gifKeyword" (1–3 English words: "thumbs up") for actions and emotions — at most one per question. PinPlay finds them when the quiz is saved.');
+  }
+  if (req.video === 'some') {
+    rules.push(agent
+      ? 'Video: where a clip helps, give the exact clip as "media": {"url": "…", "startAt": seconds, "endAt": seconds}, and check that the link works.'
+      : 'Video: where a clip helps, add "videoKeyword": 2–4 English words (subject + action: "ocean waves"). Never write video links.');
+  }
+  if (req.audio === 'some') {
+    rules.push(`Audio: where hearing the question helps (listening, pronunciation, young readers), add "audioEnabled": true and "audioText" (what is said; write "blank" for a gap, never ___) and the voice of the language that is said: ${PROMPT_VOICE}.`);
+  }
+  const words = 'about 40–100 words at A1–A2, 100–200 at B1, 200–500 at B2 and above';
+  if (req.readingText === 'some') {
+    rules.push(`Reading passages: where a text helps (comprehension, context), add "readingText": plain text, ${words}. A question with a passage has no picture; never on pin.`);
+  } else if (req.readingText === 'all') {
+    rules.push(`Reading passages: give every question except pin its own "readingText" (plain text, ${words}) and no picture.`);
+  }
+  return rules;
+}
+
+// req: { theme, language, level, adaptive, levelNotes, goal, timeLimit,
+// questionCount (number or brief text), batchSize, images, audio, video,
+// readingText, typesMode, selectedTypes, aiMode }. Returns { text, filename }.
+function buildCreationPrompt(req) {
+  const agent = req.aiMode === 'agent';
+  const selected = (req.selectedTypes || []).filter((type) => CANONICAL_QUESTION_TYPES.includes(type));
+  const includeSelected = req.typesMode === 'include' && selected.length > 0;
+  const allowed = CANONICAL_QUESTION_TYPES.filter((type) => {
+    if (includeSelected) return selected.includes(type);
+    if (req.typesMode === 'exclude_teacher_graded') return !TEACHER_GRADED_TYPES.includes(type);
+    return true;
+  });
+  const list = allowed.join(', ');
+  const count = req.questionCount;
+  const numeric = typeof count === 'number' ? count : null;
+
+  let typesLine = `use only ${list}`;
+  if (req.typesMode === 'ai_choice') typesLine = `choose the ones that best fit the goal, from ${list}`;
+  else if (includeSelected || req.typesMode === 'all') {
+    typesLine = `use each of these at least once, and no others: ${list}`;
+    // A pin on a picture found by keyword only works where positions are predictable.
+    if (allowed.includes('pin')) typesLine += ' (pin only if something in the theme fits it)';
+    if (numeric && numeric < allowed.length) typesLine += ' (fewer questions than types: cover as many as you can)';
+  }
+  const howMany = typeof count === 'string' ? `decide how many from this brief: "${count}"` : String(numeric || 10);
+  const delivery = req.batchSize
+    ? `in batches of ${req.batchSize}, one JSON object per batch (the teacher joins them with Import → Append)`
+    : 'all in one JSON object';
+
+  const task = [
+    `Theme: ${req.theme}`,
+    req.language ? `Language of the quiz: ${req.language}` : null,
+    `Goal: ${req.goal || 'balanced practice: scaffolding plus retrieval'}`,
+    req.level ? `Level: ${req.level}` : null,
+    req.adaptive ? 'Levels: adaptive, A1 to C2 (see Levels)' : null,
+    `Questions: ${howMany}, ${delivery}`,
+    `Question types: ${typesLine}`,
+  ].filter(Boolean);
+
+  const rules = [
+    'Clear, short prompts and answer options. Distractors are near misses: believable, not obvious, not impossible.',
+    `Every question has a unique "id", "points": 1000 and "timeLimit": ${req.timeLimit} (seconds; 0 = no limit).`,
+    ...promptMediaRules(req, allowed, agent),
+  ];
+  if (agent) {
+    rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
+  }
+
+  const templateQuestions = TEMPLATE_ALL_13_TYPES.questions.filter((q) => allowed.includes(q.type));
+  const examples = pickPromptExamples(templateQuestions).map((q, i) => shapePromptExample(q, req, i));
+  const common = `"id", "type", "prompt", "points", "timeLimit"${req.adaptive ? ', "cefr"' : ''}`;
+
+  const out = [
+    '# PinPlay quiz instructions',
+    '',
+    `Create a quiz for PinPlay. Reply with the quiz as ONE JSON object${req.batchSize ? ' per batch' : ''} and nothing else: no commentary, no code fences.`,
+    '',
+    '## Task',
+    ...task.map((line) => `- ${line}`),
+    '',
+    '## Rules',
+    ...rules.map((r, i) => `${i + 1}. ${r}`),
+  ];
+  if (req.adaptive) {
+    out.push('', '## Levels', ...buildAdaptiveLevelRules(req).map((r, i) => `${i + 1}. ${r}`));
+  }
+  out.push('',
+    '## Question fields',
+    'Quiz: {"version": 3, "title": "…", "questions": [ … ]}',
+    `Every question has ${common}, plus the fields of its type:`,
+    ...allowed.map((type) => `- ${type}: ${PROMPT_TYPE_FIELDS[type] || ''}`),
+    '',
+    '## Examples',
+    '```json',
+    `[\n${examples.map((ex) => `  ${JSON.stringify(ex)}`).join(',\n')}\n]`,
+    '```',
+    '');
+  return {
+    text: out.join('\n'),
+    filename: `prompt-${agent ? 'agent-' : ''}${toSafeFilename(req.theme)}.md`,
+  };
+}
+
 async function exportCreationPrompt() {
   const theme = document.getElementById('promptTheme')?.value.trim();
-  const lang = document.getElementById('promptLanguage')?.value.trim();
   const adaptive = !!document.getElementById('promptAdaptive')?.checked;
-  const level = adaptive ? '' : document.getElementById('promptLevel')?.value.trim();
-  const levelNotes = adaptive ? document.getElementById('promptLevelNotes')?.value.trim() : '';
-  const timeLimit = document.getElementById('promptTimeLimit')?.value;
-  const count = document.getElementById('promptQuestionCount')?.value.trim();
-  const batchSize = document.getElementById('promptBatchSize')?.value;
-  const images = document.getElementById('promptImages')?.value;
-  const audio = document.getElementById('promptAudio')?.value;
-  const video = document.getElementById('promptVideo')?.value;
-  const readingText = document.getElementById('promptReadingText')?.value;
-  const aiMode = document.getElementById('promptAiMode')?.value || 'chatbot';
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
   const customGoalEl = document.getElementById('promptGoalCustom') instanceof HTMLTextAreaElement ? document.getElementById('promptGoalCustom') : null;
-  const goal = goalEl?.value;
-  const goalText = goalEl?.options[goalEl.selectedIndex]?.text;
-  const customGoalText = customGoalEl?.value.trim();
 
   if (!theme) {
     alert(t('Please enter a theme for the quiz!'));
     return;
   }
-
-  // Create clean request object (no blank fields)
-  const cleanRequest = { theme };
-  if (lang) cleanRequest.language = lang;
-  if (level) cleanRequest.level = level;
-  if (adaptive) {
-    cleanRequest.levels = 'Adaptive: all CEFR levels A1–C2, tagged per question';
-    if (levelNotes) cleanRequest.levelNotes = levelNotes;
-  }
-  cleanRequest.timeLimit = Number(timeLimit) || 0;
-  if (count) {
-    const asNum = Number(count);
-    cleanRequest.questionCount = (/^\d+$/.test(count) && Number.isFinite(asNum) && asNum > 0) ? asNum : count;
-  }
-  const batchSizeNum = Number(batchSize);
-  if (batchSizeNum >= 3) {
-    cleanRequest.batchSize = Math.min(100, batchSizeNum);
-  }
-  cleanRequest.images = images;
-  cleanRequest.audio = audio;
-  cleanRequest.video = video;
-  cleanRequest.readingText = readingText || 'no';
-
-  if (goal === 'custom') {
-    if (!customGoalText) {
+  let goal = goalEl?.options[goalEl.selectedIndex]?.text || '';
+  if (goalEl?.value === 'custom') {
+    goal = customGoalEl?.value.trim() || '';
+    if (!goal) {
       alert(t('Please enter a custom pedagogical goal before generating the prompt.'));
       customGoalEl?.focus();
       return;
     }
-    cleanRequest.goal = customGoalText;
-  } else if (goalText) {
-    cleanRequest.goal = goalText;
   }
 
-  const typesMode = document.getElementById('promptTypesMode')?.value;
-  const selectedTypes = Array.from(document.querySelectorAll('#promptTypesList input:checked'))
-    .map(cb => cb.value)
-    .filter((type) => CANONICAL_QUESTION_TYPES.includes(type));
-  const TEACHER_GRADED_TYPES = ['open', 'speaking', 'voice_record'];
-  const allowedTypes = CANONICAL_QUESTION_TYPES.filter((type) => {
-    if (typesMode === 'include' && selectedTypes.length) return selectedTypes.includes(type);
-    if (typesMode === 'exclude_teacher_graded') return !TEACHER_GRADED_TYPES.includes(type);
-    return true;
+  const valueOf = (id) => String(document.getElementById(id)?.value || '').trim();
+  const countRaw = valueOf('promptQuestionCount');
+  const batchSize = Number(valueOf('promptBatchSize'));
+  const { text, filename } = buildCreationPrompt({
+    theme,
+    language: valueOf('promptLanguage'),
+    level: adaptive ? '' : valueOf('promptLevel'),
+    adaptive,
+    levelNotes: adaptive ? valueOf('promptLevelNotes') : '',
+    goal,
+    timeLimit: Number(valueOf('promptTimeLimit')) || 0,
+    questionCount: /^\d+$/.test(countRaw) && Number(countRaw) > 0 ? Number(countRaw) : (countRaw || 10),
+    batchSize: batchSize >= 3 ? Math.min(100, batchSize) : 0,
+    images: valueOf('promptImages') || 'no',
+    audio: valueOf('promptAudio') || 'no',
+    video: valueOf('promptVideo') || 'no',
+    readingText: valueOf('promptReadingText') || 'no',
+    typesMode: valueOf('promptTypesMode'),
+    selectedTypes: Array.from(document.querySelectorAll('#promptTypesList input:checked')).map((cb) => cb.value),
+    aiMode: valueOf('promptAiMode') || 'chatbot',
   });
 
-  if (typesMode === 'ai_choice') {
-    cleanRequest.questionTypeSelection = 'ai_choice';
-  } else if (typesMode === 'include' && selectedTypes.length > 0) {
-    cleanRequest.includeQuestionTypes = selectedTypes;
-  } else if (typesMode === 'exclude_teacher_graded') {
-    cleanRequest.excludeQuestionTypes = TEACHER_GRADED_TYPES;
-  }
-
-  // "Include selected" and "Use all available" are restrictive picks: the teacher
-  // wants every chosen type to actually appear, so mandate full coverage. "Best
-  // fitting" (ai_choice) and "Exclude teacher-corrected" stay open/non-prescriptive.
-  const requireFullTypeCoverage = (typesMode === 'include' && selectedTypes.length > 0) || typesMode === 'all';
-
-  const textualSummary = Object.entries(cleanRequest)
-    .map(([k, v]) => Array.isArray(v) ? `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v.join(', ')}` : `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
-    .join('\n');
-
-  const templateAllowedTypes = allowedTypes.filter((type) => TEMPLATE_QUESTION_TYPES.includes(type));
-  const filteredTemplateQuestions = TEMPLATE_ALL_13_TYPES.questions
-    .filter((q) => templateAllowedTypes.includes(q.type))
-    .map((q) => {
-      const clone = JSON.parse(JSON.stringify(q));
-      if (!supportsQuestionAudio(clone.type)) return clone;
-
-      clone.audioMode = clone.audioMode === 'file' ? 'file' : 'tts';
-      if (clone.audioMode === 'tts') {
-        clone.audioData = '';
-        clone.audioText = String(clone.audioText || clone.prompt || '').slice(0, 1200);
-        const questionTtsLanguage = normalizeTtsLanguage(clone.ttsLanguage || TEMPLATE_ALL_13_TYPES.ttsLanguage);
-        clone.ttsLanguage = questionTtsLanguage;
-        if (questionTtsLanguage === 'OTHER') {
-          clone.language = String(clone.language || TEMPLATE_ALL_13_TYPES.language || EDGE_TTS_LANGUAGE_DEFAULTS.OTHER).trim();
-        } else {
-          delete clone.language;
-        }
-      }
-      return clone;
-    });
-  const relevantTypeExplanations = Object.fromEntries(
-    allowedTypes
-      .filter((type) => QUESTION_TYPE_EXPLANATIONS[type])
-      .map((type) => [type, JSON.parse(JSON.stringify(QUESTION_TYPE_EXPLANATIONS[type]))])
-  );
-  // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
-
-  const pickedExamples = pickPromptExamples(filteredTemplateQuestions);
-  // Show the per-question level tag in the example shapes.
-  if (adaptive) pickedExamples.forEach((q, i) => { q.cefr = ['A2', 'B2'][i] || 'B1'; });
-
-  const allowedTypesText = allowedTypes.join(', ');
-  const blockedTypesText = CANONICAL_QUESTION_TYPES.filter((type) => !allowedTypes.includes(type)).join(', ');
-
-  let promptText;
-  let exportData;
-  let filename = `prompt-${toSafeFilename(theme)}.md`;
-
-  // featureGuides + audioPedagogicalUse are shared: chatbot puts them in context, and
-  // agent mode reuses the same keyword/audio fallback rules in its context block.
-  const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
-  const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
-
-  const featureGuides = {
-    imageKeyword: wantsImages
-      ? "Static images via Pexels. Set imageKeyword to 1-3 concrete nouns naming the visual target; the question text already carries the narrative. Auto-search runs on save. Keep imageData empty.\n\nRules: 1-3 words. Concrete nouns / objects / places only. No proper nouns from copyrighted media (show titles, character names, branded locations) — stock libraries don't index them, results are unrelated noise. No mood adjectives (scary, creepy, happy, intense, dramatic) — they filter to staged vanity shots. No scene reconstruction — pick the single most universal object in the question.\n\nGood: 'waffles', 'electric guitar', 'shopping mall', 'lightning storm', 'wall clock', 'red apple', 'human heart diagram'.\nBad: 'eating eggo waffles' (narrative + brand), 'scary shadow monster' (adjective + abstract), 'stranger things logo reveal' (proper noun)."
-      : undefined,
-    gifKeyword: wantsGifs
-      ? "Animated GIFs via GIPHY. GIFs excel at universal reaction/emotion verbs and short concrete actions — NOT at static objects or scene reconstructions. Auto-search runs on save and embeds the CDN URL into imageData. Keep imageKeyword and imageData empty when using gifKeyword.\n\nRules: 1-3 words. Prefer universal action/emotion verbs (huge GIPHY libraries). No proper nouns from copyrighted media. No mood adjectives. No multi-element compound phrases. If the visual target is a static object, use imageKeyword instead (or omit both).\n\nGood: 'thumbs up', 'applause', 'facepalm', 'thinking', 'shrug', 'celebrating', 'high five', 'happy dance', 'mind blown', 'clapping'.\nBad: 'siblings fighting' (compound novel concept), 'scary clock ticking' (adjective + object), 'stranger things squad' (proper noun + fuzzy compound)."
-      : undefined,
-    videoKeyword: cleanRequest.video === 'some'
-      ? "Auto-search videos via Pexels stock footage. Set videoKeyword to 2-4 concrete words: subject + action, or subject + setting. videoProviderPreference:'youtube'|'vimeo'|'direct' is optional. Do NOT include media.url unless the user explicitly asks for a fixed/manual URL.\n\nRules: 2-4 words. Concrete subject + concrete activity/setting. No proper nouns from copyrighted media. No mood adjectives. No scene reconstructions.\n\nGood: 'ocean waves', 'city traffic night', 'students reading book', 'rain on window', 'guitar player closeup', 'forest aerial view'.\nBad: 'stranger things intro scene' (proper noun), 'creepy abandoned mall hallway' (adjective + over-specific), 'kids fighting monsters' (fuzzy narrative)."
-      : undefined,
-    audioMode: cleanRequest.audio === 'some'
-      ? "For TTS questions include audioMode:'tts', audioText, question-level ttsLanguage, and question-level language when ttsLanguage:'OTHER'. Keep audioData empty."
-      : undefined,
-    videoEmbed: cleanRequest.video === 'some'
-      ? "Strict exception path: use media.url only for user-supplied or manually verified links. Default to keyword-first flow with videoKeyword for auto-add."
-      : undefined,
-    readAllQuestionsAloud: cleanRequest.audio === 'some'
-      ? "Set true only when broad accessibility/listening repetition is desired."
-      : undefined,
-    readingText: (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
-      ? "Per-question reading passage rendered centered (in place of an image) inside a scrollable card. Text is non-selectable and non-copyable, so it doubles as a soft anti-cheat surface for translation/AI assistance during the quiz. Use the field `readingText` (string, max 10,000 chars per question). Supported on every question type EXCEPT `pin`.\n\nWhen to use: reading-comprehension prompts where students must read a passage of 1-3 paragraphs before answering; cloze/gap-fill where the passage gives context; vocabulary-in-context; error-hunt with a paragraph instead of a one-liner; speaking/voice_record prompts that need a source text to react to.\n\nWhen NOT to use: trivia, math drills, definition recall, or any question that's self-contained in the prompt — adding a passage there is noise, not pedagogy. Skip on `pin` questions (they require an image).\n\nMutually exclusive with imageKeyword, gifKeyword, and imageData on the SAME question. If a question has readingText, leave all three image fields empty. If a question needs a visual instead, leave readingText empty.\n\nLength guidance by level: A1-A2 ≈ 40-100 words; B1 ≈ 100-200 words; B2+ ≈ 200-500 words. Stay under ~1500 words / 10000 chars per question — quizzes with many long passages risk exceeding the storage row limit. For 1000+ word passages, prefer splitting into multiple questions over one giant passage."
-      : undefined
-  };
-
-  const audioPedagogicalUse = cleanRequest.audio === 'some' ? {
-    role: "Audio is a modality/strategy, not a question type.",
-    usage: [
-      "Listening comprehension (prompt text = [Listening...], audioText = transcript)",
-      "Spelling/Dictation (prompt text = Spell this word, audioText = the word)",
-      "Speaking triggers (audioText provides the target phrase to say)"
-    ],
-    implementation: "Apply audio fields (audioMode: 'tts', audioText: '...') to existing supported question types."
-  } : undefined;
-
-  if (aiMode === 'agent') {
-    ({ promptText, exportData } = buildAgentArtifacts({
-      cleanRequest,
-      textualSummary,
-      allowedTypes,
-      blockedTypesText,
-      featureGuides,
-      audioPedagogicalUse,
-      typeExplanations: relevantTypeExplanations,
-      pickedExamples,
-      requireFullTypeCoverage
-    }));
-    filename = `prompt-agent-${toSafeFilename(theme)}.md`;
-  } else {
-  const questionTypesRule = typesMode === 'ai_choice'
-    ? `Choose the question types that best fit the quiz goals and theme from the available types: ${allowedTypesText}. Vary types for engagement and pedagogical effectiveness.`
-    : requireFullTypeCoverage
-      ? `Use ONLY these question types AND include at least one question of EVERY one of them: ${allowedTypesText}. Treat this list as a required checklist, not a menu — full coverage is mandatory. The only acceptable reason to omit a listed type is if the total question count is smaller than the number of listed types (in which case still maximise coverage).`
-      : `Use only allowed question types: ${allowedTypesText}.`;
-  const mustFollowRules = [
-    'Return valid PinPlay JSON version 3.',
-    questionTypesRule,
-    'Use imageData as "" (never base64 in generated output).',
-    cleanRequest.audio === 'some'
-      ? 'For generated audio use audioMode:"tts", audioData:"", meaningful audioText, and always include question-level ttsLanguage.'
-      : 'Do not add question audio fields unless required by request.',
-    cleanRequest.audio === 'some'
-      ? 'In audioText, never write blanks as underscores or "___" — TTS reads them aloud literally as "underscore underscore underscore". Use the spoken word "blank" instead (e.g. prompt "I went to the ___" → audioText "I went to the blank").'
-      : undefined,
-    cleanRequest.audio === 'some'
-      ? 'If question ttsLanguage is "OTHER", question language must be an exact Edge voice ID (format like "xx-XX-NameNeural").'
-      : undefined,
-    cleanRequest.audio === 'some'
-      ? 'For mixed-language quizzes, set ttsLanguage per question (and language only for OTHER) instead of relying only on quiz-level defaults.'
-      : undefined,
-    cleanRequest.images === 'no'
-      ? 'Do NOT include imageKeyword, gifKeyword, or imageData on any question.'
-      : 'Keep imageData empty (auto-search fills it at save time).',
-    wantsImages && !wantsGifs
-      ? 'Use imageKeyword for visual cues. Do NOT use gifKeyword.'
-      : undefined,
-    wantsGifs && !wantsImages
-      ? 'Use gifKeyword (not imageKeyword) for visual cues. Pick prompts where animated reactions/actions add pedagogical value; if a question only benefits from a static reference image, leave both keyword fields empty.'
-      : undefined,
-    wantsGifs && wantsImages
-      ? 'Choose imageKeyword for static reference visuals (maps, diagrams, anatomy, objects) and gifKeyword for action/emotion/reaction visuals (verbs, celebrations, demonstrations of motion). Set exactly one of the two on any given question — never both.'
-      : undefined,
-    cleanRequest.video === 'some'
-      ? 'If both imageKeyword and videoKeyword are present, video takes precedence and image can be cleared when video is auto-filled.'
-      : undefined,
-    cleanRequest.video === 'some'
-      ? 'Prefer videoKeyword over explicit media.url.'
-      : undefined,
-    cleanRequest.video === 'some'
-      ? 'Do not invent or guess YouTube/Vimeo URLs.'
-      : undefined,
-    cleanRequest.video === 'some'
-      ? 'If both videoKeyword and media.url are present, keep videoKeyword as source of truth unless the user explicitly asked for a fixed link.'
-      : undefined,
-    cleanRequest.video === 'no' ? 'Do NOT include media object or video URLs.' : 'Use media object for video only when pedagogically relevant.',
-    cleanRequest.readingText === 'no'
-      ? 'Do NOT include the readingText field on any question.'
-      : undefined,
-    cleanRequest.readingText === 'some'
-      ? 'Use readingText only on questions where a reading passage genuinely adds pedagogical value (comprehension, gap-fill in context, vocab-in-context). Leave it empty on self-contained trivia/recall questions. Never on pin.'
-      : undefined,
-    cleanRequest.readingText === 'all'
-      ? 'Add a readingText passage to every non-pin question. Each passage must be specific to that question (do not reuse the same passage across questions unless the quiz is a multi-question reading where that is the intent).'
-      : undefined,
-    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
-      ? 'readingText is mutually exclusive with imageKeyword, gifKeyword, and imageData on the same question — pick one or the other, never both.'
-      : undefined,
-    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
-      ? 'Keep each readingText under 10,000 characters. For long content, split into multiple questions.'
-      : undefined,
-    'Do not repeat request fields verbatim inside the output JSON.'
-  ];
-  if (blockedTypesText) {
-    mustFollowRules.push(`Do NOT use blocked types: ${blockedTypesText}.`);
-  }
-  const normalizedMustFollowRules = mustFollowRules.filter(Boolean);
-  if (cleanRequest.levels) normalizedMustFollowRules.push(...buildAdaptiveLevelRules(cleanRequest));
-  const outputContract = [
-    'Output only one JSON object.',
-    'Follow exampleTemplate key shapes.',
-    'Keep ids stable and unique.',
-    'Prefer short, clear prompt text and concise answer choices.',
-    'TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }.',
-    'For videos, prefer keyword auto-add flow (videoKeyword) so generated quizzes stay resilient to link rot.',
-    (cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all')
-      ? 'readingText shape: plain UTF-8 string, no markdown or HTML. Line breaks with \\n are fine and render preserved. When set, do not also set imageData/imageKeyword/gifKeyword on that question.'
-      : undefined,
-    cleanRequest.levels ? 'Every question includes "cefr": "A1" | "A2" | "B1" | "B2" | "C1" | "C2".' : undefined
-  ].filter(Boolean);
-  const qualityGoals = [
-    `Prioritize: ${cleanRequest.goal || 'balanced scaffold + retrieval practice'}.`,
-    'Use pedagogically meaningful distractors and progression.',
-    "Prioritize high-quality 'near-miss' distractors that perfectly challenge students — not too obvious, not too difficult.",
-    'Keep language level aligned to request.',
-    'Avoid redundant narration and filler text.',
-    (() => {
-      const qc = cleanRequest.questionCount;
-      const isTextualBrief = typeof qc === 'string';
-      const sizingDirective = isTextualBrief
-        ? `Decide the appropriate number of questions yourself based on this brief: "${qc}". Use pedagogical judgment — do not force a specific count.`
-        : null;
-      const numericCount = typeof qc === 'number' ? qc : 10;
-      if (cleanRequest.batchSize) {
-        return isTextualBrief
-          ? `${sizingDirective} Deliver the quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`
-          : `Create the ${numericCount} question quiz in batches of ${cleanRequest.batchSize}. The teacher will use Import → Append to combine batches.`;
-      }
-      return isTextualBrief
-        ? `${sizingDirective} Return the entire quiz as a single JSON object containing all questions.`
-        : `Create the entire ${numericCount} question quiz in a single batch (one JSON object containing all questions).`;
-    })()
-  ].filter(Boolean);
-
-  promptText = [
-    'Task',
-    textualSummary,
-    '',
-    'Quality goals',
-    qualityGoals.map((r, i) => `${i + 1}. ${r}`).join('\n'),
-    '',
-    'Must-follow rules',
-    normalizedMustFollowRules.map((r, i) => `${i + 1}. ${r}`).join('\n'),
-    '',
-    'Output contract',
-    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n')
-  ].join('\n').trim();
-
-  exportData = {
-    metadata: {
-      generatedAt: new Date().toISOString(),
-      type: "PinPlay Creation Prompt",
-      version: "3.5"
-    },
-    promptIntent: "Generate one valid PinPlay v3 quiz JSON from the Task block below.",
-    context: {
-      allowedQuestionTypes: allowedTypes,
-      typeExplanations: relevantTypeExplanations,
-      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value)),
-      audioPedagogicalUse
-    },
-    exampleTemplate: {
-      ...TEMPLATE_ALL_13_TYPES,
-      questions: pickedExamples
-    }
-  };
-  }
-
-  const CONTEXT_BUDGET = 22000;
-  if (JSON.stringify(exportData).length > CONTEXT_BUDGET && exportData.context?.typeExplanations) {
-    Object.keys(exportData.context.typeExplanations).forEach((type) => {
-      const info = exportData.context.typeExplanations[type];
-      if (!info) return;
-      info.pedagogicalUses = (info.pedagogicalUses || []).slice(0, 1);
-      info.differentiationTips = (info.differentiationTips || []).slice(0, 1);
-      info.commonPitfalls = (info.commonPitfalls || []).slice(0, 1);
-      if (typeof info.ttsStrategy === 'string') info.ttsStrategy = info.ttsStrategy.slice(0, 120);
-      if (typeof info.rules === 'string') info.rules = info.rules.slice(0, 300);
-    });
-  }
-  if (JSON.stringify(exportData).length > CONTEXT_BUDGET) {
-    delete exportData.context.typeExplanations;
-  }
-  // typeUseCases no longer exists; skip this trim step
-
-  // Single self-contained instructions file: readable prose prompt at the top, then the
-  // schema/reference JSON in a fenced block. The teacher attaches just this one file.
-  const instructionsFile = [
-    '# PinPlay — Quiz Creation Instructions',
-    '',
-    'Attach this whole file to your AI chatbot or agent and say: "Here are the instructions to create a new quiz." Read the instructions below, then use the reference JSON at the bottom for the exact field shapes, allowed question types, and examples. Return your quiz as a single JSON object.',
-    '',
-    '---',
-    '',
-    promptText,
-    '',
-    '---',
-    '',
-    '## Reference data — PinPlay v3 schema (field shapes, allowed types, examples)',
-    '',
-    aiMode === 'agent'
-      ? 'Match the key shapes in `exampleTemplate`. The example questions set imageKeyword with an empty imageData only to show where a visual goes — in agent mode you should instead populate imageData with real embedded base64 for any content-bearing visual (see Phase 2); imageKeyword is for decorative visuals only. Do not copy this reference into your output — produce a fresh quiz JSON.'
-      : 'Match the key shapes in `exampleTemplate`. Do not copy this reference into your output — produce a fresh quiz JSON.',
-    '',
-    '```json',
-    JSON.stringify(exportData, null, 2),
-    '```',
-    ''
-  ].join('\n');
-
-  // Download the file first so the attachment always lands even if clipboard access fails.
-  downloadTextFile(instructionsFile, filename);
-
+  // The file is short enough to paste as well: download it and copy the same text.
+  downloadTextFile(text, filename);
   try {
-    await navigator.clipboard.writeText(promptText);
+    await navigator.clipboard.writeText(text);
     if (promptStatusEl) {
       promptStatusEl.textContent = t('Instructions file downloaded — prompt also copied 📋');
       promptStatusEl.className = 'small ok';
@@ -4583,162 +4283,6 @@ async function exportCreationPrompt() {
       setTimeout(() => { if (promptStatusEl) promptStatusEl.textContent = ''; }, 4000);
     }
   }
-}
-
-// Agent-mode counterpart to the chatbot prompt: a brief + research/assets/assemble
-// workflow + non-prescriptive hints + short hard constraints, instead of a long rulebook.
-// Returns the same { promptText (clipboard), exportData (downloaded JSON) } shape so the
-// shared tail of exportCreationPrompt can copy + trim + download it identically.
-function buildAgentArtifacts({ cleanRequest, textualSummary, allowedTypes, blockedTypesText, featureGuides, audioPedagogicalUse, typeExplanations, pickedExamples, requireFullTypeCoverage }) {
-  const wantsImages = cleanRequest.images === 'some' || cleanRequest.images === 'mix';
-  const wantsGifs = cleanRequest.images === 'gifs' || cleanRequest.images === 'mix';
-  const wantsVideo = cleanRequest.video === 'some';
-  const wantsAudio = cleanRequest.audio === 'some';
-  const wantsReading = cleanRequest.readingText === 'some' || cleanRequest.readingText === 'all';
-  const allowsSlider = allowedTypes.includes('slider');
-  const allowsPin = allowedTypes.includes('pin');
-  const aiChoice = cleanRequest.questionTypeSelection === 'ai_choice';
-  const allowedTypesText = allowedTypes.join(', ');
-
-  // Brief — one paragraph of pedagogical intent synthesised from the form.
-  let brief = `Build a PinPlay v3 quiz on "${cleanRequest.theme}"`;
-  if (cleanRequest.level) brief += `, pitched at ${cleanRequest.level}`;
-  if (cleanRequest.levels) brief += ', as an adaptive multilevel quiz spanning CEFR A1–C2 (every question tagged with its level)';
-  if (cleanRequest.language) brief += `, in ${cleanRequest.language}`;
-  brief += `. Pedagogical aim: ${cleanRequest.goal || 'a balanced scaffold + retrieval-practice progression'}. `;
-  brief += 'You are an agent, not a form-filler — read the intent, then decide how to reach a genuinely high-quality quiz. ';
-  brief += 'Favour real, verified content over plausible-sounding guesses, and vary question types where they serve the goal.';
-
-  // Capabilities — conditional (don't assert tools the agent may lack) + extensible
-  // (acquire or author a subskill when the quiz needs a capability not already at hand).
-  const capabilityTools = ['web search to verify facts, names, dates, and slider targets'];
-  if (wantsImages || wantsGifs) capabilityTools.push('image download/generation and base64 embedding');
-  if (wantsGifs) capabilityTools.push('GIF search');
-  if (wantsVideo) capabilityTools.push('YouTube/video lookup with timestamp verification');
-  if (wantsImages) capabilityTools.push('image composition and annotation');
-  const agentCapabilities = `If you have tools, use them rather than treating these hints as suggestions you cannot act on — ${capabilityTools.join('; ')}. This is not a keyword-fill task. If this quiz needs a specialized capability you do not already have (e.g. rendering chemical structures, music notation, IPA phonetics, accurate map/flag overlays, LaTeX math figures), first look for an existing skill or tool online that provides it, or author a small reusable subskill connected to your PinPlay quiz-creator skills — then use it. Match any capability you acquire to what THIS quiz actually requires; skip this for topics you can already handle.`;
-
-  // Phase 2 asset guidance is built only from the media the teacher actually enabled.
-  const assetSteps = [];
-  if (wantsImages) assetSteps.push('find or capture the actual image the question is about (real UI screenshot, diagram, map, chart, artwork, specimen — not a generic stock photo) and embed it as base64 imageData, confirming it truly shows the subject');
-  if (wantsGifs) assetSteps.push('embed a fitting animated GIF as base64 imageData where motion aids understanding');
-  if (wantsVideo) assetSteps.push('find the exact clip and set media.url with startAt/endAt to show precisely the right seconds');
-  if (wantsAudio) assetSteps.push('decide deliberately between real sourced audio and TTS for each listening prompt');
-  const assetGuidance = assetSteps.length
-    ? `For each question that needs media: ${assetSteps.join('; ')}. Verify every asset actually loads and matches the question.`
-    : 'This quiz needs no media — go straight to assembly.';
-
-  const workflow = {
-    phase1_research: 'Before writing any question, research the topic. Verify every fact, statistic, name, date, and slider target against a real source (web search, Wikipedia, reference sites). Do not write a question about anything you cannot verify — drop it or pick a verifiable angle instead.',
-    phase2_assets: `Resolve all media yourself now — do NOT defer to save-time keyword auto-search and hope it finds something usable. That deferral is the chatbot fallback, and shipping keyword placeholders instead of real assets is exactly the lazy route you must avoid. ${assetGuidance} Litmus test for every visual: is there ONE specific real image that correctly shows what the question is about — a particular UI screen, diagram, map, chart, artwork, place, person, or specimen? If yes, you MUST find, capture, generate, or compose that exact image and embed it as base64 imageData; a generic stock photo from a keyword search would be a wrong answer there. Software/interface and procedural "how-to" topics nearly always need real screenshots or annotated captures of the actual product — stock imagery teaches nothing. Reserve imageKeyword/gifKeyword only for purely decorative or generic-reaction visuals where any representative image is fine. If a real embed is large, downscale or compress it (aim for a few hundred KB) rather than dropping to a keyword.`,
-    phase3_assemble: 'Only now write the quiz JSON, with every asset already resolved. Any question whose content or answer depends on a specific real visual must already carry an embedded base64 imageData — not an imageKeyword placeholder — and likewise a specific media.url with startAt/endAt over a videoKeyword. If you could not resolve a needed real image, drop or rework that question rather than papering over it with a keyword. Keep ids stable and unique, prompts tight, and distractors based on real near-misses you found while researching.'
-  };
-
-  // Hints — non-prescriptive ideas, gated by the same form selections.
-  const hints = {};
-  if (wantsImages) hints.images = 'Find or capture the actual image the question is about — a real UI screenshot/annotated capture, diagram, map, chart, artwork, or specimen — and embed it as base64 imageData. You can also generate or compose custom images (e.g. map + flag overlay), crop to the subject, or annotate with arrows/labels. imageKeyword is only a fallback for decorative visuals, never the default.';
-  if (wantsGifs) hints.gifs = 'Animated GIFs shine for reaction/emotion verbs and short concrete actions. Embed a real one in imageData when motion adds pedagogical value; gifKeyword is only a fallback.';
-  if (wantsVideo) hints.video = 'Find a specific YouTube/Vimeo clip and set startAt/endAt to show exactly the right seconds, or transcribe a clip into a listening-comprehension question. Verify the link is live before using it.';
-  if (wantsAudio) hints.audio = 'Beyond generic TTS: consider pacing (pauses for dictation), voice selection by gender/accent for pedagogical effect, or sourcing real ambient/crowd audio when it adds value.';
-  if (allowsSlider) hints.facts = 'Slider questions are far better when the target value is real and verified (venue capacity, goals scored, population, distance). Look it up before writing the question.';
-  if (allowsPin) hints.pin = 'For pin questions, find or generate a real image (map, diagram, stadium layout), then compute accurate x/y/r zone coordinates from the actual image dimensions. A bad pin with wrong zones is worse than none — only use pin when you can resolve a real image and verify the zones.';
-  hints.composition = "When a single found asset won't capture the idea, compose one — e.g. combine a regional map with event branding rather than hoping one keyword finds it.";
-
-  // Constraints — hard rules only.
-  const constraints = [];
-  constraints.push('Return one valid PinPlay JSON v3 object that matches the key shapes in exampleTemplate. Keep ids stable and unique.');
-  constraints.push(aiChoice
-    ? `Choose the question types that best fit the goal and theme from: ${allowedTypesText}.`
-    : requireFullTypeCoverage
-      ? `Use ONLY these question types AND include at least one question of EVERY one — treat the list as a required checklist, not a menu, so full coverage is mandatory: ${allowedTypesText}. Omit a listed type only if the question count is smaller than the number of listed types.`
-      : `Use only these question types: ${allowedTypesText}.`);
-  if (blockedTypesText) constraints.push(`Never use blocked types: ${blockedTypesText}.`);
-  if (cleanRequest.levels) constraints.push(...buildAdaptiveLevelRules(cleanRequest));
-  if (wantsImages || wantsGifs) {
-    constraints.push('Embed real, verified assets for any question whose content or answer depends on a specific image — do not ship imageKeyword/gifKeyword placeholders there and lean on save-time auto-search (that is the chatbot fallback). Keyword fields are only for purely decorative or generic-reaction visuals. Control storage by downscaling/compressing embeds (aim for a few hundred KB each), not by swapping them for keywords.');
-  } else if (cleanRequest.images === 'no') {
-    constraints.push('Do not add imageKeyword, gifKeyword, or imageData to any question.');
-  }
-  if (wantsReading) {
-    constraints.push('readingText is a plain UTF-8 string (no markdown/HTML, no base64), max ~10,000 chars; split long content across questions.');
-    constraints.push('On any question with readingText, leave imageKeyword, gifKeyword, and imageData empty — they are mutually exclusive. Never put readingText on a pin question.');
-  } else if (cleanRequest.readingText === 'no') {
-    constraints.push('Do not use the readingText field on any question.');
-  }
-  if (wantsAudio) {
-    constraints.push('TTS shape: { audioMode:"tts", audioText:"...", ttsLanguage:"EN|CA|FR|OTHER|NONE", language:"xx-XX-NameNeural" only when ttsLanguage is "OTHER" }. In audioText write the word "blank" rather than "___" so TTS does not read underscores aloud.');
-  }
-  const qc = cleanRequest.questionCount;
-  const isTextualBrief = typeof qc === 'string';
-  const numericCount = typeof qc === 'number' ? qc : 10;
-  if (cleanRequest.batchSize) {
-    constraints.push(isTextualBrief
-      ? `Decide the question count yourself from this brief: "${qc}". Deliver in batches of ${cleanRequest.batchSize}; the teacher combines them via Import → Append.`
-      : `Produce ${numericCount} questions in batches of ${cleanRequest.batchSize}; the teacher combines them via Import → Append.`);
-  } else {
-    constraints.push(isTextualBrief
-      ? `Decide the question count yourself from this brief: "${qc}", then return the whole quiz as one JSON object.`
-      : `Return all ${numericCount} questions in one JSON object.`);
-  }
-
-  const outputContract = [
-    'Resolve and embed all assets first, then assemble.',
-    'Output only one JSON object — no commentary, no markdown fences.',
-    'Follow exampleTemplate key shapes; prefer embedded imageData / media.url+startAt/endAt over keyword placeholders when you found the real asset.',
-    cleanRequest.levels ? 'Every question includes "cefr": "A1" | "A2" | "B1" | "B2" | "C1" | "C2".' : undefined
-  ].filter(Boolean);
-
-  const promptText = [
-    'Task',
-    textualSummary,
-    '',
-    'Brief',
-    brief,
-    '',
-    'Capabilities',
-    agentCapabilities,
-    '',
-    'Workflow',
-    `1. Research — ${workflow.phase1_research}`,
-    `2. Assets — ${workflow.phase2_assets}`,
-    `3. Assemble — ${workflow.phase3_assemble}`,
-    '',
-    "Hints (optional — use what helps, ignore what doesn't)",
-    Object.entries(hints).map(([k, v]) => `- ${k}: ${v}`).join('\n'),
-    '',
-    'Constraints',
-    constraints.map((r, i) => `${i + 1}. ${r}`).join('\n'),
-    '',
-    'Output contract',
-    outputContract.map((r, i) => `${i + 1}. ${r}`).join('\n')
-  ].join('\n').trim();
-
-  const exportData = {
-    metadata: {
-      generatedAt: new Date().toISOString(),
-      type: "PinPlay Creation Prompt",
-      version: "3.5",
-      agentMode: "agent"
-    },
-    agentMode: "agent",
-    agentCapabilities,
-    brief,
-    workflow,
-    hints,
-    constraints,
-    context: {
-      allowedQuestionTypes: allowedTypes,
-      typeExplanations,
-      featureGuides: Object.fromEntries(Object.entries(featureGuides).filter(([, value]) => !!value)),
-      audioPedagogicalUse
-    },
-    exampleTemplate: {
-      ...TEMPLATE_ALL_13_TYPES,
-      questions: pickedExamples
-    }
-  };
-
-  return { promptText, exportData };
 }
 
 async function customPasswordPrompt(message) {
@@ -15532,18 +15076,16 @@ function buildAdaptiveLevelRules(cleanRequest) {
     ? CEFR_LEVELS.map((l) => `${l} ${counts[l]}`).join(', ')
     : CEFR_LEVELS.map((l) => `${l} ≈${ADAPTIVE_DEFAULT_LEVEL_SHARES[l]}%`).join(', ');
   return [
-    'This is an ADAPTIVE multilevel quiz with no single level. Every question MUST include a "cefr" field set to exactly one of "A1", "A2", "B1", "B2", "C1", "C2". PinPlay moves each student up or down between levels based on their answers, so every tag must be accurate.',
-    `Level mix: cover all six levels, with more easy questions than hard ones (harder questions often require writing and take longer to answer). Default target: ${defaultMix}.`,
+    'Every question has "cefr": "A1", "A2", "B1", "B2", "C1" or "C2". PinPlay moves each student up and down the levels, so the tags must be accurate and the difficulty real: vocabulary, grammar and the kind of task (recognising an answer is easier than typing one).',
+    `Level mix: all six levels, more easy questions than hard ones (hard ones often need writing and take longer). Default target: ${defaultMix}.`,
     // Teachers mostly describe what each level should look like (task types,
-    // vocabulary); the default count target only yields when they ask for a
-    // different balance.
+    // vocabulary); the default target only yields when they ask for another balance.
     cleanRequest.levelNotes
-      ? `Teacher's notes on the levels: "${cleanRequest.levelNotes}". Follow them. If they ask for a different number or balance of questions per level, that replaces the default target; otherwise keep the default target.`
+      ? `Teacher's notes on the levels: "${cleanRequest.levelNotes}". Follow them; if they ask for a different balance, that replaces the default target; otherwise keep the default target.`
       : undefined,
-    'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
-    'Where possible, practise the same skill or topic at several levels, so a student who moves up keeps working on the same thing at a harder level.',
-    'If the quiz (or a question) tests knowledge of another subject rather than the language (general knowledge, history, science, geography…), use the same six levels as difficulty steps: A1 = almost every student knows it; A2 = most students know it; B1 = typical school knowledge; B2 = needs solid study or some reasoning; C1 = only the best-read students know it; C2 = specialist or obscure.',
-    cleanRequest.batchSize ? 'Apply the level mix to the whole quiz; each batch may mix levels.' : undefined,
+    'Where you can, practise the same skill at several levels.',
+    'For questions about another subject (history, science…), use the levels as difficulty steps: A1 = almost everyone knows it, A2 = most students, B1 = typical school knowledge, B2 = needs solid study, C1 = only the best-read, C2 = specialist.',
+    cleanRequest.batchSize ? 'The level mix applies to the whole quiz; each batch can mix levels.' : undefined,
   ].filter(Boolean);
 }
 

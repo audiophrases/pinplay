@@ -36,6 +36,19 @@ function extractDeclaration(source, name) {
       }
     }
 
+    // An array literal (`const LIST = [ { … }, … ];`) ends at its matching `]`.
+    if (!isFunction && /^\s*\[/.test(source.slice(start + m[0].length))) {
+      const bracket = source.indexOf('[', start + m[0].length);
+      let depth = 0;
+      for (let i = bracket; i < source.length; i++) {
+        if (source[i] === '[') depth += 1;
+        else if (source[i] === ']') {
+          depth -= 1;
+          if (depth === 0) return source.slice(start, i + 1) + ';';
+        }
+      }
+    }
+
     const open = source.indexOf('{', bodySearchFrom);
     // A single-line `const` (arrow or literal) ends at the `;` with no block.
     if (!isFunction) {
