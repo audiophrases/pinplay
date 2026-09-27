@@ -6569,13 +6569,11 @@ function tokenEditDistance(aTokens, bTokens) {
   return dp[a.length][b.length];
 }
 
+// Same accepted set as app.js and play.js: corrected plus correctedVariants.
 function getCorrectedVariantsList(corrected, correctedVariants) {
-  if (Array.isArray(correctedVariants) && correctedVariants.length) {
-    return correctedVariants.map((v) => String(v || '').trim()).filter(Boolean);
-  }
-  const raw = String(corrected || '').trim();
-  if (!raw) return [];
-  return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
+  const main = String(corrected || '').split(/\r?\n/);
+  const extra = Array.isArray(correctedVariants) ? correctedVariants : [];
+  return Array.from(new Set([...main, ...extra].map((v) => String(v || '').trim()).filter(Boolean)));
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {

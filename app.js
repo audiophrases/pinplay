@@ -139,12 +139,12 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q7-error",
       "type": "error_hunt",
-      "prompt": "He go to school every days.",
+      "prompt": "He go to school every day.",
       "points": 1000,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "He go to school every days.",
+      "audioText": "He go to school every day.",
       "ttsLanguage": "EN",
       "imageKeyword": "",
       "videoKeyword": "",
@@ -152,7 +152,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "gifKeyword": "kid running to school",
       "imageData": "",
       "corrected": "He goes to school every day.",
-      "correctedVariants": ["He goes to school every day."]
+      "correctedVariants": ["He goes to school every day.", "They go to school every day."]
     },
     {
       "id": "q8-open",
@@ -390,7 +390,7 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "text": {
     "name": "Typed Answer",
-    "rules": "Students type the answer. Case-insensitive matching.",
+    "rules": "Students type the answer. Put every answer you accept as a plain string in \"accepted\", e.g. \"accepted\": [\"segunda\", \"2\"]. Do NOT use an \"answers\" array — that is only for mcq, multi and tf. Matching ignores case and punctuation, so do not list variants that differ only by those.",
     "constraints": { "maxAcceptedVariants": 20, "maxTextLength": 120 },
     "pedagogicalUses": ["Spelling and recall checks.", "Short constructed response without options."],
     "ttsStrategy": "audioText may intentionally differ from prompt for dictation/listening contrast.",
@@ -417,7 +417,7 @@ const QUESTION_TYPE_EXPLANATIONS = {
   },
   "error_hunt": {
     "name": "Error Hunting",
-    "rules": "CRITICAL: The 'prompt' field MUST ONLY contain the sentence with errors — no instructions, labels, or prefixes (e.g. never write 'Fix this: ...'). The app scores by word-level diff between prompt and corrected; extra words break scoring. Students tap wrong tokens. 'corrected' must be the full fixed sentence. If multiple corrections are valid, list each full sentence in 'correctedVariants'.",
+    "rules": "'prompt' is ONLY the sentence with the mistake — no instructions or labels. 'correctedVariants' lists every full corrected sentence you accept: the obvious fix, plus any other fix a student would naturally make, which may change a different word (e.g. 'Ellos habla mucho.' → ['Ellos hablan mucho.', 'Él habla mucho.']). The obvious fixes only, not every possible rewrite. Set 'corrected' to the first of them.",
     "constraints": { "maxTokens": 40 },
     "pedagogicalUses": ["Editing and proofreading routines.", "Metalinguistic awareness tasks."],
     "ttsStrategy": "audioText can read the incorrect sentence to trigger listening-for-errors.",
@@ -1557,6 +1557,17 @@ function bindBuilderEvents() {
         parsed.questions = (parsed.questions || []).map((q) => {
           const next = { ...q };
           if (!next.prompt && next.question) next.prompt = next.question;
+          // Bots sometimes write a typed-answer question with an mcq-style
+          // "answers" array. The correct ones are exactly the accepted answers.
+          if ((next.type === 'text' || next.type === 'voice_text')
+            && !(Array.isArray(next.accepted) && next.accepted.length)
+            && Array.isArray(next.answers)) {
+            next.accepted = next.answers
+              .filter((a) => a && (a.correct === true || a.correct === undefined))
+              .map((a) => String(typeof a === 'string' ? a : a.text || '').trim())
+              .filter(Boolean);
+            delete next.answers;
+          }
           if (!Array.isArray(next.correctedVariants) && next.corrected) {
             next.correctedVariants = String(next.corrected).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
           }
@@ -4331,7 +4342,9 @@ async function exportCreationPrompt() {
   // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
 
   // Shrink exampleTemplate: keep max 2 examples (1 simple + 1 complex) to save tokens
-  const EXAMPLE_SIMPLE_TYPES = ['mcq'];
+  // 'text' is here because its shape ("accepted": [...]) is not guessable: with
+  // only a context_gap example to go on, bots invented an mcq-style answers array.
+  const EXAMPLE_SIMPLE_TYPES = ['mcq', 'text', 'tf'];
   const EXAMPLE_COMPLEX_TYPES = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
   const pickedExamples = [];
   const simpleEx = filteredTemplateQuestions.find((q) => EXAMPLE_SIMPLE_TYPES.includes(q.type));
@@ -17374,13 +17387,13 @@ function tokenEditDistance(aTokens, bTokens) {
   return dp[a.length][b.length];
 }
 
+// corrected and correctedVariants together are the accepted set. Returning only
+// the variants when present meant a quiz written as corrected + "the other fix"
+// in correctedVariants graded the main fix as wrong; play.js always unioned them.
 function getCorrectedVariantsList(corrected, correctedVariants) {
-  if (Array.isArray(correctedVariants) && correctedVariants.length) {
-    return correctedVariants.map((v) => String(v || '').trim()).filter(Boolean);
-  }
-  const raw = String(corrected || '').trim();
-  if (!raw) return [];
-  return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
+  const main = String(corrected || '').split(/\r?\n/);
+  const extra = Array.isArray(correctedVariants) ? correctedVariants : [];
+  return Array.from(new Set([...main, ...extra].map((v) => String(v || '').trim()).filter(Boolean)));
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {
