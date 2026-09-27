@@ -3935,16 +3935,7 @@ function openLocalLibraryDialog(opts = {}) {
         label: `${item.name} (${qc} Q) — ${new Date(item.updatedAt || Date.now()).toLocaleString()}`,
       };
     }),
-    onOpen: async (item) => {
-      const chosen = item.raw;
-      validateImportedQuiz(chosen.quiz);
-      quiz = chosen.quiz;
-      setApplyAssignmentTarget('', '');
-      collapseAllQuestions(quiz);
-      renderBuilder();
-      saveQuiz(quiz);
-      setStatus(hostStatusEl, t('Loaded local save: {name}', { name: chosen.name }), 'ok');
-    },
+    onOpen: async (item) => openLocalLibraryItem(item.raw),
     onDelete: async (item) => {
       const next = loadQuizLibrary().filter((x) => x.id !== item.id);
       saveQuizLibrary(next);
@@ -3952,6 +3943,37 @@ function openLocalLibraryDialog(opts = {}) {
     },
     highlightId: opts.highlightId || null,
   });
+}
+
+// Load one local library entry ({ id, name, quiz }) into the builder.
+function openLocalLibraryItem(chosen) {
+  validateImportedQuiz(chosen.quiz);
+  quiz = chosen.quiz;
+  setApplyAssignmentTarget('', '');
+  collapseAllQuestions(quiz);
+  renderBuilder();
+  saveQuiz(quiz);
+  setStatus(hostStatusEl, t('Loaded local save: {name}', { name: chosen.name }), 'ok');
+}
+
+// Load one cloud quiz (by its R2 key) into the builder.
+async function openCloudQuizByKey(quizKey, label) {
+  const base = loadBackendUrl() || 'https://api.pinplay.win';
+  setStatus(hostStatusEl, t('☁️ Loading from cloud...'), 'ok');
+  const res = await fetch(`${base}/api/media/${quizKey}`);
+  if (!res.ok) throw new Error('Failed to load quiz from cloud');
+  const loadedQuiz = await res.json();
+  // The quiz JSON is stored directly (not wrapped)
+  validateImportedQuiz(loadedQuiz);
+  quiz = loadedQuiz;
+  // Extract just the basename: handles both `quizzes/<pin>.json` and
+  // `workspaces/<wsid>/quizzes/<pin>.json` for guests.
+  quiz._r2QuizId = quizKey.split('/').pop().replace(/\.json$/, '');
+  setApplyAssignmentTarget('', '');
+  collapseAllQuestions(quiz);
+  renderBuilder();
+  saveQuiz(quiz);
+  setStatus(hostStatusEl, t('✅ Loaded: {label}', { label }), 'ok');
 }
 
 // Open quiz from Cloud (R2)
@@ -3975,25 +3997,7 @@ async function openQuizFromCloud() {
         raw: q,
         label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`
       })),
-      onOpen: async (item) => {
-        const quizKey = item.raw.key;
-        const base = loadBackendUrl() || 'https://api.pinplay.win';
-        setStatus(hostStatusEl, t('☁️ Loading from cloud...'), 'ok');
-        const res = await fetch(`${base}/api/media/${quizKey}`);
-        if (!res.ok) throw new Error('Failed to load quiz from cloud');
-        const loadedQuiz = await res.json();
-        // The quiz JSON is stored directly (not wrapped)
-        validateImportedQuiz(loadedQuiz);
-        quiz = loadedQuiz;
-        // Extract just the basename: handles both `quizzes/<pin>.json` and
-        // `workspaces/<wsid>/quizzes/<pin>.json` for guests.
-        quiz._r2QuizId = quizKey.split('/').pop().replace(/\.json$/, '');
-        setApplyAssignmentTarget('', '');
-        collapseAllQuestions(quiz);
-        renderBuilder();
-        saveQuiz(quiz);
-        setStatus(hostStatusEl, t('✅ Loaded: {label}', { label: item.label }), 'ok');
-      },
+      onOpen: async (item) => openCloudQuizByKey(item.raw.key, item.label),
       onDelete: async (item) => {
         // Delete from R2 via Worker API
         const quizKey = item.raw.key;
@@ -9538,6 +9542,7 @@ function buildAssignmentListItem(a) {
   const link = buildAssignmentJoinLink(code);
   const li = document.createElement('li');
   li.classList.add('assignment-item');
+  li.dataset.code = code;
   if (a?.archived) li.classList.add('assignment-archived');
 
   const header = document.createElement('div');
@@ -10233,32 +10238,29 @@ function handleHostHotkeys(e) {
     return;
   }
 
-  if (shouldIgnoreHostHotkey(e)) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-  if (e.key === 'l' || e.key === 'L') {
+  // Ctrl+K (or ?) opens the command palette. Starting a game, opening,
+  // applying and collapsing live there now rather than on single letters one
+  // stray key press away; Ctrl+S saves. Ctrl+K works even in a text field.
+  const workspaceOpen = !!createWorkspace && !createWorkspace.classList.contains('hidden');
+  const ctrlOnly = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
+  if (workspaceOpen && ctrlOnly && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
-    createLiveGame();
+    window.PinPlayPalette?.open();
     return;
   }
-
-  if (e.key === 'o' || e.key === 'O') {
-    e.preventDefault();
-    openLocalLibraryDialog();
-    return;
-  }
-
-  if (e.key === 's' || e.key === 'S') {
+  if (workspaceOpen && ctrlOnly && (e.key === 's' || e.key === 'S')) {
     e.preventDefault();
     saveBtn?.click();
     return;
   }
 
-  if (e.key === 'a' || e.key === 'A') {
+  if (shouldIgnoreHostHotkey(e)) return;
+  if (e.key === '?') {
     e.preventDefault();
-    hostApplyBuilderToLive();
+    window.PinPlayPalette?.open();
     return;
   }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   const modal = document.getElementById('projectorScoreboardSection');
 
@@ -10274,12 +10276,6 @@ function handleHostHotkeys(e) {
     } else {
       startRankingAnimationMode();
     }
-    return;
-  }
-
-  if (e.key === 'c' || e.key === 'C') {
-    e.preventDefault();
-    toggleTeacherSectionCollapseAll();
     return;
   }
 

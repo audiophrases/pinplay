@@ -251,9 +251,18 @@ Then configure the Worker secrets (`EDGE_TTS_URL` and `EDGE_TTS_SECRET`) and red
 | **Space** | Next question (assignment mode) |
 
 ### Teacher UI
+**Ctrl+K** (or **?**) opens the command palette: one search box over every action, quiz (local and cloud), assignment, class, student and question of the open quiz. Each action shows its shortcut; with nothing typed it lists everything available right now.
+
 | Key | Action |
 |-----|--------|
+| **Ctrl+K** / **?** | Command palette |
+| **Ctrl+S** | Save quiz (local) |
+| **←** / **→** | Previous / next question (live game) |
+| **Space** | Reveal the answer (live game) |
+| **R** | Ranking |
+| **P** | Play question audio |
 | **F** | Fullscreen projector view |
+| **M** | Mute game music (live game) · media check (editor) |
 
 ## Quiz JSON Format
 
