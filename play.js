@@ -201,6 +201,7 @@ function init() {
   initBetControl();
   initReactionRow();
   window.addEventListener('resize', scheduleJoinAdaptiveFit);
+  armFirstInteractionFullscreen();
   document.addEventListener('fullscreenchange', () => {
     if (!joinSubmitBtn) return;
     if (isAnswerFullscreenLocked()) {
@@ -6371,6 +6372,36 @@ function onExamFullscreenChange() {
     if (!document.hidden && (tag === 'IFRAME' || tag === 'VIDEO')) return;
     handleExamFocusLost();
   }, 0);
+}
+
+// Live, Cup and assignments go fullscreen on the student's first click or key
+// press once they're in (the same idea as Classroom Screen's relaxed mode): no
+// pill, no prompt, and the click still does what it was for. Only once — if
+// they leave fullscreen, that's their choice. Exam-mode assignments enforce
+// fullscreen their own way, and the teacher's Live preview tab is left alone.
+function armFirstInteractionFullscreen() {
+  const preview = new URLSearchParams(window.location.search || '').get('autojoin') === '1';
+  if (preview) return;
+  const inGame = () => {
+    const p = live.player;
+    if (p.mode === 'assignment') {
+      return !!p.assignment.attemptId && !p.assignment.state?.attempt?.assignment?.examMode;
+    }
+    return !!p.token || document.body.classList.contains('arena-mode');
+  };
+  const disarm = () => {
+    document.removeEventListener('pointerdown', onFirst, true);
+    document.removeEventListener('keydown', onFirst, true);
+  };
+  function onFirst(e) {
+    if (document.fullscreenElement) { disarm(); return; }
+    if (e.type === 'keydown' && (e.key === 'Escape' || ['Shift', 'Control', 'Alt', 'Meta', 'Tab'].includes(e.key))) return;
+    if (!inGame()) return;
+    disarm();
+    requestExamFullscreen();
+  }
+  document.addEventListener('pointerdown', onFirst, true);
+  document.addEventListener('keydown', onFirst, true);
 }
 
 function requestExamFullscreen() {
