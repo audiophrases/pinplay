@@ -6346,10 +6346,17 @@ function tokenizeWords(text) {
   return String(text || '').trim().split(/\s+/).filter(Boolean);
 }
 
+// Case and punctuation don't count, including Spanish and typographic marks
+// (¿ ¡ « » curly quotes and apostrophes, dashes, ellipsis). Ordinals match
+// however they're written: 2.ª, 2ª and 2a all read as "2a" (º reads as o).
+// Mirrored in app.js, play.js and cloudflare/worker.js.
 function normalizeTextAnswer(text) {
   return String(text || '')
     .toLowerCase()
-    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
+    .replace(/(\d)\s*\.?\s*([ªº])/g, '$1$2')
+    .replace(/ª/g, 'a')
+    .replace(/º/g, 'o')
+    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=¿¡«»“”‘’‚„…–—·]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -1555,28 +1555,7 @@ function bindBuilderEvents() {
         validateImportedQuiz(parsed);
         // Normalize prompts/corrections on import for compatibility
         parsed.questions = (parsed.questions || []).map((q) => {
-          const next = { ...q };
-          if (!next.prompt && next.question) next.prompt = next.question;
-          // Bots sometimes write a typed-answer question with an mcq-style
-          // "answers" array. The correct ones are exactly the accepted answers.
-          if ((next.type === 'text' || next.type === 'voice_text')
-            && !(Array.isArray(next.accepted) && next.accepted.length)
-            && Array.isArray(next.answers)) {
-            next.accepted = next.answers
-              .filter((a) => a && (a.correct === true || a.correct === undefined))
-              .map((a) => String(typeof a === 'string' ? a : a.text || '').trim())
-              .filter(Boolean);
-            delete next.answers;
-          }
-          if (!Array.isArray(next.correctedVariants) && next.corrected) {
-            next.correctedVariants = String(next.corrected).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
-          }
-          if (!next.corrected && Array.isArray(next.correctedVariants) && next.correctedVariants.length) {
-            next.corrected = next.correctedVariants[0];
-          }
-          if (!next.requiredErrors && next.prompt && next.corrected) {
-            next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
-          }
+          const next = normalizeImportedQuestion(q);
           // Adaptive level tag: accept "b1", or the cefrLevel/level aliases AIs sometimes use.
           const cefr = normalizeCefr(next.cefr) || normalizeCefr(next.cefrLevel) || normalizeCefr(next.level);
           if (normalizeCefr(next.level)) delete next.level;
@@ -2617,7 +2596,9 @@ function renderBuilder() {
     }
 
     if (q.type === 'error_hunt') {
-      const correctedBlock = Array.isArray(q.correctedVariants) ? q.correctedVariants.join('\n') : (q.corrected || '');
+      // Both fields are one accepted set; showing only correctedVariants let the
+      // next save drop a main fix that was only in corrected.
+      const correctedBlock = getCorrectedVariantsList(q.corrected, q.correctedVariants).join('\n');
       specific += `
         <label class="top-space">Accepted corrections (one per line)</label>
         <textarea data-q="${idx}" data-field="corrected" maxlength="400">${escapeHtml(correctedBlock)}</textarea>
@@ -4341,18 +4322,7 @@ async function exportCreationPrompt() {
   );
   // typeUseCases removed: redundant with pedagogicalUses inside typeExplanations
 
-  // Shrink exampleTemplate: keep max 2 examples (1 simple + 1 complex) to save tokens
-  // 'text' is here because its shape ("accepted": [...]) is not guessable: with
-  // only a context_gap example to go on, bots invented an mcq-style answers array.
-  const EXAMPLE_SIMPLE_TYPES = ['mcq', 'text', 'tf'];
-  const EXAMPLE_COMPLEX_TYPES = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
-  const pickedExamples = [];
-  const simpleEx = filteredTemplateQuestions.find((q) => EXAMPLE_SIMPLE_TYPES.includes(q.type));
-  if (simpleEx) pickedExamples.push(simpleEx);
-  const complexEx = filteredTemplateQuestions.find((q) => EXAMPLE_COMPLEX_TYPES.includes(q.type) && q.type !== simpleEx?.type);
-  if (complexEx) pickedExamples.push(complexEx);
-  // Fallback: if no match found, take first 2 filtered questions
-  if (!pickedExamples.length) pickedExamples.push(...filteredTemplateQuestions.slice(0, 2));
+  const pickedExamples = pickPromptExamples(filteredTemplateQuestions);
   // Show the per-question level tag in the example shapes.
   if (adaptive) pickedExamples.forEach((q, i) => { q.cefr = ['A2', 'B2'][i] || 'B1'; });
 
@@ -17244,10 +17214,17 @@ function salvageQuestionForImport(q) {
   return { question: q, conversion: null };
 }
 
+// Case and punctuation don't count, including Spanish and typographic marks
+// (¿ ¡ « » curly quotes and apostrophes, dashes, ellipsis). Ordinals match
+// however they're written: 2.ª, 2ª and 2a all read as "2a" (º reads as o).
+// Mirrored in app.js, play.js and cloudflare/worker.js.
 function normalizeTextAnswer(text) {
   return String(text || '')
     .toLowerCase()
-    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
+    .replace(/(\d)\s*\.?\s*([ªº])/g, '$1$2')
+    .replace(/ª/g, 'a')
+    .replace(/º/g, 'o')
+    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=¿¡«»“”‘’‚„…–—·]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -17394,6 +17371,57 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
   const main = String(corrected || '').split(/\r?\n/);
   const extra = Array.isArray(correctedVariants) ? correctedVariants : [];
   return Array.from(new Set([...main, ...extra].map((v) => String(v || '').trim()).filter(Boolean)));
+}
+
+// Import step for one question, for quizzes written by hand or by an AI.
+function normalizeImportedQuestion(q) {
+  const next = { ...q };
+  if (!next.prompt && next.question) next.prompt = next.question;
+  // Bots sometimes write a typed-answer question with an mcq-style
+  // "answers" array. The correct ones are exactly the accepted answers.
+  if ((next.type === 'text' || next.type === 'voice_text')
+    && !(Array.isArray(next.accepted) && next.accepted.length)
+    && Array.isArray(next.answers)) {
+    next.accepted = next.answers
+      .filter((a) => a && (a.correct === true || a.correct === undefined))
+      .map((a) => String(typeof a === 'string' ? a : a.text || '').trim())
+      .filter(Boolean);
+    delete next.answers;
+  }
+  // corrected + correctedVariants are one accepted set: keep all of it in
+  // correctedVariants (the editor's list), with corrected as its first line.
+  if (next.corrected || Array.isArray(next.correctedVariants)) {
+    const all = getCorrectedVariantsList(next.corrected, next.correctedVariants);
+    if (all.length) {
+      next.correctedVariants = all;
+      next.corrected = all[0];
+    }
+  }
+  if (!next.requiredErrors && next.prompt && next.corrected) {
+    next.requiredErrors = countErrorHuntRequiredTokens(next.prompt, next.correctedVariants || [next.corrected]);
+  }
+  return next;
+}
+
+// Example questions for the AI creation prompt: one simple + one complex keeps
+// it short, and text and error_hunt are always added when allowed, because
+// their shapes are the ones bots get wrong without seeing them ("accepted"
+// strings; several corrections that may change different words).
+function pickPromptExamples(questions) {
+  const SIMPLE = ['mcq', 'text', 'tf'];
+  const COMPLEX = ['pin', 'context_gap', 'error_hunt', 'match_pairs', 'slider'];
+  const picked = [];
+  const simpleEx = questions.find((q) => SIMPLE.includes(q.type));
+  if (simpleEx) picked.push(simpleEx);
+  const complexEx = questions.find((q) => COMPLEX.includes(q.type) && q.type !== simpleEx?.type);
+  if (complexEx) picked.push(complexEx);
+  if (!picked.length) picked.push(...questions.slice(0, 2));
+  ['text', 'error_hunt'].forEach((type) => {
+    if (picked.some((q) => q.type === type)) return;
+    const ex = questions.find((q) => q.type === type);
+    if (ex) picked.push(ex);
+  });
+  return picked;
 }
 
 function countErrorHuntRequiredTokens(prompt, corrected) {

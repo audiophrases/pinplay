@@ -4260,7 +4260,7 @@ function renderJoinQuestion(question) {
         renderMatchPairsColumns(joinAnswersEl, leftItems, rightOptions, 'joinPair', initialValues);
       }
     } else if (question.type === 'error_hunt') {
-      const required = Number(question.requiredErrors) || Math.max(1, countErrorHuntRequiredTokens(question.prompt, question.correctedVariants || [question.corrected]));
+      const required = Number(question.requiredErrors) || Math.max(1, countErrorHuntRequiredTokens(question.prompt, [question.corrected, ...(question.correctedVariants || [])].filter(Boolean)));
       const promptEl = document.getElementById('joinPrompt');
       if (promptEl) {
         promptEl.innerHTML = '';
@@ -5054,7 +5054,7 @@ function readJoinAnswer() {
     const rewrite = String(ta?.value || '').trim();
     if (!rewrite) return null;
     const originalPrompt = String(ta?.dataset.originalPrompt || q.prompt || '').trim();
-    const required = Number(q.requiredErrors) || countErrorHuntRequiredTokens(q.prompt, q.correctedVariants || [q.corrected]);
+    const required = Number(q.requiredErrors) || countErrorHuntRequiredTokens(q.prompt, [q.corrected, ...(q.correctedVariants || [])].filter(Boolean));
     // Compute selectedTokens by diffing original prompt tokens vs student's rewrite tokens
     const origTokens = tokenizeWords(originalPrompt);
     const rewriteTokens = tokenizeWords(rewrite);
@@ -7268,10 +7268,17 @@ function tokenizeWords(text) {
   return String(text || '').trim().split(/\s+/).filter(Boolean);
 }
 
+// Case and punctuation don't count, including Spanish and typographic marks
+// (¿ ¡ « » curly quotes and apostrophes, dashes, ellipsis). Ordinals match
+// however they're written: 2.ª, 2ª and 2a all read as "2a" (º reads as o).
+// Mirrored in app.js, play.js and cloudflare/worker.js.
 function normalizeTextAnswer(text) {
   return String(text || '')
     .toLowerCase()
-    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=]/g, ' ')
+    .replace(/(\d)\s*\.?\s*([ªº])/g, '$1$2')
+    .replace(/ª/g, 'a')
+    .replace(/º/g, 'o')
+    .replace(/[~`!@#$%^&*(){}\[\];:"'<,>.?\/\\|\-_+=¿¡«»“”‘’‚„…–—·]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
