@@ -302,6 +302,8 @@ function init() {
       if (_spellingBeeRoundActive || _wordleRoundActive) return;
       const q = live.player.currentQuestion;
       if (!q) return;
+      // Never play the prompt over a voice recording in progress.
+      if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
       // Mirror the 🎧 replay button: duck (don't kill) the ambient loop and
       // hand the resume decision to resumeAssignmentAnsweringAmbient's guards.
       playAssignmentQuestionAudio(q, { preserveAmbient: true })
@@ -3991,6 +3993,8 @@ function renderJoinQuestion(question) {
       eq.addEventListener('click', () => {
         const q = live.player.currentQuestion;
         if (!q) return;
+        // Never play the prompt over a voice recording in progress.
+        if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
         stopAssignmentQuestionAudioPlayback();
         // Always attempt the resume — even when playback failed or was
         // interrupted, the answering track was paused at click time and
@@ -6288,7 +6292,6 @@ let _assignmentAudioPlaying = false;
 function setAssignmentAudioPlayingUi(playing) {
   _assignmentAudioPlaying = !!playing;
   if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
-  _refreshAssignmentRecordBtnsForAudio();
 }
 
 // Hide just the visual bars (used to fade them out ~0.7s before audio ends
@@ -6296,30 +6299,6 @@ function setAssignmentAudioPlayingUi(playing) {
 // felt abrupt). The record-button lock stays until actual audio end.
 function hideAssignmentAudioBarsEarly() {
   if (joinPromptEl) joinPromptEl.classList.remove('audio-playing');
-}
-
-// Lock voice_record / voice_text record buttons while question audio plays
-// so the mic doesn't pick up the prompt audio. Preserves any prior disabled
-// state (e.g. review mode) so unlocking only undoes our lock.
-function _refreshAssignmentRecordBtnsForAudio() {
-  const btns = document.querySelectorAll('.voice-record-btn, .voice-text-mic-btn');
-  btns.forEach((btn) => {
-    if (_assignmentAudioPlaying) {
-      if (btn.dataset.audioLocked === '1') return;
-      btn.dataset.priorDisabled = btn.disabled ? '1' : '0';
-      btn.dataset.audioLocked = '1';
-      btn.disabled = true;
-      btn.classList.add('audio-locked');
-      btn.title = t('Listen to the question first');
-    } else if (btn.dataset.audioLocked === '1') {
-      const prior = btn.dataset.priorDisabled === '1';
-      delete btn.dataset.audioLocked;
-      delete btn.dataset.priorDisabled;
-      btn.disabled = prior;
-      btn.classList.remove('audio-locked');
-      btn.removeAttribute('title');
-    }
-  });
 }
 
 function stopAssignmentQuestionAudioPlayback() {
@@ -6814,6 +6793,9 @@ async function playAssignmentQuestionVideo(question) {
 }
 
 async function runAssignmentQuestionMediaSequence(question, audioKey) {
+  // A recording already running (Record pressed before the prompt audio got
+  // going) owns the audio channel — playing over it can cut the mic off.
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
   const audioResult = await playAssignmentQuestionAudio(question, { audioKey });
   // Playback was deliberately stopped mid-play (answer saved, replay clicked,
   // exam blur). Whoever stopped it owns what happens next — don't proceed to
@@ -6836,6 +6818,8 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   // A manual replay owns the audio channel right now — its own resume
   // callback restarts ambient when it ends, so don't layer ambient under it.
   if (_assignmentAudioPlaying || activeAssignmentQuestionAudioEl) return;
+  // Recording in progress — its onstop resumes ambient when the take ends.
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
 
   playAssignmentSfx('answering');
 }
@@ -7049,6 +7033,15 @@ function pauseAssignmentAnsweringAmbient() {
   } catch { }
 }
 
+// Opening the mic (voice_record / voice_text) stops the question audio —
+// playing, loading, or still queued for autoplay — and pauses ambient.
+function silenceAssignmentAudioForMic() {
+  if (live.player.mode !== 'assignment') return;
+  pauseAssignmentAnsweringAmbient();
+  cancelPendingAssignmentQuestionAutoplay();
+  stopAssignmentQuestionAudioPlayback();
+}
+
 // Resume the answering ambient after a mic-driven pause (voice_record /
 // voice_text). Guarded so we don't restart if the student has already left
 // the question, submitted, or while the question's prompt audio is still
@@ -7065,6 +7058,7 @@ function resumeAssignmentAnsweringAmbient() {
   const attempt = s?.attempt;
   if (!attempt || attempt.submitted) return;
   if (_assignmentAudioPlaying) return;
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
   try {
     if (currentAnsweringIdx < 0) { playAssignmentSfx('answering'); return; }
     const a = assignmentAmbient.answering[currentAnsweringIdx];
@@ -7613,6 +7607,20 @@ function _cleanupVoiceRecordStream() {
   _stopVoiceRecordSilentSR();
 }
 
+// Playing back your own take pauses the ambient (and any question audio) so
+// the student can actually hear it; ambient resumes when playback pauses/ends.
+function _wireOwnRecordingPlayback(audio) {
+  if (live.player.mode !== 'assignment') return;
+  audio.addEventListener('play', () => {
+    pauseAssignmentAnsweringAmbient();
+    stopAssignmentQuestionAudioPlayback();
+  });
+  audio.addEventListener('pause', () => {
+    if (!audio.isConnected) return; // left the question; the new one owns ambient
+    resumeAssignmentAnsweringAmbient();
+  });
+}
+
 function renderVoiceRecorder(container, question) {
   _cleanupVoiceRecordStream();
   _voiceRecordUpload = null;
@@ -7642,7 +7650,6 @@ function renderVoiceRecorder(container, question) {
 
   wrap.append(recordBtn, stopBtn, timerEl, previewWrap, statusEl);
   container.appendChild(wrap);
-  _refreshAssignmentRecordBtnsForAudio();
 
   // --- NEW: Pre-fill student recording ---
   const state = live.player.assignment.state;
@@ -7659,6 +7666,7 @@ function renderVoiceRecorder(container, question) {
       src = `${base}/api/media/${src}`;
     }
     audio.src = src;
+    _wireOwnRecordingPlayback(audio);
     previewWrap.innerHTML = '';
     previewWrap.appendChild(audio);
     previewWrap.classList.remove('hidden');
@@ -7693,6 +7701,7 @@ function renderVoiceRecorder(container, question) {
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.src = URL.createObjectURL(blob);
+    _wireOwnRecordingPlayback(audio);
 
     const rerecordBtn = document.createElement('button');
     rerecordBtn.type = 'button';
@@ -7773,8 +7782,9 @@ function renderVoiceRecorder(container, question) {
   }
 
   recordBtn.addEventListener('click', async () => {
-    // Pause assignment ambient so it doesn't bleed into the recording.
-    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
+    // Record cuts off the question audio and ambient so neither bleeds into
+    // the take (playback starting mid-take can also cut the mic off).
+    silenceAssignmentAudioForMic();
     try {
       _voiceRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
@@ -7805,17 +7815,28 @@ function renderVoiceRecorder(container, question) {
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
-    _voiceRecordRecorder = mimeType
-      ? new MediaRecorder(_voiceRecordStream, { mimeType })
-      : new MediaRecorder(_voiceRecordStream);
+    // Local handles so this take's onstop only ever touches its own recorder and
+    // stream. onstop fires async; reading the globals there let a late onstop
+    // from an earlier take stop the mic of the take that replaced it.
+    const stream = _voiceRecordStream;
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    _voiceRecordRecorder = recorder;
+    const releaseStream = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (_voiceRecordStream === stream) _voiceRecordStream = null;
+    };
 
     const startTime = Date.now();
 
-    _voiceRecordRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-    _voiceRecordRecorder.onstop = () => {
+    recorder.onstop = () => {
+      // Superseded (student left the question / re-rendered): this take's UI is gone.
+      if (_voiceRecordRecorder !== recorder) { releaseStream(); return; }
       const durationMs = Date.now() - startTime;
-      const blob = new Blob(chunks, { type: _voiceRecordRecorder.mimeType || 'audio/webm' });
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
 
       _stopVoiceRecordSilentSR();
       const transcript = String(_voiceRecordSRFinal || '').trim().slice(0, 4000);
@@ -7830,16 +7851,14 @@ function renderVoiceRecorder(container, question) {
         statusEl.textContent = t('Recording too large ({size} MB, max {max} MB). Try again.', { size: (blob.size / 1024 / 1024).toFixed(1), max: MAX_SIZE_BYTES / 1024 / 1024 });
         statusEl.className = 'voice-record-upload-status error';
         recordBtn.classList.remove('hidden');
-        _voiceRecordStream?.getTracks().forEach((t) => t.stop());
-        _voiceRecordStream = null;
+        releaseStream();
         if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
         return;
       }
 
       showPreview(blob, durationMs);
       uploadBlob(blob, durationMs, transcript);
-      _voiceRecordStream?.getTracks().forEach((t) => t.stop());
-      _voiceRecordStream = null;
+      releaseStream();
       if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
     };
 
@@ -7850,7 +7869,7 @@ function renderVoiceRecorder(container, question) {
       : _bcp47FromQuestionLanguage(question?.language);
     _startVoiceRecordSilentSR(recogLang);
 
-    _voiceRecordRecorder.start(1000); // collect chunks every 1s
+    recorder.start(1000); // collect chunks every 1s
 
     recordBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
@@ -8305,7 +8324,6 @@ function renderVoiceTextRecognizer(container, question) {
 
   wrap.append(micBtn, stopBtn, transcriptEl, statusEl);
   container.appendChild(wrap);
-  _refreshAssignmentRecordBtnsForAudio();
 
   let finalTranscript = hidden.value || '';
   let interimTranscript = '';
@@ -8417,8 +8435,8 @@ function renderVoiceTextRecognizer(container, question) {
     _userListening = true;
     _fatalError = false;
 
-    // Pause assignment ambient so it doesn't bleed into recognition.
-    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
+    // Cut off question audio + ambient so they don't bleed into recognition.
+    silenceAssignmentAudioForMic();
 
     micBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
