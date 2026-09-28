@@ -4219,7 +4219,7 @@ function buildCreationPrompt(req) {
     ...rules.map((r, i) => `${i + 1}. ${r}`),
   ];
   if (req.adaptive) {
-    out.push('', '## Levels', ...buildAdaptiveLevelRules(req).map((r, i) => `${i + 1}. ${r}`));
+    out.push('', '## Levels', ...buildAdaptiveLevelRules(req, allowed).map((r, i) => `${i + 1}. ${r}`));
   }
   out.push('',
     '## Question fields',
@@ -15074,7 +15074,17 @@ function adaptiveDefaultLevelCounts(total) {
 
 // Prompt rules shared by the chatbot and agent creation prompts when the
 // teacher ticks "Adaptive quiz".
-function buildAdaptiveLevelRules(cleanRequest) {
+// Question types from most to least scaffolded: recognising an answer, then
+// arranging or matching given pieces, then producing a constrained answer,
+// then producing it freely. Adaptive prompts lean easy levels towards the
+// front of this list and hard levels towards the back.
+const SCAFFOLD_ORDER = [
+  'tf', 'mcq', 'multi', 'match_pairs', 'slider', 'pin', 'puzzle', 'wordle', 'context_gap',
+  'error_hunt', 'spellingbee', 'text', 'voice_text', 'image_open', 'voice_record', 'speaking', 'open',
+];
+
+function buildAdaptiveLevelRules(cleanRequest, allowedTypes = []) {
+  const scaffold = SCAFFOLD_ORDER.filter((type) => allowedTypes.includes(type));
   const qc = cleanRequest.questionCount;
   const counts = typeof qc === 'number' ? adaptiveDefaultLevelCounts(qc) : null;
   const defaultMix = counts
@@ -15084,6 +15094,9 @@ function buildAdaptiveLevelRules(cleanRequest) {
     'Every question has "cefr": "A1", "A2", "B1", "B2", "C1" or "C2". PinPlay moves each student up and down the levels, so every tag must be accurate.',
     'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false, matching) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
     'For language questions the level comes from how the language is used, not from which grammar point it is: any tense or structure the quiz works on can appear at every level (e.g. the past simple at A1 with very common verbs in short sentences, and at C1 in a complex sentence with less common words). The levels mean: A1 = very common words, short simple sentences, familiar situations. A2 = everyday topics, short connected sentences. B1 = familiar topics with some detail, sentences joined with linking words. B2 = abstract topics, longer sentences, less obvious distractors. C1 = less common words, idioms, nuance. C2 = rare words, fine shades of meaning and register: hard even for a very advanced learner. Never tag an easy question C1 or C2.',
+    scaffold.length >= 2
+      ? `This quiz's question types, from most to least scaffolded: ${scaffold.join(', ')}. Lean towards the first ones at lower levels and the last ones at higher levels. This is a tendency, not a rule: any type can appear at any level when it fits.`
+      : undefined,
     'The examples at the end are easy questions tagged at their real level (mostly A1–A2); your quiz covers every level.',
     `Level mix: all six levels, more easy questions than hard ones (hard ones often need writing and take longer). Default target: ${defaultMix}.`,
     // Teachers mostly describe what each level should look like (task types,

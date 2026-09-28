@@ -22,7 +22,7 @@ before(() => {
     'isAdaptiveEligibleQuestion',
     'cefrCoverage',
     'adaptiveDefaultLevelCounts',
-    'buildAdaptiveLevelRules',
+    'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'compactQuestionForLevelTagging',
     'parseLevelTagReply',
   ], { t: (s) => s });

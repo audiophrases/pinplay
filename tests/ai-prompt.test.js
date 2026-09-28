@@ -14,7 +14,7 @@ let W;
 before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
-    'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'buildAdaptiveLevelRules',
+    'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
   ]);
@@ -143,6 +143,18 @@ describe('rules follow the request', () => {
     assert.doesNotMatch(levels, /present simple|present perfect|conditional|reported speech|passive,/);
     assert.match(levels, /C2 = rare words/);
     assert.match(levels, /Never tag an easy question C1 or C2/);
+  });
+
+  it('adaptive: ranks every question type by scaffolding', () => {
+    assert.deepEqual([...A.SCAFFOLD_ORDER].sort(), [...A.CANONICAL_QUESTION_TYPES].sort());
+  });
+
+  it('adaptive: lists only this quiz\'s types, most scaffolded first, as a tendency', () => {
+    const levels = section(build({ adaptive: true, typesMode: 'include', selectedTypes: ['open', 'mcq', 'context_gap', 'tf'] }), 'Levels');
+    assert.match(levels, /most to least scaffolded: tf, mcq, context_gap, open\. Lean towards the first ones at lower levels/);
+    assert.match(levels, /a tendency, not a rule/);
+    // One type: nothing to rank.
+    assert.doesNotMatch(section(build({ adaptive: true, typesMode: 'include', selectedTypes: ['mcq'] }), 'Levels'), /scaffolded/);
   });
 
   it('adaptive: every example is tagged at its real level, never above B1', () => {
