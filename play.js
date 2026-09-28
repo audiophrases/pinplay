@@ -210,6 +210,7 @@ function init() {
     }
   });
   initAssignmentFromUrl();
+  initGameFromUrl();
   initLivePreviewFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
@@ -463,6 +464,117 @@ function initAssignmentFromUrl() {
   }, 0);
 }
 
+// ?game=CODE: a public game from /games/. No PIN box: the title, then
+// "Continue with Google" (saved results, teacher corrections) or Play
+// anonymously (nothing stored).
+async function initGameFromUrl() {
+  const params = new URLSearchParams(window.location.search || '');
+  const code = String(params.get('game') || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return;
+
+  live.player.game = { code, title: '', teacherGraded: false, anonymous: true, started: false, token: '', last: null };
+  live.player.mode = 'assignment';
+  live.player.assignment.code = code;
+  document.body.classList.add('assignment-mode', 'game-mode');
+  if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+  if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
+  if (joinTitleEl) joinTitleEl.textContent = t('Loading…');
+
+  let card = null;
+  try {
+    const data = await api('/api/public/games', { method: 'GET' });
+    card = (Array.isArray(data?.games) ? data.games : []).find((g) => g.code === code) || null;
+  } catch { /* shown below */ }
+  if (!card) {
+    if (joinTitleEl) joinTitleEl.textContent = t('This game is not available.');
+    setStatus(joinStatusEl, t('It may have been removed. See the other games.'), 'bad');
+    appendMoreGamesLink(joinStatusEl?.parentElement || joinCardEl);
+    return;
+  }
+
+  Object.assign(live.player.game, { title: card.title, teacherGraded: !!card.teacherGraded });
+  try { document.title = card.title || document.title; } catch { /* ignore */ }
+  if (joinTitleEl) joinTitleEl.textContent = card.title;
+  if (joinModeHintEl) {
+    joinModeHintEl.textContent = card.adaptive
+      ? t('🎯 Adapts to your level · {n} questions', { n: card.questionCount })
+      : t('{n} questions', { n: card.questionCount });
+  }
+  if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+  await applyIdentityMode(true);
+  syncGameEntry();
+}
+
+// Entry screen of a game: the Google button (or "signed in as") above the play
+// button, whose label says which way the game will be played.
+function syncGameEntry() {
+  const game = live.player.game;
+  if (!game || game.started || !joinBtn) return;
+  const signedIn = studentSession.signedIn;
+  joinBtn.textContent = signedIn ? t('▶ Play') : t('Play anonymously');
+  if (!signedIn && joinSignInHintEl) {
+    joinSignInHintEl.textContent = game.teacherGraded
+      ? t('Sign in with Google for teacher corrections.')
+      : t('Sign in with Google to keep your results.');
+  }
+}
+
+function appendMoreGamesLink(parent) {
+  if (!parent || parent.querySelector('.game-more-link')) return;
+  const link = document.createElement('a');
+  link.className = 'btn game-more-link top-space';
+  link.href = 'games/';
+  link.textContent = t('🎮 More games');
+  parent.appendChild(link);
+}
+
+// End of a game, in the results panel: whether teacher-graded answers will be
+// corrected, then play again, more games, and a like (one per browser).
+function renderGameEndActions(panel, pendingCount = 0) {
+  const game = live.player.game;
+  if (!game || !panel) return;
+  if (pendingCount > 0) {
+    const note = document.createElement('p');
+    note.className = 'small game-end-note';
+    note.textContent = game.anonymous
+      ? t('Anonymous answers are not corrected by the teacher.')
+      : t('Your teacher will correct {n} answer(s). Open this game again, signed in, to see the corrections.', { n: pendingCount });
+    panel.appendChild(note);
+  }
+  const row = document.createElement('div');
+  row.className = 'game-end-actions top-space';
+
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'btn primary';
+  again.textContent = t('🔁 Play again');
+  again.addEventListener('click', () => window.location.reload());
+
+  const LIKES_KEY = 'pinplay.gameLikes.v1';
+  const readLikes = () => { try { return JSON.parse(localStorage.getItem(LIKES_KEY) || '{}') || {}; } catch { return {}; } };
+  const like = document.createElement('button');
+  like.type = 'button';
+  like.className = 'btn game-like-btn';
+  const paint = () => {
+    const liked = !!readLikes()[game.code];
+    like.textContent = liked ? t('❤️ Liked') : t('🤍 Like');
+    like.setAttribute('aria-pressed', liked ? 'true' : 'false');
+  };
+  like.addEventListener('click', async () => {
+    const likes = readLikes();
+    const next = !likes[game.code];
+    if (next) likes[game.code] = true; else delete likes[game.code];
+    try { localStorage.setItem(LIKES_KEY, JSON.stringify(likes)); } catch { /* storage off: counts anyway */ }
+    paint();
+    try { await apiFetch('/api/public/game/like', { method: 'POST', body: { code: game.code, like: next } }); } catch { /* best effort */ }
+  });
+  paint();
+
+  row.append(again, like);
+  panel.appendChild(row);
+  appendMoreGamesLink(row);
+}
+
 function initLivePreviewFromUrl() {
   const params = new URLSearchParams(window.location.search || '');
   const pin = String(params.get('pin') || '').trim();
@@ -540,11 +652,18 @@ async function renderStudentIdentity() {
       });
     }
     setSignInError('');
+    syncGameEntry();
     return;
   }
 
   const cfg = await fetchStudentConfig();
   if (!cfg?.loginEnabled) {
+    // A public game without sign-in on this site: anonymous play only.
+    if (live.player.game) {
+      joinIdentityBoxEl.classList.add('hidden');
+      syncGameEntry();
+      return;
+    }
     if (joinSignInHintEl) {
       joinSignInHintEl.textContent = t('Student sign-in is not set up on this site yet. Ask your teacher.');
     }
@@ -556,6 +675,7 @@ async function renderStudentIdentity() {
       ? t('Sign in with your {domain} school account to continue.', { domain: domains[0] })
       : t('Sign in with your school account to continue.');
   }
+  syncGameEntry();
   await renderGoogleButton(cfg.googleClientId);
 }
 
@@ -742,6 +862,13 @@ async function joinLiveGame() {
       if (!live.player.assignment.code) {
         await validatePin();
         if (!live.player.assignment.code) return;
+      }
+      // A public game is played the way the entry screen shows: signed in, or anonymously.
+      const game = live.player.game;
+      if (game && !game.started) {
+        game.anonymous = !studentSession.signedIn;
+        game.started = true;
+        live.player.randomNamesMode = game.anonymous;
       }
       setBusyState();
       await startAssignmentAttempt();
@@ -2058,13 +2185,20 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
-    const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
-    setJoinStatusHud(submittedText, 'ok');
-    setStatus(joinStatusEl, submittedText, 'ok');
-    showAssignmentCompleteMessage(submittedText, {
-      title: 'Assignment submitted 🎉',
-      submitted: true,
-    });
+    if (live.player.game) {
+      // The results panel that follows carries the game's end: score, answers,
+      // corrections note, play again / like / more games.
+      setJoinStatusHud(t('Well played! 🎉'), 'ok');
+      setStatus(joinStatusEl, t('Well played! 🎉'), 'ok');
+    } else {
+      const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
+      setJoinStatusHud(submittedText, 'ok');
+      setStatus(joinStatusEl, submittedText, 'ok');
+      showAssignmentCompleteMessage(submittedText, {
+        title: 'Assignment submitted 🎉',
+        submitted: true,
+      });
+    }
     if (!assignmentFinalPlayed) {
       playAssignmentSfx('final');
       assignmentFinalPlayed = true;
@@ -2537,6 +2671,7 @@ function renderInstantFeedbackFromState() {
 
   // --- Self-correct retake row (only for instant/end feedback) ---
   renderRetakeRow(panel, state);
+  if (live.player.game && attempt?.submitted) renderGameEndActions(panel, pendingCount);
 
   wrap.appendChild(panel);
 
@@ -3481,7 +3616,7 @@ function renderPlayerState(state) {
   // Update mode label in header row
   const modeLabel = document.getElementById('joinModeLabel');
   if (modeLabel) {
-    modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : '';
+    modeLabel.textContent = live.player.game ? t('Game') : (live.player.mode === 'assignment' ? 'Assignment' : '');
   }
 
   const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
@@ -3500,17 +3635,18 @@ function renderPlayerState(state) {
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
     if (assignmentNextBtn) assignmentNextBtn.classList.add('hidden');
     if (assignmentNextPendingBtn) assignmentNextPendingBtn.classList.add('hidden');
+    const isGame = !!live.player.game;
     if (assignmentBannerEl) {
       assignmentBannerEl.classList.remove('hidden');
-      assignmentBannerEl.textContent = t('All answers saved. Submit assignment to finish.');
+      assignmentBannerEl.textContent = isGame ? t('That was the last question.') : t('All answers saved. Submit assignment to finish.');
     }
     setJoinStatusHud(t('All answers saved ✅'), 'ok');
-    setStatus(joinStatusEl, t('End of quiz reached. Submit assignment to finish.'), 'ok');
+    setStatus(joinStatusEl, isGame ? t('That was the last question.') : t('End of quiz reached. Submit assignment to finish.'), 'ok');
     const allowEditing = state.feedbackMode !== 'instant' && !live.player.assignment.state?.attempt?.adaptive;
-    showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
+    showAssignmentCompleteMessage(isGame ? t('See your score and your answers.') : 'All answers are saved. You reached the end of the quiz.', {
       title: 'End of quiz 🎉',
       showFinishButton: true,
-      finishLabel: 'Submit assignment',
+      finishLabel: isGame ? t('🏁 See my score') : 'Submit assignment',
       showReviewButton: allowEditing,
       reviewLabel: 'Edit answers',
     });
@@ -5624,7 +5760,52 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   container.appendChild(wrap);
 }
 
+// Public games (opened from /games/ with ?game=CODE) run the normal assignment
+// flow. Signed in, its calls go to the assignment routes with via: 'play' (the
+// worker applies the public-play settings). Anonymous, they are answered by the
+// stateless public-game routes: the play token carries the attempt, so nothing
+// about the player is stored. See PUBLIC_GAMES_PLAN.md.
 async function api(path, opts = {}) {
+  const game = live.player.game;
+  if (game?.started && String(path).startsWith('/api/assignment/')) {
+    if (game.anonymous) return publicGameApi(path, opts);
+    if (opts.body) return apiFetch(path, { ...opts, body: { ...opts.body, via: 'play' } });
+    return apiFetch(`${path}${path.includes('?') ? '&' : '?'}via=play`, opts);
+  }
+  return apiFetch(path, opts);
+}
+
+async function publicGameApi(path, opts = {}) {
+  const game = live.player.game;
+  const route = String(path).split('?')[0];
+  const body = opts.body || {};
+  const remember = (data) => {
+    game.token = data.token;
+    game.last = { ok: true, attempt: data.attempt };
+    return data.attempt;
+  };
+  const call = (route2, payload) => apiFetch(route2, { method: 'POST', body: payload });
+  if (route === '/api/assignment/check-status') {
+    return { ok: true, hasSubmittedAttempts: false, canRetake: true, feedbackMode: 'instant', examMode: false };
+  }
+  if (route === '/api/assignment/start') {
+    return { ok: true, alreadyStarted: false, attempt: remember(await call('/api/public/game/start', { code: game.code })) };
+  }
+  if (route === '/api/assignment/state') return game.last;
+  if (route === '/api/assignment/answer') {
+    const attempt = remember(await call('/api/public/game/answer', {
+      token: game.token, qIndex: body.qIndex, answer: body.answer, bet: body.bet,
+    }));
+    return { ok: true, saved: true, qIndex: body.qIndex, metrics: attempt?.metrics, attempt };
+  }
+  if (route === '/api/assignment/submit') {
+    return { ok: true, alreadySubmitted: false, attempt: remember(await call('/api/public/game/finish', { token: game.token })) };
+  }
+  // Review marks, self-correct, focus events, deleting: nothing is stored.
+  return { ok: true };
+}
+
+async function apiFetch(path, opts = {}) {
   const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
   if (!base) throw new Error('Backend URL is not configured.');
 
@@ -7739,6 +7920,13 @@ function renderVoiceRecorder(container, question) {
 
   async function uploadBlob(blob, durationMs, transcript) {
     const mimeType = blob.type || 'audio/webm';
+    // Anonymous game: nothing is stored, so the recording stays in this browser.
+    if (live.player.game?.anonymous) {
+      _voiceRecordUpload = { url: 'anonymous', durationMs, mimeType, uploading: false, error: null, transcript: transcript || '' };
+      statusEl.textContent = t('✓ Recorded (not sent: anonymous play)');
+      statusEl.className = 'voice-record-upload-status uploaded';
+      return;
+    }
     _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null, transcript: transcript || '' };
     statusEl.textContent = t('Uploading…');
     statusEl.className = 'voice-record-upload-status uploading';
@@ -8191,6 +8379,13 @@ async function downscaleImageForUpload(file, maxEdge = 1600, quality = 0.82) {
 }
 
 async function uploadImageBlob(file, statusEl) {
+  // Anonymous game: nothing is stored, so the photo stays in this browser.
+  if (live.player.game?.anonymous) {
+    _imageAnswerUpload = { url: 'anonymous', mimeType: file?.type || 'image/jpeg', uploading: false, error: null };
+    statusEl.textContent = t('✓ Added (not sent: anonymous play)');
+    statusEl.className = 'image-answer-upload-status uploaded';
+    return;
+  }
   statusEl.textContent = t('Processing…');
   statusEl.className = 'image-answer-upload-status uploading';
   const blob = await downscaleImageForUpload(file);

@@ -5610,3 +5610,9 @@ body.arena-board-open { overflow: hidden; }
   100% { box-shadow: 0 0 0 3px transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .cmdp-flash { animation: none; outline: 3px solid var(--primary); } }
+
+/* ---------- Public games (?game=CODE): end of game ---------- */
+.game-end-note { text-align: center; color: var(--muted); margin: 0.6rem 0 0; }
+.game-end-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; align-items: center; }
+.game-end-actions .top-space { margin-top: 0; }
+.game-like-btn[aria-pressed="true"] { border-color: #e11d48; color: #be123c; }
