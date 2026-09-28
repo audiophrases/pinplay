@@ -1498,6 +1498,8 @@ function bindBuilderEvents() {
 
   initLevelTools();
 
+  document.getElementById('mediaManagerBtn')?.addEventListener('click', openMediaManager);
+
   if (addMediaBatchBtn && addMediaBatchInput) {
     addMediaBatchBtn.addEventListener('click', () => addMediaBatchInput.click());
 
@@ -11151,6 +11153,8 @@ function applyAdaptiveFitHost() {
 let _i18nLastHostState = null;
 window.onLocaleChange = function () {
   try { if (_i18nLastHostState) renderHostState(_i18nLastHostState); } catch (e) { console.error('locale re-render failed', e); }
+  // The Media Manager rebuilds in the new language; its filters and selection are kept.
+  try { if (document.getElementById('mediaManagerOverlay')) openMediaManager(); } catch (e) { console.error('media manager re-render failed', e); }
 };
 
 function renderHostState(state) {
@@ -16665,6 +16669,409 @@ function questionMediaStatus(q, quizCtx = {}) {
 
   const changedAt = Math.max(mediaVersionTime(q._imageVersion), mediaVersionTime(q._audioVersion));
   return { visual, audio, changedAt };
+}
+
+const MEDIA_ROW_STATUS_ORDER = ['failed', 'missing', 'local', 'ready', 'none'];
+const MEDIA_VISUAL_KIND_ORDER = ['gif', 'image', 'video', 'none', 'na'];
+const MEDIA_AUDIO_KIND_ORDER = ['tts', 'file', 'none', 'na'];
+
+// One row per question. `failures` holds this session's failed runs (question ->
+// { status, reason }); a failure only shows while something is still missing, so
+// fixing the question by hand in the builder clears it.
+function buildMediaRows(questions, quizCtx = {}, failures = new Map()) {
+  return (Array.isArray(questions) ? questions : []).map((q, i) => {
+    const { visual, audio, changedAt } = questionMediaStatus(q, quizCtx);
+    const statuses = [visual.status, audio.status];
+    const failure = statuses.includes('missing') ? (failures.get(q) || null) : null;
+    let status = 'none';
+    if (failure) status = 'failed';
+    else if (statuses.includes('missing')) status = 'missing';
+    else if (statuses.includes('local')) status = 'local';
+    else if (statuses.includes('ready')) status = 'ready';
+    return { q, n: i + 1, level: normalizeCefr(q?.cefr), type: String(q?.type || ''), visual, audio, changedAt, status, failure };
+  });
+}
+
+// filters: { level: '' | 'A1'…'C2' | 'untagged', media: '' | 'gif' | 'image' | 'video' |
+// 'audio' (TTS or file) | 'tts' | 'file' | 'nomedia', status: '' | a row status, type: '' | question type, text }
+function filterMediaRows(rows, filters = {}) {
+  const text = String(filters.text || '').trim().toLowerCase();
+  return rows.filter((r) => {
+    if (filters.level === 'untagged' ? !!r.level : (filters.level && r.level !== filters.level)) return false;
+    const m = filters.media;
+    if (m === 'tts' || m === 'file') {
+      if (r.audio.kind !== m) return false;
+    } else if (m === 'audio') {
+      if (r.audio.kind !== 'tts' && r.audio.kind !== 'file') return false;
+    } else if (m === 'nomedia') {
+      if (['gif', 'image', 'video'].includes(r.visual.kind) || ['tts', 'file'].includes(r.audio.kind)) return false;
+    } else if (m && r.visual.kind !== m) {
+      return false;
+    }
+    if (filters.status && r.status !== filters.status) return false;
+    if (filters.type && r.type !== filters.type) return false;
+    if (text) {
+      const q = r.q || {};
+      const haystack = [q.prompt, q.imageKeyword, q.gifKeyword, q.videoKeyword, q.audioText].join(' ').toLowerCase();
+      if (!haystack.includes(text)) return false;
+    }
+    return true;
+  });
+}
+
+// sort: { key: 'n' | 'level' | 'visual' | 'audio' | 'status' | 'changed', dir: 'asc' | 'desc' }.
+// Ties keep question order.
+function sortMediaRows(rows, sort = {}) {
+  const dir = sort.dir === 'desc' ? -1 : 1;
+  const rank = (list, v) => { const i = list.indexOf(v); return i === -1 ? list.length : i; };
+  const keyOf = {
+    n: (r) => r.n,
+    level: (r) => (r.level ? CEFR_LEVELS.indexOf(r.level) : CEFR_LEVELS.length),
+    visual: (r) => rank(MEDIA_VISUAL_KIND_ORDER, r.visual.kind),
+    audio: (r) => rank(MEDIA_AUDIO_KIND_ORDER, r.audio.kind),
+    status: (r) => rank(MEDIA_ROW_STATUS_ORDER, r.status),
+    changed: (r) => r.changedAt,
+  }[sort.key] || ((r) => r.n);
+  return rows.slice().sort((a, b) => (keyOf(a) - keyOf(b)) * dir || a.n - b.n);
+}
+
+function mediaSummaryCounts(rows) {
+  const counts = { total: rows.length, failed: 0, missing: 0, local: 0, gif: 0, image: 0, video: 0, audio: 0 };
+  rows.forEach((r) => {
+    if (r.status in counts) counts[r.status] += 1;
+    if (['gif', 'image', 'video'].includes(r.visual.kind) && r.visual.status !== 'missing') counts[r.visual.kind] += 1;
+    if (r.audio.kind === 'tts' || r.audio.kind === 'file') counts.audio += 1;
+  });
+  return counts;
+}
+
+// File-manager selection over the visible (filtered, sorted) order of questions.
+// Plain click: only this one. Ctrl/⌘: toggle it. Shift: the range from the anchor,
+// replacing the selection (Ctrl/⌘+Shift adds the range). Returns { selected, anchor }.
+function nextMediaSelection(selected, visible, clicked, { ctrl = false, shift = false } = {}, anchor = null) {
+  const anchorIdx = anchor ? visible.indexOf(anchor) : -1;
+  const idx = visible.indexOf(clicked);
+  if (shift && anchorIdx !== -1 && idx !== -1) {
+    const next = ctrl ? new Set(selected) : new Set();
+    const [lo, hi] = idx < anchorIdx ? [idx, anchorIdx] : [anchorIdx, idx];
+    for (let i = lo; i <= hi; i++) next.add(visible[i]);
+    return { selected: next, anchor };
+  }
+  if (ctrl) {
+    const next = new Set(selected);
+    if (next.has(clicked)) next.delete(clicked);
+    else next.add(clicked);
+    return { selected: next, anchor: clicked };
+  }
+  return { selected: new Set([clicked]), anchor: clicked };
+}
+
+// ---------- Media Manager panel ----------
+// Session state: kept while the panel is closed, so filters and selection survive.
+const mediaManagerState = {
+  filters: { level: '', media: '', status: '', type: '', text: '' },
+  sort: { key: 'n', dir: 'asc' },
+  selected: new Set(),
+  anchor: null,
+  failures: new Map(),
+  visible: [],
+};
+
+function formatMediaChanged(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString();
+}
+
+function mediaVisualCellHtml(r) {
+  const q = r.q;
+  const { kind, status } = r.visual;
+  if (kind === 'na') return `<span class="muted">${escapeHtml(t('Reading text'))}</span>`;
+  if (kind === 'none') return '<span class="muted">—</span>';
+  const kindLabel = { gif: t('GIF'), image: t('Picture'), video: t('Video') }[kind];
+  if (status === 'missing') {
+    const keyword = { gif: q.gifKeyword, image: q.imageKeyword, video: q.videoKeyword }[kind];
+    return `<span class="mm-media muted" title="${escapeHtml(t('Keyword set, nothing found or searched yet'))}">⏳ ${escapeHtml(kindLabel)}: “${escapeHtml(String(keyword || '').trim())}”</span>`;
+  }
+  if (kind === 'video') {
+    const media = normalizeQuestionMedia(q.media);
+    return `<span class="mm-media" title="${escapeHtml(media.url)}">🎬 ${escapeHtml(kindLabel)} <span class="small muted">${escapeHtml(media.provider)}</span></span>`;
+  }
+  const localMark = status === 'local' ? ` <span title="${escapeHtml(t('Not uploaded yet: uploads on the next save'))}">⬆</span>` : '';
+  return `<span class="mm-media"><img class="mm-thumb" loading="lazy" src="${escapeHtml(String(q.imageData || ''))}" alt="" /> ${escapeHtml(kindLabel)}${localMark}</span>`;
+}
+
+function mediaAudioCellHtml(r, idx) {
+  const { kind, status } = r.audio;
+  if (kind === 'na') return '';
+  if (kind === 'none') return '<span class="muted">—</span>';
+  const label = kind === 'tts' ? `🔊 ${escapeHtml(t('TTS'))}` : `🎵 ${escapeHtml(t('File'))}`;
+  const voice = kind === 'tts' ? ` <span class="small muted">${escapeHtml(String(r.q.language || ''))}</span>` : '';
+  const mark = status === 'local'
+    ? ` <span title="${escapeHtml(t('Not uploaded yet: uploads on the next save'))}">⬆</span>`
+    : (status === 'missing' ? ` <span title="${escapeHtml(t('Generated on the next save'))}">⏳</span>` : '');
+  return `<span class="mm-media">${label}${mark}${voice} <button type="button" class="btn btn-sm" data-mm-play="${idx}" title="${escapeHtml(t('Play preview'))}">▶</button></span>`;
+}
+
+function mediaStatusBadgeHtml(r) {
+  const label = {
+    failed: t('⚠️ Failed'),
+    missing: t('⏳ Missing'),
+    local: t('⬆ Not uploaded'),
+    ready: t('✅ Ready'),
+    none: t('— None'),
+  }[r.status];
+  const title = r.failure?.reason ? ` title="${escapeHtml(r.failure.reason)}"` : '';
+  return `<span class="mm-status ${r.status}"${title}>${escapeHtml(label)}</span>`;
+}
+
+function renderMediaManager() {
+  const overlay = document.getElementById('mediaManagerOverlay');
+  if (!overlay) return;
+  const state = mediaManagerState;
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+
+  // Drop selected questions that are no longer in the quiz.
+  const present = new Set(questions);
+  state.selected = new Set([...state.selected].filter((q) => present.has(q)));
+  if (state.anchor && !present.has(state.anchor)) state.anchor = null;
+
+  const rows = buildMediaRows(questions, quiz, state.failures);
+  const visible = sortMediaRows(filterMediaRows(rows, state.filters), state.sort);
+  state.visible = visible.map((r) => r.q);
+  const indexOf = new Map(questions.map((q, i) => [q, i]));
+
+  const c = mediaSummaryCounts(rows);
+  const chip = (apply, text, cls = '') => `<button type="button" class="mm-count ${cls}" data-mm-apply="${apply}">${escapeHtml(text)}</button>`;
+  const parts = [chip('all', t('{n} questions', { n: c.total }))];
+  if (c.missing) parts.push(chip('status:missing', t('{n} missing', { n: c.missing }), 'warn'));
+  if (c.failed) parts.push(chip('status:failed', t('{n} failed', { n: c.failed }), 'bad'));
+  if (c.local) parts.push(chip('status:local', t('{n} not uploaded', { n: c.local })));
+  if (c.gif) parts.push(chip('media:gif', t('{n} GIFs', { n: c.gif })));
+  if (c.image) parts.push(chip('media:image', t('{n} pictures', { n: c.image })));
+  if (c.video) parts.push(chip('media:video', t('{n} videos', { n: c.video })));
+  if (c.audio) parts.push(chip('media:audio', t('{n} with audio', { n: c.audio })));
+  overlay.querySelector('[data-mm-summary]').innerHTML = parts.join('');
+
+  overlay.querySelectorAll('[data-mm-filter]').forEach((el) => {
+    const v = state.filters[el.dataset.mmFilter] || '';
+    if (el.value !== v) el.value = v;
+  });
+  overlay.querySelectorAll('th[data-mm-sort]').forEach((th) => {
+    const active = th.dataset.mmSort === state.sort.key;
+    th.dataset.dir = active ? state.sort.dir : '';
+    th.setAttribute('aria-sort', active ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none');
+  });
+
+  const body = overlay.querySelector('[data-mm-body]');
+  if (!visible.length) {
+    body.innerHTML = `<tr><td colspan="10" class="muted mm-empty">${escapeHtml(questions.length ? t('No questions match these filters.') : t('No questions yet.'))}</td></tr>`;
+  } else {
+    body.innerHTML = visible.map((r) => {
+      const idx = indexOf.get(r.q);
+      const prompt = String(r.q?.prompt || '').replace(/\s+/g, ' ').trim();
+      return `<tr data-mm-row="${idx}">
+        <td><input type="checkbox" data-mm-check aria-label="${escapeHtml(t('Select Q{n}', { n: r.n }))}" /></td>
+        <td class="mm-num">Q${r.n}</td>
+        <td>${r.level ? `<span class="q-cefr-chip">${r.level}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="mm-col-type" title="${escapeHtml(labelForType(r.type))}">${iconForType(r.type)}</td>
+        <td class="mm-prompt" title="${escapeHtml(prompt)}">${escapeHtml(prompt.slice(0, 120)) || '<span class="muted">—</span>'}</td>
+        <td>${mediaVisualCellHtml(r)}</td>
+        <td>${mediaAudioCellHtml(r, idx)}</td>
+        <td>${mediaStatusBadgeHtml(r)}</td>
+        <td class="mm-col-changed small muted">${escapeHtml(formatMediaChanged(r.changedAt))}</td>
+        <td><button type="button" class="btn btn-sm" data-mm-open="${idx}" title="${escapeHtml(t('Open in the editor'))}">↗</button></td>
+      </tr>`;
+    }).join('');
+  }
+  refreshMediaSelection();
+}
+
+// Selection changes only repaint row highlights and the selection bar.
+function refreshMediaSelection() {
+  const overlay = document.getElementById('mediaManagerOverlay');
+  if (!overlay) return;
+  const state = mediaManagerState;
+  overlay.querySelectorAll('tr[data-mm-row]').forEach((tr) => {
+    const on = state.selected.has(quiz.questions[Number(tr.dataset.mmRow)]);
+    tr.classList.toggle('selected', on);
+    tr.setAttribute('aria-selected', on ? 'true' : 'false');
+    const box = tr.querySelector('[data-mm-check]');
+    if (box) box.checked = on;
+  });
+  const bar = overlay.querySelector('[data-mm-selbar]');
+  const n = state.selected.size;
+  const hiddenSelected = [...state.selected].filter((q) => !state.visible.includes(q)).length;
+  bar.classList.toggle('empty', !n);
+  bar.innerHTML = n
+    ? `<strong>${escapeHtml(t('{n} selected', { n }))}</strong>${hiddenSelected ? ` <span class="small muted">${escapeHtml(t('({n} hidden by filters)', { n: hiddenSelected }))}</span>` : ''}
+       <button type="button" class="btn btn-sm" data-mm-select-all>${escapeHtml(t('Select all shown ({n})', { n: state.visible.length }))}</button>
+       <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`
+    : `<span>${escapeHtml(t('No questions selected.'))}</span>
+       <button type="button" class="btn btn-sm" data-mm-select-all ${state.visible.length ? '' : 'disabled'}>${escapeHtml(t('Select all shown ({n})', { n: state.visible.length }))}</button>`;
+}
+
+function closeMediaManager() {
+  document.getElementById('mediaManagerOverlay')?.remove();
+}
+
+function openQuestionFromMediaManager(idx) {
+  const q = quiz.questions[idx];
+  if (!q) return;
+  closeMediaManager();
+  q.collapsed = false;
+  renderBuilder();
+  const item = questionListEl?.querySelectorAll('.question-item')[idx];
+  if (item) {
+    item.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    item.classList.add('mm-flash');
+    setTimeout(() => item.classList.remove('mm-flash'), 1600);
+  }
+}
+
+function openMediaManager() {
+  syncQuizFromUI();
+  normalizeQuizAudioDefaults(quiz);
+  closeMediaManager();
+  const state = mediaManagerState;
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  const types = [...new Set(questions.map((q) => String(q?.type || '')).filter(Boolean))];
+  const opt = (value, label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+  const th = (key, label, cls = '') => `<th data-mm-sort="${key}" class="${cls}" scope="col" title="${escapeHtml(t('Sort'))}">${escapeHtml(label)}</th>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mediaManagerOverlay';
+  overlay.className = 'dialog-overlay';
+  overlay.innerHTML = `
+    <div class="dialog-card media-manager" role="dialog" aria-modal="true" aria-labelledby="mmTitle" tabindex="-1">
+      <div class="row spread gap">
+        <h3 id="mmTitle">${escapeHtml(t('🗂 Media'))}</h3>
+        <button type="button" class="btn" data-mm-close>${escapeHtml(t('Close'))}</button>
+      </div>
+      <div class="mm-summary small" data-mm-summary></div>
+      <div class="mm-filters">
+        <select data-mm-filter="level" aria-label="${escapeHtml(t('Level'))}">
+          ${opt('', t('All levels'))}${CEFR_LEVELS.map((l) => opt(l, l)).join('')}${opt('untagged', t('Untagged'))}
+        </select>
+        <select data-mm-filter="media" aria-label="${escapeHtml(t('Media type'))}">
+          ${opt('', t('All media'))}${opt('gif', t('GIFs'))}${opt('image', t('Pictures'))}${opt('video', t('Videos'))}${opt('audio', t('Any audio'))}${opt('tts', t('TTS audio'))}${opt('file', t('Audio files'))}${opt('nomedia', t('No media'))}
+        </select>
+        <select data-mm-filter="status" aria-label="${escapeHtml(t('Status'))}">
+          ${opt('', t('All statuses'))}${opt('missing', t('Missing'))}${opt('failed', t('Failed'))}${opt('local', t('Not uploaded'))}${opt('ready', t('Ready'))}${opt('none', t('None'))}
+        </select>
+        <select data-mm-filter="type" aria-label="${escapeHtml(t('Question type'))}">
+          ${opt('', t('All question types'))}${types.map((ty) => opt(ty, labelForType(ty))).join('')}
+        </select>
+        <input type="search" data-mm-filter="text" placeholder="${escapeHtml(t('Search questions and keywords'))}" />
+        <button type="button" class="btn btn-sm" data-mm-apply="all">${escapeHtml(t('Clear filters'))}</button>
+      </div>
+      <div class="mm-selbar" data-mm-selbar></div>
+      <div class="mm-table-wrap">
+        <table class="mm-table">
+          <thead><tr>
+            <th scope="col"><span class="sr-only">${escapeHtml(t('Select'))}</span></th>
+            ${th('n', '#')}${th('level', t('Level'))}
+            <th scope="col" class="mm-col-type">${escapeHtml(t('Type'))}</th>
+            <th scope="col">${escapeHtml(t('Question'))}</th>
+            ${th('visual', t('Picture / video'))}${th('audio', t('Audio'))}${th('status', t('Status'))}${th('changed', t('Changed'), 'mm-col-changed')}
+            <th scope="col"></th>
+          </tr></thead>
+          <tbody data-mm-body></tbody>
+        </table>
+      </div>
+      <p class="small muted mm-help">${escapeHtml(t('Click selects a question · Ctrl/⌘+click adds or removes one · Shift+click selects a range · Ctrl/⌘+A selects everything shown · Esc clears'))}</p>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const dialog = overlay.querySelector('.media-manager');
+  const selectAllShown = () => {
+    state.selected = new Set(state.visible);
+    state.anchor = state.visible[0] || null;
+    refreshMediaSelection();
+  };
+
+  overlay.addEventListener('click', async (e) => {
+    if (e.target === overlay || e.target.closest('[data-mm-close]')) { closeMediaManager(); return; }
+
+    const apply = e.target.closest('[data-mm-apply]');
+    if (apply) {
+      const [key, value] = apply.dataset.mmApply.split(':');
+      state.filters = { level: '', media: '', status: '', type: '', text: '' };
+      if (key !== 'all') state.filters[key] = value;
+      renderMediaManager();
+      return;
+    }
+
+    const sortTh = e.target.closest('th[data-mm-sort]');
+    if (sortTh) {
+      const key = sortTh.dataset.mmSort;
+      state.sort = { key, dir: state.sort.key === key && state.sort.dir === 'asc' ? 'desc' : 'asc' };
+      renderMediaManager();
+      return;
+    }
+
+    if (e.target.closest('[data-mm-select-all]')) { selectAllShown(); return; }
+    if (e.target.closest('[data-mm-select-none]')) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
+
+    const openBtn = e.target.closest('[data-mm-open]');
+    if (openBtn) { openQuestionFromMediaManager(Number(openBtn.dataset.mmOpen)); return; }
+
+    const playBtn = e.target.closest('[data-mm-play]');
+    if (playBtn) {
+      if (await previewBuilderQuestionAudio(Number(playBtn.dataset.mmPlay), playBtn)) renderMediaManager();
+      return;
+    }
+
+    const row = e.target.closest('tr[data-mm-row]');
+    if (row) {
+      const q = quiz.questions[Number(row.dataset.mmRow)];
+      if (!q) return;
+      // The checkbox toggles like Ctrl/⌘+click (Shift still selects a range).
+      const viaCheckbox = !!e.target.closest('[data-mm-check]');
+      const next = nextMediaSelection(state.selected, state.visible, q, {
+        ctrl: viaCheckbox || e.ctrlKey || e.metaKey,
+        shift: e.shiftKey,
+      }, state.anchor);
+      state.selected = next.selected;
+      state.anchor = next.anchor;
+      refreshMediaSelection();
+    }
+  });
+
+  // Shift+click would otherwise highlight text across the rows.
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.shiftKey && e.target.closest('tr[data-mm-row]')) e.preventDefault();
+  });
+
+  const onFilter = (e) => {
+    const el = e.target.closest('[data-mm-filter]');
+    if (!el) return;
+    state.filters[el.dataset.mmFilter] = el.value;
+    renderMediaManager();
+  };
+  overlay.addEventListener('change', onFilter);
+  overlay.addEventListener('input', (e) => { if (e.target.matches('input[data-mm-filter]')) onFilter(e); });
+
+  overlay.addEventListener('keydown', (e) => {
+    const inField = !!e.target.closest('input:not([type="checkbox"]), select, textarea');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !inField) {
+      e.preventDefault();
+      selectAllShown();
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (inField) { e.target.blur(); dialog.focus(); return; }
+      if (state.selected.size) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
+      closeMediaManager();
+    }
+  });
+
+  renderMediaManager();
+  dialog.focus();
 }
 
 function loadQuiz() {

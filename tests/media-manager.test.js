@@ -17,6 +17,9 @@ const NAMES = [
   'MEDIA_SEARCH_RESULTS', 'MEDIA_SEARCH_CACHE_LIMIT', 'GIF_LIMIT_PAUSE_MS', 'mediaSearchState',
   'isRateLimitError', 'isGifSearchPaused', 'cachedMediaSearch',
   'searchGifsForKeyword', 'searchImagesForKeyword', 'giphySearch', 'autoFillImages',
+  'CEFR_LEVELS', 'normalizeCefr',
+  'MEDIA_ROW_STATUS_ORDER', 'MEDIA_VISUAL_KIND_ORDER', 'MEDIA_AUDIO_KIND_ORDER',
+  'buildMediaRows', 'filterMediaRows', 'sortMediaRows', 'mediaSummaryCounts', 'nextMediaSelection',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -227,5 +230,109 @@ describe('autoFillImages: GIF searches and the GIPHY limit', () => {
     assert.equal(quiz[0].imageData, undefined);
     assert.ok(quiz[1].imageData);
     assert.equal(quiz[2].imageData, undefined);
+  });
+});
+
+describe('Media Manager rows, filters and sorting', () => {
+  const EN = { ttsLanguage: 'EN', readAllQuestionsAloud: false };
+  let A;
+  let qs;
+  let rows;
+  beforeEach(() => {
+    ({ A } = load(() => jsonRes(200, {})));
+    qs = [
+      { type: 'mcq', cefr: 'B1', prompt: 'Past of go?', imageData: 'https://media.giphy.com/a/1.gif' },       // Q1 gif ready
+      { type: 'mcq', cefr: 'A1', prompt: 'Colour of the sky', gifKeyword: 'blue sky' },                     // Q2 gif missing
+      { type: 'text', prompt: 'Spell it', audioMode: 'tts', ttsAudioKey: 'tts/x.mp3' },                     // Q3 tts ready, untagged
+      { type: 'mcq', cefr: 'C2', prompt: 'Nuance', imageData: 'data:image/png;base64,AA' },                  // Q4 image local
+      { type: 'mcq', cefr: 'A1', prompt: 'Nothing here' },                                                   // Q5 none
+      { type: 'mcq', cefr: 'B1', prompt: 'Apple', imageKeyword: 'apple' },                                   // Q6 image missing
+    ];
+    rows = A.buildMediaRows(qs, EN, new Map([[qs[5], { status: 'failed', reason: 'No pictures found' }], [qs[0], { status: 'failed', reason: 'old' }]]));
+  });
+  const ns = (list) => list.map((r) => r.n);
+
+  it('gives each row one status; a failure only counts while something is missing', () => {
+    assert.deepEqual(rows.map((r) => r.status), ['ready', 'missing', 'ready', 'local', 'none', 'failed']);
+    assert.equal(rows[5].failure.reason, 'No pictures found');
+    assert.equal(rows[0].failure, null, 'a filled question drops its old failure');
+  });
+
+  it('filters by level, media, status, type and text, combined', () => {
+    assert.deepEqual(ns(A.filterMediaRows(rows, { level: 'A1' })), [2, 5]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { level: 'untagged' })), [3]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { media: 'gif' })), [1, 2]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { media: 'image' })), [4, 6]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { media: 'audio' })), [3]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { media: 'nomedia' })), [5]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { status: 'missing' })), [2]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { type: 'text' })), [3]);
+    assert.deepEqual(ns(A.filterMediaRows(rows, { text: 'SKY' })), [2], 'matches the GIF keyword too, any case');
+    assert.deepEqual(ns(A.filterMediaRows(rows, { level: 'B1', media: 'image' })), [6]);
+  });
+
+  it('sorts by level (untagged last), status, media type and back; ties keep question order', () => {
+    assert.deepEqual(ns(A.sortMediaRows(rows, { key: 'level', dir: 'asc' })), [2, 5, 1, 6, 4, 3]);
+    assert.deepEqual(ns(A.sortMediaRows(rows, { key: 'status', dir: 'asc' })), [6, 2, 4, 1, 3, 5]);
+    assert.deepEqual(ns(A.sortMediaRows(rows, { key: 'visual', dir: 'asc' })), [1, 2, 4, 6, 3, 5]);
+    assert.deepEqual(ns(A.sortMediaRows(rows, { key: 'n', dir: 'desc' })), [6, 5, 4, 3, 2, 1]);
+    assert.deepEqual(ns(rows), [1, 2, 3, 4, 5, 6], 'the input is not reordered');
+  });
+
+  it('summary counts present media, not keywords waiting', () => {
+    const c = A.mediaSummaryCounts(rows);
+    assert.equal(c.total, 6);
+    assert.equal(c.missing, 1);
+    assert.equal(c.failed, 1);
+    assert.equal(c.local, 1);
+    assert.equal(c.gif, 1);
+    assert.equal(c.image, 1);
+    assert.equal(c.audio, 1);
+  });
+});
+
+describe('Media Manager selection', () => {
+  let A;
+  beforeEach(() => { ({ A } = load(() => jsonRes(200, {}))); });
+  const [a, b, c, d, e] = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+  const visible = [a, b, c, d, e];
+  const ids = (set) => [...set].map((q) => q.id).sort().join('');
+
+  it('plain click selects only that question and sets the anchor', () => {
+    const r = A.nextMediaSelection(new Set([a, b]), visible, c, {}, a);
+    assert.equal(ids(r.selected), 'c');
+    assert.equal(r.anchor, c);
+  });
+
+  it('Ctrl/⌘ toggles one question', () => {
+    let r = A.nextMediaSelection(new Set([a]), visible, c, { ctrl: true }, a);
+    assert.equal(ids(r.selected), 'ac');
+    r = A.nextMediaSelection(r.selected, visible, a, { ctrl: true }, r.anchor);
+    assert.equal(ids(r.selected), 'c');
+  });
+
+  it('Shift selects the range from the anchor, either direction, keeping the anchor', () => {
+    let r = A.nextMediaSelection(new Set([b]), visible, d, { shift: true }, b);
+    assert.equal(ids(r.selected), 'bcd');
+    assert.equal(r.anchor, b);
+    r = A.nextMediaSelection(r.selected, visible, a, { shift: true }, b);
+    assert.equal(ids(r.selected), 'ab', 'a new Shift range replaces the last one');
+  });
+
+  it('Ctrl/⌘+Shift adds a range to the selection', () => {
+    const r = A.nextMediaSelection(new Set([a]), visible, e, { ctrl: true, shift: true }, d);
+    assert.equal(ids(r.selected), 'ade');
+  });
+
+  it('ranges follow the visible (filtered, sorted) order', () => {
+    const sorted = [e, c, a];
+    const r = A.nextMediaSelection(new Set([e]), sorted, a, { shift: true }, e);
+    assert.equal(ids(r.selected), 'ace');
+  });
+
+  it('Shift with the anchor filtered out acts as a plain click', () => {
+    const r = A.nextMediaSelection(new Set([b]), [c, d, e], d, { shift: true }, b);
+    assert.equal(ids(r.selected), 'd');
+    assert.equal(r.anchor, d);
   });
 });

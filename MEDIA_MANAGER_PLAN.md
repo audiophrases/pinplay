@@ -6,8 +6,9 @@ adds a **🗂 Media** panel to the quiz editor: one table row per question, with
 filters and sorting, file-manager selection, and bulk actions that apply to the
 selected rows.
 
-Discussed with the owner on 2026-09-28. Status: **step 1 built** (see "Built" at
-the end); the panel itself (steps 2–4) is not built yet.
+Discussed with the owner on 2026-09-28. Status: **steps 1–2 built** (see "Built"
+at the end): the panel with filters, sorting and selection. Bulk actions (steps
+3–4) are not built yet.
 
 ## Decisions (from the discussion)
 
@@ -199,3 +200,26 @@ time.
 - `cloudflare/worker.js`: `/api/gifs/search` returns 429 `{ rateLimited: true }`
   when GIPHY does. Takes effect when the worker is next deployed.
 - Tests: `tests/media-manager.test.js` (real `app.js` code, `fetch` stubbed).
+
+### Step 2: the panel (2026-09-28)
+
+- **🗂 Media** button next to "Collapse all" (`create/index.html`) opens
+  `openMediaManager()`: a large dialog whose table scrolls while the summary line,
+  filters and selection bar stay in view.
+- Pure helpers (tested): `buildMediaRows` (one status per row: failed > missing >
+  not uploaded > ready > none; a failure only shows while something is still
+  missing), `filterMediaRows`, `sortMediaRows` (ties keep question order),
+  `mediaSummaryCounts`, `nextMediaSelection` (click / Ctrl-⌘ / Shift / Ctrl-⌘+Shift
+  over the visible order).
+- Filters: level (incl. untagged), media (GIFs, pictures, videos, any audio, TTS,
+  audio files, no media), status, question type, text (prompt + keywords + audio
+  text). Summary counts are buttons that apply their filter. Column headers sort.
+- Selection: rows and checkboxes; Ctrl/⌘+A selects every row shown; Esc clears the
+  selection, then closes. Selection is held by question object and pruned when
+  questions are deleted. The bar notes selected rows hidden by filters.
+- Row: thumbnail (lazy, enlarges on hover), audio with ▶ preview (the builder's
+  `previewBuilderQuestionAudio`), status with the failure reason on hover, last
+  changed, ↗ to open the question in the builder.
+- `mediaManagerState` keeps filters, sort, selection and this session's failures
+  while the panel is closed; a language switch rebuilds it.
+- The bulk action buttons come in step 3; the selection bar is where they go.
