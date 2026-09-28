@@ -1697,6 +1697,38 @@ export default {
       }));
     }
 
+    // ---------- Public games (/play) ----------
+    // Owner-only: guest workspaces cannot publish to the owner's /play page.
+    if (url.pathname === '/api/assignments/set-public' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
+      return withCors(await assignmentsStub(env).fetch('https://room/assignments/set-public', {
+        method: 'POST',
+        body: JSON.stringify({ code, public: !!body?.public }),
+      }));
+    }
+
+    if (url.pathname === '/api/public/games' && request.method === 'GET') {
+      const res = await assignmentsStub(env).fetch('https://room/public/games', { method: 'GET' });
+      const out = withCors(res);
+      if (res.ok) out.headers.set('Cache-Control', 'public, max-age=30');
+      return out;
+    }
+
+    if (['/api/public/game/start', '/api/public/game/answer', '/api/public/game/finish', '/api/public/game/like'].includes(url.pathname)
+      && request.method === 'POST') {
+      const body = await safeJson(request);
+      const route = url.pathname.replace('/api/public/game/', '/public/');
+      return withCors(await assignmentsStub(env).fetch(`https://room${route}`, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      }));
+    }
+
     if (url.pathname === '/api/player/random-name' && request.method === 'GET') {
       return withCors(json({ ok: true, name: pickRandomName({}) }));
     }
@@ -1716,7 +1748,10 @@ export default {
 
       let studentKey = '';
       let legacyStudentKey = '';
-      if (assignment.randomNames) {
+      // From /play a stored attempt always means a signed-in player (anonymous
+      // /play players use /api/public/game/* and store nothing).
+      const via = body?.via === 'play' ? 'play' : '';
+      if (assignment.randomNames && !via) {
         // Anonymous mode has no account; the client's own key is all there is,
         // and it still finds that player's attempts within their session.
         studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
@@ -1731,7 +1766,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/check-status', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey, legacyStudentKey }),
+        body: JSON.stringify({ code, studentKey, legacyStudentKey, via }),
       }));
     }
 
@@ -1759,7 +1794,7 @@ export default {
 
       let studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
       let legacyStudentKey = '';
-      if (!assignment.randomNames) {
+      if (!assignment.randomNames || body?.via === 'play') {
         const student = await resolveStudent(env, body, request);
         if (!student) return json({ error: 'Please sign in to continue.', reason: 'signin' }, 401);
         studentKey = student.studentKey;
@@ -1786,8 +1821,9 @@ export default {
       let studentName = sanitizeName(body?.studentName || body?.username || 'Student');
       let studentEmail = '';
       let className = '';
+      const via = body?.via === 'play' ? 'play' : '';
 
-      if (assignment.randomNames) {
+      if (assignment.randomNames && !via) {
         // Anonymous mode keeps the client-supplied key: there is no account.
         studentKey = sanitizeAssignmentStudentKey(body?.studentKey);
         if (!studentKey) return json({ error: 'Student key required.' }, 400);
@@ -1804,7 +1840,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey, legacyStudentKey, studentName, studentEmail, className }),
+        body: JSON.stringify({ code, studentKey, legacyStudentKey, studentName, studentEmail, className, via }),
       }));
     }
 
@@ -1829,7 +1865,7 @@ export default {
       if (!assignment) return json({ error: 'Assignment not found.' }, 404);
 
       let studentKey = '';
-      if (assignment.randomNames) {
+      if (assignment.randomNames && url.searchParams.get('via') !== 'play') {
         studentKey = sanitizeAssignmentStudentKey(url.searchParams.get('studentKey'));
       } else {
         // History is personal data: only the signed-in owner may read it.
@@ -2837,7 +2873,15 @@ export class QuizRoom {
           // Total attempts started, served from the cached counter so the list
           // still never has to read attempt rows.
           const attemptsCount = Number(assignment?.attemptsCount) || 0;
-          if (pub) out.push({ ...pub, ...pending, attemptsCount });
+          const publicCounts = assignment?.public ? await this.state.storage.get(publicCountsKey(code)) : null;
+          if (pub) {
+            out.push({
+              ...pub,
+              ...pending,
+              attemptsCount,
+              ...(assignment?.public ? { plays: Number(publicCounts?.plays) || 0, likes: Number(publicCounts?.likes) || 0 } : {}),
+            });
+          }
         }
 
         return json({ ok: true, assignments: out });
@@ -2877,12 +2921,15 @@ export class QuizRoom {
 
         assignment.attempts = attemptsByKey;
         const allAttempts = Object.values(attemptsByKey);
+        const via = body?.via === 'play' ? 'play' : '';
+        if (via && !isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
+        const settings = via ? publicGameAssignment(assignment) : assignment;
         const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
-        const studentAttempts = allAttempts.filter((a) => matchKeys.has(String(a?.studentKey || '')));
+        const studentAttempts = allAttempts.filter((a) => matchKeys.has(String(a?.studentKey || '')) && sameEntry(a, via));
         const submittedAttempts = studentAttempts.filter((a) => !!a?.submitted);
         const openAttempt = studentAttempts.find((a) => !a?.submitted);
 
-        const limit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
+        const limit = clamp(Math.round(Number(settings.attemptsLimit ?? 1)), 0, 10);
         const attemptsUsed = studentAttempts.length;
         const canRetake = openAttempt ? true : (limit === 0 || attemptsUsed < limit);
 
@@ -2922,8 +2969,8 @@ export class QuizRoom {
           canRetake,
           attemptsUsed,
           attemptsLimit: limit,
-          examMode: !!assignment.examMode,
-          feedbackMode: assignment.feedbackMode || 'none',
+          examMode: !!settings.examMode,
+          feedbackMode: settings.feedbackMode || 'none',
           assignmentTitle: String(assignment.title || '').slice(0, 120),
           previousAttempts,
         });
@@ -2948,24 +2995,30 @@ export class QuizRoom {
           loadAttemptsForCode(this.state.storage, code),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+        // Signed in from /play: the public-play settings apply (always open,
+        // no due date, unlimited attempts).
+        const via = body?.via === 'play' ? 'play' : '';
+        if (via && !isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
+        const settings = via ? publicGameAssignment(assignment) : assignment;
+        if (!settings.active) return json({ error: 'Assignment is inactive.' }, 410);
 
         const now = Date.now();
-        if (Number(assignment.dueAt || 0) > 0 && now > Number(assignment.dueAt)) {
+        if (Number(settings.dueAt || 0) > 0 && now > Number(settings.dueAt)) {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
 
         assignment.attempts = attemptsByKey;
         const attempts = Object.values(attemptsByKey);
         const matchKeys = new Set([studentKey, legacyStudentKey].filter(Boolean));
+        const mine = attempts.filter((a) => matchKeys.has(String(a?.studentKey || '')) && sameEntry(a, via));
 
-        const existingOpen = attempts.find((a) => matchKeys.has(String(a?.studentKey || '')) && !a?.submitted);
+        const existingOpen = mine.find((a) => !a?.submitted);
         if (existingOpen) {
-          return json({ ok: true, alreadyStarted: true, attempt: publicAssignmentAttempt(assignment, existingOpen) });
+          return json({ ok: true, alreadyStarted: true, attempt: publicAssignmentAttempt(settings, existingOpen, { includeAnswerKey: false }) });
         }
 
-        const startedCount = attempts.filter((a) => matchKeys.has(String(a?.studentKey || ''))).length;
-        const limit = clamp(Math.round(Number(assignment.attemptsLimit ?? 1)), 0, 10);
+        const startedCount = mine.length;
+        const limit = clamp(Math.round(Number(settings.attemptsLimit ?? 1)), 0, 10);
         if (limit > 0 && startedCount >= limit) {
           return json({ error: 'Attempts limit reached for this assignment.' }, 409);
         }
@@ -2982,6 +3035,7 @@ export class QuizRoom {
           submittedAt: null,
           answersByQ: {},
           autoScore: 0,
+          ...(via ? { via } : {}),
         };
         // Signed-in students pick up their saved level (roster rows live in
         // this DO); anonymous ones start at the bottom.
@@ -2999,7 +3053,7 @@ export class QuizRoom {
         await saveAttempt(this.state.storage, code, attempt.id, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
-        return json({ ok: true, alreadyStarted: false, attempt: publicAssignmentAttempt(assignment, attempt) }, 201);
+        return json({ ok: true, alreadyStarted: false, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswerKey: false }) }, 201);
       }
 
       if (url.pathname === '/assignments/results' && request.method === 'GET') {
@@ -3115,8 +3169,9 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         if (!attempt) return json({ error: 'Attempt not found.' }, 404);
 
-        const includeAnswers = assignment.feedbackMode === 'instant' || (assignment.feedbackMode !== 'none' && !!attempt.submitted);
-        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
+        const settings = attemptAssignment(assignment, attempt);
+        const includeAnswers = settings.feedbackMode === 'instant' || (settings.feedbackMode !== 'none' && !!attempt.submitted);
+        return json({ ok: true, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers, includeAnswerKey: attemptAnswerKey(attempt, includeAnswers) }) });
       }
 
       if (url.pathname === '/assignments/attempt' && request.method === 'GET') {
@@ -3227,14 +3282,15 @@ export class QuizRoom {
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        const settings = attemptAssignment(assignment, attempt);
+        if (!settings.active) return json({ error: 'Assignment is inactive.' }, 410);
 
         const now = Date.now();
-        if (Number(assignment.dueAt || 0) > 0 && now > Number(assignment.dueAt)) {
+        if (Number(settings.dueAt || 0) > 0 && now > Number(settings.dueAt)) {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
 
-        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
         if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
 
         // Adaptive: the student answers the served question (virtual index =
@@ -3275,7 +3331,10 @@ export class QuizRoom {
             saved: true,
             qIndex,
             metrics,
-            attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers: assignment.feedbackMode === 'instant' }),
+            attempt: publicAssignmentAttempt(settings, attempt, {
+              includeAnswers: settings.feedbackMode === 'instant',
+              includeAnswerKey: attemptAnswerKey(attempt, settings.feedbackMode === 'instant'),
+            }),
           });
         }
 
@@ -3310,13 +3369,13 @@ export class QuizRoom {
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
-        const includeAnswers = assignment.feedbackMode === 'instant';
+        const includeAnswers = settings.feedbackMode === 'instant';
         return json({
           ok: true,
           saved: true,
           qIndex,
           metrics,
-          attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }),
+          attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers, includeAnswerKey: attemptAnswerKey(attempt, includeAnswers) }),
         });
       }
 
@@ -3332,12 +3391,13 @@ export class QuizRoom {
           this.state.storage.get(`a:${code}:t:${attemptId}`),
         ]);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
-        if (!assignment.active) return json({ error: 'Assignment is inactive.' }, 410);
-        if (Number(assignment.dueAt || 0) > 0 && Date.now() > Number(assignment.dueAt)) {
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        const settings = attemptAssignment(assignment, attempt);
+        if (!settings.active) return json({ error: 'Assignment is inactive.' }, 410);
+        if (Number(settings.dueAt || 0) > 0 && Date.now() > Number(settings.dueAt)) {
           return json({ error: 'Assignment due date has passed.' }, 410);
         }
-        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
-        if (attempt.submitted) return json({ ok: true, alreadySubmitted: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+        if (attempt.submitted) return json({ ok: true, alreadySubmitted: true, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswerKey: false }) });
 
         const metrics = evaluateAssignmentAttempt(assignment, attempt);
         if (Number(metrics.answeredCount || 0) <= 0) {
@@ -3358,7 +3418,7 @@ export class QuizRoom {
               totalQuestions: Number(st.count || 0),
             }, 409);
           }
-        } else if (String(assignment.feedbackMode || 'none') !== 'instant' && !body?.force) {
+        } else if (String(settings.feedbackMode || 'none') !== 'instant' && !body?.force) {
           const totalQuestions = Math.max(0, Math.round(Number(assignment.totalQuestions
             || (Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions.length : 0))));
           if (totalQuestions > 0 && Number(metrics.answeredCount || 0) < totalQuestions) {
@@ -3382,8 +3442,8 @@ export class QuizRoom {
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
-        const includeAnswers = assignment.feedbackMode !== 'none' && !!attempt.submitted;
-        return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(assignment, attempt, { includeAnswers }) });
+        const includeAnswers = settings.feedbackMode !== 'none' && !!attempt.submitted;
+        return json({ ok: true, alreadySubmitted: false, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers, includeAnswerKey: attemptAnswerKey(attempt, includeAnswers) }) });
       }
 
       if (url.pathname === '/assignments/reopen-attempt' && request.method === 'POST') {
@@ -3926,6 +3986,80 @@ export class QuizRoom {
         await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
+      }
+
+      // ---------- Public games (/play) ----------
+      if (url.pathname === '/assignments/set-public' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        const on = !!body?.public;
+        assignment.public = on;
+        if (on) assignment.publishedAt = Date.now();
+        await saveAssignmentBase(this.state.storage, code, assignment);
+        const index = new Set((await this.state.storage.get(PUBLIC_INDEX_KEY)) || []);
+        if (on) index.add(code); else index.delete(code);
+        await this.state.storage.put(PUBLIC_INDEX_KEY, [...index]);
+        return json({ ok: true, code, public: on, publishedAt: Number(assignment.publishedAt || 0) || null });
+      }
+
+      if (url.pathname === '/public/games' && request.method === 'GET') {
+        const codes = (await this.state.storage.get(PUBLIC_INDEX_KEY)) || [];
+        const games = [];
+        for (const code of codes) {
+          const assignment = await loadAssignmentBase(this.state.storage, code);
+          if (!isPublicGame(assignment)) continue;
+          games.push(publicGameCard(assignment, await this.state.storage.get(publicCountsKey(code))));
+        }
+        return json({ ok: true, games });
+      }
+
+      if (url.pathname === '/public/start' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const assignment = code ? await loadAssignmentBase(this.state.storage, code) : null;
+        if (!isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
+        return json(await publicPlayResponse(this.env, assignment, newPublicPlayAttempt(assignment)), 201);
+      }
+
+      if ((url.pathname === '/public/answer' || url.pathname === '/public/finish') && request.method === 'POST') {
+        const body = await safeJson(request);
+        const claim = await verifyPublicPlay(this.env, body?.token);
+        if (!claim) return json({ error: 'This game has expired. Start again.', code: 'PLAY_EXPIRED' }, 410);
+        const code = sanitizeAssignmentCode(claim.c);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
+        if (!isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
+        if (claim.q !== await publicQuizVersion(assignment)) {
+          return json({ error: 'This game was just updated. Start again.', code: 'GAME_CHANGED' }, 409);
+        }
+        const attempt = publicPlayAttempt(claim);
+        const now = Date.now();
+        if (url.pathname === '/public/answer') {
+          const err = applyPublicPlayAnswer(assignment, attempt, Math.round(Number(body?.qIndex)), body?.answer, body?.bet, now);
+          if (err) return json({ error: err.error, code: err.code }, err.status);
+        } else if (!attempt.submitted) {
+          if (!Object.keys(attempt.answersByQ).length) return json({ error: 'Answer at least one question first.' }, 409);
+          attempt.submitted = true;
+          attempt.submittedAt = now;
+          attempt.updatedAt = now;
+          const counts = (await this.state.storage.get(publicCountsKey(code))) || {};
+          await this.state.storage.put(publicCountsKey(code), { ...counts, plays: (Number(counts.plays) || 0) + 1 });
+        }
+        return json(await publicPlayResponse(this.env, assignment, attempt));
+      }
+
+      if (url.pathname === '/public/like' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const assignment = code ? await loadAssignmentBase(this.state.storage, code) : null;
+        if (!isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
+        // One like per browser is kept by the page; the server only counts.
+        const counts = (await this.state.storage.get(publicCountsKey(code))) || {};
+        const likes = Math.max(0, (Number(counts.likes) || 0) + (body?.like === false ? -1 : 1));
+        await this.state.storage.put(publicCountsKey(code), { ...counts, likes });
+        return json({ ok: true, code, likes });
       }
 
       if (url.pathname === '/assignments/toggle-archive' && request.method === 'POST') {
@@ -7425,6 +7559,202 @@ function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}
   };
 }
 
+// ---------------------------------------------------------------- public games (/play)
+// An assignment marked Public is also a game on /play. Anonymous players store
+// nothing: the attempt lives in a signed play token that the browser sends
+// back with every answer, and the server rebuilds it, grades, and signs the
+// next one. Only two counters per game are kept: plays and likes.
+// See PUBLIC_GAMES_PLAN.md.
+const PUBLIC_INDEX_KEY = 'pub:index';
+const PUBLIC_PLAY_TTL_MS = 3 * 60 * 60 * 1000;
+const PUBLIC_PLAY_TOKEN_MAX = 200000;
+
+const publicCountsKey = (code) => `pc:${code}`;
+
+function isPublicGame(assignment) {
+  return !!assignment && !!assignment.public && !assignment.archived;
+}
+
+// The assignment as public play runs it: instant feedback, no exam mode,
+// unlimited attempts, no due date, anonymous. Archiving is the only stop.
+function publicGameAssignment(assignment) {
+  return { ...assignment, feedbackMode: 'instant', examMode: false, attemptsLimit: 0, dueAt: null, randomNames: true, active: true };
+}
+
+function publicGameCard(assignment, counts) {
+  const questions = (assignment?.quiz?.questions || []).filter((q) => q && !q.isPoll);
+  const adaptiveCount = assignmentAdaptiveCount(assignment);
+  const adaptive = !!adaptiveCount && assignmentAdaptivePool(assignment).bands.length >= 2;
+  const bands = questions.map((q) => CEFR_LEVELS.indexOf(normalizeCefrLevel(q.cefr))).filter((i) => i >= 0);
+  return {
+    code: sanitizeAssignmentCode(assignment.code),
+    title: String(assignment.title || assignment.quiz?.title || '').slice(0, 120),
+    cover: questions.map((q) => String(q.imageData || '')).find((u) => /^https?:\/\//.test(u)) || null,
+    adaptive,
+    levels: adaptive && bands.length ? { from: CEFR_LEVELS[Math.min(...bands)], to: CEFR_LEVELS[Math.max(...bands)] } : null,
+    questionCount: adaptive ? adaptiveCount : questions.length,
+    teacherGraded: questions.some((q) => isAssignmentTeacherGradedQuestion(q)),
+    plays: Math.max(0, Number(counts?.plays) || 0),
+    likes: Math.max(0, Number(counts?.likes) || 0),
+    publishedAt: Number(assignment.publishedAt || 0) || null,
+  };
+}
+
+// Changes whenever the questions do, so a token from before an edit is refused
+// instead of grading answers against the wrong questions.
+async function publicQuizVersion(assignment) {
+  return (await sha256Hex(JSON.stringify(assignment?.quiz?.questions || []))).slice(0, 16);
+}
+
+// Its own key, derived from the student-session secret, so a play token can
+// never pass as a student session or the other way round.
+function publicPlaySecret(env) {
+  const base = studentSessionSecret(env);
+  return base ? `public-play:${base}` : '';
+}
+
+async function signPublicPlay(env, assignment, attempt) {
+  const secret = publicPlaySecret(env);
+  if (!secret) throw new Error('Public games are not configured.');
+  const claim = {
+    v: 1,
+    c: sanitizeAssignmentCode(assignment.code),
+    q: await publicQuizVersion(assignment),
+    i: attempt.id,
+    n: attempt.studentName,
+    s: attempt.startedAt,
+    u: attempt.updatedAt,
+    e: attempt.startedAt + PUBLIC_PLAY_TTL_MS,
+    d: attempt.submitted ? attempt.submittedAt : 0,
+    a: attempt.answersByQ || {},
+    ...(attempt.adaptive ? { ad: attempt.adaptive } : {}),
+  };
+  const payloadB64 = b64urlEncodeBytes(new TextEncoder().encode(JSON.stringify(claim)));
+  return `${payloadB64}.${b64urlEncodeBytes(await hmacSignBytes(secret, payloadB64))}`;
+}
+
+// The claim, or null when missing, tampered with, oversized or expired.
+async function verifyPublicPlay(env, token, now = Date.now()) {
+  const secret = publicPlaySecret(env);
+  const raw = String(token || '');
+  if (!secret || !raw || raw.length > PUBLIC_PLAY_TOKEN_MAX) return null;
+  const parts = raw.split('.');
+  if (parts.length !== 2) return null;
+  try {
+    const expected = await hmacSignBytes(secret, parts[0]);
+    if (!constantTimeEqual(expected, b64urlDecodeBytes(parts[1]))) return null;
+    const claim = JSON.parse(new TextDecoder().decode(b64urlDecodeBytes(parts[0])));
+    if (!claim || claim.v !== 1 || !sanitizeAssignmentCode(claim.c)) return null;
+    if (!(Number(claim.e) > now)) return null;
+    return claim;
+  } catch {
+    return null;
+  }
+}
+
+function publicPlayAttempt(claim) {
+  const attempt = {
+    id: String(claim.i || ''),
+    studentKey: '',
+    studentName: sanitizeName(claim.n || 'Player'),
+    studentEmail: '',
+    className: '',
+    startedAt: Number(claim.s) || 0,
+    updatedAt: Number(claim.u) || 0,
+    submitted: Number(claim.d) > 0,
+    submittedAt: Number(claim.d) || null,
+    answersByQ: claim.a && typeof claim.a === 'object' ? claim.a : {},
+    autoScore: 0,
+    guest: true,
+  };
+  if (claim.ad && typeof claim.ad === 'object') attempt.adaptive = claim.ad;
+  return attempt;
+}
+
+// A signed-in player who started from /play has an ordinary stored attempt,
+// marked via: 'play'. It keeps the public-play settings (and never gets the
+// full answer key) even if the game is later unpublished, so it can finish.
+function attemptAssignment(assignment, attempt) {
+  return attempt?.via === 'play' ? publicGameAssignment(assignment) : assignment;
+}
+
+function attemptAnswerKey(attempt, includeAnswers) {
+  return attempt?.via === 'play' ? false : includeAnswers;
+}
+
+// /play and the normal link keep separate attempts for the same student.
+function sameEntry(attempt, via) {
+  return (attempt?.via === 'play') === (via === 'play');
+}
+
+function newPublicPlayAttempt(assignment, now = Date.now()) {
+  const attempt = {
+    id: randomId('pg_'),
+    studentKey: '',
+    studentName: pickRandomName({}),
+    studentEmail: '',
+    className: '',
+    startedAt: now,
+    updatedAt: now,
+    submitted: false,
+    submittedAt: null,
+    answersByQ: {},
+    autoScore: 0,
+    guest: true,
+  };
+  // Anonymous: no saved level, the engine starts at the bottom and climbs.
+  const adaptive = adaptiveAttemptInit(assignment, null);
+  if (adaptive) attempt.adaptive = adaptive;
+  return attempt;
+}
+
+// One answer in public play, on the in-memory attempt. Mirrors
+// /assignments/answer without storage: no pending-grading counts, no roster
+// level. Each question is answered once (instant feedback has shown the
+// answer). Returns null, or { status, error, code }.
+function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, now = Date.now()) {
+  if (attempt.submitted) return { status: 409, error: 'This game is finished.', code: 'PLAY_DONE' };
+  if (!Number.isFinite(qIndex)) return { status: 400, error: 'qIndex required.' };
+  const bet = sanitizeBet(rawBet);
+  if (attempt.adaptive) {
+    const st = attempt.adaptive;
+    if (st.done || st.current == null) return { status: 409, error: 'All questions are answered.', code: 'ADAPTIVE_DONE' };
+    if (qIndex !== st.items.length) return { status: 409, error: 'That question is no longer open.', code: 'NOT_CURRENT' };
+    const qi = st.current;
+    const served = assignment.quiz?.questions?.[qi];
+    if (!served) return { status: 404, error: 'Question not found.' };
+    const answer = sanitizeAssignmentAnswer(served, rawAnswer);
+    const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
+    const qBand = band >= 0 ? band : adaptiveBand(st);
+    const teacher = isAssignmentTeacherGradedQuestion(served);
+    st.items.push({ qi, answer, bet, at: now, ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
+    attempt.answersByQ[String(qi)] = { answer, bet, teacherGrade: null, updatedAt: now };
+    if (teacher) adaptiveRecordPending(st, qi, qBand);
+    else adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, answer)));
+    adaptiveAttemptAdvance(assignment, st);
+  } else {
+    const question = assignment.quiz?.questions?.[qIndex];
+    if (!question) return { status: 404, error: 'Question not found.' };
+    if (attempt.answersByQ[String(qIndex)]) return { status: 409, error: 'Already answered.', code: 'ALREADY_ANSWERED' };
+    attempt.answersByQ[String(qIndex)] = { answer: sanitizeAssignmentAnswer(question, rawAnswer), bet, teacherGrade: null, updatedAt: now };
+  }
+  attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+  attempt.updatedAt = now;
+  return null;
+}
+
+// What the player's browser gets: the same shape as an assignment attempt
+// (so the student page plays it unchanged), plus the next token. Answers are
+// revealed for answered questions only.
+async function publicPlayResponse(env, assignment, attempt) {
+  const view = publicGameAssignment(assignment);
+  return {
+    ok: true,
+    token: await signPublicPlay(env, assignment, attempt),
+    attempt: publicAssignmentAttempt(view, attempt, { includeAnswers: true, includeAnswerKey: false }),
+  };
+}
+
 function evaluateAssignmentAttempt(assignment, attempt) {
   if (attempt?.adaptive) {
     const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
@@ -7501,11 +7831,11 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   };
 }
 
-function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false } = {}) {
+function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers } = {}) {
   if (attempt?.adaptive) {
     const st = attempt.adaptive;
     const v = adaptiveAttemptView(assignment, attempt);
-    const out = publicAssignmentAttempt(v.assignment, v.attempt, { includeAnswers });
+    const out = publicAssignmentAttempt(v.assignment, v.attempt, { includeAnswers, includeAnswerKey });
     out.metrics = evaluateAssignmentAttempt(assignment, attempt);
     out.assignment.totalQuestions = st.count;
     // Progress only: levels stay teacher-side.
@@ -7567,7 +7897,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false }
     submittedAt: Number(attempt?.submittedAt || 0) || null,
     reviewedAt: Number(attempt?.reviewedAt || 0) || null,
     selfCorrectedAt: Number(attempt?.selfCorrectedAt || 0) || null,
-    assignment: publicAssignment(assignment, { includeQuiz: true, includeAnswerKey: includeAnswers }),
+    via: attempt?.via === 'play' ? 'play' : undefined,
+    assignment: publicAssignment(assignment, { includeQuiz: true, includeAnswerKey }),
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
@@ -7674,6 +8005,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     reviewedAt: full.reviewedAt,
     selfCorrectedAt: full.selfCorrectedAt,
     notifiedAt: Number(attempt?.notifiedAt || 0) || null,
+    via: full.via,
     metrics: full.metrics,
     answeredQIndexes: full.answeredQIndexes,
     focusEventsCount: full.focusEventsCount,
@@ -8127,6 +8459,8 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: assignmentAdaptiveCount(assignment) || Number(assignment.quiz?.questions?.length || 0),
     adaptiveCount: assignmentAdaptiveCount(assignment) || undefined,
+    public: !!assignment.public,
+    publishedAt: Number(assignment.publishedAt || 0) || null,
   };
   if (includeQuiz) {
     const quiz = normalizeQuiz(assignment.quiz || {});

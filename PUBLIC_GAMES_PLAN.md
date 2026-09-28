@@ -86,3 +86,18 @@ Reuses the existing assignment routes with `via: 'play'`:
 - Listing never contains answer fields; archived or non-public assignments are absent.
 - Teacher-graded questions in anonymous play: answered, not scored.
 - Signed-in `via: 'play'`: sign-in enforced on a random-names assignment; overrides applied.
+
+## Built
+
+### Step 1: worker (2026-09-28)
+- `assignment.public` + `publishedAt` (owner-only `POST /api/assignments/set-public`); `pub:index` lists public codes; `pc:<code>` holds `{ plays, likes }`. The teacher's assignment list shows `public`, `plays`, `likes`.
+- `GET /api/public/games` (cached 30 s): `{ code, title, cover, adaptive, levels, questionCount, teacherGraded, plays, likes, publishedAt }`.
+- Anonymous play: `POST /api/public/game/start | answer | finish | like`. The play token is the attempt (answers, adaptive state), signed with a key derived from the student-session secret (`public-play:` prefix), valid 3 h, refused after a quiz edit (`GAME_CHANGED`). Each question is answered once. Responses have the same shape as an assignment attempt, so the student page can play them unchanged. `finish` counts the play.
+- Signed-in play: `via: 'play'` on `/api/assignment/check-status | start | attempts | delete-my-attempt` requires sign-in even on a random-names assignment. The attempt is stored with `via: 'play'`, and every route applies the public-play settings to it. `/play` and normal-link attempts are kept apart (resume, attempt limit). Results carry `via`.
+- Answers are only ever revealed for questions already answered (`includeAnswerKey: false`), for anonymous and `via: 'play'` attempts alike.
+- Tests: `tests/public-games.test.js` (unit, real worker code). An end-to-end script against `wrangler dev` checked 49 behaviours (listing, anonymous play incl. adaptive, tampering, edits, counters, archive, signed-in via /play).
+
+### Notes for later steps
+- Existing instant-feedback assignments send the answer key for the whole quiz with the first answer (`publicAssignmentAttempt` → `includeAnswerKey: includeAnswers`). Public play does not; normal homework is unchanged for now.
+- Top scores (step 5) need replay protection: a player can resend an earlier token to answer a question again after seeing the answer. Record used token steps (id + step, expiring with the token) before scores count.
+- Plays and likes have no server-side rate limit; the page keeps one like per browser.
