@@ -187,6 +187,15 @@ describe('rules follow the request', () => {
     assert.match(A.buildCreationPrompt({ ...base, aiMode: 'agent' }).filename, /^prompt-agent-/);
   });
 
+  it('what the teacher typed wins over the rest, except the JSON format', () => {
+    for (const mode of ['chatbot', 'agent']) {
+      const first = section(build({ aiMode: mode }), 'Rules').split('\n').find((l) => /^\d+\. /.test(l));
+      assert.match(first, /^1\. The teacher's own words come first/, mode);
+      assert.match(first, /contradicts the rest of these instructions, follow the teacher/);
+      assert.match(first, /Only the JSON format and the field names below stay fixed/);
+    }
+  });
+
   it('states each rule once', () => {
     const rules = section(build({ audio: 'some', video: 'some', readingText: 'some', images: 'mix' }), 'Rules')
       .split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, '').split(':')[0]);

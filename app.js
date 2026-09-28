@@ -4202,6 +4202,8 @@ function buildCreationPrompt(req) {
   if (agent) {
     rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
   }
+  // What the teacher typed by hand is the most specific instruction there is.
+  rules.unshift('The teacher\'s own words come first: if anything the teacher typed (theme, goal, level notes, number of questions) contradicts the rest of these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.');
 
   const templateQuestions = TEMPLATE_ALL_13_TYPES.questions.filter((q) => allowed.includes(q.type));
   const examples = pickPromptExamples(templateQuestions).map((q, i) => shapePromptExample(q, req, i));
