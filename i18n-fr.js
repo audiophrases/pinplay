@@ -1033,6 +1033,23 @@ window.PINPLAY_FR_DICT = {
   '✓ Recorded (not sent: anonymous play)': '✓ Enregistré (non envoyé : jeu anonyme)',
   '✓ Added (not sent: anonymous play)': '✓ Ajoutée (non envoyée : jeu anonyme)',
 
+  /* ===================== Public games: teacher page ===================== */
+  '🌐 Public game: on': '🌐 Jeu public : activé',
+  '🌐 Make public game': '🌐 Rendre public comme jeu',
+  'List this assignment on the Games page ({url}). Anyone can play it there, anonymously or signed in; this assignment’s own link and settings don’t change.': 'Afficher ce devoir sur la page Jeux ({url}). Tout le monde peut y jouer, anonymement ou connecté ; le lien et les réglages de ce devoir ne changent pas.',
+  'Make “{title}” a public game?\n\nIt will appear on the Games page, where anyone with the link can play it. Anonymous players store nothing; signed-in players’ results appear here, tagged “via Games”. This assignment’s own link and settings don’t change.': 'Rendre « {title} » public comme jeu ?\n\nIl apparaîtra sur la page Jeux, où toute personne ayant le lien pourra y jouer. Rien n’est enregistré pour les joueurs anonymes ; les résultats des joueurs connectés apparaissent ici, marqués « via Jeux ». Le lien et les réglages de ce devoir ne changent pas.',
+  '“{title}” is now on the Games page.': '« {title} » est maintenant sur la page Jeux.',
+  '“{title}” was removed from the Games page.': '« {title} » a été retiré de la page Jeux.',
+  'Public game error: {msg}': 'Erreur jeu public : {msg}',
+  'Copy game link': 'Copier le lien du jeu',
+  'Copied the game link for {code}': 'Lien du jeu {code} copié',
+  'Copy failed': 'La copie a échoué',
+  'On the Games page: plays and likes so far': 'Sur la page Jeux : parties et « j’aime » jusqu’ici',
+  '🌐 Public · ▶ {plays} · ❤ {likes}': '🌐 Public · ▶ {plays} · ❤ {likes}',
+  'Played from the Games page (signed in)': 'Joué depuis la page Jeux (connecté)',
+  '🌐 via Games': '🌐 via Jeux',
+  '{n} of these students played from the Games page. Their corrections are behind the game link, so notify them separately (select only them).': '{n} de ces élèves ont joué depuis la page Jeux. Leurs corrections sont accessibles par le lien du jeu : prévenez-les séparément (en ne sélectionnant qu’eux).',
+
   /* ===================== Games page (/games/) ===================== */
   'Games': 'Jeux',
   'Sort games': 'Trier les jeux',

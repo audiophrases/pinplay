@@ -97,6 +97,15 @@ Reuses the existing assignment routes with `via: 'play'`:
 - Answers are only ever revealed for questions already answered (`includeAnswerKey: false`), for anonymous and `via: 'play'` attempts alike.
 - Tests: `tests/public-games.test.js` (unit, real worker code). An end-to-end script against `wrangler dev` checked 49 behaviours (listing, anonymous play incl. adaptive, tampering, edits, counters, archive, signed-in via /play).
 
+### Step 2: student page (2026-09-28)
+- `?game=CODE` opens the game's entry screen (title, length, Google button with "Sign in with Google for teacher corrections.", Play anonymously / ▶ Play). `api()` routes the unchanged assignment flow: anonymous → `/api/public/game/*` with the token; signed in → assignment routes with `via: 'play'`. Anonymous voice/photo answers stay in the browser. End of game (results panel): corrections note, Play again, Like, More games.
+
+### Step 3: `/games/` page (2026-09-28)
+- `games/index.html` + `games.js`: cards (first picture or coloured tile, title, adaptive pill + level range, questions, plays, likes), sort Most played / Newest / Most liked (remembered), like per browser, EN/FR.
+
+### Step 4: teacher page (2026-09-28)
+- Owner-only "🌐 Make public game" / "🌐 Public game: on" on each assignment (with a confirm), "Copy game link" when public, and a "🌐 Public · ▶ plays · ❤ likes" badge. Results rows tag "🌐 via Games". Notify uses the game link when every selected student played from the Games page; a mixed selection keeps the homework link and warns to notify Games players separately.
+
 ### Notes for later steps
 - Fixed for homework too (2026-09-28): instant-feedback assignments used to send the answer key for the whole quiz with the first answer. Now every open attempt (homework, anonymous play, via /play) gets verdicts and correct answers only for what it has answered; the whole key comes with the submitted attempt (review, self-correct). The match-pairs highlight now reads the per-answer reveal (it had marked every pair wrong).
 - Top scores (step 5) need replay protection: a player can resend an earlier token to answer a question again after seeing the answer. Record used token steps (id + step, expiring with the token) before scores count.

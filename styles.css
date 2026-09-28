@@ -5659,3 +5659,10 @@ body.arena-board-open { overflow: hidden; }
 .game-like[aria-pressed="true"] { border-color: #fda4af; color: #be123c; }
 .game-like:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .game-card, .game-card:hover { transition: none; transform: none; } }
+
+/* Public game (Games page) badge: assignment list and results rows. */
+.badge-public {
+  display: inline-block; font-size: 0.72rem; font-weight: 700;
+  padding: 0.05rem 0.45rem; border-radius: 999px; margin-left: 0.35rem;
+  background: #e0f2fe; color: #075985; white-space: nowrap; vertical-align: baseline;
+}

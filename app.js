@@ -6397,6 +6397,18 @@ async function setAssignmentActive(code, active) {
   });
 }
 
+async function setAssignmentPublic(code, isPublic) {
+  if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
+  await api('/api/assignments/set-public', {
+    method: 'POST',
+    body: {
+      password: createSessionPassword,
+      code,
+      public: !!isPublic,
+    },
+  });
+}
+
 async function setAssignmentArchived(code, archived) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   await api('/api/assignments/toggle-archive', {
@@ -8605,7 +8617,10 @@ function renderAssignmentResults(safeCode, data) {
       ? `<span class="badge-adaptive" title="${escapeHtml(t('Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' }))}${lv.path ? `
 ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
       : '';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${levelBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
+    const viaGamesBadge = a?.via === 'play'
+      ? `<span class="badge-public" title="${escapeHtml(t('Played from the Games page (signed in)'))}">${escapeHtml(t('🌐 via Games'))}</span>`
+      : '';
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -8713,6 +8728,16 @@ function buildAssignmentJoinLink(code) {
   const safeCode = encodeURIComponent(String(code || '').trim());
   return `https://audiophrases.github.io/pinplay/?assignment=${safeCode}`;
 }
+
+// A public game, as opened from the Games page. Students who played it from
+// there find their attempt (and your corrections) through this link, not the
+// assignment link. See PUBLIC_GAMES_PLAN.md.
+function buildGameLink(code) {
+  const safeCode = encodeURIComponent(String(code || '').trim());
+  return `https://audiophrases.github.io/pinplay/?game=${safeCode}`;
+}
+
+const GAMES_PAGE_URL = 'https://audiophrases.github.io/pinplay/games/';
 
 // ==================== Students (roster) ====================
 // The in-app replacement for keeping a roster spreadsheet. Students prove who
@@ -9215,7 +9240,11 @@ async function markAttemptsNotified(safeCode, attemptIds) {
 function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
   const tpl = loadNotifyTemplate();
   const quizTitle = String(assignment?.title || safeCode);
-  const quizLink = buildAssignmentJoinLink(safeCode);
+  // Students who played from the Games page find their attempt through the
+  // game link; the email has one link, so a mixed selection gets a warning.
+  const viaGames = attempts.filter((a) => a?.via === 'play').length;
+  const allViaGames = viaGames > 0 && viaGames === attempts.length;
+  const quizLink = allViaGames ? buildGameLink(safeCode) : buildAssignmentJoinLink(safeCode);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(3px);';
@@ -9289,7 +9318,15 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
   markBtn.style.color = 'white';
 
   btnRow.append(closeBtn, copyAddrBtn, copyAllBtn, mailtoBtn, markBtn);
-  dialog.append(title, status, subjectLabel, subjectInput, bodyLabel, bodyInput, recipientsLabel, recipientsBox, missingNote, btnRow);
+  dialog.append(title, status);
+  if (viaGames && !allViaGames) {
+    const mixedNote = document.createElement('div');
+    mixedNote.className = 'small';
+    mixedNote.style.cssText = 'background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;';
+    mixedNote.textContent = t('{n} of these students played from the Games page. Their corrections are behind the game link, so notify them separately (select only them).', { n: viaGames });
+    dialog.append(mixedNote);
+  }
+  dialog.append(subjectLabel, subjectInput, bodyLabel, bodyInput, recipientsLabel, recipientsBox, missingNote, btnRow);
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
 
@@ -9587,6 +9624,9 @@ function buildAssignmentListItem(a) {
     : '';
   const archivedTag = a?.archived ? ' <span class="badge-archived" title="Archived — hidden from default view">archived</span>' : '';
   const liveTag = a?.origin === 'live' ? ' <span class="badge-live" title="Captured from a login-required live game">🔴 live</span>' : '';
+  const publicTag = a?.public
+    ? ` <span class="badge-public" title="${escapeHtml(t('On the Games page: plays and likes so far'))}">${escapeHtml(t('🌐 Public · ▶ {plays} · ❤ {likes}', { plays: Number(a?.plays || 0), likes: Number(a?.likes || 0) }))}</span>`
+    : '';
   const attemptsCount = Number(a?.attemptsCount || 0);
   const attemptsCountTag = attemptsCount > 0
     ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
@@ -9594,7 +9634,7 @@ function buildAssignmentListItem(a) {
   const sizeTag = a?.adaptiveCount
     ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} questions per student', { n: Number(a.adaptiveCount) }))}</span>`
     : `${Number(a?.totalQuestions || 0)}q`;
-  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${sizeTag}${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}`;
+  title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${sizeTag}${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}${publicTag}`;
 
   const meta = document.createElement('div');
   meta.className = 'small muted';
@@ -9737,7 +9777,45 @@ function buildAssignmentListItem(a) {
     }
   });
 
-  row.append(copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, archiveBtn, deleteBtn);
+  // Public game: listed on the Games page, playable anonymously or signed in,
+  // without touching this assignment's own link or settings. Owner only.
+  const publicBtn = document.createElement('button');
+  publicBtn.className = `btn owner-only${a?.public ? ' active' : ''}`;
+  publicBtn.setAttribute('aria-pressed', a?.public ? 'true' : 'false');
+  publicBtn.textContent = a?.public ? t('🌐 Public game: on') : t('🌐 Make public game');
+  publicBtn.title = t('List this assignment on the Games page ({url}). Anyone can play it there, anonymously or signed in; this assignment’s own link and settings don’t change.', { url: GAMES_PAGE_URL });
+  publicBtn.addEventListener('click', async () => {
+    const next = !a?.public;
+    const title = String(a?.title || code);
+    if (next && !confirm(t('Make “{title}” a public game?\n\nIt will appear on the Games page, where anyone with the link can play it. Anonymous players store nothing; signed-in players’ results appear here, tagged “via Games”. This assignment’s own link and settings don’t change.', { title }))) return;
+    try {
+      publicBtn.disabled = true;
+      await setAssignmentPublic(code, next);
+      if (assignmentStatusEl) {
+        assignmentStatusEl.textContent = next
+          ? t('“{title}” is now on the Games page.', { title })
+          : t('“{title}” was removed from the Games page.', { title });
+      }
+      await refreshAssignmentsList();
+    } catch (err) {
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t('Public game error: {msg}', { msg: err.message });
+    } finally {
+      publicBtn.disabled = false;
+    }
+  });
+
+  const actions = [copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, publicBtn];
+  if (a?.public) {
+    const copyGameLinkBtn = document.createElement('button');
+    copyGameLinkBtn.className = 'btn owner-only';
+    copyGameLinkBtn.textContent = t('Copy game link');
+    copyGameLinkBtn.addEventListener('click', async () => {
+      const ok = await copyTextSmart(buildGameLink(code));
+      if (assignmentStatusEl) assignmentStatusEl.textContent = ok ? t('Copied the game link for {code}', { code }) : t('Copy failed');
+    });
+    actions.push(copyGameLinkBtn);
+  }
+  row.append(...actions, archiveBtn, deleteBtn);
   li.append(header, row);
   return li;
 }
