@@ -1033,6 +1033,19 @@ window.PINPLAY_FR_DICT = {
   '✓ Recorded (not sent: anonymous play)': '✓ Enregistré (non envoyé : jeu anonyme)',
   '✓ Added (not sent: anonymous play)': '✓ Ajoutée (non envoyée : jeu anonyme)',
 
+  /* ===================== Games page (/games/) ===================== */
+  'Games': 'Jeux',
+  'Sort games': 'Trier les jeux',
+  'Most played': 'Les plus joués',
+  'Newest': 'Les plus récents',
+  'Most liked': 'Les plus aimés',
+  '🎯 Adaptive · {levels}': '🎯 Adaptatif · {levels}',
+  '▶ {n} plays': '▶ {n} parties',
+  '▶ 1 play': '▶ 1 partie',
+  'Like {title}': "J'aime {title}",
+  'No games yet. Check back soon!': 'Pas encore de jeux. Revenez bientôt !',
+  'Could not load the games. Check your connection and reload.': 'Impossible de charger les jeux. Vérifiez votre connexion et rechargez la page.',
+
   /* ===================== Command palette (Ctrl+K) ===================== */
   'Search actions, quizzes, assignments, classes, students…': 'Rechercher des actions, quiz, devoirs, classes, élèves…',
   '↑↓ move · Enter open · Esc close · Ctrl+K search': '↑↓ se déplacer · Entrée ouvrir · Échap fermer · Ctrl+K rechercher',
