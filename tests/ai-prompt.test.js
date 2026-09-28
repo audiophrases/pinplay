@@ -127,7 +127,8 @@ describe('rules follow the request', () => {
   it('adaptive: a Levels section and a level on every example', () => {
     const text = build({ adaptive: true, levelNotes: 'more typing at higher levels' });
     assert.match(section(text, 'Levels'), /"cefr"/);
-    assert.match(section(text, 'Levels'), /Teacher's notes on the levels: "more typing at higher levels"/);
+    assert.match(section(text, 'Levels'), /Follow the teacher's notes on levels \(above\)/);
+    assert.match(section(text, "The teacher's own words"), /- Notes on levels: "more typing at higher levels"/);
     assert.match(section(text, 'Question fields'), /"timeLimit", "cefr"/);
     examplesOf(text).forEach((ex) => assert.ok(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(ex.cefr)));
     assert.equal(section(build(), 'Levels'), '');
@@ -176,7 +177,9 @@ describe('rules follow the request', () => {
 
   it('batches and brief counts', () => {
     assert.match(build({ questionCount: 40, batchSize: 10 }), /in batches of 10, one JSON object per batch/);
-    assert.match(build({ questionCount: 'about 50 minutes' }), /decide how many from this brief: "about 50 minutes"/);
+    const brief = build({ questionCount: 'about 50 minutes' });
+    assert.match(section(brief, 'Task'), /decide how many from the teacher's brief \(above\)/);
+    assert.match(section(brief, "The teacher's own words"), /- How many questions: "about 50 minutes"/);
   });
 
   it('agent mode: check facts, embed the real picture, same fields and examples', () => {
@@ -190,10 +193,26 @@ describe('rules follow the request', () => {
   it('what the teacher typed wins over the rest, except the JSON format', () => {
     for (const mode of ['chatbot', 'agent']) {
       const first = section(build({ aiMode: mode }), 'Rules').split('\n').find((l) => /^\d+\. /.test(l));
-      assert.match(first, /^1\. The teacher's own words come first/, mode);
-      assert.match(first, /contradicts the rest of these instructions, follow the teacher/);
+      assert.match(first, /^1\. The teacher's own words \(the section above\) come first/, mode);
+      assert.match(first, /\(the section above\) come first: if they contradict anything else in these instructions, follow the teacher/);
       assert.match(first, /Only the JSON format and the field names below stay fixed/);
     }
+  });
+
+  it('puts only what the teacher typed, quoted, in its own section', () => {
+    const typed = build({ goal: 'Past simple at A1, lots of speaking', goalIsCustom: true, level: 'Grade 5' });
+    const own = section(typed, "The teacher's own words");
+    assert.match(own, /- Theme: "Spanish verbs: present tense"/);
+    assert.match(own, /- Language of the quiz: "Spanish"/);
+    assert.match(own, /- Goal: "Past simple at A1, lots of speaking"/);
+    assert.match(own, /- Level: "Grade 5"/);
+    assert.doesNotMatch(section(typed, 'Task'), /Goal:|Theme:/);
+    // A goal picked from the dropdown is PinPlay's wording: it stays in Task.
+    const picked = build();
+    assert.doesNotMatch(section(picked, "The teacher's own words"), /Goal:/);
+    assert.match(section(picked, 'Task'), /- Goal: More learning \(scaffolded\)/);
+    // The section comes before Task and Rules.
+    assert.ok(picked.indexOf("## The teacher's own words") < picked.indexOf('## Task'));
   });
 
   it('states each rule once', () => {

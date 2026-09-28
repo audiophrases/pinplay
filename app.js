@@ -4179,16 +4179,25 @@ function buildCreationPrompt(req) {
     if (allowed.includes('pin')) typesLine += ' (pin only if something in the theme fits it)';
     if (numeric && numeric < allowed.length) typesLine += ' (fewer questions than types: cover as many as you can)';
   }
-  const howMany = typeof count === 'string' ? `decide how many from this brief: "${count}"` : String(numeric || 10);
+  const howMany = typeof count === 'string' ? 'decide how many from the teacher\'s brief (above)' : String(numeric || 10);
   const delivery = req.batchSize
     ? `in batches of ${req.batchSize}, one JSON object per batch (the teacher joins them with Import → Append)`
     : 'all in one JSON object';
 
+  // Only what the teacher typed by hand, word for word, so the AI can tell it
+  // apart from PinPlay's own wording (dropdown choices stay in Task).
+  const quote = (v) => `"${String(v).trim()}"`;
+  const teacherWords = [
+    `Theme: ${quote(req.theme)}`,
+    req.language ? `Language of the quiz: ${quote(req.language)}` : null,
+    req.goalIsCustom && req.goal ? `Goal: ${quote(req.goal)}` : null,
+    req.level ? `Level: ${quote(req.level)}` : null,
+    req.adaptive && req.levelNotes ? `Notes on levels: ${quote(req.levelNotes)}` : null,
+    typeof count === 'string' ? `How many questions: ${quote(count)}` : null,
+  ].filter(Boolean);
+
   const task = [
-    `Theme: ${req.theme}`,
-    req.language ? `Language of the quiz: ${req.language}` : null,
-    `Goal: ${req.goal || 'balanced practice: scaffolding plus retrieval'}`,
-    req.level ? `Level: ${req.level}` : null,
+    req.goalIsCustom && req.goal ? null : `Goal: ${req.goal || 'balanced practice: scaffolding plus retrieval'}`,
     req.adaptive ? 'Levels: adaptive, A1 to C2 (see Levels)' : null,
     `Questions: ${howMany}, ${delivery}`,
     `Question types: ${typesLine}`,
@@ -4203,7 +4212,7 @@ function buildCreationPrompt(req) {
     rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
   }
   // What the teacher typed by hand is the most specific instruction there is.
-  rules.unshift('The teacher\'s own words come first: if anything the teacher typed (theme, goal, level notes, number of questions) contradicts the rest of these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.');
+  rules.unshift('The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.');
 
   const templateQuestions = TEMPLATE_ALL_13_TYPES.questions.filter((q) => allowed.includes(q.type));
   const examples = pickPromptExamples(templateQuestions).map((q, i) => shapePromptExample(q, req, i));
@@ -4213,6 +4222,10 @@ function buildCreationPrompt(req) {
     '# PinPlay quiz instructions',
     '',
     `Create a quiz for PinPlay. Reply with the quiz as ONE JSON object${req.batchSize ? ' per batch' : ''} and nothing else (no commentary). If you can create files, give it as a downloadable file named "${toSafeFilename(req.theme)}${req.batchSize ? '-part1' : ''}.json"${req.batchSize ? ' (part2, part3… for the next batches)' : ''}; otherwise put it in one \`\`\`json code block.`,
+    '',
+    '## The teacher\'s own words',
+    'Typed by the teacher, word for word. They win if anything below contradicts them.',
+    ...teacherWords.map((line) => `- ${line}`),
     '',
     '## Task',
     ...task.map((line) => `- ${line}`),
@@ -4270,6 +4283,7 @@ async function exportCreationPrompt() {
     adaptive,
     levelNotes: adaptive ? valueOf('promptLevelNotes') : '',
     goal,
+    goalIsCustom: goalEl?.value === 'custom',
     timeLimit: Number(valueOf('promptTimeLimit')) || 0,
     questionCount: /^\d+$/.test(countRaw) && Number(countRaw) > 0 ? Number(countRaw) : (countRaw || 10),
     batchSize: batchSize >= 3 ? Math.min(100, batchSize) : 0,
@@ -15104,7 +15118,7 @@ function buildAdaptiveLevelRules(cleanRequest, allowedTypes = []) {
     // Teachers mostly describe what each level should look like (task types,
     // vocabulary); the default target only yields when they ask for another balance.
     cleanRequest.levelNotes
-      ? `Teacher's notes on the levels: "${cleanRequest.levelNotes}". Follow them; if they ask for a different balance, that replaces the default target; otherwise keep the default target.`
+      ? 'Follow the teacher\'s notes on levels (above); if they ask for a different balance, that replaces the default target; otherwise keep the default target.'
       : undefined,
     'Where you can, practise the same skill at several levels.',
     'For questions about another subject (history, science…), use the levels as difficulty steps: A1 = almost everyone knows it, A2 = most students, B1 = typical school knowledge, B2 = needs solid study, C1 = only the best-read, C2 = specialist.',
