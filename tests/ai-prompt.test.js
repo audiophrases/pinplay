@@ -15,7 +15,7 @@ before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'buildAdaptiveLevelRules',
-    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS',
+    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
   ]);
   W = loadDeclarations(read('cloudflare/worker.js'), [
@@ -38,7 +38,10 @@ const section = (text, name) => {
   const next = text.indexOf('\n## ', start + 3);
   return text.slice(start, next < 0 ? undefined : next);
 };
-const examplesOf = (text) => JSON.parse(text.slice(text.indexOf('```json') + 7, text.lastIndexOf('```')));
+const examplesOf = (text) => {
+  const block = section(text, 'Examples');
+  return JSON.parse(block.slice(block.indexOf('```json') + 7, block.lastIndexOf('```')));
+};
 const fieldTypes = (text) => section(text, 'Question fields').split('\n')
   .filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
 
@@ -78,6 +81,8 @@ describe('question types', () => {
     assert.match(f.text, /"accepted"/);
     assert.match(f.text, /not "answers"/);
     assert.match(f.error_hunt, /"correctedVariants"/);
+    assert.match(f.error_hunt, /Always list the alternatives/);
+    assert.match(f.error_hunt, /"They don't see it\.", "He doesn't see it\.", "She doesn't see it\."/);
     assert.match(f.slider, /"min", "max", "target"/);
     assert.match(f.match_pairs, /"pairs": \[\{"left"/);
     assert.match(f.wordle, /exactly "Guess the word\."/);
@@ -126,6 +131,32 @@ describe('rules follow the request', () => {
     assert.match(section(text, 'Question fields'), /"timeLimit", "cefr"/);
     examplesOf(text).forEach((ex) => assert.ok(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(ex.cefr)));
     assert.equal(section(build(), 'Levels'), '');
+  });
+
+  it('adaptive: says what each language level means and forbids easy C1/C2', () => {
+    const levels = section(build({ adaptive: true }), 'Levels');
+    assert.match(levels, /Make the difficulty real, not just the label/);
+    assert.match(levels, /producing language \(typing an answer, correcting errors, filling gaps from memory\) suits higher levels/);
+    assert.match(levels, /A1 = very common words/);
+    assert.match(levels, /C2 = rare words/);
+    assert.match(levels, /Never tag an easy question C1 or C2/);
+  });
+
+  it('adaptive: every example is tagged at its real level, never above B1', () => {
+    // The template questions are all easy; tagging them by position once showed
+    // "I went to the ____" as B2, and bots copied that.
+    A.TEMPLATE_ALL_13_TYPES.questions.forEach((q) => {
+      assert.ok(A.PROMPT_EXAMPLE_CEFR[q.id], `${q.id} has no real level`);
+      assert.ok(['A1', 'A2', 'B1'].includes(A.shapePromptExample(q, { ...base, adaptive: true }, 1).cefr), q.id);
+    });
+  });
+
+  it('asks for a downloadable .json file, or else one json code block', () => {
+    const text = build();
+    assert.match(text, /downloadable file named "spanish-verbs-present-tense\.json"/);
+    assert.match(text, /otherwise put it in one ```json code block/);
+    assert.doesNotMatch(text, /no code fences/);
+    assert.match(build({ questionCount: 40, batchSize: 10 }), /-part1\.json" \(part2, part3/);
   });
 
   it('batches and brief counts', () => {

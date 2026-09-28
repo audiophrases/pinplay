@@ -4075,7 +4075,7 @@ const PROMPT_TYPE_FIELDS = {
   voice_text: 'the student says the answer: "accepted" as in text, plus "answerLanguage": the spoken language, e.g. "es-ES".',
   context_gap: 'mark each gap in the prompt with ____; "gaps": ["…"] — the answers in order; two accepted answers for one gap: "dreamed, dreamt".',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs.',
-  error_hunt: 'the prompt is ONLY the sentence with the mistake. "correctedVariants": every full corrected sentence you accept — the obvious fix plus other natural fixes, which may change a different word ("Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho."). "corrected": the first of them.',
+  error_hunt: 'the prompt is ONLY the sentence with the mistake. "correctedVariants": every full corrected sentence you accept. Always list the alternatives, not just the obvious fix: a mistake can often be fixed by changing a different word, and a student who does that is right too. "They doesn\'t see it." → "They don\'t see it.", "He doesn\'t see it.", "She doesn\'t see it."; "Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho.". "corrected": the first of them.',
   puzzle: '"items": the 3 to 12 pieces in the CORRECT order — PinPlay shuffles them. For 1–2 pieces use text instead.',
   slider: 'a question with one right number (a fact, not an opinion): "min", "max", "target" (numbers), "unit", and "margin": "none", "low", "medium", "high" or "maximum" (how close counts as right).',
   pin: 'needs a still picture: "imageKeyword" (1–3 English words). "zones": [{"x": 50, "y": 40, "r": 8}] in % of the picture; "pinMode": "all" (tap every zone) or "any". The picture is found later, so use pin only where positions are predictable (e.g. a world map); if nothing in the theme fits, leave pin out.',
@@ -4093,9 +4093,18 @@ const PROMPT_EXAMPLE_FIELDS = ['answers', 'accepted', 'answerLanguage', 'gaps', 
 
 // A template question reduced to what this request uses: no empty fields, the
 // request's picture/audio settings, its time limit and (adaptive) a level.
+// Real difficulty of each template question: an adaptive example must never
+// show a beginner question under a high tag (the AI copies what it sees).
+const PROMPT_EXAMPLE_CEFR = {
+  'q1-mcq': 'A1', 'q2-multi': 'A1', 'q3-tf': 'A2', 'q4-text': 'A1', 'q5-context': 'A2',
+  'q6-match': 'A1', 'q7-error': 'A1', 'q8-open': 'A2', 'q9-speaking': 'A2', 'q10-puzzle': 'A1',
+  'q11-slider': 'B1', 'q12-pin': 'A1', 'q13-voice-record': 'A2', 'q14-voice-text': 'A1',
+  'q15-image-answer': 'B1', 'q16-spellingbee': 'A2', 'q17-wordle': 'A2',
+};
+
 function shapePromptExample(q, req, index) {
   const ex = { id: q.id, type: q.type, prompt: q.prompt };
-  if (req.adaptive) ex.cefr = ['A2', 'B2', 'A1', 'B1'][index] || 'B1';
+  if (req.adaptive) ex.cefr = PROMPT_EXAMPLE_CEFR[q.id] || 'A2';
   ex.points = 1000;
   ex.timeLimit = req.timeLimit;
   PROMPT_EXAMPLE_FIELDS.forEach((k) => { if (q[k] !== undefined) ex[k] = JSON.parse(JSON.stringify(q[k])); });
@@ -4201,7 +4210,7 @@ function buildCreationPrompt(req) {
   const out = [
     '# PinPlay quiz instructions',
     '',
-    `Create a quiz for PinPlay. Reply with the quiz as ONE JSON object${req.batchSize ? ' per batch' : ''} and nothing else: no commentary, no code fences.`,
+    `Create a quiz for PinPlay. Reply with the quiz as ONE JSON object${req.batchSize ? ' per batch' : ''} and nothing else (no commentary). If you can create files, give it as a downloadable file named "${toSafeFilename(req.theme)}${req.batchSize ? '-part1' : ''}.json"${req.batchSize ? ' (part2, part3… for the next batches)' : ''}; otherwise put it in one \`\`\`json code block.`,
     '',
     '## Task',
     ...task.map((line) => `- ${line}`),
@@ -15072,7 +15081,10 @@ function buildAdaptiveLevelRules(cleanRequest) {
     ? CEFR_LEVELS.map((l) => `${l} ${counts[l]}`).join(', ')
     : CEFR_LEVELS.map((l) => `${l} ≈${ADAPTIVE_DEFAULT_LEVEL_SHARES[l]}%`).join(', ');
   return [
-    'Every question has "cefr": "A1", "A2", "B1", "B2", "C1" or "C2". PinPlay moves each student up and down the levels, so the tags must be accurate and the difficulty real: vocabulary, grammar and the kind of task (recognising an answer is easier than typing one).',
+    'Every question has "cefr": "A1", "A2", "B1", "B2", "C1" or "C2". PinPlay moves each student up and down the levels, so every tag must be accurate.',
+    'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false, matching) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
+    'For language questions the levels mean: A1 = very common words, present simple, short sentences. A2 = everyday topics, past simple, comparatives. B1 = familiar topics, present perfect, first conditional, linking words. B2 = abstract topics, passive, reported speech, second and third conditionals, phrasal verbs. C1 = less common words, idioms, inversion, nuance. C2 = rare words, fine shades of meaning and register: hard even for a very advanced learner. Never tag an easy question C1 or C2.',
+    'The examples at the end are easy questions tagged at their real level (mostly A1–A2); your quiz covers every level.',
     `Level mix: all six levels, more easy questions than hard ones (hard ones often need writing and take longer). Default target: ${defaultMix}.`,
     // Teachers mostly describe what each level should look like (task types,
     // vocabulary); the default target only yields when they ask for another balance.
