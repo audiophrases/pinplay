@@ -1,7 +1,7 @@
-# Public games (`/play`)
+# Public games (`/games/`)
 
 PinPlay is one game in ESL Games and Beyond, but its link only shows a PIN box. This
-adds a second entry point: **`/play`**, a page of game cards made from assignments
+adds a second entry point: **`/games/`** (https://audiophrases.github.io/pinplay/games/, the link for ESL Games and Beyond), a page of game cards made from assignments
 the teacher marks **🌐 Public**. The join page stays as it is (PIN box only) for live
 games and normal assignments, so students never see both at once.
 
