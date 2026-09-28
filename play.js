@@ -5721,7 +5721,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Match pairs
   if (question.type === 'match_pairs') {
-    highlightMatchPairs(question);
+    highlightMatchPairs(question, state.correctAnswer);
     return;
   }
 
@@ -5806,17 +5806,28 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   });
 }
 
-// Match pairs: highlight each pair row
-function highlightMatchPairs(question) {
-  const pairs = question.pairs || [];
+// Match pairs: highlight each pair row. The right match for each left item
+// comes from the server's reveal ("left→right | …"), or the answer key once
+// the attempt is submitted. Fields follow question.leftItems order.
+function highlightMatchPairs(question, correctAnswer) {
+  const rightFor = new Map();
+  (Array.isArray(question.pairs) ? question.pairs : []).forEach((p) => {
+    rightFor.set(String(p?.left || '').trim(), String(p?.right || '').trim());
+  });
+  String(correctAnswer || '').split(' | ').forEach((part) => {
+    const at = part.indexOf('→');
+    if (at > 0) rightFor.set(part.slice(0, at).trim(), part.slice(at + 1).trim());
+  });
+  const leftItems = Array.isArray(question.leftItems) ? question.leftItems : (question.pairs || []).map((p) => p?.left);
   const fields = document.querySelectorAll('[data-join-pair]'); // Scope broadened to catch elements in the overlay
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim();
     if (!val) return;
-    const correct = pairs[idx]?.[1] || '';
+    const correct = rightFor.get(String(leftItems[idx] || '').trim());
+    if (!correct) return;
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
-    if (val.toLowerCase() === correct.toLowerCase()) {
+    if (normalizeTextAnswer(val) === normalizeTextAnswer(correct)) {
       row.classList.add('correct-highlight');
     } else {
       row.classList.add('incorrect-highlight');

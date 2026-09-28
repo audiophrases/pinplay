@@ -7672,14 +7672,16 @@ function publicPlayAttempt(claim) {
 }
 
 // A signed-in player who started from /play has an ordinary stored attempt,
-// marked via: 'play'. It keeps the public-play settings (and never gets the
-// full answer key) even if the game is later unpublished, so it can finish.
+// marked via: 'play'. It keeps the public-play settings even if the game is
+// later unpublished, so it can finish.
 function attemptAssignment(assignment, attempt) {
   return attempt?.via === 'play' ? publicGameAssignment(assignment) : assignment;
 }
 
+// The whole answer key goes out only with a submitted attempt, for homework and
+// /play alike (see publicAssignmentAttempt).
 function attemptAnswerKey(attempt, includeAnswers) {
-  return attempt?.via === 'play' ? false : includeAnswers;
+  return includeAnswers && !!attempt?.submitted;
 }
 
 // /play and the normal link keep separate attempts for the same student.
@@ -7745,13 +7747,13 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
 
 // What the player's browser gets: the same shape as an assignment attempt
 // (so the student page plays it unchanged), plus the next token. Answers are
-// revealed for answered questions only.
+// revealed for answered questions only, and the whole key once finished.
 async function publicPlayResponse(env, assignment, attempt) {
   const view = publicGameAssignment(assignment);
   return {
     ok: true,
     token: await signPublicPlay(env, assignment, attempt),
-    attempt: publicAssignmentAttempt(view, attempt, { includeAnswers: true, includeAnswerKey: false }),
+    attempt: publicAssignmentAttempt(view, attempt, { includeAnswers: true }),
   };
 }
 
@@ -7831,7 +7833,11 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   };
 }
 
-function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers } = {}) {
+// includeAnswers: per-answer verdicts and correct answers for what the student
+// has answered (instant feedback). includeAnswerKey: the whole quiz's answers,
+// only once the attempt is submitted (review, self-correct); an open attempt
+// never gets answers to questions still ahead.
+function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers && !!attempt?.submitted } = {}) {
   if (attempt?.adaptive) {
     const st = attempt.adaptive;
     const v = adaptiveAttemptView(assignment, attempt);

@@ -98,6 +98,6 @@ Reuses the existing assignment routes with `via: 'play'`:
 - Tests: `tests/public-games.test.js` (unit, real worker code). An end-to-end script against `wrangler dev` checked 49 behaviours (listing, anonymous play incl. adaptive, tampering, edits, counters, archive, signed-in via /play).
 
 ### Notes for later steps
-- Existing instant-feedback assignments send the answer key for the whole quiz with the first answer (`publicAssignmentAttempt` → `includeAnswerKey: includeAnswers`). Public play does not; normal homework is unchanged for now.
+- Fixed for homework too (2026-09-28): instant-feedback assignments used to send the answer key for the whole quiz with the first answer. Now every open attempt (homework, anonymous play, via /play) gets verdicts and correct answers only for what it has answered; the whole key comes with the submitted attempt (review, self-correct). The match-pairs highlight now reads the per-answer reveal (it had marked every pair wrong).
 - Top scores (step 5) need replay protection: a player can resend an earlier token to answer a question again after seeing the answer. Record used token steps (id + step, expiring with the token) before scores count.
 - Plays and likes have no server-side rate limit; the page keeps one like per browser.

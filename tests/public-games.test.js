@@ -128,6 +128,16 @@ describe('anonymous play', () => {
     assert.equal(JSON.stringify(view.answersWithCorrectness.map((a) => a.qIndex)), '[0]');
   });
 
+  it('sends the whole answer key only once the game is finished', async () => {
+    const game = plainGame();
+    const attempt = W.newPublicPlayAttempt(game);
+    W.applyPublicPlayAnswer(game, attempt, 0, 0, 0);
+    attempt.submitted = true;
+    attempt.submittedAt = Date.now();
+    const { attempt: view } = await W.publicPlayResponse(env, game, attempt);
+    assert.ok(view.assignment.quiz.questions.some(hasAnswerKey));
+  });
+
   it('refuses answers after the game is finished', () => {
     const game = plainGame();
     const attempt = W.newPublicPlayAttempt(game);
@@ -151,6 +161,18 @@ describe('anonymous play', () => {
     assert.ok(LEVELS.indexOf(served[5]) >= 3, served.join(' '));
     assert.equal(W.applyPublicPlayAnswer(game, attempt, 6, 0, 0).code, 'ADAPTIVE_DONE');
     assert.equal(W.applyPublicPlayAnswer(adaptiveGame(), W.newPublicPlayAttempt(adaptiveGame()), 3, 0, 0).code, 'NOT_CURRENT');
+  });
+});
+
+describe('homework with instant feedback', () => {
+  it('an open attempt gets verdicts for answered questions, never the answers ahead', () => {
+    const homework = { ...plainGame(), public: false, feedbackMode: 'instant' };
+    const attempt = { id: 'at_1', studentKey: 'usr_x', answersByQ: { 0: { answer: 1 } }, submitted: false };
+    const open = W.publicAssignmentAttempt(homework, attempt, { includeAnswers: true });
+    assert.ok(!open.assignment.quiz.questions.some(hasAnswerKey));
+    assert.equal(JSON.stringify(open.answersWithCorrectness.map((a) => [a.qIndex, a.correct])), '[[0,false]]');
+    const done = W.publicAssignmentAttempt(homework, { ...attempt, submitted: true, submittedAt: 1 }, { includeAnswers: true });
+    assert.ok(done.assignment.quiz.questions.some(hasAnswerKey));
   });
 });
 
