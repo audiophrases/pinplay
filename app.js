@@ -1738,47 +1738,7 @@ function bindBuilderEvents() {
 
     const audioBtn = e.target.closest('[data-play-audio-preview]');
     if (audioBtn) {
-      const idx = Number(audioBtn.dataset.playAudioPreview);
-      // Capture the latest typed text/voice (and auto-reset stale TTS mp3s) so the
-      // preview reflects exactly what will be generated/played.
-      syncQuizFromUI();
-      const q = quiz.questions[idx];
-      if (!q) return;
-      // Decide what we can actually preview here — independent of the live-mode
-      // `audioEnabled` flag, which isn't maintained in the builder.
-      const hasFileAudio = q.audioMode === 'file' && !!q.audioData;
-      const hasTtsAudio = q.audioMode !== 'file' && !!String(q.audioText || q.prompt || '').trim();
-      if (!hasFileAudio && !hasTtsAudio) {
-        setStatus(hostStatusEl, t('Nothing to preview yet — upload an audio file or add text to read aloud.'), 'bad');
-        return;
-      }
-      const origLabel = audioBtn.textContent;
-      const restore = () => { audioBtn.disabled = false; audioBtn.textContent = origLabel; };
-      audioBtn.disabled = true;
-      audioBtn.textContent = t('⏳ Loading…');
-      let healed = false;
-      // If the attached cloud file is gone, drop the dead reference and switch
-      // back to Text-to-speech so the next save regenerates a fresh mp3.
-      const onMissingFile = (reason) => {
-        q.audioData = '';
-        q.audioMode = 'tts';
-        q._ttsGenerated = false;
-        q._userAudioUploaded = false;
-        q._audioVersion = '';
-        healed = true;
-        setStatus(hostStatusEl, t('{reason} Switched back to Text-to-speech — it will regenerate on the next save.', { reason: reason || '' }).trim(), 'checking');
-      };
-      try {
-        // onStart clears the loading label as soon as audio actually begins,
-        // covering the Edge TTS fetch/decode latency on cold starts.
-        // playQuestionAudio surfaces its own specific failure reason (missing
-        // cloud file, decode error, TTS error), so no generic message here.
-        await playQuestionAudio(q, { onStart: restore, force: true, onMissingFile });
-      } finally {
-        restore();
-      }
-      // Re-render after playback so the source dropdown reflects the auto-reset.
-      if (healed) renderBuilder();
+      await previewBuilderQuestionAudio(Number(audioBtn.dataset.playAudioPreview), audioBtn);
       return;
     }
 
@@ -3191,6 +3151,52 @@ function toVideoEmbedConfig(media) {
   }
 }
 
+// ▶ Play preview, from a question's audio settings or a Media Manager row.
+// Returns true when the audio source was reset (the caller re-renders).
+async function previewBuilderQuestionAudio(idx, audioBtn) {
+  // Capture the latest typed text/voice (and auto-reset stale TTS mp3s) so the
+  // preview reflects exactly what will be generated/played.
+  syncQuizFromUI();
+  const q = quiz.questions[idx];
+  if (!q) return false;
+  // Decide what we can actually preview here — independent of the live-mode
+  // `audioEnabled` flag, which isn't maintained in the builder.
+  const hasFileAudio = q.audioMode === 'file' && !!q.audioData;
+  const hasTtsAudio = q.audioMode !== 'file' && !!String(q.audioText || q.prompt || '').trim();
+  if (!hasFileAudio && !hasTtsAudio) {
+    setStatus(hostStatusEl, t('Nothing to preview yet — upload an audio file or add text to read aloud.'), 'bad');
+    return false;
+  }
+  const origLabel = audioBtn.textContent;
+  const restore = () => { audioBtn.disabled = false; audioBtn.textContent = origLabel; };
+  audioBtn.disabled = true;
+  audioBtn.textContent = t('⏳ Loading…');
+  let healed = false;
+  // If the attached cloud file is gone, drop the dead reference and switch
+  // back to Text-to-speech so the next save regenerates a fresh mp3.
+  const onMissingFile = (reason) => {
+    q.audioData = '';
+    q.audioMode = 'tts';
+    q._ttsGenerated = false;
+    q._userAudioUploaded = false;
+    q._audioVersion = '';
+    healed = true;
+    setStatus(hostStatusEl, t('{reason} Switched back to Text-to-speech — it will regenerate on the next save.', { reason: reason || '' }).trim(), 'checking');
+  };
+  try {
+    // onStart clears the loading label as soon as audio actually begins,
+    // covering the Edge TTS fetch/decode latency on cold starts.
+    // playQuestionAudio surfaces its own specific failure reason (missing
+    // cloud file, decode error, TTS error), so no generic message here.
+    await playQuestionAudio(q, { onStart: restore, force: true, onMissingFile });
+  } finally {
+    restore();
+  }
+  // Re-render after playback so the source dropdown reflects the auto-reset.
+  if (healed) renderBuilder();
+  return healed;
+}
+
 function buildAudioSettingsMarkup(idx, q) {
   const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
   const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
@@ -3755,6 +3761,80 @@ async function openImageSearchDialog(questionIdx) {
   });
 }
 
+// ---------- Media search limits (MEDIA_MANAGER_PLAN.md) ----------
+// The GIPHY key is a Beta key: 100 calls per hour for the whole installation.
+// Every save/publish auto-fills missing GIFs, so searches are cached per keyword
+// for the session (one search serves every question sharing it), and a refusal
+// pauses automatic GIF searches instead of retrying on every question and save.
+const MEDIA_SEARCH_RESULTS = 25;
+const MEDIA_SEARCH_CACHE_LIMIT = 300;
+const GIF_LIMIT_PAUSE_MS = 15 * 60 * 1000;
+const mediaSearchState = { cache: new Map(), gifPausedUntil: 0 };
+
+function isRateLimitError(err) {
+  if (!err) return false;
+  if (err.rateLimited || Number(err.status) === 429) return true;
+  return /\bHTTP 429\b|rate limit/i.test(String(err.message || ''));
+}
+
+function isGifSearchPaused(now = Date.now()) {
+  return now < mediaSearchState.gifPausedUntil;
+}
+
+// One search per (kind, keyword) per session. The promise is cached, so rows
+// searching the same keyword at once share it; empty results are kept (no retry
+// on every save), failures are dropped so a later run can try again.
+function cachedMediaSearch(kind, keyword, search) {
+  const cacheKey = `${kind}:${String(keyword || '').trim().toLowerCase()}`;
+  const cache = mediaSearchState.cache;
+  if (!cache.has(cacheKey)) {
+    if (cache.size >= MEDIA_SEARCH_CACHE_LIMIT) cache.delete(cache.keys().next().value);
+    const pending = Promise.resolve()
+      .then(search)
+      .then((items) => (Array.isArray(items) ? items : []));
+    cache.set(cacheKey, pending);
+    pending.catch(() => {
+      if (cache.get(cacheKey) === pending) cache.delete(cacheKey);
+    });
+  }
+  return cache.get(cacheKey);
+}
+
+function searchGifsForKeyword(keyword) {
+  return cachedMediaSearch('gif', keyword, () => giphySearch(keyword, MEDIA_SEARCH_RESULTS));
+}
+
+// Openverse (browser-side) first, then Pexels through the backend. Returns [{ url }].
+function searchImagesForKeyword(keyword) {
+  return cachedMediaSearch('image', keyword, async () => {
+    const rawQuery = String(keyword || '').trim().slice(0, 140);
+    // Quote multi-word queries so they're searched as a phrase
+    const query = rawQuery.includes(' ') ? `"${rawQuery}"` : rawQuery;
+    try {
+      const ovUrl = new URL('https://api.openverse.org/v1/images/');
+      ovUrl.searchParams.set('q', query);
+      ovUrl.searchParams.set('page_size', String(MEDIA_SEARCH_RESULTS));
+      ovUrl.searchParams.set('page', '1');
+      ovUrl.searchParams.set('mature', 'false');
+      const ovRes = await fetch(ovUrl.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8' },
+      });
+      if (ovRes.ok) {
+        const ovData = await ovRes.json();
+        const items = (ovData?.results || []).filter((it) => it?.url).map((it) => ({ url: String(it.url) }));
+        if (items.length) return items;
+      }
+    } catch { /* continue to Pexels */ }
+
+    const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+    if (!beUrl) return [];
+    const res = await fetch(`${beUrl}/api/images/search?q=${encodeURIComponent(query)}&count=${MEDIA_SEARCH_RESULTS}`);
+    const data = await res.json();
+    return (data?.items || []).filter((it) => it?.url).map((it) => ({ url: String(it.url) }));
+  });
+}
+
 async function giphySearch(query, limit = 24) {
   const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
   const url = new URL(`${base}/api/gifs/search`);
@@ -3763,12 +3843,22 @@ async function giphySearch(query, limit = 24) {
   const res = await fetch(url.toString());
   if (!res.ok) {
     let msg = `GIF search failed (${res.status})`;
+    let rateLimited = false;
     try {
       const data = await res.json();
       if (data?.error) msg = data.error;
+      rateLimited = !!data?.rateLimited;
     } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    // Older workers report GIPHY's 429 as a 502 whose message says "HTTP 429".
+    if (rateLimited || isRateLimitError(err)) {
+      err.rateLimited = true;
+      mediaSearchState.gifPausedUntil = Date.now() + GIF_LIMIT_PAUSE_MS;
+    }
+    throw err;
   }
+  mediaSearchState.gifPausedUntil = 0;
   const data = await res.json();
   return Array.isArray(data?.items) ? data.items : [];
 }
@@ -3853,7 +3943,9 @@ async function openGifSearchDialog(questionIdx) {
         results.appendChild(card);
       });
     } catch (err) {
-      status.textContent = String(err?.message || 'GIF search failed.');
+      status.textContent = isRateLimitError(err)
+        ? t('GIF search limit reached: GIPHY allows 100 searches per hour for this PinPlay. Try again later.')
+        : String(err?.message || t('GIF search failed.'));
     }
   };
 
@@ -16244,6 +16336,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   let converted = 0;
   let uploaded = 0;
   let mediaAutoUpdated = false;
+  let gifLimitNotice = '';
 
   // Show progress indicator (defined early so setProgress is available everywhere)
   const progressEl = document.getElementById('mediaProgressEl');
@@ -16263,7 +16356,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   }).length;
   if (missingVideo > 0) {
     setProgress(`🎬 Auto-searching videos for ${missingVideo} question(s)...`);
-    const result = await autoFillVideos(quiz, ({ index, total, status }) => {
+    const result = await autoFillVideos(questions, ({ index, total, status }) => {
       setProgress(`🎬 Searching videos: ${index + 1}/${total} — ${status}`);
     });
     if (result.filled > 0) {
@@ -16282,12 +16375,15 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   const missingImages = questions.filter(q => q && !q.imageData && !String(q.readingText || '').trim() && (q.imageKeyword || q.gifKeyword) && normalizeQuestionMedia(q.media).kind !== 'video').length;
   if (missingImages > 0) {
     setProgress(`🔍 Auto-searching images for ${missingImages} question(s)...`);
-    const result = await autoFillImages(quiz, ({ index, total, status }) => {
+    const result = await autoFillImages(questions, ({ index, total, status }) => {
       setProgress(`🔍 Searching images: ${index + 1}/${total} — ${status}`);
     });
     if (result.filled > 0) {
       mediaAutoUpdated = true;
       setProgress(`✅ Auto-filled ${result.filled} image(s)`);
+    }
+    if (result.gifLimited > 0) {
+      gifLimitNotice = t('⚠️ GIF search limit reached: {n} GIF(s) not added yet. GIPHY allows 100 searches per hour; they will be added on a later save.', { n: result.gifLimited });
     }
   }
 
@@ -16388,8 +16484,10 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   }
 
   // Update progress
-  if (uploaded > 0 || converted > 0 || mediaAutoUpdated) {
-    renderBuilder();
+  if (uploaded > 0 || converted > 0 || mediaAutoUpdated) renderBuilder();
+  if (gifLimitNotice) {
+    setProgress(gifLimitNotice, 'bad');
+  } else if (uploaded > 0 || converted > 0 || mediaAutoUpdated) {
     setProgress(`✅ Media synced: ${uploaded} uploaded, ${converted} generated`, 'ok');
   } else if (strictMediaCheck) {
     setProgress('✅ Media ready', 'ok');
@@ -16397,8 +16495,8 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     if (progressEl) progressEl.classList.remove('show-popup');
   }
 
-  // Auto-hide progress after 3s (Replace the old style.display code at the bottom)
-  setTimeout(() => { if (progressEl) progressEl.classList.remove('show-popup'); }, 3000);
+  // Auto-hide progress after 3s (the GIF limit notice stays longer, it needs reading)
+  setTimeout(() => { if (progressEl) progressEl.classList.remove('show-popup'); }, gifLimitNotice ? 10000 : 3000);
 }
 
 // Upload base64 data to R2 via Worker API
@@ -16501,6 +16599,74 @@ function replaceQuestionImageData(question, nextImageData) {
   question._imageVersion = '';
 }
 
+// ---------- Media Manager: per-question media status (MEDIA_MANAGER_PLAN.md) ----------
+// Read-only: derived from the fields the builder and ensureQuizMediaReady already use.
+
+function isGifMediaUrl(url) {
+  const s = String(url || '').trim().toLowerCase();
+  if (s.startsWith('data:')) return s.startsWith('data:image/gif');
+  return /^https?:\/\/([^/]+\.)?giphy\.com\//.test(s) || /\.gif(?:[?#]|$)/.test(s);
+}
+
+// Revision tokens start with Date.now() in base 36, so they double as "last changed".
+function mediaVersionTime(token) {
+  const ms = parseInt(String(token || '').split('-')[0], 36);
+  return Number.isFinite(ms) && ms > 1.5e12 && ms < 4e12 ? ms : 0;
+}
+
+/**
+ * @returns {{ visual: { kind, status }, audio: { kind, status }, changedAt: number }}
+ *   visual.kind: 'image' | 'gif' | 'video' | 'none' | 'na' (reading-text questions)
+ *   audio.kind:  'tts' | 'file' | 'none' | 'na' (types without question audio)
+ *   status: 'ready' | 'missing' (keyword/text set, nothing yet) | 'local' (not uploaded) | 'none' | 'na'
+ */
+function questionMediaStatus(q, quizCtx = {}) {
+  if (!q || typeof q !== 'object') {
+    return { visual: { kind: 'na', status: 'na' }, audio: { kind: 'na', status: 'na' }, changedAt: 0 };
+  }
+
+  let visual;
+  const imageData = String(q.imageData || '').trim();
+  if (String(q.readingText || '').trim()) {
+    visual = { kind: 'na', status: 'na' };
+  } else if (normalizeQuestionMedia(q.media).kind === 'video') {
+    visual = { kind: 'video', status: 'ready' };
+  } else if (imageData) {
+    visual = { kind: isGifMediaUrl(imageData) ? 'gif' : 'image', status: imageData.startsWith('data:') ? 'local' : 'ready' };
+  } else if (q.type !== 'pin' && String(q.videoKeyword || '').trim()) {
+    // Same order as ensureQuizMediaReady: videos are filled before pictures.
+    visual = { kind: 'video', status: 'missing' };
+  } else if (String(q.gifKeyword || '').trim()) {
+    visual = { kind: 'gif', status: 'missing' };
+  } else if (String(q.imageKeyword || '').trim()) {
+    visual = { kind: 'image', status: 'missing' };
+  } else {
+    visual = { kind: 'none', status: 'none' };
+  }
+
+  let audio;
+  const mode = String(q.audioMode || '').toLowerCase();
+  const audioData = String(q.audioData || '');
+  if (!supportsQuestionAudio(q.type)) {
+    audio = { kind: 'na', status: 'na' };
+  } else if (mode !== 'tts' && audioData) {
+    audio = { kind: 'file', status: audioData.startsWith('data:') ? 'local' : 'ready' };
+  } else {
+    const overrideText = String(q.audioText || '').trim();
+    const ttsText = overrideText || String(q.prompt || '').trim();
+    const quizLanguage = String(quizCtx.ttsLanguage || 'NONE').toUpperCase();
+    const questionLanguage = overrideText ? String(q.ttsLanguage || quizLanguage).toUpperCase() : quizLanguage;
+    const hearingDisabled = quizLanguage === 'NONE' || questionLanguage === 'NONE';
+    const wantsTts = mode === 'tts' || !!quizCtx.readAllQuestionsAloud;
+    audio = !hearingDisabled && wantsTts && ttsText
+      ? { kind: 'tts', status: q.ttsAudioKey ? 'ready' : 'missing' }
+      : { kind: 'none', status: 'none' };
+  }
+
+  const changedAt = Math.max(mediaVersionTime(q._imageVersion), mediaVersionTime(q._audioVersion));
+  return { visual, audio, changedAt };
+}
+
 function loadQuiz() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -16520,121 +16686,164 @@ function isStorageQuotaError(err) {
 /**
  * Auto-fill missing images for questions that have no imageData but have an imageKeyword set.
  * If imageKeyword is empty, the question is skipped (creator doesn't want an auto-image).
- * Uses the existing Openverse + Pexels search pipeline. Takes the first result.
- * @param {object} quizData - The quiz object
+ * Uses the Openverse + Pexels search pipeline (GIFs: GIPHY). Takes the first result.
+ * Searches are cached per keyword (searchGifsForKeyword / searchImagesForKeyword).
+ * @param {object[]} questions - The questions to fill (the whole quiz, or a selection)
  * @param {function} onProgress - Optional callback({ index, total, status })
- * @returns {{ filled: number, skipped: number }}
+ * @returns {{ filled: number, skipped: number, gifLimited: number, outcomes: Map }}
+ *   outcomes: question -> { status: 'filled' | 'failed' | 'limited', reason }
  */
-async function autoFillImages(quizData, onProgress) {
-  const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
+async function autoFillImages(questions, onProgress) {
+  const list = Array.isArray(questions) ? questions : [];
   let filled = 0;
   let skipped = 0;
+  let gifLimited = 0;
+  const outcomes = new Map();
   const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+  const limitedReason = t('GIF search limit reached — try again later.');
 
-  for (let i = 0; i < questions.length; i++) {
-    const q = questions[i];
+  for (let i = 0; i < list.length; i++) {
+    const q = list[i];
     if (!q || q.imageData || normalizeQuestionMedia(q.media).kind === 'video') { skipped++; continue; }
     if (String(q.readingText || '').trim()) { skipped++; continue; }
 
     // GIF path takes priority: store GIPHY CDN URL directly in imageData (no resize, animation preserved)
     const gifQuery = String(q.gifKeyword || '').trim().slice(0, 140);
+    let failReason = '';
     if (gifQuery) {
-      onProgress?.({ index: i, total: questions.length, status: 'Searching GIFs...' });
+      // Over the GIPHY limit: leave the question for a later run rather than
+      // falling back to a picture the teacher didn't ask for.
+      if (isGifSearchPaused()) {
+        gifLimited++;
+        outcomes.set(q, { status: 'limited', reason: limitedReason });
+        continue;
+      }
+      onProgress?.({ index: i, total: list.length, status: 'Searching GIFs...' });
       try {
-        const items = await giphySearch(gifQuery, 5);
+        const items = await searchGifsForKeyword(gifQuery);
         if (items[0]?.url) {
           replaceQuestionImageData(q, items[0].url);
           filled++;
+          outcomes.set(q, { status: 'filled', reason: '' });
           continue;
         }
-        console.warn(`[GIF auto-fill] No results for "${gifQuery}"`);
+        failReason = t('No GIFs found for "{keyword}".', { keyword: gifQuery });
       } catch (err) {
+        if (isRateLimitError(err)) {
+          gifLimited++;
+          outcomes.set(q, { status: 'limited', reason: limitedReason });
+          continue;
+        }
         console.error(`[GIF auto-fill] "${gifQuery}":`, err);
-        onProgress?.({ index: i, total: questions.length, status: `GIF search failed: ${err.message}` });
+        failReason = String(err?.message || t('GIF search failed.'));
+        onProgress?.({ index: i, total: list.length, status: `GIF search failed: ${err.message}` });
       }
     }
 
     // Only use the explicit imageKeyword field — if empty, skip (creator doesn't want auto-image)
     const rawQuery = String(q.imageKeyword || '').trim().slice(0, 140);
-    if (!rawQuery) { skipped++; continue; }
-    // Quote multi-word queries so they're searched as a phrase
-    const query = rawQuery.includes(' ') ? `"${rawQuery}"` : rawQuery;
+    if (!rawQuery) {
+      skipped++;
+      if (failReason) outcomes.set(q, { status: 'failed', reason: failReason });
+      continue;
+    }
 
-    onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
+    onProgress?.({ index: i, total: list.length, status: 'Searching...' });
 
     try {
-      // 1) Try Openverse first (browser-side)
-      let imageUrl = '';
-      try {
-        const ovUrl = new URL('https://api.openverse.org/v1/images/');
-        ovUrl.searchParams.set('q', query);
-        ovUrl.searchParams.set('page_size', '5');
-        ovUrl.searchParams.set('page', '1');
-        ovUrl.searchParams.set('mature', 'false');
-        const ovRes = await fetch(ovUrl.toString(), {
-          method: 'GET',
-          headers: { Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8' },
-        });
-        if (ovRes.ok) {
-          const ovData = await ovRes.json();
-          const first = (ovData?.results || []).find(it => it?.url);
-          if (first) imageUrl = String(first.url);
-        }
-      } catch { /* continue to Pexels */ }
-
-      // 2) Fallback to backend Pexels search
-      if (!imageUrl && beUrl) {
-        try {
-          const res = await fetch(`${beUrl}/api/images/search?q=${encodeURIComponent(query)}&count=5`);
-          const data = await res.json();
-          const first = (data?.items || []).find(it => it?.url);
-          if (first) imageUrl = String(first.url);
-        } catch { /* skip */ }
+      const items = await searchImagesForKeyword(rawQuery).catch(() => []);
+      const imageUrl = items[0]?.url || '';
+      if (!imageUrl) {
+        skipped++;
+        outcomes.set(q, { status: 'failed', reason: t('No pictures found for "{keyword}".', { keyword: rawQuery }) });
+        continue;
       }
 
-      if (!imageUrl) { skipped++; continue; }
+      onProgress?.({ index: i, total: list.length, status: 'Importing...' });
 
-      onProgress?.({ index: i, total: questions.length, status: 'Importing...' });
-
-      // 3) Fetch image via proxy and resize
-      if (!beUrl) { skipped++; continue; }
+      // Fetch image via proxy and resize
+      if (!beUrl) {
+        skipped++;
+        outcomes.set(q, { status: 'failed', reason: t('No backend configured to import pictures.') });
+        continue;
+      }
       const res = await fetch(`${beUrl}/api/images/fetch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: imageUrl }),
       });
       const data = await res.json();
-      if (!data?.dataUrl) { skipped++; continue; }
+      if (!data?.dataUrl) {
+        skipped++;
+        outcomes.set(q, { status: 'failed', reason: t('The picture could not be imported.') });
+        continue;
+      }
 
       const blob = dataUrlToBlob(data.dataUrl);
       const resized = await imageFileToOptimizedDataUrl(blob);
       replaceQuestionImageData(q, resized);
       filled++;
-    } catch {
+      outcomes.set(q, { status: 'filled', reason: '' });
+    } catch (err) {
       skipped++;
+      outcomes.set(q, { status: 'failed', reason: String(err?.message || t('The picture could not be imported.')) });
     }
   }
 
-  return { filled, skipped };
+  return { filled, skipped, gifLimited, outcomes };
+}
+
+// Preferred provider first, then any provider; each tried on every backend.
+// Returns the playable results, cached per keyword + provider. Throws (so the
+// failure isn't cached) only when no backend answered at all.
+function searchVideosForKeyword(keyword, providerPref, backendCandidates) {
+  return cachedMediaSearch(`video-${providerPref}`, keyword, async () => {
+    let answered = false;
+    for (const attemptProvider of [providerPref, '']) {
+      const params = new URLSearchParams();
+      params.set('q', keyword);
+      params.set('count', String(MEDIA_SEARCH_RESULTS));
+      if (attemptProvider) params.set('provider', attemptProvider);
+      for (const beUrl of backendCandidates) {
+        try {
+          const res = await fetch(`${beUrl}/api/videos/search?${params.toString()}`, { method: 'GET' });
+          if (!res.ok) {
+            await res.text().catch(() => '');
+            continue;
+          }
+          answered = true;
+          const data = await res.json().catch(() => ({}));
+          const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => isHttpUrl(item?.url));
+          if (items.length) return items;
+        } catch (err) {
+          console.warn('Video search backend failed:', beUrl, err);
+        }
+      }
+    }
+    if (!answered) throw new Error(t('Video search is unavailable right now.'));
+    return [];
+  });
 }
 
 /**
  * Auto-fill missing videos for questions that have no video media but have a videoKeyword set.
  * Preserves the existing restriction that pin questions do not support question video.
- * @param {object} quizData
+ * @param {object[]} questions - The questions to fill (the whole quiz, or a selection)
  * @param {function} onProgress - Optional callback({ index, total, status })
- * @returns {{ filled: number, skipped: number }}
+ * @returns {{ filled: number, skipped: number, outcomes: Map }}
+ *   outcomes: question -> { status: 'filled' | 'failed', reason }
  */
-async function autoFillVideos(quizData, onProgress) {
-  const questions = Array.isArray(quizData?.questions) ? quizData.questions : [];
+async function autoFillVideos(questions, onProgress) {
+  const list = Array.isArray(questions) ? questions : [];
   let filled = 0;
   let skipped = 0;
+  const outcomes = new Map();
   const configuredBeUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
   const defaultBeUrl = DEFAULT_BACKEND_URL.replace(/\/+$/, '');
   const backendCandidates = Array.from(new Set([configuredBeUrl, defaultBeUrl].filter(Boolean)));
 
-  for (let i = 0; i < questions.length; i += 1) {
-    const q = questions[i];
+  for (let i = 0; i < list.length; i += 1) {
+    const q = list[i];
     if (!q || q.type === 'pin') { skipped += 1; continue; }
     if (String(q.readingText || '').trim()) { skipped += 1; continue; }
     if (normalizeQuestionMedia(q.media).kind === 'video') { skipped += 1; continue; }
@@ -16643,39 +16852,18 @@ async function autoFillVideos(quizData, onProgress) {
     if (!keyword) { skipped += 1; continue; }
     if (!backendCandidates.length) { skipped += 1; continue; }
 
-    onProgress?.({ index: i, total: questions.length, status: 'Searching...' });
+    onProgress?.({ index: i, total: list.length, status: 'Searching...' });
     try {
-      const params = new URLSearchParams();
-      params.set('q', keyword);
-      params.set('count', '5');
       const providerPref = ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || ''))
         ? String(q.videoProviderPreference)
         : 'youtube';
-
-      // Try preferred provider first, then fall back without provider filter
-      const providerAttempts = [providerPref, ''];
-      let candidate = null;
-      for (const attemptProvider of providerAttempts) {
-        if (candidate) break;
-        const attemptParams = new URLSearchParams(params);
-        if (attemptProvider) attemptParams.set('provider', attemptProvider);
-        else attemptParams.delete('provider');
-        for (const beUrl of backendCandidates) {
-          try {
-            const res = await fetch(`${beUrl}/api/videos/search?${attemptParams.toString()}`, { method: 'GET' });
-            if (!res.ok) {
-              await res.text().catch(() => '');
-              continue;
-            }
-            const data = await res.json().catch(() => ({}));
-            candidate = (Array.isArray(data?.items) ? data.items : []).find((item) => isHttpUrl(item?.url)) || null;
-            if (candidate) break;
-          } catch (err) {
-            console.warn('Video search backend failed:', beUrl, err);
-          }
-        }
+      const items = await searchVideosForKeyword(keyword, providerPref, backendCandidates);
+      const candidate = items[0] || null;
+      if (!candidate) {
+        skipped += 1;
+        outcomes.set(q, { status: 'failed', reason: t('No videos found for "{keyword}".', { keyword }) });
+        continue;
       }
-      if (!candidate) { skipped += 1; continue; }
       const provider = ['youtube', 'vimeo', 'direct'].includes(String(candidate.provider || ''))
         ? String(candidate.provider)
         : detectVideoProvider(candidate.url || '');
@@ -16688,12 +16876,14 @@ async function autoFillVideos(quizData, onProgress) {
       });
       replaceQuestionImageData(q, '');
       filled += 1;
+      outcomes.set(q, { status: 'filled', reason: '' });
     } catch (err) {
       console.warn('Video auto-fill failed for keyword:', keyword, err);
       skipped += 1;
+      outcomes.set(q, { status: 'failed', reason: String(err?.message || t('Video search failed.')) });
     }
   }
-  return { filled, skipped };
+  return { filled, skipped, outcomes };
 }
 
 function saveQuiz(data) {

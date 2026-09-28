@@ -2443,6 +2443,10 @@ export default {
         const res = await fetch(apiUrl.toString());
         if (!res.ok) {
           const raw = await res.text();
+          // Beta keys allow 100 calls/hour; tell the editor so it pauses GIF auto-fill.
+          if (res.status === 429) {
+            return json({ error: 'GIPHY search limit reached (HTTP 429). Try again later.', rateLimited: true }, 429);
+          }
           return json({ error: `GIPHY search failed (HTTP ${res.status}): ${raw.slice(0, 200)}` }, 502);
         }
         const data = await res.json();

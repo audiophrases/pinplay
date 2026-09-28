@@ -1096,4 +1096,16 @@ window.PINPLAY_FR_DICT = {
   'Play question audio': "Lire l'audio de la question",
   'Mute or unmute game music': 'Couper ou remettre la musique du jeu',
   'Collapse or expand all sections': 'Replier ou déplier toutes les sections',
+  // Media search limits (MEDIA_MANAGER_PLAN.md)
+  'GIF search limit reached: GIPHY allows 100 searches per hour for this PinPlay. Try again later.': 'Limite de recherche de GIF atteinte : GIPHY autorise 100 recherches par heure pour ce PinPlay. Réessayez plus tard.',
+  'GIF search failed.': 'La recherche de GIF a échoué.',
+  'GIF search limit reached — try again later.': 'Limite de recherche de GIF atteinte — réessayez plus tard.',
+  'No GIFs found for "{keyword}".': 'Aucun GIF trouvé pour « {keyword} ».',
+  'No pictures found for "{keyword}".': 'Aucune image trouvée pour « {keyword} ».',
+  'No backend configured to import pictures.': "Aucun serveur configuré pour importer les images.",
+  'The picture could not be imported.': "L'image n'a pas pu être importée.",
+  'No videos found for "{keyword}".': 'Aucune vidéo trouvée pour « {keyword} ».',
+  'Video search failed.': 'La recherche de vidéos a échoué.',
+  'Video search is unavailable right now.': 'La recherche de vidéos est indisponible pour le moment.',
+  '⚠️ GIF search limit reached: {n} GIF(s) not added yet. GIPHY allows 100 searches per hour; they will be added on a later save.': "⚠️ Limite de recherche de GIF atteinte : {n} GIF non ajouté(s) pour l'instant. GIPHY autorise 100 recherches par heure ; ils seront ajoutés lors d'un prochain enregistrement.",
 };
