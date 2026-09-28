@@ -136,7 +136,9 @@
                           <option value="gifs" selected data-i18n>GIFs (when relevant)</option>
                           <option value="mix" data-i18n>Mix of images and GIFs</option>
                           <option value="no" data-i18n>No images or GIFs</option>
+                          <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
+                        <input id="promptImagesCustom" class="top-space hidden" type="text" placeholder="e.g. mostly images, with a GIF here and there" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
@@ -144,7 +146,9 @@
                         <select id="promptAudio">
                           <option value="some" selected data-i18n>Some (when relevant)</option>
                           <option value="no" data-i18n>No audio</option>
+                          <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
+                        <input id="promptAudioCustom" class="top-space hidden" type="text" placeholder="e.g. read every A1–A2 question aloud" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
@@ -152,7 +156,9 @@
                         <select id="promptVideo">
                           <option value="some" data-i18n>Some (when relevant)</option>
                           <option value="no" selected data-i18n>No videos</option>
+                          <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
+                        <input id="promptVideoCustom" class="top-space hidden" type="text" placeholder="e.g. one short clip to open the quiz" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field">
@@ -161,7 +167,9 @@
                           <option value="no" selected data-i18n>No reading passages</option>
                           <option value="some" data-i18n>Some (when relevant)</option>
                           <option value="all" data-i18n>Every question (reading comprehension)</option>
+                          <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
+                        <input id="promptReadingTextCustom" class="top-space hidden" type="text" placeholder="e.g. the grammar rule needed to answer, on every A1–A2 question" data-i18n-ph />
                       </label>
                     </div>
                   </div>
@@ -593,7 +601,7 @@
     <script src="../wordle-lexicon-fr.js"></script>
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
-    <script src="../app.js?v=20260928-ownwords"></script>
+    <script src="../app.js?v=20260928-custommedia"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20260927-palette"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

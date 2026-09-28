@@ -215,6 +215,37 @@ describe('rules follow the request', () => {
     assert.ok(picked.indexOf("## The teacher's own words") < picked.indexOf('## Task'));
   });
 
+  it('custom media: the teacher\'s wording goes in their section, the widest field format in Rules', () => {
+    const text = build({
+      images: 'custom', readingText: 'custom', audio: 'no',
+      mediaCustom: { images: 'mostly images, a GIF here and there', readingText: 'the grammar rule needed, on every A1–A2 question' },
+    });
+    const own = section(text, "The teacher's own words");
+    assert.match(own, /- Images: "mostly images, a GIF here and there"/);
+    assert.match(own, /- Reading text: "the grammar rule needed, on every A1–A2 question"/);
+    const rules = section(text, 'Rules');
+    assert.match(rules, /"imageKeyword"/);
+    assert.match(rules, /"gifKeyword"/);
+    assert.match(rules, /"readingText"/);
+    assert.match(rules, /For pictures, reading text: how much and on which questions is what the teacher typed \(above\)/);
+    assert.doesNotMatch(rules, /Audio:/);
+  });
+
+  it('marks where the teacher\'s words end, and repeats their priority at the very end', () => {
+    const text = build();
+    assert.match(section(text, "The teacher's own words"), /Everything after this section is PinPlay's general instructions/);
+    const last = text.trim().split('\n').pop();
+    assert.match(last, /^Before you write: re-read "The teacher's own words" at the top\..*follow the teacher/);
+  });
+
+  it('custom media with nothing typed, or text left behind by another choice, is ignored', () => {
+    const empty = build({ images: 'custom', mediaCustom: { images: '  ' } });
+    assert.match(section(empty, 'Rules'), /No pictures/);
+    const stale = build({ images: 'some', mediaCustom: { images: 'old text' } });
+    assert.doesNotMatch(stale, /old text/);
+    assert.doesNotMatch(section(stale, 'Rules'), /how much and on which questions/);
+  });
+
   it('states each rule once', () => {
     const rules = section(build({ audio: 'some', video: 'some', readingText: 'some', images: 'mix' }), 'Rules')
       .split('\n').filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, '').split(':')[0]);

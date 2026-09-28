@@ -1008,6 +1008,21 @@ function syncCustomGoalFieldState() {
   customGoalEl.setAttribute('aria-hidden', isCustom ? 'false' : 'true');
 }
 
+// Media dropdowns in the AI prompt form: "Custom" shows a text box for the
+// teacher's own wording (e.g. "mostly images, a GIF here and there").
+const PROMPT_MEDIA_FIELDS = ['promptImages', 'promptAudio', 'promptVideo', 'promptReadingText'];
+
+function syncCustomMediaFields() {
+  PROMPT_MEDIA_FIELDS.forEach((id) => {
+    const selectEl = document.getElementById(id);
+    const textEl = document.getElementById(`${id}Custom`);
+    if (!(selectEl instanceof HTMLSelectElement) || !(textEl instanceof HTMLInputElement)) return;
+    const isCustom = selectEl.value === 'custom';
+    textEl.classList.toggle('hidden', !isCustom);
+    textEl.disabled = !isCustom;
+  });
+}
+
 // Adaptive quizzes span A1–C2, so the single-level field is cleared and locked
 // (its text is kept aside and restored if the box is unticked).
 function syncAdaptivePromptFields() {
@@ -1049,6 +1064,8 @@ function bindBuilderEvents() {
     goalEl.addEventListener('change', syncCustomGoalFieldState);
     syncCustomGoalFieldState();
   }
+  PROMPT_MEDIA_FIELDS.forEach((id) => document.getElementById(id)?.addEventListener('change', syncCustomMediaFields));
+  syncCustomMediaFields();
   const adaptiveEl = document.getElementById('promptAdaptive');
   if (adaptiveEl instanceof HTMLInputElement) {
     adaptiveEl.addEventListener('change', syncAdaptivePromptFields);
@@ -4158,7 +4175,17 @@ function promptMediaRules(req, allowed, agent) {
 // req: { theme, language, level, adaptive, levelNotes, goal, timeLimit,
 // questionCount (number or brief text), batchSize, images, audio, video,
 // readingText, typesMode, selectedTypes, aiMode }. Returns { text, filename }.
-function buildCreationPrompt(req) {
+function buildCreationPrompt(request) {
+  // A media option the teacher typed: explain the fields of the widest preset
+  // (so any mix they describe can be written), and let their words decide how
+  // much and where.
+  const custom = Object.fromEntries(Object.entries(request.mediaCustom || {})
+    .filter(([key, text]) => request[key] === 'custom' && String(text || '').trim()));
+  const widest = { images: 'mix', audio: 'some', video: 'some', readingText: 'some' };
+  const req = { ...request };
+  Object.keys(widest).forEach((key) => {
+    if (req[key] === 'custom') req[key] = custom[key] ? widest[key] : 'no';
+  });
   const agent = req.aiMode === 'agent';
   const selected = (req.selectedTypes || []).filter((type) => CANONICAL_QUESTION_TYPES.includes(type));
   const includeSelected = req.typesMode === 'include' && selected.length > 0;
@@ -4194,7 +4221,13 @@ function buildCreationPrompt(req) {
     req.level ? `Level: ${quote(req.level)}` : null,
     req.adaptive && req.levelNotes ? `Notes on levels: ${quote(req.levelNotes)}` : null,
     typeof count === 'string' ? `How many questions: ${quote(count)}` : null,
+    custom.images ? `Images: ${quote(custom.images)}` : null,
+    custom.audio ? `Audio: ${quote(custom.audio)}` : null,
+    custom.video ? `Video: ${quote(custom.video)}` : null,
+    custom.readingText ? `Reading text: ${quote(custom.readingText)}` : null,
   ].filter(Boolean);
+  const customMedia = [custom.images && 'pictures', custom.audio && 'audio', custom.video && 'video',
+    custom.readingText && 'reading text'].filter(Boolean);
 
   const task = [
     req.goalIsCustom && req.goal ? null : `Goal: ${req.goal || 'balanced practice: scaffolding plus retrieval'}`,
@@ -4208,6 +4241,9 @@ function buildCreationPrompt(req) {
     `Every question has a unique "id", "points": 1000 and "timeLimit": ${req.timeLimit} (seconds; 0 = no limit).`,
     ...promptMediaRules(req, allowed, agent),
   ];
+  if (customMedia.length) {
+    rules.push(`For ${customMedia.join(', ')}: how much and on which questions is what the teacher typed (above); the rules here only give the fields to use.`);
+  }
   if (agent) {
     rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
   }
@@ -4224,7 +4260,7 @@ function buildCreationPrompt(req) {
     `Create a quiz for PinPlay. Reply with the quiz as ONE JSON object${req.batchSize ? ' per batch' : ''} and nothing else (no commentary). If you can create files, give it as a downloadable file named "${toSafeFilename(req.theme)}${req.batchSize ? '-part1' : ''}.json"${req.batchSize ? ' (part2, part3… for the next batches)' : ''}; otherwise put it in one \`\`\`json code block.`,
     '',
     '## The teacher\'s own words',
-    'Typed by the teacher, word for word. They win if anything below contradicts them.',
+    'Typed by the teacher, word for word, in quotes. Everything after this section is PinPlay\'s general instructions. Where they contradict the teacher\'s words, the teacher\'s words win.',
     ...teacherWords.map((line) => `- ${line}`),
     '',
     '## Task',
@@ -4246,6 +4282,9 @@ function buildCreationPrompt(req) {
     '```json',
     `[\n${examples.map((ex) => `  ${JSON.stringify(ex)}`).join(',\n')}\n]`,
     '```',
+    '',
+    // Said last as well: bots weigh the end of a prompt heavily.
+    'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions (rules, levels, media, examples), follow the teacher. Only the JSON format and field names are fixed.',
     '');
   return {
     text: out.join('\n'),
@@ -4274,6 +4313,18 @@ async function exportCreationPrompt() {
   }
 
   const valueOf = (id) => String(document.getElementById(id)?.value || '').trim();
+  // A media dropdown set to "Custom" carries the teacher's typed wording.
+  const mediaCustom = {};
+  const mediaKeys = { promptImages: 'images', promptAudio: 'audio', promptVideo: 'video', promptReadingText: 'readingText' };
+  for (const [id, key] of Object.entries(mediaKeys)) {
+    if (valueOf(id) !== 'custom') continue;
+    mediaCustom[key] = valueOf(`${id}Custom`);
+    if (!mediaCustom[key]) {
+      alert(t('Please type what you want in the custom media field, or pick another option.'));
+      document.getElementById(`${id}Custom`)?.focus();
+      return;
+    }
+  }
   const countRaw = valueOf('promptQuestionCount');
   const batchSize = Number(valueOf('promptBatchSize'));
   const { text, filename } = buildCreationPrompt({
@@ -4291,6 +4342,7 @@ async function exportCreationPrompt() {
     audio: valueOf('promptAudio') || 'no',
     video: valueOf('promptVideo') || 'no',
     readingText: valueOf('promptReadingText') || 'no',
+    mediaCustom,
     typesMode: valueOf('promptTypesMode'),
     selectedTypes: Array.from(document.querySelectorAll('#promptTypesList input:checked')).map((cb) => cb.value),
     aiMode: valueOf('promptAiMode') || 'chatbot',
