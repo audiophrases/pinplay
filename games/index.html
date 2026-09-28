@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" translate="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google" content="notranslate" />
+    <meta name="description" content="PinPlay games: pick one and play, no code needed." />
+    <title>PinPlay · Games</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <link rel="stylesheet" href="../styles.css?v=20260928-public" />
+  </head>
+  <body class="games-page">
+    <header class="topbar">
+      <h1 data-i18n-ignore>🎯 PinPlay</h1>
+    </header>
+
+    <main class="container">
+      <div class="games-head">
+        <h2 data-i18n>Games</h2>
+        <div class="games-sort" role="group" aria-label="Sort games" data-i18n-aria>
+          <button type="button" class="btn games-sort-btn" data-sort="popular" aria-pressed="true" data-i18n>Most played</button>
+          <button type="button" class="btn games-sort-btn" data-sort="newest" aria-pressed="false" data-i18n>Newest</button>
+          <button type="button" class="btn games-sort-btn" data-sort="liked" aria-pressed="false" data-i18n>Most liked</button>
+        </div>
+      </div>
+      <p id="gamesStatus" class="small muted" aria-live="polite"></p>
+      <ul id="gamesGrid" class="games-grid"></ul>
+    </main>
+
+    <script src="../i18n-fr.js?v=20260928-public"></script>
+    <script src="../i18n.js"></script>
+    <script src="../games.js?v=20260928-gamespage"></script>
+  </body>
+</html>

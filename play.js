@@ -210,6 +210,7 @@ function init() {
     }
   });
   initAssignmentFromUrl();
+  initGameFromUrl();
   initLivePreviewFromUrl();
   if (validatePinBtn) validatePinBtn.addEventListener('click', validatePin);
   if (joinBtn) joinBtn.addEventListener('click', joinLiveGame);
@@ -302,6 +303,8 @@ function init() {
       if (_spellingBeeRoundActive || _wordleRoundActive) return;
       const q = live.player.currentQuestion;
       if (!q) return;
+      // Never play the prompt over a voice recording in progress.
+      if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
       // Mirror the 🎧 replay button: duck (don't kill) the ambient loop and
       // hand the resume decision to resumeAssignmentAnsweringAmbient's guards.
       playAssignmentQuestionAudio(q, { preserveAmbient: true })
@@ -461,6 +464,117 @@ function initAssignmentFromUrl() {
   }, 0);
 }
 
+// ?game=CODE: a public game from /games/. No PIN box: the title, then
+// "Continue with Google" (saved results, teacher corrections) or Play
+// anonymously (nothing stored).
+async function initGameFromUrl() {
+  const params = new URLSearchParams(window.location.search || '');
+  const code = String(params.get('game') || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return;
+
+  live.player.game = { code, title: '', teacherGraded: false, anonymous: true, started: false, token: '', last: null };
+  live.player.mode = 'assignment';
+  live.player.assignment.code = code;
+  document.body.classList.add('assignment-mode', 'game-mode');
+  if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
+  if (rerollNameBtn) rerollNameBtn.classList.add('hidden');
+  if (joinTitleEl) joinTitleEl.textContent = t('Loading…');
+
+  let card = null;
+  try {
+    const data = await api('/api/public/games', { method: 'GET' });
+    card = (Array.isArray(data?.games) ? data.games : []).find((g) => g.code === code) || null;
+  } catch { /* shown below */ }
+  if (!card) {
+    if (joinTitleEl) joinTitleEl.textContent = t('This game is not available.');
+    setStatus(joinStatusEl, t('It may have been removed. See the other games.'), 'bad');
+    appendMoreGamesLink(joinStatusEl?.parentElement || joinCardEl);
+    return;
+  }
+
+  Object.assign(live.player.game, { title: card.title, teacherGraded: !!card.teacherGraded });
+  try { document.title = card.title || document.title; } catch { /* ignore */ }
+  if (joinTitleEl) joinTitleEl.textContent = card.title;
+  if (joinModeHintEl) {
+    joinModeHintEl.textContent = card.adaptive
+      ? t('🎯 Adapts to your level · {n} questions', { n: card.questionCount })
+      : t('{n} questions', { n: card.questionCount });
+  }
+  if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
+  await applyIdentityMode(true);
+  syncGameEntry();
+}
+
+// Entry screen of a game: the Google button (or "signed in as") above the play
+// button, whose label says which way the game will be played.
+function syncGameEntry() {
+  const game = live.player.game;
+  if (!game || game.started || !joinBtn) return;
+  const signedIn = studentSession.signedIn;
+  joinBtn.textContent = signedIn ? t('▶ Play') : t('Play anonymously');
+  if (!signedIn && joinSignInHintEl) {
+    joinSignInHintEl.textContent = game.teacherGraded
+      ? t('Sign in with Google for teacher corrections.')
+      : t('Sign in with Google to keep your results.');
+  }
+}
+
+function appendMoreGamesLink(parent) {
+  if (!parent || parent.querySelector('.game-more-link')) return;
+  const link = document.createElement('a');
+  link.className = 'btn game-more-link top-space';
+  link.href = 'games/';
+  link.textContent = t('🎮 More games');
+  parent.appendChild(link);
+}
+
+// End of a game, in the results panel: whether teacher-graded answers will be
+// corrected, then play again, more games, and a like (one per browser).
+function renderGameEndActions(panel, pendingCount = 0) {
+  const game = live.player.game;
+  if (!game || !panel) return;
+  if (pendingCount > 0) {
+    const note = document.createElement('p');
+    note.className = 'small game-end-note';
+    note.textContent = game.anonymous
+      ? t('Anonymous answers are not corrected by the teacher.')
+      : t('Your teacher will correct {n} answer(s). Open this game again, signed in, to see the corrections.', { n: pendingCount });
+    panel.appendChild(note);
+  }
+  const row = document.createElement('div');
+  row.className = 'game-end-actions top-space';
+
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'btn primary';
+  again.textContent = t('🔁 Play again');
+  again.addEventListener('click', () => window.location.reload());
+
+  const LIKES_KEY = 'pinplay.gameLikes.v1';
+  const readLikes = () => { try { return JSON.parse(localStorage.getItem(LIKES_KEY) || '{}') || {}; } catch { return {}; } };
+  const like = document.createElement('button');
+  like.type = 'button';
+  like.className = 'btn game-like-btn';
+  const paint = () => {
+    const liked = !!readLikes()[game.code];
+    like.textContent = liked ? t('❤️ Liked') : t('🤍 Like');
+    like.setAttribute('aria-pressed', liked ? 'true' : 'false');
+  };
+  like.addEventListener('click', async () => {
+    const likes = readLikes();
+    const next = !likes[game.code];
+    if (next) likes[game.code] = true; else delete likes[game.code];
+    try { localStorage.setItem(LIKES_KEY, JSON.stringify(likes)); } catch { /* storage off: counts anyway */ }
+    paint();
+    try { await apiFetch('/api/public/game/like', { method: 'POST', body: { code: game.code, like: next } }); } catch { /* best effort */ }
+  });
+  paint();
+
+  row.append(again, like);
+  panel.appendChild(row);
+  appendMoreGamesLink(row);
+}
+
 function initLivePreviewFromUrl() {
   const params = new URLSearchParams(window.location.search || '');
   const pin = String(params.get('pin') || '').trim();
@@ -538,11 +652,18 @@ async function renderStudentIdentity() {
       });
     }
     setSignInError('');
+    syncGameEntry();
     return;
   }
 
   const cfg = await fetchStudentConfig();
   if (!cfg?.loginEnabled) {
+    // A public game without sign-in on this site: anonymous play only.
+    if (live.player.game) {
+      joinIdentityBoxEl.classList.add('hidden');
+      syncGameEntry();
+      return;
+    }
     if (joinSignInHintEl) {
       joinSignInHintEl.textContent = t('Student sign-in is not set up on this site yet. Ask your teacher.');
     }
@@ -554,6 +675,7 @@ async function renderStudentIdentity() {
       ? t('Sign in with your {domain} school account to continue.', { domain: domains[0] })
       : t('Sign in with your school account to continue.');
   }
+  syncGameEntry();
   await renderGoogleButton(cfg.googleClientId);
 }
 
@@ -740,6 +862,13 @@ async function joinLiveGame() {
       if (!live.player.assignment.code) {
         await validatePin();
         if (!live.player.assignment.code) return;
+      }
+      // A public game is played the way the entry screen shows: signed in, or anonymously.
+      const game = live.player.game;
+      if (game && !game.started) {
+        game.anonymous = !studentSession.signedIn;
+        game.started = true;
+        live.player.randomNamesMode = game.anonymous;
       }
       setBusyState();
       await startAssignmentAttempt();
@@ -2056,13 +2185,20 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
-    const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
-    setJoinStatusHud(submittedText, 'ok');
-    setStatus(joinStatusEl, submittedText, 'ok');
-    showAssignmentCompleteMessage(submittedText, {
-      title: 'Assignment submitted 🎉',
-      submitted: true,
-    });
+    if (live.player.game) {
+      // The results panel that follows carries the game's end: score, answers,
+      // corrections note, play again / like / more games.
+      setJoinStatusHud(t('Well played! 🎉'), 'ok');
+      setStatus(joinStatusEl, t('Well played! 🎉'), 'ok');
+    } else {
+      const submittedText = data?.alreadySubmitted ? 'Assignment was already submitted.' : 'Assignment submitted ✅';
+      setJoinStatusHud(submittedText, 'ok');
+      setStatus(joinStatusEl, submittedText, 'ok');
+      showAssignmentCompleteMessage(submittedText, {
+        title: 'Assignment submitted 🎉',
+        submitted: true,
+      });
+    }
     if (!assignmentFinalPlayed) {
       playAssignmentSfx('final');
       assignmentFinalPlayed = true;
@@ -2535,6 +2671,7 @@ function renderInstantFeedbackFromState() {
 
   // --- Self-correct retake row (only for instant/end feedback) ---
   renderRetakeRow(panel, state);
+  if (live.player.game && attempt?.submitted) renderGameEndActions(panel, pendingCount);
 
   wrap.appendChild(panel);
 
@@ -3479,7 +3616,7 @@ function renderPlayerState(state) {
   // Update mode label in header row
   const modeLabel = document.getElementById('joinModeLabel');
   if (modeLabel) {
-    modeLabel.textContent = live.player.mode === 'assignment' ? 'Assignment' : '';
+    modeLabel.textContent = live.player.game ? t('Game') : (live.player.mode === 'assignment' ? 'Assignment' : '');
   }
 
   const assignmentSubmitted = live.player.mode === 'assignment' && !!state.assignmentSubmitted;
@@ -3498,17 +3635,18 @@ function renderPlayerState(state) {
     if (assignmentPrevBtn) assignmentPrevBtn.classList.add('hidden');
     if (assignmentNextBtn) assignmentNextBtn.classList.add('hidden');
     if (assignmentNextPendingBtn) assignmentNextPendingBtn.classList.add('hidden');
+    const isGame = !!live.player.game;
     if (assignmentBannerEl) {
       assignmentBannerEl.classList.remove('hidden');
-      assignmentBannerEl.textContent = t('All answers saved. Submit assignment to finish.');
+      assignmentBannerEl.textContent = isGame ? t('That was the last question.') : t('All answers saved. Submit assignment to finish.');
     }
     setJoinStatusHud(t('All answers saved ✅'), 'ok');
-    setStatus(joinStatusEl, t('End of quiz reached. Submit assignment to finish.'), 'ok');
+    setStatus(joinStatusEl, isGame ? t('That was the last question.') : t('End of quiz reached. Submit assignment to finish.'), 'ok');
     const allowEditing = state.feedbackMode !== 'instant' && !live.player.assignment.state?.attempt?.adaptive;
-    showAssignmentCompleteMessage('All answers are saved. You reached the end of the quiz.', {
+    showAssignmentCompleteMessage(isGame ? t('See your score and your answers.') : 'All answers are saved. You reached the end of the quiz.', {
       title: 'End of quiz 🎉',
       showFinishButton: true,
-      finishLabel: 'Submit assignment',
+      finishLabel: isGame ? t('🏁 See my score') : 'Submit assignment',
       showReviewButton: allowEditing,
       reviewLabel: 'Edit answers',
     });
@@ -3991,6 +4129,8 @@ function renderJoinQuestion(question) {
       eq.addEventListener('click', () => {
         const q = live.player.currentQuestion;
         if (!q) return;
+        // Never play the prompt over a voice recording in progress.
+        if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
         stopAssignmentQuestionAudioPlayback();
         // Always attempt the resume — even when playback failed or was
         // interrupted, the answering track was paused at click time and
@@ -5620,7 +5760,52 @@ function createPuzzleDnd(container, options, listId = 'puzzlePieces') {
   container.appendChild(wrap);
 }
 
+// Public games (opened from /games/ with ?game=CODE) run the normal assignment
+// flow. Signed in, its calls go to the assignment routes with via: 'play' (the
+// worker applies the public-play settings). Anonymous, they are answered by the
+// stateless public-game routes: the play token carries the attempt, so nothing
+// about the player is stored. See PUBLIC_GAMES_PLAN.md.
 async function api(path, opts = {}) {
+  const game = live.player.game;
+  if (game?.started && String(path).startsWith('/api/assignment/')) {
+    if (game.anonymous) return publicGameApi(path, opts);
+    if (opts.body) return apiFetch(path, { ...opts, body: { ...opts.body, via: 'play' } });
+    return apiFetch(`${path}${path.includes('?') ? '&' : '?'}via=play`, opts);
+  }
+  return apiFetch(path, opts);
+}
+
+async function publicGameApi(path, opts = {}) {
+  const game = live.player.game;
+  const route = String(path).split('?')[0];
+  const body = opts.body || {};
+  const remember = (data) => {
+    game.token = data.token;
+    game.last = { ok: true, attempt: data.attempt };
+    return data.attempt;
+  };
+  const call = (route2, payload) => apiFetch(route2, { method: 'POST', body: payload });
+  if (route === '/api/assignment/check-status') {
+    return { ok: true, hasSubmittedAttempts: false, canRetake: true, feedbackMode: 'instant', examMode: false };
+  }
+  if (route === '/api/assignment/start') {
+    return { ok: true, alreadyStarted: false, attempt: remember(await call('/api/public/game/start', { code: game.code })) };
+  }
+  if (route === '/api/assignment/state') return game.last;
+  if (route === '/api/assignment/answer') {
+    const attempt = remember(await call('/api/public/game/answer', {
+      token: game.token, qIndex: body.qIndex, answer: body.answer, bet: body.bet,
+    }));
+    return { ok: true, saved: true, qIndex: body.qIndex, metrics: attempt?.metrics, attempt };
+  }
+  if (route === '/api/assignment/submit') {
+    return { ok: true, alreadySubmitted: false, attempt: remember(await call('/api/public/game/finish', { token: game.token })) };
+  }
+  // Review marks, self-correct, focus events, deleting: nothing is stored.
+  return { ok: true };
+}
+
+async function apiFetch(path, opts = {}) {
   const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
   if (!base) throw new Error('Backend URL is not configured.');
 
@@ -5717,7 +5902,7 @@ function highlightAnswerItems(isCorrect, state) {
 
   // Match pairs
   if (question.type === 'match_pairs') {
-    highlightMatchPairs(question);
+    highlightMatchPairs(question, state.correctAnswer);
     return;
   }
 
@@ -5802,17 +5987,28 @@ function highlightChoiceAnswers(question, correctAnswerStr) {
   });
 }
 
-// Match pairs: highlight each pair row
-function highlightMatchPairs(question) {
-  const pairs = question.pairs || [];
+// Match pairs: highlight each pair row. The right match for each left item
+// comes from the server's reveal ("left→right | …"), or the answer key once
+// the attempt is submitted. Fields follow question.leftItems order.
+function highlightMatchPairs(question, correctAnswer) {
+  const rightFor = new Map();
+  (Array.isArray(question.pairs) ? question.pairs : []).forEach((p) => {
+    rightFor.set(String(p?.left || '').trim(), String(p?.right || '').trim());
+  });
+  String(correctAnswer || '').split(' | ').forEach((part) => {
+    const at = part.indexOf('→');
+    if (at > 0) rightFor.set(part.slice(0, at).trim(), part.slice(at + 1).trim());
+  });
+  const leftItems = Array.isArray(question.leftItems) ? question.leftItems : (question.pairs || []).map((p) => p?.left);
   const fields = document.querySelectorAll('[data-join-pair]'); // Scope broadened to catch elements in the overlay
   fields.forEach((field, idx) => {
     const val = String(field.value || '').trim();
     if (!val) return;
-    const correct = pairs[idx]?.[1] || '';
+    const correct = rightFor.get(String(leftItems[idx] || '').trim());
+    if (!correct) return;
     const row = field.closest('.answer-row') || field.parentElement;
     if (!row) return;
-    if (val.toLowerCase() === correct.toLowerCase()) {
+    if (normalizeTextAnswer(val) === normalizeTextAnswer(correct)) {
       row.classList.add('correct-highlight');
     } else {
       row.classList.add('incorrect-highlight');
@@ -6288,7 +6484,6 @@ let _assignmentAudioPlaying = false;
 function setAssignmentAudioPlayingUi(playing) {
   _assignmentAudioPlaying = !!playing;
   if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
-  _refreshAssignmentRecordBtnsForAudio();
 }
 
 // Hide just the visual bars (used to fade them out ~0.7s before audio ends
@@ -6296,30 +6491,6 @@ function setAssignmentAudioPlayingUi(playing) {
 // felt abrupt). The record-button lock stays until actual audio end.
 function hideAssignmentAudioBarsEarly() {
   if (joinPromptEl) joinPromptEl.classList.remove('audio-playing');
-}
-
-// Lock voice_record / voice_text record buttons while question audio plays
-// so the mic doesn't pick up the prompt audio. Preserves any prior disabled
-// state (e.g. review mode) so unlocking only undoes our lock.
-function _refreshAssignmentRecordBtnsForAudio() {
-  const btns = document.querySelectorAll('.voice-record-btn, .voice-text-mic-btn');
-  btns.forEach((btn) => {
-    if (_assignmentAudioPlaying) {
-      if (btn.dataset.audioLocked === '1') return;
-      btn.dataset.priorDisabled = btn.disabled ? '1' : '0';
-      btn.dataset.audioLocked = '1';
-      btn.disabled = true;
-      btn.classList.add('audio-locked');
-      btn.title = t('Listen to the question first');
-    } else if (btn.dataset.audioLocked === '1') {
-      const prior = btn.dataset.priorDisabled === '1';
-      delete btn.dataset.audioLocked;
-      delete btn.dataset.priorDisabled;
-      btn.disabled = prior;
-      btn.classList.remove('audio-locked');
-      btn.removeAttribute('title');
-    }
-  });
 }
 
 function stopAssignmentQuestionAudioPlayback() {
@@ -6814,6 +6985,9 @@ async function playAssignmentQuestionVideo(question) {
 }
 
 async function runAssignmentQuestionMediaSequence(question, audioKey) {
+  // A recording already running (Record pressed before the prompt audio got
+  // going) owns the audio channel — playing over it can cut the mic off.
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
   const audioResult = await playAssignmentQuestionAudio(question, { audioKey });
   // Playback was deliberately stopped mid-play (answer saved, replay clicked,
   // exam blur). Whoever stopped it owns what happens next — don't proceed to
@@ -6836,6 +7010,8 @@ async function runAssignmentQuestionMediaSequence(question, audioKey) {
   // A manual replay owns the audio channel right now — its own resume
   // callback restarts ambient when it ends, so don't layer ambient under it.
   if (_assignmentAudioPlaying || activeAssignmentQuestionAudioEl) return;
+  // Recording in progress — its onstop resumes ambient when the take ends.
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
 
   playAssignmentSfx('answering');
 }
@@ -7049,6 +7225,15 @@ function pauseAssignmentAnsweringAmbient() {
   } catch { }
 }
 
+// Opening the mic (voice_record / voice_text) stops the question audio —
+// playing, loading, or still queued for autoplay — and pauses ambient.
+function silenceAssignmentAudioForMic() {
+  if (live.player.mode !== 'assignment') return;
+  pauseAssignmentAnsweringAmbient();
+  cancelPendingAssignmentQuestionAutoplay();
+  stopAssignmentQuestionAudioPlayback();
+}
+
 // Resume the answering ambient after a mic-driven pause (voice_record /
 // voice_text). Guarded so we don't restart if the student has already left
 // the question, submitted, or while the question's prompt audio is still
@@ -7065,6 +7250,7 @@ function resumeAssignmentAnsweringAmbient() {
   const attempt = s?.attempt;
   if (!attempt || attempt.submitted) return;
   if (_assignmentAudioPlaying) return;
+  if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
   try {
     if (currentAnsweringIdx < 0) { playAssignmentSfx('answering'); return; }
     const a = assignmentAmbient.answering[currentAnsweringIdx];
@@ -7613,6 +7799,20 @@ function _cleanupVoiceRecordStream() {
   _stopVoiceRecordSilentSR();
 }
 
+// Playing back your own take pauses the ambient (and any question audio) so
+// the student can actually hear it; ambient resumes when playback pauses/ends.
+function _wireOwnRecordingPlayback(audio) {
+  if (live.player.mode !== 'assignment') return;
+  audio.addEventListener('play', () => {
+    pauseAssignmentAnsweringAmbient();
+    stopAssignmentQuestionAudioPlayback();
+  });
+  audio.addEventListener('pause', () => {
+    if (!audio.isConnected) return; // left the question; the new one owns ambient
+    resumeAssignmentAnsweringAmbient();
+  });
+}
+
 function renderVoiceRecorder(container, question) {
   _cleanupVoiceRecordStream();
   _voiceRecordUpload = null;
@@ -7642,7 +7842,6 @@ function renderVoiceRecorder(container, question) {
 
   wrap.append(recordBtn, stopBtn, timerEl, previewWrap, statusEl);
   container.appendChild(wrap);
-  _refreshAssignmentRecordBtnsForAudio();
 
   // --- NEW: Pre-fill student recording ---
   const state = live.player.assignment.state;
@@ -7659,6 +7858,7 @@ function renderVoiceRecorder(container, question) {
       src = `${base}/api/media/${src}`;
     }
     audio.src = src;
+    _wireOwnRecordingPlayback(audio);
     previewWrap.innerHTML = '';
     previewWrap.appendChild(audio);
     previewWrap.classList.remove('hidden');
@@ -7693,6 +7893,7 @@ function renderVoiceRecorder(container, question) {
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.src = URL.createObjectURL(blob);
+    _wireOwnRecordingPlayback(audio);
 
     const rerecordBtn = document.createElement('button');
     rerecordBtn.type = 'button';
@@ -7719,6 +7920,13 @@ function renderVoiceRecorder(container, question) {
 
   async function uploadBlob(blob, durationMs, transcript) {
     const mimeType = blob.type || 'audio/webm';
+    // Anonymous game: nothing is stored, so the recording stays in this browser.
+    if (live.player.game?.anonymous) {
+      _voiceRecordUpload = { url: 'anonymous', durationMs, mimeType, uploading: false, error: null, transcript: transcript || '' };
+      statusEl.textContent = t('✓ Recorded (not sent: anonymous play)');
+      statusEl.className = 'voice-record-upload-status uploaded';
+      return;
+    }
     _voiceRecordUpload = { url: null, durationMs, mimeType, uploading: true, error: null, transcript: transcript || '' };
     statusEl.textContent = t('Uploading…');
     statusEl.className = 'voice-record-upload-status uploading';
@@ -7773,8 +7981,9 @@ function renderVoiceRecorder(container, question) {
   }
 
   recordBtn.addEventListener('click', async () => {
-    // Pause assignment ambient so it doesn't bleed into the recording.
-    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
+    // Record cuts off the question audio and ambient so neither bleeds into
+    // the take (playback starting mid-take can also cut the mic off).
+    silenceAssignmentAudioForMic();
     try {
       _voiceRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
@@ -7805,17 +8014,28 @@ function renderVoiceRecorder(container, question) {
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
-    _voiceRecordRecorder = mimeType
-      ? new MediaRecorder(_voiceRecordStream, { mimeType })
-      : new MediaRecorder(_voiceRecordStream);
+    // Local handles so this take's onstop only ever touches its own recorder and
+    // stream. onstop fires async; reading the globals there let a late onstop
+    // from an earlier take stop the mic of the take that replaced it.
+    const stream = _voiceRecordStream;
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    _voiceRecordRecorder = recorder;
+    const releaseStream = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (_voiceRecordStream === stream) _voiceRecordStream = null;
+    };
 
     const startTime = Date.now();
 
-    _voiceRecordRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-    _voiceRecordRecorder.onstop = () => {
+    recorder.onstop = () => {
+      // Superseded (student left the question / re-rendered): this take's UI is gone.
+      if (_voiceRecordRecorder !== recorder) { releaseStream(); return; }
       const durationMs = Date.now() - startTime;
-      const blob = new Blob(chunks, { type: _voiceRecordRecorder.mimeType || 'audio/webm' });
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
 
       _stopVoiceRecordSilentSR();
       const transcript = String(_voiceRecordSRFinal || '').trim().slice(0, 4000);
@@ -7830,16 +8050,14 @@ function renderVoiceRecorder(container, question) {
         statusEl.textContent = t('Recording too large ({size} MB, max {max} MB). Try again.', { size: (blob.size / 1024 / 1024).toFixed(1), max: MAX_SIZE_BYTES / 1024 / 1024 });
         statusEl.className = 'voice-record-upload-status error';
         recordBtn.classList.remove('hidden');
-        _voiceRecordStream?.getTracks().forEach((t) => t.stop());
-        _voiceRecordStream = null;
+        releaseStream();
         if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
         return;
       }
 
       showPreview(blob, durationMs);
       uploadBlob(blob, durationMs, transcript);
-      _voiceRecordStream?.getTracks().forEach((t) => t.stop());
-      _voiceRecordStream = null;
+      releaseStream();
       if (live.player.mode === 'assignment') resumeAssignmentAnsweringAmbient();
     };
 
@@ -7850,7 +8068,7 @@ function renderVoiceRecorder(container, question) {
       : _bcp47FromQuestionLanguage(question?.language);
     _startVoiceRecordSilentSR(recogLang);
 
-    _voiceRecordRecorder.start(1000); // collect chunks every 1s
+    recorder.start(1000); // collect chunks every 1s
 
     recordBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
@@ -8161,6 +8379,13 @@ async function downscaleImageForUpload(file, maxEdge = 1600, quality = 0.82) {
 }
 
 async function uploadImageBlob(file, statusEl) {
+  // Anonymous game: nothing is stored, so the photo stays in this browser.
+  if (live.player.game?.anonymous) {
+    _imageAnswerUpload = { url: 'anonymous', mimeType: file?.type || 'image/jpeg', uploading: false, error: null };
+    statusEl.textContent = t('✓ Added (not sent: anonymous play)');
+    statusEl.className = 'image-answer-upload-status uploaded';
+    return;
+  }
   statusEl.textContent = t('Processing…');
   statusEl.className = 'image-answer-upload-status uploading';
   const blob = await downscaleImageForUpload(file);
@@ -8305,7 +8530,6 @@ function renderVoiceTextRecognizer(container, question) {
 
   wrap.append(micBtn, stopBtn, transcriptEl, statusEl);
   container.appendChild(wrap);
-  _refreshAssignmentRecordBtnsForAudio();
 
   let finalTranscript = hidden.value || '';
   let interimTranscript = '';
@@ -8417,8 +8641,8 @@ function renderVoiceTextRecognizer(container, question) {
     _userListening = true;
     _fatalError = false;
 
-    // Pause assignment ambient so it doesn't bleed into recognition.
-    if (live.player.mode === 'assignment') pauseAssignmentAnsweringAmbient();
+    // Cut off question audio + ambient so they don't bleed into recognition.
+    silenceAssignmentAudioForMic();
 
     micBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
