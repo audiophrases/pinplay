@@ -632,6 +632,28 @@ textarea {
   color: var(--muted);
 }
 
+.mm-selbar progress {
+  flex: 0 1 12rem;
+}
+
+.mm-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0 .4rem;
+}
+
+.mm-notice {
+  padding: .3rem .6rem;
+  border-left: 3px solid var(--primary);
+  background: var(--bg);
+  border-radius: .3rem;
+}
+
+.mm-status.working {
+  color: var(--primary);
+}
+
 .mm-table-wrap {
   flex: 1;
   min-height: 0;

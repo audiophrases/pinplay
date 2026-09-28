@@ -3802,6 +3802,13 @@ function cachedMediaSearch(kind, keyword, search) {
   return cache.get(cacheKey);
 }
 
+// While GIF searches are paused, keywords already searched still work: their
+// results come from the cache without calling GIPHY.
+function isGifKeywordBlocked(keyword) {
+  if (!isGifSearchPaused()) return false;
+  return !mediaSearchState.cache.has(`gif:${String(keyword || '').trim().toLowerCase()}`);
+}
+
 function searchGifsForKeyword(keyword) {
   return cachedMediaSearch('gif', keyword, () => giphySearch(keyword, MEDIA_SEARCH_RESULTS));
 }
@@ -16332,6 +16339,36 @@ async function ensureTtsAudioBatchOnR2(items, rate = '+0%') {
   return Array.isArray(data?.results) ? data.results.map((r) => (r?.ok ? String(r.key || '') || null : null)) : null;
 }
 
+// Settles a question's voice/language fields as publishing does and returns the
+// TTS clip it needs ({ voice, text }), or null when it has no TTS audio (a
+// `tts`-mode question without audio then loses its stale key).
+// Shared by ensureQuizMediaReady and the Media Manager.
+function prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud) {
+  const overrideText = String(q.audioText || '').trim();
+
+  if (supportsQuestionAudio(q.type)) {
+    const langForQuestion = overrideText
+      ? normalizeTtsLanguage(q.ttsLanguage || quizLanguage)
+      : quizLanguage;
+    q.ttsLanguage = langForQuestion;
+    q.language = normalizeTtsVoice(q.language, langForQuestion);
+  }
+
+  const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
+  const promptText = String(q.prompt || '').trim();
+  const ttsText = (overrideText || promptText).slice(0, 1200);
+  const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
+
+  // If hearing is disabled, skip TTS generation
+  const hearingDisabled = (quizLanguage === 'NONE') || (String(q.ttsLanguage || '').toUpperCase() === 'NONE');
+
+  if (!hearingDisabled && (wantsTts || shouldGenerateQuizWide) && ttsText) {
+    return { voice: q.language || getVoiceForTtsLanguage(quizLanguage), text: ttsText };
+  }
+  if (wantsTts) q.ttsAudioKey = '';
+  return null;
+}
+
 async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false } = {}) {
   normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
@@ -16423,41 +16460,21 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     }
 
-    const overrideText = String(q.audioText || '').trim();
-
-    if (supportsQuestionAudio(q.type)) {
-      const langForQuestion = overrideText
-        ? normalizeTtsLanguage(q.ttsLanguage || quizLanguage)
-        : quizLanguage;
-      q.ttsLanguage = langForQuestion;
-      q.language = normalizeTtsVoice(q.language, langForQuestion);
-    }
-
-    const wantsTts = String(q.audioMode || '').toLowerCase() === 'tts';
-    const promptText = String(q.prompt || '').trim();
-    const ttsText = (overrideText || promptText).slice(0, 1200);
-    const shouldGenerateQuizWide = readAllQuestionsAloud && supportsQuestionAudio(q.type);
-
-    // If hearing is disabled, skip TTS generation
-    const hearingDisabled = (quizLanguage === 'NONE') || (String(q.ttsLanguage || '').toUpperCase() === 'NONE');
-
     // TTS questions stay in `tts` mode and carry a content-addressed cache key
     // (ttsAudioKey) derived from voice+text. The key auto-changes when the text
     // changes — no stale-mp3 invalidation, no flip to `file`. The mp3 is generated
     // once and reused; we only materialize it on R2 at publish boundaries
     // (materializeTts), not on every local save / media check.
-    if (!hearingDisabled && (wantsTts || shouldGenerateQuizWide) && ttsText) {
-      const voiceForKey = q.language || getVoiceForTtsLanguage(quizLanguage);
+    const ttsClip = prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud);
+    if (ttsClip) {
       try {
-        q.ttsAudioKey = await computeTtsAudioKey(voiceForKey, ttsText);
+        q.ttsAudioKey = await computeTtsAudioKey(ttsClip.voice, ttsClip.text);
         q.audioEnabled = true; // this question has playable TTS audio (incl. quiz-wide read-aloud)
-        if (materializeTts && uploadToR2) pendingTts.push({ q, voice: voiceForKey, text: ttsText });
+        if (materializeTts && uploadToR2) pendingTts.push({ q, voice: ttsClip.voice, text: ttsClip.text });
       } catch (err) {
         // Non-fatal: playback lazily synthesizes via Edge if the object is absent.
         console.warn(`Q${i + 1} TTS prepare failed:`, err?.message || err);
       }
-    } else if (wantsTts) {
-      q.ttsAudioKey = '';
     }
 
     // Validate genuine uploaded/recorded file audio (data: URL) before it ships.
@@ -16766,6 +16783,188 @@ function nextMediaSelection(selected, visible, clicked, { ctrl = false, shift = 
   return { selected: new Set([clicked]), anchor: clicked };
 }
 
+// Regenerate: the result after the current one in the cached list (wrapping),
+// never the current one. `lastIndex` is where the current media came from when
+// its URL can't be matched (pictures are stored resized, not by source URL).
+// Returns { item, index } or null when there is no other result.
+function nextMediaResult(items, currentUrl, lastIndex = -1) {
+  const list = (Array.isArray(items) ? items : []).filter((it) => it?.url);
+  if (!list.length) return null;
+  let from = list.findIndex((it) => it.url === currentUrl);
+  if (from === -1) from = lastIndex;
+  for (let step = 1; step <= list.length; step++) {
+    const i = (((from + step) % list.length) + list.length) % list.length;
+    if (list[i].url !== currentUrl) return { item: list[i], index: i };
+  }
+  return null;
+}
+
+// Worst outcome wins when a question gets two (picture, then audio).
+const MEDIA_OUTCOME_RANK = { skipped: 0, filled: 1, limited: 2, failed: 3 };
+
+function worseMediaOutcome(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return (MEDIA_OUTCOME_RANK[b.status] || 0) > (MEDIA_OUTCOME_RANK[a.status] || 0) ? b : a;
+}
+
+// Fold a finished job's outcomes into the session failures and the job's counts.
+function applyMediaJobOutcomes(failures, outcomes) {
+  const counts = { filled: 0, failed: 0, limited: 0, skipped: 0 };
+  outcomes.forEach((outcome, q) => {
+    const status = outcome?.status in counts ? outcome.status : 'skipped';
+    counts[status] += 1;
+    if (status === 'failed' || status === 'limited') failures.set(q, outcome);
+    else if (status === 'filled') failures.delete(q);
+  });
+  return counts;
+}
+
+// ---------- Media Manager: bulk actions ----------
+
+const MEDIA_JOB_CONCURRENCY = 3;
+const MEDIA_TTS_CHUNK = 25;
+
+// Generate missing: the picture, GIF or video a question's keyword asks for.
+// A video that can't be found falls back to its GIF/picture keyword, as publishing does.
+async function generateMissingVisualFor(q) {
+  const { visual } = questionMediaStatus(q, quiz);
+  if (visual.status !== 'missing') return { status: 'skipped', reason: '' };
+  let outcome = null;
+  if (visual.kind === 'video') {
+    outcome = (await autoFillVideos([q])).outcomes.get(q) || null;
+    if (outcome?.status === 'filled') return outcome;
+    if (!String(q.gifKeyword || q.imageKeyword || '').trim()) return outcome || { status: 'skipped', reason: '' };
+  }
+  return (await autoFillImages([q])).outcomes.get(q) || outcome || { status: 'skipped', reason: '' };
+}
+
+// Regenerate: the next result for the same keyword (from the session cache).
+// Missing media is generated instead; TTS audio is unchanged (same voice + text
+// gives the same clip: use Change voice).
+async function regenerateVisualFor(q) {
+  const { visual } = questionMediaStatus(q, quiz);
+  if (visual.status === 'missing') return generateMissingVisualFor(q);
+  const picks = mediaManagerState.picks;
+  if (visual.kind === 'gif') {
+    const keyword = String(q.gifKeyword || '').trim();
+    if (!keyword) return { status: 'failed', reason: t('No GIF keyword to search with. Use Set keyword or the GIF picker.') };
+    if (isGifKeywordBlocked(keyword)) return { status: 'limited', reason: t('GIF search limit reached — try again later.') };
+    let items;
+    try {
+      items = await searchGifsForKeyword(keyword);
+    } catch (err) {
+      if (isRateLimitError(err)) return { status: 'limited', reason: t('GIF search limit reached — try again later.') };
+      throw err;
+    }
+    const pick = nextMediaResult(items, String(q.imageData || ''), picks.has(q) ? picks.get(q) : -1);
+    if (!pick) return { status: 'failed', reason: t('No other GIFs found for "{keyword}".', { keyword }) };
+    replaceQuestionImageData(q, pick.item.url);
+    picks.set(q, pick.index);
+    return { status: 'filled', reason: '' };
+  }
+  if (visual.kind === 'image') {
+    const keyword = String(q.imageKeyword || '').trim();
+    if (!keyword) return { status: 'failed', reason: t('No picture keyword to search with. Use Set keyword or the picture search.') };
+    const items = await searchImagesForKeyword(keyword);
+    // Auto-fill takes the first result, so a picture of unknown origin counts as #1.
+    const pick = nextMediaResult(items, '', picks.has(q) ? picks.get(q) : 0);
+    if (!pick) return { status: 'failed', reason: t('No other pictures found for "{keyword}".', { keyword }) };
+    replaceQuestionImageData(q, await importPictureAsDataUrl(pick.item.url));
+    picks.set(q, pick.index);
+    return { status: 'filled', reason: '' };
+  }
+  if (visual.kind === 'video') {
+    const keyword = String(q.videoKeyword || '').trim();
+    if (!keyword) return { status: 'failed', reason: t('No video keyword to search with. Use Set keyword.') };
+    const items = await searchVideosForKeyword(keyword, videoProviderPreferenceOf(q), videoBackendCandidates());
+    const pick = nextMediaResult(items, normalizeQuestionMedia(q.media).url, picks.has(q) ? picks.get(q) : -1);
+    if (!pick) return { status: 'failed', reason: t('No other videos found for "{keyword}".', { keyword }) };
+    applyFoundVideo(q, pick.item);
+    picks.set(q, pick.index);
+    return { status: 'filled', reason: '' };
+  }
+  return { status: 'skipped', reason: '' };
+}
+
+// TTS audio for questions whose clip isn't prepared yet: settle the key as
+// publishing does and, when signed in, put the clips on R2 now (25 per request).
+// Returns question -> outcome.
+async function generateMissingTtsFor(questions, job) {
+  const outcomes = new Map();
+  const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
+  const pending = [];
+  for (const q of questions) {
+    if (job.cancelled) break;
+    if (questionMediaStatus(q, quiz).audio.status !== 'missing') continue;
+    const clip = prepareQuestionTts(q, quizLanguage, !!quiz.readAllQuestionsAloud);
+    if (!clip) continue;
+    q.ttsAudioKey = await computeTtsAudioKey(clip.voice, clip.text);
+    q.audioEnabled = true;
+    pending.push({ q, ...clip });
+    outcomes.set(q, { status: 'filled', reason: '' });
+  }
+  for (let i = 0; i < pending.length && !job.cancelled; i += MEDIA_TTS_CHUNK) {
+    const chunk = pending.slice(i, i + MEDIA_TTS_CHUNK);
+    let keys = null;
+    let reason = t('The audio could not be generated.');
+    try {
+      keys = await ensureTtsAudioBatchOnR2(chunk.map(({ voice, text }) => ({ voice, text })));
+    } catch (err) {
+      reason = String(err?.message || reason);
+    }
+    if (!Array.isArray(keys)) {
+      // Not signed in (null without error): the next publish puts the clips on R2.
+      if (!createSessionPassword) continue;
+      keys = [];
+    }
+    chunk.forEach((item, k) => {
+      if (keys[k]) {
+        item.q.ttsAudioKey = keys[k];
+      } else {
+        item.q.ttsAudioKey = '';
+        outcomes.set(item.q, { status: 'failed', reason });
+      }
+    });
+  }
+  return outcomes;
+}
+
+// Remove one kind of media from the questions, with the keyword that would
+// bring it back on the next save. Pin questions keep their picture (it is the map).
+// Returns the number of questions changed.
+function removeMediaFrom(questions, what) {
+  let changed = 0;
+  questions.forEach((q) => {
+    if (!q) return;
+    if (what === 'visual') {
+      if (q.type === 'pin') return;
+      if (!q.imageData && !q.gifKeyword && !q.imageKeyword) return;
+      replaceQuestionImageData(q, '');
+      q.gifKeyword = '';
+      q.imageKeyword = '';
+    } else if (what === 'video') {
+      if (normalizeQuestionMedia(q.media).kind !== 'video' && !q.videoKeyword) return;
+      q.media = makeDefaultQuestionMedia();
+      q.videoKeyword = '';
+    } else if (what === 'audio') {
+      // Uploaded/recorded audio and per-question read-aloud. A quiz that reads
+      // every question aloud still reads the question text.
+      if (!q.audioData && !q.audioText && !q.audioMode && !q.ttsAudioKey) return;
+      q.audioData = '';
+      q.audioText = '';
+      q.audioMode = '';
+      q.ttsAudioKey = '';
+      q._audioVersion = '';
+    } else {
+      return;
+    }
+    mediaManagerState.picks.delete(q);
+    changed += 1;
+  });
+  return changed;
+}
+
 // ---------- Media Manager panel ----------
 // Session state: kept while the panel is closed, so filters and selection survive.
 const mediaManagerState = {
@@ -16774,8 +16973,114 @@ const mediaManagerState = {
   selected: new Set(),
   anchor: null,
   failures: new Map(),
+  picks: new WeakMap(), // question -> index of its current result, for Regenerate
   visible: [],
+  job: null, // { label, total, done, cancelled, working: Set }
+  notice: '',
+  removeOpen: false,
 };
+
+let mediaManagerRenderTimer = 0;
+
+function scheduleMediaManagerRender() {
+  if (mediaManagerRenderTimer) return;
+  mediaManagerRenderTimer = setTimeout(() => {
+    mediaManagerRenderTimer = 0;
+    renderMediaManager();
+  }, 300);
+}
+
+// Runs perQuestion over the questions, a few at a time, then (withTts) prepares
+// their missing TTS audio. Cancel stops after the rows already running.
+async function runMediaManagerJob(label, questions, perQuestion, { withTts = false } = {}) {
+  const state = mediaManagerState;
+  if (state.job || !questions.length) return;
+  const job = { label, total: questions.length, done: 0, cancelled: false, working: new Set() };
+  state.job = job;
+  state.notice = '';
+  state.removeOpen = false;
+  renderMediaManager();
+
+  const outcomes = new Map();
+  let next = 0;
+  const worker = async () => {
+    while (!job.cancelled && next < questions.length) {
+      const q = questions[next++];
+      job.working.add(q);
+      scheduleMediaManagerRender();
+      let outcome;
+      try {
+        outcome = await perQuestion(q);
+      } catch (err) {
+        outcome = { status: 'failed', reason: String(err?.message || err) };
+      }
+      outcomes.set(q, worseMediaOutcome(outcomes.get(q), outcome));
+      job.working.delete(q);
+      job.done += 1;
+      scheduleMediaManagerRender();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(MEDIA_JOB_CONCURRENCY, questions.length) }, worker));
+
+  if (withTts && !job.cancelled) {
+    try {
+      const ttsOutcomes = await generateMissingTtsFor(questions, job);
+      ttsOutcomes.forEach((outcome, q) => outcomes.set(q, worseMediaOutcome(outcomes.get(q), outcome)));
+    } catch (err) {
+      console.warn('Media Manager TTS failed:', err);
+    }
+  }
+
+  const counts = applyMediaJobOutcomes(state.failures, outcomes);
+  const parts = [t('{n} updated', { n: counts.filled })];
+  if (counts.failed) parts.push(t('{n} failed', { n: counts.failed }));
+  if (counts.limited) parts.push(t('{n} held back by the GIF limit', { n: counts.limited }));
+  if (counts.skipped) parts.push(t('{n} had nothing to do', { n: counts.skipped }));
+  if (job.cancelled) parts.push(t('cancelled'));
+  state.notice = `${label}: ${parts.join(' · ')}`;
+  state.job = null;
+  renderBuilder();
+  renderMediaManager();
+}
+
+function mediaManagerJobQuestions(scope) {
+  if (scope === 'all-missing') {
+    return buildMediaRows(quiz.questions, quiz, mediaManagerState.failures)
+      .filter((r) => r.status === 'missing' || r.status === 'failed')
+      .map((r) => r.q);
+  }
+  // Selected questions, in quiz order.
+  return quiz.questions.filter((q) => mediaManagerState.selected.has(q));
+}
+
+function startMediaManagerAction(action) {
+  const state = mediaManagerState;
+  if (state.job) return;
+  if (action === 'generate' || action === 'generate-all') {
+    const questions = mediaManagerJobQuestions(action === 'generate-all' ? 'all-missing' : 'selected');
+    if (!confirmGifSearchBudget(questions)) return;
+    runMediaManagerJob(action === 'generate-all' ? t('Generate all missing') : t('Generate missing'), questions, generateMissingVisualFor, { withTts: true });
+  } else if (action === 'regenerate') {
+    const questions = mediaManagerJobQuestions('selected');
+    if (!confirmGifSearchBudget(questions, { regenerate: true })) return;
+    runMediaManagerJob(t('Regenerate'), questions, regenerateVisualFor);
+  }
+}
+
+// GIF searches share 100 per hour for the whole installation: say what a run
+// needs before it starts, and warn when it is a big share of that.
+function confirmGifSearchBudget(questions, { regenerate = false } = {}) {
+  const cached = mediaSearchState.cache;
+  const keywords = new Set();
+  questions.forEach((q) => {
+    const { visual } = questionMediaStatus(q, quiz);
+    if (visual.kind !== 'gif' || (!regenerate && visual.status !== 'missing')) return;
+    const keyword = String(q.gifKeyword || '').trim().toLowerCase();
+    if (keyword && !cached.has(`gif:${keyword}`)) keywords.add(keyword);
+  });
+  if (keywords.size <= 50) return true;
+  return confirm(t('This needs {n} GIF searches. GIPHY allows about 100 per hour for this whole PinPlay, so some GIFs may have to wait. Continue?', { n: keywords.size }));
+}
 
 function formatMediaChanged(ms) {
   if (!ms) return '—';
@@ -16816,6 +17121,9 @@ function mediaAudioCellHtml(r, idx) {
 }
 
 function mediaStatusBadgeHtml(r) {
+  if (mediaManagerState.job?.working.has(r.q)) {
+    return `<span class="mm-status working">${escapeHtml(t('🔄 Working…'))}</span>`;
+  }
   const label = {
     failed: t('⚠️ Failed'),
     missing: t('⏳ Missing'),
@@ -16853,7 +17161,13 @@ function renderMediaManager() {
   if (c.image) parts.push(chip('media:image', t('{n} pictures', { n: c.image })));
   if (c.video) parts.push(chip('media:video', t('{n} videos', { n: c.video })));
   if (c.audio) parts.push(chip('media:audio', t('{n} with audio', { n: c.audio })));
+  if ((c.missing || c.failed) && !state.job) {
+    parts.push(`<button type="button" class="btn btn-sm primary" data-mm-action="generate-all">${escapeHtml(t('✨ Generate all missing ({n})', { n: c.missing + c.failed }))}</button>`);
+  }
   overlay.querySelector('[data-mm-summary]').innerHTML = parts.join('');
+  const noticeEl = overlay.querySelector('[data-mm-notice]');
+  noticeEl.textContent = state.notice;
+  noticeEl.hidden = !state.notice;
 
   overlay.querySelectorAll('[data-mm-filter]').forEach((el) => {
     const v = state.filters[el.dataset.mmFilter] || '';
@@ -16904,17 +17218,58 @@ function refreshMediaSelection() {
   const bar = overlay.querySelector('[data-mm-selbar]');
   const n = state.selected.size;
   const hiddenSelected = [...state.selected].filter((q) => !state.visible.includes(q)).length;
-  bar.classList.toggle('empty', !n);
-  bar.innerHTML = n
-    ? `<strong>${escapeHtml(t('{n} selected', { n }))}</strong>${hiddenSelected ? ` <span class="small muted">${escapeHtml(t('({n} hidden by filters)', { n: hiddenSelected }))}</span>` : ''}
-       <button type="button" class="btn btn-sm" data-mm-select-all>${escapeHtml(t('Select all shown ({n})', { n: state.visible.length }))}</button>
-       <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`
-    : `<span>${escapeHtml(t('No questions selected.'))}</span>
-       <button type="button" class="btn btn-sm" data-mm-select-all ${state.visible.length ? '' : 'disabled'}>${escapeHtml(t('Select all shown ({n})', { n: state.visible.length }))}</button>`;
+  const job = state.job;
+  bar.classList.toggle('empty', !n && !job);
+  const selectAllBtn = `<button type="button" class="btn btn-sm" data-mm-select-all ${state.visible.length ? '' : 'disabled'}>${escapeHtml(t('Select all shown ({n})', { n: state.visible.length }))}</button>`;
+  if (job) {
+    const progressText = escapeHtml(t('🔄 {label}: {done} of {total}', { label: job.label, done: job.done, total: job.total }));
+    bar.innerHTML = `<strong>${progressText}</strong>
+       <progress max="${job.total}" value="${job.done}"></progress>
+       <button type="button" class="btn btn-sm" data-mm-cancel ${job.cancelled ? 'disabled' : ''}>${escapeHtml(job.cancelled ? t('Stopping…') : t('Cancel'))}</button>`;
+  } else if (n && state.removeOpen) {
+    const removeTitle = escapeHtml(t('Remove from {n} selected:', { n }));
+    bar.innerHTML = `<strong>${removeTitle}</strong>
+       <button type="button" class="btn btn-sm" data-mm-remove="visual">${escapeHtml(t('🖼 Picture / GIF'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-remove="video">${escapeHtml(t('🎬 Video'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-remove="audio">${escapeHtml(t('🔊 Audio'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-remove-cancel>${escapeHtml(t('Cancel'))}</button>`;
+  } else if (n) {
+    const selectedText = escapeHtml(t('{n} selected', { n }));
+    const hiddenHtml = hiddenSelected
+      ? ` <span class="small muted">${escapeHtml(t('({n} hidden by filters)', { n: hiddenSelected }))}</span>`
+      : '';
+    bar.innerHTML = `<strong>${selectedText}</strong>${hiddenHtml}
+       <span class="mm-actions">
+         <button type="button" class="btn btn-sm primary" data-mm-action="generate" title="${escapeHtml(t('Search for the media the keywords ask for, and prepare missing audio'))}">${escapeHtml(t('✨ Generate missing'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-action="regenerate" title="${escapeHtml(t('Take the next result for the same keyword'))}">${escapeHtml(t('🔄 Regenerate'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-remove-open>${escapeHtml(t('🗑 Remove…'))}</button>
+       </span>
+       ${selectAllBtn}
+       <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`;
+  } else {
+    bar.innerHTML = `<span>${escapeHtml(t('No questions selected.'))}</span> ${selectAllBtn}`;
+  }
 }
 
+// Closing stops a running job after the rows already in progress, so nothing
+// changes the quiz behind the teacher's back while they edit.
 function closeMediaManager() {
+  if (mediaManagerState.job) mediaManagerState.job.cancelled = true;
+  mediaManagerState.removeOpen = false;
   document.getElementById('mediaManagerOverlay')?.remove();
+}
+
+function removeSelectedMedia(what) {
+  const state = mediaManagerState;
+  const questions = mediaManagerJobQuestions('selected');
+  const label = { visual: t('picture or GIF'), video: t('video'), audio: t('audio') }[what];
+  if (!questions.length || !label) return;
+  if (!confirm(t("Remove the {what} of {n} selected question(s)? Their keywords are cleared too, so saving won't add it back.", { what: label, n: questions.length }))) return;
+  const changed = removeMediaFrom(questions, what);
+  state.removeOpen = false;
+  state.notice = t('Removed the {what} of {n} question(s).', { what: label, n: changed });
+  renderBuilder();
+  renderMediaManager();
 }
 
 function openQuestionFromMediaManager(idx) {
@@ -16934,7 +17289,8 @@ function openQuestionFromMediaManager(idx) {
 function openMediaManager() {
   syncQuizFromUI();
   normalizeQuizAudioDefaults(quiz);
-  closeMediaManager();
+  // Rebuilding (e.g. on a language switch) keeps a running job going.
+  document.getElementById('mediaManagerOverlay')?.remove();
   const state = mediaManagerState;
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const types = [...new Set(questions.map((q) => String(q?.type || '')).filter(Boolean))];
@@ -16968,6 +17324,7 @@ function openMediaManager() {
         <button type="button" class="btn btn-sm" data-mm-apply="all">${escapeHtml(t('Clear filters'))}</button>
       </div>
       <div class="mm-selbar" data-mm-selbar></div>
+      <div class="mm-notice small" data-mm-notice role="status" hidden></div>
       <div class="mm-table-wrap">
         <table class="mm-table">
           <thead><tr>
@@ -17011,6 +17368,17 @@ function openMediaManager() {
       renderMediaManager();
       return;
     }
+
+    const actionBtn = e.target.closest('[data-mm-action]');
+    if (actionBtn) { startMediaManagerAction(actionBtn.dataset.mmAction); return; }
+    if (e.target.closest('[data-mm-cancel]')) {
+      if (state.job) { state.job.cancelled = true; refreshMediaSelection(); }
+      return;
+    }
+    if (e.target.closest('[data-mm-remove-open]')) { state.removeOpen = true; refreshMediaSelection(); return; }
+    if (e.target.closest('[data-mm-remove-cancel]')) { state.removeOpen = false; refreshMediaSelection(); return; }
+    const removeBtn = e.target.closest('[data-mm-remove]');
+    if (removeBtn) { removeSelectedMedia(removeBtn.dataset.mmRemove); return; }
 
     if (e.target.closest('[data-mm-select-all]')) { selectAllShown(); return; }
     if (e.target.closest('[data-mm-select-none]')) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
@@ -17090,6 +17458,21 @@ function isStorageQuotaError(err) {
   return name.includes('quota') || msg.includes('exceeded the quota') || msg.includes('quota exceeded');
 }
 
+// Fetch a found picture through the backend proxy and resize it; the data URL is
+// uploaded to R2 on the next save. Throws with a readable reason.
+async function importPictureAsDataUrl(imageUrl) {
+  const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+  if (!beUrl) throw new Error(t('No backend configured to import pictures.'));
+  const res = await fetch(`${beUrl}/api/images/fetch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: imageUrl }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!data?.dataUrl) throw new Error(t('The picture could not be imported.'));
+  return imageFileToOptimizedDataUrl(dataUrlToBlob(data.dataUrl));
+}
+
 /**
  * Auto-fill missing images for questions that have no imageData but have an imageKeyword set.
  * If imageKeyword is empty, the question is skipped (creator doesn't want an auto-image).
@@ -17106,7 +17489,6 @@ async function autoFillImages(questions, onProgress) {
   let skipped = 0;
   let gifLimited = 0;
   const outcomes = new Map();
-  const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
   const limitedReason = t('GIF search limit reached — try again later.');
 
   for (let i = 0; i < list.length; i++) {
@@ -17120,7 +17502,7 @@ async function autoFillImages(questions, onProgress) {
     if (gifQuery) {
       // Over the GIPHY limit: leave the question for a later run rather than
       // falling back to a picture the teacher didn't ask for.
-      if (isGifSearchPaused()) {
+      if (isGifKeywordBlocked(gifQuery)) {
         gifLimited++;
         outcomes.set(q, { status: 'limited', reason: limitedReason });
         continue;
@@ -17168,27 +17550,7 @@ async function autoFillImages(questions, onProgress) {
 
       onProgress?.({ index: i, total: list.length, status: 'Importing...' });
 
-      // Fetch image via proxy and resize
-      if (!beUrl) {
-        skipped++;
-        outcomes.set(q, { status: 'failed', reason: t('No backend configured to import pictures.') });
-        continue;
-      }
-      const res = await fetch(`${beUrl}/api/images/fetch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: imageUrl }),
-      });
-      const data = await res.json();
-      if (!data?.dataUrl) {
-        skipped++;
-        outcomes.set(q, { status: 'failed', reason: t('The picture could not be imported.') });
-        continue;
-      }
-
-      const blob = dataUrlToBlob(data.dataUrl);
-      const resized = await imageFileToOptimizedDataUrl(blob);
-      replaceQuestionImageData(q, resized);
+      replaceQuestionImageData(q, await importPictureAsDataUrl(imageUrl));
       filled++;
       outcomes.set(q, { status: 'filled', reason: '' });
     } catch (err) {
@@ -17198,6 +17560,33 @@ async function autoFillImages(questions, onProgress) {
   }
 
   return { filled, skipped, gifLimited, outcomes };
+}
+
+function videoBackendCandidates() {
+  const configuredBeUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
+  const defaultBeUrl = DEFAULT_BACKEND_URL.replace(/\/+$/, '');
+  return Array.from(new Set([configuredBeUrl, defaultBeUrl].filter(Boolean)));
+}
+
+function videoProviderPreferenceOf(q) {
+  return ['youtube', 'vimeo', 'direct'].includes(String(q?.videoProviderPreference || ''))
+    ? String(q.videoProviderPreference)
+    : 'youtube';
+}
+
+// A found video replaces the question's picture (a question shows one or the other).
+function applyFoundVideo(q, candidate) {
+  const provider = ['youtube', 'vimeo', 'direct'].includes(String(candidate.provider || ''))
+    ? String(candidate.provider)
+    : detectVideoProvider(candidate.url || '');
+  q.media = normalizeQuestionMedia({
+    kind: 'video',
+    provider,
+    url: String(candidate.url || ''),
+    startAt: 0,
+    endAt: null,
+  });
+  replaceQuestionImageData(q, '');
 }
 
 // Preferred provider first, then any provider; each tried on every backend.
@@ -17245,9 +17634,7 @@ async function autoFillVideos(questions, onProgress) {
   let filled = 0;
   let skipped = 0;
   const outcomes = new Map();
-  const configuredBeUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
-  const defaultBeUrl = DEFAULT_BACKEND_URL.replace(/\/+$/, '');
-  const backendCandidates = Array.from(new Set([configuredBeUrl, defaultBeUrl].filter(Boolean)));
+  const backendCandidates = videoBackendCandidates();
 
   for (let i = 0; i < list.length; i += 1) {
     const q = list[i];
@@ -17261,27 +17648,14 @@ async function autoFillVideos(questions, onProgress) {
 
     onProgress?.({ index: i, total: list.length, status: 'Searching...' });
     try {
-      const providerPref = ['youtube', 'vimeo', 'direct'].includes(String(q.videoProviderPreference || ''))
-        ? String(q.videoProviderPreference)
-        : 'youtube';
-      const items = await searchVideosForKeyword(keyword, providerPref, backendCandidates);
+      const items = await searchVideosForKeyword(keyword, videoProviderPreferenceOf(q), backendCandidates);
       const candidate = items[0] || null;
       if (!candidate) {
         skipped += 1;
         outcomes.set(q, { status: 'failed', reason: t('No videos found for "{keyword}".', { keyword }) });
         continue;
       }
-      const provider = ['youtube', 'vimeo', 'direct'].includes(String(candidate.provider || ''))
-        ? String(candidate.provider)
-        : detectVideoProvider(candidate.url || '');
-      q.media = normalizeQuestionMedia({
-        kind: 'video',
-        provider,
-        url: String(candidate.url || ''),
-        startAt: 0,
-        endAt: null,
-      });
-      replaceQuestionImageData(q, '');
+      applyFoundVideo(q, candidate);
       filled += 1;
       outcomes.set(q, { status: 'filled', reason: '' });
     } catch (err) {

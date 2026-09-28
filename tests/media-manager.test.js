@@ -15,11 +15,17 @@ const NAMES = [
   'makeImageRevisionToken', 'replaceQuestionImageData',
   'isGifMediaUrl', 'mediaVersionTime', 'questionMediaStatus',
   'MEDIA_SEARCH_RESULTS', 'MEDIA_SEARCH_CACHE_LIMIT', 'GIF_LIMIT_PAUSE_MS', 'mediaSearchState',
-  'isRateLimitError', 'isGifSearchPaused', 'cachedMediaSearch',
-  'searchGifsForKeyword', 'searchImagesForKeyword', 'giphySearch', 'autoFillImages',
+  'isRateLimitError', 'isGifSearchPaused', 'cachedMediaSearch', 'isGifKeywordBlocked',
+  'searchGifsForKeyword', 'searchImagesForKeyword', 'giphySearch', 'importPictureAsDataUrl', 'autoFillImages',
   'CEFR_LEVELS', 'normalizeCefr',
   'MEDIA_ROW_STATUS_ORDER', 'MEDIA_VISUAL_KIND_ORDER', 'MEDIA_AUDIO_KIND_ORDER',
   'buildMediaRows', 'filterMediaRows', 'sortMediaRows', 'mediaSummaryCounts', 'nextMediaSelection',
+  'nextMediaResult', 'MEDIA_OUTCOME_RANK', 'worseMediaOutcome', 'applyMediaJobOutcomes',
+  'videoBackendCandidates', 'videoProviderPreferenceOf', 'applyFoundVideo', 'searchVideosForKeyword', 'autoFillVideos',
+  'generateMissingVisualFor', 'regenerateVisualFor', 'removeMediaFrom', 'mediaManagerState',
+  'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
+  'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'prepareQuestionTts',
+  'sha256HexClient', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -31,6 +37,10 @@ function load(fetchImpl) {
     t: interpolate,
     URL,
     URLSearchParams,
+    TextEncoder,
+    crypto: globalThis.crypto,
+    quiz: { questions: [], ttsLanguage: 'EN', readAllQuestionsAloud: false },
+    createSessionPassword: '',
     console: { warn() {}, error() {}, log() {} },
     loadBackendUrl: () => 'https://be.test',
     normalizeBackendUrl: (u) => String(u || '').replace(/\/+$/, ''),
@@ -42,7 +52,7 @@ function load(fetchImpl) {
     },
   };
   const A = loadDeclarations(APP_SRC, NAMES, sandbox);
-  return { A, calls };
+  return { A, calls, sandbox };
 }
 
 const jsonRes = (status, body) => ({
@@ -334,5 +344,205 @@ describe('Media Manager selection', () => {
     const r = A.nextMediaSelection(new Set([b]), [c, d, e], d, { shift: true }, b);
     assert.equal(ids(r.selected), 'd');
     assert.equal(r.anchor, d);
+  });
+});
+
+describe('nextMediaResult (Regenerate)', () => {
+  let A;
+  beforeEach(() => { ({ A } = load(() => jsonRes(200, {}))); });
+  const items = [{ url: 'u0' }, { url: 'u1' }, { url: 'u2' }];
+
+  it('takes the result after the current one and wraps around', () => {
+    assert.equal(A.nextMediaResult(items, 'u0').item.url, 'u1');
+    assert.equal(A.nextMediaResult(items, 'u2').item.url, 'u0');
+  });
+
+  it('uses the remembered index when the current media is not in the list', () => {
+    assert.equal(A.nextMediaResult(items, 'data:image/jpeg;base64,AA', 0).item.url, 'u1');
+    assert.equal(A.nextMediaResult(items, 'data:x', 2).index, 0);
+    assert.equal(A.nextMediaResult(items, 'elsewhere').item.url, 'u0', 'unknown origin starts at the first result');
+  });
+
+  it('never returns the current media; none when it is the only result', () => {
+    assert.equal(A.nextMediaResult([{ url: 'u0' }], 'u0'), null);
+    assert.equal(A.nextMediaResult([], 'u0'), null);
+  });
+});
+
+describe('job outcomes', () => {
+  let A;
+  beforeEach(() => { ({ A } = load(() => jsonRes(200, {}))); });
+
+  it('keeps the worst outcome per question', () => {
+    const filled = { status: 'filled' };
+    const failed = { status: 'failed', reason: 'x' };
+    assert.equal(A.worseMediaOutcome(filled, failed), failed);
+    assert.equal(A.worseMediaOutcome(failed, filled), failed);
+    assert.equal(A.worseMediaOutcome({ status: 'skipped' }, filled), filled);
+    assert.equal(A.worseMediaOutcome(undefined, filled), filled);
+  });
+
+  it('records failures and clears them when a question is filled', () => {
+    const [a, b, c, d] = [{}, {}, {}, {}];
+    const failures = new Map([[a, { status: 'failed', reason: 'old' }], [d, { status: 'failed', reason: 'keep' }]]);
+    const counts = A.applyMediaJobOutcomes(failures, new Map([
+      [a, { status: 'filled' }],
+      [b, { status: 'limited', reason: 'GIF limit' }],
+      [c, { status: 'skipped' }],
+      [d, { status: 'skipped' }],
+    ]));
+    assert.deepEqual({ ...counts }, { filled: 1, failed: 0, limited: 1, skipped: 2 });
+    assert.equal(failures.has(a), false);
+    assert.equal(failures.get(b).reason, 'GIF limit');
+    assert.equal(failures.get(d).reason, 'keep', 'skipping a question leaves its failure');
+  });
+});
+
+describe('Regenerate and Generate missing on single questions', () => {
+  it('Regenerate walks through the GIF results of the keyword with one search', async () => {
+    const { A, calls, sandbox } = load((url) => jsonRes(200, { items: gifItems(new URL(url).searchParams.get('q'), 3) }));
+    const q = { type: 'mcq', gifKeyword: 'cat' };
+    sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
+    await A.generateMissingVisualFor(q);
+    const first = q.imageData;
+    assert.match(first, /cat\/0\.gif$/);
+    const seen = [];
+    for (let i = 0; i < 3; i++) {
+      const r = await A.regenerateVisualFor(q);
+      assert.equal(r.status, 'filled');
+      seen.push(q.imageData.split('/').pop());
+    }
+    assert.deepEqual(seen, ['1.gif', '2.gif', '0.gif']);
+    assert.equal(calls.filter((u) => u.includes('/api/gifs/search')).length, 1);
+  });
+
+  it('Regenerate imports the next picture, not the first again', async () => {
+    const imported = [];
+    const { A, sandbox } = load((url, opts) => {
+      if (url.includes('openverse')) return jsonRes(200, { results: [{ url: 'https://img.test/p0.jpg' }, { url: 'https://img.test/p1.jpg' }] });
+      if (url.includes('/api/images/fetch')) {
+        imported.push(JSON.parse(opts.body).url);
+        return jsonRes(200, { dataUrl: 'data:image/jpeg;base64,AA' });
+      }
+      return jsonRes(404, {});
+    });
+    const q = { type: 'mcq', imageKeyword: 'pear', imageData: 'https://api.pinplay.win/api/media/q/images/q0-a.jpg' };
+    sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
+    const r = await A.regenerateVisualFor(q);
+    assert.equal(r.status, 'filled');
+    assert.ok(q.imageData.startsWith('data:image/jpeg'));
+    assert.deepEqual(imported, ['https://img.test/p1.jpg']);
+    assert.equal(A.mediaManagerState.picks.get(q), 1);
+  });
+
+  it('Regenerate without a keyword fails with a hint, and is held back while GIFs are paused', async () => {
+    const { A, sandbox } = load(() => jsonRes(200, { items: [] }));
+    const noKeyword = { type: 'mcq', imageData: 'https://media.giphy.com/x/1.gif' };
+    const paused = { type: 'mcq', gifKeyword: 'dog', imageData: 'https://media.giphy.com/dog/0.gif' };
+    sandbox.quiz = { questions: [noKeyword, paused], ttsLanguage: 'EN' };
+    assert.match((await A.regenerateVisualFor(noKeyword)).reason, /No GIF keyword/);
+    A.mediaSearchState.gifPausedUntil = Date.now() + 60000;
+    assert.equal((await A.regenerateVisualFor(paused)).status, 'limited');
+  });
+
+  it('Generate missing falls back from a video keyword to the GIF keyword', async () => {
+    const { A, sandbox } = load((url) => {
+      if (url.includes('/api/videos/search')) return jsonRes(200, { items: [] });
+      if (url.includes('/api/gifs/search')) return jsonRes(200, { items: gifItems('wave', 1) });
+      return jsonRes(404, {});
+    });
+    const q = { type: 'mcq', videoKeyword: 'waving', gifKeyword: 'wave' };
+    sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
+    const r = await A.generateMissingVisualFor(q);
+    assert.equal(r.status, 'filled');
+    assert.match(q.imageData, /giphy/);
+  });
+
+  it('Generate missing leaves questions that are not missing anything alone', async () => {
+    const { A, calls, sandbox } = load(() => jsonRes(200, { items: gifItems('x') }));
+    const q = { type: 'mcq', gifKeyword: 'x', imageData: 'https://media.giphy.com/keep.gif' };
+    sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
+    assert.equal((await A.generateMissingVisualFor(q)).status, 'skipped');
+    assert.equal(q.imageData, 'https://media.giphy.com/keep.gif');
+    assert.equal(calls.length, 0);
+  });
+});
+
+describe('generateMissingTtsFor', () => {
+  it('prepares keys for missing TTS and puts them on R2 in chunks of 25 when signed in', async () => {
+    const batches = [];
+    const { A, sandbox } = load((url, opts) => {
+      const items = JSON.parse(opts.body).items;
+      batches.push(items.length);
+      return jsonRes(200, { results: items.map((it, i) => (it.text === 'Q7' ? { ok: false } : { ok: true, key: `ws/tts/${i}.mp3` })) });
+    });
+    const questions = Array.from({ length: 30 }, (_, i) => ({ type: 'mcq', audioMode: 'tts', prompt: `Q${i}` }));
+    questions.push({ type: 'mcq', audioMode: 'tts', prompt: 'ready', ttsAudioKey: 'tts/done.mp3' });
+    sandbox.quiz = { questions, ttsLanguage: 'EN', readAllQuestionsAloud: false };
+    sandbox.createSessionPassword = 'secret';
+    const outcomes = await A.generateMissingTtsFor(questions, { cancelled: false });
+    assert.deepEqual(batches, [25, 5]);
+    assert.equal(outcomes.size, 30, 'the question that already had audio is left out');
+    assert.equal(outcomes.get(questions[7]).status, 'failed');
+    assert.equal(questions[7].ttsAudioKey, '');
+    assert.equal(outcomes.get(questions[8]).status, 'filled');
+    assert.match(questions[8].ttsAudioKey, /^ws\/tts\//);
+  });
+
+  it('when not signed in, computes the keys and leaves R2 to the next publish', async () => {
+    const { A, calls, sandbox } = load(() => jsonRes(500, {}));
+    const q = { type: 'mcq', audioMode: 'tts', prompt: 'Hello' };
+    sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
+    const outcomes = await A.generateMissingTtsFor([q], { cancelled: false });
+    assert.equal(outcomes.get(q).status, 'filled');
+    assert.match(q.ttsAudioKey, /^tts\/[0-9a-f]{64}\.mp3$/);
+    assert.equal(calls.length, 0);
+  });
+});
+
+describe('removeMediaFrom', () => {
+  let A;
+  beforeEach(() => { ({ A } = load(() => jsonRes(200, {}))); });
+
+  it('removes pictures/GIFs with their keywords, but not a pin question\'s map', () => {
+    const gif = { type: 'mcq', imageData: 'https://media.giphy.com/a.gif', gifKeyword: 'a', _imageVersion: 'x' };
+    const pin = { type: 'pin', imageData: 'data:image/png;base64,MAP' };
+    const none = { type: 'mcq' };
+    assert.equal(A.removeMediaFrom([gif, pin, none], 'visual'), 1);
+    assert.equal(gif.imageData, '');
+    assert.equal(gif.gifKeyword, '');
+    assert.equal(pin.imageData, 'data:image/png;base64,MAP');
+  });
+
+  it('removes videos and audio with what would bring them back', () => {
+    const v = { type: 'mcq', media: { kind: 'video', url: 'https://youtu.be/x' }, videoKeyword: 'x' };
+    const a = { type: 'mcq', audioMode: 'tts', audioText: 'Say it', ttsAudioKey: 'tts/a.mp3' };
+    assert.equal(A.removeMediaFrom([v], 'video'), 1);
+    assert.equal(v.media.kind, 'none');
+    assert.equal(v.videoKeyword, '');
+    assert.equal(A.removeMediaFrom([a], 'audio'), 1);
+    assert.deepEqual([a.audioMode, a.audioText, a.ttsAudioKey], ['', '', '']);
+  });
+});
+describe('GIF pause and the cache', () => {
+  it('while paused, keywords already searched still fill from the cache', async () => {
+    const { A, calls } = load((url) => {
+      const kw = new URL(url).searchParams.get('q');
+      if (kw === 'wow') return jsonRes(429, { error: 'GIPHY search limit reached (HTTP 429).', rateLimited: true });
+      return jsonRes(200, { items: gifItems(kw) });
+    });
+    const qs = [
+      { type: 'mcq', gifKeyword: 'happy' },
+      { type: 'mcq', gifKeyword: 'wow' },
+      { type: 'mcq', gifKeyword: 'happy' },
+      { type: 'mcq', gifKeyword: 'new' },
+    ];
+    const r = await A.autoFillImages(qs, null);
+    assert.ok(qs[0].imageData && qs[2].imageData, 'both "happy" questions filled');
+    assert.equal(r.outcomes.get(qs[1]).status, 'limited');
+    assert.equal(r.outcomes.get(qs[3]).status, 'limited', 'a new keyword waits');
+    assert.equal(calls.length, 2);
+    assert.equal(A.isGifKeywordBlocked('Happy'), false);
+    assert.equal(A.isGifKeywordBlocked('new'), true);
   });
 });

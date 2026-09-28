@@ -6,9 +6,9 @@ adds a **🗂 Media** panel to the quiz editor: one table row per question, with
 filters and sorting, file-manager selection, and bulk actions that apply to the
 selected rows.
 
-Discussed with the owner on 2026-09-28. Status: **steps 1–2 built** (see "Built"
-at the end): the panel with filters, sorting and selection. Bulk actions (steps
-3–4) are not built yet.
+Discussed with the owner on 2026-09-28. Status: **steps 1–3 built** (see "Built"
+at the end): the panel, selection and the Generate / Regenerate / Remove bulk
+actions. Step 4 (Replace, Set keyword, Change voice) is not built yet.
 
 ## Decisions (from the discussion)
 
@@ -223,3 +223,38 @@ time.
 - `mediaManagerState` keeps filters, sort, selection and this session's failures
   while the panel is closed; a language switch rebuilds it.
 - The bulk action buttons come in step 3; the selection bar is where they go.
+
+### Step 3: bulk actions (2026-09-28)
+
+- Selection bar: **✨ Generate missing**, **🔄 Regenerate**, **🗑 Remove…**; summary
+  line: **✨ Generate all missing (n)** (missing + failed rows, no selection needed).
+- `runMediaManagerJob`: 3 questions at a time, progress bar with **Cancel** (stops
+  after the rows already running), 🔄 on rows in progress, then a result line
+  ("108 updated · 12 held back by the GIF limit"). Outcomes feed the session
+  failures (`applyMediaJobOutcomes`, worst outcome per question wins).
+- Generate missing (`generateMissingVisualFor`): the step-1 auto-fill on one
+  question; a video keyword with no result falls back to the GIF/picture keyword,
+  as publishing does. Then `generateMissingTtsFor`: keys via
+  `prepareQuestionTts` (now shared with `ensureQuizMediaReady`) and, when signed
+  in, clips on R2 in requests of 25; otherwise the next publish does it.
+- Regenerate (`regenerateVisualFor`, `nextMediaResult`): the next result for the
+  same keyword from the session cache, wrapping round at the end of the list
+  (no new search); `mediaManagerState.picks` remembers each question's position,
+  since pictures are stored resized and can't be matched by URL. TTS is left alone
+  (same voice + text = same clip).
+- Remove (`removeMediaFrom`): picture/GIF, video or audio of the selection, after
+  a confirm. **Differs from the first plan:** the keyword is cleared too, otherwise
+  the next save would search and put the media back. Pin questions keep their
+  picture (it is the map). Removing audio clears uploaded audio and per-question
+  read-aloud; a quiz that reads every question aloud still reads the question.
+- GIF budget: before a run needing more than 50 new GIF searches, a confirm
+  explains the ~100/hour limit.
+- Fix found in the browser test: while GIF searches are paused, keywords already
+  searched still fill from the cache (`isGifKeywordBlocked`); only new keywords wait.
+- Closing the panel cancels a running job, so nothing changes the quiz while the
+  teacher edits. Changes are not saved automatically: like other builder edits,
+  they are in the editor until the teacher saves.
+- Checked in headless Chrome with a 120-question quiz and stubbed searches:
+  selection (click, Ctrl, Shift range, Ctrl+A on a filter), filters, sorting,
+  Generate all missing with a GIPHY 429, Regenerate from cache, Remove, ↗ Open,
+  Esc, French.
