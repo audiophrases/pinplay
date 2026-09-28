@@ -138,6 +138,9 @@ describe('rules follow the request', () => {
     assert.match(levels, /Make the difficulty real, not just the label/);
     assert.match(levels, /producing language \(typing an answer, correcting errors, filling gaps from memory\) suits higher levels/);
     assert.match(levels, /A1 = very common words/);
+    // A grammar point can be taught at any level: no tense is tied to one.
+    assert.match(levels, /any tense or structure the quiz works on can appear at every level/);
+    assert.doesNotMatch(levels, /present simple|present perfect|conditional|reported speech|passive,/);
     assert.match(levels, /C2 = rare words/);
     assert.match(levels, /Never tag an easy question C1 or C2/);
   });
