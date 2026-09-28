@@ -6,9 +6,9 @@ adds a **🗂 Media** panel to the quiz editor: one table row per question, with
 filters and sorting, file-manager selection, and bulk actions that apply to the
 selected rows.
 
-Discussed with the owner on 2026-09-28. Status: **steps 1–3 built** (see "Built"
-at the end): the panel, selection and the Generate / Regenerate / Remove bulk
-actions. Step 4 (Replace, Set keyword, Change voice) is not built yet.
+Discussed with the owner on 2026-09-28. Status: **built (steps 1–4)**, see
+"Built" at the end. Remaining: deploy the worker (GIPHY 429 pass-through) and
+decide on a GIPHY production key.
 
 ## Decisions (from the discussion)
 
@@ -258,3 +258,26 @@ time.
   selection (click, Ctrl, Shift range, Ctrl+A on a filter), filters, sorting,
   Generate all missing with a GIPHY 429, Regenerate from cache, Remove, ↗ Open,
   Esc, French.
+
+### Step 4: Replace and Change voice (2026-09-28)
+
+- **🔁 Replace…** (selection bar form): keyword type (GIF / picture / video) + new
+  keyword → **Set keyword and generate** (`setMediaKeywordOn`, then the Generate
+  job; Enter works too). It drops the current picture/GIF/video and the other
+  keywords; reading-text and pin questions are left out. When questions already
+  had media, a confirm first. With one question selected, **Pick by hand…** opens
+  the existing picture or GIF picker on top of the panel; the table refreshes
+  when the picker closes. (There is no video picker, so videos use a keyword.)
+- **🗣 Change voice…**: any Edge voice (the three defaults first) for the selected
+  questions read with TTS (`setTtsVoiceOn`); their clips are prepared again.
+- Builder fix found on the way: a question's voice dropdown lists only the three
+  default voices (unless the language is "Other"), so syncing the builder replaced
+  any other voice with the first default. The dropdown now always includes the
+  question's own voice.
+- **Remove → Audio**, corrected: the builder has no per-question "off" for
+  reading a question aloud, so Remove audio removes uploaded/recorded audio and
+  custom read-aloud text; while the quiz hears questions, the question text is
+  still read. The confirm says so.
+- Esc in an open form closes the form; the step-3 hints now point to Replace.
+- Checked in headless Chrome: Replace by keyword on a Shift range, Pick by hand
+  through the real GIF picker, Change voice surviving `syncQuizFromUI`.

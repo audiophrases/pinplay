@@ -3209,7 +3209,9 @@ function buildAudioSettingsMarkup(idx, q) {
     .map((x) => `<option value="${x.value}" ${ttsLanguage === x.value ? 'selected' : ''}>${x.label}</option>`)
     .join('');
 
-  const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : [EDGE_TTS_LANGUAGE_DEFAULTS['EN'], EDGE_TTS_LANGUAGE_DEFAULTS['CA'], EDGE_TTS_LANGUAGE_DEFAULTS['FR']];
+  // Always list the question's own voice (e.g. set with the Media Manager's
+  // Change voice), or syncing the builder would replace it with the first default.
+  const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : [voice, EDGE_TTS_LANGUAGE_DEFAULTS['EN'], EDGE_TTS_LANGUAGE_DEFAULTS['CA'], EDGE_TTS_LANGUAGE_DEFAULTS['FR']].filter(Boolean);
   const voiceOptions = [...new Set(voiceSource)]
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
     .join('');
@@ -16848,7 +16850,7 @@ async function regenerateVisualFor(q) {
   const picks = mediaManagerState.picks;
   if (visual.kind === 'gif') {
     const keyword = String(q.gifKeyword || '').trim();
-    if (!keyword) return { status: 'failed', reason: t('No GIF keyword to search with. Use Set keyword or the GIF picker.') };
+    if (!keyword) return { status: 'failed', reason: t('No GIF keyword to search with. Use Replace to set one or pick a GIF.') };
     if (isGifKeywordBlocked(keyword)) return { status: 'limited', reason: t('GIF search limit reached — try again later.') };
     let items;
     try {
@@ -16865,7 +16867,7 @@ async function regenerateVisualFor(q) {
   }
   if (visual.kind === 'image') {
     const keyword = String(q.imageKeyword || '').trim();
-    if (!keyword) return { status: 'failed', reason: t('No picture keyword to search with. Use Set keyword or the picture search.') };
+    if (!keyword) return { status: 'failed', reason: t('No picture keyword to search with. Use Replace to set one or pick a picture.') };
     const items = await searchImagesForKeyword(keyword);
     // Auto-fill takes the first result, so a picture of unknown origin counts as #1.
     const pick = nextMediaResult(items, '', picks.has(q) ? picks.get(q) : 0);
@@ -16876,7 +16878,7 @@ async function regenerateVisualFor(q) {
   }
   if (visual.kind === 'video') {
     const keyword = String(q.videoKeyword || '').trim();
-    if (!keyword) return { status: 'failed', reason: t('No video keyword to search with. Use Set keyword.') };
+    if (!keyword) return { status: 'failed', reason: t('No video keyword to search with. Use Replace to set one.') };
     const items = await searchVideosForKeyword(keyword, videoProviderPreferenceOf(q), videoBackendCandidates());
     const pick = nextMediaResult(items, normalizeQuestionMedia(q.media).url, picks.has(q) ? picks.get(q) : -1);
     if (!pick) return { status: 'failed', reason: t('No other videos found for "{keyword}".', { keyword }) };
@@ -16930,6 +16932,40 @@ async function generateMissingTtsFor(questions, job) {
   return outcomes;
 }
 
+// Set keyword (Replace for several questions): drop the current picture, GIF or
+// video and the other keywords, and set this one; the caller then runs Generate
+// missing. Reading-text and pin questions are left out. Returns the changed questions.
+function setMediaKeywordOn(questions, kind, keyword) {
+  const kw = String(keyword || '').trim().slice(0, 140);
+  if (!kw || !['gif', 'image', 'video'].includes(kind)) return [];
+  const changed = [];
+  questions.forEach((q) => {
+    if (!q || String(q.readingText || '').trim() || q.type === 'pin') return;
+    replaceQuestionImageData(q, '');
+    q.media = makeDefaultQuestionMedia();
+    q.gifKeyword = kind === 'gif' ? kw : '';
+    q.imageKeyword = kind === 'image' ? kw : '';
+    q.videoKeyword = kind === 'video' ? kw : '';
+    mediaManagerState.picks.delete(q);
+    changed.push(q);
+  });
+  return changed;
+}
+
+// Change voice: for questions read with TTS. The old clip key is dropped so the
+// new one is prepared. Returns the changed questions.
+function setTtsVoiceOn(questions, voice, quizCtx) {
+  if (!EDGE_TTS_VOICE_OPTIONS.includes(voice)) return [];
+  const changed = [];
+  questions.forEach((q) => {
+    if (questionMediaStatus(q, quizCtx).audio.kind !== 'tts') return;
+    q.language = voice;
+    q.ttsAudioKey = '';
+    changed.push(q);
+  });
+  return changed;
+}
+
 // Remove one kind of media from the questions, with the keyword that would
 // bring it back on the next save. Pin questions keep their picture (it is the map).
 // Returns the number of questions changed.
@@ -16948,14 +16984,17 @@ function removeMediaFrom(questions, what) {
       q.media = makeDefaultQuestionMedia();
       q.videoKeyword = '';
     } else if (what === 'audio') {
-      // Uploaded/recorded audio and per-question read-aloud. A quiz that reads
-      // every question aloud still reads the question text.
-      if (!q.audioData && !q.audioText && !q.audioMode && !q.ttsAudioKey) return;
+      // Uploaded/recorded audio and custom read-aloud text. The builder has no
+      // per-question "off": while the quiz hears questions, the question text is
+      // still read (the mode goes back to TTS, as the builder's own sync would).
+      if (!q.audioData && !String(q.audioText || '').trim()) return;
       q.audioData = '';
       q.audioText = '';
-      q.audioMode = '';
+      q.audioMode = 'tts';
       q.ttsAudioKey = '';
       q._audioVersion = '';
+      q._ttsGenerated = false;
+      q._userAudioUploaded = false;
     } else {
       return;
     }
@@ -16977,7 +17016,7 @@ const mediaManagerState = {
   visible: [],
   job: null, // { label, total, done, cancelled, working: Set }
   notice: '',
-  removeOpen: false,
+  form: '', // inline form in the selection bar: '' | 'remove' | 'replace' | 'voice'
 };
 
 let mediaManagerRenderTimer = 0;
@@ -16998,7 +17037,7 @@ async function runMediaManagerJob(label, questions, perQuestion, { withTts = fal
   const job = { label, total: questions.length, done: 0, cancelled: false, working: new Set() };
   state.job = job;
   state.notice = '';
-  state.removeOpen = false;
+  state.form = '';
   renderMediaManager();
 
   const outcomes = new Map();
@@ -17226,13 +17265,43 @@ function refreshMediaSelection() {
     bar.innerHTML = `<strong>${progressText}</strong>
        <progress max="${job.total}" value="${job.done}"></progress>
        <button type="button" class="btn btn-sm" data-mm-cancel ${job.cancelled ? 'disabled' : ''}>${escapeHtml(job.cancelled ? t('Stopping…') : t('Cancel'))}</button>`;
-  } else if (n && state.removeOpen) {
+  } else if (n && state.form === 'remove') {
     const removeTitle = escapeHtml(t('Remove from {n} selected:', { n }));
     bar.innerHTML = `<strong>${removeTitle}</strong>
        <button type="button" class="btn btn-sm" data-mm-remove="visual">${escapeHtml(t('🖼 Picture / GIF'))}</button>
        <button type="button" class="btn btn-sm" data-mm-remove="video">${escapeHtml(t('🎬 Video'))}</button>
-       <button type="button" class="btn btn-sm" data-mm-remove="audio">${escapeHtml(t('🔊 Audio'))}</button>
-       <button type="button" class="btn btn-sm" data-mm-remove-cancel>${escapeHtml(t('Cancel'))}</button>`;
+       <button type="button" class="btn btn-sm" data-mm-remove="audio" title="${escapeHtml(t('Uploaded or recorded audio and custom read-aloud text'))}">${escapeHtml(t('🔊 Audio'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
+  } else if (n && state.form === 'replace') {
+    const replaceTitle = escapeHtml(t('Replace for {n} selected:', { n }));
+    const only = n === 1 ? [...state.selected][0] : null;
+    const pickable = only && only.type !== 'pin' && !String(only.readingText || '').trim();
+    bar.innerHTML = `<strong>${replaceTitle}</strong>
+       <select data-mm-replace-kind aria-label="${escapeHtml(t('Media type'))}">
+         <option value="gif">${escapeHtml(t('GIF keyword'))}</option>
+         <option value="image">${escapeHtml(t('Picture keyword'))}</option>
+         <option value="video">${escapeHtml(t('Video keyword'))}</option>
+       </select>
+       <input type="text" data-mm-replace-keyword maxlength="140" placeholder="${escapeHtml(t('New keyword'))}" />
+       <button type="button" class="btn btn-sm primary" data-mm-replace-apply>${escapeHtml(t('Set keyword and generate'))}</button>
+       ${pickable ? `<button type="button" class="btn btn-sm" data-mm-pick>${escapeHtml(t('Pick by hand…'))}</button>` : ''}
+       <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
+    const kindEl = bar.querySelector('[data-mm-replace-kind]');
+    const first = only || [...state.selected][0];
+    const firstKind = questionMediaStatus(first, quiz).visual.kind;
+    kindEl.value = ['gif', 'image', 'video'].includes(firstKind) ? firstKind : 'gif';
+    const keyOf = { gif: 'gifKeyword', image: 'imageKeyword', video: 'videoKeyword' };
+    bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || '');
+    setTimeout(() => bar.querySelector('[data-mm-replace-keyword]')?.focus(), 0);
+  } else if (n && state.form === 'voice') {
+    const ttsCount = [...state.selected].filter((q) => questionMediaStatus(q, quiz).audio.kind === 'tts').length;
+    const voiceTitle = escapeHtml(t('Voice for {n} question(s) read with TTS:', { n: ttsCount }));
+    bar.innerHTML = `<strong>${voiceTitle}</strong>
+       <select data-mm-voice aria-label="${escapeHtml(t('TTS Voice'))}">${mediaManagerVoiceOptionsHtml()}</select>
+       <button type="button" class="btn btn-sm primary" data-mm-voice-apply ${ttsCount ? '' : 'disabled'}>${escapeHtml(t('Change voice'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
+    const firstTts = [...state.selected].find((q) => questionMediaStatus(q, quiz).audio.kind === 'tts');
+    if (firstTts?.language && EDGE_TTS_VOICE_OPTIONS.includes(firstTts.language)) bar.querySelector('[data-mm-voice]').value = firstTts.language;
   } else if (n) {
     const selectedText = escapeHtml(t('{n} selected', { n }));
     const hiddenHtml = hiddenSelected
@@ -17242,7 +17311,9 @@ function refreshMediaSelection() {
        <span class="mm-actions">
          <button type="button" class="btn btn-sm primary" data-mm-action="generate" title="${escapeHtml(t('Search for the media the keywords ask for, and prepare missing audio'))}">${escapeHtml(t('✨ Generate missing'))}</button>
          <button type="button" class="btn btn-sm" data-mm-action="regenerate" title="${escapeHtml(t('Take the next result for the same keyword'))}">${escapeHtml(t('🔄 Regenerate'))}</button>
-         <button type="button" class="btn btn-sm" data-mm-remove-open>${escapeHtml(t('🗑 Remove…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="replace" title="${escapeHtml(t('Set a new keyword, or pick a picture or GIF by hand'))}">${escapeHtml(t('🔁 Replace…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="voice">${escapeHtml(t('🗣 Change voice…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="remove">${escapeHtml(t('🗑 Remove…'))}</button>
        </span>
        ${selectAllBtn}
        <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`;
@@ -17255,7 +17326,7 @@ function refreshMediaSelection() {
 // changes the quiz behind the teacher's back while they edit.
 function closeMediaManager() {
   if (mediaManagerState.job) mediaManagerState.job.cancelled = true;
-  mediaManagerState.removeOpen = false;
+  mediaManagerState.form = '';
   document.getElementById('mediaManagerOverlay')?.remove();
 }
 
@@ -17264,12 +17335,79 @@ function removeSelectedMedia(what) {
   const questions = mediaManagerJobQuestions('selected');
   const label = { visual: t('picture or GIF'), video: t('video'), audio: t('audio') }[what];
   if (!questions.length || !label) return;
-  if (!confirm(t("Remove the {what} of {n} selected question(s)? Their keywords are cleared too, so saving won't add it back.", { what: label, n: questions.length }))) return;
+  const question = what === 'audio'
+    ? t('Remove uploaded or recorded audio and custom read-aloud text from {n} selected question(s)? While the quiz reads questions aloud, the question text is still read.', { n: questions.length })
+    : t("Remove the {what} of {n} selected question(s)? Their keywords are cleared too, so saving won't add it back.", { what: label, n: questions.length });
+  if (!confirm(question)) return;
   const changed = removeMediaFrom(questions, what);
-  state.removeOpen = false;
+  state.form = '';
   state.notice = t('Removed the {what} of {n} question(s).', { what: label, n: changed });
   renderBuilder();
   renderMediaManager();
+}
+
+// Voices for Change voice: the three defaults first, then every Edge voice.
+let mediaManagerVoiceOptionsCache = '';
+
+function mediaManagerVoiceOptionsHtml() {
+  if (mediaManagerVoiceOptionsCache) return mediaManagerVoiceOptionsCache;
+  const defaults = ['EN', 'CA', 'FR'].map((k) => EDGE_TTS_LANGUAGE_DEFAULTS[k]);
+  const byCode = new Map(EDGE_TTS_VOICE_INDEX.map((v) => [v.code, v]));
+  const label = (code) => (byCode.has(code) ? formatVoiceIndexLabel(byCode.get(code)) : code);
+  const rest = EDGE_TTS_VOICE_INDEX
+    .filter((v) => !defaults.includes(v.code))
+    .sort((a, b) => formatVoiceIndexLabel(a).localeCompare(formatVoiceIndexLabel(b)))
+    .map((v) => v.code);
+  mediaManagerVoiceOptionsCache = [...defaults, ...rest]
+    .map((code) => `<option value="${escapeHtml(code)}">${escapeHtml(label(code))}</option>`)
+    .join('');
+  return mediaManagerVoiceOptionsCache;
+}
+
+// Replace, several questions (or by keyword): set the keyword, then generate.
+function applyReplaceKeyword(kind, keyword) {
+  const state = mediaManagerState;
+  const questions = mediaManagerJobQuestions('selected');
+  const kw = String(keyword || '').trim();
+  if (!questions.length || !kw) return;
+  const withMedia = questions.filter((q) => ['ready', 'local'].includes(questionMediaStatus(q, quiz).visual.status)).length;
+  if (withMedia && !confirm(t('Replace the picture, GIF or video of {n} question(s) with results for "{keyword}"?', { n: withMedia, keyword: kw }))) return;
+  const changed = setMediaKeywordOn(questions, kind, kw);
+  state.form = '';
+  if (!changed.length) {
+    state.notice = t('Nothing to replace: reading-text and pin questions keep their own media.');
+    renderMediaManager();
+    return;
+  }
+  if (kind === 'gif' && !confirmGifSearchBudget(changed)) { renderBuilder(); renderMediaManager(); return; }
+  runMediaManagerJob(t('Replace'), changed, generateMissingVisualFor);
+}
+
+// Replace, one question: the existing picture or GIF picker, then refresh the table.
+function pickMediaByHand(kind) {
+  const [q] = mediaManagerJobQuestions('selected');
+  const idx = quiz.questions.indexOf(q);
+  if (idx === -1) return;
+  mediaManagerState.form = '';
+  refreshMediaSelection();
+  const observer = new MutationObserver((mutations) => {
+    const closed = mutations.some((m) => [...m.removedNodes].some((node) => node.classList?.contains('dialog-overlay') && node.id !== 'mediaManagerOverlay'));
+    if (!closed) return;
+    observer.disconnect();
+    renderMediaManager();
+  });
+  observer.observe(document.body, { childList: true });
+  if (kind === 'gif') openGifSearchDialog(idx);
+  else openImageSearchDialog(idx);
+}
+
+// Change voice, then prepare the new clips (same path as Generate missing's audio).
+function applyVoiceChange(voice) {
+  const state = mediaManagerState;
+  const changed = setTtsVoiceOn(mediaManagerJobQuestions('selected'), voice, quiz);
+  state.form = '';
+  if (!changed.length) { renderMediaManager(); return; }
+  runMediaManagerJob(t('Change voice'), changed, async () => ({ status: 'skipped', reason: '' }), { withTts: true });
 }
 
 function openQuestionFromMediaManager(idx) {
@@ -17375,10 +17513,22 @@ function openMediaManager() {
       if (state.job) { state.job.cancelled = true; refreshMediaSelection(); }
       return;
     }
-    if (e.target.closest('[data-mm-remove-open]')) { state.removeOpen = true; refreshMediaSelection(); return; }
-    if (e.target.closest('[data-mm-remove-cancel]')) { state.removeOpen = false; refreshMediaSelection(); return; }
+    const formBtn = e.target.closest('[data-mm-form]');
+    if (formBtn) { state.form = formBtn.dataset.mmForm; refreshMediaSelection(); return; }
     const removeBtn = e.target.closest('[data-mm-remove]');
     if (removeBtn) { removeSelectedMedia(removeBtn.dataset.mmRemove); return; }
+    if (e.target.closest('[data-mm-replace-apply]')) {
+      applyReplaceKeyword(overlay.querySelector('[data-mm-replace-kind]')?.value, overlay.querySelector('[data-mm-replace-keyword]')?.value);
+      return;
+    }
+    if (e.target.closest('[data-mm-pick]')) {
+      pickMediaByHand(overlay.querySelector('[data-mm-replace-kind]')?.value);
+      return;
+    }
+    if (e.target.closest('[data-mm-voice-apply]')) {
+      applyVoiceChange(overlay.querySelector('[data-mm-voice]')?.value);
+      return;
+    }
 
     if (e.target.closest('[data-mm-select-all]')) { selectAllShown(); return; }
     if (e.target.closest('[data-mm-select-none]')) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
@@ -17429,9 +17579,15 @@ function openMediaManager() {
       selectAllShown();
       return;
     }
+    if (e.key === 'Enter' && e.target.matches('[data-mm-replace-keyword]')) {
+      e.preventDefault();
+      applyReplaceKeyword(overlay.querySelector('[data-mm-replace-kind]')?.value, e.target.value);
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
+      if (state.form) { state.form = ''; refreshMediaSelection(); dialog.focus(); return; }
       if (inField) { e.target.blur(); dialog.focus(); return; }
       if (state.selected.size) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
       closeMediaManager();

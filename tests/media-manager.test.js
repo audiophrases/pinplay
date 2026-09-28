@@ -26,6 +26,7 @@ const NAMES = [
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'prepareQuestionTts',
   'sha256HexClient', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
+  'setMediaKeywordOn', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -521,7 +522,8 @@ describe('removeMediaFrom', () => {
     assert.equal(v.media.kind, 'none');
     assert.equal(v.videoKeyword, '');
     assert.equal(A.removeMediaFrom([a], 'audio'), 1);
-    assert.deepEqual([a.audioMode, a.audioText, a.ttsAudioKey], ['', '', '']);
+    assert.deepEqual([a.audioMode, a.audioText, a.ttsAudioKey], ['tts', '', ''], 'back to reading the question, as the builder would');
+    assert.equal(A.removeMediaFrom([{ type: 'mcq', audioMode: 'tts', prompt: 'x' }], 'audio'), 0, 'nothing to remove from plain read-aloud');
   });
 });
 describe('GIF pause and the cache', () => {
@@ -544,5 +546,57 @@ describe('GIF pause and the cache', () => {
     assert.equal(calls.length, 2);
     assert.equal(A.isGifKeywordBlocked('Happy'), false);
     assert.equal(A.isGifKeywordBlocked('new'), true);
+  });
+});
+describe('Replace: setMediaKeywordOn', () => {
+  it('drops the current media and other keywords and sets the new one', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const img = { type: 'mcq', imageData: 'data:image/png;base64,AA', imageKeyword: 'apple', gifKeyword: 'old' };
+    const vid = { type: 'mcq', media: { kind: 'video', url: 'https://youtu.be/x' }, videoKeyword: 'x' };
+    const reading = { type: 'mcq', readingText: 'A story' };
+    const pin = { type: 'pin', imageData: 'data:image/png;base64,MAP' };
+    const changed = A.setMediaKeywordOn([img, vid, reading, pin], 'gif', ' dancing cat ');
+    assert.equal(changed.length, 2);
+    assert.deepEqual([img.imageData, img.imageKeyword, img.gifKeyword, img.videoKeyword], ['', '', 'dancing cat', '']);
+    assert.equal(vid.media.kind, 'none');
+    assert.equal(vid.gifKeyword, 'dancing cat');
+    assert.equal(pin.imageData, 'data:image/png;base64,MAP');
+    assert.equal(A.questionMediaStatus(img, {}).visual.status, 'missing', 'ready for Generate missing');
+  });
+
+  it('ignores an empty keyword or unknown kind', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const q = { type: 'mcq', imageData: 'https://x/a.jpg' };
+    assert.equal(A.setMediaKeywordOn([q], 'gif', '  ').length, 0);
+    assert.equal(A.setMediaKeywordOn([q], 'audio', 'x').length, 0);
+    assert.equal(q.imageData, 'https://x/a.jpg');
+  });
+});
+
+describe('Change voice', () => {
+  const EN = { ttsLanguage: 'EN', readAllQuestionsAloud: false };
+
+  it('sets the voice on TTS questions only and drops the old clip key', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const tts = { type: 'mcq', audioMode: 'tts', prompt: 'Hi', ttsAudioKey: 'tts/old.mp3', language: 'en-US-AriaNeural' };
+    const file = { type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3', language: 'en-US-AriaNeural' };
+    const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
+    const changed = A.setTtsVoiceOn([tts, file], voice, EN);
+    assert.equal(changed.length, 1);
+    assert.equal(tts.language, voice);
+    assert.equal(tts.ttsAudioKey, '');
+    assert.equal(file.language, 'en-US-AriaNeural');
+    assert.equal(A.setTtsVoiceOn([tts], 'xx-Not-A-Voice', EN).length, 0);
+  });
+
+  it('the voice survives the publish preparation and the builder dropdown', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
+    const q = { type: 'mcq', audioMode: 'tts', prompt: 'Hi', language: voice };
+    const clip = A.prepareQuestionTts(q, 'EN', false);
+    assert.equal(clip.voice, voice);
+    // The builder's voice <select> must list it, or syncing would fall back to the first default.
+    const html = A.buildAudioSettingsMarkup(0, q);
+    assert.match(html, new RegExp(`<option value="${voice}" selected>`));
   });
 });
