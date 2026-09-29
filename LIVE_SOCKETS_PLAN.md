@@ -21,6 +21,45 @@ connection. Planned 2026-09-29.
   and since the first two correct answers score 100% (then 90%, 80%), the phones
   that happened to poll first get a head start. A push removes both.
 
+## What we give up, and the safeguards it needs
+
+- **Self-repair.** Polling fixes any glitch within 2 s. A connection can die
+  silently (phone roaming between access points, laptop sleep, a proxy dropping
+  a quiet connection) and the page only notices by its heartbeat. The Cup pings
+  every 30 s and only reacts to a clean close. Classic games need a watchdog: a
+  ping every 10 s while a game is on, and a reconnect when no pong comes back
+  within 5 s. Also reconnect on the page's `online` and `visibilitychange`
+  events. Worst case, a rare frozen screen lasts ~15 s instead of ≤2 s. (A slow
+  safety poll every 15 s would add redundancy for ~2,400 requests a game; not by
+  default.)
+- **Answers must name their question.** `/api/answer` sends no question index;
+  the server applies an answer to whatever question is current. So a stale
+  screen (today: the 0–2 s after Next, if the question was still open) can put a
+  tap meant for the old question onto the new one. With a connection, a frozen
+  screen would widen that window. Send the question index (and
+  `questionStartedAt`) with every answer; the server rejects a mismatch ("That
+  question has ended") and the page refreshes. Worth doing on its own, before
+  this plan.
+- **Jobs that ride on polls today must move.** Closing timed-out questions (to
+  the alarm); retrying the save of a login-required game into an assignment at
+  the end (`maybeSnapshotLiveGame` runs on every host poll in the results phase;
+  it moves to the alarm and to the host connecting); the host's attempts summary
+  (pushed).
+- **Out-of-order messages.** A push and an HTTP answer response travel on
+  different channels. Every state carries a revision number; pages ignore
+  anything older than what they've shown.
+- **More moving parts.** Two ways of getting state (connection and fallback),
+  reconnect logic, a timer instead of "the next poll". More to test, and new
+  bugs would first show in class. Mitigated by the off switch, the per-page
+  fallback, and a first try with one class. Local tests can simulate a host and
+  several players, not 30 phones on school Wi-Fi.
+
+Not lost (checked in the code): screens advancing together (tighter); deadline
+enforcement (the answer route closes a timed-out question itself before
+accepting, so the alarm only decides when "time's up" appears); answers, host
+actions and uploads (unchanged HTTP); nothing depends on polling for "who's
+online" (a connection would allow a real connected indicator); the Cup.
+
 ## Considered and rejected (2026-09-29)
 
 - **Slower polling between questions** (5 s): the new question would reach
