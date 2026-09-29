@@ -1043,7 +1043,10 @@ window.PINPLAY_FR_DICT = {
   /* ===================== Public games (?game=CODE) ===================== */
   'This game is not available.': "Ce jeu n'est pas disponible.",
   'It may have been removed. See the other games.': 'Il a peut-être été retiré. Découvrez les autres jeux.',
-  '🎯 Adapts to your level · {n} questions': "🎯 S'adapte à votre niveau · {n} questions",
+  '🎯 Adaptive quiz · {from}–{to} · {n} questions. The questions adjust to your level as you play.': '🎯 Quiz adaptatif · {from}–{to} · {n} questions. Les questions s’adaptent à votre niveau pendant le jeu.',
+  'How many do you want to play?': 'Combien voulez-vous en jouer ?',
+  '(recommended: {n})': '(recommandé : {n})',
+  'Questions to play': 'Questions à jouer',
   '{n} questions': '{n} questions',
   '▶ Play': '▶ Jouer',
   'Play anonymously': 'Jouer anonymement',

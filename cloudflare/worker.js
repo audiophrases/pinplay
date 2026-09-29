@@ -1849,7 +1849,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/start', {
         method: 'POST',
-        body: JSON.stringify({ code, studentKey, legacyStudentKey, studentName, studentEmail, className, via }),
+        body: JSON.stringify({ code, studentKey, legacyStudentKey, studentName, studentEmail, className, via, count: Math.round(Number(body?.count) || 0) }),
       }));
     }
 
@@ -3058,11 +3058,15 @@ export class QuizRoom {
           ...(via ? { via } : {}),
         };
         // Signed-in students pick up their saved level (roster rows live in
-        // this DO); anonymous ones start at the bottom.
-        const savedLevel = assignmentAdaptiveCount(assignment) && studentEmail
+        // this DO); anonymous ones start at the bottom. From /play a tagged
+        // quiz is always adaptive, with the number of questions the player chose.
+        const adaptiveOn = via ? !!publicAdaptivePool(assignment) : !!assignmentAdaptiveCount(assignment);
+        const savedLevel = adaptiveOn && studentEmail
           ? (await this.state.storage.get(rosterKey(studentEmail)))?.level
           : null;
-        const adaptive = adaptiveAttemptInit(assignment, savedLevel);
+        const adaptive = via
+          ? publicAdaptiveAttemptInit(assignment, body?.count, savedLevel)
+          : adaptiveAttemptInit(assignment, savedLevel);
         if (adaptive) attempt.adaptive = adaptive;
 
         assignment.attempts[attempt.id] = attempt;
@@ -4041,7 +4045,7 @@ export class QuizRoom {
         const code = sanitizeAssignmentCode(body?.code);
         const assignment = code ? await loadAssignmentBase(this.state.storage, code) : null;
         if (!isPublicGame(assignment)) return json({ error: 'This game is not available.', code: 'NOT_PUBLIC' }, 404);
-        return json(await publicPlayResponse(this.env, assignment, newPublicPlayAttempt(assignment)), 201);
+        return json(await publicPlayResponse(this.env, assignment, newPublicPlayAttempt(assignment, body?.count)), 201);
       }
 
       if ((url.pathname === '/public/answer' || url.pathname === '/public/finish') && request.method === 'POST') {
@@ -7681,17 +7685,23 @@ function assignmentAdaptiveCount(assignment) {
   return n > 0 ? n : 0;
 }
 
-function assignmentAdaptivePool(assignment) {
+// autoOnly: auto-graded questions only (anonymous public play, where nobody
+// will grade the rest).
+function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
   const questions = assignment?.quiz?.questions || [];
-  return adaptivePool(questions, questions.map((q, i) => (q && !q.isPoll ? i : -1)).filter((i) => i >= 0));
+  const eligible = autoOnly
+    ? autoGradedQuestionIndexes(questions)
+    : questions.map((q, i) => (q && !q.isPoll ? i : -1)).filter((i) => i >= 0);
+  return adaptivePool(questions, eligible);
 }
 
-function adaptiveAttemptInit(assignment, saved = null) {
-  const count = assignmentAdaptiveCount(assignment);
-  const { bands, pool } = assignmentAdaptivePool(assignment);
+// count: questions per student (the assignment's own number unless given).
+function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdaptiveCount(assignment), autoOnly = false } = {}) {
+  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly });
   if (!count || bands.length < 2) return null;
   const st = adaptiveInit(bands, saved);
-  st.count = count;
+  st.count = clamp(Math.round(count), 1, Math.max(1, pool.length));
+  if (autoOnly) st.autoOnly = true;
   st.items = [];
   st.done = false;
   st.current = adaptiveNext(st, pool);
@@ -7704,7 +7714,7 @@ function adaptiveAttemptAdvance(assignment, st) {
     st.current = null;
     return;
   }
-  const { bands, pool } = assignmentAdaptivePool(assignment);
+  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
   adaptiveRebase(st, bands);
   st.current = adaptiveNext(st, pool);
   if (st.current == null) st.done = true;
@@ -7799,18 +7809,43 @@ function publicGameAssignment(assignment) {
   return { ...assignment, feedbackMode: 'instant', examMode: false, attemptsLimit: 0, dueAt: null, randomNames: true, active: true };
 }
 
+// A public game plays adaptive whenever its questions are tagged with 2+
+// levels, whatever the assignment's own setting. The player picks how many
+// questions; the suggestion is a quarter of the quiz, at least 10.
+const PUBLIC_ADAPTIVE_SHARE = 0.25;
+const PUBLIC_ADAPTIVE_MIN = 10;
+
+function publicAdaptivePool(assignment, { autoOnly = false } = {}) {
+  const found = assignmentAdaptivePool(assignment, { autoOnly });
+  return found.bands.length >= 2 ? found : null;
+}
+
+function publicAdaptiveDefaultCount(total) {
+  return Math.min(total, Math.max(PUBLIC_ADAPTIVE_MIN, Math.round(total * PUBLIC_ADAPTIVE_SHARE)));
+}
+
+// The player's number (or the suggestion), capped at what the pool can serve.
+function publicAdaptiveAttemptInit(assignment, requested, saved, { autoOnly = false } = {}) {
+  const found = publicAdaptivePool(assignment, { autoOnly });
+  if (!found) return null;
+  const total = found.pool.length;
+  const count = Number(requested) > 0 ? Math.round(Number(requested)) : publicAdaptiveDefaultCount(total);
+  return adaptiveAttemptInit(assignment, saved, { count: clamp(count, 1, total), autoOnly });
+}
+
 function publicGameCard(assignment, counts) {
   const questions = (assignment?.quiz?.questions || []).filter((q) => q && !q.isPoll);
-  const adaptiveCount = assignmentAdaptiveCount(assignment);
-  const adaptive = !!adaptiveCount && assignmentAdaptivePool(assignment).bands.length >= 2;
-  const bands = questions.map((q) => CEFR_LEVELS.indexOf(normalizeCefrLevel(q.cefr))).filter((i) => i >= 0);
+  const found = publicAdaptivePool(assignment);
+  const adaptive = !!found;
   return {
     code: sanitizeAssignmentCode(assignment.code),
     title: String(assignment.title || assignment.quiz?.title || '').slice(0, 120),
     cover: questions.map((q) => String(q.imageData || '')).find((u) => /^https?:\/\//.test(u)) || null,
     adaptive,
-    levels: adaptive && bands.length ? { from: CEFR_LEVELS[Math.min(...bands)], to: CEFR_LEVELS[Math.max(...bands)] } : null,
-    questionCount: adaptive ? adaptiveCount : questions.length,
+    levels: adaptive ? { from: found.bands[0], to: found.bands[found.bands.length - 1] } : null,
+    // Adaptive: the tagged questions the game can draw from, and the suggested number to play.
+    questionCount: adaptive ? found.pool.length : questions.length,
+    recommended: adaptive ? publicAdaptiveDefaultCount(found.pool.length) : null,
     teacherGraded: questions.some((q) => isAssignmentTeacherGradedQuestion(q)),
     plays: Math.max(0, Number(counts?.plays) || 0),
     likes: Math.max(0, Number(counts?.likes) || 0),
@@ -7907,7 +7942,7 @@ function sameEntry(attempt, via) {
   return (attempt?.via === 'play') === (via === 'play');
 }
 
-function newPublicPlayAttempt(assignment, now = Date.now()) {
+function newPublicPlayAttempt(assignment, count = 0, now = Date.now()) {
   const attempt = {
     id: randomId('pg_'),
     studentKey: '',
@@ -7923,7 +7958,8 @@ function newPublicPlayAttempt(assignment, now = Date.now()) {
     guest: true,
   };
   // Anonymous: no saved level, the engine starts at the bottom and climbs.
-  const adaptive = adaptiveAttemptInit(assignment, null);
+  // Only auto-graded questions: nobody will ever grade the others.
+  const adaptive = publicAdaptiveAttemptInit(assignment, count, null, { autoOnly: true });
   if (adaptive) attempt.adaptive = adaptive;
   return attempt;
 }

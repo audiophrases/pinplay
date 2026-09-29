@@ -5873,6 +5873,8 @@ body.arena-board-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .cmdp-flash { animation: none; outline: 3px solid var(--primary); } }
 
 /* ---------- Public games (?game=CODE): end of game ---------- */
+.game-count-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.game-count-row input { width: 5rem; }
 .game-end-note { text-align: center; color: var(--muted); margin: 0.6rem 0 0; }
 .game-end-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; align-items: center; }
 .game-end-actions .top-space { margin-top: 0; }

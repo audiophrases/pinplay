@@ -497,12 +497,43 @@ async function initGameFromUrl() {
   if (joinTitleEl) joinTitleEl.textContent = card.title;
   if (joinModeHintEl) {
     joinModeHintEl.textContent = card.adaptive
-      ? t('🎯 Adapts to your level · {n} questions', { n: card.questionCount })
+      ? t('🎯 Adaptive quiz · {from}–{to} · {n} questions. The questions adjust to your level as you play.', { from: card.levels?.from || 'A1', to: card.levels?.to || 'C2', n: card.questionCount })
       : t('{n} questions', { n: card.questionCount });
   }
+  if (card.adaptive) renderGameCountPicker(card);
   if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
   await applyIdentityMode(true);
   syncGameEntry();
+}
+
+// Adaptive games: the player picks how many questions to play (the server
+// suggests a quarter of the quiz, at least 10, and caps the number).
+function renderGameCountPicker(card) {
+  const game = live.player.game;
+  const total = Math.max(1, Number(card.questionCount) || 1);
+  game.count = Math.min(total, Math.max(1, Number(card.recommended) || total));
+  if (!joinModeHintEl || document.getElementById('gameCountRow')) return;
+  const row = document.createElement('label');
+  row.id = 'gameCountRow';
+  row.className = 'small game-count-row top-space';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.max = String(total);
+  input.value = String(game.count);
+  input.inputMode = 'numeric';
+  input.setAttribute('aria-label', t('Questions to play'));
+  input.addEventListener('input', () => {
+    const n = Math.round(Number(input.value));
+    if (Number.isFinite(n) && n >= 1) game.count = Math.min(total, n);
+  });
+  const before = document.createElement('span');
+  before.textContent = t('How many do you want to play?');
+  const after = document.createElement('span');
+  after.className = 'muted';
+  after.textContent = t('(recommended: {n})', { n: game.count });
+  row.append(before, input, after);
+  joinModeHintEl.insertAdjacentElement('afterend', row);
 }
 
 // Entry screen of a game: the Google button (or "signed in as") above the play
@@ -5859,7 +5890,7 @@ async function api(path, opts = {}) {
   const game = live.player.game;
   if (game?.started && String(path).startsWith('/api/assignment/')) {
     if (game.anonymous) return publicGameApi(path, opts);
-    if (opts.body) return apiFetch(path, { ...opts, body: { ...opts.body, via: 'play' } });
+    if (opts.body) return apiFetch(path, { ...opts, body: { ...opts.body, via: 'play', ...(game.count ? { count: game.count } : {}) } });
     return apiFetch(`${path}${path.includes('?') ? '&' : '?'}via=play`, opts);
   }
   return apiFetch(path, opts);
@@ -5879,7 +5910,7 @@ async function publicGameApi(path, opts = {}) {
     return { ok: true, hasSubmittedAttempts: false, canRetake: true, feedbackMode: 'instant', examMode: false };
   }
   if (route === '/api/assignment/start') {
-    return { ok: true, alreadyStarted: false, attempt: remember(await call('/api/public/game/start', { code: game.code })) };
+    return { ok: true, alreadyStarted: false, attempt: remember(await call('/api/public/game/start', { code: game.code, ...(game.count ? { count: game.count } : {}) })) };
   }
   if (route === '/api/assignment/state') return game.last;
   if (route === '/api/assignment/answer') {

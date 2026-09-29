@@ -23,6 +23,8 @@ const NAMES = [
   'detectQuestionMediaProvider', 'publicQuestion', 'publicQuestionMediaPayload', 'publicAudioPayload', 'normalizeTextAnswer',
   'gradeContextGap', 'contextGapExpectedOptions', 'parseAcceptedGapOptions', 'dedupeAcceptedForDisplay', 'stripDiacritics',
   'stableShuffle', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'normalizeWordle',
+  'publicAdaptivePool', 'publicAdaptiveDefaultCount', 'publicAdaptiveAttemptInit', 'PUBLIC_ADAPTIVE_SHARE', 'PUBLIC_ADAPTIVE_MIN',
+  'autoGradedQuestionIndexes', 'ADAPTIVE_REPEAT_DISCOUNT', 'ADAPTIVE_DOWN', 'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_RETRY_GAPS',
 ];
 
 let W;
@@ -147,7 +149,7 @@ describe('anonymous play', () => {
 
   it('adaptive: starts at the bottom, climbs, keeps levels hidden and stops at the count', async () => {
     const game = adaptiveGame();
-    let attempt = W.newPublicPlayAttempt(game);
+    let attempt = W.newPublicPlayAttempt(game, 6);
     const served = [];
     for (let step = 0; step < 6; step += 1) {
       served.push(game.quiz.questions[attempt.adaptive.current].cefr);
@@ -161,6 +163,35 @@ describe('anonymous play', () => {
     assert.ok(LEVELS.indexOf(served[5]) >= 3, served.join(' '));
     assert.equal(W.applyPublicPlayAnswer(game, attempt, 6, 0, 0).code, 'ADAPTIVE_DONE');
     assert.equal(W.applyPublicPlayAnswer(adaptiveGame(), W.newPublicPlayAttempt(adaptiveGame()), 3, 0, 0).code, 'NOT_CURRENT');
+  });
+
+  it('adaptive whenever the quiz is tagged with 2+ levels, even if the assignment is not', () => {
+    const game = { ...adaptiveGame(), adaptive: undefined };
+    assert.ok(W.newPublicPlayAttempt(game).adaptive);
+    const oneLevel = { ...game, quiz: { questions: game.quiz.questions.filter((q) => q.cefr === 'A1') } };
+    assert.equal(W.newPublicPlayAttempt(oneLevel).adaptive, undefined);
+  });
+
+  it('plays the number the player picks; suggests a quarter of the quiz, at least 10', () => {
+    const big = (n) => ({ ...adaptiveGame(), quiz: { questions: Array.from({ length: n }, (_, i) => tf(`q${i}`, LEVELS[i % 6])) } });
+    assert.equal(W.newPublicPlayAttempt(big(100)).adaptive.count, 25);
+    assert.equal(W.newPublicPlayAttempt(big(120)).adaptive.count, 30);
+    assert.equal(W.newPublicPlayAttempt(big(24)).adaptive.count, 10);
+    assert.equal(W.newPublicPlayAttempt(big(8)).adaptive.count, 8);
+    assert.equal(W.newPublicPlayAttempt(big(100), 40).adaptive.count, 40);
+    assert.equal(W.newPublicPlayAttempt(big(100), 500).adaptive.count, 100);
+    assert.equal(W.publicGameCard(big(100), null).recommended, 25);
+  });
+
+  it('anonymous adaptive play never serves teacher-graded questions', () => {
+    const game = adaptiveGame();
+    game.quiz.questions.push(...LEVELS.map((lv) => ({ id: `open-${lv}`, type: 'open', prompt: 'Write', cefr: lv, points: 1000 })));
+    const attempt = W.newPublicPlayAttempt(game, 18);
+    assert.equal(attempt.adaptive.count, 18, 'capped at the 18 auto-graded questions');
+    for (let step = 0; step < 18; step += 1) {
+      assert.notEqual(game.quiz.questions[attempt.adaptive.current].type, 'open');
+      assert.equal(W.applyPublicPlayAnswer(game, attempt, step, 0, 0), null);
+    }
   });
 });
 
@@ -191,7 +222,8 @@ describe('game card', () => {
     const card = W.publicGameCard(game, null);
     assert.equal(card.adaptive, true);
     assert.equal(JSON.stringify(card.levels), JSON.stringify({ from: 'A1', to: 'B1' }));
-    assert.equal(card.questionCount, 6);
+    assert.equal(card.questionCount, 9); // the questions it can draw from
+    assert.equal(card.recommended, 9); // at least 10, but no more than there are
     assert.equal(card.plays, 0);
   });
 

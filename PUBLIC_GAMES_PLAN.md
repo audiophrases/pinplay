@@ -22,6 +22,7 @@ Decided with the owner on 2026-09-28.
 | Card picture | Automatic: the first question picture in the quiz (assignment media are already R2 URLs). No picture: a coloured tile with the title. |
 | Card text | Title. Adaptive games add a **🎯 Adaptive** pill and the range of levels the quiz contains (e.g. "A1–B1", from its `cefr` tags). |
 | Question order | Non-adaptive games play in the teacher's order. Adaptive games: the engine picks. |
+| Adaptive by default (2026-09-29) | A public game whose questions are tagged with 2+ levels always plays adaptive on /play, whatever the assignment's own setting (its normal link is unchanged). The start screen says "🎯 Adaptive quiz · A1–C2 · N questions" and the player picks how many to play: suggested 25% of the tagged questions, at least 10 (all of them if fewer), capped at the total. Anonymous players only get auto-graded questions (nobody would grade the rest); signed-in players get all of them and start at their saved level. |
 | Card order on `/play` | Most played first by default; "Newest" and "Most liked" as alternatives. |
 | Remove a game | Turn Public off, or archive the assignment. |
 | Top scores (step 2) | Top 10 per game. Everyone appears as initials: signed-in players from their name (Eugeni Monfort Espí → EM), anonymous players from their random name (Calm Messi → CM). Only initials and score are stored. Adaptive games rank by level reached, then points. |
