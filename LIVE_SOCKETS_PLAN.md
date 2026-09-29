@@ -7,7 +7,7 @@ of 30 costs about 1,000 of each per minute (~20,000 for a 20-minute game, about
 a fifth of the free daily 100,000). PinPlay Cup already uses a live connection
 (a hibernating WebSocket on the room's Durable Object) and costs a few hundred
 requests per round. This moves classic live games onto the same kind of
-connection. Planned 2026-09-29; not started.
+connection. Planned and built 2026-09-29 (see "Built" at the end).
 
 ## When to build it
 
@@ -230,3 +230,12 @@ on HTTP, where uploads and retries already work.
   either way).
 - If a school network turns out to block WebSockets for classic games, the
   per-page fallback covers it at today's cost for those pages only.
+
+## Built (2026-09-29)
+
+All of steps 0–3, as designed above, with these specifics:
+
+- Worker: `/api/live/ws`; `#liveSchedulePush` after `#setRoom` and `#persistReactionSlice` (120 ms coalescing, per-socket change check via `liveStateKey`, which ignores `serverNow` and `rev`); `rev` bumped in `#setRoom`, sent in both states and the answer response; `transport: 'socket'` in both states (`LIVE_TRANSPORT`, the off switch); the room alarm (`nextRoomAlarmAt`) closes timed-out questions and retries the end-of-game save (at most 5 times, a minute apart); `#deleteRoom` closes live connections with 4004 so pages learn the game ended; answers carrying `qIndex`/`questionStartedAt` for another question get 409 `question_ended`.
+- Pages: `live-socket.js` (shared): 10 s ping, 5 s pong watchdog, back-off reconnect, rest after 6 failures (retry every minute), immediate check on `visibilitychange`/`online`. play.js and app.js keep polling as the bootstrap; the first state with `transport: 'socket'` opens the connection, polling pauses while it's up and resumes whenever it's down. Revision check on every state. A push during a voice recording waits until it stops. The host gets the attempts summary pushed.
+- Tests: `tests/live-sockets.test.js` (alarm timing, snapshot retries, answer matching, change key). End-to-end against `wrangler dev`: host + 3 students over connections, no polling (push to all students within ~1 ms of each other, a 5 s question closed by the alarm ~0.4 s after its deadline, stale answer rejected, old pages still accepted, reconnect, ping/pong, rising revisions, game over closes connections). Real pages in Chrome: host page + 3 student pages through the normal UI; question shown on the 3 phones 245–279 ms after Start, no polling while connected, 20 API requests for the whole game.
+- Not yet tried in a real class.

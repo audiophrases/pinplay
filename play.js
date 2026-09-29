@@ -3279,11 +3279,83 @@ async function pollPlayerState() {
       },
     );
 
-    renderPlayerState(data);
+    applyLivePlayerState(data);
   } catch (err) {
     setStatus(joinStatusEl, t('Join poll failed: {msg}', { msg: err.message }), 'bad');
     stopPlayerPolling();
   }
+}
+
+// ---------------------------------------------------------------- live socket
+// Classic live games: the server pushes the state over a live connection; the
+// 2 s poll above is the bootstrap and the fallback, paused while the
+// connection is healthy. See LIVE_SOCKETS_PLAN.md and live-socket.js.
+
+// Every state, polled or pushed, comes through here. A state older than one
+// already shown (a push overtaken by a newer answer response) is ignored.
+function applyLivePlayerState(state) {
+  if (!state) return;
+  const rev = Number(state.rev || 0);
+  if (rev && rev < Number(live.player.shownRev || 0)) return;
+  if (rev) live.player.shownRev = rev;
+  live.player.lastLiveState = state;
+  renderPlayerState(state);
+  if (state.transport === 'socket' && live.player.liveActive && !live.player.liveSocket) startLivePlayerSocket();
+}
+
+// A push that arrives while a voice answer records waits until it stops (a
+// re-render janks speech recognition), like the poll that skips that tick.
+function applyPushedPlayerState(state) {
+  if (!(_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording')) {
+    applyLivePlayerState(state);
+    return;
+  }
+  live.player.pendingLiveState = state;
+  if (live.player.pendingLiveTimer) return;
+  live.player.pendingLiveTimer = setInterval(() => {
+    if (_voiceRecordRecorder && _voiceRecordRecorder.state === 'recording') return;
+    clearInterval(live.player.pendingLiveTimer);
+    live.player.pendingLiveTimer = null;
+    const pending = live.player.pendingLiveState;
+    live.player.pendingLiveState = null;
+    if (pending) applyLivePlayerState(pending);
+  }, 500);
+}
+
+function startLivePlayerSocket() {
+  if (live.player.liveSocket || !window.PinPlayLiveSocket) return;
+  live.player.liveSocket = window.PinPlayLiveSocket.connect({
+    base: normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL,
+    pin: live.player.pin,
+    auth: { t: 'auth', role: 'player', playerId: live.player.id, playerToken: live.player.token },
+    onState: (msg) => applyPushedPlayerState(msg.state),
+    onUp: pausePlayerPollTimer,
+    onDown: resumePlayerPollTimer,
+    // Unauthorized or game over: polling reports it as it always has.
+    onFatal: () => { live.player.liveSocket = null; resumePlayerPollTimer(); },
+  });
+}
+
+function stopLivePlayerSocket() {
+  if (live.player.liveSocket) live.player.liveSocket.close();
+  live.player.liveSocket = null;
+  if (live.player.pendingLiveTimer) clearInterval(live.player.pendingLiveTimer);
+  live.player.pendingLiveTimer = null;
+  live.player.pendingLiveState = null;
+}
+
+function pausePlayerPollTimer() {
+  if (live.player.pollTimer) clearInterval(live.player.pollTimer);
+  live.player.pollTimer = null;
+  live.player.pollPaused = true;
+}
+
+function resumePlayerPollTimer() {
+  if (!live.player.pollPaused || !live.player.liveActive) return;
+  live.player.pollPaused = false;
+  if (live.player.pollTimer) return;
+  live.player.pollTimer = setInterval(pollPlayerState, 2000);
+  pollPlayerState();
 }
 
 async function rerollRandomName() {
@@ -5097,9 +5169,15 @@ async function submitLiveAnswer(opts = {}) {
         playerId: live.player.id,
         answer,
         bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
+        // The question this answer is for: if the teacher has moved on, the
+        // server rejects it instead of recording it on the new question.
+        qIndex: live.player.lastLiveState?.currentIndex,
+        questionStartedAt: live.player.lastLiveState?.questionStartedAt || undefined,
       },
     });
 
+    // Newer than any push already on its way: those are ignored.
+    if (Number(data.rev || 0) > Number(live.player.shownRev || 0)) live.player.shownRev = Number(data.rev);
     live.player.submittedForIndex = data.currentIndex;
     if (joinSubmitBtn) joinSubmitBtn.disabled = true;
 
@@ -5134,6 +5212,13 @@ async function submitLiveAnswer(opts = {}) {
     // can replay it, and ambient resume paths work again).
     if (live.player?.assignment) live.player.assignment.suppressAmbientResume = false;
     const msg = String(err?.message || t('Could not submit answer.'));
+    if (err?.code === 'question_ended') {
+      // This screen was behind: fetch where the game really is.
+      if (joinSubmitBtn) joinSubmitBtn.disabled = true;
+      setJoinStatusHud(t('That question has ended.'), 'bad');
+      pollPlayerState();
+      return;
+    }
     if (msg.includes('Question is closed') || msg.includes('Question is not active')) {
       if (joinSubmitBtn) joinSubmitBtn.disabled = true;
       setJoinStatusHud(t('Question is closed. Waiting for next one…'), 'ok');
@@ -5260,12 +5345,17 @@ function readJoinAnswer() {
 
 function startPlayerPolling() {
   stopPlayerPolling();
+  live.player.liveActive = true;
+  live.player.shownRev = 0;
   live.player.pollTimer = setInterval(pollPlayerState, 2000);
 }
 
 function stopPlayerPolling() {
   if (live.player.pollTimer) clearInterval(live.player.pollTimer);
   live.player.pollTimer = null;
+  live.player.liveActive = false;
+  live.player.pollPaused = false;
+  stopLivePlayerSocket();
   if (live.player.assignment.pollingTimer) clearInterval(live.player.assignment.pollingTimer);
   live.player.assignment.pollingTimer = null;
   stopJoinTimer();

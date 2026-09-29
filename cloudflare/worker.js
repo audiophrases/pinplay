@@ -417,6 +417,15 @@ export default {
       return json({ error: 'Could not allocate PIN. Try again.' }, 503);
     }
 
+    // Classic live games: state pushed over a hibernating WebSocket instead of
+    // polled (see LIVE_SOCKETS_PLAN.md). Auth is the socket's first message.
+    if (url.pathname === '/api/live/ws' && request.method === 'GET') {
+      const pin = sanitizePin(url.searchParams.get('pin'));
+      if (!pin) return json({ error: 'PIN must be 6 digits.' }, 400);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return stub.fetch(new Request('https://room/live/ws', request));
+    }
+
     // Arena live mode: one hibernating WebSocket per student/teacher board.
     // The PIN only picks the room; auth is the socket's first message.
     if (url.pathname === '/api/arena/ws' && request.method === 'GET') {
@@ -2146,7 +2155,10 @@ export default {
       return withCors(
         await stub.fetch('https://room/answer', {
           method: 'POST',
-          body: JSON.stringify({ playerId, playerToken, answer: body?.answer, bet: sanitizeBet(body?.bet) }),
+          body: JSON.stringify({
+            playerId, playerToken, answer: body?.answer, bet: sanitizeBet(body?.bet),
+            qIndex: body?.qIndex, questionStartedAt: body?.questionStartedAt,
+          }),
         }),
       );
     }
@@ -4337,6 +4349,16 @@ export class QuizRoom {
 
       if (!Array.isArray(room.eventLog)) room.eventLog = [];
 
+      if (url.pathname === '/live/ws') {
+        if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'Expected WebSocket.' }, 426);
+        if (room.settings?.gameMode === 'arena') return json({ error: 'Arena games use /arena/ws.' }, 409);
+        const pair = new WebSocketPair();
+        const [client, server] = Object.values(pair);
+        this.state.acceptWebSocket(server);
+        server.serializeAttachment({ kind: 'live' });
+        return new Response(null, { status: 101, webSocket: client });
+      }
+
       if (url.pathname === '/arena/ws') {
         if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'Expected WebSocket.' }, 426);
         if (room.settings?.gameMode !== 'arena') return json({ error: 'Not an arena game.' }, 409);
@@ -4923,6 +4945,12 @@ export class QuizRoom {
 
         if (room.phase !== 'question') return json({ error: 'Question is not active.' }, 409);
         if (room.questionClosed) return json({ error: 'Question is closed.' }, 409);
+        // The answer names the question the student saw; a screen that was behind
+        // (the teacher moved on) must not land its tap on the new question.
+        // Pages that don't send these yet are accepted as before.
+        if (answerIsForAnotherQuestion(room, body)) {
+          return json({ error: 'That question has ended.', reason: 'question_ended', code: 'QUESTION_ENDED' }, 409);
+        }
 
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
@@ -5060,6 +5088,7 @@ export class QuizRoom {
           graded: isAutoGraded,
           score: room.players[playerId].score,
           currentIndex: qIndex,
+          rev: Number(room.rev || 0),
           correctAnswer: answerCorrectSummary,
           correctZones: isAutoGraded && question.type === 'pin' ? (question.zones || []) : undefined,
           partialScore: Number(verdict.partialScore || 0) || undefined,
@@ -5133,8 +5162,95 @@ export class QuizRoom {
   // one small message and zero storage writes.
   #arenaSockets(filter) {
     return this.state.getWebSockets().filter((ws) => {
-      try { return filter(ws.deserializeAttachment() || {}); } catch { return false; }
+      try {
+        const att = ws.deserializeAttachment() || {};
+        return att.kind !== 'live' && filter(att);
+      } catch { return false; }
     });
+  }
+
+  // ---------------------------------------------------------------- classic live sockets
+  // State is pushed after each change instead of polled. Answers and host
+  // actions stay HTTP; every write goes through #setRoom (or the reaction
+  // slice), which schedules one coalesced push. Each socket is sent its own
+  // state only when it changed since the last push. See LIVE_SOCKETS_PLAN.md.
+  #liveSockets() {
+    if (typeof this.state?.getWebSockets !== 'function') return [];
+    return this.state.getWebSockets().filter((ws) => {
+      try { return (ws.deserializeAttachment() || {}).kind === 'live'; } catch { return false; }
+    });
+  }
+
+  #liveSchedulePush(room) {
+    if (!room || room.settings?.gameMode === 'arena') return;
+    if (this.livePushTimer) return;
+    if (!this.#liveSockets().length) return;
+    this.livePushTimer = setTimeout(() => {
+      this.livePushTimer = null;
+      this.#livePush().catch(() => { /* next change pushes again */ });
+    }, LIVE_PUSH_COALESCE_MS);
+  }
+
+  async #livePush(onlyWs = null) {
+    const room = await this.#getRoom();
+    if (!room) return;
+    if (!this.liveSent) this.liveSent = new WeakMap();
+    const sockets = onlyWs ? [onlyWs] : this.#liveSockets();
+    let attempts;
+    for (const ws of sockets) {
+      let att;
+      try { att = ws.deserializeAttachment() || {}; } catch { continue; }
+      let msg;
+      if (att.role === 'host') {
+        if (attempts === undefined) attempts = buildAttemptSnapshots(room);
+        msg = { t: 'state', state: hostState(room), attempts };
+      } else if (att.role === 'player' && room.players?.[att.pid]) {
+        msg = { t: 'state', state: playerState(room, att.pid) };
+      } else {
+        continue;
+      }
+      // Compare without the clock fields that change on every call.
+      const key = liveStateKey(msg);
+      if (!onlyWs && this.liveSent.get(ws) === key) continue;
+      this.liveSent.set(ws, key);
+      try { ws.send(JSON.stringify(msg)); } catch { /* closed: the page reconnects */ }
+    }
+  }
+
+  async #liveSocketMessage(ws, raw, att) {
+    // Normally answered by the auto-response without waking; a plain reply
+    // keeps the page's watchdog happy where auto-response isn't available.
+    if (raw === 'ping') { try { ws.send('pong'); } catch { /* */ } return; }
+    let data;
+    try { data = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
+    if (!data || data.t !== 'auth') return;
+    const room = await this.#getRoom();
+    if (!room) { try { ws.close(4004, 'Game over'); } catch { /* */ } return; }
+    if (data.role === 'host') {
+      if (String(data.token || '') !== room.hostToken) { try { ws.close(4001, 'Unauthorized'); } catch { /* */ } return; }
+      ws.serializeAttachment({ kind: 'live', role: 'host' });
+    } else {
+      const pid = sanitizeId(data.playerId);
+      const player = room.players?.[pid];
+      if (!player || player.token !== String(data.playerToken || '')) { try { ws.close(4001, 'Unauthorized'); } catch { /* */ } return; }
+      ws.serializeAttachment({ kind: 'live', role: 'player', pid });
+    }
+    // What a poll would have done on arrival: close a timed-out question, and
+    // (host, end of game) retry saving a login-required game.
+    let changed = closeQuestionIfTimedOut(room);
+    if (data.role === 'host' && room.phase === 'results' && await maybeSnapshotLiveGame(room, this.env)) changed = true;
+    if (changed) await this.#setRoom(room);
+    await this.#livePush(ws);
+  }
+
+  // When the room's alarm should next fire: the current question's deadline,
+  // a retry of the end-of-game save, or the 24-hour cleanup, whichever is first.
+  // Only ever moves the alarm earlier here; alarm() re-arms after it fires.
+  async #armRoomAlarm(room) {
+    const storage = this.state.storage;
+    const next = nextRoomAlarmAt(room, Date.now());
+    const current = await storage.getAlarm();
+    if (current == null || next < current - 500) await storage.setAlarm(next);
   }
 
   #arenaSend(ws, msg) {
@@ -5242,6 +5358,9 @@ export class QuizRoom {
   }
 
   async webSocketMessage(ws, raw) {
+    let att0 = {};
+    try { att0 = ws.deserializeAttachment() || {}; } catch { /* */ }
+    if (att0.kind === 'live') { await this.#liveSocketMessage(ws, raw, att0); return; }
     let data;
     try { data = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
     if (!data || typeof data !== 'object') return;
@@ -5435,6 +5554,8 @@ export class QuizRoom {
 
   async #setRoom(room) {
     if (!room || typeof room !== 'object') return;
+    // Pages ignore any state older than one they've already shown.
+    room.rev = (Number(room.rev) || 0) + 1;
     const { quiz, eventLog, responsesByQuestion, scoreLocksByQuestion, reactionsByQuestion, ...meta } = room;
     const storage = this.state.storage;
     const snap = room.__snapshot instanceof Map ? room.__snapshot : new Map();
@@ -5478,15 +5599,14 @@ export class QuizRoom {
     // Keep the in-memory cache aligned with what we just persisted.
     this.roomCache = room;
 
-    // Arm a one-shot cleanup alarm so an abandoned live room (and its ephemeral
-    // no-login media) is purged ~ROOM_TTL_MS later without anyone re-opening the
-    // PIN. Set only when none is pending (avoids an alarm write per mutation);
-    // alarm() re-arms from updatedAt. No-op for the assignments DO (never #setRoom).
-    try {
-      if ((await storage.getAlarm()) == null) {
-        await storage.setAlarm(Date.now() + ROOM_TTL_MS);
-      }
-    } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
+    this.#liveSchedulePush(room);
+
+    // The room's one alarm: closes a timed-out question on time (nobody polls
+    // with live sockets), retries the end-of-game save, and purges an abandoned
+    // room (and its ephemeral no-login media) ~ROOM_TTL_MS after it goes idle.
+    // Moved only earlier here (no alarm write per mutation); alarm() re-arms.
+    // No-op for the assignments DO (never #setRoom).
+    try { await this.#armRoomAlarm(room); } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
   }
 
   // Slim persist path for the high-frequency reaction stream. Writes only the
@@ -5505,6 +5625,7 @@ export class QuizRoom {
     await storage.put(key, value);
     // Keep the in-memory cache aligned (room is mutated in place by the caller).
     this.roomCache = room;
+    this.#liveSchedulePush(room);
     // Ensure the cleanup alarm stays armed — normally already set by #setRoom,
     // so this is a cheap getAlarm read with no write during an active game.
     try {
@@ -5527,6 +5648,11 @@ export class QuizRoom {
   }
 
   async #deleteRoom() {
+    // Live connections would otherwise stay open and quiet (pings are answered
+    // without waking the room), so the pages would never learn the game ended.
+    for (const ws of this.#liveSockets()) {
+      try { ws.close(4004, 'Game over'); } catch { /* already closed */ }
+    }
     const entries = await this.state.storage.list({ prefix: 'r:' });
     const keys = [...entries.keys()];
     keys.push('room'); // best-effort cleanup of the legacy key
@@ -5552,9 +5678,18 @@ export class QuizRoom {
       if (this.env?.QUIZ_MEDIA && pin && !wasSnapshotted) {
         try { await deleteR2Prefix(this.env.QUIZ_MEDIA, `live-${pin}`); } catch { /* */ }
       }
-    } else {
-      try { await this.state.storage.setAlarm(Date.now() + (ROOM_TTL_MS - idleFor)); } catch { /* */ }
+      return;
     }
+    let changed = closeQuestionIfTimedOut(room);
+    if (needsLiveSnapshotRetry(room)) {
+      room.snapshotRetries = (Number(room.snapshotRetries) || 0) + 1;
+      await maybeSnapshotLiveGame(room, this.env);
+      changed = true;
+    }
+    try {
+      if (changed) await this.#setRoom(room); // pushes, and re-arms (no alarm pending now)
+      else await this.#armRoomAlarm(room);
+    } catch { /* */ }
   }
 }
 
@@ -5663,6 +5798,8 @@ function hostState(room) {
   }
 
   return {
+    rev: Number(room.rev || 0),
+    transport: LIVE_TRANSPORT,
     phase: room.phase,
     pin: room.pin,
     currentIndex: qIndex,
@@ -5737,6 +5874,8 @@ function playerState(room, playerId) {
     && (room.questionClosed || room.phase === 'results' || (isTeacherGraded && (!!myResponse.graded || hasTeacherCorrection)));
 
   return {
+    rev: Number(room.rev || 0),
+    transport: LIVE_TRANSPORT,
     phase: room.phase,
     pin: room.pin,
     name: player.name,
@@ -5866,6 +6005,57 @@ function closeCurrentQuestion(room, reason = 'manual_reveal') {
   });
   room.updatedAt = Date.now();
   return true;
+}
+
+// ---------------------------------------------------------------- classic live sockets
+// 'socket': pages open /api/live/ws after their first poll and pause polling
+// while it's healthy. 'poll': every page keeps polling (the off switch).
+const LIVE_TRANSPORT = 'socket';
+const LIVE_PUSH_COALESCE_MS = 120;
+const LIVE_SNAPSHOT_RETRY_MS = 60 * 1000;
+const LIVE_SNAPSHOT_MAX_RETRIES = 5;
+
+// The deadline of the open question, or null.
+function liveQuestionDeadline(room) {
+  if (room?.phase !== 'question' || room.questionClosed) return null;
+  const question = room.quiz?.questions?.[room.currentIndex];
+  const startedAt = Number(room.questionStartedAt || 0);
+  const limit = getQuestionTimeLimitSec(question);
+  if (!question || !(startedAt > 0) || !Number.isFinite(limit) || limit <= 0) return null;
+  return startedAt + limit * 1000;
+}
+
+// A login-required game whose save into an assignment hasn't worked yet.
+// Retried by the alarm a few times (it used to ride on host polls).
+function needsLiveSnapshotRetry(room) {
+  return room?.phase === 'results' && !room.snapshotted && !room.settings?.randomNames
+    && (Number(room.snapshotRetries) || 0) < LIVE_SNAPSHOT_MAX_RETRIES
+    && Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '').trim());
+}
+
+function nextRoomAlarmAt(room, now = Date.now()) {
+  let next = Number(room?.updatedAt || now) + ROOM_TTL_MS;
+  const deadline = liveQuestionDeadline(room);
+  if (deadline) next = Math.min(next, Math.max(deadline, now) + 250);
+  if (needsLiveSnapshotRetry(room)) next = Math.min(next, now + LIVE_SNAPSHOT_RETRY_MS);
+  return next;
+}
+
+// Step 0 of LIVE_SOCKETS_PLAN.md: an answer names the question it was given
+// for (index + start time). Old pages send neither and are accepted.
+function answerIsForAnotherQuestion(room, body) {
+  const hasIndex = body?.qIndex !== undefined && body?.qIndex !== null && body?.qIndex !== '';
+  if (hasIndex && Number(body.qIndex) !== Number(room.currentIndex)) return true;
+  const startedAt = Number(body?.questionStartedAt || 0);
+  return startedAt > 0 && startedAt !== Number(room.questionStartedAt || 0);
+}
+
+// What decides whether a socket needs a new message: the state minus the
+// server clock and the revision number, which change on every call/write.
+function liveStateKey(msg) {
+  // eslint-disable-next-line no-unused-vars
+  const { serverNow, rev, ...state } = msg?.state || {};
+  return JSON.stringify({ state, attempts: msg?.attempts });
 }
 
 function closeQuestionIfTimedOut(room) {

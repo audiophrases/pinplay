@@ -10834,7 +10834,7 @@ async function pollHostState() {
       method: 'GET',
       headers: { Authorization: `Bearer ${live.host.token}` },
     });
-    renderHostState(data);
+    applyLiveHostState(data);
     fetchHostAttempts({ force: false });
   } catch (err) {
     setStatus(hostStatusEl, t('Host poll failed: {msg}', { msg: err.message }), 'bad');
@@ -12749,16 +12749,71 @@ function animatePulse(el) {
 
 function startHostPolling() {
   stopHostPolling();
+  live.host.liveActive = true;
+  live.host.shownRev = 0;
   live.host.pollTimer = setInterval(pollHostState, 1000);
 }
 
 function stopHostPolling() {
   if (live.host.pollTimer) clearInterval(live.host.pollTimer);
   live.host.pollTimer = null;
+  live.host.liveActive = false;
+  live.host.pollPaused = false;
+  if (live.host.liveSocket) live.host.liveSocket.close();
+  live.host.liveSocket = null;
   live.host.state = null;
   live.host.timerStartedAtMs = null;
   live.host.attemptsLoading = false;
   stopHostTimerTicker();
+}
+
+// ---------------------------------------------------------------- live socket
+// Classic live games: the server pushes the host state (and the attempts
+// summary) over a live connection; the 1 s poll is the bootstrap and the
+// fallback, paused while the connection is healthy. See LIVE_SOCKETS_PLAN.md.
+
+// Every host state, polled or pushed, comes through here; an older one than
+// already shown is ignored.
+function applyLiveHostState(state) {
+  if (!state) return;
+  const rev = Number(state.rev || 0);
+  if (rev && rev < Number(live.host.shownRev || 0)) return;
+  if (rev) live.host.shownRev = rev;
+  renderHostState(state);
+  if (state.transport === 'socket' && live.host.liveActive && !live.host.liveSocket) startLiveHostSocket();
+}
+
+function startLiveHostSocket() {
+  if (live.host.liveSocket || !window.PinPlayLiveSocket) return;
+  live.host.liveSocket = window.PinPlayLiveSocket.connect({
+    base: normalizeBackendUrl(loadBackendUrl()) || 'https://api.pinplay.win',
+    pin: live.host.pin,
+    auth: { t: 'auth', role: 'host', token: live.host.token },
+    onState: (msg) => {
+      applyLiveHostState(msg.state);
+      if (msg.attempts) {
+        live.host.attemptsCache = msg.attempts;
+        live.host.attemptsFetchedAt = Date.now();
+        renderHostAttemptsSnapshot(msg.attempts);
+      }
+    },
+    onUp: () => {
+      if (live.host.pollTimer) clearInterval(live.host.pollTimer);
+      live.host.pollTimer = null;
+      live.host.pollPaused = true;
+    },
+    onDown: resumeHostPollTimer,
+    // Unauthorized or game over: polling reports it as it always has.
+    onFatal: () => { live.host.liveSocket = null; resumeHostPollTimer(); },
+  });
+}
+
+function resumeHostPollTimer() {
+  if (!live.host.pollPaused || !live.host.liveActive) return;
+  live.host.pollPaused = false;
+  if (live.host.pollTimer) return;
+  live.host.pollTimer = setInterval(pollHostState, 1000);
+  pollHostState();
 }
 async function joinLiveGame() {
   try {

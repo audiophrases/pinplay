@@ -1017,6 +1017,8 @@ window.PINPLAY_FR_DICT = {
   'Skip question?': 'Passer la question ?',
   'Answered {done}/{total}': 'Répondu {done}/{total}',
 
+  'That question has ended.': 'Cette question est terminée.',
+
   /* ===================== Public games (?game=CODE) ===================== */
   'This game is not available.': "Ce jeu n'est pas disponible.",
   'It may have been removed. See the other games.': 'Il a peut-être été retiré. Découvrez les autres jeux.',
