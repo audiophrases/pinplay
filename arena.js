@@ -726,6 +726,7 @@
         <span class="arena-board-actions">
           <span data-h="durations" class="arena-durations"></span>
           <button type="button" class="btn success" data-h="start">${esc(tr('Start'))}</button>
+          <button type="button" class="btn hidden" data-h="addtime">${esc(tr('+1 min'))}</button>
           <button type="button" class="btn danger hidden" data-h="end">${esc(tr('End now'))}</button>
           <button type="button" class="btn hidden" data-h="levels">${esc(tr('📥 Level report'))}</button>
           <button type="button" class="btn" data-h="close">${esc(tr('Close'))}</button>
@@ -744,6 +745,7 @@
       if (d) { H.sock.send({ t: 'duration', sec: Number(d.dataset.dur) }); return; }
       if (e.target.closest('[data-h="levels"]')) { downloadLevelReport(); return; }
       if (e.target.closest('[data-h="start"]')) H.sock.send({ t: 'start' });
+      else if (e.target.closest('[data-h="addtime"]')) H.sock.send({ t: 'addtime' });
       else if (e.target.closest('[data-h="end"]')) { if (confirm(tr('End the round now?'))) H.sock.send({ t: 'end' }); }
       else if (e.target.closest('[data-h="close"]')) closeHost();
     });
@@ -804,6 +806,7 @@
     const lobby = msg.status === 'lobby';
     $h('start').classList.toggle('hidden', !lobby);
     $h('end').classList.toggle('hidden', msg.status !== 'playing');
+    $h('addtime').classList.toggle('hidden', msg.status !== 'playing');
     $h('durations').innerHTML = lobby
       ? H.durations.map((s) => `<button type="button" class="btn small${s === msg.durationSec ? ' primary' : ''}" data-dur="${s}">${s / 60} min</button>`).join('')
       : '';
@@ -814,9 +817,12 @@
     H.root.classList.toggle('is-lobby', lobby);
     hallMusic(lobby);
     renderRanking(msg.players, msg.status);
-    $h('feed').innerHTML = (msg.feed || []).slice().reverse().map((f) => `<div class="arena-feed-item">${feedText(f)}</div>`).join('');
-    // Celebrate each new jackpot on the projector once.
+    // The board is re-sent many times a second; only items newer than the last
+    // render pop in (rebuilding them all made the whole feed pulse nonstop).
     const lastAt = H.lastFeedAt || 0;
+    $h('feed').innerHTML = (msg.feed || []).slice().reverse()
+      .map((f) => `<div class="arena-feed-item${H.lastFeedAt != null && (f.at || 0) > lastAt ? ' is-new' : ''}">${feedText(f)}</div>`).join('');
+    // Celebrate each new jackpot on the projector once.
     (msg.feed || []).forEach((f) => {
       if (f.at > lastAt && f.kind === 'jackpot' && H.lastFeedAt != null) { playFx('jackpot', H.root); sfx('jackpot', 0.7); }
     });

@@ -5304,6 +5304,15 @@ export class QuizRoom {
         this.#arenaEnsureTicker(room);
       } else if (data.t === 'end' && room.arena.status === 'playing') {
         await this.#arenaFinish(room);
+      } else if (data.t === 'addtime' && room.arena.status === 'playing') {
+        // +1 minute from the projector: move the end, tell every clock.
+        room.arena.endsAt = Number(room.arena.endsAt || Date.now()) + 60 * 1000;
+        room.arena.durationSec = Number(room.arena.durationSec || 0) + 60;
+        await this.#arenaPersist(room, true);
+        this.#arenaBroadcastBoard(room);
+        for (const pws of this.#arenaSockets((a) => a.role === 'player')) {
+          this.#arenaSend(pws, arenaYou(room, pws.deserializeAttachment().pid));
+        }
       }
       return;
     }
