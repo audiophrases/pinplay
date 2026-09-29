@@ -497,7 +497,7 @@ async function initGameFromUrl() {
   if (joinTitleEl) joinTitleEl.textContent = card.title;
   if (joinModeHintEl) {
     joinModeHintEl.textContent = card.adaptive
-      ? t('🎯 Adaptive quiz · {from}–{to} · {n} questions. The questions adjust to your level as you play.', { from: card.levels?.from || 'A1', to: card.levels?.to || 'C2', n: card.questionCount })
+      ? t('🎯 Adaptive quiz · {n} questions that adjust to your level {from}–{to}.',{ from: card.levels?.from || 'A1', to: card.levels?.to || 'C2', n: card.questionCount })
       : t('{n} questions', { n: card.questionCount });
   }
   if (card.adaptive) renderGameCountPicker(card);
@@ -528,10 +528,9 @@ function renderGameCountPicker(card) {
     if (Number.isFinite(n) && n >= 1) game.count = Math.min(total, n);
   });
   const before = document.createElement('span');
-  before.textContent = t('How many do you want to play?');
+  before.textContent = t('Play');
   const after = document.createElement('span');
-  after.className = 'muted';
-  after.textContent = t('(recommended: {n})', { n: game.count });
+  after.textContent = t('questions');
   row.append(before, input, after);
   joinModeHintEl.insertAdjacentElement('afterend', row);
 }
