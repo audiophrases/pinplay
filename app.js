@@ -2647,6 +2647,7 @@ function renderBuilder() {
       mediaSection += `<div class="media-section-wrap" style="display:${q.mediaExpand.readingText ? '' : 'none'}">
         <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
           <label>Reading passage (centered, scrollable; replaces image)</label>
+          ${readingFormatButtonsHtml(`[data-q="${idx}"][data-field="readingText"]`)}
           <textarea data-q="${idx}" data-field="readingText" maxlength="10000" rows="6" placeholder="Paste the reading-comprehension passage students should read before answering. Up to 10,000 characters.">${escapeHtml(q.readingText || '')}</textarea>
           <div class="${counterClass}" data-reading-counter="${idx}">${readingChars} / 10,000 chars</div>
           <p class="small">When set, the passage appears centered (in place of any image) and students can scroll it but can't select or copy. Image and GIF inputs are disabled until you clear this field.</p>
@@ -4268,9 +4269,9 @@ function promptMediaRules(req, allowed, agent) {
   }
   const words = 'about 40–100 words at A1–A2, 100–200 at B1, 200–500 at B2 and above';
   if (req.readingText === 'some') {
-    rules.push(`Reading passages: where a text helps (comprehension, context), add "readingText": plain text, ${words}. A question with a passage has no picture; never on pin.`);
+    rules.push(`Reading passages: where a text helps (comprehension, context), add "readingText": plain text, ${words}; **bold**, *italic* and __underline__ are shown as formatting. A question with a passage has no picture; never on pin.`);
   } else if (req.readingText === 'all') {
-    rules.push(`Reading passages: give every question except pin its own "readingText" (plain text, ${words}) and no picture.`);
+    rules.push(`Reading passages: give every question except pin its own "readingText" (plain text, ${words}; **bold**, *italic* and __underline__ are shown as formatting) and no picture.`);
   }
   return rules;
 }
@@ -11754,7 +11755,7 @@ function renderHostQuestion(state) {
   if (hasHostReading) {
     const readingBlock = document.createElement('div');
     readingBlock.className = 'reading-text-block reading-text-host';
-    readingBlock.textContent = hostReadingText;
+    readingBlock.innerHTML = formatReadingTextHtml(hostReadingText);
     hostQuestionAnswersEl.appendChild(readingBlock);
   } else if (!hasHostVideo && question.type !== 'pin' && question.type !== 'image_open' && question.type !== 'match_pairs' && question.imageData) {
     const preview = document.createElement('div');
@@ -16798,6 +16799,8 @@ function filterMediaRows(rows, filters = {}) {
       if (r.audio.kind !== m) return false;
     } else if (m === 'audio') {
       if (r.audio.kind !== 'tts' && r.audio.kind !== 'file') return false;
+    } else if (m === 'reading') {
+      if (r.q?.type === 'pin' || !String(r.q?.readingText || '').trim()) return false;
     } else if (m === 'nomedia') {
       if (['gif', 'image', 'video'].includes(r.visual.kind) || ['tts', 'file'].includes(r.audio.kind)) return false;
     } else if (m && r.visual.kind !== m) {
@@ -16807,7 +16810,7 @@ function filterMediaRows(rows, filters = {}) {
     if (filters.type && r.type !== filters.type) return false;
     if (text) {
       const q = r.q || {};
-      const haystack = [q.prompt, q.imageKeyword, q.gifKeyword, q.videoKeyword, q.audioText].join(' ').toLowerCase();
+      const haystack = [q.prompt, q.imageKeyword, q.gifKeyword, q.videoKeyword, q.audioText, q.readingText].join(' ').toLowerCase();
       if (!haystack.includes(text)) return false;
     }
     return true;
@@ -17369,6 +17372,9 @@ function refreshMediaSelection() {
     const keyOf = { gif: 'gifKeyword', image: 'imageKeyword', video: 'videoKeyword' };
     bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || '');
     setTimeout(() => bar.querySelector('[data-mm-replace-keyword]')?.focus(), 0);
+  } else if (n && state.form === 'reading') {
+    bar.innerHTML = readingTextFormHtml([...state.selected]);
+    setTimeout(() => bar.querySelector('[data-mm-reading]')?.focus(), 0);
   } else if (n && state.form === 'voice') {
     const ttsCount = [...state.selected].filter((q) => questionMediaStatus(q, quiz).audio.kind === 'tts').length;
     const voiceTitle = escapeHtml(t('Voice for {n} question(s) read with TTS:', { n: ttsCount }));
@@ -17389,6 +17395,7 @@ function refreshMediaSelection() {
          <button type="button" class="btn btn-sm" data-mm-action="regenerate" title="${escapeHtml(t('Take the next result for the same keyword'))}">${escapeHtml(t('🔄 Regenerate'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="replace" title="${escapeHtml(t('Set a new keyword, or pick a picture or GIF by hand'))}">${escapeHtml(t('🔁 Replace…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="voice">${escapeHtml(t('🗣 Change voice…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="reading" title="${escapeHtml(t('Give the selected questions the same reading text, or change or remove it'))}">${escapeHtml(t('📖 Reading text…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="remove">${escapeHtml(t('🗑 Remove…'))}</button>
        </span>
        ${selectAllBtn}
@@ -17478,6 +17485,136 @@ function pickMediaByHand(kind) {
 }
 
 // Change voice, then prepare the new clips (same path as Generate missing's audio).
+// ---------------------------------------------------------------- reading text (bulk)
+// B / I / U buttons for a reading-text box: they wrap the selected words in the
+// marks formatReadingTextHtml shows as formatting. `target` is a selector.
+function readingFormatButtonsHtml(target) {
+  const btn = (format, label, title) => `<button type="button" class="btn btn-sm reading-format-btn" data-reading-format="${format}" data-reading-target="${escapeHtml(target)}" title="${escapeHtml(title)}">${label}</button>`;
+  return `<div class="reading-format-bar">
+    ${btn('bold', '<strong>B</strong>', t('Bold: **text**'))}
+    ${btn('italic', '<em>I</em>', t('Italic: *text*'))}
+    ${btn('underline', '<u>U</u>', t('Underline: __text__'))}
+    <span class="small muted">${escapeHtml(t('Select words, then B, I or U'))}</span>
+  </div>`;
+}
+
+const READING_FORMAT_MARKS = { bold: '**', italic: '*', underline: '__' };
+
+// Wrap (or unwrap) the textarea's selection in a format mark.
+function wrapReadingSelection(textarea, format) {
+  const mark = READING_FORMAT_MARKS[format];
+  if (!textarea || !mark) return;
+  const { value } = textarea;
+  let start = textarea.selectionStart;
+  let end = textarea.selectionEnd;
+  // Leave surrounding spaces out of the mark ("**word** ", not "**word **").
+  while (start < end && /\s/.test(value[start])) start += 1;
+  while (end > start && /\s/.test(value[end - 1])) end -= 1;
+  const before = value.slice(0, start);
+  const picked = value.slice(start, end);
+  const after = value.slice(end);
+  let next;
+  let caretStart;
+  let caretEnd;
+  if (before.endsWith(mark) && after.startsWith(mark)) {
+    next = before.slice(0, -mark.length) + picked + after.slice(mark.length);
+    caretStart = start - mark.length;
+    caretEnd = caretStart + picked.length;
+  } else {
+    const text = picked || t('text');
+    next = `${before}${mark}${text}${mark}${after}`;
+    caretStart = start + mark.length;
+    caretEnd = caretStart + text.length;
+  }
+  textarea.value = next.slice(0, Number(textarea.maxLength) > 0 ? Number(textarea.maxLength) : undefined);
+  textarea.focus();
+  textarea.setSelectionRange(caretStart, caretEnd);
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-reading-format]');
+  if (!btn) return;
+  e.preventDefault();
+  wrapReadingSelection(document.querySelector(btn.dataset.readingTarget), btn.dataset.readingFormat);
+});
+// Keep the selection in the textarea when a format button is pressed.
+document.addEventListener('mousedown', (e) => {
+  if (e.target.closest('[data-reading-format]')) e.preventDefault();
+});
+
+function readingTextsOf(questions) {
+  return [...new Set(questions.filter((q) => q && q.type !== 'pin').map((q) => String(q.readingText || '').trim()))];
+}
+
+function readingTextFormHtml(selected) {
+  const eligible = selected.filter((q) => q && q.type !== 'pin');
+  const pins = selected.length - eligible.length;
+  const texts = readingTextsOf(eligible);
+  const first = eligible.find((q) => String(q.readingText || '').trim());
+  const current = String(first?.readingText || '');
+  const sameElsewhere = current.trim()
+    ? quiz.questions.filter((q) => q && q.type !== 'pin' && !mediaManagerState.selected.has(q) && String(q.readingText || '').trim() === current.trim()).length
+    : 0;
+  const withPicture = eligible.filter((q) => !String(q.readingText || '').trim() && (q.imageData || q.imageKeyword || q.gifKeyword)).length;
+  const notes = [];
+  if (texts.filter(Boolean).length > 1) notes.push(t('The selected questions have {n} different reading texts; applying gives them all this one.', { n: texts.filter(Boolean).length }));
+  if (withPicture) notes.push(t('{n} of them have a picture or GIF: the reading text is shown instead.', { n: withPicture }));
+  if (pins) notes.push(t('{n} pin question(s) are skipped (they need their picture).', { n: pins }));
+  const count = texts.length ? eligible.length : 0;
+  return `<div class="mm-reading-form">
+    <strong>${escapeHtml(t('Reading text for {n} selected question(s):', { n: eligible.length }))}</strong>
+    ${readingFormatButtonsHtml('#mediaManagerOverlay [data-mm-reading]')}
+    <textarea data-mm-reading maxlength="10000" rows="6" placeholder="${escapeHtml(t('The text students read with these questions (a rule, a passage…)'))}">${escapeHtml(current)}</textarea>
+    ${notes.length ? `<p class="small muted">${notes.map(escapeHtml).join('<br>')}</p>` : ''}
+    <div class="mm-reading-actions">
+      <button type="button" class="btn btn-sm primary" data-mm-reading-apply ${count ? '' : 'disabled'}>${escapeHtml(t('Apply to {n} selected', { n: eligible.length }))}</button>
+      ${sameElsewhere ? `<button type="button" class="btn btn-sm" data-mm-reading-same>${escapeHtml(t('Also select the {n} other question(s) with this same text', { n: sameElsewhere }))}</button>` : ''}
+      <button type="button" class="btn btn-sm" data-mm-reading-remove ${texts.some(Boolean) ? '' : 'disabled'}>${escapeHtml(t('Remove reading text'))}</button>
+      <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>
+    </div>
+  </div>`;
+}
+
+// Selects every question whose reading text is the same as the first selected one's.
+function selectSameReadingText() {
+  const state = mediaManagerState;
+  const first = quiz.questions.find((q) => state.selected.has(q) && String(q?.readingText || '').trim());
+  const text = String(first?.readingText || '').trim();
+  if (!text) return;
+  quiz.questions.forEach((q) => {
+    if (q && q.type !== 'pin' && String(q.readingText || '').trim() === text) state.selected.add(q);
+  });
+  // The form is redrawn for the new selection; keep what was typed.
+  const box = document.querySelector('#mediaManagerOverlay [data-mm-reading]');
+  const draft = box ? box.value : null;
+  refreshMediaSelection();
+  const redrawn = document.querySelector('#mediaManagerOverlay [data-mm-reading]');
+  if (redrawn && draft !== null) redrawn.value = draft;
+}
+
+// Sets (or, with '', removes) the reading text of the selected questions.
+function applyReadingText(text) {
+  const state = mediaManagerState;
+  const value = String(text || '').slice(0, 10000);
+  const questions = mediaManagerJobQuestions('selected').filter((q) => q && q.type !== 'pin');
+  if (!questions.length) return;
+  if (!value.trim() && !confirm(t('Remove the reading text of {n} selected question(s)?', { n: questions.length }))) return;
+  let changed = 0;
+  questions.forEach((q) => {
+    if (String(q.readingText || '') === value) return;
+    q.readingText = value;
+    changed += 1;
+  });
+  state.form = '';
+  state.notice = value.trim()
+    ? t('Reading text set on {n} question(s).', { n: changed })
+    : t('Reading text removed from {n} question(s).', { n: changed });
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  renderMediaManager();
+}
+
 function applyVoiceChange(voice) {
   const state = mediaManagerState;
   const changed = setTtsVoiceOn(mediaManagerJobQuestions('selected'), voice, quiz);
@@ -17526,7 +17663,7 @@ function openMediaManager() {
           ${opt('', t('All levels'))}${CEFR_LEVELS.map((l) => opt(l, l)).join('')}${opt('untagged', t('Untagged'))}
         </select>
         <select data-mm-filter="media" aria-label="${escapeHtml(t('Media type'))}">
-          ${opt('', t('All media'))}${opt('gif', t('GIFs'))}${opt('image', t('Pictures'))}${opt('video', t('Videos'))}${opt('audio', t('Any audio'))}${opt('tts', t('TTS audio'))}${opt('file', t('Audio files'))}${opt('nomedia', t('No media'))}
+          ${opt('', t('All media'))}${opt('gif', t('GIFs'))}${opt('image', t('Pictures'))}${opt('video', t('Videos'))}${opt('audio', t('Any audio'))}${opt('tts', t('TTS audio'))}${opt('file', t('Audio files'))}${opt('reading', t('Reading text'))}${opt('nomedia', t('No media'))}
         </select>
         <select data-mm-filter="status" aria-label="${escapeHtml(t('Status'))}">
           ${opt('', t('All statuses'))}${opt('missing', t('Missing'))}${opt('failed', t('Failed'))}${opt('local', t('Not uploaded'))}${opt('ready', t('Ready'))}${opt('none', t('None'))}
@@ -17534,7 +17671,7 @@ function openMediaManager() {
         <select data-mm-filter="type" aria-label="${escapeHtml(t('Question type'))}">
           ${opt('', t('All question types'))}${types.map((ty) => opt(ty, labelForType(ty))).join('')}
         </select>
-        <input type="search" data-mm-filter="text" placeholder="${escapeHtml(t('Search questions and keywords'))}" />
+        <input type="search" data-mm-filter="text" placeholder="${escapeHtml(t('Search questions, keywords and reading texts'))}" />
         <button type="button" class="btn btn-sm" data-mm-apply="all">${escapeHtml(t('Clear filters'))}</button>
       </div>
       <div class="mm-selbar" data-mm-selbar></div>
@@ -17605,6 +17742,13 @@ function openMediaManager() {
       applyVoiceChange(overlay.querySelector('[data-mm-voice]')?.value);
       return;
     }
+    if (e.target.closest('[data-mm-reading-apply]')) {
+      applyReadingText(overlay.querySelector('[data-mm-reading]')?.value || '');
+      return;
+    }
+    if (e.target.closest('[data-mm-reading-remove]')) { applyReadingText(''); return; }
+    const sameBtn = e.target.closest('[data-mm-reading-same]');
+    if (sameBtn) { selectSameReadingText(); return; }
 
     if (e.target.closest('[data-mm-select-all]')) { selectAllShown(); return; }
     if (e.target.closest('[data-mm-select-none]')) { state.selected = new Set(); state.anchor = null; refreshMediaSelection(); return; }
@@ -18295,6 +18439,16 @@ function contextGapList(question) {
   const gaps = (Array.isArray(question?.gaps) ? question.gaps : []).map((g) => String(g ?? '').trim()).filter(Boolean);
   const blanks = (String(question?.prompt || '').match(/_{2,}|\[\s*\]/g) || []).length;
   return blanks === 1 && gaps.length > 1 ? [gaps.join(', ')] : gaps;
+}
+
+// Reading text formatting: **bold**, *italic*, __underline__, stored as plain
+// text marks (safe for AI quizzes and the server). Everything else is escaped
+// first, so nothing typed becomes HTML. Mirrored in app.js and play.js.
+function formatReadingTextHtml(text) {
+  return escapeHtml(String(text || ''))
+    .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(?=\S)([^\n]*?\S)__/g, '<u>$1</u>')
+    .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1<em>$2</em>');
 }
 
 function normalizeImportedQuestion(q) {
@@ -19556,7 +19710,7 @@ function buildPaperQuestionHtml(q, index, showReadingText) {
   const promptText = String(q.prompt || '').trim() || '(No prompt)';
   const readingText = q.type !== 'pin' ? String(q.readingText || '').trim() : '';
   const readingHtml = (showReadingText && readingText)
-    ? `<div class="pdf-reading">${escapeHtml(readingText).replace(/\n/g, '<br>')}</div>`
+    ? `<div class="pdf-reading">${formatReadingTextHtml(readingText).replace(/\n/g, '<br>')}</div>`
     : '';
   // Treat voice-record + speaking as written open-answer on paper.
   const paperType = (q.type === 'voice_record' || q.type === 'speaking') ? 'open' : (q.type === 'voice_text' ? 'text' : q.type);

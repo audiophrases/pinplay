@@ -4276,7 +4276,7 @@ function renderJoinQuestion(question) {
   if (hasReadingText && joinQuestionWrap) {
     const readingBlock = document.createElement('div');
     readingBlock.className = 'reading-text-block';
-    readingBlock.textContent = readingText;
+    readingBlock.innerHTML = formatReadingTextHtml(readingText);
     // Block selection, drag, and context menus on the reading text — these
     // would let students extract the passage for translation / AI help.
     readingBlock.addEventListener('selectstart', (e) => e.preventDefault());
@@ -8748,6 +8748,16 @@ function renderVoiceTextRecognizer(container, question) {
       finalizeUI();
     }
   });
+}
+
+// Reading text formatting: **bold**, *italic*, __underline__, stored as plain
+// text marks (safe for AI quizzes and the server). Everything else is escaped
+// first, so nothing typed becomes HTML. Mirrored in app.js and play.js.
+function formatReadingTextHtml(text) {
+  return escapeHtml(String(text || ''))
+    .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(?=\S)([^\n]*?\S)__/g, '<u>$1</u>')
+    .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1<em>$2</em>');
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {

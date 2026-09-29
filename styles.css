@@ -5927,3 +5927,11 @@ body.arena-board-open { overflow: hidden; }
   padding: 0.05rem 0.45rem; border-radius: 999px; margin-left: 0.35rem;
   background: #e0f2fe; color: #075985; white-space: nowrap; vertical-align: baseline;
 }
+
+/* Reading text: B / I / U buttons (editor and Media manager) */
+.reading-format-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: .35rem 0; }
+.reading-format-btn { min-width: 2.1rem; justify-content: center; }
+.mm-reading-form { display: flex; flex-direction: column; gap: .5rem; flex: 1 1 100%; min-width: 0; }
+.mm-reading-form textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.mm-reading-form p { margin: 0; }
+.mm-reading-actions { display: flex; flex-wrap: wrap; gap: .4rem; }

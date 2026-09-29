@@ -1019,6 +1019,27 @@ window.PINPLAY_FR_DICT = {
 
   'That question has ended.': 'Cette question est terminée.',
 
+  /* ===================== Reading text: formatting and bulk edit ===================== */
+  'Give the selected questions the same reading text, or change or remove it': 'Donner le même texte de lecture aux questions sélectionnées, ou le modifier ou le supprimer',
+  '📖 Reading text…': '📖 Texte de lecture…',
+  'Bold: **text**': 'Gras : **texte**',
+  'Italic: *text*': 'Italique : *texte*',
+  'Underline: __text__': 'Souligné : __texte__',
+  'Select words, then B, I or U': 'Sélectionnez des mots, puis B, I ou U',
+  'text': 'texte',
+  'The selected questions have {n} different reading texts; applying gives them all this one.': 'Les questions sélectionnées ont {n} textes de lecture différents ; appliquer leur donne à toutes celui-ci.',
+  '{n} of them have a picture or GIF: the reading text is shown instead.': '{n} d’entre elles ont une image ou un GIF : le texte de lecture s’affiche à la place.',
+  '{n} pin question(s) are skipped (they need their picture).': '{n} question(s) « pin » ignorée(s) (elles ont besoin de leur image).',
+  'Reading text for {n} selected question(s):': 'Texte de lecture pour {n} question(s) sélectionnée(s) :',
+  'The text students read with these questions (a rule, a passage…)': 'Le texte que les élèves lisent avec ces questions (une règle, un passage…)',
+  'Apply to {n} selected': 'Appliquer aux {n} sélectionnée(s)',
+  'Also select the {n} other question(s) with this same text': 'Sélectionner aussi les {n} autre(s) question(s) avec ce même texte',
+  'Remove reading text': 'Supprimer le texte de lecture',
+  'Remove the reading text of {n} selected question(s)?': 'Supprimer le texte de lecture de {n} question(s) sélectionnée(s) ?',
+  'Reading text set on {n} question(s).': 'Texte de lecture ajouté à {n} question(s).',
+  'Reading text removed from {n} question(s).': 'Texte de lecture supprimé de {n} question(s).',
+  'Search questions, keywords and reading texts': 'Rechercher dans les questions, mots-clés et textes de lecture',
+
   /* ===================== Public games (?game=CODE) ===================== */
   'This game is not available.': "Ce jeu n'est pas disponible.",
   'It may have been removed. See the other games.': 'Il a peut-être été retiré. Découvrez les autres jeux.',
