@@ -10321,6 +10321,19 @@ function scheduleRankingAnimationFrame() {
   });
 }
 
+// The final ranking reveal (names from 7th to 1st, then the final music) is
+// timed from its start. It used to advance on the host's 1 s poll; with the
+// live connection nothing else redraws it, so it redraws itself a few times a
+// second until the final music has started.
+function scheduleFinalRevealTick() {
+  if (live.host.finalRevealTimer) return;
+  live.host.finalRevealTimer = setTimeout(() => {
+    live.host.finalRevealTimer = null;
+    if (live.host.state?.phase !== 'results' || live.host.rankingMode) return;
+    renderHostState(live.host.state);
+  }, 250);
+}
+
 function startRankingAnimationMode() {
   cancelRankingAnimationFrame();
 
@@ -11395,8 +11408,8 @@ function renderHostState(state) {
   if (state.phase === 'results' && live.host.lastPhase !== 'results') {
     stopFx('answering');
     stopFx('answered');
-    stopFx('final');
-    stopFx('drumrollwinner');
+    // Not the drumroll or final music: the scoreboard, drawn just before this,
+    // has already reset them and started the drumroll for the final reveal.
 
     // ✅ AUTO-SHOW MODAL FOR FINAL RESULTS
     const modal = document.getElementById('projectorScoreboardSection');
@@ -12157,9 +12170,9 @@ function renderProjectorScores(players, opts = {}) {
       live.host.finalRevealStagePlayed.final = true;
     }
 
-    if (elapsed < finalStartMs) {
-      scheduleRankingAnimationFrame();
-    }
+    // Drive the reveal itself: host state is now pushed only when it changes,
+    // so nothing else redraws the board while the names come in.
+    if (elapsed < finalStartMs) scheduleFinalRevealTick();
     return;
   }
 
