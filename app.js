@@ -8790,7 +8790,15 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
     const total = Number(a?.metrics?.totalQuestions || 0);
     const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
     const completion = total ? `${Math.round((answered / total) * 100)}%` : '—';
-    meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
+    if (a?.timed) {
+      // Cup is timed: nobody is meant to reach every question, so count what
+      // was answered and measure accuracy on those.
+      const graded = answered - pending;
+      const cupAcc = graded > 0 ? `${Math.round((Number(a?.metrics?.correctCount || 0) / graded) * 100)}%` : '—';
+      meta.textContent = t("Answered: {p1} · Accuracy: {p2} · Pending teacher: {p3}", { p1: answered, p2: cupAcc, p3: pending });
+    } else {
+      meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
+    }
     let levelsLine = null;
     if (lv?.usualLevel) {
       levelsLine = document.createElement('div');

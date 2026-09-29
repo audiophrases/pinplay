@@ -124,3 +124,24 @@ describe('AI level tagging round trip', () => {
     assert.throws(() => A.parseLevelTagReply('no json here'));
   });
 });
+
+describe('Cup level summary on saved live attempts', () => {
+  let S;
+  before(() => { S = loadDeclarations(WORKER_SRC, ['CEFR_LEVELS', 'sanitizeCupLevels']); });
+
+  it('keeps a valid summary and drops bad levels and counts', () => {
+    const out = plain(S.sanitizeCupLevels({
+      answered: 12, usualLevel: 'B1', finalLevel: 'B2', peakLevel: 'Z9', path: 'A2✓ B1✗',
+      perLevel: { A2: { right: 3, answered: 4 }, B1: { right: 9, answered: 2 }, X1: { right: 1, answered: 1 }, C1: { right: 0, answered: 0 } },
+    }));
+    assert.deepEqual(out, {
+      answered: 12, usualLevel: 'B1', finalLevel: 'B2', peakLevel: '', path: 'A2✓ B1✗',
+      perLevel: { A2: { right: 3, answered: 4 }, B1: { right: 2, answered: 2 } },
+    });
+  });
+
+  it('returns null without a usual level', () => {
+    assert.equal(S.sanitizeCupLevels(null), null);
+    assert.equal(S.sanitizeCupLevels({ usualLevel: '' }), null);
+  });
+});

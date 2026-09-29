@@ -812,6 +812,7 @@ window.PINPLAY_FR_DICT = {
   "Attempt snapshot error: {p1}": "Erreur d'aperçu des tentatives : {p1}",
   "Award full points ({p1})": "Attribuer tous les points ({p1})",
   "Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}": "Achèvement : {p1} ({p2}/{p3}) · Précision : {p4} · En attente enseignant : {p5}",
+  "Answered: {p1} · Accuracy: {p2} · Pending teacher: {p3}": "Répondues : {p1} · Précision : {p2} · En attente enseignant : {p3}",
   "Could not load context: {p1}": "Impossible de charger le contexte : {p1}",
   "Could not read file: {p1}": "Impossible de lire le fichier : {p1}",
   "Danger": "Danger",

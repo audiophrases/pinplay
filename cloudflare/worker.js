@@ -2729,6 +2729,8 @@ export class QuizRoom {
           examMode: false,
           active: true,
           origin: 'live',
+          // A Cup is timed: students answer as many questions as they reach.
+          liveMode: body?.mode === 'arena' ? 'arena' : 'classic',
           liveMediaPin: livePin,
           livePin,
           finishedAt,
@@ -2775,6 +2777,8 @@ export class QuizRoom {
             autoScore: 0,
             origin: 'live',
           };
+          const cupLevels = sanitizeCupLevels(a?.cupLevels);
+          if (cupLevels) attempt.cupLevels = cupLevels;
           attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
           attemptsToSave.push(attempt);
         }
@@ -8031,7 +8035,31 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     focusEventsTotalMs: full.focusEventsTotalMs,
     adaptive: attempt?.adaptive
       ? { ...full.adaptive, ...adaptiveSummary(attempt.adaptive) }
-      : undefined,
+      : (attempt?.cupLevels || undefined),
+    timed: assignment?.liveMode === 'arena' || undefined,
+  };
+}
+
+// Level summary a finished adaptive Cup hands over with each attempt.
+function sanitizeCupLevels(src) {
+  if (!src || typeof src !== 'object') return null;
+  const level = (v) => (CEFR_LEVELS.includes(v) ? v : '');
+  const usualLevel = level(src.usualLevel);
+  if (!usualLevel) return null;
+  const perLevel = {};
+  CEFR_LEVELS.forEach((l) => {
+    const r = src.perLevel?.[l];
+    if (!r) return;
+    const answered = Math.max(0, Math.round(Number(r.answered) || 0));
+    if (answered) perLevel[l] = { right: Math.min(answered, Math.max(0, Math.round(Number(r.right) || 0))), answered };
+  });
+  return {
+    answered: Math.max(0, Math.round(Number(src.answered) || 0)),
+    usualLevel,
+    finalLevel: level(src.finalLevel),
+    peakLevel: level(src.peakLevel),
+    path: String(src.path || '').slice(0, 4000),
+    perLevel,
   };
 }
 
@@ -9400,6 +9428,9 @@ async function maybeSnapshotLiveGame(room, env) {
         studentName: String(p.name || p?.identity?.username || 'Student'),
         username: String(p?.identity?.username || ''),
         answersByQ: {},
+        // Adaptive Cup: the teacher-only level summary, so the results view
+        // can show each student's level like an adaptive assignment.
+        cupLevels: room.arena?.adaptive ? adaptiveSummary(room.arena.players?.[p.id]?.adaptive) : null,
       });
     }
   }
@@ -9439,6 +9470,7 @@ async function maybeSnapshotLiveGame(room, env) {
         quiz: room.quiz,
         title: room.quiz?.title || 'Live game',
         pin: room.pin,
+        mode: room.settings?.gameMode === 'arena' ? 'arena' : 'classic',
         finishedAt: Number(room.questionClosedAt || 0) || Date.now(),
         attempts,
       }),
