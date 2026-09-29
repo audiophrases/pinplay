@@ -1,0 +1,159 @@
+{
+  "note": "context_gap questions from an AI-made quiz (2026-09-29): alternatives listed as separate gaps for a one-blank sentence",
+  "questions": [
+    {
+      "id": "q16",
+      "prompt": "I ____ (visitar) the art museum yesterday.",
+      "gaps": [
+        "visited"
+      ]
+    },
+    {
+      "id": "q17",
+      "prompt": "She ____ (has helped) her community.",
+      "gaps": [
+        "has helped"
+      ]
+    },
+    {
+      "id": "q18",
+      "prompt": "They ____ (won) a medal last week.",
+      "gaps": [
+        "won"
+      ]
+    },
+    {
+      "id": "q38",
+      "prompt": "The activist ____ (organitzar) a march for climate change yesterday.",
+      "gaps": [
+        "organized",
+        "organised"
+      ]
+    },
+    {
+      "id": "q39",
+      "prompt": "I ____ (no he vist) the new documentary about nature yet.",
+      "gaps": [
+        "haven't seen",
+        "have not seen"
+      ]
+    },
+    {
+      "id": "q40",
+      "prompt": "They have ____ (ja) finished the marathon.",
+      "gaps": [
+        "already"
+      ]
+    },
+    {
+      "id": "q55",
+      "prompt": "Greta ____ (start) her climate strike in 2018.",
+      "gaps": [
+        "started"
+      ]
+    },
+    {
+      "id": "q56",
+      "prompt": "She ____ (inspire) millions of people since then.",
+      "gaps": [
+        "has inspired"
+      ]
+    },
+    {
+      "id": "q57",
+      "prompt": "We ____ (not decide) on a business plan yet.",
+      "gaps": [
+        "haven't decided",
+        "have not decided"
+      ]
+    },
+    {
+      "id": "q58",
+      "prompt": "He ____ (win) the art competition last Saturday.",
+      "gaps": [
+        "won"
+      ]
+    },
+    {
+      "id": "q71",
+      "prompt": "I have ____ (be) interested in robotics since I was a child.",
+      "gaps": [
+        "been"
+      ]
+    },
+    {
+      "id": "q72",
+      "prompt": "The young entrepreneur ____ (sell) her company for millions last year.",
+      "gaps": [
+        "sold"
+      ]
+    },
+    {
+      "id": "q73",
+      "prompt": "They ____ (not / launch) their new product yet.",
+      "gaps": [
+        "haven't launched",
+        "have not launched"
+      ]
+    },
+    {
+      "id": "q74",
+      "prompt": "____ you ____ (ever / run) a marathon?",
+      "gaps": [
+        "Have",
+        "ever run"
+      ]
+    },
+    {
+      "id": "q83",
+      "prompt": "He ____ (dedicate) his life to ocean cleanup since he was 16.",
+      "gaps": [
+        "has dedicated"
+      ]
+    },
+    {
+      "id": "q84",
+      "prompt": "They ____ (achieve) remarkable success despite their young age.",
+      "gaps": [
+        "have achieved"
+      ]
+    },
+    {
+      "id": "q85",
+      "prompt": "The prodigy ____ (compose) three symphonies before his 18th birthday last month.",
+      "gaps": [
+        "composed"
+      ]
+    },
+    {
+      "id": "q86",
+      "prompt": "Lately, the young activist ____ (campaign) tirelessly for policy changes.",
+      "gaps": [
+        "has campaigned",
+        "has been campaigning"
+      ]
+    },
+    {
+      "id": "q94",
+      "prompt": "Scarcely ____ she ____ (finish) her speech when the crowd erupted in applause.",
+      "gaps": [
+        "had",
+        "finished"
+      ]
+    },
+    {
+      "id": "q95",
+      "prompt": "The young entrepreneur's valuation ____ (plummet) yesterday after the scandal broke.",
+      "gaps": [
+        "plummeted"
+      ]
+    },
+    {
+      "id": "q96",
+      "prompt": "It is the first time the 16-year-old athlete ____ (compete) at an international level.",
+      "gaps": [
+        "has competed"
+      ]
+    }
+  ]
+}

@@ -4193,7 +4193,7 @@ const PROMPT_TYPE_FIELDS = {
   tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
   text: '"accepted": ["…", "…"] — every answer you accept, as plain strings (not "answers"). Capitals, punctuation and how an ordinal is written (2.ª, 2ª, 2a) don\'t matter, so don\'t list those variants.',
   voice_text: 'the student says the answer: "accepted" as in text, plus "answerLanguage": the spoken language, e.g. "es-ES".',
-  context_gap: 'mark each gap in the prompt with ____; "gaps": ["…"] — the answers in order; two accepted answers for one gap: "dreamed, dreamt".',
+  context_gap: 'mark each gap in the prompt with ____; "gaps": exactly one string per ____, in order. Two accepted answers for one gap go in that ONE string, comma-separated: one ____ → ["dreamed, dreamt"], never ["dreamed", "dreamt"]. Don\'t put the answer itself in the prompt\'s brackets; give the base verb or a translation: "I ____ (visit) the museum."',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs.',
   error_hunt: 'the prompt is ONLY the sentence with the mistake. "correctedVariants": every full corrected sentence you accept. Always list the alternatives, not just the obvious fix: a mistake can often be fixed by changing a different word, and a student who does that is right too. "They doesn\'t see it." → "They don\'t see it.", "He doesn\'t see it.", "She doesn\'t see it."; "Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho.". "corrected": the first of them.',
   puzzle: '"items": the 3 to 12 pieces in the CORRECT order — PinPlay shuffles them. For 1–2 pieces use text instead.',
@@ -16157,7 +16157,7 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 10);
+      const gaps = contextGapList(q).map((x) => x.slice(0, 120)).slice(0, 10);
       if (gaps.length < 1) return;
       normalized.questions.push({ ...base, gaps });
       return;
@@ -18286,9 +18286,21 @@ function getCorrectedVariantsList(corrected, correctedVariants) {
 }
 
 // Import step for one question, for quizzes written by hand or by an AI.
+// One entry per ____ in the sentence; a gap's alternatives go inside its entry,
+// comma-separated ("haven't seen, have not seen"). AI quizzes sometimes list
+// them as separate entries instead, which drew a second box after the sentence
+// and graded a right answer as wrong. With a single blank in the prompt, the
+// entries can only be alternatives, so they are merged into one.
+function contextGapList(question) {
+  const gaps = (Array.isArray(question?.gaps) ? question.gaps : []).map((g) => String(g ?? '').trim()).filter(Boolean);
+  const blanks = (String(question?.prompt || '').match(/_{2,}|\[\s*\]/g) || []).length;
+  return blanks === 1 && gaps.length > 1 ? [gaps.join(', ')] : gaps;
+}
+
 function normalizeImportedQuestion(q) {
   const next = { ...q };
   if (!next.prompt && next.question) next.prompt = next.question;
+  if (next.type === 'context_gap' && Array.isArray(next.gaps)) next.gaps = contextGapList(next);
   // Bots sometimes write a typed-answer question with an mcq-style
   // "answers" array. The correct ones are exactly the accepted answers.
   if ((next.type === 'text' || next.type === 'voice_text')

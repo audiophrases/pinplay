@@ -5731,6 +5731,17 @@ function summarizeHistoryAnswer(question, answer) {
   return String(answer || '');
 }
 
+// One entry per ____ in the sentence; a gap's alternatives go inside its entry,
+// comma-separated ("haven't seen, have not seen"). AI quizzes sometimes list
+// them as separate entries instead, which drew a second box after the sentence
+// and graded a right answer as wrong. With a single blank in the prompt, the
+// entries can only be alternatives, so they are merged into one.
+function contextGapList(question) {
+  const gaps = (Array.isArray(question?.gaps) ? question.gaps : []).map((g) => String(g ?? '').trim()).filter(Boolean);
+  const blanks = (String(question?.prompt || '').match(/_{2,}|\[\s*\]/g) || []).length;
+  return blanks === 1 && gaps.length > 1 ? [gaps.join(', ')] : gaps;
+}
+
 function effectiveQuestionIndex(room) {
   const total = Number(room?.quiz?.questions?.length || 0);
   if (total <= 0) return -1;
@@ -6134,12 +6145,12 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
       media: publicQuestionMediaPayload(question),
       language: question.type === 'voice_text' ? String(question.language || 'en-US-Wave') : undefined,
       answerLanguage: (question.type === 'voice_text' || question.type === 'voice_record') ? String(question.answerLanguage || '') : undefined,
-      gapCount: question.type === 'context_gap' ? Number((question.gaps || []).filter(Boolean).length || 0) : undefined,
+      gapCount: question.type === 'context_gap' ? contextGapList(question).length : undefined,
       leftItems: question.type === 'match_pairs' ? (question.pairs || []).map((p) => String(p.left || '')) : undefined,
       rightOptions: question.type === 'match_pairs' ? stableShuffle((question.pairs || []).map((p) => String(p.right || '')), question.id || question.prompt || 'pairs') : undefined,
       requiredErrors: question.type === 'error_hunt' ? countErrorHuntRequiredTokens(question.prompt, question.corrected) : undefined,
       accepted: includeAnswerKey && (question.type === 'text' || question.type === 'voice_text') ? (question.accepted || []) : undefined,
-      gaps: includeAnswerKey && question.type === 'context_gap' ? (question.gaps || []) : undefined,
+      gaps: includeAnswerKey && question.type === 'context_gap' ? contextGapList(question) : undefined,
       pairs: includeAnswerKey && question.type === 'match_pairs' ? (question.pairs || []).map((p) => ({ left: String(p.left || ''), right: String(p.right || '') })) : undefined,
       corrected: includeAnswerKey && question.type === 'error_hunt' ? String(question.corrected || '') : undefined,
       correctedVariants: includeAnswerKey && question.type === 'error_hunt' && Array.isArray(question.correctedVariants) ? question.correctedVariants : undefined,
@@ -6325,7 +6336,7 @@ function evaluate(question, answer) {
   }
 
   if (question.type === 'context_gap') {
-    const g = gradeContextGap(answer, question.gaps || []);
+    const g = gradeContextGap(answer, contextGapList(question));
     return { correct: g.correct, partialScore: g.score, partialTotal: g.total };
   }
 
@@ -6515,7 +6526,7 @@ function normalizeQuiz(quiz) {
     }
 
     if (q.type === 'context_gap') {
-      const gaps = (q.gaps || []).map((x) => String(x || '').slice(0, 120)).filter(Boolean).slice(0, 10);
+      const gaps = contextGapList(q).map((x) => x.slice(0, 120)).slice(0, 10);
       if (gaps.length < 1) return;
       normalized.questions.push({ ...base, gaps });
       return;
@@ -9890,7 +9901,7 @@ function hostCorrectSummary(question) {
   }
 
   if (question.type === 'context_gap') {
-    return (question.gaps || []).filter(Boolean).join(' | ');
+    return contextGapList(question).join(' | ');
   }
 
   if (question.type === 'match_pairs') {

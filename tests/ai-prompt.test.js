@@ -21,7 +21,7 @@ before(() => {
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
-    'countErrorHuntRequiredTokens', 'normalizeWordle', 'normalizeQuiz', 'detectQuestionMediaProvider',
+    'countErrorHuntRequiredTokens', 'normalizeWordle', 'normalizeQuiz', 'detectQuestionMediaProvider', 'contextGapList',
   ], { crypto: require('node:crypto').webcrypto });
 });
 
