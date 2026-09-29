@@ -15,6 +15,23 @@ connection. Planned 2026-09-29.
   revealed, scores. Screens only show what it sends, so all screens still
   advance together, and more tightly than now (a push reaches every screen at
   once instead of within the next 2 s poll).
+- Fairer too. With polling, each phone sees a new question 0–2 s after Next
+  (~1 s on average). The countdown ends at the server deadline
+  (`questionDeadlineAt`), so that delay comes off the student's answering time,
+  and since the first two correct answers score 100% (then 90%, 80%), the phones
+  that happened to poll first get a head start. A push removes both.
+
+## Considered and rejected (2026-09-29)
+
+- **Slower polling between questions** (5 s): the new question would reach
+  phones up to 5 s late, costing answer time and making the speed ranking more
+  random. Host polling 1 s → 2 s is harmless but saves only ~3% (1 of 31
+  screens). Slowing only while a student waits after answering saves ~20% but
+  delays their right/wrong by up to 5 s. Not worth it.
+- **Workers Paid ($5/month)** removes the quota concern without code changes
+  (10M Worker requests and 1M Durable Object requests a month included, then
+  $0.30 and $0.15 per million). This plan is about staying on the free plan and
+  about fairness/smoothness.
 - The messages carry exactly what the polls return today (`hostState(room)` for
   the host, `playerState(room, playerId)` for each student), so the page
   renderers (`renderHostState`, `renderPlayerState`) are unchanged.
