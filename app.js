@@ -17500,6 +17500,21 @@ function readingFormatButtonsHtml(target) {
 
 const READING_FORMAT_MARKS = { bold: '**', italic: '*', underline: '__' };
 
+// Selecting text in a dialog and releasing the mouse outside it makes the
+// browser fire a click on the dialog's full-screen backdrop, which closes most
+// dialogs on this page. A click that was pressed inside and released on such a
+// backdrop is not a click on the backdrop: drop it.
+let lastPressTarget = null;
+document.addEventListener('pointerdown', (e) => { lastPressTarget = e.target; }, true);
+document.addEventListener('click', (e) => {
+  const target = e.target;
+  const pressed = lastPressTarget;
+  if (!pressed || pressed === target || !(target instanceof Element) || !target.contains(pressed)) return;
+  if (getComputedStyle(target).position !== 'fixed') return;
+  e.stopPropagation();
+  e.preventDefault();
+}, true);
+
 // Wrap (or unwrap) the textarea's selection in a format mark.
 function wrapReadingSelection(textarea, format) {
   const mark = READING_FORMAT_MARKS[format];
@@ -17701,7 +17716,10 @@ function openMediaManager() {
   };
 
   overlay.addEventListener('click', async (e) => {
-    if (e.target === overlay || e.target.closest('[data-mm-close]')) { closeMediaManager(); return; }
+    // Only a click that starts and ends on the backdrop closes the panel: a
+    // text selection dragged out of the panel ends with a click on the backdrop.
+    const backdropClick = e.target === overlay && overlay.dataset.pressedOnBackdrop === '1';
+    if (backdropClick || e.target.closest('[data-mm-close]')) { closeMediaManager(); return; }
 
     const apply = e.target.closest('[data-mm-apply]');
     if (apply) {
@@ -17776,6 +17794,10 @@ function openMediaManager() {
       state.anchor = next.anchor;
       refreshMediaSelection();
     }
+  });
+
+  overlay.addEventListener('pointerdown', (e) => {
+    overlay.dataset.pressedOnBackdrop = e.target === overlay ? '1' : '';
   });
 
   // Shift+click would otherwise highlight text across the rows.
