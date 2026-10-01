@@ -508,6 +508,7 @@ const livePinHudEl = document.getElementById('livePinHud');
 const hallHintEl = document.getElementById('hallHint');
 const hallLobbyPlayersEl = document.getElementById('hallLobbyPlayers');
 const projectorFullscreenBtn = document.getElementById('projectorFullscreenBtn');
+const projectorStartBtn = document.getElementById('projectorStartBtn');
 const projectorTimerEl = document.getElementById('projectorTimer');
 const projectorAnswersEl = document.getElementById('projectorAnswers');
 const projectorProgressEl = document.getElementById('projectorProgress');
@@ -4727,6 +4728,12 @@ function bindLiveEvents() {
     });
   }
 
+  if (projectorStartBtn) {
+    projectorStartBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // the header around it collapses the live screen on click
+      hostStartGame();
+    });
+  }
   if (projectorFullscreenBtn) {
     projectorFullscreenBtn.addEventListener('click', toggleProjectorFullscreen);
     document.addEventListener('fullscreenchange', syncFullscreenButtonLabel);
@@ -10657,6 +10664,13 @@ function handleHostHotkeys(e) {
   const state = live.host.state;
   if (!state) return;
 
+  // S starts a classic game, only while its lobby waits (Ctrl+S saves).
+  if ((e.key === 's' || e.key === 'S') && state.phase === 'lobby') {
+    e.preventDefault();
+    hostStartGame();
+    return;
+  }
+
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
     hostPrevQuestion();
@@ -11301,6 +11315,8 @@ function renderHostState(state) {
 
   if (projectorAnswersEl) projectorAnswersEl.textContent = t("👥 Answers: {p1} / {p2}", { p1: state.responseCount, p2: state.playerCount });
   if (projectorProgressEl) projectorProgressEl.textContent = `❓ ${state.currentIndex + 1} / ${state.totalQuestions}`;
+  // Start on the projected screen, like the Cup board: only while the lobby waits.
+  if (projectorStartBtn) projectorStartBtn.classList.toggle('hidden', state.phase !== 'lobby');
   if (projectorScoresEl) {
     const showScores = state.phase === 'results' || live.host.rankingMode;
     renderProjectorScores(showScores ? (state.players || []) : [], { animate: live.host.rankingMode });

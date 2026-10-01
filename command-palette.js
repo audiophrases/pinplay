@@ -117,7 +117,7 @@
     B('createLiveBtn', LIVE, 'start new live game pin host'),
     B('createArenaBtn', LIVE, 'start new cup arena pinplay cup game'),
     B('randomNamesToggle', LIVE, 'login random names sign in mode'),
-    B('hostStartBtn', LIVE, 'start game begin'),
+    B('hostStartBtn', LIVE, 'start game begin', { key: 'S' }),
     B('hostNextBtn', LIVE, 'next question forward', { key: '→', label: () => t('Next question') }),
     B('hostPrevBtn', LIVE, 'previous question back', { key: '←', label: () => t('Previous question') }),
     {
