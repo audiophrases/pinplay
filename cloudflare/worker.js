@@ -208,11 +208,16 @@ export default {
               const data = await obj.json();
               if (data?.title) q.title = data.title;
               if (data?.questions?.length) q.questionCount = data.questions.length;
+              // A copy a live game made on its own. One the teacher opened and
+              // saved again carries _r2QuizId, like every ☁️ Save.
+              if (isLiveGameCopyId(q.pin) && !data?._r2QuizId) q.liveCopy = true;
             }
           } catch (e) { /* skip */ }
         }
-        // Sort newest-first by uploaded timestamp (fallback to pin desc)
+        // Sort newest-first by uploaded timestamp (fallback to pin desc),
+        // old live-game copies after the teacher's own saves
         quizzes.sort((a, b) => {
+          if (!!a.liveCopy !== !!b.liveCopy) return a.liveCopy ? 1 : -1;
           const ta = a.uploaded ? new Date(a.uploaded).getTime() : 0;
           const tb = b.uploaded ? new Date(b.uploaded).getTime() : 0;
           if (ta !== tb) return tb - ta;
@@ -247,12 +252,17 @@ export default {
         // Delete the quiz JSON
         await env.QUIZ_MEDIA.delete(key);
 
-        // Delete associated media under <mediaPrefix><quizId>/
+        // Delete associated media under <mediaPrefix><quizId>/. Not for a
+        // live-game copy: its pictures belong to the quiz it was copied from,
+        // and any under <PIN>/ were added after opening the copy, so
+        // assignments made from it may still show them.
         let deletedMedia = 0;
-        const listed = await env.QUIZ_MEDIA.list({ prefix: `${mediaPrefix}${quizId}/`, limit: 1000 });
-        for (const obj of listed.objects || []) {
-          await env.QUIZ_MEDIA.delete(obj.key);
-          deletedMedia += 1;
+        if (!isLiveGameCopyId(quizId)) {
+          const listed = await env.QUIZ_MEDIA.list({ prefix: `${mediaPrefix}${quizId}/`, limit: 1000 });
+          for (const obj of listed.objects || []) {
+            await env.QUIZ_MEDIA.delete(obj.key);
+            deletedMedia += 1;
+          }
         }
 
         return json({ ok: true, deletedMedia, deletedKey: key, quizId });
@@ -270,7 +280,7 @@ export default {
         const body = await safeJson(request);
         const rawId = String(body?.quizId || `quiz-${Date.now()}`);
         // Reject path-traversal attempts in quizId
-        if (rawId.includes('/') || rawId.includes('..') || !/^[A-Za-z0-9_.-]{1,80}$/.test(rawId)) {
+        if (!sanitizeCloudQuizId(rawId)) {
           return json({ error: 'invalid quizId' }, 400);
         }
         const key = `${prefix}${rawId}.json`;
@@ -400,17 +410,10 @@ export default {
         });
 
         if (initRes.status === 201) {
-          const data = await initRes.json();
-          // Also save quiz JSON to R2 for Cloud listing
-          if (env.QUIZ_MEDIA) {
-            const quizKey = `quizzes/${pin}.json`;
-            try {
-              await env.QUIZ_MEDIA.put(quizKey, JSON.stringify(quiz), {
-                httpMetadata: { contentType: 'application/json' }
-              });
-            } catch (e) { /* non-critical */ }
-          }
-          return json(data, 201);
+          // No copy goes to the cloud list: ☁️ Save is the only way in. A copy
+          // per game (quizzes/<PIN>.json) duplicated the quiz every time, and
+          // anyone with the PIN could read its answers through /api/media/.
+          return json(await initRes.json(), 201);
         }
       }
 
@@ -1134,7 +1137,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
       }));
     }
 
@@ -1702,6 +1705,7 @@ export default {
       if (typeof body?.title === 'string') forward.title = String(body.title).slice(0, 120);
       if (typeof body?.randomNames === 'boolean') forward.randomNames = !!body.randomNames;
       if (typeof body?.examMode === 'boolean') forward.examMode = !!body.examMode;
+      if (sanitizeCloudQuizId(body?.cloudQuizId)) forward.cloudQuizId = body.cloudQuizId;
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/update-quiz', {
@@ -2708,6 +2712,8 @@ export class QuizRoom {
           pendingGradingCount: 0,
           pendingAttemptsCount: 0,
         };
+        const cloudQuizId = sanitizeCloudQuizId(body?.cloudQuizId);
+        if (cloudQuizId) assignment.cloudQuizId = cloudQuizId;
 
         // Adaptive: N questions per student, capped at the questions it can serve.
         const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
@@ -2764,6 +2770,8 @@ export class QuizRoom {
           pendingGradingCount: 0,
           pendingAttemptsCount: 0,
         };
+        const cloudQuizId = sanitizeCloudQuizId(body?.cloudQuizId);
+        if (cloudQuizId) assignment.cloudQuizId = cloudQuizId;
 
         const seenKeys = new Set();
         const attemptsToSave = [];
@@ -4177,7 +4185,9 @@ export class QuizRoom {
         const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         const meta = publicAssignment(assignment, { includeQuiz: false });
-        return json({ ok: true, assignment: meta, quiz: assignment.quiz || null });
+        // cloudQuizId stays out of publicAssignment: students get that, and the
+        // id names a quiz JSON (answers included) that /api/media/ serves.
+        return json({ ok: true, assignment: meta, quiz: assignment.quiz || null, cloudQuizId: assignment.cloudQuizId || '' });
       }
 
       if (url.pathname === '/assignments/update-quiz' && request.method === 'POST') {
@@ -4269,6 +4279,9 @@ export class QuizRoom {
           assignment.examMode = !!body.examMode;
         }
 
+        const cloudQuizId = sanitizeCloudQuizId(body?.cloudQuizId);
+        if (cloudQuizId) assignment.cloudQuizId = cloudQuizId;
+
         // Question set just changed — `pendingGradingCount` and
         // `pendingAttemptsCount` need a full recompute because previously
         // pending answers may now point at non-teacher-graded questions (or
@@ -4324,6 +4337,10 @@ export class QuizRoom {
             gameMode: options.gameMode === 'arena' ? 'arena' : 'classic',
           },
         };
+        // Handed to the results assignment (maybeSnapshotLiveGame), so opening
+        // it in the builder stays linked to the same cloud quiz.
+        const cloudQuizId = sanitizeCloudQuizId(options.cloudQuizId);
+        if (cloudQuizId) room.cloudQuizId = cloudQuizId;
         if (room.settings.gameMode === 'arena') {
           const dur = Number(options.arenaDurationSec);
           room.arena = {
@@ -7233,6 +7250,20 @@ function quizPrefixFor(auth) {
   return `workspaces/${auth.wsid}/quizzes/`;
 }
 
+// A cloud quiz's id: the name of its `<quizPrefix><id>.json`. Assignments and
+// live games keep the one they were made from, so opening them in the builder
+// and pressing ☁️ Save updates that quiz instead of adding a copy.
+function sanitizeCloudQuizId(value) {
+  const id = String(value || '');
+  return /^[A-Za-z0-9_.-]{1,80}$/.test(id) && !id.includes('..') ? id : '';
+}
+
+// Until 2026-10 every live game also saved its quiz as quizzes/<PIN>.json.
+// Those copies are still in the cloud list.
+function isLiveGameCopyId(id) {
+  return /^\d{6}$/.test(String(id || ''));
+}
+
 function mediaPrefixFor(auth) {
   if (!auth) return null;
   if (auth.role === 'owner') return ''; // owner can write any top-level key
@@ -9733,6 +9764,7 @@ async function maybeSnapshotLiveGame(room, env) {
         quiz: room.quiz,
         title: room.quiz?.title || 'Live game',
         pin: room.pin,
+        cloudQuizId: room.cloudQuizId || '',
         mode: room.settings?.gameMode === 'arena' ? 'arena' : 'classic',
         finishedAt: Number(room.questionClosedAt || 0) || Date.now(),
         attempts,

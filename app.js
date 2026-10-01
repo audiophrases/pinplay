@@ -3979,7 +3979,9 @@ async function openGifSearchDialog(questionIdx) {
   if (input.value.trim()) runSearch();
 }
 
-function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null }) {
+// bulkAction: optional { label, run } button under the title; the dialog
+// closes after run() finishes.
+function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = null, bulkAction = null }) {
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
 
@@ -4036,7 +4038,22 @@ function showQuizManagerDialog({ title, items, onOpen, onDelete, highlightId = n
     });
   }
 
-  dialog.append(head, list);
+  dialog.append(head);
+  if (bulkAction) {
+    const bulkBtn = document.createElement('button');
+    bulkBtn.className = 'btn top-space';
+    bulkBtn.textContent = bulkAction.label;
+    bulkBtn.addEventListener('click', async () => {
+      bulkBtn.disabled = true;
+      try {
+        if (await bulkAction.run() !== false) overlay.remove();
+      } finally {
+        bulkBtn.disabled = false;
+      }
+    });
+    dialog.appendChild(bulkBtn);
+  }
+  dialog.append(list);
   overlay.appendChild(dialog);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
@@ -4111,18 +4128,48 @@ async function openQuizFromCloud() {
       return;
     }
 
+    // Old automatic live-game copies that also have a save of the teacher's own
+    // with the same title. A copy without one may be the only cloud version of
+    // that quiz, so the bulk button leaves it for the teacher to decide.
+    const titleKey = (q) => String(q.title || '').trim().toLowerCase();
+    const savedTitles = new Set(cloudQuizzes.filter((q) => !q.liveCopy).map(titleKey));
+    const copies = cloudQuizzes.filter((q) => q.liveCopy);
+    const removable = copies.filter((q) => savedTitles.has(titleKey(q)));
+    const kept = copies.length - removable.length;
+    const deleteCloudQuiz = (quizKey) => fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
+
     showQuizManagerDialog({
       title: '☁️ Cloud quizzes (R2)',
-      items: cloudQuizzes.map((q, i) => ({
-        id: q.key,
-        raw: q,
-        label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${(q.size / 1024).toFixed(0)} KB`
-      })),
+      bulkAction: removable.length ? {
+        label: t('Remove automatic copies ({n})', { n: removable.length }),
+        run: async () => {
+          const keptNote = kept ? `\n\n${t('Kept, because they have no save of your own with the same title: {n}. Check those one by one.', { n: kept })}` : '';
+          if (!confirm(t('Remove {n} automatic copies made by live games? Each one has a save of your own with the same title. Pictures are not touched.', { n: removable.length }) + keptNote)) return false;
+          let removed = 0;
+          for (const q of removable) {
+            setStatus(hostStatusEl, t('Removing automatic copies… {done}/{total}', { done: removed, total: removable.length }), 'ok');
+            const res = await deleteCloudQuiz(q.key);
+            if (res.ok) removed += 1;
+          }
+          setStatus(hostStatusEl, t('Removed {n} automatic copies from the cloud.', { n: removed }), removed === removable.length ? 'ok' : 'bad');
+          return true;
+        },
+      } : null,
+      items: cloudQuizzes.map((q) => {
+        // Saved date, and old automatic live-game copies marked, so duplicates
+        // can be told apart.
+        const saved = q.uploaded ? `${new Date(q.uploaded).toLocaleString()} · ` : '';
+        const copy = q.liveCopy ? ` · ${t('automatic copy from live game {pin}', { pin: q.pin })}` : '';
+        return {
+          id: q.key,
+          raw: q,
+          label: `${q.title || q.pin} (${q.questionCount || '?'} Q) — ${saved}${(q.size / 1024).toFixed(0)} KB${copy}`,
+        };
+      }),
       onOpen: async (item) => openCloudQuizByKey(item.raw.key, item.label),
       onDelete: async (item) => {
         // Delete from R2 via Worker API
-        const quizKey = item.raw.key;
-        await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
+        await deleteCloudQuiz(item.raw.key);
         setStatus(hostStatusEl, t('Deleted from Cloud: {label}', { label: item.label }), 'ok');
       },
       highlightId: null,
@@ -4791,6 +4838,7 @@ async function createLiveGame(opts = {}) {
           randomNames: isRandomNamesEnabled(),
           gameMode: arenaMode ? 'arena' : 'classic',
           arenaAdaptive,
+          cloudQuizId: quiz._r2QuizId || '',
         },
       },
     });
@@ -10062,6 +10110,7 @@ async function createAssignmentFromCurrentQuiz() {
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
         adaptiveCount,
+        cloudQuizId: quiz._r2QuizId || '',
         quiz: normalizeQuizForLive(quiz),
       },
     });
@@ -10160,6 +10209,9 @@ async function openAssignmentInBuilder(code, titleHint) {
 
   validateImportedQuiz(loadedQuiz);
   quiz = loadedQuiz;
+  // The cloud quiz it was made from, so ☁️ Save updates that one instead of
+  // adding a copy. Assignments from before this was recorded have none.
+  if (data?.cloudQuizId) quiz._r2QuizId = String(data.cloudQuizId);
   // Prefer the assignment's canonical title over the embedded quiz title (they can drift).
   const assignmentTitle = String(data?.assignment?.title || titleHint || loadedQuiz.title || '').trim();
   if (assignmentTitle) quiz.title = assignmentTitle;
@@ -10222,6 +10274,7 @@ async function applyQuizToAssignment() {
         title: String(quiz.title || '').trim(),
         randomNames: isRandomNamesEnabled(),
         examMode: assignmentExamMode,
+        cloudQuizId: quiz._r2QuizId || '',
       },
     });
 

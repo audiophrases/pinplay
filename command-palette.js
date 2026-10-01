@@ -307,8 +307,9 @@
     });
     cloudQuizzes.forEach((q) => {
       const label = q.title || q.pin || q.key;
+      const copy = q.liveCopy ? ` · ${t('automatic copy from live game {pin}', { pin: q.pin })}` : '';
       items.push({
-        id: `quiz:cloud:${q.key}`, label, sub: `${t('Cloud')} · ${q.questionCount || '?'} Q`, tag: t('Quiz'),
+        id: `quiz:cloud:${q.key}`, label, sub: `${t('Cloud')} · ${q.questionCount || '?'} Q${copy}`, tag: t('Quiz'),
         kw: 'open quiz cloud',
         run: async () => {
           try { await openCloudQuizByKey(q.key, label); showBuilder(); } catch (err) {
