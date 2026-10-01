@@ -662,3 +662,40 @@ describe('repeats and retry spacing (2026-09-27)', () => {
     }
   });
 });
+
+describe('at the top level, variety wins once the top questions are mastered', () => {
+  // 3 A1, 3 B1 and 6 C2 questions; a settled C2 student.
+  const qs = [...Array(3)].map(() => q('A1')).concat([...Array(3)].map(() => q('B1')), [...Array(6)].map(() => q('C2')));
+  const start = () => {
+    const { bands, pool } = E.adaptivePool(qs, qs.map((_, i) => i));
+    return { st: E.adaptiveInit(bands, { cefr: 5.5, answered: 200 }), pool };
+  };
+  const serve = (st, pool, rng, right = true) => {
+    const qi = E.adaptiveNext(st, pool, rng);
+    E.adaptiveRecord(st, qi, pool.find((p) => p.qi === qi).band, right, rng);
+    return qi;
+  };
+
+  it('feeds unseen lower questions level by level going down, then returns to the top ones', () => {
+    const { st, pool } = start();
+    const rng = seeded(7);
+    const served = [...Array(13)].map(() => serve(st, pool, rng));
+    assert.deepEqual(served.slice(0, 6).map((qi) => qs[qi].cefr), Array(6).fill('C2'));
+    const lower = served.slice(6, 12);
+    assert.deepEqual(lower.map((qi) => qs[qi].cefr), ['B1', 'B1', 'B1', 'A1', 'A1', 'A1'], 'the level below first');
+    assert.deepEqual([...lower].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5], 'every lower question once, none repeated');
+    assert.equal(levelOf(st), 'C2');
+    assert.equal(qs[served[12]].cefr, 'C2', 'lower questions used up: back to the top');
+  });
+
+  it('keeps to the top level until a missed top question is answered right', () => {
+    const { st, pool } = start();
+    const rng = seeded(11);
+    for (let i = 0; i < 5; i++) serve(st, pool, rng);
+    const missed = serve(st, pool, rng, false);
+    assert.equal(levelOf(st), 'C2');
+    assert.equal(qs[serve(st, pool, rng)].cefr, 'C2');
+    assert.equal(serve(st, pool, rng), missed, 'the missed top question comes back');
+    assert.equal(qs[serve(st, pool, rng)].cefr === 'C2', false, 'now all top questions are right: lower ones');
+  });
+});

@@ -163,9 +163,10 @@ are the *settled* sizes (a level resting on ~50 answers); section 4a scales them
 Picking the next question:
 
 1. If a `retry` item is due (after 6–10 other questions; 2–3 before 2026-09-27) **and the student is at or above that question's band**, serve it. Missed questions come back with spacing, not straight away, and a student who dropped isn't fed harder retries.
-2. Otherwise draw from the current band. Prefer questions not yet seen, then ones seen least often. Never repeat the one just answered (same rule as today).
-3. If the band has run out, reuse its questions and weight the ones the student missed (today's 60/40 rule, applied within the band). If the band is empty, use the nearest band, going down first.
-4. A student stuck at the floor who keeps missing questions naturally keeps getting the same A1 questions again. That is the consolidation loop from the discussion.
+2. **At the top level, variety wins (since 2026-10-01, owner's request).** When the student is at the quiz's highest band and has answered every question of that band right (its latest try), serve a lower question they haven't had yet: from the band just below (C1 under C2) while it has unseen ones, then the next band down, at random within the band, instead of circling the same few top questions. A right answer there can't lift them further; a miss lowers the level as usual (it's an easier question). When no unseen lower question is left, carry on with step 3.
+3. Otherwise draw from the current band. Prefer questions not yet seen, then ones seen least often. Never repeat the one just answered (same rule as today).
+4. If the band has run out, reuse its questions and weight the ones the student missed (today's 60/40 rule, applied within the band). If the band is empty, use the nearest band, going down first.
+5. A student stuck at the floor who keeps missing questions naturally keeps getting the same A1 questions again. That is the consolidation loop from the discussion.
 
 The engine only needs `correct: true/false`. It doesn't care whether the
 student is *shown* the result, so it works with instant feedback, end-of-quiz

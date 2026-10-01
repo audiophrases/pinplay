@@ -9298,6 +9298,20 @@ function adaptiveNext(st, pool, rng = Math.random) {
     st.retry = st.retry.filter((r) => r !== due);
     return due.qi;
   }
+  // At the top level with every top question answered right, variety wins
+  // over level: questions the student hasn't had yet from the level below
+  // (C1 under C2), then the next one down, at random within the level,
+  // instead of circling the same few top ones. Once those run out, back to the top.
+  const top = st.bands.length - 1;
+  if (band === top && top > 0) {
+    const topLeft = pool.filter((p) => p.band === top && !(p.teacher && st.seen[p.qi]));
+    if (topLeft.every((p) => st.seen[p.qi]?.ok)) {
+      for (let b = top - 1; b >= 0; b--) {
+        const fresh = pool.filter((p) => p.band === b && !st.seen[p.qi]);
+        if (fresh.length) return fresh[Math.floor(rng() * fresh.length)].qi;
+      }
+    }
+  }
   const order = [band];
   for (let d = 1; d < st.bands.length; d++) order.push(band - d, band + d);
   for (const b of order) {
