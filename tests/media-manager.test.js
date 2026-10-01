@@ -26,7 +26,7 @@ const NAMES = [
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'prepareQuestionTts',
   'sha256HexClient', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
-  'setMediaKeywordOn', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
+  'setMediaKeywordOn', 'answerMediaKeyword', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -598,5 +598,39 @@ describe('Change voice', () => {
     // The builder's voice <select> must list it, or syncing would fall back to the first default.
     const html = A.buildAudioSettingsMarkup(0, q);
     assert.match(html, new RegExp(`<option value="${voice}" selected>`));
+  });
+});
+describe('Replace, Use each answer: answerMediaKeyword', () => {
+  const { A } = load(() => jsonRes(200, {}));
+  const kw = (q) => A.answerMediaKeyword(q);
+
+  it('takes the answer of each auto-graded type', () => {
+    assert.equal(kw({ type: 'mcq', answers: [{ text: 'cat', correct: false }, { text: 'dog', correct: true }] }), 'dog');
+    assert.equal(kw({ type: 'multi', answers: [{ text: 'red' }, { text: 'blue', correct: true }, { text: 'green', correct: true }] }), 'blue');
+    assert.equal(kw({ type: 'text', accepted: ['', 'ice cream', 'icecream'] }), 'ice cream');
+    assert.equal(kw({ type: 'voice_text', accepted: ['run'] }), 'run');
+    assert.equal(kw({ type: 'context_gap', gaps: ['dreamed, dreamt', 'went'] }), 'dreamed');
+    assert.equal(kw({ type: 'spellingbee', words: [{ target: 'elephant' }, 'zebra'] }), 'elephant');
+    assert.equal(kw({ type: 'wordle', word: 'tiger' }), 'tiger');
+  });
+
+  it('keeps answers of up to 3 words whole, else takes the first word', () => {
+    assert.equal(kw({ type: 'text', accepted: ['ran away fast'] }), 'ran away fast');
+    assert.equal(kw({ type: 'text', accepted: ['She has been living here'] }), 'She');
+    assert.equal(kw({ type: 'text', accepted: ['"Hello, world!"'] }), 'Hello, world');
+    assert.equal(kw({ type: 'text', accepted: ['Yes, I have been there.'] }), 'Yes');
+  });
+
+  it('gives nothing for types without a single answer worth a search', () => {
+    for (const q of [
+      { type: 'tf', answers: [{ text: 'True', correct: true }, { text: 'False' }] },
+      { type: 'error_hunt', corrected: 'They don\'t see it.' },
+      { type: 'match_pairs', pairs: [{ left: 'a', right: 'b' }] },
+      { type: 'puzzle', items: ['a', 'b', 'c'] },
+      { type: 'slider', target: 5 },
+      { type: 'open' }, { type: 'speaking' }, { type: 'pin' },
+      { type: 'mcq', answers: [{ text: 'x' }] },
+      { type: 'text', accepted: ['  '] },
+    ]) assert.equal(kw(q), '', q.type);
   });
 });

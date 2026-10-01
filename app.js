@@ -17124,6 +17124,39 @@ function setMediaKeywordOn(questions, kind, keyword) {
   return changed;
 }
 
+// Replace "Use each answer": the keyword a question's own answer gives — the
+// whole answer when it is 3 words or fewer, else its first word. '' for types
+// with no single answer worth a search: True/False ("True"), error hunt (a
+// whole sentence), pairs, puzzles, sliders and teacher-graded answers.
+function answerMediaKeyword(q) {
+  const firstOf = (list) => String((Array.isArray(list) ? list : []).find((s) => String(s || '').trim()) || '');
+  let answer = '';
+  switch (q?.type) {
+    case 'mcq':
+    case 'multi':
+      answer = firstOf((q.answers || []).filter((a) => a?.correct).map((a) => a.text));
+      break;
+    case 'text':
+    case 'voice_text':
+      answer = firstOf(q.accepted);
+      break;
+    case 'context_gap':
+      answer = firstOf(q.gaps).split(',')[0]; // "dreamed, dreamt" lists alternatives
+      break;
+    case 'spellingbee':
+      answer = firstOf((q.words || []).map((w) => (typeof w === 'string' ? w : w?.target)));
+      break;
+    case 'wordle':
+      answer = q.word;
+      break;
+    default:
+      return '';
+  }
+  const words = String(answer || '').replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '').split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+  return (words.length <= 3 ? words.join(' ') : words[0].replace(/[\p{P}]+$/u, '')).slice(0, 140);
+}
+
 // Change voice: for questions read with TTS. The old clip key is dropped so the
 // new one is prepared. Returns the changed questions.
 function setTtsVoiceOn(questions, voice, quizCtx) {
@@ -17203,7 +17236,7 @@ function scheduleMediaManagerRender() {
 
 // Runs perQuestion over the questions, a few at a time, then (withTts) prepares
 // their missing TTS audio. Cancel stops after the rows already running.
-async function runMediaManagerJob(label, questions, perQuestion, { withTts = false } = {}) {
+async function runMediaManagerJob(label, questions, perQuestion, { withTts = false, notes = [] } = {}) {
   const state = mediaManagerState;
   if (state.job || !questions.length) return;
   const job = { label, total: questions.length, done: 0, cancelled: false, working: new Set() };
@@ -17247,6 +17280,7 @@ async function runMediaManagerJob(label, questions, perQuestion, { withTts = fal
   if (counts.failed) parts.push(t('{n} failed', { n: counts.failed }));
   if (counts.limited) parts.push(t('{n} held back by the GIF limit', { n: counts.limited }));
   if (counts.skipped) parts.push(t('{n} had nothing to do', { n: counts.skipped }));
+  parts.push(...notes);
   if (job.cancelled) parts.push(t('cancelled'));
   state.notice = `${label}: ${parts.join(' · ')}`;
   state.job = null;
@@ -17456,6 +17490,7 @@ function refreshMediaSelection() {
        </select>
        <input type="text" data-mm-replace-keyword maxlength="140" placeholder="${escapeHtml(t('New keyword'))}" />
        <button type="button" class="btn btn-sm primary" data-mm-replace-apply>${escapeHtml(t('Set keyword and generate'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-answer-keywords title="${escapeHtml(t('For questions with no keyword and no media yet: search with each question’s own answer (the whole answer when it is 3 words or fewer, else its first word)'))}">${escapeHtml(t('Use each answer'))}</button>
        ${pickable ? `<button type="button" class="btn btn-sm" data-mm-pick>${escapeHtml(t('Pick by hand…'))}</button>` : ''}
        <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
     const kindEl = bar.querySelector('[data-mm-replace-kind]');
@@ -17557,6 +17592,34 @@ function applyReplaceKeyword(kind, keyword) {
   }
   if (kind === 'gif' && !confirmGifSearchBudget(changed)) { renderBuilder(); renderMediaManager(); return; }
   runMediaManagerJob(t('Replace'), changed, generateMissingVisualFor);
+}
+
+// Replace, "Use each answer": every selected question with no keyword and no
+// picture, GIF or video gets its own answer (answerMediaKeyword) as the keyword.
+function applyAnswerKeywords(kind) {
+  const state = mediaManagerState;
+  const questions = mediaManagerJobQuestions('selected');
+  if (!questions.length) return;
+  const empty = questions.filter((q) => questionMediaStatus(q, quiz).visual.status === 'none');
+  const changed = [];
+  let noAnswer = 0;
+  empty.forEach((q) => {
+    const kw = answerMediaKeyword(q);
+    if (!kw) { noAnswer += 1; return; }
+    changed.push(...setMediaKeywordOn([q], kind, kw));
+  });
+  const notes = [];
+  const hadMedia = questions.length - empty.length;
+  if (hadMedia) notes.push(t('{n} already had media or a keyword', { n: hadMedia }));
+  if (noAnswer) notes.push(t('{n} have no answer to search for (True/False, error hunt, pairs, open answers…)', { n: noAnswer }));
+  state.form = '';
+  if (!changed.length) {
+    state.notice = `${t('Use each answer')}: ${notes.join(' · ') || t('nothing to do')}`;
+    renderMediaManager();
+    return;
+  }
+  if (kind === 'gif' && !confirmGifSearchBudget(changed)) { renderBuilder(); renderMediaManager(); return; }
+  runMediaManagerJob(t('Use each answer'), changed, generateMissingVisualFor, { notes });
 }
 
 // Replace, one question: the existing picture or GIF picker, then refresh the table.
@@ -17843,6 +17906,10 @@ function openMediaManager() {
     if (removeBtn) { removeSelectedMedia(removeBtn.dataset.mmRemove); return; }
     if (e.target.closest('[data-mm-replace-apply]')) {
       applyReplaceKeyword(overlay.querySelector('[data-mm-replace-kind]')?.value, overlay.querySelector('[data-mm-replace-keyword]')?.value);
+      return;
+    }
+    if (e.target.closest('[data-mm-answer-keywords]')) {
+      applyAnswerKeywords(overlay.querySelector('[data-mm-replace-kind]')?.value);
       return;
     }
     if (e.target.closest('[data-mm-pick]')) {
