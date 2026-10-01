@@ -4001,6 +4001,51 @@ body.review-mode-active #joinSubmission {
   min-height: 0;
 }
 
+/* Classic lobby: each student as their avatar over their name (Cup avatars). */
+.hall-player-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .2rem;
+  min-width: 5.5rem;
+  max-width: 9rem;
+  padding: .45rem .6rem .5rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .06);
+}
+.hall-player-chip.is-new { animation: hallPlayerPop 520ms cubic-bezier(.2, .9, .3, 1.35) both; }
+.hall-player-avatar { display: block; width: 64px; height: 64px; }
+.hall-player-avatar .hall-av { width: 100%; height: 100%; display: block; }
+.hall-player-name {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  max-width: 100%;
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes hallPlayerPop {
+  0% { opacity: 0; transform: scale(.4) translateY(14px); }
+  70% { opacity: 1; transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hall-player-chip.is-new { animation: none; }
+}
+
+/* Ranking and final reveal rows: the avatar between rank and name. */
+.projector-score-av { width: 1.9em; height: 1.9em; flex: 0 0 auto; }
+
+/* Student header (classic live): a small avatar before the name. */
+#joinPlayerAvatar { display: inline-flex; align-items: center; margin-right: -9px; }
+#joinPlayerAvatar.hidden { display: none; }
+#joinPlayerAvatar .join-avatar { width: 28px; height: 28px; display: block; }
+
 /* ==========================================================================
    REMOVE FRAMES FROM EMOJI BUTTONS (Dice, Reactions)
    ========================================================================== */

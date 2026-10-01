@@ -467,7 +467,7 @@ export default {
         await stub.fetch('https://room/join', {
           method: 'POST',
           headers: {},
-          body: JSON.stringify({ name, studentToken, clientId }),
+          body: JSON.stringify({ name, studentToken, clientId, avatar: body?.avatar }),
         }),
       );
     }
@@ -4504,6 +4504,9 @@ export class QuizRoom {
             source: room.settings?.randomNames ? 'random' : 'manual',
           },
           ...(verifiedLevel ? { savedLevel: verifiedLevel } : {}),
+          // Classic games show it in the lobby, the ranking and the student's
+          // header: the one they built in a Cup, else the same default a Cup gives.
+          avatar: arenaSanitizeAvatar(body?.avatar) || arenaDefaultAvatar(playerId),
         };
 
         appendRoomEvent(room, 'player_joined', {
@@ -5793,6 +5796,7 @@ function hostState(room) {
       score: p.score,
       answeredCurrent: !!responses[p.id],
       identity: p.identity || null,
+      avatar: p.avatar || arenaDefaultAvatar(p.id),
     }))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
@@ -5924,6 +5928,7 @@ function playerState(room, playerId) {
     pin: room.pin,
     name: player.name,
     identity: player.identity || null,
+    avatar: player.avatar || arenaDefaultAvatar(playerId),
     currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     score: player.score,

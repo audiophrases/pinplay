@@ -924,6 +924,8 @@ async function joinLiveGame() {
         pin: live.player.pin,
         name: username,
         clientId: live.player.clientId,
+        // The avatar built in a Cup, if any; the server picks one otherwise.
+        avatar: window.PinArena?.savedAvatar?.() || null,
       },
     });
 
@@ -1785,6 +1787,7 @@ async function proceedWithAssignmentStart(code, studentKey, username) {
   live.player.assignment.attemptId = data?.attempt?.id || null;
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
+  setJoinAvatar(null);
   // Reset ambient state for new assignment
   cancelPendingAssignmentQuestionAutoplay();
   stopAssignmentQuestionAudioPlayback();
@@ -2103,6 +2106,7 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
     live.player.assignment.currentIndex = 0;
     live.player.displayName = username;
     setJoinTitle(`${username} · ${code} · Review`);
+    setJoinAvatar(null);
 
     if (joinStepIdentityEl) joinStepIdentityEl.classList.add('hidden');
     if (joinStepPinEl) joinStepPinEl.classList.add('hidden');
@@ -3536,6 +3540,7 @@ function renderPlayerState(state) {
     live.player.displayName = latestName;
     setJoinTitle(latestName);
   }
+  setJoinAvatar(state?.avatar);
 
   if (joinProgressEl) joinProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (joinScoreEl) {
@@ -6319,6 +6324,18 @@ function setJoinTitle(name = '') {
   // Also update player name in header row
   const playerNameEl = document.getElementById('joinPlayerName');
   if (playerNameEl) playerNameEl.textContent = safe ? safe : '';
+}
+
+// Classic live games: the student's avatar next to their name in the header.
+// null clears it (assignments share the header).
+function setJoinAvatar(avatar) {
+  const el = document.getElementById('joinPlayerAvatar');
+  if (!el) return;
+  const key = avatar ? JSON.stringify(avatar) : '';
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.innerHTML = avatar && window.PinArena?.avatarSvg ? window.PinArena.avatarSvg(avatar, 'join-avatar') : '';
+  el.classList.toggle('hidden', !el.innerHTML);
 }
 
 // Bet selection toggle

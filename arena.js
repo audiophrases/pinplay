@@ -910,5 +910,8 @@
     submit,
     openHost,
     closeHost,
+    // Classic live games show the same avatars (lobby, ranking, header).
+    avatarSvg,
+    savedAvatar: loadSavedAvatar,
   };
 })();

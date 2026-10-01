@@ -12160,13 +12160,19 @@ function computeCrazyCountScore(toScore, p, elapsedMs) {
   return Number.isFinite(n) ? n : target;
 }
 
-function buildProjectorScoreItem(rank, name, score, medal = '🏅') {
+function buildProjectorScoreItem(rank, name, score, medal = '🏅', avatar = null) {
   const li = document.createElement('li');
   li.classList.add('projector-score-item', `rank-${Math.min(rank, 4)}`);
 
   const left = document.createElement('span');
   left.className = 'projector-score-left';
-  left.textContent = `${medal} ${rank}. ${name}`;
+  left.textContent = `${medal} ${rank}.`;
+  if (avatar && window.PinArena?.avatarSvg) {
+    left.insertAdjacentHTML('beforeend', window.PinArena.avatarSvg(avatar, 'projector-score-av'));
+  }
+  const nameEl = document.createElement('span');
+  nameEl.textContent = name;
+  left.appendChild(nameEl);
 
   const right = document.createElement('span');
   right.className = 'projector-score-value';
@@ -12238,7 +12244,7 @@ function renderProjectorScores(players, opts = {}) {
       if (elapsed < revealAt) continue;
       const p = revealSlice[rank - 1];
       if (!p) continue;
-      projectorScoresEl.appendChild(buildProjectorScoreItem(rank, p.name, p.score, medalForRank(rank)));
+      projectorScoresEl.appendChild(buildProjectorScoreItem(rank, p.name, p.score, medalForRank(rank), p.avatar));
     }
 
     const finalStartMs = revealTiming.drumrollTotalMs;
@@ -12285,7 +12291,7 @@ function renderProjectorScores(players, opts = {}) {
   viewPlayers.slice(0, 10).forEach((p, i) => {
     const medals = ['🥇', '🥈', '🥉'];
     const prefix = medals[i] || '🏅';
-    projectorScoresEl.appendChild(buildProjectorScoreItem(i + 1, p.name, p.score, prefix));
+    projectorScoresEl.appendChild(buildProjectorScoreItem(i + 1, p.name, p.score, prefix, p.avatar));
   });
 }
 
@@ -12493,23 +12499,43 @@ function updateHallScene(state) {
       const players = Array.isArray(state.players) ? state.players : [];
       const isRandomNames = !!(state.settings && state.settings.randomNames);
       // Build a key to avoid unnecessary DOM rebuilds
-      const chipKey = players.map(p => `${p.id}:${p.name}`).join('|') + ':' + (isRandomNames ? '1' : '0');
+      const chipKey = players.map(p => `${p.id}:${p.name}:${JSON.stringify(p.avatar || '')}`).join('|') + ':' + (isRandomNames ? '1' : '0');
       if (hallLobbyPlayersEl.dataset.chipKey !== chipKey) {
         hallLobbyPlayersEl.dataset.chipKey = chipKey;
-        hallLobbyPlayersEl.innerHTML = '';
+        // Updated in place: a newcomer pops in, everyone already there stays put.
+        const firstPaint = !hallLobbyPlayersEl.children.length;
+        const existing = new Map([...hallLobbyPlayersEl.children].map((el) => [el.dataset.pid, el]));
+        const wanted = new Set(players.map((p) => p.id));
+        existing.forEach((el, pid) => { if (!wanted.has(pid)) el.remove(); });
         players.forEach(p => {
-          const chip = document.createElement('span');
-          chip.className = 'hall-player-chip';
+          const chipSig = `${p.name}:${JSON.stringify(p.avatar || '')}:${isRandomNames ? 1 : 0}`;
+          let chip = existing.get(p.id);
+          if (chip && chip.dataset.sig === chipSig) { hallLobbyPlayersEl.appendChild(chip); return; }
+          const isNew = !chip && !firstPaint;
+          const fresh = document.createElement('span');
+          fresh.className = `hall-player-chip${isNew ? ' is-new' : ''}`;
+          fresh.dataset.pid = p.id;
+          fresh.dataset.sig = chipSig;
+          if (p.avatar && window.PinArena?.avatarSvg) {
+            const av = document.createElement('span');
+            av.className = 'hall-player-avatar';
+            av.innerHTML = window.PinArena.avatarSvg(p.avatar, 'hall-av');
+            fresh.appendChild(av);
+          }
+          const nameRow = document.createElement('span');
+          nameRow.className = 'hall-player-name';
           if (isRandomNames) {
             const dice = document.createElement('span');
             dice.className = 'hall-dice-btn';
             dice.textContent = '🎲';
-            chip.appendChild(dice);
+            nameRow.appendChild(dice);
           }
           const nameSpan = document.createElement('span');
           nameSpan.textContent = p.name || 'Player';
-          chip.appendChild(nameSpan);
-          hallLobbyPlayersEl.appendChild(chip);
+          nameRow.appendChild(nameSpan);
+          fresh.appendChild(nameRow);
+          if (chip) chip.replaceWith(fresh);
+          hallLobbyPlayersEl.appendChild(fresh);
         });
       }
     }
