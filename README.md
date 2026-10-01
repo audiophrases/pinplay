@@ -263,6 +263,7 @@ Then configure the Worker secrets (`EDGE_TTS_URL` and `EDGE_TTS_SECRET`) and red
 | **P** | Play question audio |
 | **F** | Fullscreen projector view |
 | **M** | Mute game music (live game) · media check (editor) |
+| **E** | Pause / resume students' emojis (classic live game) |
 
 ## Quiz JSON Format
 

@@ -134,6 +134,11 @@
 
     return {
       get up() { return up; },
+      // Sends a message over the connection; false when it isn't up.
+      send(msg) {
+        if (!up || !ws || ws.readyState !== 1) return false;
+        try { ws.send(JSON.stringify(msg)); return true; } catch { return false; }
+      },
       close() {
         stopped = true;
         clearTimers();

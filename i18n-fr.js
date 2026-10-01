@@ -1018,6 +1018,13 @@ window.PINPLAY_FR_DICT = {
   'Answered {done}/{total}': 'Répondu {done}/{total}',
 
   'That question has ended.': 'Cette question est terminée.',
+  '😶 Emojis paused. Press E to turn them back on.': '😶 Émojis en pause. Appuyez sur E pour les réactiver.',
+  '😀 Emojis are back on.': '😀 Les émojis sont réactivés.',
+  'Could not change emojis: {msg}': 'Impossible de modifier les émojis : {msg}',
+  '😶 Emojis paused': '😶 Émojis en pause',
+  'Press E to turn emojis back on': 'Appuyez sur E pour réactiver les émojis',
+  'Turn emojis back on': 'Réactiver les émojis',
+  'Pause emojis': 'Mettre les émojis en pause',
 
   /* ===================== Reading text: formatting and bulk edit ===================== */
   'Give the selected questions the same reading text, or change or remove it': 'Donner le même texte de lecture aux questions sélectionnées, ou le modifier ou le supprimer',

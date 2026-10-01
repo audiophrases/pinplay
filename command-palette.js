@@ -140,6 +140,12 @@
       run: () => { playQuestionAudio(live.host.state.question).catch(() => { }); },
     },
     {
+      id: 'fn:emojis', area: LIVE, kw: 'emojis reactions pause resume stop distraction', key: 'E',
+      label: () => (live.host.state?.reactionsPaused ? t('Turn emojis back on') : t('Pause emojis')),
+      avail: () => !!live.host.state && !!live.host.token,
+      run: () => toggleReactionsPaused(),
+    },
+    {
       id: 'fn:mute', area: LIVE, kw: 'mute unmute music sound', key: 'M',
       label: () => t('Mute or unmute game music'),
       avail: () => !!live.host.isPrimaryAudioHost,

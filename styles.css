@@ -5937,3 +5937,6 @@ body.arena-board-open { overflow: hidden; }
 .mm-reading-form textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .mm-reading-form p { margin: 0; }
 .mm-reading-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+/* Live screen: emojis paused by the teacher (E) */
+.reactions-paused-badge { margin-left: .6rem; font-weight: 700; color: #b45309; white-space: nowrap; }

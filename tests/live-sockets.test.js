@@ -12,7 +12,7 @@ before(() => {
   W = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'cloudflare', 'worker.js'), 'utf8'), [
     'ROOM_TTL_MS', 'LIVE_SNAPSHOT_RETRY_MS', 'LIVE_SNAPSHOT_MAX_RETRIES', 'getQuestionTimeLimitSec', 'normalizeTimeLimitValue',
     'minTimeByType', 'clamp', 'liveQuestionDeadline', 'needsLiveSnapshotRetry', 'nextRoomAlarmAt', 'answerIsForAnotherQuestion',
-    'liveStateKey',
+    'liveStateKey', 'REACTION_MIN_GAP_MS', 'REACTION_MAX_PER_QUESTION', 'reactionLimitVerdict',
   ]);
 });
 
@@ -86,5 +86,26 @@ describe('what counts as a change to push', () => {
     const base = { t: 'state', state: { phase: 'question', score: 10 } };
     assert.notEqual(W.liveStateKey(base), W.liveStateKey({ ...base, state: { phase: 'question', score: 11 } }));
     assert.notEqual(W.liveStateKey(base), W.liveStateKey({ ...base, attempts: { rows: 1 } }));
+  });
+});
+
+describe('emoji limits per student', () => {
+  it('one every half second', () => {
+    const first = W.reactionLimitVerdict(undefined, 0, NOW);
+    assert.equal(first.ok, true);
+    assert.equal(W.reactionLimitVerdict(first.next, 0, NOW + W.REACTION_MIN_GAP_MS - 1).ok, false);
+    assert.equal(W.reactionLimitVerdict(first.next, 0, NOW + W.REACTION_MIN_GAP_MS).ok, true);
+  });
+  it('at most REACTION_MAX_PER_QUESTION per question, counted again on the next one', () => {
+    let prev;
+    let t = NOW;
+    for (let i = 0; i < W.REACTION_MAX_PER_QUESTION; i += 1) {
+      const v = W.reactionLimitVerdict(prev, 3, t);
+      assert.equal(v.ok, true, `emoji ${i + 1}`);
+      prev = v.next;
+      t += W.REACTION_MIN_GAP_MS;
+    }
+    assert.equal(W.reactionLimitVerdict(prev, 3, t).ok, false);
+    assert.equal(W.reactionLimitVerdict(prev, 4, t).ok, true);
   });
 });

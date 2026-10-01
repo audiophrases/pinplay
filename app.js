@@ -10549,6 +10549,13 @@ function handleHostHotkeys(e) {
     stopRankingAnimationMode();
   }
 
+  if (e.key === 'e' || e.key === 'E') {
+    if (!live.host.state || !live.host.token) return;
+    e.preventDefault();
+    toggleReactionsPaused();
+    return;
+  }
+
   if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     if (modal && modal.classList.contains('visible')) {
@@ -11225,6 +11232,7 @@ function renderHostState(state) {
   if (liveProgressEl) liveProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   if (liveResponsesEl) liveResponsesEl.textContent = `${state.responseCount} / ${state.playerCount}`;
   renderReactionPop(state.reactions || []);
+  renderReactionsPausedBadge(!!state.reactionsPaused);
   if (livePinEl) livePinEl.textContent = state.pin || '-';
   if (livePinBigEl) {
     livePinBigEl.textContent = state.pin || '-';
@@ -12210,6 +12218,38 @@ function renderProjectorScores(players, opts = {}) {
     const prefix = medals[i] || '🏅';
     projectorScoresEl.appendChild(buildProjectorScoreItem(i + 1, p.name, p.score, prefix));
   });
+}
+
+// Pause or resume students' emojis (E). Phones hide their emoji bar meanwhile.
+async function toggleReactionsPaused() {
+  if (!live.host.pin || !live.host.token) return;
+  const paused = !live.host.state?.reactionsPaused;
+  try {
+    const data = await api('/api/host/reactions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: { pin: live.host.pin, paused },
+    });
+    applyLiveHostState(data);
+    setStatus(hostStatusEl, paused ? t('😶 Emojis paused. Press E to turn them back on.') : t('😀 Emojis are back on.'), 'ok');
+  } catch (err) {
+    setStatus(hostStatusEl, t('Could not change emojis: {msg}', { msg: err.message }), 'bad');
+  }
+}
+
+function renderReactionsPausedBadge(paused) {
+  const anchor = document.getElementById('projectorAnswers');
+  if (!anchor) return;
+  let badge = document.getElementById('projectorReactionsPaused');
+  if (!paused) { badge?.remove(); return; }
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'projectorReactionsPaused';
+    badge.className = 'small reactions-paused-badge';
+    anchor.insertAdjacentElement('afterend', badge);
+  }
+  badge.textContent = t('😶 Emojis paused');
+  badge.title = t('Press E to turn emojis back on');
 }
 
 function renderReactionPop(reactions) {

@@ -239,3 +239,10 @@ All of steps 0–3, as designed above, with these specifics:
 - Pages: `live-socket.js` (shared): 10 s ping, 5 s pong watchdog, back-off reconnect, rest after 6 failures (retry every minute), immediate check on `visibilitychange`/`online`. play.js and app.js keep polling as the bootstrap; the first state with `transport: 'socket'` opens the connection, polling pauses while it's up and resumes whenever it's down. Revision check on every state. A push during a voice recording waits until it stops. The host gets the attempts summary pushed.
 - Tests: `tests/live-sockets.test.js` (alarm timing, snapshot retries, answer matching, change key). End-to-end against `wrangler dev`: host + 3 students over connections, no polling (push to all students within ~1 ms of each other, a 5 s question closed by the alarm ~0.4 s after its deadline, stale answer rejected, old pages still accepted, reconnect, ping/pong, rising revisions, game over closes connections). Real pages in Chrome: host page + 3 student pages through the normal UI; question shown on the 3 phones 245–279 ms after Start, no polling while connected, 20 API requests for the whole game.
 - Not yet tried in a real class.
+
+### Emojis (2026-10-01)
+
+- Students' emojis go over the live connection (`{ t: 'react', emoji }`, billed 20 to 1) and are kept in the room's memory, saved with the next change instead of one storage write each (`#acceptReaction`; `#persistReactionSlice` removed). Phones on the polling fallback still use `/api/react`, with the same rules.
+- Server-side limit per student: one every 0.5 s and 30 per question (`reactionLimitVerdict`), on top of the page's 0.6 s.
+- The teacher pauses/resumes emojis with **E** (or Ctrl+K → Pause emojis): `POST /api/host/reactions`, `reactionsPaused` in both states; phones hide the emoji bar, the live screen shows "😶 Emojis paused", and both routes refuse emojis meanwhile.
+- A lightly reacting game (30 students × 3 per question × 20 questions = 1,800 emojis) goes from ~1,800 requests and ~1,800 storage writes to ~90 billed requests and no writes of its own.

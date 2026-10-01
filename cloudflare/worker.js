@@ -649,6 +649,20 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/reactions' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(await stub.fetch('https://room/host/reactions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paused: !!body?.paused }),
+      }));
+    }
+
     if (url.pathname === '/api/host/kick' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -4654,6 +4668,17 @@ export class QuizRoom {
         return json(hostState(room));
       }
 
+      // The teacher pauses emojis when they become a distraction (E on the host page).
+      if (url.pathname === '/host/reactions' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+        const body = await safeJson(request);
+        room.settings = { ...(room.settings || {}), reactionsPaused: !!body?.paused };
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+        return json(hostState(room));
+      }
+
       if (url.pathname === '/host/kick' && request.method === 'POST') {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
@@ -5113,29 +5138,9 @@ export class QuizRoom {
         const timeoutClosed = closeQuestionIfTimedOut(room);
         if (timeoutClosed) await this.#setRoom(room);
 
-        if (!(room.phase === 'question' || room.phase === 'results')) {
-          return json({ error: 'Question is not active.' }, 409);
-        }
-
-        const qIndex = effectiveQuestionIndex(room);
-        room.reactionsByQuestion = room.reactionsByQuestion || {};
-        room.reactionsByQuestion[qIndex] = room.reactionsByQuestion[qIndex] || [];
-
-        const list = room.reactionsByQuestion[qIndex];
-        const payload = {
-          playerId,
-          name: player.name,
-          emoji,
-          at: Date.now(),
-        };
-
-        list.push(payload);
-        if (list.length > 120) list.splice(0, list.length - 120);
-
-        room.updatedAt = Date.now();
-        await this.#persistReactionSlice(room, qIndex);
-
-        return json({ ok: true, reaction: payload });
+        const result = this.#acceptReaction(room, playerId, emoji);
+        if (result.error) return json({ error: result.error, reason: result.reason }, result.status);
+        return json({ ok: true, reaction: result.reaction });
       }
 
       return json({ error: 'Not found' }, 404);
@@ -5227,7 +5232,16 @@ export class QuizRoom {
     if (raw === 'ping') { try { ws.send('pong'); } catch { /* */ } return; }
     let data;
     try { data = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
-    if (!data || data.t !== 'auth') return;
+    if (!data) return;
+    if (data.t === 'react') {
+      // An emoji over the connection: billed 20 to 1 and not stored on its own.
+      if (att.role !== 'player' || !att.pid) return;
+      const room = await this.#getRoom();
+      const emoji = sanitizeReaction(data.emoji);
+      if (room && emoji && room.players?.[att.pid]) this.#acceptReaction(room, att.pid, emoji);
+      return;
+    }
+    if (data.t !== 'auth') return;
     const room = await this.#getRoom();
     if (!room) { try { ws.close(4004, 'Game over'); } catch { /* */ } return; }
     if (data.role === 'host') {
@@ -5245,6 +5259,28 @@ export class QuizRoom {
     if (data.role === 'host' && room.phase === 'results' && await maybeSnapshotLiveGame(room, this.env)) changed = true;
     if (changed) await this.#setRoom(room);
     await this.#livePush(ws);
+  }
+
+  // An emoji from a student, over the connection or the old request. Kept in
+  // the room's memory (saved along with the next change, not one write per
+  // emoji) and pushed to the host screen. Limited per student, and refused
+  // while the teacher has paused emojis.
+  #acceptReaction(room, playerId, emoji, now = Date.now()) {
+    if (room.settings?.reactionsPaused) return { status: 409, error: 'Emojis are paused.', reason: 'reactions_paused' };
+    if (!(room.phase === 'question' || room.phase === 'results')) return { status: 409, error: 'Question is not active.' };
+    const qIndex = effectiveQuestionIndex(room);
+    if (!this.reactionLimits) this.reactionLimits = new Map();
+    const verdict = reactionLimitVerdict(this.reactionLimits.get(playerId), qIndex, now);
+    if (!verdict.ok) return { status: 429, error: 'Too many emojis.', reason: 'reactions_limited' };
+    this.reactionLimits.set(playerId, verdict.next);
+    room.reactionsByQuestion = room.reactionsByQuestion || {};
+    const list = room.reactionsByQuestion[qIndex] = room.reactionsByQuestion[qIndex] || [];
+    const reaction = { playerId, name: room.players[playerId]?.name, emoji, at: now };
+    list.push(reaction);
+    if (list.length > 120) list.splice(0, list.length - 120);
+    this.roomCache = room;
+    this.#liveSchedulePush(room);
+    return { reaction };
   }
 
   // When the room's alarm should next fire: the current question's deadline,
@@ -5613,32 +5649,6 @@ export class QuizRoom {
     try { await this.#armRoomAlarm(room); } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
   }
 
-  // Slim persist path for the high-frequency reaction stream. Writes only the
-  // single changed r:react:<qIndex> slice, skipping the r:meta + r:events writes
-  // that #setRoom does unconditionally — cutting 3 storage writes per tap to 1.
-  // Reactions never touch eventLog, and a stale persisted updatedAt is harmless
-  // here: ROOM_TTL_MS is 24h and any real activity (advancing questions, polls)
-  // refreshes it via #setRoom long before expiry.
-  async #persistReactionSlice(room, qIndex) {
-    if (!room || typeof room !== 'object') return;
-    const storage = this.state.storage;
-    const key = `r:react:${qIndex}`;
-    const value = (room.reactionsByQuestion && room.reactionsByQuestion[qIndex]) || [];
-    const snap = room.__snapshot instanceof Map ? room.__snapshot : null;
-    if (snap) snap.set(key, JSON.stringify(value));
-    await storage.put(key, value);
-    // Keep the in-memory cache aligned (room is mutated in place by the caller).
-    this.roomCache = room;
-    this.#liveSchedulePush(room);
-    // Ensure the cleanup alarm stays armed — normally already set by #setRoom,
-    // so this is a cheap getAlarm read with no write during an active game.
-    try {
-      if ((await storage.getAlarm()) == null) {
-        await storage.setAlarm(Date.now() + ROOM_TTL_MS);
-      }
-    } catch { /* alarms unavailable — lazy TTL still covers cleanup */ }
-  }
-
   async #migrateLegacyRoom() {
     if (this.legacyRoomMigrated) return;
     const legacy = await this.state.storage.get('room');
@@ -5815,6 +5825,7 @@ function hostState(room) {
   return {
     rev: Number(room.rev || 0),
     transport: LIVE_TRANSPORT,
+    reactionsPaused: !!room.settings?.reactionsPaused,
     phase: room.phase,
     pin: room.pin,
     currentIndex: qIndex,
@@ -5891,6 +5902,7 @@ function playerState(room, playerId) {
   return {
     rev: Number(room.rev || 0),
     transport: LIVE_TRANSPORT,
+    reactionsPaused: !!room.settings?.reactionsPaused,
     phase: room.phase,
     pin: room.pin,
     name: player.name,
@@ -6046,6 +6058,20 @@ function needsLiveSnapshotRetry(room) {
   return room?.phase === 'results' && !room.snapshotted && !room.settings?.randomNames
     && (Number(room.snapshotRetries) || 0) < LIVE_SNAPSHOT_MAX_RETRIES
     && Object.values(room.players || {}).some((p) => String(p?.identity?.studentKey || '').trim());
+}
+
+// Emojis per student: at most one every REACTION_MIN_GAP_MS and
+// REACTION_MAX_PER_QUESTION per question (the page also waits 0.6 s; this
+// holds for any page). `prev` is { at, qIndex, count } or undefined.
+const REACTION_MIN_GAP_MS = 500;
+const REACTION_MAX_PER_QUESTION = 30;
+
+function reactionLimitVerdict(prev, qIndex, now = Date.now()) {
+  const sameQuestion = prev && prev.qIndex === qIndex;
+  if (prev && now - Number(prev.at || 0) < REACTION_MIN_GAP_MS) return { ok: false };
+  const count = sameQuestion ? Number(prev.count || 0) : 0;
+  if (count >= REACTION_MAX_PER_QUESTION) return { ok: false };
+  return { ok: true, next: { at: now, qIndex, count: count + 1 } };
 }
 
 function nextRoomAlarmAt(room, now = Date.now()) {

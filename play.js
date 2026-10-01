@@ -3330,6 +3330,7 @@ function applyLivePlayerState(state) {
   if (rev) live.player.shownRev = rev;
   live.player.lastLiveState = state;
   renderPlayerState(state);
+  syncReactionRowPaused(!!state.reactionsPaused);
   if (state.transport === 'socket' && live.player.liveActive && !live.player.liveSocket) startLivePlayerSocket();
 }
 
@@ -5045,7 +5046,10 @@ let lastReactionAt = 0;
 async function sendReaction(emoji) {
   const now = Date.now();
   if (now - lastReactionAt < REACTION_COOLDOWN_MS) return;
+  if (live.player.lastLiveState?.reactionsPaused) return;
   lastReactionAt = now;
+  // Over the live connection when there is one: nearly free (see LIVE_SOCKETS_PLAN.md).
+  if (live.player.liveSocket?.send({ t: 'react', emoji })) return;
   try {
     if (!live.player.pin || !live.player.id || !live.player.token) return;
     await api('/api/react', {
@@ -6331,6 +6335,13 @@ function initBetControl() {
 }
 
 // Reaction emojis (live mode only) - defined at top of file
+// The teacher can pause emojis (E on the host page); the bar disappears meanwhile.
+function syncReactionRowPaused(paused) {
+  const row = document.getElementById('reactionRow');
+  if (!row || live.player.mode === 'assignment') return;
+  row.style.display = paused ? 'none' : '';
+}
+
 function initReactionRow() {
   const row = document.getElementById('reactionRow');
   if (!row) return;
