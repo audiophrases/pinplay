@@ -1154,8 +1154,11 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* Pictures, videos and reading text take a full row, so the option tiles of
+   choice questions wrap underneath instead of squeezing in beside them. */
 #hostQuestionAnswers.project-answers .question-image-preview,
-#hostQuestionAnswers.project-answers .question-video-wrap {
+#hostQuestionAnswers.project-answers .question-video-wrap,
+#hostQuestionAnswers.project-answers .reading-text-host {
   flex: 0 0 100% !important;
   width: 100% !important;
   max-width: 100% !important;
