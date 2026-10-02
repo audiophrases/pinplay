@@ -173,4 +173,37 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     assert.deepEqual(plain(got.body.quiz.listeningSections.map((s) => s.id)), ['s1']);
     assert.deepEqual(plain(got.body.quiz.questions.map((q) => q.listeningSection || '')), ['', 's1', 's1']);
   });
+
+  it('counts plays on the attempt, locks a submitted section and only then shows its marks', async () => {
+    const created = await post('/api/assignments/create', { password: PW, quiz: levelled(), randomNames: true, feedbackMode: 'instant' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const code = created.body.assignment.code;
+    const started = await post('/api/assignment/start', { code, studentKey: 'anon-1', studentName: 'Ann' });
+    assert.ok(started.status < 300, JSON.stringify(started.body));
+    const attemptId = started.body.attempt.id;
+    const pubQuiz = started.body.attempt.assignment.quiz;
+    assert.deepEqual(plain(pubQuiz.listeningSections), [{ id: 's1', title: 'Part 1', text: 'You will hear…', audioUrl: 'https://api.pinplay.win/api/media/quiz-1/listening/a.mp3', playsAllowed: 2, pauseAllowed: true }]);
+    assert.deepEqual(plain(pubQuiz.questions.map((q) => q.listeningSection || '')), ['', 's1', 's1']);
+
+    const p1 = await post('/api/assignment/listen', { code, attemptId, sectionId: 's1' });
+    const p2 = await post('/api/assignment/listen', { code, attemptId, sectionId: 's1' });
+    const p3 = await post('/api/assignment/listen', { code, attemptId, sectionId: 's1' });
+    assert.deepEqual([p1.body.plays, p2.body.plays, p3.status, p3.body.code], [1, 2, 409, 'NO_PLAYS_LEFT']);
+    assert.equal((await post('/api/assignment/listen', { code, attemptId, sectionId: 'nope' })).status, 404);
+
+    const a1 = await post('/api/assignment/answer', { code, attemptId, qIndex: 1, answer: 0 });
+    assert.equal(a1.status, 200, JSON.stringify(a1.body));
+    assert.equal(a1.body.attempt.answersWithCorrectness.length, 0, 'no marks while the section is open');
+    assert.equal(a1.body.attempt.listeningPlays.s1, 2);
+
+    const sub = await post('/api/assignment/submit-section', { code, attemptId, sectionId: 's1' });
+    assert.equal(sub.status, 200, JSON.stringify(sub.body));
+    assert.ok(sub.body.attempt.sectionsSubmitted.s1 > 0);
+    assert.deepEqual(plain(sub.body.attempt.answersWithCorrectness.map((a) => [a.qIndex, a.correct])), [[1, true]]);
+
+    const late = await post('/api/assignment/answer', { code, attemptId, qIndex: 2, answer: 0 });
+    assert.deepEqual([late.status, late.body.code], [409, 'SECTION_SUBMITTED']);
+    const outside = await post('/api/assignment/answer', { code, attemptId, qIndex: 0, answer: 0 });
+    assert.equal(outside.status, 200);
+  });
 });

@@ -1,7 +1,7 @@
 # Listening sections: a scrollable exam sheet with one recording
 
-Status: **phase 1 (data model + editor) built 2026-10-02.** Phases 2–5 are
-still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
+Status: **phases 1 (data model + editor) and 2 (homework sheet) built
+2026-10-02.** Phases 3–5 are still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
 - `listeningSections` on the quiz and `listeningSection` on each question, kept
@@ -19,9 +19,27 @@ Phase 1 as built:
   recordings as in use.
 - The Adaptive box is hidden for a quiz with sections; the server refuses an
   adaptive assignment for one. PinPlay Cup never deals section questions.
-- Until phase 2, students still get section questions one at a time (without
-  media); the recording isn't played yet.
 - Tests: `tests/listening-sections.test.js`.
+
+Phase 2 as built:
+- Students reaching any question of a section get the section's sheet (a
+  full-page overlay in `play.js`): sticky strip with title, player and
+  "N of M answered", the instruction, then every question compactly (radio /
+  checkbox rows, one-line inputs, inline gaps, one dropdown per matching row,
+  a small text area for open). "← Previous question" and "Submit section".
+- Each change autosaves through `/api/assignment/answer` (typing after a short
+  pause); the 5-second state refresh never rebuilds the sheet while it is open.
+- Player: unlimited plays = the browser's player. Limited = our player, bar
+  not draggable, "Play 1 of 2", pause only if allowed. `/api/assignment/listen`
+  counts a play when it starts (`attempt.listeningPlays`), refusing past the
+  limit, so reloading doesn't reset it.
+- `/api/assignment/submit-section` locks it (`attempt.sectionsSubmitted`); the
+  answer route then refuses that section (409 `SECTION_SUBMITTED`). Instant
+  marks for section questions are held back until the section is submitted,
+  then show on the locked sheet; once locked the recording replays freely.
+- Blanks in a submitted section count as done for navigation and the final
+  submit. Submitting the whole assignment keeps autosaved answers as they are.
+- /play games: plays and the lock are kept in the page only (nothing stored).
 
 In one line: a quiz can contain **listening sections**: a run of consecutive
 questions that share one recording and show **all together on one calm,

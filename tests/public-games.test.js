@@ -19,7 +19,7 @@ const NAMES = [
   'adaptiveAttemptView', 'verdictScoreFraction', 'applyBetScore', 'round', 'studentSessionSecret', 'sha256Hex', 'b64urlEncodeBytes',
   'b64urlDecodeBytes', 'constantTimeEqual', 'hmacSignBytes', 'publicAssignmentAttempt', 'hostCorrectSummary',
   'sanitizeAssignmentAttemptId', 'sanitizeAssignmentStudentKey', 'normalizeStudentKeyInput', 'sanitizeName', 'sanitizeEmail',
-  'sanitizeClassName', 'publicAssignment', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'normalizeTimeLimitValue', 'minTimeByType', 'normalizeQuestionMedia',
+  'sanitizeClassName', 'publicAssignment', 'publicListeningSections', 'attemptSectionSubmitted', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'normalizeTimeLimitValue', 'minTimeByType', 'normalizeQuestionMedia',
   'detectQuestionMediaProvider', 'publicQuestion', 'publicQuestionMediaPayload', 'publicAudioPayload', 'normalizeTextAnswer',
   'gradeContextGap', 'contextGapExpectedOptions', 'parseAcceptedGapOptions', 'dedupeAcceptedForDisplay', 'stripDiacritics',
   'stableShuffle', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'normalizeWordle',

@@ -976,6 +976,7 @@ function deriveAssignmentCurrentIndex(state, fromIndex = 0) {
   const total = Number(state?.attempt?.assignment?.totalQuestions || state?.attempt?.assignment?.quiz?.questions?.length || 0);
   if (total <= 0) return 0;
   const answered = new Set(Array.isArray(state?.attempt?.answeredQIndexes) ? state.attempt.answeredQIndexes.map((x) => Number(x)) : []);
+  assignmentLockedIndexes(state?.attempt).forEach((i) => answered.add(i));
   const start = Math.max(0, Math.min(Number(fromIndex) || 0, total - 1));
   // Prefer the next unanswered at or after `start` (keeps forward momentum
   // after the student deliberately skipped earlier blanks with the arrow keys).
@@ -1036,6 +1037,7 @@ function moveAssignmentIndex(delta) {
   if (step > 0 && requested >= total && !isSubmitted) {
     const answered = new Set(Array.isArray(live.player.assignment.state?.attempt?.answeredQIndexes)
       ? live.player.assignment.state.attempt.answeredQIndexes.map(Number) : []);
+    assignmentLockedIndexes(live.player.assignment.state?.attempt).forEach((i) => answered.add(i));
     const blanks = [];
     for (let i = 0; i < total; i += 1) if (!answered.has(i)) blanks.push(i);
     if (blanks.length > 0) {
@@ -1279,7 +1281,7 @@ function mapAssignmentStateToPlayerState() {
     answeredCurrent,
     feedbackMode: String(assignment.feedbackMode || 'none'),
     assignmentSubmitted: !!attempt?.submitted,
-    answeredQIndexes: Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : [],
+    answeredQIndexes: [...new Set([...(Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : []), ...assignmentLockedIndexes(attempt)])],
     question,
     correction: '',
     revealedResult,
@@ -2213,9 +2215,17 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
 
+    // Blanks left in submitted listening sections can't be filled any more.
+    const att = live.player.assignment.state?.attempt;
+    const locked = new Set(assignmentLockedIndexes(att));
+    const answeredNow = new Set((att?.answeredQIndexes || []).map(Number));
+    const totalNow = Number(att?.assignment?.quiz?.questions?.length || 0);
+    let onlyLockedBlanks = locked.size > 0;
+    for (let i = 0; i < totalNow; i += 1) if (!answeredNow.has(i) && !locked.has(i)) onlyLockedBlanks = false;
+    closeListeningSheet();
     const data = await api('/api/assignment/submit', {
       method: 'POST',
-      body: { code, attemptId, force: !!force },
+      body: { code, attemptId, force: !!force || onlyLockedBlanks },
     });
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
@@ -3435,6 +3445,7 @@ window.onLocaleChange = function () {
 
 function renderPlayerState(state) {
   _i18nLastPlayerState = state;
+  if (maybeRenderListeningSheet(state)) return;
   // Clear liveRevealApplied when the question changes (different index)
   if (live.player.liveRevealApplied && state.currentIndex !== live.player.liveRevealForIndex) {
     live.player.liveRevealApplied = false;
@@ -5968,6 +5979,7 @@ async function apiFetch(path, opts = {}) {
     // The backend flags an unusable student session so callers can re-prompt
     // for sign-in instead of showing a dead-end error.
     if (data.reason) err.code = String(data.reason);
+    err.data = data;
     throw err;
   }
   return data;
@@ -9093,4 +9105,620 @@ function setupImageLightbox() {
 function round(n, d = 0) {
   const p = 10 ** d;
   return Math.round(n * p) / p;
+}
+
+// ── Listening sections (homework) ──────────────────────────────────────────
+// A run of questions sharing one recording shows as one scrolling sheet, like
+// an exam paper: the player and "N of M answered" in a sticky strip, every
+// question stacked below. Each change autosaves; "Submit section" locks it
+// (the server refuses later answers), and only then do instant marks appear.
+const listeningSheet = { el: null, sectionId: '', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false };
+
+function assignmentListeningInfo(attempt, qIndex) {
+  const quiz = attempt?.assignment?.quiz || {};
+  const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
+  const id = questions[qIndex]?.listeningSection;
+  if (!id) return null;
+  const section = (Array.isArray(quiz.listeningSections) ? quiz.listeningSections : []).find((s) => s.id === id);
+  if (!section) return null;
+  let first = qIndex;
+  let last = qIndex;
+  while (first > 0 && questions[first - 1]?.listeningSection === id) first -= 1;
+  while (last < questions.length - 1 && questions[last + 1]?.listeningSection === id) last += 1;
+  return { section, first, last };
+}
+
+function listeningSectionLocked(attempt, sectionId) {
+  return !!(attempt?.submitted || live.player.assignment?.reviewMode || attempt?.sectionsSubmitted?.[sectionId]);
+}
+
+// Questions of a submitted section count as done for navigation: they can't be
+// answered any more, so the "unanswered" prompts must not send students back.
+function assignmentLockedIndexes(attempt) {
+  const quiz = attempt?.assignment?.quiz || {};
+  const done = attempt?.sectionsSubmitted || {};
+  const out = [];
+  (Array.isArray(quiz.questions) ? quiz.questions : []).forEach((q, i) => {
+    if (q?.listeningSection && done[q.listeningSection]) out.push(i);
+  });
+  return out;
+}
+
+function closeListeningSheet() {
+  if (!listeningSheet.el) return;
+  flushListeningSaves();
+  if (listeningSheet.audio) {
+    try { listeningSheet.audio.pause(); } catch {}
+  }
+  listeningSheet.audio = null;
+  listeningSheet.playing = false;
+  listeningSheet.el.remove();
+  listeningSheet.el = null;
+  listeningSheet.sectionId = '';
+  document.body.classList.remove('listening-sheet-open');
+}
+
+// Called first thing by renderPlayerState; true when the sheet took over.
+function maybeRenderListeningSheet(state) {
+  const as = live.player.assignment;
+  const attempt = as?.state?.attempt;
+  const info = (live.player.mode === 'assignment' && state?.phase === 'question' && !as?.retake?.active && !attempt?.adaptive)
+    ? assignmentListeningInfo(attempt, Number(state.currentIndex || 0)) : null;
+  if (!info) {
+    closeListeningSheet();
+    return false;
+  }
+  // The end-of-quiz screen wins once everything is saved.
+  const total = Number(state.totalQuestions || 0);
+  const done = new Set((state.answeredQIndexes || []).map(Number));
+  if (total > 0 && done.size >= total && !attempt.submitted && !as.pendingComplete && !as.bypassAllAnsweredScreen) {
+    closeListeningSheet();
+    return false;
+  }
+  cancelPendingAssignmentQuestionAutoplay();
+  stopAssignmentQuestionAudioPlayback();
+  stopJoinTimer();
+  // The 5-second state refresh must not rebuild the sheet under the student's
+  // fingers: keep it, re-apply edits not saved yet, refresh the count.
+  const locked = listeningSectionLocked(attempt, info.section.id);
+  if (listeningSheet.el && listeningSheet.sectionId === info.section.id && listeningSheet.el.dataset.locked === String(locked)) {
+    attempt.answersByQ = attempt.answersByQ || {};
+    listeningSheet.saveTimers.forEach((entry, i) => {
+      attempt.answersByQ[String(i)] = { ...(attempt.answersByQ[String(i)] || {}), answer: entry.answer };
+    });
+    updateListeningProgress(info);
+    return true;
+  }
+  renderListeningSheet(info);
+  return true;
+}
+
+function listeningSavedAnswer(qIndex) {
+  const raw = live.player.assignment.state?.attempt?.answersByQ || {};
+  return raw[String(qIndex)]?.answer;
+}
+
+function renderListeningSheet(info) {
+  const attempt = live.player.assignment.state.attempt;
+  const { section, first, last } = info;
+  const locked = listeningSectionLocked(attempt, section.id);
+  const sameSection = listeningSheet.el && listeningSheet.sectionId === section.id;
+  const keepAudio = sameSection ? listeningSheet.audio : null;
+  const scrollTop = sameSection ? listeningSheet.el.scrollTop : 0;
+  if (listeningSheet.el) {
+    listeningSheet.el.remove();
+    listeningSheet.el = null;
+  }
+  if (!sameSection && listeningSheet.audio) {
+    try { listeningSheet.audio.pause(); } catch {}
+    listeningSheet.audio = null;
+    listeningSheet.playing = false;
+  }
+  listeningSheet.audio = keepAudio || listeningSheet.audio;
+  listeningSheet.sectionId = section.id;
+
+  const el = document.createElement('div');
+  el.id = 'listeningSheet';
+  el.className = 'listening-sheet' + (locked ? ' is-locked' : '');
+  el.dataset.locked = String(locked);
+  el.setAttribute('role', 'region');
+  el.setAttribute('aria-label', section.title || t('Listening'));
+
+  const strip = document.createElement('div');
+  strip.className = 'ls-strip';
+  const head = document.createElement('div');
+  head.className = 'ls-strip-head';
+  const title = document.createElement('div');
+  title.className = 'ls-title';
+  title.textContent = `🎧 ${section.title || t('Listening')}`;
+  const range = document.createElement('div');
+  range.className = 'ls-range';
+  range.textContent = first === last
+    ? t('Question {n}', { n: first + 1 })
+    : t('Questions {from}–{to}', { from: first + 1, to: last + 1 });
+  head.append(title, range);
+  const playerWrap = document.createElement('div');
+  playerWrap.className = 'ls-player';
+  const progress = document.createElement('div');
+  progress.className = 'ls-answered';
+  strip.append(head, playerWrap, progress);
+  el.appendChild(strip);
+
+  const pageEl = document.createElement('div');
+  pageEl.className = 'ls-page';
+  if (section.text) {
+    const instr = document.createElement('p');
+    instr.className = 'ls-instruction';
+    instr.textContent = section.text;
+    pageEl.appendChild(instr);
+  }
+  if (locked) {
+    const note = document.createElement('p');
+    note.className = 'ls-locked-note';
+    note.textContent = t('This section is submitted. You can look at it but not change it.');
+    pageEl.appendChild(note);
+  }
+
+  const questions = attempt.assignment.quiz.questions;
+  const marks = new Map((attempt.answersWithCorrectness || []).map((a) => [Number(a.qIndex), a]));
+  for (let i = first; i <= last; i += 1) {
+    pageEl.appendChild(renderListeningQuestion(questions[i], i, locked, marks.get(i)));
+  }
+
+  const status = document.createElement('div');
+  status.className = 'ls-status';
+  status.setAttribute('aria-live', 'polite');
+  const actions = document.createElement('div');
+  actions.className = 'ls-actions';
+  if (first > 0) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ls-btn ls-btn-quiet';
+    back.textContent = t('← Previous question');
+    back.addEventListener('click', () => leaveListeningSheet(first - 1));
+    actions.appendChild(back);
+  }
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'ls-btn ls-btn-main';
+  if (locked) {
+    main.textContent = t('Continue →');
+    main.addEventListener('click', () => leaveListeningSheet(last + 1, last));
+  } else {
+    main.textContent = t('Submit section');
+    main.addEventListener('click', () => submitListeningSection(info));
+  }
+  actions.appendChild(main);
+  pageEl.append(status, actions);
+  el.appendChild(pageEl);
+
+  document.body.appendChild(el);
+  document.body.classList.add('listening-sheet-open');
+  listeningSheet.el = el;
+  renderListeningPlayer(playerWrap, section, attempt, locked);
+  updateListeningProgress(info);
+  el.scrollTop = scrollTop;
+}
+
+function listeningStatus(text, mode = '') {
+  const s = listeningSheet.el?.querySelector('.ls-status');
+  if (!s) return;
+  s.textContent = text || '';
+  s.dataset.mode = mode;
+}
+
+function listeningAnswered(answer) {
+  if (answer == null) return false;
+  if (Array.isArray(answer)) return answer.some((x) => String(x ?? '').trim() !== '');
+  if (typeof answer === 'object') return !!String(answer.rewrite || '').trim();
+  return String(answer).trim() !== '';
+}
+
+function updateListeningProgress(info) {
+  const el = listeningSheet.el?.querySelector('.ls-answered');
+  if (!el) return;
+  const count = info.last - info.first + 1;
+  let answered = 0;
+  for (let i = info.first; i <= info.last; i += 1) if (listeningAnswered(listeningSavedAnswer(i))) answered += 1;
+  el.textContent = t('{done} of {total} answered', { done: answered, total: count });
+}
+
+function renderListeningQuestion(q, qIndex, locked, mark) {
+  const card = document.createElement('div');
+  card.className = 'ls-q';
+  card.dataset.qIndex = String(qIndex);
+  const prompt = document.createElement('div');
+  prompt.className = 'ls-q-prompt';
+  const num = document.createElement('span');
+  num.className = 'ls-q-num';
+  num.textContent = `${qIndex + 1}.`;
+  prompt.appendChild(num);
+  if (q.type !== 'context_gap') {
+    const p = document.createElement('span');
+    p.textContent = ` ${q.prompt || ''}`;
+    prompt.appendChild(p);
+  }
+  card.appendChild(prompt);
+
+  const saved = listeningSavedAnswer(qIndex);
+  const body = document.createElement('div');
+  body.className = 'ls-q-body';
+  const save = (answer, delay = 0) => queueListeningSave(qIndex, answer, delay);
+
+  if (q.type === 'mcq' || q.type === 'tf' || q.type === 'multi') {
+    const multi = q.type === 'multi';
+    const picked = multi ? new Set(Array.isArray(saved) ? saved.map(Number) : []) : (saved == null ? null : Number(saved));
+    (q.answers || []).forEach((a, i) => {
+      const row = document.createElement('label');
+      row.className = 'ls-option';
+      const input = document.createElement('input');
+      input.type = multi ? 'checkbox' : 'radio';
+      input.name = `ls-q-${qIndex}`;
+      input.value = String(i);
+      input.checked = multi ? picked.has(i) : picked === i;
+      input.disabled = locked;
+      const letter = document.createElement('span');
+      letter.className = 'ls-option-letter';
+      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + i);
+      const text = document.createElement('span');
+      text.textContent = q.type === 'tf' ? t(String(a.text || '')) : String(a.text || '');
+      row.append(input, letter, text);
+      input.addEventListener('change', () => {
+        if (multi) {
+          const vals = [...body.querySelectorAll('input:checked')].map((x) => Number(x.value));
+          save(vals.length ? vals : null);
+        } else {
+          save(i);
+        }
+      });
+      body.appendChild(row);
+    });
+  } else if (q.type === 'text' || q.type === 'error_hunt') {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ls-input';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.value = q.type === 'error_hunt' ? String(saved?.rewrite || '') : String(saved ?? '');
+    if (q.type === 'error_hunt') input.placeholder = t('Write the sentence correctly');
+    input.disabled = locked;
+    input.addEventListener('input', () => {
+      const v = input.value;
+      save(q.type === 'error_hunt' ? listeningErrorHuntAnswer(q, v) : v, 700);
+    });
+    input.addEventListener('blur', () => flushListeningSaves());
+    body.appendChild(input);
+  } else if (q.type === 'open') {
+    const ta = document.createElement('textarea');
+    ta.className = 'ls-input ls-textarea';
+    ta.rows = 3;
+    ta.value = String(saved ?? '');
+    ta.disabled = locked;
+    ta.addEventListener('input', () => save(ta.value, 900));
+    ta.addEventListener('blur', () => flushListeningSaves());
+    body.appendChild(ta);
+  } else if (q.type === 'context_gap') {
+    const count = Math.max(1, Math.min(10, Number(q.gapCount || 1)));
+    const holder = document.createElement('div');
+    holder.className = 'ls-gap-text';
+    renderInlineContextGapInputs(holder, q.prompt, count, 'lsGap');
+    const inputs = [...holder.querySelectorAll('[data-ls-gap]')];
+    inputs.forEach((input) => {
+      const i = Number(input.dataset.lsGap);
+      if (Array.isArray(saved) && saved[i] != null) input.value = String(saved[i]);
+      input.readOnly = false;
+      input.disabled = locked;
+      input.addEventListener('input', () => {
+        const vals = inputs.map((x) => String(x.value || '').trim());
+        save(vals.some(Boolean) ? vals : null, 700);
+      });
+      input.addEventListener('blur', () => flushListeningSaves());
+    });
+    prompt.appendChild(holder);
+  } else if (q.type === 'match_pairs') {
+    const lefts = Array.isArray(q.leftItems) ? q.leftItems : [];
+    const rights = Array.isArray(q.rightOptions) ? q.rightOptions : [];
+    const selects = [];
+    lefts.forEach((left, i) => {
+      const row = document.createElement('label');
+      row.className = 'ls-pair';
+      const l = document.createElement('span');
+      l.className = 'ls-pair-left';
+      l.textContent = left;
+      const sel = document.createElement('select');
+      sel.className = 'ls-select';
+      sel.disabled = locked;
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = '—';
+      sel.appendChild(blank);
+      rights.forEach((r) => {
+        const o = document.createElement('option');
+        o.value = r;
+        o.textContent = r;
+        sel.appendChild(o);
+      });
+      if (Array.isArray(saved) && saved[i]) sel.value = String(saved[i]);
+      sel.addEventListener('change', () => {
+        const vals = selects.map((s) => s.value);
+        save(vals.some(Boolean) ? vals : null);
+      });
+      selects.push(sel);
+      row.append(l, sel);
+      body.appendChild(row);
+    });
+  }
+  card.appendChild(body);
+
+  if (locked) {
+    const fb = document.createElement('div');
+    fb.className = 'ls-q-mark';
+    const answered = listeningAnswered(saved);
+    if (mark?.teacherGrade || q.type === 'open') {
+      const g = live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
+      if (g?.graded) {
+        fb.textContent = t('Teacher: {points} points', { points: Number(g.pointsAwarded || 0) }) + (g.correction ? ` · ${g.correction}` : '');
+      } else if (answered) {
+        fb.textContent = t('Your teacher will mark this one.');
+      }
+    } else if (mark) {
+      const partial = !mark.correct && Number(mark.partialScore || 0) > 0;
+      fb.dataset.verdict = mark.correct ? 'correct' : (partial ? 'partial' : 'wrong');
+      const verdict = mark.correct ? `✓ ${t('Correct')}` : (partial ? `◐ ${mark.partialScore}/${mark.partialTotal}` : `✗ ${t('Wrong')}`);
+      fb.textContent = mark.correct || !mark.correctAnswer ? verdict : `${verdict} · ${t('Answer: {answer}', { answer: mark.correctAnswer })}`;
+    } else if (!answered) {
+      fb.dataset.verdict = 'wrong';
+      fb.textContent = t('Not answered');
+    }
+    if (fb.textContent) card.appendChild(fb);
+  }
+  return card;
+}
+
+// Same rule as the one-question screen: the changed words are the "found" errors.
+function listeningErrorHuntAnswer(q, rewriteRaw) {
+  const rewrite = String(rewriteRaw || '').trim();
+  if (!rewrite) return null;
+  const origTokens = tokenizeWords(String(q.prompt || '').trim());
+  const rewriteTokens = tokenizeWords(rewrite);
+  const selected = [];
+  const maxLen = Math.max(origTokens.length, rewriteTokens.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    if ((origTokens[i] || '') !== (rewriteTokens[i] || '')) selected.push(i < origTokens.length ? i : origTokens.length - 1);
+  }
+  return { rewrite, selectedTokens: selected };
+}
+
+function queueListeningSave(qIndex, answer, delay) {
+  const timers = listeningSheet.saveTimers;
+  if (timers.has(qIndex)) clearTimeout(timers.get(qIndex).timer);
+  const entry = { answer, timer: null };
+  entry.timer = setTimeout(() => {
+    timers.delete(qIndex);
+    sendListeningSave(qIndex, answer);
+  }, delay);
+  timers.set(qIndex, entry);
+  // Count it as answered straight away; the server copy follows.
+  const attempt = live.player.assignment.state?.attempt;
+  if (attempt) {
+    attempt.answersByQ = attempt.answersByQ || {};
+    attempt.answersByQ[String(qIndex)] = { ...(attempt.answersByQ[String(qIndex)] || {}), answer };
+    const info = assignmentListeningInfo(attempt, qIndex);
+    if (info) updateListeningProgress(info);
+  }
+}
+
+function flushListeningSaves() {
+  const timers = listeningSheet.saveTimers;
+  [...timers.entries()].forEach(([qIndex, entry]) => {
+    clearTimeout(entry.timer);
+    timers.delete(qIndex);
+    sendListeningSave(qIndex, entry.answer);
+  });
+  return Promise.all([...listeningSheet.pendingSaves]);
+}
+
+function sendListeningSave(qIndex, answer) {
+  const code = String(live.player.assignment.code || '').trim();
+  const attemptId = String(live.player.assignment.attemptId || '').trim();
+  if (!code || !attemptId) return;
+  // A cleared answer is just left unsaved: the server has no "unanswer".
+  if (!listeningAnswered(answer)) return;
+  const p = api('/api/assignment/answer', { method: 'POST', body: { code, attemptId, qIndex, answer } })
+    .then((data) => {
+      if (data?.attempt && live.player.assignment.state) {
+        const local = live.player.assignment.state.attempt?.answersByQ || {};
+        // Keep newer local edits typed while this save was in flight.
+        const merged = { ...(data.attempt.answersByQ || {}) };
+        listeningSheet.saveTimers.forEach((entry, i) => { merged[String(i)] = { ...(merged[String(i)] || {}), answer: local[String(i)]?.answer ?? entry.answer }; });
+        data.attempt.answersByQ = merged;
+        live.player.assignment.state.attempt = data.attempt;
+      }
+      listeningStatus(t('Saved ✓'), 'ok');
+    })
+    .catch((err) => {
+      listeningStatus(String(err?.message || t('Could not save. Check your connection.')), 'bad');
+    })
+    .finally(() => listeningSheet.pendingSaves.delete(p));
+  listeningSheet.pendingSaves.add(p);
+}
+
+function leaveListeningSheet(target, fromIndex = null) {
+  flushListeningSaves();
+  const as = live.player.assignment;
+  if (fromIndex != null) {
+    // Moving on from the section: the normal "next" logic decides (end of quiz,
+    // the unanswered reminder…), as if leaving its last question.
+    as.currentIndex = fromIndex;
+    closeListeningSheet();
+    moveAssignmentIndex(1);
+    return;
+  }
+  as.currentIndex = Math.max(0, target);
+  closeListeningSheet();
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+}
+
+async function submitListeningSection(info) {
+  if (listeningSheet.busy) return;
+  const count = info.last - info.first + 1;
+  let blank = 0;
+  for (let i = info.first; i <= info.last; i += 1) if (!listeningAnswered(listeningSavedAnswer(i))) blank += 1;
+  const ask = blank > 0
+    ? (blank === 1 ? t('1 question unanswered. Submit the section anyway? You can\'t change it afterwards.') : t('{n} questions unanswered. Submit the section anyway? You can\'t change it afterwards.', { n: blank }))
+    : t('Submit this section? You can\'t change it afterwards.');
+  if (!window.confirm(ask)) return;
+  listeningSheet.busy = true;
+  listeningStatus(t('Submitting…'));
+  try {
+    await flushListeningSaves();
+    const code = String(live.player.assignment.code || '').trim();
+    const attemptId = String(live.player.assignment.attemptId || '').trim();
+    const data = await api('/api/assignment/submit-section', { method: 'POST', body: { code, attemptId, sectionId: info.section.id } });
+    const st = live.player.assignment.state;
+    if (data?.attempt) st.attempt = data.attempt;
+    else {
+      // /play games keep nothing on the server: lock it here.
+      st.attempt.sectionsSubmitted = { ...(st.attempt.sectionsSubmitted || {}), [info.section.id]: Date.now() };
+    }
+    if (listeningSheet.audio) {
+      try { listeningSheet.audio.pause(); } catch {}
+    }
+    listeningSheet.playing = false;
+    renderListeningSheet(assignmentListeningInfo(st.attempt, info.first) || info);
+    listeningStatus(count > 1 ? t('Section submitted ✅') : t('Answer submitted ✅'), 'ok');
+    listeningSheet.el?.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    listeningStatus(String(err?.message || t('Could not submit the section.')), 'bad');
+  } finally {
+    listeningSheet.busy = false;
+  }
+}
+
+function formatListeningTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Unlimited plays: the browser's own player (pause, seek). Limited: our own
+// player with a bar you can't drag, "Play 1 of 2", and pause only if allowed.
+// A play counts on the server when it starts, so reloading never resets it.
+function renderListeningPlayer(wrap, section, attempt, locked) {
+  wrap.innerHTML = '';
+  if (!section.audioUrl) {
+    wrap.textContent = t('No recording in this section yet.');
+    return;
+  }
+  const allowed = Number(section.playsAllowed || 0);
+  // Once the section is submitted the recording is free to replay for review.
+  if (!allowed || locked) {
+    let audio = listeningSheet.audio;
+    if (!audio || !audio.controls) {
+      if (audio) { try { audio.pause(); } catch {} }
+      audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'metadata';
+      audio.src = section.audioUrl;
+      listeningSheet.audio = audio;
+    }
+    audio.className = 'ls-native-audio';
+    wrap.appendChild(audio);
+    return;
+  }
+
+  let audio = listeningSheet.audio;
+  if (!audio || audio.controls) {
+    if (audio) { try { audio.pause(); } catch {} }
+    audio = new Audio(section.audioUrl);
+    audio.preload = 'auto';
+    listeningSheet.audio = audio;
+    listeningSheet.playing = false;
+  }
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ls-play-btn';
+  const bar = document.createElement('div');
+  bar.className = 'ls-bar';
+  const fill = document.createElement('div');
+  fill.className = 'ls-bar-fill';
+  bar.appendChild(fill);
+  const time = document.createElement('span');
+  time.className = 'ls-time';
+  const note = document.createElement('span');
+  note.className = 'ls-plays';
+  wrap.append(btn, bar, time, note);
+
+  const plays = () => Number(live.player.assignment.state?.attempt?.listeningPlays?.[section.id] || 0);
+  const midPlay = () => listeningSheet.playing || (audio.currentTime > 0 && !audio.ended);
+  const refresh = () => {
+    const used = plays();
+    const left = Math.max(0, allowed - used);
+    const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+    fill.style.width = dur ? `${Math.min(100, (audio.currentTime / dur) * 100)}%` : '0%';
+    time.textContent = dur ? `${formatListeningTime(audio.currentTime)} / ${formatListeningTime(dur)}` : '';
+    if (listeningSheet.playing) {
+      btn.textContent = section.pauseAllowed ? `⏸ ${t('Pause')}` : `🔊 ${t('Playing…')}`;
+      btn.disabled = !section.pauseAllowed;
+    } else if (midPlay()) {
+      btn.textContent = `▶ ${t('Resume')}`;
+      btn.disabled = false;
+    } else if (left > 0 && !locked) {
+      btn.textContent = '▶ ' + t('Play {n} of {total}', { n: used + 1, total: allowed });
+      btn.disabled = false;
+    } else {
+      btn.textContent = t('No plays left');
+      btn.disabled = true;
+    }
+    note.textContent = midPlay()
+      ? t('Play {n} of {total}', { n: Math.max(1, used), total: allowed })
+      : (left > 0 ? (left === 1 ? t('1 play left') : t('{n} plays left', { n: left })) : '');
+  };
+  audio.ontimeupdate = refresh;
+  audio.onloadedmetadata = refresh;
+  audio.onplay = () => { listeningSheet.playing = true; refresh(); };
+  audio.onpause = () => { listeningSheet.playing = false; refresh(); };
+  audio.onended = () => {
+    listeningSheet.playing = false;
+    audio.currentTime = 0;
+    refresh();
+  };
+  // No skipping: snap back if anything tries to seek.
+  let lastTime = 0;
+  audio.addEventListener('timeupdate', () => { if (!audio.seeking) lastTime = audio.currentTime; });
+  audio.onseeking = () => { if (Math.abs(audio.currentTime - lastTime) > 1 && audio.currentTime !== 0) audio.currentTime = lastTime; };
+
+  btn.addEventListener('click', async () => {
+    if (listeningSheet.playing) {
+      if (section.pauseAllowed) audio.pause();
+      return;
+    }
+    if (midPlay()) {
+      audio.play().catch(() => {});
+      return;
+    }
+    if (plays() >= allowed) return;
+    // Start at once (phones want play() inside the tap), count it on the server.
+    audio.currentTime = 0;
+    audio.play().catch(() => listeningStatus(t('The recording could not play.'), 'bad'));
+    const st = live.player.assignment.state.attempt;
+    st.listeningPlays = { ...(st.listeningPlays || {}), [section.id]: plays() + 1 };
+    refresh();
+    try {
+      const data = await api('/api/assignment/listen', {
+        method: 'POST',
+        body: { code: live.player.assignment.code, attemptId: live.player.assignment.attemptId, sectionId: section.id },
+      });
+      if (Number.isFinite(Number(data?.plays))) st.listeningPlays[section.id] = Number(data.plays);
+    } catch (err) {
+      if (err?.data?.code === 'NO_PLAYS_LEFT') {
+        audio.pause();
+        audio.currentTime = 0;
+        st.listeningPlays[section.id] = Number(err.data.plays || allowed);
+        listeningStatus(t('No plays left'), 'bad');
+      }
+    }
+    refresh();
+  });
+  refresh();
 }

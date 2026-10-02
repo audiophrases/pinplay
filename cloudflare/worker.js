@@ -1924,6 +1924,19 @@ export default {
       }));
     }
 
+    if ((url.pathname === '/api/assignment/listen' || url.pathname === '/api/assignment/submit-section') && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+      const sectionId = sanitizeListeningSectionId(body?.sectionId);
+      if (!code || !attemptId || !sectionId) return json({ error: 'Missing required fields.' }, 400);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch(`https://room${url.pathname.replace('/api/assignment/', '/assignments/')}`, {
+        method: 'POST',
+        body: JSON.stringify({ code, attemptId, sectionId }),
+      }));
+    }
+
     if (url.pathname === '/api/assignment/focus-event' && request.method === 'POST') {
       const body = await safeJson(request);
       const code = sanitizeAssignmentCode(body?.code);
@@ -3390,6 +3403,9 @@ export class QuizRoom {
 
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
+        if (attemptSectionSubmitted(attempt, question.listeningSection)) {
+          return json({ error: 'This listening section is already submitted.', code: 'SECTION_SUBMITTED' }, 409);
+        }
 
         // One-time backfill if this is a legacy row whose cached pending
         // counts haven't been seeded yet. Subsequent writes hit the fast path.
@@ -3427,6 +3443,45 @@ export class QuizRoom {
           metrics,
           attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers, includeAnswerKey: attemptAnswerKey(attempt, includeAnswers) }),
         });
+      }
+
+      // Listening sections: a play counts when it starts and is kept on the
+      // attempt, so reloading never resets it; a submitted section is locked.
+      if ((url.pathname === '/assignments/listen' || url.pathname === '/assignments/submit-section') && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const attemptId = sanitizeAssignmentAttemptId(body?.attemptId);
+        const sectionId = sanitizeListeningSectionId(body?.sectionId);
+        if (!code || !attemptId || !sectionId) return json({ error: 'Missing required fields.' }, 400);
+        const [assignment, attempt] = await Promise.all([
+          loadAssignmentBase(this.state.storage, code),
+          this.state.storage.get(`a:${code}:t:${attemptId}`),
+        ]);
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        if (!attempt) return json({ error: 'Attempt not found.' }, 404);
+        const settings = attemptAssignment(assignment, attempt);
+        const section = (assignment.quiz?.listeningSections || []).find((s) => s.id === sectionId);
+        if (!section) return json({ error: 'Listening section not found.' }, 404);
+        if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
+        const now = Date.now();
+        if (url.pathname === '/assignments/listen') {
+          const allowed = Math.max(0, Math.min(3, Math.round(Number(section.playsAllowed) || 0)));
+          attempt.listeningPlays = attempt.listeningPlays && typeof attempt.listeningPlays === 'object' ? attempt.listeningPlays : {};
+          const plays = Math.max(0, Math.round(Number(attempt.listeningPlays[sectionId]) || 0));
+          if (allowed > 0 && plays >= allowed) {
+            return json({ error: 'No plays left.', code: 'NO_PLAYS_LEFT', plays, playsAllowed: allowed }, 409);
+          }
+          attempt.listeningPlays[sectionId] = plays + 1;
+          attempt.updatedAt = now;
+          await saveAttempt(this.state.storage, code, attemptId, attempt);
+          return json({ ok: true, plays: plays + 1, playsAllowed: allowed });
+        }
+        attempt.sectionsSubmitted = attempt.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {};
+        if (!attempt.sectionsSubmitted[sectionId]) attempt.sectionsSubmitted[sectionId] = now;
+        attempt.updatedAt = now;
+        await saveAttempt(this.state.storage, code, attemptId, attempt);
+        const includeAnswers = settings.feedbackMode === 'instant';
+        return json({ ok: true, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers, includeAnswerKey: attemptAnswerKey(attempt, includeAnswers) }) });
       }
 
       if (url.pathname === '/assignments/submit' && request.method === 'POST') {
@@ -8291,6 +8346,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
       const qIndex = Number(idxRaw);
       const question = assignment?.quiz?.questions?.[qIndex];
       if (!question || isAssignmentTeacherGradedQuestion(question)) return null;
+      // A listening section shows its marks only once it is submitted (locked).
+      if (question.listeningSection && !attempt?.submitted && !attemptSectionSubmitted(attempt, question.listeningSection)) return null;
       const verdict = evaluate(question, item?.answer);
       const basePoints = Number(question?.points || 0);
       const scoreFraction = verdictScoreFraction(verdict);
@@ -8340,6 +8397,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
     answersWithCorrectness,
+    listeningPlays: attempt?.listeningPlays && typeof attempt.listeningPlays === 'object' ? attempt.listeningPlays : {},
+    sectionsSubmitted: attempt?.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {},
     focusEventsCount: focusEvents.length,
     focusEventsTotalMs,
   };
@@ -8927,10 +8986,39 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     const quiz = normalizeQuiz(assignment.quiz || {});
     base.quiz = {
       title: String(quiz?.title || ''),
-      questions: Array.isArray(quiz?.questions) ? quiz.questions.map((q) => publicQuestion(q, { includeAnswerKey })) : [],
+      questions: Array.isArray(quiz?.questions) ? quiz.questions.map((q) => {
+        const pq = publicQuestion(q, { includeAnswerKey });
+        if (pq && q.listeningSection) pq.listeningSection = q.listeningSection;
+        return pq;
+      }) : [],
     };
+    const sections = publicListeningSections(quiz);
+    if (sections.length) base.quiz.listeningSections = sections;
   }
   return base;
+}
+
+// Listening sections as students see them (phase 2): the recording URL and the
+// play/pause rules; play counts and submitted sections live on the attempt.
+function publicListeningSections(quiz) {
+  return (Array.isArray(quiz?.listeningSections) ? quiz.listeningSections : []).map((s) => ({
+    id: s.id,
+    title: String(s.title || ''),
+    text: String(s.text || ''),
+    audioUrl: String(s.audio?.url || ''),
+    playsAllowed: Math.max(0, Math.min(3, Math.round(Number(s.playsAllowed) || 0))),
+    pauseAllowed: !!s.pauseAllowed,
+  }));
+}
+
+function listeningSectionOfQuestion(assignment, qIndex) {
+  const id = assignment?.quiz?.questions?.[qIndex]?.listeningSection;
+  if (!id) return null;
+  return (assignment.quiz.listeningSections || []).find((s) => s.id === id) || null;
+}
+
+function attemptSectionSubmitted(attempt, sectionId) {
+  return !!(sectionId && attempt?.sectionsSubmitted && attempt.sectionsSubmitted[sectionId]);
 }
 
 function sanitizeName(name) {
