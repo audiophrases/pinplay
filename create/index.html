@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261001-avatars" />
+    <link rel="stylesheet" href="../styles.css?v=20261002-listening" />
   </head>
   <body>
     <header class="topbar">
@@ -348,6 +348,22 @@
                       <div id="levelToolsStatus" class="small top-space"></div>
                     </div>
                   </details>
+                  <details id="listeningTools" class="level-tools listening-tools">
+                    <summary><span data-i18n>🎧 Listening sections</span> <span id="listeningSummary" class="level-coverage"></span></summary>
+                    <div class="level-tools-body">
+                      <p class="small muted" data-i18n>Questions that share one recording, shown together on one scrolling sheet like an exam paper. Students see all of them while the recording plays. A quiz can have several (Part 1, Part 2…) and normal questions around them.</p>
+                      <div class="level-tools-row">
+                        <label><span data-i18n>From question</span>
+                          <input id="listeningRangeFrom" type="number" min="1" value="1" />
+                        </label>
+                        <label><span data-i18n>to</span>
+                          <input id="listeningRangeTo" type="number" min="1" value="1" />
+                        </label>
+                        <button id="listeningAddBtn" class="btn" type="button" data-i18n>Make listening section</button>
+                      </div>
+                      <div id="listeningToolsStatus" class="small top-space"></div>
+                    </div>
+                  </details>
                   <div id="questionList" class="question-list"></div>
                 </div>
               </div>
@@ -604,7 +620,7 @@
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
-    <script src="../app.js?v=20261001-avatars"></script>
+    <script src="../app.js?v=20261002-listening"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261001-startkey"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

@@ -1,7 +1,27 @@
 # Listening sections: a scrollable exam sheet with one recording
 
-Status: **plan, 2026-10-02.** Nothing built yet. Decisions settled with the
-owner on 2026-10-02 (section 2).
+Status: **phase 1 (data model + editor) built 2026-10-02.** Phases 2–5 are
+still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
+
+Phase 1 as built:
+- `listeningSections` on the quiz and `listeningSection` on each question, kept
+  by both normalizers through one shared block of functions (identical in
+  `app.js` and `worker.js`; a test checks they stay the same). Membership needs
+  a known section, a section 3 type and one unbroken run; media is stripped.
+- Editor: a **🎧 Listening sections** panel next to Levels ("From question … to
+  … → Make listening section"); each section shows as a blue panel above its
+  first question (title, instruction, recording, Plays allowed, Pausing,
+  question range, remove). Questions with pictures etc. get a warning before
+  their media is removed; unsuitable types stay outside with a message.
+- The recording uploads to cloud storage as soon as it is picked (too big for
+  the browser's local copy); if that fails it stays embedded and the server
+  uploads it when the quiz is assigned. The media clean-up job counts section
+  recordings as in use.
+- The Adaptive box is hidden for a quiz with sections; the server refuses an
+  adaptive assignment for one. PinPlay Cup never deals section questions.
+- Until phase 2, students still get section questions one at a time (without
+  media); the recording isn't played yet.
+- Tests: `tests/listening-sections.test.js`.
 
 In one line: a quiz can contain **listening sections**: a run of consecutive
 questions that share one recording and show **all together on one calm,

@@ -1446,6 +1446,20 @@ function bindBuilderEvents() {
             }
             existingIds.add(q.id);
           });
+          if (Array.isArray(parsed.listeningSections) && parsed.listeningSections.length) {
+            const taken = new Set((quiz.listeningSections || []).map((sec) => sec.id));
+            const renamed = {};
+            parsed.listeningSections.forEach((sec, k) => {
+              const copy = { ...sec };
+              if (taken.has(copy.id)) {
+                copy.id = `ls${Date.now().toString(36)}${k}`;
+                renamed[sec.id] = copy.id;
+              }
+              taken.add(copy.id);
+              quiz.listeningSections = [...(quiz.listeningSections || []), copy];
+            });
+            parsed.questions.forEach((q) => { if (renamed[q.listeningSection]) q.listeningSection = renamed[q.listeningSection]; });
+          }
           quiz.questions.push(...parsed.questions);
           if (parsed.title && !quiz.title) quiz.title = parsed.title;
           if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
@@ -2156,6 +2170,259 @@ function findQuestionIndexFromBuilderEventTarget(target) {
   return Number.isInteger(idx) ? idx : null;
 }
 
+
+// ---------- Listening sections in the builder (LISTENING_MODE_PLAN.md) ----------
+
+function quizListeningSections() {
+  if (!Array.isArray(quiz.listeningSections)) quiz.listeningSections = [];
+  return quiz.listeningSections;
+}
+
+function findListeningSection(id) {
+  return quizListeningSections().find((sec) => sec.id === id) || null;
+}
+
+function quizHasListeningSections() {
+  return Array.isArray(quiz?.listeningSections) && quiz.questions?.some((q) => q?.listeningSection);
+}
+
+// Question numbers (1-based) a section covers, or null when it has none yet.
+function listeningSectionRange(id) {
+  let first = -1;
+  let last = -1;
+  quiz.questions.forEach((q, idx) => {
+    if (q?.listeningSection !== id) return;
+    if (first < 0) first = idx;
+    last = idx;
+  });
+  return first < 0 ? null : { from: first + 1, to: last + 1 };
+}
+
+// Questions from..to (1-based) become the section's questions. Types that
+// don't suit a listening sheet stay out; pictures, GIFs, videos, reading texts
+// and question audio are removed (after a warning). Returns a message, or ''.
+function setListeningSectionRange(id, from, to) {
+  const sec = findListeningSection(id);
+  if (!sec) return '';
+  const lo = Math.max(1, Math.min(from, to));
+  const hi = Math.min(quiz.questions.length, Math.max(from, to));
+  if (!quiz.questions.length || lo > hi) return t('Choose question numbers between 1 and {n}.', { n: quiz.questions.length });
+  const picked = [];
+  const skipped = [];
+  for (let i = lo - 1; i < hi; i++) {
+    const q = quiz.questions[i];
+    if (LISTENING_SECTION_TYPES.includes(q?.type)) picked.push(i);
+    else skipped.push(i + 1);
+  }
+  if (!picked.length) return t('None of those questions can go in a listening section.');
+  const withMedia = picked.filter((i) => {
+    const q = quiz.questions[i];
+    return !!(q.imageData || String(q.imageKeyword || '').trim() || String(q.gifKeyword || '').trim()
+      || String(q.videoKeyword || '').trim() || String(q.readingText || '').trim()
+      || normalizeQuestionMedia(q.media).kind === 'video' || q.audioData || (q.audioEnabled && String(q.audioText || '').trim()));
+  });
+  if (withMedia.length && !confirm(t('These questions have pictures, GIFs, videos, reading texts or audio: {list}. A listening section has none of these (the screen is for the questions while the recording plays), so they will be removed. Continue?', { list: withMedia.map((i) => i + 1).join(', ') }))) {
+    return '';
+  }
+  quiz.questions.forEach((q) => { if (q?.listeningSection === id) delete q.listeningSection; });
+  picked.forEach((i) => {
+    const q = quiz.questions[i];
+    q.listeningSection = id;
+    stripListeningQuestionMedia(q);
+    delete q.imageKeyword;
+    delete q.gifKeyword;
+    delete q.videoKeyword;
+  });
+  return skipped.length
+    ? t('These questions stay outside the section: {list}. Speaking, recording, picture, spelling and game questions don\'t fit a listening sheet.', { list: skipped.join(', ') })
+    : '';
+}
+
+function addListeningSection(from, to) {
+  const sections = quizListeningSections();
+  if (sections.length >= LISTENING_MAX_SECTIONS) return t('A quiz can have up to {n} listening sections.', { n: LISTENING_MAX_SECTIONS });
+  const id = `ls${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  sections.push({ id, title: '', text: '', audio: null, playsAllowed: LISTENING_DEFAULT_PLAYS, pauseAllowed: true });
+  const msg = setListeningSectionRange(id, from, to);
+  if (!quiz.questions.some((q) => q?.listeningSection === id)) {
+    quiz.listeningSections = sections.filter((sec) => sec.id !== id);
+    return msg || t('The section was not created.');
+  }
+  return msg;
+}
+
+function removeListeningSection(id) {
+  quiz.questions.forEach((q) => { if (q?.listeningSection === id) delete q.listeningSection; });
+  quiz.listeningSections = quizListeningSections().filter((sec) => sec.id !== id);
+}
+
+// Keeps membership consistent after reorders and type changes, and drops
+// sections that have no questions left.
+function tidyListeningSections() {
+  const sections = quizListeningSections();
+  const used = assignListeningMembership(quiz.questions, sections.map((sec) => sec.id));
+  quiz.listeningSections = sections.filter((sec) => used.has(sec.id));
+  if (!quiz.listeningSections.length) delete quiz.listeningSections;
+}
+
+function buildListeningSectionPanel(sec) {
+  const range = listeningSectionRange(sec.id) || { from: 1, to: 1 };
+  const plays = Number(sec.playsAllowed);
+  const audioUrl = sec.audio?.url || '';
+  const recording = audioUrl
+    ? `<audio controls preload="none" src="${escapeHtml(audioUrl)}"></audio>
+       <span class="small muted">${escapeHtml(sec.audio?.name || t('Recording added'))}</span>`
+    : `<span class="small muted">${escapeHtml(t('No recording yet'))}</span>`;
+  return `
+    <div class="listening-section-head">
+      <strong>🎧 ${escapeHtml(t('Listening section'))}</strong>
+      <span class="small muted">${escapeHtml(t('Questions {from}–{to}', range))}</span>
+      <button type="button" class="btn btn-sm" data-ls-remove="${sec.id}" title="${escapeHtml(t('Remove the section (the questions stay)'))}">✕</button>
+    </div>
+    <label>${escapeHtml(t('Title (optional)'))}
+      <input type="text" maxlength="120" data-ls-id="${sec.id}" data-ls-field="title" value="${escapeHtml(sec.title || '')}" placeholder="${escapeHtml(t('e.g. Part 1 — Questions {from}–{to}', range))}" />
+    </label>
+    <label>${escapeHtml(t('Instruction (optional)'))}
+      <textarea rows="2" maxlength="600" data-ls-id="${sec.id}" data-ls-field="text" placeholder="${escapeHtml(t('e.g. You will hear a conversation between two friends. Listen and choose the right answer.'))}">${escapeHtml(sec.text || '')}</textarea>
+    </label>
+    <div class="listening-section-recording">
+      <span>${escapeHtml(t('Recording'))}</span>
+      ${recording}
+      <input type="file" accept="audio/*" data-ls-audio="${sec.id}" />
+      <span class="small" data-ls-audio-status="${sec.id}"></span>
+    </div>
+    <div class="listening-section-row">
+      <label>${escapeHtml(t('Plays allowed'))}
+        <select data-ls-id="${sec.id}" data-ls-field="playsAllowed">
+          ${[1, 2, 3].map((n) => `<option value="${n}" ${plays === n ? 'selected' : ''}>${n}</option>`).join('')}
+          <option value="0" ${plays === 0 ? 'selected' : ''}>${escapeHtml(t('Unlimited'))}</option>
+        </select>
+      </label>
+      <label class="listening-section-check">
+        <input type="checkbox" data-ls-id="${sec.id}" data-ls-field="pauseAllowed" ${sec.pauseAllowed !== false ? 'checked' : ''} />
+        ${escapeHtml(t('Pausing allowed'))}
+      </label>
+      <span class="listening-section-range">
+        ${escapeHtml(t('Questions'))}
+        <input type="number" min="1" data-ls-from="${sec.id}" value="${range.from}" />
+        ${escapeHtml(t('to'))}
+        <input type="number" min="1" data-ls-to="${sec.id}" value="${range.to}" />
+        <button type="button" class="btn btn-sm" data-ls-apply="${sec.id}">${escapeHtml(t('Update'))}</button>
+      </span>
+    </div>
+    <p class="small muted">${escapeHtml(t('With limited plays, students can\'t rewind or skip. Questions here have no pictures, GIFs, videos or reading texts.'))}</p>`;
+}
+
+// The recording goes to cloud storage right away: it is too big to keep in
+// the quiz (the browser's local copy has a ~5 MB limit). If the upload fails,
+// it stays embedded and the server uploads it when the quiz is assigned.
+async function attachListeningRecording(id, file) {
+  const sec = findListeningSection(id);
+  const statusEl = () => questionListEl.querySelector(`[data-ls-audio-status="${id}"]`);
+  if (!sec || !file) return;
+  if (!String(file.type || '').startsWith('audio/')) {
+    alert(t('Please choose an audio file.'));
+    return;
+  }
+  const show = (msg, cls = '') => { const el = statusEl(); if (el) { el.textContent = msg; el.className = `small ${cls}`; } };
+  show(t('⏳ Uploading the recording…'));
+  let dataUrl;
+  try {
+    dataUrl = await fileToDataUrl(file);
+  } catch (err) {
+    show(t('Audio load failed: {msg}', { msg: err.message }), 'bad');
+    return;
+  }
+  const name = String(file.name || '').slice(0, 120);
+  try {
+    const quizId = quiz._r2QuizId || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    quiz._r2QuizId = quizId;
+    const folder = creatorRole === 'guest' && creatorWsid ? `workspaces/${creatorWsid}/${quizId}` : quizId;
+    const key = `${folder}/listening/${id}-${Date.now().toString(36)}${mimeToExt(dataUrl)}`;
+    await uploadMediaToR2(dataUrl, key);
+    sec.audio = { kind: 'file', url: `${loadBackendUrl() || 'https://api.pinplay.win'}/api/media/${key}`, name };
+    renderBuilder();
+    try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  } catch (err) {
+    sec.audio = { kind: 'file', url: dataUrl, name };
+    renderBuilder();
+    const el = statusEl();
+    if (el) {
+      el.textContent = t('Not uploaded yet ({msg}); it will be uploaded when you assign the quiz.', { msg: err.message });
+      el.className = 'small bad';
+    }
+  }
+}
+
+function bindListeningSectionEvents() {
+  if (!questionListEl || questionListEl.dataset.lsBound) return;
+  questionListEl.dataset.lsBound = '1';
+  const onField = (e) => {
+    const el = e.target.closest('[data-ls-field]');
+    if (!el) return;
+    const sec = findListeningSection(el.dataset.lsId);
+    if (!sec) return;
+    const field = el.dataset.lsField;
+    if (field === 'pauseAllowed') sec.pauseAllowed = !!el.checked;
+    else if (field === 'playsAllowed') sec.playsAllowed = Number(el.value);
+    else if (field === 'title') sec.title = String(el.value || '').slice(0, 120);
+    else if (field === 'text') sec.text = String(el.value || '').slice(0, 600);
+  };
+  questionListEl.addEventListener('input', onField);
+  questionListEl.addEventListener('change', (e) => {
+    onField(e);
+    const fileEl = e.target.closest('[data-ls-audio]');
+    if (fileEl) attachListeningRecording(fileEl.dataset.lsAudio, fileEl.files?.[0]);
+  });
+  questionListEl.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-ls-remove]');
+    if (removeBtn) {
+      if (!confirm(t('Remove this listening section? Its questions stay in the quiz as normal questions.'))) return;
+      removeListeningSection(removeBtn.dataset.lsRemove);
+      renderBuilder();
+      return;
+    }
+    const applyBtn = e.target.closest('[data-ls-apply]');
+    if (applyBtn) {
+      const id = applyBtn.dataset.lsApply;
+      const from = Number(questionListEl.querySelector(`[data-ls-from="${id}"]`)?.value);
+      const to = Number(questionListEl.querySelector(`[data-ls-to="${id}"]`)?.value);
+      syncQuizFromUI();
+      const msg = setListeningSectionRange(id, from, to);
+      renderBuilder();
+      if (msg) setListeningToolsStatus(msg, 'bad');
+    }
+  });
+}
+
+function setListeningToolsStatus(msg, cls = 'ok') {
+  const el = document.getElementById('listeningToolsStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `small top-space ${cls}`;
+}
+
+function initListeningSectionTools() {
+  bindListeningSectionEvents();
+  const btn = document.getElementById('listeningAddBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    syncQuizFromUI();
+    const from = Number(document.getElementById('listeningRangeFrom')?.value);
+    const to = Number(document.getElementById('listeningRangeTo')?.value);
+    const msg = addListeningSection(from, to);
+    renderBuilder();
+    setListeningToolsStatus(msg || t('Listening section added: add its recording below.'), msg ? 'bad' : 'ok');
+  });
+}
+
+function renderListeningSummary() {
+  const el = document.getElementById('listeningSummary');
+  if (!el) return;
+  const n = quizHasListeningSections() ? quizListeningSections().length : 0;
+  el.textContent = n ? t('{n} in this quiz', { n }) : '';
+}
+
 function renderBuilder() {
   normalizeQuizAudioDefaults(quiz);
   quizTitleEl.value = quiz.title || '';
@@ -2170,7 +2437,9 @@ function renderBuilder() {
     }
   }
   questionListEl.innerHTML = '';
+  tidyListeningSections();
   renderLevelCoverage();
+  renderListeningSummary();
 
   if (!quiz.questions.length) {
     questionListEl.innerHTML = t('<p class="muted">No questions yet. Add one above.</p>');
@@ -2178,8 +2447,17 @@ function renderBuilder() {
   }
 
   quiz.questions.forEach((q, idx) => {
+    // A listening section's settings sit just above its first question.
+    const sectionId = q.listeningSection || '';
+    const listeningSec = sectionId ? findListeningSection(sectionId) : null;
+    if (listeningSec && quiz.questions[idx - 1]?.listeningSection !== sectionId) {
+      const panel = document.createElement('div');
+      panel.className = 'listening-section-panel';
+      panel.innerHTML = buildListeningSectionPanel(listeningSec);
+      questionListEl.appendChild(panel);
+    }
     const wrap = document.createElement('div');
-    wrap.className = 'question-item';
+    wrap.className = listeningSec ? 'question-item in-listening-section' : 'question-item';
     if (!q.mediaExpand) q.mediaExpand = {};
 
     const isCollapsed = !!q.collapsed;
@@ -2197,6 +2475,7 @@ function renderBuilder() {
           <span class="q-type-icon">${iconForType(q.type)}</span>
           <strong>Q${idx + 1}</strong>
           <span class="q-cefr-chip" data-cefr-chip="${idx}">${normalizeCefr(q.cefr)}</span>
+          ${listeningSec ? `<span class="q-listening-chip" title="${escapeHtml(t('In a listening section'))}">🎧</span>` : ''}
           ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
         <div class="question-actions">
@@ -2671,7 +2950,8 @@ function renderBuilder() {
     mediaSection += buildVideoSettingsMarkup(idx, q);
     mediaSection += `</div>`;
 
-    body += specific + mediaSection + '</div>';
+    // Listening-section questions have no media of their own.
+    body += specific + (listeningSec ? '' : mediaSection) + '</div>';
     wrap.innerHTML = header + body;
     wrap.dataset.questionIndex = String(idx);
     questionListEl.appendChild(wrap);
@@ -4649,6 +4929,7 @@ function bindLiveEvents() {
   if (assignmentExamModeBtn) assignmentExamModeBtn.addEventListener('click', toggleAssignmentExamMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   initAssignmentAdaptiveControl();
+  initListeningSectionTools();
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
     showArchivedAssignments = !showArchivedAssignments;
@@ -15592,7 +15873,8 @@ function syncAssignmentAdaptiveControl() {
   if (!wrap) return;
   const { counts, tagged } = cefrCoverage(quiz?.questions);
   const levels = CEFR_LEVELS.filter((l) => counts[l] > 0);
-  const available = levels.length >= 2;
+  // A listening paper has a fixed order: no adaptive with listening sections.
+  const available = levels.length >= 2 && !quizHasListeningSections();
   wrap.classList.toggle('hidden', !available);
   const box = document.getElementById('assignmentAdaptive');
   const countEl = document.getElementById('assignmentAdaptiveCount');
@@ -16177,6 +16459,99 @@ function normalizePinZones(question) {
     }));
 }
 
+// ---------------------------------------------------------------- listening sections
+// A listening section (LISTENING_MODE_PLAN.md) is a run of consecutive
+// questions that share one recording and show together as one scrolling
+// sheet. Kept identical in app.js and cloudflare/worker.js.
+const LISTENING_SECTION_TYPES = ['mcq', 'multi', 'tf', 'text', 'error_hunt', 'context_gap', 'match_pairs', 'open'];
+const LISTENING_MAX_SECTIONS = 20;
+const LISTENING_DEFAULT_PLAYS = 2;
+
+function sanitizeListeningSectionId(value) {
+  const id = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{1,40}$/.test(id) ? id : '';
+}
+
+// The recording: an uploaded file (a URL, or an embedded file not uploaded yet).
+function normalizeListeningAudio(audio) {
+  if (!audio || typeof audio !== 'object' || audio.kind !== 'file') return null;
+  const url = String(audio.url || '').trim();
+  if (!/^(https?:\/\/|data:audio\/)/i.test(url)) return null;
+  const name = String(audio.name || '').trim().slice(0, 120);
+  return { kind: 'file', url, ...(name ? { name } : {}) };
+}
+
+// Section settings, cleaned. playsAllowed: 1–3, or 0 = unlimited.
+function normalizeListeningSectionList(raw) {
+  const seen = new Set();
+  return (Array.isArray(raw) ? raw : []).slice(0, LISTENING_MAX_SECTIONS).map((s) => {
+    const id = sanitizeListeningSectionId(s?.id);
+    if (!id || seen.has(id)) return null;
+    seen.add(id);
+    const plays = Number(s.playsAllowed);
+    return {
+      id,
+      title: String(s.title || '').trim().slice(0, 120),
+      text: String(s.text || '').trim().slice(0, 600),
+      audio: normalizeListeningAudio(s.audio),
+      playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
+      pauseAllowed: s.pauseAllowed !== false,
+    };
+  }).filter(Boolean);
+}
+
+// Which questions belong to which section, fixed in place. A question stays in
+// its section only if the section exists, its type suits a listening sheet and
+// it is part of the section's one unbroken run (one cut off from the run, e.g.
+// after a reorder, leaves). Returns the ids of sections that have questions.
+function assignListeningMembership(questions, sectionIds) {
+  const known = new Set(sectionIds);
+  const closed = new Set();
+  const used = new Set();
+  let current = null;
+  (questions || []).forEach((q) => {
+    if (!q || typeof q !== 'object') return;
+    const id = sanitizeListeningSectionId(q.listeningSection);
+    const fits = !!id && known.has(id) && LISTENING_SECTION_TYPES.includes(q.type);
+    if (fits && id === current) {
+      q.listeningSection = id;
+      used.add(id);
+      return;
+    }
+    if (current) closed.add(current);
+    current = null;
+    if (fits && !closed.has(id)) {
+      current = id;
+      q.listeningSection = id;
+      used.add(id);
+      return;
+    }
+    delete q.listeningSection;
+  });
+  return used;
+}
+
+// A section's questions carry no media of their own: the whole screen is for
+// the questions while the recording plays.
+function stripListeningQuestionMedia(q) {
+  q.imageData = '';
+  ['imageKeyword', 'gifKeyword', 'videoKeyword', 'videoProviderPreference'].forEach((k) => { if (k in q) q[k] = ''; });
+  q.readingText = '';
+  q.media = normalizeQuestionMedia(null);
+  q.audioEnabled = false;
+  q.audioData = '';
+  q.ttsAudioKey = '';
+}
+
+// Cleans the quiz's sections and its questions' membership (in place) and
+// returns the sections that have questions.
+function normalizeListeningSections(rawSections, questions) {
+  const sections = normalizeListeningSectionList(rawSections);
+  const used = assignListeningMembership(questions, sections.map((s) => s.id));
+  (questions || []).forEach((q) => { if (q?.listeningSection) stripListeningQuestionMedia(q); });
+  return sections.filter((s) => used.has(s.id));
+}
+
 function normalizeQuizForLive(raw) {
   const quizTtsLanguage = normalizeTtsLanguage(raw.ttsLanguage);
   const quizVoice = normalizeTtsVoice(raw.language, quizTtsLanguage);
@@ -16219,6 +16594,7 @@ function normalizeQuizForLive(raw) {
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q.media),
       ...(normalizeCefr(q.cefr) ? { cefr: normalizeCefr(q.cefr) } : {}),
+      ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
     };
 
     if (base.ttsLanguage === 'OTHER' && !String(q.language || '').trim() && !String(raw.language || '').trim()) {
@@ -16407,6 +16783,9 @@ function normalizeQuizForLive(raw) {
   if (!normalized.questions.length) {
     throw new Error('No valid questions for live game.');
   }
+
+  const listeningSections = normalizeListeningSections(raw.listeningSections, normalized.questions);
+  if (listeningSections.length) normalized.listeningSections = listeningSections;
 
   return normalized;
 }

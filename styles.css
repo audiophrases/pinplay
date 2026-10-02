@@ -539,6 +539,75 @@ textarea {
   width: 5.5rem;
 }
 
+/* Listening sections in the builder (LISTENING_MODE_PLAN.md): the section's
+   settings sit above its first question, and its questions share a blue edge. */
+.listening-section-panel {
+  display: grid;
+  gap: .5rem;
+  margin: .9rem 0 .35rem;
+  padding: .7rem .8rem;
+  border: 1px solid #93c5fd;
+  border-left: 5px solid #3b82f6;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.listening-section-head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.listening-section-head .btn {
+  margin-left: auto;
+}
+
+.listening-section-recording,
+.listening-section-row,
+.listening-section-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.listening-section-recording audio {
+  height: 2rem;
+  max-width: 100%;
+}
+
+.listening-section-recording input[type="file"] {
+  width: auto;
+}
+
+.listening-section-row select {
+  width: auto;
+}
+
+.listening-section-range input[type="number"] {
+  width: 4.5rem;
+}
+
+.listening-section-check {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+}
+
+.listening-section-check input {
+  width: auto;
+}
+
+.question-item.in-listening-section {
+  border-left: 5px solid #3b82f6;
+}
+
+.q-listening-chip {
+  flex-shrink: 0;
+  font-size: .85rem;
+}
+
 /* Media Manager (MEDIA_MANAGER_PLAN.md): the table scrolls, everything above
    it (summary, filters, selection bar) stays in view. */
 .dialog-card.media-manager {

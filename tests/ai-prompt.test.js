@@ -21,7 +21,7 @@ before(() => {
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
-    'countErrorHuntRequiredTokens', 'normalizeWordle', 'normalizeQuiz', 'detectQuestionMediaProvider', 'contextGapList',
+    'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'detectQuestionMediaProvider', 'contextGapList',
   ], { crypto: require('node:crypto').webcrypto });
 });
 

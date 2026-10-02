@@ -2718,6 +2718,10 @@ export class QuizRoom {
         // Adaptive: N questions per student, capped at the questions it can serve.
         const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
         if (adaptiveCount > 0) {
+          // A listening paper has a fixed order (LISTENING_MODE_PLAN.md).
+          if (quiz.listeningSections?.length) {
+            return json({ error: 'A quiz with listening sections can\'t be adaptive.' }, 400);
+          }
           const { bands, pool } = assignmentAdaptivePool(assignment);
           if (bands.length < 2) {
             return json({ error: 'Adaptive mode needs questions tagged with at least two levels.' }, 400);
@@ -6469,6 +6473,99 @@ function normalizeCefrLevel(value) {
   return CEFR_LEVELS.includes(v) ? v : '';
 }
 
+// ---------------------------------------------------------------- listening sections
+// A listening section (LISTENING_MODE_PLAN.md) is a run of consecutive
+// questions that share one recording and show together as one scrolling
+// sheet. Kept identical in app.js and cloudflare/worker.js.
+const LISTENING_SECTION_TYPES = ['mcq', 'multi', 'tf', 'text', 'error_hunt', 'context_gap', 'match_pairs', 'open'];
+const LISTENING_MAX_SECTIONS = 20;
+const LISTENING_DEFAULT_PLAYS = 2;
+
+function sanitizeListeningSectionId(value) {
+  const id = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{1,40}$/.test(id) ? id : '';
+}
+
+// The recording: an uploaded file (a URL, or an embedded file not uploaded yet).
+function normalizeListeningAudio(audio) {
+  if (!audio || typeof audio !== 'object' || audio.kind !== 'file') return null;
+  const url = String(audio.url || '').trim();
+  if (!/^(https?:\/\/|data:audio\/)/i.test(url)) return null;
+  const name = String(audio.name || '').trim().slice(0, 120);
+  return { kind: 'file', url, ...(name ? { name } : {}) };
+}
+
+// Section settings, cleaned. playsAllowed: 1–3, or 0 = unlimited.
+function normalizeListeningSectionList(raw) {
+  const seen = new Set();
+  return (Array.isArray(raw) ? raw : []).slice(0, LISTENING_MAX_SECTIONS).map((s) => {
+    const id = sanitizeListeningSectionId(s?.id);
+    if (!id || seen.has(id)) return null;
+    seen.add(id);
+    const plays = Number(s.playsAllowed);
+    return {
+      id,
+      title: String(s.title || '').trim().slice(0, 120),
+      text: String(s.text || '').trim().slice(0, 600),
+      audio: normalizeListeningAudio(s.audio),
+      playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
+      pauseAllowed: s.pauseAllowed !== false,
+    };
+  }).filter(Boolean);
+}
+
+// Which questions belong to which section, fixed in place. A question stays in
+// its section only if the section exists, its type suits a listening sheet and
+// it is part of the section's one unbroken run (one cut off from the run, e.g.
+// after a reorder, leaves). Returns the ids of sections that have questions.
+function assignListeningMembership(questions, sectionIds) {
+  const known = new Set(sectionIds);
+  const closed = new Set();
+  const used = new Set();
+  let current = null;
+  (questions || []).forEach((q) => {
+    if (!q || typeof q !== 'object') return;
+    const id = sanitizeListeningSectionId(q.listeningSection);
+    const fits = !!id && known.has(id) && LISTENING_SECTION_TYPES.includes(q.type);
+    if (fits && id === current) {
+      q.listeningSection = id;
+      used.add(id);
+      return;
+    }
+    if (current) closed.add(current);
+    current = null;
+    if (fits && !closed.has(id)) {
+      current = id;
+      q.listeningSection = id;
+      used.add(id);
+      return;
+    }
+    delete q.listeningSection;
+  });
+  return used;
+}
+
+// A section's questions carry no media of their own: the whole screen is for
+// the questions while the recording plays.
+function stripListeningQuestionMedia(q) {
+  q.imageData = '';
+  ['imageKeyword', 'gifKeyword', 'videoKeyword', 'videoProviderPreference'].forEach((k) => { if (k in q) q[k] = ''; });
+  q.readingText = '';
+  q.media = normalizeQuestionMedia(null);
+  q.audioEnabled = false;
+  q.audioData = '';
+  q.ttsAudioKey = '';
+}
+
+// Cleans the quiz's sections and its questions' membership (in place) and
+// returns the sections that have questions.
+function normalizeListeningSections(rawSections, questions) {
+  const sections = normalizeListeningSectionList(rawSections);
+  const used = assignListeningMembership(questions, sections.map((s) => s.id));
+  (questions || []).forEach((q) => { if (q?.listeningSection) stripListeningQuestionMedia(q); });
+  return sections.filter((s) => used.has(s.id));
+}
+
 function normalizeQuiz(quiz) {
   const normalized = {
     version: 1,
@@ -6498,6 +6595,7 @@ function normalizeQuiz(quiz) {
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
       ...(normalizeCefrLevel(q.cefr) ? { cefr: normalizeCefrLevel(q.cefr) } : {}),
+      ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
     };
 
     if (['mcq', 'multi'].includes(q.type)) {
@@ -6701,6 +6799,9 @@ function normalizeQuiz(quiz) {
   if (!normalized.questions.length) {
     throw new Error('No valid questions for room.');
   }
+
+  const listeningSections = normalizeListeningSections(quiz.listeningSections, normalized.questions);
+  if (listeningSections.length) normalized.listeningSections = listeningSections;
 
   return normalized;
 }
@@ -7289,15 +7390,17 @@ function extractMediaPrefixesFromQuiz(quiz) {
   //   <quiz-...>                              (cloud-saved quizzes' media)
   //   workspaces/<wsid>/<quiz-...>            (workspace-scoped quizzes)
   const URL_RE = /\/api\/media\/((?:workspaces\/[A-Za-z0-9_-]+\/)?(?:assign|preview|quiz)-[A-Za-z0-9_.-]+)\//g;
+  const scan = (val) => {
+    if (typeof val !== 'string') return;
+    URL_RE.lastIndex = 0;
+    let m;
+    while ((m = URL_RE.exec(val)) !== null) prefixes.add(m[1]);
+  };
   for (const q of questions) {
-    for (const field of ['audioData', 'imageData', 'audio', 'image', 'audioUrl', 'imageUrl']) {
-      const val = q?.[field];
-      if (typeof val !== 'string') continue;
-      URL_RE.lastIndex = 0;
-      let m;
-      while ((m = URL_RE.exec(val)) !== null) prefixes.add(m[1]);
-    }
+    for (const field of ['audioData', 'imageData', 'audio', 'image', 'audioUrl', 'imageUrl']) scan(q?.[field]);
   }
+  // Listening sections' recordings (LISTENING_MODE_PLAN.md) live on the quiz.
+  (Array.isArray(quiz?.listeningSections) ? quiz.listeningSections : []).forEach((sec) => scan(sec?.audio?.url));
   return prefixes;
 }
 
@@ -7343,6 +7446,18 @@ async function extractBase64MediaToR2(quiz, env, prefix) {
       q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
       if (field === 'audioData') q.audioMode = 'file';
     }
+  }
+  for (const sec of (Array.isArray(out.listeningSections) ? out.listeningSections : [])) {
+    const val = sec?.audio?.url;
+    const match = typeof val === 'string' ? val.match(/^data:([^;]+);base64,(.+)$/) : null;
+    if (!match) continue;
+    const binaryStr = atob(match[2]);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const ext = match[1].includes('mpeg') || match[1].includes('mp3') ? '.mp3' : match[1].includes('wav') ? '.wav' : match[1].includes('ogg') ? '.ogg' : match[1].includes('mp4') || match[1].includes('m4a') ? '.m4a' : '.bin';
+    const key = `${prefix}/listening/${sanitizeListeningSectionId(sec.id) || Math.random().toString(36).slice(2)}${ext}`;
+    await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: match[1] } });
+    sec.audio.url = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
   }
   return out;
 }
@@ -8950,7 +9065,9 @@ function autoGradedQuestionIndexes(questions) {
 }
 
 function arenaEligibleIndexes(room) {
-  return autoGradedQuestionIndexes(room.quiz?.questions);
+  // Listening-section questions belong on their sheet, not in a Cup deck.
+  const questions = room.quiz?.questions || [];
+  return autoGradedQuestionIndexes(questions).filter((qi) => !questions[qi]?.listeningSection);
 }
 
 function arenaShuffle(arr) {
