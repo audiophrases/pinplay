@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261002-listening-live" />
+    <link rel="stylesheet" href="../styles.css?v=20261003-listening-ai" />
   </head>
   <body>
     <header class="topbar">
@@ -70,12 +70,20 @@
                         </select>
                       </label>
                     </div>
+                    <div class="prompt-field full-width">
+                      <label><span data-i18n>Kind of quiz</span>
+                        <select id="promptKind">
+                          <option value="standard" selected data-i18n>Standard quiz</option>
+                          <option value="listening" data-i18n>🎧 Listening (questions about a recording)</option>
+                        </select>
+                      </label>
+                    </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Theme</span>
                         <input id="promptTheme" type="text" placeholder="e.g. Ecology, History, Math" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Goal</span>
                         <select id="promptGoal">
                           <option value="learning" data-i18n>More learning (scaffolded)</option>
@@ -104,7 +112,7 @@
                       <label><span data-i18n>Level</span>
                         <input id="promptLevel" type="text" placeholder="e.g. B1, Grade 5" data-i18n-ph />
                       </label>
-                      <label class="prompt-adaptive-toggle">
+                      <label class="prompt-adaptive-toggle prompt-standard-only">
                         <input id="promptAdaptive" type="checkbox" />
                         <span data-i18n>🎯 Adaptive quiz (all levels A1–C2)</span>
                       </label>
@@ -114,22 +122,22 @@
                         <input id="promptLevelNotes" type="text" placeholder="e.g. more typing and Word Guess at higher levels, rarer verbs at C1–C2. Default: more easy questions than hard ones, unless you ask otherwise." data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Time limit (sec)</span>
                         <input id="promptTimeLimit" type="number" value="0" min="0" max="300" />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Questions</span>
                         <input id="promptQuestionCount" type="text" value="15" placeholder="e.g. 15, or 'last about 50 minutes', or 'all irregular verbs'" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Create in batches of</span>
                         <input id="promptBatchSize" type="number" value="0" min="0" max="100" />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Images</span>
                         <select id="promptImages">
                           <option value="some" data-i18n>Images (when relevant)</option>
@@ -141,7 +149,7 @@
                         <input id="promptImagesCustom" class="top-space hidden" type="text" placeholder="e.g. mostly images, with a GIF here and there" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Audio/TTS</span>
                         <select id="promptAudio">
                           <option value="some" selected data-i18n>Some (when relevant)</option>
@@ -151,7 +159,7 @@
                         <input id="promptAudioCustom" class="top-space hidden" type="text" placeholder="e.g. read every A1–A2 question aloud" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Video</span>
                         <select id="promptVideo">
                           <option value="some" data-i18n>Some (when relevant)</option>
@@ -161,7 +169,7 @@
                         <input id="promptVideoCustom" class="top-space hidden" type="text" placeholder="e.g. one short clip to open the quiz" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
+                    <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Reading text</span>
                         <select id="promptReadingText">
                           <option value="no" selected data-i18n>No reading passages</option>
@@ -173,7 +181,57 @@
                       </label>
                     </div>
                   </div>
-                  <div class="prompt-field full-width top-space">
+                  <div class="creation-prompt-grid top-space hidden" id="promptListeningWrap">
+                    <div class="prompt-field">
+                      <label><span data-i18n>Transcript</span>
+                        <select id="promptListeningSource">
+                          <option value="paste" selected data-i18n>I paste it here</option>
+                          <option value="attach" data-i18n>I attach the recording to the AI chat</option>
+                          <option value="write" data-i18n>The AI writes the script (I record it)</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="prompt-field hidden" id="promptListeningPartsWrap">
+                      <label><span data-i18n>Recordings (parts)</span>
+                        <input id="promptListeningParts" type="number" value="1" min="1" max="20" />
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width" id="promptTranscriptWrap">
+                      <label><span data-i18n>What is said in the recording</span>
+                        <textarea id="promptTranscript" rows="8" placeholder="Anna: Hi Tom! Are we still meeting on Saturday?&#10;Tom: Not Saturday, sorry…&#10;&#10;--- Part 2&#10;…"></textarea>
+                      </label>
+                      <span id="promptTranscriptInfo" class="small muted"></span>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Questions per part</span>
+                        <input id="promptListeningCount" type="text" value="6" placeholder="e.g. 6, or '5 in part 1 and 8 in part 2'" data-i18n-ph />
+                      </label>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Plays allowed</span>
+                        <select id="promptListeningPlays">
+                          <option value="1">1</option>
+                          <option value="2" selected>2</option>
+                          <option value="3">3</option>
+                          <option value="0" data-i18n>Unlimited</option>
+                        </select>
+                      </label>
+                      <label class="prompt-adaptive-toggle">
+                        <input id="promptListeningPause" type="checkbox" />
+                        <span data-i18n>Pausing allowed</span>
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width">
+                      <label><span data-i18n>Instructions for the AI (optional)</span>
+                        <textarea id="promptListeningNotes" rows="2" placeholder="e.g. like Cambridge B1 Preliminary Part 2; gaps: no more than two words or a number" data-i18n-ph></textarea>
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width">
+                      <span data-i18n>Question types</span>
+                      <div class="prompt-types-grid" id="promptListeningTypes"></div>
+                    </div>
+                  </div>
+                  <div class="prompt-field full-width top-space prompt-standard-only">
                     <label for="promptTypesMode" data-i18n>Question Types</label>
                     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
                       <select id="promptTypesMode" style="width: auto; min-width: 200px;">
@@ -611,7 +669,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261001-answergifs"></script>
+    <script src="../i18n-fr.js?v=20261003-listening-ai"></script>
     <script src="../i18n.js"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
@@ -620,7 +678,7 @@
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
-    <script src="../app.js?v=20261002-listening-live"></script>
+    <script src="../app.js?v=20261003-listening-ai"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261001-startkey"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

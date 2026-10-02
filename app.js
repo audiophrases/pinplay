@@ -1055,8 +1055,55 @@ function syncTypesGridVisibility() {
   if (clearAllTypesBtn) clearAllTypesBtn.classList.toggle('hidden', hidden);
 }
 
+// Listening prompt: only the types a listening sheet shows. Speaking-like
+// open answers and error hunts are off by default (rare in listening papers).
+function renderListeningPromptTypes() {
+  const listEl = document.getElementById('promptListeningTypes');
+  if (!listEl) return;
+  const labels = Object.fromEntries(QUESTION_TYPE_CATALOG.map((item) => [item.type, item.label]));
+  listEl.innerHTML = LISTENING_SECTION_TYPES
+    .map((type) => `<label class="type-pill"><input type="checkbox" value="${type}" ${['open', 'error_hunt'].includes(type) ? '' : 'checked'}> <span>${escapeHtml(t(labels[type] || type))}</span></label>`)
+    .join('');
+}
+
+// "Standard" or "Listening": each kind shows only its own fields.
+function syncPromptKind() {
+  const listening = document.getElementById('promptKind')?.value === 'listening';
+  document.querySelectorAll('#creationPromptBody .prompt-standard-only').forEach((el) => el.classList.toggle('hidden', listening));
+  document.getElementById('promptListeningWrap')?.classList.toggle('hidden', !listening);
+  if (listening) document.getElementById('promptLevelNotesWrap')?.classList.add('hidden');
+  else syncAdaptivePromptFields();
+  const levelEl = document.getElementById('promptLevel');
+  if (levelEl instanceof HTMLInputElement && listening && levelEl.disabled) {
+    levelEl.disabled = false;
+    levelEl.value = levelEl.dataset.savedValue || '';
+  }
+  syncListeningSource();
+}
+
+function syncListeningSource() {
+  const source = document.getElementById('promptListeningSource')?.value || 'paste';
+  document.getElementById('promptTranscriptWrap')?.classList.toggle('hidden', source !== 'paste');
+  document.getElementById('promptListeningPartsWrap')?.classList.toggle('hidden', source !== 'write');
+  syncTranscriptPartsInfo();
+}
+
+function syncTranscriptPartsInfo() {
+  const infoEl = document.getElementById('promptTranscriptInfo');
+  if (!infoEl) return;
+  const parts = splitListeningTranscript(document.getElementById('promptTranscript')?.value || '');
+  infoEl.textContent = parts.length > 1
+    ? t('{n} parts found: each becomes its own listening section.', { n: parts.length })
+    : t('Several recordings? Start each one with a line such as --- Part 2');
+}
+
 function bindBuilderEvents() {
   renderPromptTypesList();
+  renderListeningPromptTypes();
+  document.getElementById('promptKind')?.addEventListener('change', syncPromptKind);
+  document.getElementById('promptListeningSource')?.addEventListener('change', syncListeningSource);
+  document.getElementById('promptTranscript')?.addEventListener('input', syncTranscriptPartsInfo);
+  syncPromptKind();
   if (exportPromptBtn) {
     exportPromptBtn.addEventListener('click', exportCreationPrompt);
   }
@@ -2285,6 +2332,10 @@ function buildListeningSectionPanel(sec) {
     <label>${escapeHtml(t('Instruction (optional)'))}
       <textarea rows="2" maxlength="600" data-ls-id="${sec.id}" data-ls-field="text" placeholder="${escapeHtml(t('e.g. You will hear a conversation between two friends. Listen and choose the right answer.'))}">${escapeHtml(sec.text || '')}</textarea>
     </label>
+    <details class="listening-section-transcript">
+      <summary>${escapeHtml(t('Transcript (only you see it)'))}</summary>
+      <textarea rows="6" maxlength="${LISTENING_MAX_TRANSCRIPT}" data-ls-id="${sec.id}" data-ls-field="transcript" placeholder="${escapeHtml(t('What is said in the recording, for checking answers. Students never see it.'))}">${escapeHtml(sec.transcript || '')}</textarea>
+    </details>
     <div class="listening-section-recording">
       <span>${escapeHtml(t('Recording'))}</span>
       ${recording}
@@ -2367,6 +2418,11 @@ function bindListeningSectionEvents() {
     else if (field === 'playsAllowed') sec.playsAllowed = Number(el.value);
     else if (field === 'title') sec.title = String(el.value || '').slice(0, 120);
     else if (field === 'text') sec.text = String(el.value || '').slice(0, 600);
+    else if (field === 'transcript') {
+      const transcript = String(el.value || '').slice(0, LISTENING_MAX_TRANSCRIPT);
+      if (transcript.trim()) sec.transcript = transcript;
+      else delete sec.transcript;
+    }
   };
   questionListEl.addEventListener('input', onField);
   questionListEl.addEventListener('change', (e) => {
@@ -4724,7 +4780,175 @@ function buildCreationPrompt(request) {
   };
 }
 
+// ---------------------------------------------------------------- AI listening prompt
+// The listening variant (LISTENING_MODE_PLAN.md, phase 5): one listening
+// section per recording, questions written from what is actually said (a
+// transcript the teacher pastes, one the AI makes from an attached recording,
+// or a script the AI writes), only the types a listening sheet shows, no media.
+
+// Lines such as "--- Part 2" split a pasted transcript into parts, one
+// section each. Text before the first marker is a part too.
+function splitListeningTranscript(text) {
+  const parts = [];
+  let current = { label: '', lines: [] };
+  String(text || '').replace(/\r\n?/g, '\n').split('\n').forEach((line) => {
+    const marker = /^\s*-{3,}\s*(.*?)\s*-*\s*$/.exec(line);
+    if (!marker) {
+      current.lines.push(line);
+      return;
+    }
+    parts.push(current);
+    current = { label: marker[1], lines: [] };
+  });
+  parts.push(current);
+  return parts
+    .map((p) => ({ label: p.label.slice(0, 80), text: p.lines.join('\n').trim() }))
+    .filter((p) => p.text);
+}
+
+// Where a type reads differently when its answers come from a recording.
+const LISTENING_PROMPT_TYPE_FIELDS = {
+  context_gap: 'notes or a summary of what is heard, with each gap marked ____; "gaps": exactly one string per ____, in order. Two accepted answers for one gap go in that ONE string, comma-separated: ["15, fifteen"]. No hints in brackets: the answer comes from the recording.',
+  match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs. "left": who or what is heard about (Speaker 1, a person, a place, a day); "right": what matches it.',
+  error_hunt: 'the prompt is ONLY a sentence with one detail that is wrong according to the recording. "correctedVariants": every full sentence, made true, that you accept; "corrected": the first of them.',
+  open: 'the student writes an answer about the recording; the teacher grades it. No answer fields.',
+};
+
+// One short recording and a question of each type written from it.
+const LISTENING_PROMPT_EXAMPLE = {
+  text: 'You will hear Anna and Tom planning to meet. Answer the questions.',
+  transcript: 'Anna: Hi Tom! Are we still meeting on Saturday?\nTom: Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?\nAnna: Sure. At the café on Bridge Street?\nTom: It\'s closed for repairs. Let\'s meet at the library instead. Bring your notebook: we need to finish the history project.\nAnna: OK. Is Emma coming?\nTom: Yes, and Leo too, but he\'ll be a bit late.',
+  // In the order their answers are heard.
+  questions: [
+    { type: 'text', prompt: 'What time will they meet?', accepted: ['10:30', 'half past ten', 'ten thirty'] },
+    { type: 'tf', prompt: 'The café on Bridge Street is open as usual.', answers: [{ text: 'True', correct: false }, { text: 'False', correct: true }] },
+    { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the café', correct: false }, { text: 'At the library', correct: true }, { text: 'At Tom\'s work', correct: false }] },
+    { type: 'context_gap', prompt: 'Bring: your ____ for the ____ project.', gaps: ['notebook', 'history'] },
+    { type: 'multi', prompt: 'Who else is coming? Choose all the right answers.', answers: [{ text: 'Emma', correct: true }, { text: 'Leo', correct: true }, { text: 'Tom\'s sister', correct: false }] },
+    { type: 'error_hunt', prompt: 'Leo will arrive early.', correctedVariants: ['Leo will arrive late.', 'Leo will be late.', 'Leo will be a bit late.'], corrected: 'Leo will arrive late.' },
+    { type: 'match_pairs', prompt: 'Match each person with what they say or do.', pairs: [{ left: 'Anna', right: 'suggests the café' }, { left: 'Tom', right: 'is working on Saturday' }, { left: 'Emma', right: 'is coming too' }] },
+    { type: 'open', prompt: 'Why can\'t they meet at the café?' },
+  ],
+};
+
+// req: { theme, language, level, source ('paste' | 'attach' | 'write'),
+// transcript, parts (scripts to write), questionCount (number or brief text),
+// playsAllowed (0–3), pauseAllowed, selectedTypes, notes, aiMode }.
+// Returns { text, filename }.
+function buildListeningPrompt(req) {
+  const agent = req.aiMode === 'agent';
+  const source = ['attach', 'write'].includes(req.source) ? req.source : 'paste';
+  const selected = (req.selectedTypes || []).filter((type) => LISTENING_SECTION_TYPES.includes(type));
+  const allowed = LISTENING_SECTION_TYPES.filter((type) => !selected.length || selected.includes(type));
+  const plays = [0, 1, 2, 3].includes(Number(req.playsAllowed)) ? Number(req.playsAllowed) : LISTENING_DEFAULT_PLAYS;
+  const pause = !!req.pauseAllowed;
+  const parts = source === 'paste' ? splitListeningTranscript(req.transcript) : [];
+  const partCount = source === 'paste' ? parts.length : Math.max(1, Math.min(LISTENING_MAX_SECTIONS, Math.round(Number(req.parts) || 1)));
+  const count = req.questionCount;
+  const numeric = typeof count === 'number' ? count : null;
+  const theme = String(req.theme || '').trim();
+
+  const quote = (v) => `"${String(v).trim()}"`;
+  const teacherWords = [
+    theme ? `Theme: ${quote(theme)}` : null,
+    req.language ? `Language of the quiz: ${quote(req.language)}` : null,
+    req.level ? `Level: ${quote(req.level)}` : null,
+    typeof count === 'string' ? `How many questions: ${quote(count)}` : null,
+    req.notes ? `Instructions: ${quote(req.notes)}` : null,
+  ].filter(Boolean);
+
+  const recordings = {
+    paste: `${partCount === 1 ? 'one recording; its transcript is' : `${partCount} recordings; their transcripts are`} below (## Transcript). One listening section per recording.`,
+    attach: 'the teacher attaches them to this chat (audio or video files). One listening section per recording, in the order they were attached. If nothing is attached, ask for the recording and stop.',
+    write: `none yet. Write ${partCount === 1 ? 'the script of one recording' : `the scripts of ${partCount} recordings`}${theme ? ' on the theme' : ''}; the teacher records them or makes them with text-to-speech. One listening section per script.`,
+  }[source];
+  const perPart = partCount > 1 ? ' per section' : '';
+  const howMany = numeric ? `${numeric}${perPart}` : 'decide from the teacher\'s words (above)';
+  const task = [
+    `Recordings: ${recordings}`,
+    `Questions: ${howMany}, all in one JSON object`,
+    `Question types: use only ${allowed.join(', ')}. In each section, choose what fits that recording (an exam part often keeps to one task type).`,
+    `Every section: "playsAllowed": ${plays} (${plays ? 'times the recording can be played' : 'unlimited plays'}), "pauseAllowed": ${pause}`,
+  ];
+
+  const transcriptRule = {
+    paste: 'Write every question from the transcript below. Copy each recording\'s transcript, word for word, into its section\'s "transcript".',
+    attach: 'First transcribe each recording word for word, one line per speaker turn ("Anna: …", or "A: …" when names aren\'t said). Write the questions from your transcription and put it in the section\'s "transcript". Don\'t ask about anything you can\'t hear clearly.',
+    write: 'Write each script as a natural recording at the quiz\'s level: one line per speaker turn, "Name: what they say" (two or three speakers for a conversation, one for a talk or an announcement), about 120–250 words at A1–A2, 250–450 at B1–B2 and 400–600 above. Put the script in its section\'s "transcript".',
+  }[source];
+  const rules = [
+    'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
+    transcriptRule,
+    'Every answer is said in the recording: a student who heard it can answer, one who didn\'t can\'t guess it from the question or from general knowledge.',
+    'Questions follow the order in which their answers are heard, spread over the whole recording; never two questions on the same piece of information.',
+    'Prompts and options say things in other words than the recording, but written answers ("accepted", "gaps") are the words actually heard: short, one to three words or a number. List the forms a student may write for them: "15, fifteen", "10:30, half past ten", a name as it is spelled in the recording.',
+    'Wrong options are near misses taken from the recording: something else that is mentioned, a plan that changes, a price or time that is corrected, what the other speaker suggests. Never absurd.',
+    'No media: no "imageKeyword", "gifKeyword", "videoKeyword", "readingText", "media", "audioEnabled" or "audioText". Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
+    'Every section has an "id" ("part1", "part2"…), a "title" numbered across the quiz ("Part 1 — Questions 1–6") and a "text": the instruction in the language of the quiz, as on an exam paper ("You will hear… For each question, choose the right answer."), never giving an answer away. Every question has "listeningSection": the id of its section, and a section\'s questions come one after another.',
+    'Before you reply, check every answer against the transcript once more.',
+  ];
+
+  const exampleQuestions = LISTENING_PROMPT_EXAMPLE.questions.filter((q) => allowed.includes(q.type))
+    .map((q, i) => ({ id: `q${i + 1}`, type: q.type, prompt: q.prompt, points: 1000, timeLimit: 0, listeningSection: 'part1',
+      ...JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(q).filter(([k]) => !['type', 'prompt'].includes(k))))) }));
+  const exampleSection = {
+    id: 'part1',
+    title: `Part 1 — Questions 1–${exampleQuestions.length}`,
+    text: LISTENING_PROMPT_EXAMPLE.text,
+    transcript: LISTENING_PROMPT_EXAMPLE.transcript,
+    playsAllowed: plays,
+    pauseAllowed: pause,
+  };
+  const name = toSafeFilename(theme || 'listening');
+
+  const out = [
+    '# PinPlay listening quiz instructions',
+    '',
+    `Create a listening quiz for PinPlay: students hear a recording and answer its questions, all shown together on one sheet. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
+    '',
+    '## The teacher\'s own words',
+    'Typed by the teacher, word for word, in quotes. Everything after this section is PinPlay\'s general instructions. Where they contradict the teacher\'s words, the teacher\'s words win.',
+    ...(teacherWords.length ? teacherWords.map((line) => `- ${line}`) : ['- (nothing typed)']),
+    '',
+    '## Task',
+    ...task.map((line) => `- ${line}`),
+    '',
+    '## Rules',
+    ...rules.map((r, i) => `${i + 1}. ${r}`),
+  ];
+  if (source === 'paste') {
+    out.push('', '## Transcript', `Typed or pasted by the teacher.${partCount > 1 ? ' One heading per recording.' : ''}`);
+    parts.forEach((part, i) => {
+      if (partCount > 1) out.push('', `### ${part.label || `Part ${i + 1}`}`);
+      out.push('', '```text', part.text, '```');
+    });
+  }
+  out.push('',
+    '## Quiz fields',
+    'Quiz: {"version": 3, "title": "…", "listeningSections": [ … ], "questions": [ … ]}',
+    'Section: "id", "title", "text", "transcript", "playsAllowed", "pauseAllowed"',
+    'Every question has "id", "type", "prompt", "points", "timeLimit", "listeningSection", plus the fields of its type:',
+    ...allowed.map((type) => `- ${type}: ${LISTENING_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
+    '',
+    '## Example',
+    'Shape only: your recordings, questions and language come from the task above.',
+    '```json',
+    `{"version": 3, "title": "Meeting on Sunday", "listeningSections": [\n  ${JSON.stringify(exampleSection)}\n], "questions": [\n${exampleQuestions.map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
+    '```',
+    '',
+    'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions, follow the teacher. Only the JSON format and field names are fixed.',
+    '');
+  return {
+    text: out.join('\n'),
+    filename: `prompt-${agent ? 'agent-' : ''}listening${theme ? `-${name}` : ''}.md`,
+  };
+}
+
 async function exportCreationPrompt() {
+  if (document.getElementById('promptKind')?.value === 'listening') {
+    await exportListeningPrompt();
+    return;
+  }
   const theme = document.getElementById('promptTheme')?.value.trim();
   const adaptive = !!document.getElementById('promptAdaptive')?.checked;
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
@@ -4779,8 +5003,50 @@ async function exportCreationPrompt() {
     selectedTypes: Array.from(document.querySelectorAll('#promptTypesList input:checked')).map((cb) => cb.value),
     aiMode: valueOf('promptAiMode') || 'chatbot',
   });
+  await deliverPromptFile(text, filename);
+}
 
-  // The file is short enough to paste as well: download it and copy the same text.
+async function exportListeningPrompt() {
+  const valueOf = (id) => String(document.getElementById(id)?.value || '').trim();
+  const source = valueOf('promptListeningSource') || 'paste';
+  const transcript = valueOf('promptTranscript');
+  const theme = valueOf('promptTheme');
+  const notes = valueOf('promptListeningNotes');
+  if (source === 'paste' && !transcript) {
+    alert(t('Paste the transcript of the recording, or choose another option under Transcript.'));
+    document.getElementById('promptTranscript')?.focus();
+    return;
+  }
+  if (source === 'write' && !theme && !notes) {
+    alert(t('Say what the recording should be about: fill in the Theme or the Instructions.'));
+    document.getElementById('promptTheme')?.focus();
+    return;
+  }
+  const selectedTypes = Array.from(document.querySelectorAll('#promptListeningTypes input:checked')).map((cb) => cb.value);
+  if (!selectedTypes.length) {
+    alert(t('Choose at least one question type.'));
+    return;
+  }
+  const countRaw = valueOf('promptListeningCount');
+  const { text, filename } = buildListeningPrompt({
+    theme,
+    language: valueOf('promptLanguage'),
+    level: valueOf('promptLevel'),
+    source,
+    transcript,
+    parts: Number(valueOf('promptListeningParts')) || 1,
+    questionCount: /^\d+$/.test(countRaw) && Number(countRaw) > 0 ? Number(countRaw) : (countRaw || 6),
+    playsAllowed: Number(valueOf('promptListeningPlays')),
+    pauseAllowed: !!document.getElementById('promptListeningPause')?.checked,
+    selectedTypes,
+    notes,
+    aiMode: valueOf('promptAiMode') || 'chatbot',
+  });
+  await deliverPromptFile(text, filename);
+}
+
+// The file is short enough to paste as well: download it and copy the same text.
+async function deliverPromptFile(text, filename) {
   downloadTextFile(text, filename);
   try {
     await navigator.clipboard.writeText(text);
@@ -16559,6 +16825,9 @@ function normalizePinZones(question) {
 const LISTENING_SECTION_TYPES = ['mcq', 'multi', 'tf', 'text', 'error_hunt', 'context_gap', 'match_pairs', 'open'];
 const LISTENING_MAX_SECTIONS = 20;
 const LISTENING_DEFAULT_PLAYS = 2;
+// A section's transcript is for the teacher (checking answers, making the
+// recording); students never receive it.
+const LISTENING_MAX_TRANSCRIPT = 20000;
 
 function sanitizeListeningSectionId(value) {
   const id = String(value || '').trim();
@@ -16582,6 +16851,7 @@ function normalizeListeningSectionList(raw) {
     if (!id || seen.has(id)) return null;
     seen.add(id);
     const plays = Number(s.playsAllowed);
+    const transcript = String(s.transcript || '').trim().slice(0, LISTENING_MAX_TRANSCRIPT);
     return {
       id,
       title: String(s.title || '').trim().slice(0, 120),
@@ -16589,6 +16859,7 @@ function normalizeListeningSectionList(raw) {
       audio: normalizeListeningAudio(s.audio),
       playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
       pauseAllowed: s.pauseAllowed !== false,
+      ...(transcript ? { transcript } : {}),
     };
   }).filter(Boolean);
 }

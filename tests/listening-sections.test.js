@@ -7,7 +7,7 @@ const { extractDeclaration, loadDeclarations } = require('./helpers/extract-decl
 // Listening sections, phase 1 (LISTENING_MODE_PLAN.md): the data model as the
 // server and the page clean it, recordings in cloud storage, no adaptive.
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const SHARED = ['LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS',
+const SHARED = ['LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT',
   'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList',
   'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections'];
 
@@ -96,6 +96,15 @@ describe('server: normalizeQuiz', () => {
     assert.equal(quiz.listeningSections[0].audio, null);
     assert.equal(quiz.listeningSections[0].playsAllowed, 2);
   });
+
+  it('keeps the teacher\'s transcript, trimmed and capped, and leaves no empty one', () => {
+    const quiz = W.normalizeQuiz({ title: 'L', listeningSections: [
+      section('s1', { transcript: '  Anna: Hi Tom!  ' }), section('s2', { transcript: 'x'.repeat(W.LISTENING_MAX_TRANSCRIPT + 50) }), section('s3', { transcript: '   ' }),
+    ], questions: [mcq('q1', { listeningSection: 's1' }), mcq('q2', { listeningSection: 's2' }), mcq('q3', { listeningSection: 's3' })] });
+    assert.equal(quiz.listeningSections[0].transcript, 'Anna: Hi Tom!');
+    assert.equal(quiz.listeningSections[1].transcript.length, W.LISTENING_MAX_TRANSCRIPT);
+    assert.equal('transcript' in quiz.listeningSections[2], false);
+  });
 });
 
 describe('recordings in cloud storage', () => {
@@ -155,7 +164,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
 
   const levelled = () => ({
     title: 'Listening + levels',
-    listeningSections: [section('s1')],
+    listeningSections: [section('s1', { transcript: 'SECRET TRANSCRIPT' })],
     questions: [mcq('q1', { cefr: 'A1' }), mcq('q2', { cefr: 'B1', listeningSection: 's1' }), mcq('q3', { cefr: 'B2', listeningSection: 's1' })],
   });
 
@@ -172,6 +181,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     assert.equal(got.status, 200, JSON.stringify(got.body));
     assert.deepEqual(plain(got.body.quiz.listeningSections.map((s) => s.id)), ['s1']);
     assert.deepEqual(plain(got.body.quiz.questions.map((q) => q.listeningSection || '')), ['', 's1', 's1']);
+    assert.equal(got.body.quiz.listeningSections[0].transcript, 'SECRET TRANSCRIPT', 'the teacher gets the transcript back');
   });
 
   it('counts plays on the attempt, locks a submitted section and only then shows its marks', async () => {
@@ -210,7 +220,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
   it('live: a section is one step, drafts autosave, and count when the teacher moves on', async () => {
     const quiz = {
       title: 'Live listening',
-      listeningSections: [section('s1')],
+      listeningSections: [section('s1', { transcript: 'SECRET TRANSCRIPT' })],
       questions: [mcq('q1'), mcq('q2', { listeningSection: 's1' }), { id: 'q3', type: 'text', prompt: 'Order?', accepted: ['coffee'], listeningSection: 's1' }, mcq('q4')],
     };
     const game = (await post('/api/create', { password: PW, options: { randomNames: true }, quiz })).body;
@@ -234,6 +244,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
 
     const saved = await sec('answer', ann, { qIndex: 1, answer: 0 });
     assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.ok(!JSON.stringify(saved.body).includes('SECRET TRANSCRIPT'), 'phones never get the transcript');
     assert.equal(saved.body.state.listening.answers['1'], 0);
     assert.equal(saved.body.state.listening.marks, null);
     await sec('answer', ann, { qIndex: 2, answer: 'coffee' });

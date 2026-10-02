@@ -17,11 +17,13 @@ before(() => {
     'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
+    'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
+    'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'buildListeningPrompt',
   ]);
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
-    'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'detectQuestionMediaProvider', 'contextGapList',
+    'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'detectQuestionMediaProvider', 'contextGapList',
   ], { crypto: require('node:crypto').webcrypto });
 });
 
@@ -299,5 +301,82 @@ describe('examples are valid PinPlay questions', () => {
       assert.ok(A.CEFR_LEVELS.includes(q.cefr), `${q.id} level`);
       if (GRADABLE[q.type]) assert.ok(GRADABLE[q.type](q), `${q.id} is not gradable: ${JSON.stringify(q)}`);
     });
+  });
+});
+// The listening variant (LISTENING_MODE_PLAN.md, phase 5).
+describe('listening prompt', () => {
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const lbase = {
+    theme: 'Weekend plans', language: 'English', level: 'B1', source: 'paste',
+    transcript: 'Anna: Hi Tom!\nTom: Hi Anna.', questionCount: 6, playsAllowed: 2, pauseAllowed: false,
+    selectedTypes: ['mcq', 'tf', 'text', 'context_gap'], notes: '', aiMode: 'chatbot',
+  };
+  const lbuild = (over = {}) => A.buildListeningPrompt({ ...lbase, ...over }).text;
+  const lexample = (text) => {
+    const block = section(text, 'Example');
+    return JSON.parse(block.slice(block.indexOf('```json') + 7, block.lastIndexOf('```')));
+  };
+  const ltypes = (text) => section(text, 'Quiz fields').split('\n')
+    .filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
+
+  it('splits a pasted transcript on "---" lines, keeping their labels', () => {
+    assert.deepEqual(plain(A.splitListeningTranscript('A: one\n--- Part 2 ---\nB: two\r\n------\nC: three\n---\n  \n')), [
+      { label: '', text: 'A: one' }, { label: 'Part 2', text: 'B: two' }, { label: '', text: 'C: three' },
+    ]);
+    assert.deepEqual(plain(A.splitListeningTranscript('--- Part 1\nA: one')), [{ label: 'Part 1', text: 'A: one' }]);
+  });
+
+  it('offers only the chosen listening types, never a type a section can\'t hold', () => {
+    assert.deepEqual(ltypes(lbuild()), ['mcq', 'tf', 'text', 'context_gap']);
+    assert.deepEqual(ltypes(lbuild({ selectedTypes: ['speaking', 'pin', 'open'] })), ['open']);
+    assert.deepEqual(ltypes(lbuild({ selectedTypes: [] })), [...A.LISTENING_SECTION_TYPES]);
+  });
+
+  it('puts the pasted transcript in, one heading per part', () => {
+    const one = lbuild();
+    assert.match(section(one, 'Transcript'), /Anna: Hi Tom!\nTom: Hi Anna\./);
+    assert.match(one, /one recording; its transcript is below/);
+    const two = lbuild({ transcript: '--- Part 1\nA: first\n--- Part 2\nB: second' });
+    assert.match(section(two, 'Transcript'), /### Part 1[\s\S]*A: first[\s\S]*### Part 2[\s\S]*B: second/);
+    assert.match(two, /2 recordings; their transcripts are below/);
+    assert.match(two, /Questions: 6 per section/);
+  });
+
+  it('asks for a transcription of attached recordings, or for scripts, with no transcript section', () => {
+    const attach = lbuild({ source: 'attach' });
+    assert.equal(section(attach, 'Transcript'), '');
+    assert.match(attach, /attaches them to this chat/);
+    assert.match(attach, /transcribe each recording word for word/);
+    const write = lbuild({ source: 'write', parts: 3 });
+    assert.equal(section(write, 'Transcript'), '');
+    assert.match(write, /the scripts of 3 recordings/);
+  });
+
+  it('quotes what the teacher typed, and carries the plays and pausing settings', () => {
+    const text = lbuild({ questionCount: '5 in part 1, 8 in part 2', notes: 'like a B1 exam', playsAllowed: 0, pauseAllowed: true });
+    const words = section(text, 'The teacher\'s own words');
+    assert.match(words, /How many questions: "5 in part 1, 8 in part 2"/);
+    assert.match(words, /Instructions: "like a B1 exam"/);
+    assert.match(text, /"playsAllowed": 0 \(unlimited plays\), "pauseAllowed": true/);
+    assert.equal(lexample(text).listeningSections[0].playsAllowed, 0);
+    assert.match(A.buildListeningPrompt({ ...lbase, aiMode: 'agent' }).filename, /^prompt-agent-listening-weekend-plans\.md$/);
+  });
+
+  it('the example survives the server\'s cleaner as one section with its transcript, and is gradable', () => {
+    const example = lexample(lbuild({ selectedTypes: [...A.LISTENING_SECTION_TYPES] }));
+    assert.deepEqual(new Set(example.questions.map((q) => q.type)), new Set(A.LISTENING_SECTION_TYPES));
+    const quiz = W.normalizeQuiz(example);
+    assert.equal(quiz.questions.length, example.questions.length);
+    assert.equal(quiz.listeningSections.length, 1);
+    assert.equal(quiz.listeningSections[0].transcript, A.LISTENING_PROMPT_EXAMPLE.transcript);
+    assert.equal(quiz.listeningSections[0].pauseAllowed, false);
+    quiz.questions.forEach((q) => {
+      assert.equal(q.listeningSection, 'part1', q.id);
+      if (GRADABLE[q.type]) assert.ok(GRADABLE[q.type](q), `${q.id} is not gradable: ${JSON.stringify(q)}`);
+    });
+    // Every written answer in the example is actually said in its recording.
+    const said = A.LISTENING_PROMPT_EXAMPLE.transcript.toLowerCase();
+    quiz.questions.filter((q) => q.type === 'text').forEach((q) => assert.ok(q.accepted.some((a) => said.includes(String(a).toLowerCase())), q.id));
+    quiz.questions.filter((q) => q.type === 'context_gap').forEach((q) => q.gaps.forEach((g) => assert.ok(said.includes(String(g).split(',')[0].trim().toLowerCase()), g)));
   });
 });

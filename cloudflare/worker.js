@@ -6740,6 +6740,9 @@ function normalizeCefrLevel(value) {
 const LISTENING_SECTION_TYPES = ['mcq', 'multi', 'tf', 'text', 'error_hunt', 'context_gap', 'match_pairs', 'open'];
 const LISTENING_MAX_SECTIONS = 20;
 const LISTENING_DEFAULT_PLAYS = 2;
+// A section's transcript is for the teacher (checking answers, making the
+// recording); students never receive it.
+const LISTENING_MAX_TRANSCRIPT = 20000;
 
 function sanitizeListeningSectionId(value) {
   const id = String(value || '').trim();
@@ -6763,6 +6766,7 @@ function normalizeListeningSectionList(raw) {
     if (!id || seen.has(id)) return null;
     seen.add(id);
     const plays = Number(s.playsAllowed);
+    const transcript = String(s.transcript || '').trim().slice(0, LISTENING_MAX_TRANSCRIPT);
     return {
       id,
       title: String(s.title || '').trim().slice(0, 120),
@@ -6770,6 +6774,7 @@ function normalizeListeningSectionList(raw) {
       audio: normalizeListeningAudio(s.audio),
       playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
       pauseAllowed: s.pauseAllowed !== false,
+      ...(transcript ? { transcript } : {}),
     };
   }).filter(Boolean);
 }

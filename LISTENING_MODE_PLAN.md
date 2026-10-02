@@ -1,7 +1,7 @@
 # Listening sections: a scrollable exam sheet with one recording
 
 Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
-built 2026-10-02.** Phases 3 and 5 are still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
+built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
 - `listeningSections` on the quiz and `listeningSection` on each question, kept
@@ -113,7 +113,11 @@ only offer the types above for questions in a section.
 
 ## 4. Data model
 
-- Quiz: `listeningSections: [{ id, title, text, audio, video?, playsAllowed, pauseAllowed }]`
+- Quiz: `listeningSections: [{ id, title, text, audio, video?, playsAllowed, pauseAllowed, transcript? }]`
+  - `transcript`: what is said, for the teacher only (up to 20,000 characters;
+    left out when empty). The student payloads (homework, live, public games)
+    list section fields one by one and never include it. Phase 3 can turn its
+    "Name: …" lines into voices.
   - `audio`: `{ kind: 'file', url }` (uploaded to R2 like other media) or,
     later, `{ kind: 'tts', lines: [{ voice, text }] }`.
   - `video`: optional, **live only** (played on the projector instead of the audio).
@@ -197,6 +201,33 @@ answers at once, pushed over the live connection. Detail to design when phase
 A listening variant of the creation prompt: section 3's types only, no media,
 section titles and instructions, and questions written **from a transcript the
 teacher pastes** (so answers match what is actually said).
+
+As built (2026-10-03):
+- The ✨ AI Creation Prompt form has a **Kind of quiz** switch: Standard /
+  🎧 Listening. Listening hides goal, adaptive, time limit, batches, media and
+  the general type list, and shows its own fields: **Transcript** (I paste it
+  here / I attach the recording to the AI chat, which transcribes it first /
+  the AI writes the script, with a number of recordings), **Questions per
+  part** (a number, or words such as "5 in part 1, 8 in part 2"), **Plays
+  allowed** and **Pausing**, **Instructions for the AI**, and the section 3
+  types as pills (all on except error hunt and open). Theme, language, level
+  and AI mode are shared with the standard form.
+- A pasted transcript is split into parts by lines such as `--- Part 2`; the
+  form shows "N parts found", and each part becomes its own section.
+- `buildListeningPrompt` (pure, tested in `tests/ai-prompt.test.js`) writes:
+  the teacher's words, the task, listening rules (every answer is said in the
+  recording; questions in the order heard; prompts paraphrase but written
+  answers are the words heard, with their variants; wrong options are near
+  misses from the recording; no media, `timeLimit` 0; section ids, titles
+  numbered across the quiz, exam-style instruction), the transcript, the
+  fields of each chosen type (gap fill, match, error hunt and open reworded
+  for a recording) and one worked example: a short dialogue with a question
+  of each chosen type, which the server's cleaner keeps as one section.
+- The AI copies each transcript (or writes its transcription or script) into
+  the section's `transcript`. In the editor it shows, collapsed, as
+  "Transcript (only you see it)" and can be edited.
+- Import → Append already renames clashing section ids, so separate prompts
+  can be joined into one exam.
 
 ## 10. Order of work
 
