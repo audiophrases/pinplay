@@ -147,8 +147,8 @@ describe('assignments with listening sections (real worker, in-memory storage)',
       ROOMS: { idFromName: (n) => n, get: (n) => { if (!rooms.has(n)) rooms.set(n, new mod.QuizRoom({ storage: storage() }, env)); const r = rooms.get(n); return { fetch: (u, i) => r.fetch(new Request(u, i)) }; } },
       QUIZ_MEDIA: null,
     };
-    post = async (p, body) => {
-      const res = await mod.default.fetch(new Request(`https://api.test${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env);
+    post = async (p, body, headers = {}) => {
+      const res = await mod.default.fetch(new Request(`https://api.test${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }), env);
       return { status: res.status, body: await res.json() };
     };
   });
@@ -205,5 +205,55 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     assert.deepEqual([late.status, late.body.code], [409, 'SECTION_SUBMITTED']);
     const outside = await post('/api/assignment/answer', { code, attemptId, qIndex: 0, answer: 0 });
     assert.equal(outside.status, 200);
+  });
+
+  it('live: a section is one step, drafts autosave, and count when the teacher moves on', async () => {
+    const quiz = {
+      title: 'Live listening',
+      listeningSections: [section('s1')],
+      questions: [mcq('q1'), mcq('q2', { listeningSection: 's1' }), { id: 'q3', type: 'text', prompt: 'Order?', accepted: ['coffee'], listeningSection: 's1' }, mcq('q4')],
+    };
+    const game = (await post('/api/create', { password: PW, options: { randomNames: true }, quiz })).body;
+    assert.ok(game.hostToken, JSON.stringify(game));
+    const host = { Authorization: `Bearer ${game.hostToken}` };
+    const join = async (n) => (await post('/api/join', { pin: game.pin, clientId: `c_${n}`, name: n })).body;
+    const ann = await join('ann');
+    const bob = await join('bob');
+    const as = (pl) => ({ 'X-Player-Token': pl.playerToken });
+    const sec = (path, pl, extra) => post(`/api/section/${path}`, { pin: game.pin, playerId: pl.playerId, sectionId: 's1', ...extra }, as(pl));
+
+    await post('/api/host/next', { pin: game.pin }, host); // q1
+    const atSection = await post('/api/host/next', { pin: game.pin }, host);
+    assert.equal(atSection.body.currentIndex, 1);
+    assert.equal(atSection.body.questionDeadlineAt, null, 'no timer on a section');
+    assert.deepEqual(plain([atSection.body.listening.first, atSection.body.listening.last, atSection.body.listening.questions.length]), [1, 2, 2]);
+
+    const wrongQ = await sec('answer', ann, { qIndex: 3, answer: 0 });
+    assert.equal(wrongQ.status, 400);
+    assert.equal((await post('/api/answer', { pin: game.pin, playerId: ann.playerId, answer: 0 }, as(ann))).body.code, 'LISTENING_SECTION');
+
+    const saved = await sec('answer', ann, { qIndex: 1, answer: 0 });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.state.listening.answers['1'], 0);
+    assert.equal(saved.body.state.listening.marks, null);
+    await sec('answer', ann, { qIndex: 2, answer: 'coffee' });
+    assert.equal((await sec('submit', ann)).status, 200);
+    assert.equal((await sec('answer', ann, { qIndex: 2, answer: 'tea' })).body.code, 'SECTION_SUBMITTED');
+    // Bob never submits: his autosaved answer still counts.
+    await sec('answer', bob, { qIndex: 1, answer: 1 });
+
+    const hs = (await post('/api/host/reveal', { pin: game.pin }, host)).body;
+    assert.equal(hs.listening.submittedCount, 1);
+    assert.equal(hs.listening.finalized, true);
+    const scores = Object.fromEntries(hs.players.map((p) => [p.id, p.score]));
+    assert.ok(scores[ann.playerId] === 2000 && scores[bob.playerId] === 0, JSON.stringify(scores));
+    assert.equal((await sec('answer', bob, { qIndex: 2, answer: 'coffee' })).body.code, 'QUESTION_ENDED');
+
+    const after = await post('/api/host/next', { pin: game.pin }, host);
+    assert.equal(after.body.currentIndex, 3, 'next leaves the whole section');
+    assert.equal(after.body.listening, undefined);
+    const back = await post('/api/host/prev', { pin: game.pin }, host);
+    assert.equal(back.body.currentIndex, 1, 'going back re-enters the section at its start');
+    assert.equal(Object.fromEntries(back.body.players.map((p) => [p.id, p.score]))[ann.playerId], 0, 're-entering takes the points back');
   });
 });

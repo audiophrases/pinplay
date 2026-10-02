@@ -1,7 +1,7 @@
 # Listening sections: a scrollable exam sheet with one recording
 
-Status: **phases 1 (data model + editor) and 2 (homework sheet) built
-2026-10-02.** Phases 3–5 are still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
+Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
+built 2026-10-02.** Phases 3 and 5 are still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
 - `listeningSections` on the quiz and `listeningSection` on each question, kept
@@ -78,6 +78,23 @@ PinPlay adds no timer and no extra pressure; it removes friction.
 | Pausing | **Per section**: allowed / not allowed. |
 | Counting | Same as a normal PinPlay quiz: one question counts as one, a matching question included (partial credit as today). |
 | Adaptive | A quiz with listening sections can't be adaptive (fixed order). |
+
+Phase 4 as built (live):
+- The room treats a section as one step: entering it from either side lands on
+  its first question; Next leaves the whole section; Prev re-enters it at its
+  start (points earned there are taken back and re-earned). No timer.
+- Phones show the same sheet (no player: "Listen to the recording in class").
+  Each change saves as a draft on the room (`/api/section/answer`), "Submit
+  section" locks it for that student (`/api/section/submit`). The sheet is
+  never rebuilt by the live pushes while the student types.
+- Reveal or Next grades everyone's drafts, submitted or not
+  (`finalizeListeningSection`): flat points per question (no speed bonus, no
+  bets), open answers wait for the teacher as usual. Reveal shows the marks on
+  each phone and the answers on the projector.
+- Projector: title, instruction, the recording's player (kept outside the
+  redrawn area so pushes never stop it), "N of M submitted · K started", the
+  questions, and after reveal the correct answers. The Answers counter counts
+  submitted sheets. Video on the projector is not built yet.
 
 ## 3. Question types inside a section
 

@@ -9112,7 +9112,38 @@ function round(n, d = 0) {
 // an exam paper: the player and "N of M answered" in a sticky strip, every
 // question stacked below. Each change autosaves; "Submit section" locks it
 // (the server refuses later answers), and only then do instant marks appear.
-const listeningSheet = { el: null, sectionId: '', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false };
+// Live games use the same sheet: answers save as drafts on the room, the
+// recording plays on the projector, and the teacher's reveal brings the marks.
+const listeningSheet = { el: null, sectionId: '', mode: 'assignment', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false, live: null, liveAnswers: {}, liveKey: '' };
+
+function liveListeningLocked(L) {
+  return !!(L?.submitted || L?.closed);
+}
+
+function maybeRenderLiveListeningSheet(state) {
+  const L = state?.phase === 'question' ? state.listening : null;
+  if (!L?.section) return false;
+  // A new visit to the section (new start time) starts from the room's drafts.
+  const key = `${L.section.id}|${state.questionStartedAt || ''}`;
+  if (listeningSheet.liveKey !== key) {
+    listeningSheet.liveKey = key;
+    listeningSheet.liveAnswers = { ...(L.answers || {}) };
+    listeningSheet.saveTimers.forEach((e) => clearTimeout(e.timer));
+    listeningSheet.saveTimers.clear();
+  }
+  listeningSheet.live = L;
+  listeningSheet.mode = 'live';
+  stopJoinTimer();
+  const info = { section: L.section, first: L.first, last: L.last };
+  const locked = liveListeningLocked(L);
+  const stage = `${locked}|${!!L.closed}`;
+  if (listeningSheet.el && listeningSheet.sectionId === L.section.id && listeningSheet.el.dataset.locked === stage) {
+    updateListeningProgress(info);
+    return true;
+  }
+  renderListeningSheet(info);
+  return true;
+}
 
 function assignmentListeningInfo(attempt, qIndex) {
   const quiz = attempt?.assignment?.quiz || {};
@@ -9160,6 +9191,12 @@ function closeListeningSheet() {
 
 // Called first thing by renderPlayerState; true when the sheet took over.
 function maybeRenderListeningSheet(state) {
+  if (live.player.mode !== 'assignment') {
+    if (maybeRenderLiveListeningSheet(state)) return true;
+    closeListeningSheet();
+    return false;
+  }
+  listeningSheet.mode = 'assignment';
   const as = live.player.assignment;
   const attempt = as?.state?.attempt;
   const info = (live.player.mode === 'assignment' && state?.phase === 'question' && !as?.retake?.active && !attempt?.adaptive)
@@ -9194,14 +9231,17 @@ function maybeRenderListeningSheet(state) {
 }
 
 function listeningSavedAnswer(qIndex) {
+  if (listeningSheet.mode === 'live') return listeningSheet.liveAnswers[String(qIndex)];
   const raw = live.player.assignment.state?.attempt?.answersByQ || {};
   return raw[String(qIndex)]?.answer;
 }
 
 function renderListeningSheet(info) {
-  const attempt = live.player.assignment.state.attempt;
+  const isLive = listeningSheet.mode === 'live';
+  const L = listeningSheet.live;
+  const attempt = isLive ? null : live.player.assignment.state.attempt;
   const { section, first, last } = info;
-  const locked = listeningSectionLocked(attempt, section.id);
+  const locked = isLive ? liveListeningLocked(L) : listeningSectionLocked(attempt, section.id);
   const sameSection = listeningSheet.el && listeningSheet.sectionId === section.id;
   const keepAudio = sameSection ? listeningSheet.audio : null;
   const scrollTop = sameSection ? listeningSheet.el.scrollTop : 0;
@@ -9220,7 +9260,7 @@ function renderListeningSheet(info) {
   const el = document.createElement('div');
   el.id = 'listeningSheet';
   el.className = 'listening-sheet' + (locked ? ' is-locked' : '');
-  el.dataset.locked = String(locked);
+  el.dataset.locked = isLive ? `${locked}|${!!L.closed}` : String(locked);
   el.setAttribute('role', 'region');
   el.setAttribute('aria-label', section.title || t('Listening'));
 
@@ -9255,12 +9295,24 @@ function renderListeningSheet(info) {
   if (locked) {
     const note = document.createElement('p');
     note.className = 'ls-locked-note';
-    note.textContent = t('This section is submitted. You can look at it but not change it.');
+    note.textContent = isLive && !L.closed
+      ? t('Submitted ✅ Wait for your teacher to move on.')
+      : (isLive ? t('Your teacher has closed this section.') : t('This section is submitted. You can look at it but not change it.'));
     pageEl.appendChild(note);
   }
 
-  const questions = attempt.assignment.quiz.questions;
-  const marks = new Map((attempt.answersWithCorrectness || []).map((a) => [Number(a.qIndex), a]));
+  let questions;
+  let marks;
+  if (isLive) {
+    questions = [];
+    (L.questions || []).forEach((q, k) => { questions[first + k] = q; });
+    marks = new Map(Object.entries(L.marks || {}).map(([i, m]) => [Number(i), m.teacher
+      ? { liveTeacher: { graded: !!m.graded, pointsAwarded: m.pointsAwarded, correction: m.correction } }
+      : m]));
+  } else {
+    questions = attempt.assignment.quiz.questions;
+    marks = new Map((attempt.answersWithCorrectness || []).map((a) => [Number(a.qIndex), a]));
+  }
   for (let i = first; i <= last; i += 1) {
     pageEl.appendChild(renderListeningQuestion(questions[i], i, locked, marks.get(i)));
   }
@@ -9270,7 +9322,7 @@ function renderListeningSheet(info) {
   status.setAttribute('aria-live', 'polite');
   const actions = document.createElement('div');
   actions.className = 'ls-actions';
-  if (first > 0) {
+  if (first > 0 && !isLive) {
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'ls-btn ls-btn-quiet';
@@ -9281,7 +9333,9 @@ function renderListeningSheet(info) {
   const main = document.createElement('button');
   main.type = 'button';
   main.className = 'ls-btn ls-btn-main';
-  if (locked) {
+  if (isLive && locked) {
+    main.classList.add('hidden');
+  } else if (locked) {
     main.textContent = t('Continue →');
     main.addEventListener('click', () => leaveListeningSheet(last + 1, last));
   } else {
@@ -9295,7 +9349,8 @@ function renderListeningSheet(info) {
   document.body.appendChild(el);
   document.body.classList.add('listening-sheet-open');
   listeningSheet.el = el;
-  renderListeningPlayer(playerWrap, section, attempt, locked);
+  if (isLive) playerWrap.textContent = t('🔊 Listen to the recording in class.');
+  else renderListeningPlayer(playerWrap, section, attempt, locked);
   updateListeningProgress(info);
   el.scrollTop = scrollTop;
 }
@@ -9454,8 +9509,8 @@ function renderListeningQuestion(q, qIndex, locked, mark) {
     const fb = document.createElement('div');
     fb.className = 'ls-q-mark';
     const answered = listeningAnswered(saved);
-    if (mark?.teacherGrade || q.type === 'open') {
-      const g = live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
+    if (mark?.teacherGrade || mark?.liveTeacher || q.type === 'open') {
+      const g = mark?.liveTeacher || live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
       if (g?.graded) {
         fb.textContent = t('Teacher: {points} points', { points: Number(g.pointsAwarded || 0) }) + (g.correction ? ` · ${g.correction}` : '');
       } else if (answered) {
@@ -9466,7 +9521,7 @@ function renderListeningQuestion(q, qIndex, locked, mark) {
       fb.dataset.verdict = mark.correct ? 'correct' : (partial ? 'partial' : 'wrong');
       const verdict = mark.correct ? `✓ ${t('Correct')}` : (partial ? `◐ ${mark.partialScore}/${mark.partialTotal}` : `✗ ${t('Wrong')}`);
       fb.textContent = mark.correct || !mark.correctAnswer ? verdict : `${verdict} · ${t('Answer: {answer}', { answer: mark.correctAnswer })}`;
-    } else if (!answered) {
+    } else if (!answered && !(listeningSheet.mode === 'live' && !listeningSheet.live?.closed)) {
       fb.dataset.verdict = 'wrong';
       fb.textContent = t('Not answered');
     }
@@ -9499,6 +9554,12 @@ function queueListeningSave(qIndex, answer, delay) {
   }, delay);
   timers.set(qIndex, entry);
   // Count it as answered straight away; the server copy follows.
+  if (listeningSheet.mode === 'live') {
+    listeningSheet.liveAnswers[String(qIndex)] = answer;
+    const L = listeningSheet.live;
+    if (L) updateListeningProgress({ section: L.section, first: L.first, last: L.last });
+    return;
+  }
   const attempt = live.player.assignment.state?.attempt;
   if (attempt) {
     attempt.answersByQ = attempt.answersByQ || {};
@@ -9519,6 +9580,21 @@ function flushListeningSaves() {
 }
 
 function sendListeningSave(qIndex, answer) {
+  if (listeningSheet.mode === 'live') {
+    const L = listeningSheet.live;
+    if (!L || !live.player.pin || !live.player.token) return;
+    // In live a cleared answer is saved too: the room keeps one draft per question.
+    const p = api('/api/section/answer', {
+      method: 'POST',
+      headers: { 'X-Player-Token': live.player.token },
+      body: { pin: live.player.pin, playerId: live.player.id, sectionId: L.section.id, qIndex, answer },
+    })
+      .then(() => listeningStatus(t('Saved ✓'), 'ok'))
+      .catch((err) => listeningStatus(String(err?.message || t('Could not save. Check your connection.')), 'bad'))
+      .finally(() => listeningSheet.pendingSaves.delete(p));
+    listeningSheet.pendingSaves.add(p);
+    return;
+  }
   const code = String(live.player.assignment.code || '').trim();
   const attemptId = String(live.player.assignment.attemptId || '').trim();
   if (!code || !attemptId) return;
@@ -9571,6 +9647,22 @@ async function submitListeningSection(info) {
   if (!window.confirm(ask)) return;
   listeningSheet.busy = true;
   listeningStatus(t('Submitting…'));
+  if (listeningSheet.mode === 'live') {
+    try {
+      await flushListeningSaves();
+      const data = await api('/api/section/submit', {
+        method: 'POST',
+        headers: { 'X-Player-Token': live.player.token },
+        body: { pin: live.player.pin, playerId: live.player.id, sectionId: info.section.id },
+      });
+      if (data?.state) applyLivePlayerState(data.state);
+    } catch (err) {
+      listeningStatus(String(err?.message || t('Could not submit the section.')), 'bad');
+    } finally {
+      listeningSheet.busy = false;
+    }
+    return;
+  }
   try {
     await flushListeningSaves();
     const code = String(live.player.assignment.code || '').trim();

@@ -1327,4 +1327,10 @@ window.PINPLAY_FR_DICT = {
   "1 play left": "1 écoute restante",
   "{n} plays left": "{n} écoutes restantes",
   "The recording could not play.": "L'enregistrement n'a pas pu être lu.",
+  "Submitted ✅ Wait for your teacher to move on.": "Envoyé ✅ Attends que ton professeur passe à la suite.",
+  "Your teacher has closed this section.": "Ton professeur a fermé cette partie.",
+  "🔊 Listen to the recording in class.": "🔊 Écoute l'enregistrement en classe.",
+  "Questions {from}–{to} · {submitted} of {players} submitted · {started} started": "Questions {from}–{to} · {submitted} sur {players} envoyées · {started} commencées",
+  "Answers revealed. Press Next to continue.": "Réponses affichées. Appuie sur Suivant pour continuer.",
+  "Play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.": "Lance l'enregistrement. Les élèves répondent sur leur téléphone ; appuie sur Suivant (ou Révéler) quand ils ont fini. Tout ce qu'ils ont saisi compte.",
 };

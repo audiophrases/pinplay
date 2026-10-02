@@ -11728,6 +11728,7 @@ function renderHostState(state) {
     Array.isArray(state.modelResponses) ? state.modelResponses.length : 0,
     openSig,
     modelSig,
+    state.listening ? `${state.listening.startedCount}:${state.listening.finalized ? 1 : 0}` : '',
   ].join(':');
 
   if (live.host.lastQuestionRenderKey !== questionRenderKey) {
@@ -11817,6 +11818,91 @@ function renderHostState(state) {
   live.host.lastPhase = state.phase;
   live.host.lastIndex = state.currentIndex;
   live.host.lastResponseCount = state.responseCount;
+}
+
+// Live listening section: the projector shows the title, instruction and the
+// recording's player (kept outside the redrawn area so new answers never stop
+// it), how many students have submitted, and after the reveal the answers.
+const hostListening = { el: null, audio: null, sectionKey: '' };
+
+function hideHostListeningPlayer() {
+  if (!hostListening.el) return;
+  if (hostListening.audio) { try { hostListening.audio.pause(); } catch {} }
+  hostListening.el.remove();
+  hostListening.el = null;
+  hostListening.audio = null;
+  hostListening.sectionKey = '';
+}
+
+function renderHostListening(state) {
+  const L = state.listening;
+  const closed = !!state.questionClosed || !!L.finalized;
+  hostQuestionCardEl?.classList.remove('intro-active');
+  hostQuestionWrap.classList.remove('hidden', 'center-stage');
+  hostQuestionPromptEl.textContent = `🎧 ${L.section.title || t('Listening')}`;
+  hostQuestionAnswersEl.classList.remove('has-question-image');
+  hostQuestionAnswersEl.innerHTML = '';
+
+  const key = `${L.section.id}|${state.questionStartedAt || ''}`;
+  if (hostListening.sectionKey !== key) {
+    hideHostListeningPlayer();
+    hostListening.sectionKey = key;
+    const box = document.createElement('div');
+    box.className = 'host-listening-box';
+    if (L.section.text) {
+      const instr = document.createElement('p');
+      instr.className = 'host-listening-instruction';
+      instr.textContent = L.section.text;
+      box.appendChild(instr);
+    }
+    if (L.section.audioUrl) {
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'auto';
+      audio.src = L.section.audioUrl;
+      audio.className = 'host-listening-audio';
+      box.appendChild(audio);
+      hostListening.audio = audio;
+    } else {
+      const none = document.createElement('p');
+      none.className = 'small muted';
+      none.textContent = t('No recording in this section yet.');
+      box.appendChild(none);
+    }
+    hostQuestionWrap.insertBefore(box, hostQuestionAnswersEl);
+    hostListening.el = box;
+  }
+
+  const count = document.createElement('p');
+  count.className = 'host-listening-count';
+  count.textContent = t('Questions {from}–{to} · {submitted} of {players} submitted · {started} started', {
+    from: L.first + 1, to: L.last + 1, submitted: state.responseCount || 0, players: state.playerCount || 0, started: L.startedCount || 0,
+  });
+  hostQuestionAnswersEl.appendChild(count);
+
+  const list = document.createElement('ol');
+  list.className = 'host-listening-list';
+  list.start = L.first + 1;
+  (L.questions || []).forEach((q) => {
+    const li = document.createElement('li');
+    const prompt = document.createElement('div');
+    prompt.textContent = q?.prompt || '';
+    li.appendChild(prompt);
+    if (closed) {
+      const ans = document.createElement('div');
+      ans.className = 'host-listening-answer';
+      const text = String(q?.answerText || '');
+      if (text) {
+        ans.textContent = `✓ ${text}`;
+        li.appendChild(ans);
+      }
+    }
+    list.appendChild(li);
+  });
+  hostQuestionAnswersEl.appendChild(list);
+  hostQuestionHintEl.textContent = closed
+    ? t('Answers revealed. Press Next to continue.')
+    : t('Play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.');
 }
 
 function renderHostQuestion(state) {
@@ -11972,6 +12058,13 @@ function renderHostQuestion(state) {
   };
 
   if (!hostQuestionWrap || !hostQuestionPromptEl || !hostQuestionAnswersEl || !hostQuestionHintEl) return;
+
+  if (phase === 'question' && state.listening?.section) {
+    applyProjectorLayoutMode(true, { type: 'listening' });
+    renderHostListening(state);
+    return;
+  }
+  hideHostListeningPlayer();
 
   const appendBigReveal = (text) => {
     const value = String(text || '').trim();

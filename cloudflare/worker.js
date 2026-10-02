@@ -2194,6 +2194,21 @@ export default {
       );
     }
 
+    if ((url.pathname === '/api/section/answer' || url.pathname === '/api/section/submit') && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const playerId = sanitizeId(body?.playerId);
+      const playerToken = request.headers.get('X-Player-Token') || '';
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!playerId) return json({ error: 'playerId required.' }, 400);
+      if (!playerToken) return json({ error: 'player token required.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(await stub.fetch(`https://room${url.pathname.replace('/api/', '/')}`, {
+        method: 'POST',
+        body: JSON.stringify({ playerId, playerToken, sectionId: body?.sectionId, qIndex: body?.qIndex, answer: body?.answer }),
+      }));
+    }
+
     if (url.pathname === '/api/react' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -4680,6 +4695,11 @@ export class QuizRoom {
         if (room.phase === 'lobby') {
           if (room.quiz.questions.length > 0) startQuestion(room, 0);
         } else if (room.phase === 'question') {
+          const range = roomListeningRange(room, room.currentIndex);
+          if (range) {
+            finalizeListeningSection(room);
+            room.currentIndex = range.last;
+          }
           if (room.currentIndex + 1 < room.quiz.questions.length) {
             startQuestion(room, room.currentIndex + 1);
           } else {
@@ -4725,6 +4745,7 @@ export class QuizRoom {
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
         if (room.phase === 'question') {
+          finalizeListeningSection(room);
           closeCurrentQuestion(room, 'manual_reveal');
           await this.#setRoom(room);
         }
@@ -5063,6 +5084,7 @@ export class QuizRoom {
         const qIndex = room.currentIndex;
         const question = room.quiz.questions[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
+        if (question.listeningSection) return json({ error: 'Answer listening sections on their sheet.', code: 'LISTENING_SECTION' }, 409);
 
         room.responsesByQuestion[qIndex] = room.responsesByQuestion[qIndex] || {};
 
@@ -5202,6 +5224,32 @@ export class QuizRoom {
           partialScore: Number(verdict.partialScore || 0) || undefined,
           partialTotal: Number(verdict.partialTotal || 0) || undefined,
         });
+      }
+
+      if ((url.pathname === '/section/answer' || url.pathname === '/section/submit') && request.method === 'POST') {
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const player = room.players[playerId];
+        if (!player || player.token !== String(body?.playerToken || '')) return json({ error: 'Unauthorized player.' }, 401);
+        const range = room.phase === 'question' ? roomListeningRange(room, room.currentIndex) : null;
+        if (!range || sanitizeListeningSectionId(body?.sectionId) !== range.section.id) {
+          return json({ error: 'That listening section has ended.', code: 'QUESTION_ENDED' }, 409);
+        }
+        if (room.questionClosed || room.listeningFinalized) return json({ error: 'The teacher has closed this section.', code: 'QUESTION_ENDED' }, 409);
+        room.sectionSubmitted = room.sectionSubmitted || {};
+        if (room.sectionSubmitted[playerId]) return json({ error: 'This listening section is already submitted.', code: 'SECTION_SUBMITTED' }, 409);
+        if (url.pathname === '/section/answer') {
+          const qIndex = Math.round(Number(body?.qIndex));
+          if (!(qIndex >= range.first && qIndex <= range.last)) return json({ error: 'Question not in this section.' }, 400);
+          room.sectionDrafts = room.sectionDrafts || {};
+          room.sectionDrafts[playerId] = room.sectionDrafts[playerId] || {};
+          room.sectionDrafts[playerId][String(qIndex)] = sanitizeAssignmentAnswer(room.quiz.questions[qIndex], body?.answer);
+        } else {
+          room.sectionSubmitted[playerId] = Date.now();
+        }
+        room.updatedAt = Date.now();
+        await this.#setRoom(room);
+        return json({ ok: true, state: playerState(room, playerId) });
       }
 
       if (url.pathname === '/react' && request.method === 'POST') {
@@ -5845,6 +5893,7 @@ function effectiveQuestionIndex(room) {
 
 function hostState(room) {
   const qIndex = effectiveQuestionIndex(room);
+  const listeningRange = room.phase === 'question' ? roomListeningRange(room, qIndex) : null;
   const responses = room.responsesByQuestion[qIndex] || {};
   const startedAt = Number(room.questionStartedAt || 0);
   const reactions = (room.reactionsByQuestion?.[qIndex] || []).filter((r) => Number(r?.at || 0) >= startedAt);
@@ -5853,7 +5902,7 @@ function hostState(room) {
       id: p.id,
       name: p.name,
       score: p.score,
-      answeredCurrent: !!responses[p.id],
+      answeredCurrent: listeningRange ? !!room.sectionSubmitted?.[p.id] : !!responses[p.id],
       identity: p.identity || null,
       avatar: p.avatar || arenaDefaultAvatar(p.id),
     }))
@@ -5911,7 +5960,9 @@ function hostState(room) {
     currentIndex: qIndex,
     totalQuestions: room.quiz.questions.length,
     playerCount: players.length,
-    responseCount: Object.keys(responses).length,
+    responseCount: listeningRange
+      ? Object.keys(room.sectionSubmitted || {}).filter((pid) => room.players?.[pid]).length
+      : Object.keys(responses).length,
     reactions,
     players,
     question,
@@ -5924,7 +5975,10 @@ function hostState(room) {
         ? Number(room.questionStartedAt) + timeLimitSec * 1000
         : null,
     serverNow: Date.now(),
-    allAnswered: room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
+    listening: listeningRange ? hostListeningState(room, listeningRange) : undefined,
+    allAnswered: listeningRange
+      ? players.length > 0 && Object.keys(room.sectionSubmitted || {}).filter((pid) => room.players?.[pid]).length >= players.length
+      : room.phase === 'question' && players.length > 0 && Object.keys(responses).length >= players.length,
     openResponses: !roomQuestion?.isPoll && (['open', 'image_open', 'speaking', 'voice_record'].includes(roomQuestion?.type) || isTeacherGradedTextQuestion(roomQuestion))
       ? Object.entries(responses)
         .filter(([, r]) => !r?.hidden)
@@ -6020,6 +6074,10 @@ function playerState(room, playerId) {
         : null,
     questionClosedAt: room.phase === 'question' ? room.questionClosedAt || null : null,
     questionCloseReason: room.phase === 'question' ? room.questionCloseReason || null : null,
+    listening: (() => {
+      const range = room.phase === 'question' ? roomListeningRange(room, qIndex) : null;
+      return range ? playerListeningState(room, playerId, range) : undefined;
+    })(),
     serverNow: Date.now(),
     leaderboard: Object.values(room.players)
       .map((p) => ({ name: p.name, score: p.score }))
@@ -6094,6 +6152,8 @@ function hostQuestionPayload(question) {
 
 function getQuestionTimeLimitSec(question) {
   if (!question) return null;
+  // A listening section stays open until the teacher moves on.
+  if (question.listeningSection) return null;
   const value = normalizeTimeLimitValue(question.timeLimit, question.type);
   if (value === 0) return null;
   return value;
@@ -6197,10 +6257,155 @@ function closeQuestionIfTimedOut(room) {
   return closeCurrentQuestion(room, 'timeout');
 }
 
+// ---------------------------------------------------------------- live listening sections
+// A section plays as one step: the room sits on its first question while every
+// question of the section takes answers at once. Answers are drafts (autosaved
+// per student) until the teacher reveals or moves on; then whatever each
+// student entered is graded and scored, submitted or not.
+function roomListeningRange(room, qIndex) {
+  const questions = room?.quiz?.questions || [];
+  const id = questions[qIndex]?.listeningSection;
+  if (!id) return null;
+  const section = (room.quiz.listeningSections || []).find((x) => x.id === id);
+  if (!section) return null;
+  let first = qIndex;
+  let last = qIndex;
+  while (first > 0 && questions[first - 1]?.listeningSection === id) first -= 1;
+  while (last < questions.length - 1 && questions[last + 1]?.listeningSection === id) last += 1;
+  return { section, first, last };
+}
+
+function liveListeningAnswered(answer) {
+  if (answer == null) return false;
+  if (Array.isArray(answer)) return answer.some((x) => String(x ?? '').trim() !== '');
+  if (typeof answer === 'object') return !!String(answer.rewrite || '').trim();
+  return String(answer).trim() !== '';
+}
+
+function isLiveTeacherGraded(question) {
+  return !!question && (['open', 'image_open', 'speaking', 'voice_record'].includes(question.type) || isTeacherGradedTextQuestion(question));
+}
+
+// Grade every student's drafts into the normal per-question responses, once.
+// Flat points (no speed bonus, no bets): everyone hears the recording together.
+function finalizeListeningSection(room) {
+  const range = room.phase === 'question' ? roomListeningRange(room, room.currentIndex) : null;
+  if (!range || room.listeningFinalized) return false;
+  const drafts = room.sectionDrafts || {};
+  const now = Date.now();
+  for (let qIndex = range.first; qIndex <= range.last; qIndex += 1) {
+    const question = room.quiz.questions[qIndex];
+    room.responsesByQuestion[qIndex] = room.responsesByQuestion[qIndex] || {};
+    Object.entries(drafts).forEach(([playerId, byQ]) => {
+      const player = room.players?.[playerId];
+      const raw = byQ?.[String(qIndex)];
+      if (!player || !liveListeningAnswered(raw)) return;
+      const answer = sanitizeAssignmentAnswer(question, raw);
+      if (isLiveTeacherGraded(question)) {
+        room.responsesByQuestion[qIndex][playerId] = { answer, correct: false, bet: 0, pointsAwarded: 0, graded: false, correction: '', modelAnswer: false, submittedAt: now };
+        return;
+      }
+      const verdict = evaluate(question, answer);
+      const pointsAwarded = Math.floor(Number(question.points || 1000) * verdictScoreFraction(verdict));
+      room.responsesByQuestion[qIndex][playerId] = {
+        answer,
+        correct: !!verdict.correct,
+        bet: 0,
+        pointsAwarded,
+        graded: true,
+        submittedAt: now,
+        partialScore: Number(verdict.partialScore || 0) || undefined,
+        partialTotal: Number(verdict.partialTotal || 0) || undefined,
+      };
+      player.score = Math.max(0, Number(player.score || 0) + pointsAwarded);
+    });
+  }
+  room.listeningFinalized = true;
+  appendRoomEvent(room, 'listening_section_closed', { sectionId: range.section.id, first: range.first, last: range.last });
+  room.updatedAt = now;
+  return true;
+}
+
+function liveListeningPublicSection(section) {
+  return {
+    id: section.id,
+    title: String(section.title || ''),
+    text: String(section.text || ''),
+    audioUrl: String(section.audio?.url || ''),
+    playsAllowed: Math.max(0, Math.min(3, Math.round(Number(section.playsAllowed) || 0))),
+    pauseAllowed: !!section.pauseAllowed,
+  };
+}
+
+// What a phone needs to draw the sheet: the questions, its own drafts, whether
+// it submitted, and once the teacher reveals, its marks.
+function playerListeningState(room, playerId, range) {
+  const closed = !!room.questionClosed || !!room.listeningFinalized;
+  const marks = {};
+  if (closed) {
+    for (let i = range.first; i <= range.last; i += 1) {
+      const q = room.quiz.questions[i];
+      const r = room.responsesByQuestion?.[i]?.[playerId];
+      if (!r) continue;
+      marks[i] = isLiveTeacherGraded(q)
+        ? { teacher: true, graded: !!r.graded, pointsAwarded: Number(r.pointsAwarded || 0), correction: String(r.correction || '') }
+        : { correct: !!r.correct, points: Number(r.pointsAwarded || 0), partialScore: r.partialScore, partialTotal: r.partialTotal, correctAnswer: hostCorrectSummary(q) };
+    }
+  }
+  const questions = [];
+  for (let i = range.first; i <= range.last; i += 1) questions.push(publicQuestion(room.quiz.questions[i]));
+  return {
+    section: liveListeningPublicSection(range.section),
+    first: range.first,
+    last: range.last,
+    questions,
+    answers: room.sectionDrafts?.[playerId] || {},
+    submitted: !!room.sectionSubmitted?.[playerId],
+    closed,
+    marks: closed ? marks : null,
+  };
+}
+
+function hostListeningState(room, range) {
+  const drafts = room.sectionDrafts || {};
+  const submitted = room.sectionSubmitted || {};
+  const players = Object.keys(room.players || {});
+  const questions = [];
+  for (let i = range.first; i <= range.last; i += 1) {
+    const q = room.quiz.questions[i];
+    questions.push({ ...hostQuestionPayload(q), answerText: isLiveTeacherGraded(q) ? '' : hostCorrectSummary(q) });
+  }
+  return {
+    section: liveListeningPublicSection(range.section),
+    first: range.first,
+    last: range.last,
+    questions,
+    submittedCount: players.filter((pid) => submitted[pid]).length,
+    startedCount: players.filter((pid) => Object.values(drafts[pid] || {}).some(liveListeningAnswered)).length,
+    finalized: !!room.listeningFinalized,
+  };
+}
+
 function startQuestion(room, index) {
-  const qIndex = Number(index);
+  let qIndex = Number(index);
   if (!Number.isFinite(qIndex)) return false;
   if (qIndex < 0 || qIndex >= room.quiz.questions.length) return false;
+  // Entering a section from either side lands on its first question.
+  const range = roomListeningRange(room, qIndex);
+  if (range) qIndex = range.first;
+  room.sectionDrafts = {};
+  room.sectionSubmitted = {};
+  room.listeningFinalized = false;
+  room.responsesByQuestion = room.responsesByQuestion || {};
+  if (range) {
+    for (let i = range.first; i <= range.last; i += 1) {
+      // Re-entering a section takes its points back off before they're re-earned.
+      Object.entries(room.responsesByQuestion[i] || {}).forEach(([pid, r]) => {
+        if (room.players?.[pid]) room.players[pid].score = Math.max(0, Number(room.players[pid].score || 0) - Math.round(Number(r?.pointsAwarded || 0)));
+      });
+      room.responsesByQuestion[i] = {};
+    }
+  }
 
   room.phase = 'question';
   room.currentIndex = qIndex;

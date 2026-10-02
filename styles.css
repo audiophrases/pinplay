@@ -6118,3 +6118,11 @@ body.listening-sheet-open { overflow: hidden; }
   .ls-pair { grid-template-columns: 1fr; gap: 4px; padding: 6px 0; }
   .ls-strip { padding: 8px 12px; }
 }
+
+/* ── Live listening section on the projector ── */
+.host-listening-box { display: grid; gap: 12px; margin: 8px 0 12px; }
+.host-listening-instruction { font-size: 1.25rem; font-style: italic; margin: 0; }
+.host-listening-audio { width: 100%; max-width: 720px; margin: 0 auto; }
+.host-listening-count { font-weight: 700; color: var(--muted); margin: 0 0 8px; }
+.host-listening-list { margin: 0; padding-left: 2rem; display: grid; gap: 10px; font-size: 1.1rem; text-align: left; }
+.host-listening-answer { color: var(--ok); font-weight: 700; margin-top: 2px; }
