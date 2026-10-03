@@ -1,7 +1,8 @@
 # Listening sections: a scrollable exam sheet with one recording
 
 Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
-built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is still a plan. Decisions settled with the owner on 2026-10-02 (section 2).
+built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is still a plan;
+phase 6 (adaptive listening, section 10) planned 2026-10-03. Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
 - `listeningSections` on the quiz and `listeningSection` on each question, kept
@@ -77,7 +78,7 @@ PinPlay adds no timer and no extra pressure; it removes friction.
 | Plays allowed | **Per section**: 1, 2, 3 or unlimited. When limited, no rewinding or skipping. |
 | Pausing | **Per section**: allowed / not allowed. |
 | Counting | Same as a normal PinPlay quiz: one question counts as one, a matching question included (partial credit as today). |
-| Adaptive | A quiz with listening sections can't be adaptive (fixed order). |
+| Adaptive | A quiz with listening sections can't be adaptive (fixed order). **Changed 2026-10-03:** sections become level blocks in adaptive assignments (section 10). |
 
 Phase 4 as built (live):
 - The room treats a section as one step: entering it from either side lands on
@@ -229,7 +230,127 @@ As built (2026-10-03):
 - Import → Append already renames clashing section ids, so separate prompts
   can be joined into one exam.
 
-## 10. Order of work
+## 10. Adaptive listening (phase 6, plan)
+
+Decided with the owner on 2026-10-03. This replaces the earlier rule that a
+quiz with listening sections can't be adaptive.
+
+### 10a. The idea
+
+A student sees a section's questions all at once, so the level can't change
+within a section. A section is therefore a **level block**: the student gets
+the questions of one level, or a ladder of levels if PinPlay doesn't know
+their level yet. Once the section is submitted, its answers count towards the
+student's level, like any other adaptive answer. A quiz made only of sections
+(Part 1, Part 2, Part 3) is the main use: each part comes at the level the
+earlier parts point to.
+
+### 10b. Decisions (owner, 2026-10-03)
+
+| Question | Decision |
+|---|---|
+| Level of a block | The student's current level when they reach the section, mapped to the nearest level the section has (easier on a tie, as for saved levels). Fixed on the attempt, so a reload doesn't change it. |
+| Student with no level | Gets a **ladder**: one level per moment, from the easiest to the hardest (10d). Applies when the student has no saved level, no level set by the teacher and no answers yet in this attempt. Random-name students always start with a ladder. |
+| Moving the level | Only when the section is submitted (or the whole assignment is): its answers go through the normal engine, one by one, in the order shown. Autosave never moves the level. Blanks count as wrong; `open` answers wait for the teacher's grade, as today. |
+| Ladder misses | On a ladder, a miss on a question **above** the student's current level doesn't lower it and doesn't count as a miss in a row. Without this rule, a B1 student who rightly fails B2, C1 and C2 ends at A1 (checked with the real engine on 2026-10-03; with the rule, A1 to C2 students all land on their own level). |
+| Counting | Section questions come **on top of** the N questions per student. Every student does every section once. |
+| Questions with no level | **Shared**: everyone gets them, at every level and in the ladder. They earn points but don't move the level. |
+| Where a section comes | **Where it sits**: a section with k normal questions before it in the quiz comes after the student's k-th served question (capped at N). Sections that follow each other come back to back. In a quiz made only of sections, the parts come in order. |
+| Live | Unchanged: classic live isn't adaptive, PinPlay Cup never deals sections. |
+
+### 10c. How a section is written: moments
+
+- A section's questions are about **moments** of the recording, in the order
+  they are heard. Every level present in the section has **one question per
+  moment**: question k of each level is about moment k. All levels cover the
+  whole recording in parallel.
+- No new field: a question's moment is its rank among the section's questions
+  of the same level (the 1st B1 question is moment 1). So the editor can
+  either group the questions by level (all A2, then all B1) or by moment
+  (moment 1 at A2, B1, B2, then moment 2…); both work.
+- Every level must have the same number of questions. Because of this, every
+  student gets a block of the same size, whatever their level.
+- Shared (untagged) questions keep their place: each goes before the moment of
+  the next tagged question after it in the section. Grouped by level, put them
+  at the start or the end of the section.
+- Played without adaptive, a multilevel section shows every question of every
+  level. The editor says so.
+
+### 10d. The block a student gets
+
+- **Known level:** the shared questions and the chosen level's questions,
+  moments 1…S, in order.
+- **Ladder:** with S moments and L levels in the section, moment k (0-based)
+  is asked at level `round(k × (L − 1) / (S − 1))`: 6 moments over A1–C2 give
+  A1, A2, B1, B2, C1, C2; 6 moments over A2–B2 give A2, A2, B1, B1, B2, B2.
+  With one moment, the easiest level.
+- The sheet numbers the block's questions as usual; the student never sees a
+  level (same display rule as adaptive mode).
+
+### 10e. Engine and assignments
+
+- The assignment's levels (engine bands) are the levels found in the single
+  questions **and** the sections, so a quiz made only of sections can be
+  adaptive. Adaptive still needs at least two levels in the quiz. N can be 0
+  when the quiz has no single questions.
+- Section questions are never served one at a time and never come back as
+  retries.
+- Serving: when the student reaches a section's place, its whole block is
+  served at once; its questions appear in the attempt's served list as one
+  run. The sheet's answer route takes any question of the open block
+  (autosave); Submit section locks it, feeds the answers to the engine (with
+  the ladder rule when it was a ladder) and serves what comes next. There is
+  no "← Previous question" on the sheet in adaptive mode.
+- The attempt is finished when N single questions are answered and every
+  section is submitted. The level is saved as today.
+- Plays allowed, pausing, instant marks after submitting: as in phase 2.
+- Teacher results: one line per section, e.g. "Part 1 · B1 · 5/6" or
+  "Part 1 · ladder A1→C2 · 4/6", and the level path marks ladder misses that
+  didn't move the level.
+
+### 10f. Editor
+
+- The section panel shows its counts per level ("A2 6 · B1 6 · B2 6 · shared
+  1") and warns when the levels don't have the same number of questions.
+- The assignment row's 🎯 Adaptive box is offered for quizzes with sections
+  (no longer hidden). For a quiz made only of sections, the "N questions per
+  student" field is hidden.
+
+### 10g. AI prompt (listening, with levels)
+
+- The listening form gets a **Levels** choice (none, or a range such as A2–B2
+  or A1–C2). With levels, the prompt asks for each recording: choose the
+  moments (as many as the questions per part), then write **one question per
+  level for every moment**, tagged with `cefr`; all levels cover the same
+  moments, in the order heard.
+- What makes a level harder, written into the prompt: the question type and
+  how open it is (true/false and choosing → gap fill → a short written answer
+  → open), how far the wording is from the recording (exact words → synonyms
+  and paraphrase), how close the wrong options are (several things that are
+  all mentioned, a detail that gets corrected), and asking for what is meant
+  rather than what is said. Never a longer question.
+- Already in the listening prompt (2026-10-03) for every level: questions and
+  options are short, because students listen, read the current question and
+  glance at the others at the same time. Short doesn't mean easy.
+
+### 10h. Order of work
+
+1. Authoring: the AI prompt's Levels option and the editor's counts per level.
+   This lets the owner make real multilevel listening quizzes to test with.
+2. Engine and assignments: bands from sections, blocks and ladders, the ladder
+   rule, where sections come, section submit feeding the engine, finishing
+   the attempt, results. Tests with the real worker, as in phase 2.
+
+### 10i. Details to settle while building
+
+- A student whose saved level rests on very few answers: level block or
+  ladder? (Default: level block; any saved level counts.)
+- A ladder with an `open` question: the next part uses the level without it
+  until the teacher grades it.
+- "Apply to assignment" removing the level a block was fixed at: the block
+  moves to the nearest level the section still has.
+
+## 11. Order of work
 
 1. Data model + editor (sections, recording upload, filtered types, plays and
    pause settings). Tests: normalizers keep sections consecutive and drop
@@ -240,3 +361,4 @@ As built (2026-10-03):
 3. Multi-voice TTS recordings.
 4. Live.
 5. AI prompt variant.
+6. Adaptive listening (section 10).

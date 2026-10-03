@@ -4880,6 +4880,7 @@ function buildListeningPrompt(req) {
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     transcriptRule,
     'Every answer is said in the recording: a student who heard it can answer, one who didn\'t can\'t guess it from the question or from general knowledge.',
+    'Keep every prompt and option short: while the recording plays, students listen, read the current question and glance at the others to keep their place. A question can be hard without being long.',
     'Questions follow the order in which their answers are heard, spread over the whole recording; never two questions on the same piece of information.',
     'Prompts and options say things in other words than the recording, but written answers ("accepted", "gaps") are the words actually heard: short, one to three words or a number. List the forms a student may write for them: "15, fifteen", "10:30, half past ten", a name as it is spelled in the recording.',
     'Wrong options are near misses taken from the recording: something else that is mentioned, a plan that changes, a price or time that is corrected, what the other speaker suggests. Never absurd.',

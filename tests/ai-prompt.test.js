@@ -352,6 +352,10 @@ describe('listening prompt', () => {
     assert.match(write, /the scripts of 3 recordings/);
   });
 
+  it('asks for short questions and options, whatever the source', () => {
+    ['paste', 'attach', 'write'].forEach((source) => assert.match(section(lbuild({ source }), 'Rules'), /Keep every prompt and option short/, source));
+  });
+
   it('quotes what the teacher typed, and carries the plays and pausing settings', () => {
     const text = lbuild({ questionCount: '5 in part 1, 8 in part 2', notes: 'like a B1 exam', playsAllowed: 0, pauseAllowed: true });
     const words = section(text, 'The teacher\'s own words');
