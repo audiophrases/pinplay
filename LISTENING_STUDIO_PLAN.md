@@ -345,6 +345,26 @@ line, in semitones; smaller is steadier.
 1. **Script format:** the shared parser, the AI rules, the listening
    prompt's "write" mode and "📋 Copy script", with tests. This is useful
    right away: an AI writes directed scripts.
+   **Built 2026-10-03:**
+   - `listening-script.js` holds `parseListeningScript`,
+     `cleanListeningTranscript`, `isListeningScript` and
+     `LISTENING_SCRIPT_RULES` (11 rules).
+   - The listening prompt's "write" mode now asks for a full recording
+     script in each section's transcript, with a "## Recording script"
+     section (the format and the rules) and a script example: Anna and Tom
+     on the phone, `[ring]`, `[phone]`, directions. The words are the plain
+     example's, so its questions still fit.
+   - The rules make the AI do the studio's work up front: language,
+     background, a full voice description per character (adults as adults,
+     voices easy to tell apart), effects, sounds, directions on every line
+     that isn't neutral, natural speech, at most ~30 words per line, numbers
+     as they are said, answers never hidden under an effect or an overlap,
+     and nothing but the recording itself.
+   - The section panel has "📋 Copy script" and a summary ("🎙️ Recording
+     script · 2 voices · 6 lines", plus anything the studio would have to
+     guess, such as a speaker with no VOICE line).
+   - Tests: `tests/listening-script.test.js`, plus prompt tests in
+     `tests/ai-prompt.test.js`.
 2. **Test 0.**
 3. **The studio engine:** making lines, the cache, the mixer and the checks,
    as a library tested on the station scene.

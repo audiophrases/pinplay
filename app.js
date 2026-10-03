@@ -2267,6 +2267,18 @@ function refreshListeningSectionLevels() {
   });
 }
 
+// "🎙️ Recording script · 4 voices · 18 lines" (plus anything the studio will
+// have to guess), or nothing for a plain transcript.
+function listeningScriptSummary(transcript) {
+  if (typeof isListeningScript !== 'function' || !isListeningScript(transcript)) return '';
+  const script = parseListeningScript(transcript);
+  const lines = script.parts.reduce((n, p) => n + p.items.filter((it) => it.type === 'line').length, 0);
+  const parts = [t('🎙️ Recording script · {v} voices · {n} lines', { v: Object.keys(script.voices).length, n: lines })];
+  if (script.parts.length > 1) parts.push(t('{n} parts', { n: script.parts.length }));
+  if (script.notes.length) parts.push(`⚠ ${script.notes.join(' ')}`);
+  return parts.join(' · ');
+}
+
 function buildListeningSectionPanel(sec) {
   const range = listeningSectionRange(sec.id) || { from: 1, to: 1 };
   const plays = Number(sec.playsAllowed);
@@ -2291,6 +2303,10 @@ function buildListeningSectionPanel(sec) {
     <details class="listening-section-transcript">
       <summary>${escapeHtml(t('Transcript (only you see it)'))}</summary>
       <textarea rows="6" maxlength="${LISTENING_MAX_TRANSCRIPT}" data-ls-id="${sec.id}" data-ls-field="transcript" placeholder="${escapeHtml(t('What is said in the recording, for checking answers. Students never see it.'))}">${escapeHtml(sec.transcript || '')}</textarea>
+      <div class="listening-section-row">
+        <button type="button" class="btn btn-sm" data-ls-copy="${sec.id}">${escapeHtml(t('📋 Copy script'))}</button>
+        <span class="small muted" data-ls-script="${sec.id}">${escapeHtml(listeningScriptSummary(sec.transcript))}</span>
+      </div>
     </details>
     <div class="listening-section-recording">
       <span>${escapeHtml(t('Recording'))}</span>
@@ -2378,6 +2394,8 @@ function bindListeningSectionEvents() {
       const transcript = String(el.value || '').slice(0, LISTENING_MAX_TRANSCRIPT);
       if (transcript.trim()) sec.transcript = transcript;
       else delete sec.transcript;
+      const summaryEl = questionListEl.querySelector(`[data-ls-script="${sec.id}"]`);
+      if (summaryEl) summaryEl.textContent = listeningScriptSummary(sec.transcript);
     }
   };
   questionListEl.addEventListener('input', onField);
@@ -2387,6 +2405,17 @@ function bindListeningSectionEvents() {
     if (fileEl) attachListeningRecording(fileEl.dataset.lsAudio, fileEl.files?.[0]);
   });
   questionListEl.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('[data-ls-copy]');
+    if (copyBtn) {
+      const sec = findListeningSection(copyBtn.dataset.lsCopy);
+      const text = String(sec?.transcript || '');
+      if (!text.trim()) return;
+      navigator.clipboard?.writeText(text).then(
+        () => { copyBtn.textContent = t('✅ Copied'); setTimeout(() => { copyBtn.textContent = t('📋 Copy script'); }, 2000); },
+        () => alert(t('Could not copy. Select the text in the box and copy it instead.')),
+      );
+      return;
+    }
     const removeBtn = e.target.closest('[data-ls-remove]');
     if (removeBtn) {
       if (!confirm(t('Remove this listening section? Its questions stay in the quiz as normal questions.'))) return;
@@ -4791,6 +4820,21 @@ const LISTENING_PROMPT_EXAMPLE = {
 // The same recording with levels: two moments, one question per level each.
 // The level comes from what is asked (openness, paraphrase, close options,
 // meaning rather than words), never from length.
+// The same recording as a script for the voice studio (listening-script.js):
+// the words are LISTENING_PROMPT_EXAMPLE's, so its questions still fit.
+const LISTENING_PROMPT_SCRIPT_EXAMPLE = `LANGUAGE: English
+AMBIENCE: room
+VOICE Anna: A young British woman of about twenty with a warm, clear, mid-range voice, friendly and quick.
+VOICE Tom [phone]: A young British man of about twenty with a relaxed, slightly deep voice, easy-going.
+
+[ring]
+Anna (cheerful): Hi Tom! Are we still meeting on Saturday?
+Tom (apologetic): Not Saturday, sorry, I'm working. Can we do Sunday at half past ten?
+Anna: Sure. At the café on Bridge Street?
+Tom: It's closed for repairs. Let's meet at the library instead. Bring your notebook: we need to finish the history project.
+Anna (curious): OK. Is Emma coming?
+Tom (laughing): Yes, and Leo too, but he'll be a bit late.`;
+
 const LISTENING_PROMPT_LEVEL_EXAMPLE = [
   {
     A1: { type: 'tf', prompt: 'They will meet on Sunday.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
@@ -4861,7 +4905,7 @@ function buildListeningPrompt(req) {
   const transcriptRule = {
     paste: 'Write every question from the transcript below. Copy each recording\'s transcript, word for word, into its section\'s "transcript".',
     attach: 'First transcribe each recording word for word, one line per speaker turn ("Anna: …", or "A: …" when names aren\'t said). Write the questions from your transcription and put it in the section\'s "transcript". Don\'t ask about anything you can\'t hear clearly.',
-    write: 'Write each script as a natural recording at the quiz\'s level: one line per speaker turn, "Name: what they say" (two or three speakers for a conversation, one for a talk or an announcement), about 120–250 words at A1–A2, 250–450 at B1–B2 and 400–600 above. Put the script in its section\'s "transcript".',
+    write: 'Write each recording as a natural scene at the quiz\'s level (two to four characters for a conversation, one for a talk, an announcement or a voicemail), about 120–250 words at A1–A2, 250–450 at B1–B2 and 400–600 above. Put the whole recording script (format: ## Recording script) in its section\'s "transcript".',
   }[source];
   const rules = [
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
@@ -4898,7 +4942,7 @@ function buildListeningPrompt(req) {
     id: 'part1',
     title: `Part 1 — Questions 1–${levelled ? LISTENING_PROMPT_LEVEL_EXAMPLE.length : exampleQuestions.length}`,
     text: LISTENING_PROMPT_EXAMPLE.text,
-    transcript: LISTENING_PROMPT_EXAMPLE.transcript,
+    transcript: source === 'write' ? LISTENING_PROMPT_SCRIPT_EXAMPLE : LISTENING_PROMPT_EXAMPLE.transcript,
     playsAllowed: plays,
     pauseAllowed: pause,
   };
@@ -4922,6 +4966,27 @@ function buildListeningPrompt(req) {
   if (levelled) {
     out.push('', '## Levels', 'The quiz is played adaptively: each student gets one level\'s questions for a recording, or, before PinPlay knows their level, an easy-to-hard mix of the levels, one question per moment.',
       ...levelRules.map((r, i) => `${i + 1}. ${r}`));
+  }
+  if (source === 'write') {
+    out.push('', '## Recording script',
+      'The recording is made from the transcript you write, by a voice studio, with no human help. Write each section\'s "transcript" in this format (lines separated by \\n in the JSON string):',
+      '```text',
+      'LANGUAGE: English',
+      'AMBIENCE: station',
+      'VOICE Name: what their everyday voice is like',
+      'VOICE Name [effect]: …',
+      '[sound]',
+      'Name (direction): what they say',
+      '>> Name (direction): an interruption',
+      'Name + Name: said together',
+      '[pause 2]',
+      '```',
+      ...LISTENING_SCRIPT_RULES.map((r, i) => `${i + 1}. ${r}`),
+      '',
+      'Example (shape only):',
+      '```text',
+      LISTENING_PROMPT_SCRIPT_EXAMPLE,
+      '```');
   }
   if (source === 'paste') {
     out.push('', '## Transcript', `Typed or pasted by the teacher.${partCount > 1 ? ' One heading per recording.' : ''}`);

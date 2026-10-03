@@ -19,8 +19,8 @@ before(() => {
     'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
-    'normalizeCefr', 'listeningSectionLevelCounts',
-  ]);
+    'normalizeCefr', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
+  ], { LISTENING_SCRIPT_RULES: require('../listening-script.js').LISTENING_SCRIPT_RULES });
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
@@ -351,6 +351,29 @@ describe('listening prompt', () => {
     const write = lbuild({ source: 'write', parts: 3 });
     assert.equal(section(write, 'Transcript'), '');
     assert.match(write, /the scripts of 3 recordings/);
+  });
+
+  it('"The AI writes the script": a full recording script, explained, with a script example', () => {
+    const S = require('../listening-script.js');
+    const write = lbuild({ source: 'write', selectedTypes: [...A.LISTENING_SECTION_TYPES] });
+    const part = section(write, 'Recording script');
+    assert.match(part, /no human help/);
+    S.LISTENING_SCRIPT_RULES.forEach((rule) => assert.ok(part.includes(rule), rule.slice(0, 40)));
+    assert.match(section(write, 'Rules'), /recording script \(format: ## Recording script\)/);
+    // The example's transcript is a script the studio can produce as it is.
+    const example = lexample(write);
+    const transcript = example.listeningSections[0].transcript;
+    assert.ok(S.isListeningScript(transcript));
+    const script = S.parseListeningScript(transcript);
+    assert.deepEqual(plain(script.notes), []);
+    assert.deepEqual(Object.keys(script.voices).sort(), ['Anna', 'Tom']);
+    assert.equal(script.voices.Tom.effect, 'phone');
+    // Same words as the plain example, so its questions still fit.
+    assert.equal(S.cleanListeningTranscript(transcript), A.LISTENING_PROMPT_EXAMPLE.transcript);
+    assert.equal(W.normalizeQuiz(example).listeningSections[0].transcript, transcript);
+    // Other modes work from real recordings: no script section.
+    assert.equal(section(lbuild({ source: 'paste' }), 'Recording script'), '');
+    assert.equal(section(lbuild({ source: 'attach' }), 'Recording script'), '');
   });
 
   it('with levels: one question per level for every moment, tagged, in a Levels section', () => {
