@@ -1419,7 +1419,7 @@ function bindBuilderEvents() {
     openLocalBtn.addEventListener('click', () => openLocalLibraryDialog());
   }
   if (importBtn && importInput) {
-    importBtn.addEventListener('click', () => importInput.click());
+    importBtn.addEventListener('click', () => openQuizImportDialog());
   }
 
   exportBtn.addEventListener('click', async () => {
@@ -1463,117 +1463,9 @@ function bindBuilderEvents() {
   importInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files || [])
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-    if (!files.length) return;
-
-    // Ask user: replace or append? (only when quiz already has questions)
-    const hasExisting = quiz.questions && quiz.questions.length > 0;
-    let mode = 'replace';
-    if (hasExisting) {
-      const choice = confirm(
-        `You already have ${quiz.questions.length} question(s).\n\n` +
-        `OK = Append new question(s) from ${files.length} file(s) at the end\n` +
-        `Cancel = Replace all with the imported file${files.length > 1 ? 's' : ''}`
-      );
-      mode = choice ? 'append' : 'replace';
-    }
-
-    let totalAppended = 0;
-    const errors = [];
-    const allConversions = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-        validateImportedQuiz(parsed);
-        // Normalize prompts/corrections on import for compatibility
-        parsed.questions = (parsed.questions || []).map((q) => {
-          const next = normalizeImportedQuestion(q);
-          // Adaptive level tag: accept "b1", or the cefrLevel/level aliases AIs sometimes use.
-          const cefr = normalizeCefr(next.cefr) || normalizeCefr(next.cefrLevel) || normalizeCefr(next.level);
-          if (normalizeCefr(next.level)) delete next.level;
-          delete next.cefrLevel;
-          if (cefr) next.cefr = cefr;
-          else delete next.cefr;
-          return next;
-        });
-
-        // Salvage questions that would be silently dropped at save/publish time
-        // (e.g. puzzle with <3 items). Convert to a valid type and report to teacher.
-        parsed.questions = parsed.questions.map((q) => {
-          const { question, conversion } = salvageQuestionForImport(q);
-          if (conversion) {
-            allConversions.push({ ...conversion, file: file.name });
-          }
-          return question;
-        });
-
-        if (mode === 'append' || (mode === 'replace' && i > 0)) {
-          // Deduplicate IDs: renumber incoming questions to avoid collisions
-          const existingIds = new Set(quiz.questions.map((q) => q.id));
-          let counter = quiz.questions.length;
-          parsed.questions.forEach((q) => {
-            counter++;
-            if (existingIds.has(q.id)) {
-              q.id = `q${counter}-${q.type || 'q'}`;
-            }
-            existingIds.add(q.id);
-          });
-          if (Array.isArray(parsed.listeningSections) && parsed.listeningSections.length) {
-            const taken = new Set((quiz.listeningSections || []).map((sec) => sec.id));
-            const renamed = {};
-            parsed.listeningSections.forEach((sec, k) => {
-              const copy = { ...sec };
-              if (taken.has(copy.id)) {
-                copy.id = `ls${Date.now().toString(36)}${k}`;
-                renamed[sec.id] = copy.id;
-              }
-              taken.add(copy.id);
-              quiz.listeningSections = [...(quiz.listeningSections || []), copy];
-            });
-            parsed.questions.forEach((q) => { if (renamed[q.listeningSection]) q.listeningSection = renamed[q.listeningSection]; });
-          }
-          quiz.questions.push(...parsed.questions);
-          if (parsed.title && !quiz.title) quiz.title = parsed.title;
-          if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
-            quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
-          }
-        } else {
-          // First file in replace mode. Keep any active assignment binding —
-          // replacing questions is a valid edit the user may want to Apply back.
-          quiz = parsed;
-        }
-        totalAppended += parsed.questions.length;
-      } catch (err) {
-        errors.push(`${file.name}: ${err.message}`);
-      }
-    }
-
-    collapseAllQuestions(quiz);
-    renderBuilder();
-    await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
-
-    const savedOk = saveQuiz(quiz);
-    let label;
-    if (mode === 'replace' && files.length === 1 && !errors.length) {
-      label = 'Quiz imported ✅';
-    } else {
-      label = `${totalAppended} question(s) from ${files.length - errors.length} file(s) ✅ (total: ${quiz.questions.length})`;
-    }
-    if (errors.length) {
-      label += `\n\nFailed files:\n${errors.join('\n')}`;
-    }
-    if (allConversions.length) {
-      const lines = allConversions.map((c) => `• ${c.id || '(no id)'}: ${c.from} → ${c.to} (${c.reason})`);
-      label += `\n\n${allConversions.length} question(s) auto-converted to a valid type to avoid silent loss. Review and edit in the builder:\n${lines.join('\n')}`;
-    }
-    if (savedOk) {
-      alert(label);
-    } else {
-      alert(label + '\n(local autosave skipped: browser storage is full). Use Export to keep a backup.');
-    }
     importInput.value = '';
+    if (!files.length) return;
+    await importQuizSources(files);
   });
 
   if (collapseAllBtn) {
@@ -9903,6 +9795,175 @@ async function addStudentFromForm() {
   } catch (err) {
     setStatus(studentsStatusEl, t('Could not add student: {msg}', { msg: err.message }), 'bad');
   }
+}
+
+// sources: File objects or { name, text } (pasted JSON).
+async function importQuizSources(files) {
+  if (!files.length) return;
+
+  // Ask user: replace or append? (only when quiz already has questions)
+  const hasExisting = quiz.questions && quiz.questions.length > 0;
+  let mode = 'replace';
+  if (hasExisting) {
+    const choice = confirm(
+      `You already have ${quiz.questions.length} question(s).\n\n` +
+      `OK = Append new question(s) from ${files.length} file(s) at the end\n` +
+      `Cancel = Replace all with the imported file${files.length > 1 ? 's' : ''}`
+    );
+    mode = choice ? 'append' : 'replace';
+  }
+
+  let totalAppended = 0;
+  const errors = [];
+  const allConversions = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      const text = typeof file.text === 'function' ? await file.text() : String(file.text || '');
+      const parsed = JSON.parse(text);
+      validateImportedQuiz(parsed);
+      // Normalize prompts/corrections on import for compatibility
+      parsed.questions = (parsed.questions || []).map((q) => {
+        const next = normalizeImportedQuestion(q);
+        // Adaptive level tag: accept "b1", or the cefrLevel/level aliases AIs sometimes use.
+        const cefr = normalizeCefr(next.cefr) || normalizeCefr(next.cefrLevel) || normalizeCefr(next.level);
+        if (normalizeCefr(next.level)) delete next.level;
+        delete next.cefrLevel;
+        if (cefr) next.cefr = cefr;
+        else delete next.cefr;
+        return next;
+      });
+
+      // Salvage questions that would be silently dropped at save/publish time
+      // (e.g. puzzle with <3 items). Convert to a valid type and report to teacher.
+      parsed.questions = parsed.questions.map((q) => {
+        const { question, conversion } = salvageQuestionForImport(q);
+        if (conversion) {
+          allConversions.push({ ...conversion, file: file.name });
+        }
+        return question;
+      });
+
+      if (mode === 'append' || (mode === 'replace' && i > 0)) {
+        // Deduplicate IDs: renumber incoming questions to avoid collisions
+        const existingIds = new Set(quiz.questions.map((q) => q.id));
+        let counter = quiz.questions.length;
+        parsed.questions.forEach((q) => {
+          counter++;
+          if (existingIds.has(q.id)) {
+            q.id = `q${counter}-${q.type || 'q'}`;
+          }
+          existingIds.add(q.id);
+        });
+        if (Array.isArray(parsed.listeningSections) && parsed.listeningSections.length) {
+          const taken = new Set((quiz.listeningSections || []).map((sec) => sec.id));
+          const renamed = {};
+          parsed.listeningSections.forEach((sec, k) => {
+            const copy = { ...sec };
+            if (taken.has(copy.id)) {
+              copy.id = `ls${Date.now().toString(36)}${k}`;
+              renamed[sec.id] = copy.id;
+            }
+            taken.add(copy.id);
+            quiz.listeningSections = [...(quiz.listeningSections || []), copy];
+          });
+          parsed.questions.forEach((q) => { if (renamed[q.listeningSection]) q.listeningSection = renamed[q.listeningSection]; });
+        }
+        quiz.questions.push(...parsed.questions);
+        if (parsed.title && !quiz.title) quiz.title = parsed.title;
+        if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
+          quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
+        }
+      } else {
+        // First file in replace mode. Keep any active assignment binding —
+        // replacing questions is a valid edit the user may want to Apply back.
+        quiz = parsed;
+      }
+      totalAppended += parsed.questions.length;
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
+    }
+  }
+
+  collapseAllQuestions(quiz);
+  renderBuilder();
+  await ensureQuizMediaReady({ contextLabel: 'import quiz', convertTtsToMp3: true, strictMediaCheck: true });
+
+  const savedOk = saveQuiz(quiz);
+  let label;
+  if (mode === 'replace' && files.length === 1 && !errors.length) {
+    label = 'Quiz imported ✅';
+  } else {
+    label = `${totalAppended} question(s) from ${files.length - errors.length} file(s) ✅ (total: ${quiz.questions.length})`;
+  }
+  if (errors.length) {
+    label += `\n\nFailed files:\n${errors.join('\n')}`;
+  }
+  if (allConversions.length) {
+    const lines = allConversions.map((c) => `• ${c.id || '(no id)'}: ${c.from} → ${c.to} (${c.reason})`);
+    label += `\n\n${allConversions.length} question(s) auto-converted to a valid type to avoid silent loss. Review and edit in the builder:\n${lines.join('\n')}`;
+  }
+  if (savedOk) {
+    alert(label);
+  } else {
+    alert(label + '\n(local autosave skipped: browser storage is full). Use Export to keep a backup.');
+  }
+}
+
+function openQuizImportDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const title = document.createElement('strong');
+  title.textContent = t('Import quiz');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('Close');
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(title, closeBtn);
+
+  const filesBtn = document.createElement('button');
+  filesBtn.className = 'btn top-space';
+  filesBtn.type = 'button';
+  filesBtn.textContent = t('📂 Choose file(s)…');
+  filesBtn.addEventListener('click', () => { overlay.remove(); importInput.click(); });
+
+  const hint = document.createElement('p');
+  hint.className = 'small muted top-space';
+  hint.textContent = t('…or paste quiz JSON below.');
+
+  const textarea = document.createElement('textarea');
+  textarea.rows = 12;
+  textarea.style.width = '100%';
+  textarea.placeholder = '{ "title": "...", "questions": [ ... ] }'; // i18n-ignore (sample data)
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+
+  const pasteBtn = document.createElement('button');
+  pasteBtn.className = 'btn primary top-space';
+  pasteBtn.type = 'button';
+  pasteBtn.textContent = t('Import pasted JSON');
+  pasteBtn.addEventListener('click', async () => {
+    // Tolerate ```json fences that AIs wrap around their output.
+    const text = textarea.value.trim().replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '');
+    if (!text) { status.textContent = t('Paste some JSON first.'); return; }
+    try { JSON.parse(text); } catch (err) { status.textContent = t('Invalid JSON: {msg}', { msg: err.message }); return; }
+    overlay.remove();
+    await importQuizSources([{ name: t('pasted JSON'), text }]);
+  });
+
+  dialog.append(head, filesBtn, hint, textarea, pasteBtn, status);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  textarea.focus();
 }
 
 function openStudentsImportDialog() {
