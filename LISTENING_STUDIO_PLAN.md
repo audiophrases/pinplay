@@ -368,6 +368,22 @@ line, in semitones; smaller is steadier.
 2. **Test 0.**
 3. **The studio engine:** making lines, the cache, the mixer and the checks,
    as a library tested on the station scene.
+   **Built 2026-10-03** (`listening-studio/engine/`):
+   - `audio.py`: levels, the four effects, chime/ring/beep, backgrounds
+     (room, hall, station, outdoors), the timeline (spacing, `>>` overlap,
+     voices together, pauses, quieter whispers) and MP3 export (lameenc,
+     mono, 24 kHz, 96 kbps), with no ffmpeg.
+   - `voices.py`: the two Qwen3 1.7B models, one at a time in memory.
+   - `checks.py`: the Whisper word check (normalised, see lesson 3) and the
+     voice-age warning.
+   - `project.py`: the plan, the cache, batches, the automatic retry and the
+     mix.
+   - `render_script.py` runs a script file for testing.
+   - First full run, the station scene: 5 voices and 24 lines in 11.5 min;
+     24/24 lines with matching words; Mia at 278 Hz (no warning).
+   - **Batches are at most 4 lines:** a batch of 8 ran out of memory (16 GB)
+     when copying a voice. 4 lines use about 9 GB.
+
 4. **The studio app:** server, page, launcher `.bat`, desktop icon, and setup
    of anything missing.
 5. **PinPlay "🔊 Read the instruction aloud".** This is independent of the
