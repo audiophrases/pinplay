@@ -58,7 +58,7 @@ Lessons:
 | Output | One MP3 per listening section. |
 | Script | A readable script format (section 4) that an AI writes and a teacher can edit. In PinPlay it is the section's transcript. |
 | Spoken exam instruction | **Not in the scripts.** It becomes a PinPlay option per section: PinPlay reads the section's instruction aloud with its own TTS before the recording (section 7). |
-| Voice mode | Decided by ear after test 0 (section 8): **acted** or **fixed voice**. |
+| Voice mode | **Fixed voice with Qwen3 Base 1.7B, lines made in batches** (owner, 2026-10-03, after test 0; "they all sound good"). Acted stays available. Every setting can be changed by the teacher in the studio (section 6b). The 0.6B model is dropped. |
 
 **The two voice modes.** **Acted** (the demo): every line is made fresh from
 the character's description plus that line's direction, so "heavy sarcasm,
@@ -316,6 +316,30 @@ recordings and stay as they are.
 
 The results set the defaults in 6d.
 
+**Results (2026-10-03).** Pitch spread is each character's lowest-to-highest
+line, in semitones; smaller is steadier.
+
+| | Acted | Fixed 0.6B | Fixed 1.7B |
+|---|---|---|---|
+| Speed (work per second of speech) | ~12× (~5× in batches) | ~9× | ~13× |
+| Pitch spread, narrator / Tom / Jake | 3.6 / 15.9 / 16.1 | 11.0 / 6.4 / 12.0 | 1.4 / 5.8 / 11.4 |
+| Mia's average pitch | 343 Hz (still too young) | 296 Hz | 250 Hz (adult) |
+| Word check | 26/26 | 26/26 | 25/26 ("Ha!" heard as "Huh") |
+
+- **Batching** (one character's lines in one call) was 2.4 times faster:
+  140 s instead of 330 s for Mia's 8 lines.
+- **The word check** gave no false alarms on numbers, spellings or fillers,
+  and runs at about real time.
+- **The fixed-voice samples** must be made with a calm, neutral direction:
+  that is what made Mia sound adult.
+- **Chosen:** fixed voice with Base 1.7B, in batches, as the default.
+- **Everything stays changeable in the studio**, per recording and per
+  character:
+  - the mode (fixed / acted);
+  - the voice description, plus "↻ New voice sample" until it sounds right;
+  - batching on or off;
+  - effects, spacing and background.
+
 ## 9. Order of work
 
 1. **Script format:** the shared parser, the AI rules, the listening
@@ -352,6 +376,6 @@ The owner answered on 2026-10-03:
 
 Still open:
 
-- The default voice mode: decided by ear after test 0.
+- ~~The default voice mode~~: fixed voice, Base 1.7B, batched (decided 2026-10-03).
 - Read the instruction aloud: is "before the first play only" right, or
   should it come before every play?
