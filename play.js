@@ -9624,7 +9624,6 @@ function sendListeningSave(qIndex, answer) {
 function leaveListeningSheet(target, fromIndex = null) {
   flushListeningSaves();
   const as = live.player.assignment;
-  as.pendingComplete = false;
   if (fromIndex != null) {
     // Moving on from the section: the normal "next" logic decides (end of quiz,
     // the unanswered reminder…), as if leaving its last question.
@@ -9673,9 +9672,6 @@ async function submitListeningSection(info) {
     const data = await api('/api/assignment/submit-section', { method: 'POST', body: { code, attemptId, sectionId: info.section.id } });
     const st = live.player.assignment.state;
     if (data?.attempt) st.attempt = data.attempt;
-    // Instant feedback on the quiz's last part: show the marks on the sheet
-    // first; Continue then opens the end-of-quiz screen.
-    if (st.attempt?.assignment?.feedbackMode === 'instant') live.player.assignment.pendingComplete = true;
     else {
       // /play games keep nothing on the server: lock it here.
       st.attempt.sectionsSubmitted = { ...(st.attempt.sectionsSubmitted || {}), [info.section.id]: Date.now() };
