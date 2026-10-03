@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261003-listening-levels" />
+    <link rel="stylesheet" href="../styles.css?v=20261003-adaptive-listening" />
   </head>
   <body>
     <header class="topbar">
@@ -551,8 +551,11 @@
                     <input id="assignmentAdaptive" type="checkbox" />
                     <span data-i18n>🎯 Adaptive</span>
                     <span id="assignmentAdaptiveRange" class="small muted"></span>
-                    <input id="assignmentAdaptiveCount" type="number" min="1" value="20" disabled aria-label="Questions per student" data-i18n-aria />
-                    <span class="small" data-i18n>questions per student</span>
+                    <span id="assignmentAdaptiveCountWrap">
+                      <input id="assignmentAdaptiveCount" type="number" min="1" value="20" disabled aria-label="Questions per student" data-i18n-aria />
+                      <span class="small" data-i18n>questions per student</span>
+                    </span>
+                    <span id="assignmentAdaptiveSections" class="small muted hidden" data-i18n>+ listening sections at each student's level</span>
                   </label>
                   <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
                 </div>
@@ -687,7 +690,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261003-listening-levels"></script>
+    <script src="../i18n-fr.js?v=20261003-adaptive-listening"></script>
     <script src="../i18n.js"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
@@ -696,7 +699,7 @@
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
-    <script src="../app.js?v=20261003-listening-levels"></script>
+    <script src="../app.js?v=20261003-adaptive-listening"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261001-startkey"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

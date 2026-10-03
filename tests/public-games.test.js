@@ -10,7 +10,7 @@ const { loadDeclarations } = require('./helpers/extract-declaration');
 const NAMES = [
   'publicGameCard', 'signPublicPlay', 'verifyPublicPlay', 'publicPlayAttempt', 'newPublicPlayAttempt', 'applyPublicPlayAnswer',
   'publicPlayResponse', 'publicGameAssignment', 'isPublicGame', 'publicQuizVersion', 'publicPlaySecret', 'PUBLIC_PLAY_TTL_MS',
-  'PUBLIC_PLAY_TOKEN_MAX', 'assignmentAdaptiveCount', 'assignmentAdaptivePool', 'adaptivePool', 'CEFR_LEVELS', 'normalizeCefrLevel',
+  'PUBLIC_PLAY_TOKEN_MAX', 'assignmentAdaptiveCount', 'listeningSectionMoments', 'listeningSectionBlock', 'adaptiveSectionPlan', 'adaptiveAttemptTotal', 'assignmentAdaptiveTotal', 'assignmentAdaptiveOn', 'adaptiveAttemptServe', 'adaptiveAttemptOpenBlock', 'adaptiveCefr', 'assignmentAdaptivePool', 'adaptivePool', 'CEFR_LEVELS', 'normalizeCefrLevel',
   'isAssignmentTeacherGradedQuestion', 'isTeacherGradedTextQuestion', 'sanitizeAssignmentCode', 'randomId', 'pickRandomName',
   'RANDOM_NAME_ADJECTIVES', 'RANDOM_NAME_PEOPLE', 'FEMALE_NAME_HINTS', 'adaptiveAttemptInit', 'adaptiveInit', 'ADAPTIVE_START',
   'adaptiveNext', 'adaptiveBand', 'clamp', 'sanitizeBet', 'sanitizeAssignmentAnswer', 'adaptiveRecord', 'adaptiveRecordPending',

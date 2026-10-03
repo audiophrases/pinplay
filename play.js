@@ -9199,7 +9199,8 @@ function maybeRenderListeningSheet(state) {
   listeningSheet.mode = 'assignment';
   const as = live.player.assignment;
   const attempt = as?.state?.attempt;
-  const info = (live.player.mode === 'assignment' && state?.phase === 'question' && !as?.retake?.active && !attempt?.adaptive)
+  // Adaptive attempts serve a section whole, as a level block (LISTENING_MODE_PLAN.md section 10).
+  const info = (live.player.mode === 'assignment' && state?.phase === 'question' && !as?.retake?.active)
     ? assignmentListeningInfo(attempt, Number(state.currentIndex || 0)) : null;
   if (!info) {
     closeListeningSheet();
@@ -9322,7 +9323,8 @@ function renderListeningSheet(info) {
   status.setAttribute('aria-live', 'polite');
   const actions = document.createElement('div');
   actions.className = 'ls-actions';
-  if (first > 0 && !isLive) {
+  // An adaptive attempt only goes forward.
+  if (first > 0 && !isLive && !isAdaptiveAssignmentOpen()) {
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'ls-btn ls-btn-quiet';

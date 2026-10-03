@@ -18,8 +18,9 @@ Phase 1 as built:
   the browser's local copy); if that fails it stays embedded and the server
   uploads it when the quiz is assigned. The media clean-up job counts section
   recordings as in use.
-- The Adaptive box is hidden for a quiz with sections; the server refuses an
-  adaptive assignment for one. PinPlay Cup never deals section questions.
+- ~~The Adaptive box is hidden for a quiz with sections; the server refuses an
+  adaptive assignment for one.~~ Changed 2026-10-03: sections are level blocks
+  in adaptive assignments (section 10). PinPlay Cup never deals section questions.
 - Tests: `tests/listening-sections.test.js`.
 
 Phase 2 as built:
@@ -174,7 +175,8 @@ player with the play count, section submit and lock.
   Pausing.
 - Questions inside a section: the type picker shows only section 3's types,
   per-question media fields disappear.
-- A quiz with a section turns the Adaptive box off and disables it.
+- ~~A quiz with a section turns the Adaptive box off and disables it.~~
+  Since 2026-10-03 the box stays (section 10f).
 
 ## 7. TTS recordings with several voices (phase 3)
 
@@ -351,6 +353,40 @@ earlier parts point to.
 2. Engine and assignments: bands from sections, blocks and ladders, the ladder
    rule, where sections come, section submit feeding the engine, finishing
    the attempt, results. Tests with the real worker, as in phase 2.
+   **Built 2026-10-03** (`worker.js`, "adaptive listening"):
+   - `listeningSectionMoments` / `listeningSectionBlock` pick a block: one
+     level (nearest the student's, easier on a tie) or the ladder; a level
+     missing a moment borrows the nearest level's question.
+     `adaptiveSectionPlan` places each section after the single questions
+     before it. Single questions are drawn only from outside sections; the
+     engine's levels include the sections'.
+   - The attempt keeps `adaptive.sections` (place, size, done) and, while a
+     section is open, `adaptive.block` (its questions, their levels, the
+     drafts). The answer route takes drafts for any question of the open
+     block (one attempt write, nothing graded). Submit section
+     (`adaptiveAttemptCloseBlock`) feeds the answers in order with the
+     ladder rule (`adaptiveRecord(…, { ladder, noRetry })`), keeps a result
+     line per section and serves what comes next. Submitting the whole
+     attempt closes an open block that has drafts.
+   - Ladder or level block: a ladder only for a student with no saved level
+     (and no level set by the teacher) who hasn't answered anything yet.
+   - Totals: N singles plus every block (`adaptiveAttemptTotal`); the
+     assignment list shows that number. `adaptive: true` with N = 0 makes a
+     quiz of sections only adaptive.
+   - Teacher grades: shared questions never move the level; a ladder's
+     teacher-graded miss above its level doesn't either.
+   - Pages: the student sheet works in adaptive attempts, without
+     "← Previous". The create page offers 🎯 Adaptive for quizzes with
+     sections ("+ listening sections at each student's level"; the N box is
+     hidden when there are no single questions). Results show one line per
+     section: "🎧 Part 1 · ladder A1→B1 · 2/3" or "🎧 Part 2 · A2 · 3/3".
+   - Tests: `tests/listening-sections.test.js` (blocks, ladders, placement,
+     the ladder rule, and full attempts on the real worker). Checked in a
+     browser on a phone-sized screen: ladder sheet, submit, Part 2 at A2.
+   - **Not yet:** public /play games with sections stay non-adaptive (their
+     attempt lives in a signed token and takes each answer once, which
+     doesn't fit an autosaved sheet). A multilevel section there shows every
+     level's questions.
 
 ### 10i. Details to settle while building
 

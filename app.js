@@ -9532,6 +9532,16 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
         .map((l) => `${l} ${lv.perLevel[l].right}/${lv.perLevel[l].answered}`)
         .join(' · ');
       levelsLine.textContent = `${t('🎯 Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' })}${perLevel ? ` · ${perLevel}` : ''}`;  // i18n-ignore (text is t()-wrapped)
+      // Listening sections: the level each was done at (or the ladder) and the score.
+      (Array.isArray(lv.sections) ? lv.sections : []).forEach((sec) => {
+        const levels = Array.isArray(sec.levels) ? sec.levels : [];
+        const how = sec.ladder && levels.length
+          ? t('ladder {from}→{to}', { from: levels[0], to: levels[levels.length - 1] })
+          : (sec.level || '—');
+        const line = document.createElement('div');
+        line.textContent = `🎧 ${sec.title || t('Listening section')} · ${how} · ${Number(sec.right || 0)}/${Number(sec.graded || 0)}`;  // i18n-ignore (text is t()-wrapped)
+        levelsLine.appendChild(line);
+      });
     }
 
     const row = document.createElement('div');
@@ -10769,7 +10779,7 @@ async function createAssignmentFromCurrentQuiz() {
 
     const adaptiveOn = !!document.getElementById('assignmentAdaptive')?.checked
       && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
-    const adaptiveCount = adaptiveOn
+    const adaptiveCount = adaptiveOn && adaptiveSingleQuestionCount() > 0
       ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
       : 0;
 
@@ -10785,6 +10795,7 @@ async function createAssignmentFromCurrentQuiz() {
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
         adaptiveCount,
+        adaptive: adaptiveOn,
         cloudQuizId: quiz._r2QuizId || '',
         quiz: normalizeQuizForLive(quiz),
       },
@@ -16351,11 +16362,17 @@ let adaptiveDefaultedFor = null;
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
   if (!wrap) return;
-  const { counts, tagged } = cefrCoverage(quiz?.questions);
+  const { counts } = cefrCoverage(quiz?.questions);
   const levels = CEFR_LEVELS.filter((l) => counts[l] > 0);
-  // A listening paper has a fixed order: no adaptive with listening sections.
-  const available = levels.length >= 2 && !quizHasListeningSections();
+  const available = levels.length >= 2;
   wrap.classList.toggle('hidden', !available);
+  // Listening sections come on top of the N single questions, each at the
+  // student's level (LISTENING_MODE_PLAN.md section 10); a quiz of sections
+  // only has no N.
+  const singles = adaptiveSingleQuestionCount();
+  const sections = quizHasListeningSections();
+  document.getElementById('assignmentAdaptiveCountWrap')?.classList.toggle('hidden', sections && !singles);
+  document.getElementById('assignmentAdaptiveSections')?.classList.toggle('hidden', !sections);
   const box = document.getElementById('assignmentAdaptive');
   const countEl = document.getElementById('assignmentAdaptiveCount');
   const rangeEl = document.getElementById('assignmentAdaptiveRange');
@@ -16373,11 +16390,16 @@ function syncAssignmentAdaptiveControl() {
     // yet there is nothing to cap against, and the default must survive.
     if (available) {
       const wanted = Number(countEl.dataset.wanted) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT;
-      countEl.max = String(tagged);
-      countEl.value = String(Math.min(wanted, tagged));
+      countEl.max = String(Math.max(1, singles));
+      countEl.value = String(Math.max(1, Math.min(wanted, singles)));
     }
     countEl.disabled = !box?.checked;
   }
+}
+
+// Tagged questions the engine can serve one at a time (outside listening sections).
+function adaptiveSingleQuestionCount() {
+  return (quiz?.questions || []).filter((q) => isAdaptiveEligibleQuestion(q) && !q.listeningSection && normalizeCefr(q.cefr)).length;
 }
 
 function initAssignmentAdaptiveControl() {

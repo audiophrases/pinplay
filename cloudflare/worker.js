@@ -1137,7 +1137,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), adaptive: body?.adaptive === true, cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
       }));
     }
 
@@ -2743,18 +2743,17 @@ export class QuizRoom {
         const cloudQuizId = sanitizeCloudQuizId(body?.cloudQuizId);
         if (cloudQuizId) assignment.cloudQuizId = cloudQuizId;
 
-        // Adaptive: N questions per student, capped at the questions it can serve.
+        // Adaptive: N single questions per student, capped at the questions it
+        // can serve, plus every listening section as a level block
+        // (LISTENING_MODE_PLAN.md section 10). A quiz of sections only has N = 0.
         const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
-        if (adaptiveCount > 0) {
-          // A listening paper has a fixed order (LISTENING_MODE_PLAN.md).
-          if (quiz.listeningSections?.length) {
-            return json({ error: 'A quiz with listening sections can\'t be adaptive.' }, 400);
-          }
+        const sectionPlan = adaptiveSectionPlan(quiz);
+        if (adaptiveCount > 0 || (body?.adaptive === true && sectionPlan.length)) {
           const { bands, pool } = assignmentAdaptivePool(assignment);
           if (bands.length < 2) {
             return json({ error: 'Adaptive mode needs questions tagged with at least two levels.' }, 400);
           }
-          assignment.adaptive = { count: clamp(adaptiveCount, 1, pool.length) };
+          assignment.adaptive = { count: sectionPlan.length ? clamp(adaptiveCount, 0, pool.length) : clamp(adaptiveCount, 1, pool.length) };
         }
 
         await saveAssignmentBase(this.state.storage, assignment.code, assignment);
@@ -3016,7 +3015,7 @@ export class QuizRoom {
               attemptNumber: studentAttempts.indexOf(a) + 1,
               totalScore: Number(metrics?.totalScore ?? 0),
               accuracy: metrics?.accuracy ?? null,
-              totalQuestions: a?.adaptive ? Number(a.adaptive.count || 0) : Number(assignment?.quiz?.questions?.length || 0),
+              totalQuestions: a?.adaptive ? adaptiveAttemptTotal(a.adaptive) : Number(assignment?.quiz?.questions?.length || 0),
               answeredCount: Number(metrics?.answeredCount || 0),
               submittedAt: Number(a?.submittedAt || 0) || null,
               startedAt: Number(a?.startedAt || 0) || null,
@@ -3114,11 +3113,11 @@ export class QuizRoom {
         // Signed-in students pick up their saved level (roster rows live in
         // this DO); anonymous ones start at the bottom. From /play a tagged
         // quiz is always adaptive, with the number of questions the player chose.
-        const adaptiveOn = via ? !!publicAdaptivePool(assignment) : !!assignmentAdaptiveCount(assignment);
+        const adaptiveOn = via ? !!publicAdaptivePool(assignment) : assignmentAdaptiveOn(assignment);
         const savedLevel = adaptiveOn && studentEmail
           ? (await this.state.storage.get(rosterKey(studentEmail)))?.level
           : null;
-        const adaptive = via
+        const adaptive = !adaptiveOn ? null : via
           ? publicAdaptiveAttemptInit(assignment, body?.count, savedLevel)
           : adaptiveAttemptInit(assignment, savedLevel);
         if (adaptive) attempt.adaptive = adaptive;
@@ -3373,6 +3372,24 @@ export class QuizRoom {
 
         // Adaptive: the student answers the served question (virtual index =
         // answers so far), the engine records the result and serves the next.
+        if (attempt.adaptive?.block) {
+          // An open listening block: autosaved drafts, any of its questions,
+          // nothing graded or levelled until Submit section.
+          const st = attempt.adaptive;
+          const k = qIndex - st.items.length;
+          const qi = st.block.qis[k];
+          const question = assignment.quiz?.questions?.[qi];
+          if (!(k >= 0) || !question) return json({ error: 'That question is no longer open.', code: 'NOT_CURRENT' }, 409);
+          st.block.answers[String(k)] = sanitizeAssignmentAnswer(question, body?.answer);
+          attempt.updatedAt = now;
+          await saveAttempt(this.state.storage, code, attemptId, attempt);
+          return json({
+            ok: true,
+            saved: true,
+            qIndex,
+            attempt: publicAssignmentAttempt(settings, attempt, { includeAnswers: settings.feedbackMode === 'instant', includeAnswerKey: false }),
+          });
+        }
         if (attempt.adaptive) {
           const st = attempt.adaptive;
           if (st.done || st.current == null) return json({ error: 'All questions are answered.', code: 'ADAPTIVE_DONE' }, 409);
@@ -3491,6 +3508,19 @@ export class QuizRoom {
           await saveAttempt(this.state.storage, code, attemptId, attempt);
           return json({ ok: true, plays: plays + 1, playsAllowed: allowed });
         }
+        if (attempt.adaptive?.block?.id === sectionId) {
+          await ensurePendingCounts(this.state.storage, code, assignment);
+          const prevPending = computeAttemptPending(assignment, attempt);
+          adaptiveAttemptCloseBlock(assignment, attempt, now);
+          adaptiveAttemptAdvance(assignment, attempt.adaptive);
+          if (attempt.adaptive.done) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
+          attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+          applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
+          assignment.updatedAt = now;
+          await saveAssignmentBase(this.state.storage, code, assignment);
+        } else if (attempt.adaptive && !attemptSectionSubmitted(attempt, sectionId)) {
+          return json({ error: 'That section is not open.', code: 'NOT_CURRENT' }, 409);
+        }
         attempt.sectionsSubmitted = attempt.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {};
         if (!attempt.sectionsSubmitted[sectionId]) attempt.sectionsSubmitted[sectionId] = now;
         attempt.updatedAt = now;
@@ -3519,6 +3549,13 @@ export class QuizRoom {
         }
         if (attempt.submitted) return json({ ok: true, alreadySubmitted: true, attempt: publicAssignmentAttempt(settings, attempt, { includeAnswerKey: false }) });
 
+        // An open listening block is submitted with whatever was autosaved.
+        let prevBlockPending = null;
+        if (attempt.adaptive?.block && Object.keys(attempt.adaptive.block.answers || {}).length) {
+          await ensurePendingCounts(this.state.storage, code, assignment);
+          prevBlockPending = computeAttemptPending(assignment, attempt);
+          adaptiveAttemptCloseBlock(assignment, attempt);
+        }
         const metrics = evaluateAssignmentAttempt(assignment, attempt);
         if (Number(metrics.answeredCount || 0) <= 0) {
           return json({ error: 'Answer at least one question before submitting.' }, 409);
@@ -3529,13 +3566,13 @@ export class QuizRoom {
         // some blank. Instant mode keeps the legacy ≥1 rule.
         if (attempt.adaptive) {
           const st = attempt.adaptive;
-          const remaining = Math.max(0, Number(st.count || 0) - (st.items || []).length);
+          const remaining = Math.max(0, adaptiveAttemptTotal(st) - (st.items || []).length);
           if (!st.done && remaining > 0 && !body?.force) {
             return json({
               error: `Answer all questions before submitting (${remaining} unanswered).`,
               code: 'UNANSWERED_REMAINING',
               remaining,
-              totalQuestions: Number(st.count || 0),
+              totalQuestions: adaptiveAttemptTotal(st),
             }, 409);
           }
         } else if (String(settings.feedbackMode || 'none') !== 'instant' && !body?.force) {
@@ -3558,6 +3595,10 @@ export class QuizRoom {
         assignment.updatedAt = attempt.submittedAt;
         // Stopped early: the answers so far still count toward the saved level.
         if (attempt.adaptive) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
+        if (prevBlockPending) {
+          attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+          applyPendingDelta(assignment, prevBlockPending, computeAttemptPending(assignment, attempt));
+        }
 
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -8127,6 +8168,14 @@ function assignmentAdaptiveCount(assignment) {
   return n > 0 ? n : 0;
 }
 
+// Adaptive is on: N single questions, or listening sections only (N = 0).
+function assignmentAdaptiveOn(assignment) {
+  return !!assignment?.adaptive && (assignmentAdaptiveCount(assignment) > 0 || adaptiveSectionPlan(assignment.quiz).length > 0);
+}
+
+// The engine's levels come from every tagged question, listening sections
+// included; single questions are served from the questions outside sections
+// (a section is served whole, as a level block).
 // autoOnly: auto-graded questions only (anonymous public play, where nobody
 // will grade the rest).
 function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
@@ -8134,32 +8183,195 @@ function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
   const eligible = autoOnly
     ? autoGradedQuestionIndexes(questions)
     : questions.map((q, i) => (q && !q.isPoll ? i : -1)).filter((i) => i >= 0);
-  return adaptivePool(questions, eligible);
+  const { bands, pool } = adaptivePool(questions, eligible);
+  return { bands, pool: pool.filter((p) => !questions[p.qi]?.listeningSection) };
 }
 
-// count: questions per student (the assignment's own number unless given).
+// ---------------------------------------------------------------- adaptive listening
+// A listening section in an adaptive assignment is a level block
+// (LISTENING_MODE_PLAN.md section 10): the student gets one level's questions,
+// or a ladder from easy to hard when PinPlay doesn't know their level yet.
+// Each level has one question per moment of the recording: a question's
+// moment is its rank among the section's questions of that level. Untagged
+// questions are shared by every level and never move the level.
+function listeningSectionMoments(questions, sectionId) {
+  const order = [];
+  (questions || []).forEach((q, i) => { if (q && !q.isPoll && q.listeningSection === sectionId) order.push(i); });
+  const byLevel = {};
+  const momentOf = {};
+  order.forEach((qi) => {
+    const level = normalizeCefrLevel(questions[qi].cefr);
+    if (!level) return;
+    byLevel[level] = byLevel[level] || [];
+    momentOf[qi] = byLevel[level].length;
+    byLevel[level].push(qi);
+  });
+  const levels = CEFR_LEVELS.filter((l) => byLevel[l]);
+  // A shared question goes before the moment of the next tagged question.
+  const shared = [];
+  order.forEach((qi, i) => {
+    if (normalizeCefrLevel(questions[qi].cefr)) return;
+    const next = order.slice(i + 1).find((x) => momentOf[x] != null);
+    shared.push({ qi, before: next == null ? Infinity : momentOf[next] });
+  });
+  const moments = Math.max(0, ...levels.map((l) => byLevel[l].length));
+  return { levels, byLevel, shared, moments };
+}
+
+// The questions one student gets. cefr: their level on the A1..C2 scale, or
+// null for a ladder. Returns { qis, qLevels, level, ladder }.
+function listeningSectionBlock(questions, sectionId, cefr = null) {
+  const m = listeningSectionMoments(questions, sectionId);
+  const L = m.levels.length;
+  const ladder = cefr == null && L > 1;
+  let fixed = 0;
+  if (cefr != null && L) {
+    const target = clamp(Math.floor(Number(cefr) || 0), 0, CEFR_LEVELS.length - 1);
+    m.levels.forEach((l, i) => {
+      // Ties keep the easier level (found first).
+      if (Math.abs(CEFR_LEVELS.indexOf(l) - target) < Math.abs(CEFR_LEVELS.indexOf(m.levels[fixed]) - target)) fixed = i;
+    });
+  }
+  const qis = [];
+  const qLevels = [];
+  const addShared = (k) => m.shared.filter((x) => (k === Infinity ? x.before >= m.moments : x.before === k))
+    .forEach((x) => { qis.push(x.qi); qLevels.push(''); });
+  for (let k = 0; k < m.moments; k += 1) {
+    addShared(k);
+    const want = ladder ? (m.moments === 1 ? 0 : Math.round((k * (L - 1)) / (m.moments - 1))) : fixed;
+    // The wanted level, else the nearest one that has this moment (easier first).
+    let pick = -1;
+    for (let d = 0; d < L && pick < 0; d += 1) {
+      if (want - d >= 0 && m.byLevel[m.levels[want - d]][k] != null) pick = want - d;
+      else if (want + d < L && m.byLevel[m.levels[want + d]][k] != null) pick = want + d;
+    }
+    if (pick < 0) continue;
+    qis.push(m.byLevel[m.levels[pick]][k]);
+    qLevels.push(m.levels[pick]);
+  }
+  addShared(Infinity);
+  return { qis, qLevels, level: ladder || !L ? '' : m.levels[fixed], ladder };
+}
+
+// The quiz's sections in order, with where each comes ("where it sits": after
+// as many single questions as come before it in the quiz) and its size.
+function adaptiveSectionPlan(quiz) {
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  const known = new Set((Array.isArray(quiz?.listeningSections) ? quiz.listeningSections : []).map((s) => s.id));
+  const plan = [];
+  let singles = 0;
+  questions.forEach((q) => {
+    if (!q || q.isPoll) return;
+    const id = q.listeningSection;
+    if (!id) {
+      singles += 1;
+      return;
+    }
+    if (!known.has(id) || plan.some((p) => p.id === id)) return;
+    const m = listeningSectionMoments(questions, id);
+    plan.push({ id, after: singles, size: m.shared.length + m.moments });
+  });
+  return plan.filter((p) => p.size > 0);
+}
+
+// Questions per student: N singles plus every section's block.
+function adaptiveAttemptTotal(st) {
+  return Number(st?.count || 0) + (st?.sections || []).reduce((n, s) => n + Number(s.size || 0), 0);
+}
+
+function assignmentAdaptiveTotal(assignment) {
+  return assignmentAdaptiveCount(assignment) + adaptiveSectionPlan(assignment?.quiz).reduce((n, s) => n + s.size, 0);
+}
+
+// count: single questions per student (the assignment's own number unless given).
 function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdaptiveCount(assignment), autoOnly = false } = {}) {
   const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly });
-  if (!count || bands.length < 2) return null;
+  const plan = autoOnly ? [] : adaptiveSectionPlan(assignment?.quiz);
+  if (bands.length < 2 || (!count && !plan.length)) return null;
   const st = adaptiveInit(bands, saved);
-  st.count = clamp(Math.round(count), 1, Math.max(1, pool.length));
+  // A saved level (or one set by the teacher) means no ladder.
+  st.known = !!saved && Number.isFinite(Number(saved.cefr));
+  st.count = plan.length
+    ? clamp(Math.round(Number(count) || 0), 0, pool.length)
+    : clamp(Math.round(count), 1, Math.max(1, pool.length));
   if (autoOnly) st.autoOnly = true;
+  if (plan.length) st.sections = plan.map((p) => ({ ...p, after: Math.min(p.after, st.count) }));
   st.items = [];
   st.done = false;
-  st.current = adaptiveNext(st, pool);
+  st.current = null;
+  adaptiveAttemptServe(assignment, st, pool);
   return st;
 }
 
-function adaptiveAttemptAdvance(assignment, st) {
-  if (st.items.length >= st.count) {
-    st.done = true;
-    st.current = null;
+// What comes next: a section once its place is reached, else a single
+// question while fewer than N are served, else done.
+function adaptiveAttemptServe(assignment, st, pool) {
+  st.current = null;
+  const singles = (st.items || []).filter((it) => !it.section).length;
+  const next = (st.sections || []).find((s) => !s.done);
+  if (next && (next.after <= singles || singles >= st.count)) {
+    adaptiveAttemptOpenBlock(assignment, st, next);
     return;
   }
+  if (singles < st.count) st.current = adaptiveNext(st, pool);
+  if (st.current == null) st.done = true;
+}
+
+function adaptiveAttemptOpenBlock(assignment, st, plan) {
+  const questions = assignment?.quiz?.questions || [];
+  const ladder = !st.known && !(st.items || []).length;
+  const block = listeningSectionBlock(questions, plan.id, ladder ? null : adaptiveCefr(st));
+  plan.size = block.qis.length;
+  st.block = { id: plan.id, ...block, answers: {} };
+}
+
+// Submitting a block: its answers go to the engine one by one, in the order
+// shown (blanks are wrong; teacher-graded ones wait for their grade; shared
+// questions don't move the level). The caller then serves what comes next.
+function adaptiveAttemptCloseBlock(assignment, attempt, now = Date.now()) {
+  const st = attempt.adaptive;
+  const b = st?.block;
+  if (!b) return;
+  const questions = assignment?.quiz?.questions || [];
+  attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
+  let right = 0;
+  let graded = 0;
+  b.qis.forEach((qi, k) => {
+    const q = questions[qi];
+    if (!q) return;
+    const answer = b.answers[String(k)] ?? null;
+    const item = { qi, answer, bet: 0, at: now, section: b.id };
+    if (answer != null) attempt.answersByQ[String(qi)] = { answer, bet: 0, teacherGrade: null, updatedAt: now };
+    const qBand = st.bands.indexOf(b.qLevels[k]);
+    if (qBand < 0) {
+      st.items.push({ ...item, shared: true });
+      return;
+    }
+    if (isAssignmentTeacherGradedQuestion(q)) {
+      st.items.push({ ...item, band: adaptiveBand(st), qBand, ...(b.ladder ? { ladder: true } : {}) });
+      adaptiveRecordPending(st, qi, qBand);
+      return;
+    }
+    st.items.push(item);
+    const verdict = evaluate(q, answer);
+    graded += 1;
+    if (verdict?.correct) right += 1;
+    adaptiveRecord(st, qi, qBand, adaptiveOutcome(verdict), Math.random, { ladder: b.ladder, noRetry: true });
+  });
+  st.sectionResults = Array.isArray(st.sectionResults) ? st.sectionResults : [];
+  const title = String((assignment?.quiz?.listeningSections || []).find((x) => x.id === b.id)?.title || '').slice(0, 120);
+  st.sectionResults.push({ id: b.id, title, level: b.level, ladder: b.ladder, levels: b.qLevels.filter(Boolean), right, graded });
+  const plan = (st.sections || []).find((s) => s.id === b.id);
+  if (plan) plan.done = true;
+  st.block = null;
+  attempt.sectionsSubmitted = attempt.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {};
+  if (!attempt.sectionsSubmitted[b.id]) attempt.sectionsSubmitted[b.id] = now;
+}
+
+function adaptiveAttemptAdvance(assignment, st) {
   const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
   adaptiveRebase(st, bands);
-  st.current = adaptiveNext(st, pool);
-  if (st.current == null) st.done = true;
+  adaptiveAttemptServe(assignment, st, pool);
 }
 
 // After a quiz edit: follow each question to its new index (by id); drop what
@@ -8173,7 +8385,18 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
     .map(([k, v]) => [mapQi(Number(k)), v])
     .filter(([k]) => k != null));
   st.last = st.last == null ? null : mapQi(st.last);
-  if (!st.done) {
+  if (st.block) {
+    const kept = st.block.qis.map((qi, k) => [mapQi(qi), k]).filter(([qi]) => qi != null);
+    const answers = {};
+    kept.forEach(([, k], i) => { if (st.block.answers[String(k)] !== undefined) answers[String(i)] = st.block.answers[String(k)]; });
+    st.block = { ...st.block, qis: kept.map(([qi]) => qi), qLevels: kept.map(([, k]) => st.block.qLevels[k]), answers };
+    if (!st.block.qis.length) {
+      const plan = (st.sections || []).find((s) => s.id === st.block.id);
+      if (plan) plan.done = true;
+      st.block = null;
+    }
+  }
+  if (!st.done && !st.block) {
     st.current = st.current == null ? null : mapQi(st.current);
     if (st.current == null) adaptiveAttemptAdvance(assignment, st);
   }
@@ -8204,6 +8427,8 @@ async function adaptiveAttemptGrade(storage, attempt, qi, grade, maxPoints) {
   const idx = (st.items || []).findIndex((it) => it.qi === qi);
   if (idx < 0) return false;
   st.items[idx].teacherGrade = grade;
+  // A shared listening question (no level) never moves the level.
+  if (st.items[idx].shared) return true;
   const outcome = maxPoints > 0 ? adaptiveOutcomeFromFraction(grade.pointsAwarded / maxPoints) : 'neutral';
   const saved = !!(st.done || attempt.submitted);
   const change = adaptiveApplyGrade(st, idx, outcome, { saved });
@@ -8217,11 +8442,19 @@ function adaptiveAttemptView(assignment, attempt, { includeCurrent = true } = {}
   const questions = assignment?.quiz?.questions || [];
   const items = (st.items || []).filter((it) => questions[it.qi]);
   const served = items.map((it) => questions[it.qi]);
-  if (includeCurrent && !st.done && questions[st.current]) served.push(questions[st.current]);
   const answersByQ = {};
   items.forEach((it, i) => {
     answersByQ[String(i)] = { answer: it.answer, bet: it.bet || 0, teacherGrade: it.teacherGrade || null, updatedAt: it.at || null };
   });
+  if (includeCurrent && !st.done && st.block) {
+    // An open listening block: all its questions at once, with the drafts.
+    st.block.qis.forEach((qi, k) => {
+      if (!questions[qi]) return;
+      const draft = st.block.answers[String(k)];
+      if (draft !== undefined) answersByQ[String(served.length)] = { answer: draft, bet: 0, teacherGrade: null, updatedAt: null };
+      served.push(questions[qi]);
+    });
+  } else if (includeCurrent && !st.done && questions[st.current]) served.push(questions[st.current]);
   const { adaptive, ...rest } = attempt;
   return {
     assignment: { ...assignment, quiz: { ...(assignment?.quiz || {}), questions: served } },
@@ -8258,6 +8491,8 @@ const PUBLIC_ADAPTIVE_SHARE = 0.25;
 const PUBLIC_ADAPTIVE_MIN = 10;
 
 function publicAdaptivePool(assignment, { autoOnly = false } = {}) {
+  // Not yet for listening sections (LISTENING_MODE_PLAN.md section 10).
+  if (adaptiveSectionPlan(assignment?.quiz).length) return null;
   const found = assignmentAdaptivePool(assignment, { autoOnly });
   return found.bands.length >= 2 ? found : null;
 }
@@ -8456,7 +8691,7 @@ async function publicPlayResponse(env, assignment, attempt) {
 function evaluateAssignmentAttempt(assignment, attempt) {
   if (attempt?.adaptive) {
     const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
-    return { ...evaluateAssignmentAttempt(v.assignment, v.attempt), totalQuestions: Number(attempt.adaptive.count || 0) };
+    return { ...evaluateAssignmentAttempt(v.assignment, v.attempt), totalQuestions: adaptiveAttemptTotal(attempt.adaptive) };
   }
   const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
   const quizQuestions = assignment?.quiz?.questions || [];
@@ -8539,9 +8774,9 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     const v = adaptiveAttemptView(assignment, attempt);
     const out = publicAssignmentAttempt(v.assignment, v.attempt, { includeAnswers, includeAnswerKey });
     out.metrics = evaluateAssignmentAttempt(assignment, attempt);
-    out.assignment.totalQuestions = st.count;
+    out.assignment.totalQuestions = adaptiveAttemptTotal(st);
     // Progress only: levels stay teacher-side.
-    out.adaptive = { step: (st.items || []).length, total: st.count, done: !!st.done };
+    out.adaptive = { step: (st.items || []).length, total: adaptiveAttemptTotal(st), done: !!st.done };
     return out;
   }
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
@@ -9187,8 +9422,8 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     origin: String(assignment.origin || ''),
     liveMediaPin: String(assignment.liveMediaPin || ''),
     quizTitle: String(assignment.quiz?.title || ''),
-    totalQuestions: assignmentAdaptiveCount(assignment) || Number(assignment.quiz?.questions?.length || 0),
-    adaptiveCount: assignmentAdaptiveCount(assignment) || undefined,
+    totalQuestions: (assignment.adaptive && assignmentAdaptiveTotal(assignment)) || Number(assignment.quiz?.questions?.length || 0),
+    adaptiveCount: (assignment.adaptive && assignmentAdaptiveTotal(assignment)) || undefined,
     public: !!assignment.public,
     publishedAt: Number(assignment.publishedAt || 0) || null,
   };
@@ -9563,11 +9798,16 @@ function adaptiveTally(st, level, outcome, sign = 1) {
 // Record one final answer. qBand is the band of the question that was served;
 // outcome is 'right', 'neutral' or 'wrong' (true / false also work). A neutral
 // answer counts toward the answers the level rests on but doesn't move it.
-function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
+// opts.ladder: the answer comes from a listening ladder (easy to hard, for a
+// student with no level yet): a miss above the current level is expected
+// there, so it doesn't lower the level or count as a miss in a row.
+// opts.noRetry: the question is never served again on its own (sections).
+function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random, { ladder = false, noRetry = false } = {}) {
   const result = outcome === true ? 'right' : (outcome === false ? 'wrong' : outcome);
   const band = adaptiveBand(st);
   const level = st.bands[qBand] || '';
-  st.path.push({ qi, level, band: st.bands[band] || '', ok: adaptivePathOk(result) });
+  const held = ladder && result === 'wrong' && qBand > band;
+  st.path.push({ qi, level, band: st.bands[band] || '', ok: adaptivePathOk(result), ...(held ? { held: true } : {}) });
   if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
   adaptiveTally(st, level, result).answered += 1;
   const repeat = (st.seen[qi]?.n || 0) > 0;
@@ -9582,6 +9822,8 @@ function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
     // question seen before (its answer may be remembered from the feedback).
     const up = (st.dropped ? ADAPTIVE_UP_AFTER_DROP : ADAPTIVE_UP) * scale * (repeat ? 1 - ADAPTIVE_REPEAT_DISCOUNT : 1);
     st.score += qBand >= band ? up : up / 2;
+  } else if (held) {
+    // Expected on a ladder: the level stays where it is.
   } else if (result === 'wrong') {
     st.streak = Math.min(0, st.streak) - 1;
     // Missing a harder question than the current band costs less.
@@ -9589,7 +9831,7 @@ function adaptiveRecord(st, qi, qBand, outcome, rng = Math.random) {
     if (st.streak <= -3) down += ADAPTIVE_STREAK_DOWN;
     st.score -= down * scale;
     const gap = ADAPTIVE_RETRY_GAPS[Math.floor(rng() * ADAPTIVE_RETRY_GAPS.length)];
-    st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
+    if (!noRetry) st.retry.push({ qi, band: qBand, due: st.answered + 1 + gap });
   } else {
     st.streak = 0;
   }
@@ -9648,7 +9890,9 @@ function adaptiveApplyGrade(st, idx, outcome, { saved = false } = {}) {
     }
   }
   const before = st.score;
-  st.score = clamp(st.score + adaptiveGradeStep(outcome, it.band, it.qBand, n), 0, top);
+  // A ladder miss above the level it was answered at moves nothing (adaptiveRecord).
+  const heldMiss = it.ladder && outcome === 'wrong' && it.qBand > it.band;
+  st.score = clamp(st.score + (heldMiss ? 0 : adaptiveGradeStep(outcome, it.band, it.qBand, n)), 0, top);
   const delta = st.score - before;
   if (saved) roster.delta += delta;
   it.levelEffect = { outcome, delta, inRoster: saved };
@@ -9698,9 +9942,11 @@ function adaptiveSummary(st) {
     usualLevel: adaptiveUsualLevel(st),
     finalLevel: bands[finalIdx] || '',
     peakLevel: bands[peakIdx] || '',
-    // ✓ right · ✗ wrong · ~ neutral · … waiting for the teacher's grade
-    path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? '✗' : '~'))}`).join(' '),
+    // ✓ right · ✗ wrong · (✗) a ladder miss that didn't move the level ·
+    // ~ neutral · … waiting for the teacher's grade
+    path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? (p.held ? '(✗)' : '✗') : '~'))}`).join(' '),
     perLevel: st.perLevel || {},
+    ...(Array.isArray(st.sectionResults) && st.sectionResults.length ? { sections: st.sectionResults } : {}),
   };
 }
 

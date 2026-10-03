@@ -148,6 +148,8 @@ window.PINPLAY_FR_DICT = {
   'Say what the recording should be about: fill in the Theme or the Instructions.': 'Indiquez le sujet de l\'enregistrement : remplissez le Thème ou les Consignes.',
   'Choose at least one question type.': 'Choisissez au moins un type de question.',
   '{n} parts found: each becomes its own listening section.': '{n} parties trouvées : chacune devient sa propre section d\'écoute.',
+  "+ listening sections at each student's level": "+ sections d'écoute au niveau de chaque élève",
+  'ladder {from}→{to}': 'échelle {from}→{to}',
   '🎯 Several levels (adaptive)': '🎯 Plusieurs niveaux (adaptatif)',
   'From': 'De',
   'Choose at least two levels for an adaptive listening.': 'Choisissez au moins deux niveaux pour une écoute adaptative.',

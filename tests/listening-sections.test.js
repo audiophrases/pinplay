@@ -125,6 +125,76 @@ describe('recordings in cloud storage', () => {
   });
 });
 
+describe('adaptive listening: blocks and ladders', () => {
+  let E;
+  before(() => {
+    const src = read('cloudflare/worker.js');
+    const consts = [...src.matchAll(/^const (ADAPTIVE_[A-Z_]+) =/gm)].map((m) => m[1]);
+    E = loadDeclarations(src, ['CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', ...consts, 'adaptiveInit', 'adaptiveBand', 'adaptiveStepScale',
+      'adaptiveTally', 'adaptivePathOk', 'adaptiveRecord', 'listeningSectionMoments', 'listeningSectionBlock', 'adaptiveSectionPlan']);
+  });
+  const q = (id, cefr, s = 'p1') => ({ id, type: 'mcq', listeningSection: s, ...(cefr ? { cefr } : {}) });
+  // Grouped by level: 6 moments at every level A1–C2.
+  const full = () => ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].flatMap((l) => [1, 2, 3, 4, 5, 6].map((m) => q(`${l}-${m}`, l)));
+  const idsOf = (questions, block) => plain(block.qis.map((i) => questions[i].id));
+
+  it('a ladder climbs one level per moment, and a known level stays on its level', () => {
+    const qs = full();
+    assert.deepEqual(idsOf(qs, E.listeningSectionBlock(qs, 'p1', null)), ['A1-1', 'A2-2', 'B1-3', 'B2-4', 'C1-5', 'C2-6']);
+    const b1 = E.listeningSectionBlock(qs, 'p1', 2.4);
+    assert.deepEqual(idsOf(qs, b1), ['B1-1', 'B1-2', 'B1-3', 'B1-4', 'B1-5', 'B1-6']);
+    assert.equal(b1.level, 'B1');
+    assert.equal(b1.ladder, false);
+  });
+
+  it('spreads fewer levels over the moments, and maps a level the section lacks to the nearest (easier on a tie)', () => {
+    const qs = ['A2', 'B1', 'B2'].flatMap((l) => [1, 2, 3, 4, 5, 6].map((m) => q(`${l}-${m}`, l)));
+    assert.deepEqual(plain(E.listeningSectionBlock(qs, 'p1', null).qLevels), ['A2', 'A2', 'B1', 'B1', 'B2', 'B2']);
+    assert.equal(E.listeningSectionBlock(qs, 'p1', 0.5).level, 'A2'); // A1 -> A2
+    assert.equal(E.listeningSectionBlock(qs, 'p1', 5.2).level, 'B2'); // C2 -> B2
+    const gap = [...['A2', 'B2'].flatMap((l) => [1, 2].map((m) => q(`${l}-${m}`, l)))];
+    assert.equal(E.listeningSectionBlock(gap, 'p1', 2.0).level, 'A2'); // B1: A2 and B2 tie
+  });
+
+  it('works grouped by level or by moment, and keeps shared questions in place', () => {
+    const byMoment = [q('intro'), q('A1-1', 'A1'), q('A2-1', 'A2'), q('mid'), q('A1-2', 'A1'), q('A2-2', 'A2'), q('outro')];
+    assert.deepEqual(idsOf(byMoment, E.listeningSectionBlock(byMoment, 'p1', null)), ['intro', 'A1-1', 'mid', 'A2-2', 'outro']);
+    assert.deepEqual(idsOf(byMoment, E.listeningSectionBlock(byMoment, 'p1', 1.5)), ['intro', 'A2-1', 'mid', 'A2-2', 'outro']);
+    const grouped = [q('intro'), q('A1-1', 'A1'), q('A1-2', 'A1'), q('A2-1', 'A2'), q('A2-2', 'A2')];
+    assert.deepEqual(idsOf(grouped, E.listeningSectionBlock(grouped, 'p1', null)), ['intro', 'A1-1', 'A2-2']);
+  });
+
+  it('a level with a missing moment borrows the nearest level\'s question', () => {
+    const qs = [q('A1-1', 'A1'), q('A1-2', 'A1'), q('B1-1', 'B1')];
+    assert.deepEqual(idsOf(qs, E.listeningSectionBlock(qs, 'p1', 2)), ['B1-1', 'A1-2']);
+  });
+
+  it('places each section after the single questions before it', () => {
+    const quiz = { listeningSections: [{ id: 'p1' }, { id: 'p2' }], questions: [
+      { id: 's1' }, q('a', 'A1'), q('b', 'A2'), { id: 's2' }, { id: 's3' }, q('c', 'A1', 'p2'), q('d', null, 'p2'), { id: 's4', isPoll: true },
+    ] };
+    assert.deepEqual(JSON.parse(JSON.stringify(E.adaptiveSectionPlan(quiz))), [{ id: 'p1', after: 1, size: 1 }, { id: 'p2', after: 3, size: 2 }]);
+  });
+
+  it('on a ladder, a miss above the current level leaves the level alone', () => {
+    const L = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    const run = (results, ladder) => {
+      const st = E.adaptiveInit(L, null);
+      results.forEach((ok, i) => E.adaptiveRecord(st, i, i, ok, () => 0, { ladder, noRetry: true }));
+      return { level: L[E.adaptiveBand(st)], st };
+    };
+    const truth = { A1: 1, A2: 2, B1: 3, B2: 4, C1: 5, C2: 6 };
+    Object.entries(truth).forEach(([level, n]) => {
+      const results = L.map((_, i) => i < n);
+      assert.equal(run(results, true).level, level, `ladder, true level ${level}`);
+    });
+    assert.equal(run([true, true, true, false, false, false], false).level, 'A1', 'without the rule a B1 student ends at A1');
+    const { st } = run([true, true, true, false, false, false], true);
+    assert.equal(st.retry.length, 0, 'section questions never come back as retries');
+    assert.ok(st.path.some((p) => p.held), 'held misses are marked for the report');
+  });
+});
+
 describe('PinPlay Cup', () => {
   it('never deals a listening-section question', () => {
     const room = { quiz: { questions: [mcq('q1'), mcq('q2', { listeningSection: 's1' }), mcq('q3')] } };
@@ -168,10 +238,91 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     questions: [mcq('q1', { cefr: 'A1' }), mcq('q2', { cefr: 'B1', listeningSection: 's1' }), mcq('q3', { cefr: 'B2', listeningSection: 's1' })],
   });
 
-  it('refuses an adaptive assignment for a quiz with sections', async () => {
-    const r = await post('/api/assignments/create', { password: PW, quiz: levelled(), adaptiveCount: 3 });
-    assert.equal(r.status, 400);
-    assert.match(r.body.error, /listening sections can't be adaptive/);
+  // Two parts, each with a shared opener and 3 moments at A1, A2 and B1
+  // (grouped by level). Every mcq's first option is right.
+  const exam = () => {
+    const part = (s) => [
+      mcq(`${s}-shared`, { listeningSection: s }),
+      ...['A1', 'A2', 'B1'].flatMap((lvl) => [1, 2, 3].map((m) => mcq(`${s}-${lvl}-m${m}`, { cefr: lvl, listeningSection: s }))),
+    ];
+    return { title: 'Adaptive listening', listeningSections: [section('p1'), section('p2')], questions: [...part('p1'), ...part('p2')] };
+  };
+  // Students' questions carry no id: the prompt names it ("Q p1-A1-m1?").
+  const ids = (body) => body.attempt.assignment.quiz.questions.map((q) => q.prompt.slice(2, -1));
+
+  it('adaptive: a quiz of sections only, a ladder first, then a level block', async () => {
+    const created = await post('/api/assignments/create', { password: PW, quiz: exam(), adaptive: true, adaptiveCount: 0, randomNames: true, feedbackMode: 'instant' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const code = created.body.assignment.code;
+    const started = await post('/api/assignment/start', { code, studentKey: 'anon-ladder', studentName: 'Lea' });
+    assert.ok(started.status < 300, JSON.stringify(started.body));
+    const attemptId = started.body.attempt.id;
+    assert.equal(started.body.attempt.assignment.totalQuestions, 8);
+    assert.deepEqual(plain(started.body.attempt.adaptive), { step: 0, total: 8, done: false });
+    // No level yet: shared opener, then moment 1 at A1, 2 at A2, 3 at B1.
+    assert.deepEqual(plain(ids(started.body)), ['p1-shared', 'p1-A1-m1', 'p1-A2-m2', 'p1-B1-m3']);
+
+    // Drafts for any question of the open block; nothing beyond it.
+    for (const [qIndex, answer] of [[0, 0], [1, 0], [2, 0], [3, 1]]) {
+      const r = await post('/api/assignment/answer', { code, attemptId, qIndex, answer });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+    }
+    const beyond = await post('/api/assignment/answer', { code, attemptId, qIndex: 4, answer: 0 });
+    assert.equal(beyond.body.code, 'NOT_CURRENT');
+    assert.equal((await post('/api/assignment/submit-section', { code, attemptId, sectionId: 'p2' })).body.code, 'NOT_CURRENT');
+
+    const sub = await post('/api/assignment/submit-section', { code, attemptId, sectionId: 'p1' });
+    assert.equal(sub.status, 200, JSON.stringify(sub.body));
+    const attempt = sub.body.attempt;
+    assert.equal(attempt.adaptive.step, 4);
+    assert.deepEqual(plain(attempt.answersWithCorrectness.map((a) => [a.qIndex, a.correct])), [[0, true], [1, true], [2, true], [3, false]]);
+    // Part 2 comes as one level's block: right at A1 and A2, wrong at B1 -> A2.
+    assert.deepEqual(plain(ids(sub.body).slice(4)), ['p2-shared', 'p2-A2-m1', 'p2-A2-m2', 'p2-A2-m3']);
+
+    await post('/api/assignment/answer', { code, attemptId, qIndex: 5, answer: 0 });
+    const done = await post('/api/assignment/submit-section', { code, attemptId, sectionId: 'p2' });
+    assert.equal(done.body.attempt.adaptive.done, true);
+    const fin = await post('/api/assignment/submit', { code, attemptId });
+    assert.equal(fin.status, 200, JSON.stringify(fin.body));
+  });
+
+  it('adaptive: a section comes where it sits, on top of the N single questions', async () => {
+    const quiz = exam();
+    quiz.listeningSections = [section('p1')];
+    quiz.questions = [mcq('s1', { cefr: 'A1' }), mcq('s2', { cefr: 'B1' }), ...quiz.questions.filter((q) => q.listeningSection === 'p1'), mcq('s3', { cefr: 'A2' })];
+    const created = await post('/api/assignments/create', { password: PW, quiz, adaptiveCount: 3, randomNames: true });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const code = created.body.assignment.code;
+    const started = await post('/api/assignment/start', { code, studentKey: 'anon-mixed', studentName: 'Max' });
+    const attemptId = started.body.attempt.id;
+    assert.equal(started.body.attempt.assignment.totalQuestions, 3 + 4);
+    let state = started.body;
+    // Two single questions come before the section in the quiz.
+    for (let i = 0; i < 2; i += 1) {
+      assert.ok(!state.attempt.assignment.quiz.questions[i].listeningSection, `question ${i + 1} is a single one`);
+      state = (await post('/api/assignment/answer', { code, attemptId, qIndex: i, answer: 0 })).body;
+    }
+    // Answers already given: a level block, not a ladder.
+    const block = state.attempt.assignment.quiz.questions.slice(2);
+    assert.equal(block.length, 4);
+    const levels = block.map((q) => q.prompt.match(/-(A1|A2|B1)-/)?.[1]).filter(Boolean);
+    assert.equal(levels.length, 3);
+    assert.equal(new Set(levels).size, 1, JSON.stringify(block.map((q) => q.prompt)));
+    state = (await post('/api/assignment/submit-section', { code, attemptId, sectionId: 'p1' })).body;
+    assert.equal(state.attempt.adaptive.step, 6);
+    assert.ok(!state.attempt.assignment.quiz.questions[6].listeningSection, 'the third single question comes last');
+  });
+
+  it('adaptive: submitting the whole attempt takes an open section\'s drafts', async () => {
+    const created = await post('/api/assignments/create', { password: PW, quiz: exam(), adaptive: true, randomNames: true });
+    const code = created.body.assignment.code;
+    const attemptId = (await post('/api/assignment/start', { code, studentKey: 'anon-stop', studentName: 'Sam' })).body.attempt.id;
+    await post('/api/assignment/answer', { code, attemptId, qIndex: 1, answer: 0 });
+    const early = await post('/api/assignment/submit', { code, attemptId });
+    assert.equal(early.body.code, 'UNANSWERED_REMAINING');
+    const fin = await post('/api/assignment/submit', { code, attemptId, force: true });
+    assert.equal(fin.status, 200, JSON.stringify(fin.body));
+    assert.ok(fin.body.attempt.sectionsSubmitted.p1 > 0);
   });
 
   it('keeps the sections on a normal assignment', async () => {

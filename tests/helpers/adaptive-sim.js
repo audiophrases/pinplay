@@ -21,7 +21,7 @@ function loadEngine() {
     'adaptiveOutcomeFromFraction', 'adaptiveOutcome', 'adaptivePathOk', 'adaptiveTally',
     'adaptiveRecord', 'adaptiveRecordPending', 'adaptiveGradeStep', 'adaptiveApplyGrade',
     'adaptiveNext', 'adaptiveUsualLevel', 'adaptiveRebase', 'adaptiveSummary',
-    'assignmentAdaptiveCount', 'assignmentAdaptivePool', 'adaptiveAttemptInit', 'adaptiveAttemptAdvance',
+    'assignmentAdaptiveCount', 'listeningSectionMoments', 'listeningSectionBlock', 'adaptiveSectionPlan', 'adaptiveAttemptTotal', 'adaptiveAttemptServe', 'adaptiveAttemptOpenBlock', 'adaptiveCefr', 'assignmentAdaptivePool', 'adaptiveAttemptInit', 'adaptiveAttemptAdvance',
     'adaptiveAttemptRemap', 'adaptiveAttemptView',
   ]);
 }
