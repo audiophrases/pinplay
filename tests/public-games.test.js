@@ -24,6 +24,7 @@ const NAMES = [
   'gradeContextGap', 'contextGapExpectedOptions', 'parseAcceptedGapOptions', 'dedupeAcceptedForDisplay', 'stripDiacritics',
   'stableShuffle', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'normalizeWordle',
   'publicAdaptivePool', 'publicAdaptiveDefaultCount', 'publicAdaptiveAttemptInit', 'PUBLIC_ADAPTIVE_SHARE', 'PUBLIC_ADAPTIVE_MIN',
+  'applyPublicSectionAnswers', 'adaptiveAttemptCloseBlock',
   'autoGradedQuestionIndexes', 'ADAPTIVE_REPEAT_DISCOUNT', 'ADAPTIVE_DOWN', 'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_RETRY_GAPS',
 ];
 
@@ -172,15 +173,15 @@ describe('anonymous play', () => {
     assert.equal(W.newPublicPlayAttempt(oneLevel).adaptive, undefined);
   });
 
-  it('plays the number the player picks; suggests a quarter of the quiz, at least 10', () => {
+  it('plays the number the player picks; suggests a third of the quiz, at least 10', () => {
     const big = (n) => ({ ...adaptiveGame(), quiz: { questions: Array.from({ length: n }, (_, i) => tf(`q${i}`, LEVELS[i % 6])) } });
-    assert.equal(W.newPublicPlayAttempt(big(100)).adaptive.count, 25);
-    assert.equal(W.newPublicPlayAttempt(big(120)).adaptive.count, 30);
+    assert.equal(W.newPublicPlayAttempt(big(100)).adaptive.count, 33);
+    assert.equal(W.newPublicPlayAttempt(big(120)).adaptive.count, 40);
     assert.equal(W.newPublicPlayAttempt(big(24)).adaptive.count, 10);
     assert.equal(W.newPublicPlayAttempt(big(8)).adaptive.count, 8);
     assert.equal(W.newPublicPlayAttempt(big(100), 40).adaptive.count, 40);
     assert.equal(W.newPublicPlayAttempt(big(100), 500).adaptive.count, 100);
-    assert.equal(W.publicGameCard(big(100), null).recommended, 25);
+    assert.equal(W.publicGameCard(big(100), null).recommended, 33);
   });
 
   it('anonymous adaptive play never serves teacher-graded questions', () => {
@@ -192,6 +193,68 @@ describe('anonymous play', () => {
       assert.notEqual(game.quiz.questions[attempt.adaptive.current].type, 'open');
       assert.equal(W.applyPublicPlayAnswer(game, attempt, step, 0, 0), null);
     }
+  });
+});
+
+// Listening sections in /play (LISTENING_MODE_PLAN.md section 10): level
+// blocks as in adaptive assignments; the page sends a section's answers with
+// Submit section (or when the game is finished).
+describe('anonymous adaptive play with listening sections', () => {
+  const sectionQ = (id, cefr, s = 'p1') => ({ ...tf(id, cefr), listeningSection: s });
+  const listeningGame = (singles = []) => ({
+    code: 'LISTEN', title: 'Listening', public: true,
+    quiz: {
+      listeningSections: [{ id: 'p1', title: 'Part 1', text: '', audio: null, playsAllowed: 2, pauseAllowed: true }],
+      questions: [
+        ...singles,
+        sectionQ('shared', null),
+        ...['A1', 'A2', 'B1'].flatMap((lv) => [1, 2, 3].map((m) => sectionQ(`${lv}-${m}`, lv))),
+        { id: 'essay', type: 'open', prompt: 'Why?', points: 1000, cefr: 'B1', listeningSection: 'p1' },
+      ],
+    },
+  });
+  const servedIds = (game, attempt) => attempt.adaptive.block.qis.map((qi) => game.quiz.questions[qi].id);
+
+  it('a game of sections only: the ladder first, without teacher-graded questions', () => {
+    const game = listeningGame();
+    const card = W.publicGameCard(game, null);
+    assert.equal(card.adaptive, true);
+    assert.equal(card.questionCount, 0, 'no single questions: nothing to pick');
+    assert.deepEqual(JSON.parse(JSON.stringify(card.listening)), { sections: 1, questions: 4 });
+    const attempt = W.newPublicPlayAttempt(game);
+    assert.equal(attempt.adaptive.count, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(servedIds(game, attempt))), ['shared', 'A1-1', 'A2-2', 'B1-3']);
+    // A normal answer is refused while the section is open; Submit section takes its answers.
+    assert.equal(W.applyPublicPlayAnswer(game, attempt, 0, 0, 0).code, 'LISTENING_SECTION');
+    assert.equal(W.applyPublicSectionAnswers(game, attempt, 'p1', { 0: 0, 1: 0, 2: 0, 3: 1 }), null);
+    assert.equal(attempt.adaptive.done, true);
+    assert.ok(attempt.sectionsSubmitted.p1 > 0);
+    assert.equal(attempt.adaptive.items.length, 4);
+  });
+
+  it('single questions before the section level the player first', () => {
+    const game = listeningGame(LEVELS.map((lv) => tf(`single-${lv}`, lv)));
+    const attempt = W.newPublicPlayAttempt(game, 3);
+    assert.equal(attempt.adaptive.count, 3);
+    for (let step = 0; step < 3; step += 1) assert.equal(W.applyPublicPlayAnswer(game, attempt, step, 0, 0), null);
+    const ids = servedIds(game, attempt);
+    assert.equal(ids[0], 'shared');
+    assert.equal(new Set(ids.slice(1).map((id) => id.split('-')[0])).size, 1, `one level, not a ladder: ${ids}`);
+  });
+
+  it('finishing with the section open counts what was entered; the token keeps submitted sections', async () => {
+    const game = listeningGame();
+    const attempt = W.newPublicPlayAttempt(game);
+    assert.equal(W.applyPublicSectionAnswers(game, attempt, 'p1', { 1: 0 }, Date.now(), { submit: false }), null);
+    assert.equal(attempt.adaptive.items.length, 4, 'the open block was closed with its answers');
+    const plain = listeningGame();
+    const p = W.newPublicPlayAttempt({ ...plain, quiz: { ...plain.quiz, questions: plain.quiz.questions.map((q) => ({ ...q, cefr: undefined })) } });
+    assert.equal(p.adaptive, undefined, 'one level or none: not adaptive');
+    assert.equal(W.applyPublicSectionAnswers(plain, p, 'p1', { 0: 0, 1: 1 }), null);
+    assert.deepEqual(Object.keys(p.answersByQ), ['0', '1']);
+    const token = await W.signPublicPlay(env, plain, p);
+    const back = W.publicPlayAttempt(await W.verifyPublicPlay(env, token));
+    assert.ok(back.sectionsSubmitted.p1 > 0);
   });
 });
 

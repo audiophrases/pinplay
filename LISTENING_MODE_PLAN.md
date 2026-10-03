@@ -383,10 +383,20 @@ earlier parts point to.
    - Tests: `tests/listening-sections.test.js` (blocks, ladders, placement,
      the ladder rule, and full attempts on the real worker). Checked in a
      browser on a phone-sized screen: ladder sheet, submit, Part 2 at A2.
-   - **Not yet:** public /play games with sections stay non-adaptive (their
-     attempt lives in a signed token and takes each answer once, which
-     doesn't fit an autosaved sheet). A multilevel section there shows every
-     level's questions.
+   - **Public /play games (owner, 2026-10-03): adaptive like assignments.**
+     Single questions before a section level the player first; the player
+     only picks the number of single questions (suggested a third of them);
+     sections come on top. Signed-in players use the assignment routes.
+     Anonymous players' attempt lives in the signed play token, which takes
+     each answer once, so the page keeps a section's answers until Submit
+     section, which sends them all (`/api/public/game/section`,
+     `applyPublicSectionAnswers`); Finish also sends an open section's
+     answers. The token now carries the submitted sections (`ss`).
+     Anonymous play leaves teacher-graded questions out of the blocks, as it
+     does elsewhere. The start screen says "Plus a listening section at your
+     level", or "🎯 Adaptive listening · N questions…" for a game of sections
+     only (no number to pick). This also fixes non-adaptive /play sections,
+     whose sheet couldn't change an answer once saved.
 
 ### 10i. Details to settle while building
 

@@ -1746,7 +1746,7 @@ export default {
       return out;
     }
 
-    if (['/api/public/game/start', '/api/public/game/answer', '/api/public/game/finish', '/api/public/game/like'].includes(url.pathname)
+    if (['/api/public/game/start', '/api/public/game/answer', '/api/public/game/section', '/api/public/game/finish', '/api/public/game/like'].includes(url.pathname)
       && request.method === 'POST') {
       const body = await safeJson(request);
       const route = url.pathname.replace('/api/public/game/', '/public/');
@@ -4185,7 +4185,7 @@ export class QuizRoom {
         return json(await publicPlayResponse(this.env, assignment, newPublicPlayAttempt(assignment, body?.count)), 201);
       }
 
-      if ((url.pathname === '/public/answer' || url.pathname === '/public/finish') && request.method === 'POST') {
+      if ((url.pathname === '/public/answer' || url.pathname === '/public/finish' || url.pathname === '/public/section') && request.method === 'POST') {
         const body = await safeJson(request);
         const claim = await verifyPublicPlay(this.env, body?.token);
         if (!claim) return json({ error: 'This game has expired. Start again.', code: 'PLAY_EXPIRED' }, 410);
@@ -4200,7 +4200,15 @@ export class QuizRoom {
         if (url.pathname === '/public/answer') {
           const err = applyPublicPlayAnswer(assignment, attempt, Math.round(Number(body?.qIndex)), body?.answer, body?.bet, now);
           if (err) return json({ error: err.error, code: err.code }, err.status);
+        } else if (url.pathname === '/public/section') {
+          const err = applyPublicSectionAnswers(assignment, attempt, sanitizeListeningSectionId(body?.sectionId), body?.answers, now);
+          if (err) return json({ error: err.error, code: err.code }, err.status);
         } else if (!attempt.submitted) {
+          // Finishing with a section still open counts what was entered there.
+          const open = body?.sectionAnswers && typeof body.sectionAnswers === 'object' ? body.sectionAnswers : {};
+          Object.entries(open).forEach(([sectionId, answers]) => {
+            applyPublicSectionAnswers(assignment, attempt, sanitizeListeningSectionId(sectionId), answers, now, { submit: false });
+          });
           if (!Object.keys(attempt.answersByQ).length) return json({ error: 'Answer at least one question first.' }, 409);
           attempt.submitted = true;
           attempt.submittedAt = now;
@@ -8194,9 +8202,12 @@ function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
 // Each level has one question per moment of the recording: a question's
 // moment is its rank among the section's questions of that level. Untagged
 // questions are shared by every level and never move the level.
-function listeningSectionMoments(questions, sectionId) {
+// autoOnly: anonymous /play leaves out teacher-graded questions (nobody grades them).
+function listeningSectionMoments(questions, sectionId, { autoOnly = false } = {}) {
   const order = [];
-  (questions || []).forEach((q, i) => { if (q && !q.isPoll && q.listeningSection === sectionId) order.push(i); });
+  (questions || []).forEach((q, i) => {
+    if (q && !q.isPoll && q.listeningSection === sectionId && !(autoOnly && isAssignmentTeacherGradedQuestion(q))) order.push(i);
+  });
   const byLevel = {};
   const momentOf = {};
   order.forEach((qi) => {
@@ -8220,8 +8231,8 @@ function listeningSectionMoments(questions, sectionId) {
 
 // The questions one student gets. cefr: their level on the A1..C2 scale, or
 // null for a ladder. Returns { qis, qLevels, level, ladder }.
-function listeningSectionBlock(questions, sectionId, cefr = null) {
-  const m = listeningSectionMoments(questions, sectionId);
+function listeningSectionBlock(questions, sectionId, cefr = null, { autoOnly = false } = {}) {
+  const m = listeningSectionMoments(questions, sectionId, { autoOnly });
   const L = m.levels.length;
   const ladder = cefr == null && L > 1;
   let fixed = 0;
@@ -8255,7 +8266,7 @@ function listeningSectionBlock(questions, sectionId, cefr = null) {
 
 // The quiz's sections in order, with where each comes ("where it sits": after
 // as many single questions as come before it in the quiz) and its size.
-function adaptiveSectionPlan(quiz) {
+function adaptiveSectionPlan(quiz, { autoOnly = false } = {}) {
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const known = new Set((Array.isArray(quiz?.listeningSections) ? quiz.listeningSections : []).map((s) => s.id));
   const plan = [];
@@ -8268,7 +8279,7 @@ function adaptiveSectionPlan(quiz) {
       return;
     }
     if (!known.has(id) || plan.some((p) => p.id === id)) return;
-    const m = listeningSectionMoments(questions, id);
+    const m = listeningSectionMoments(questions, id, { autoOnly });
     plan.push({ id, after: singles, size: m.shared.length + m.moments });
   });
   return plan.filter((p) => p.size > 0);
@@ -8286,7 +8297,7 @@ function assignmentAdaptiveTotal(assignment) {
 // count: single questions per student (the assignment's own number unless given).
 function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdaptiveCount(assignment), autoOnly = false } = {}) {
   const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly });
-  const plan = autoOnly ? [] : adaptiveSectionPlan(assignment?.quiz);
+  const plan = adaptiveSectionPlan(assignment?.quiz, { autoOnly });
   if (bands.length < 2 || (!count && !plan.length)) return null;
   const st = adaptiveInit(bands, saved);
   // A saved level (or one set by the teacher) means no ladder.
@@ -8320,7 +8331,7 @@ function adaptiveAttemptServe(assignment, st, pool) {
 function adaptiveAttemptOpenBlock(assignment, st, plan) {
   const questions = assignment?.quiz?.questions || [];
   const ladder = !st.known && !(st.items || []).length;
-  const block = listeningSectionBlock(questions, plan.id, ladder ? null : adaptiveCefr(st));
+  const block = listeningSectionBlock(questions, plan.id, ladder ? null : adaptiveCefr(st), { autoOnly: !!st.autoOnly });
   plan.size = block.qis.length;
   st.block = { id: plan.id, ...block, answers: {} };
 }
@@ -8486,13 +8497,12 @@ function publicGameAssignment(assignment) {
 
 // A public game plays adaptive whenever its questions are tagged with 2+
 // levels, whatever the assignment's own setting. The player picks how many
-// questions; the suggestion is a quarter of the quiz, at least 10.
-const PUBLIC_ADAPTIVE_SHARE = 0.25;
+// questions; the suggestion is a third of the quiz, at least 10. Listening
+// sections come on top, each as a level block.
+const PUBLIC_ADAPTIVE_SHARE = 0.33;
 const PUBLIC_ADAPTIVE_MIN = 10;
 
 function publicAdaptivePool(assignment, { autoOnly = false } = {}) {
-  // Not yet for listening sections (LISTENING_MODE_PLAN.md section 10).
-  if (adaptiveSectionPlan(assignment?.quiz).length) return null;
   const found = assignmentAdaptivePool(assignment, { autoOnly });
   return found.bands.length >= 2 ? found : null;
 }
@@ -8507,13 +8517,16 @@ function publicAdaptiveAttemptInit(assignment, requested, saved, { autoOnly = fa
   if (!found) return null;
   const total = found.pool.length;
   const count = Number(requested) > 0 ? Math.round(Number(requested)) : publicAdaptiveDefaultCount(total);
-  return adaptiveAttemptInit(assignment, saved, { count: clamp(count, 1, total), autoOnly });
+  // With listening sections the single questions may be none at all.
+  const sections = adaptiveSectionPlan(assignment?.quiz, { autoOnly }).length > 0;
+  return adaptiveAttemptInit(assignment, saved, { count: sections ? clamp(count, 0, total) : clamp(count, 1, total), autoOnly });
 }
 
 function publicGameCard(assignment, counts) {
   const questions = (assignment?.quiz?.questions || []).filter((q) => q && !q.isPoll);
   const found = publicAdaptivePool(assignment);
   const adaptive = !!found;
+  const listening = adaptiveSectionPlan(assignment?.quiz, { autoOnly: true });
   return {
     code: sanitizeAssignmentCode(assignment.code),
     title: String(assignment.title || assignment.quiz?.title || '').slice(0, 120),
@@ -8522,6 +8535,7 @@ function publicGameCard(assignment, counts) {
     levels: adaptive ? { from: found.bands[0], to: found.bands[found.bands.length - 1] } : null,
     // Adaptive: the tagged questions the game can draw from, and the suggested number to play.
     questionCount: adaptive ? found.pool.length : questions.length,
+    ...(adaptive && listening.length ? { listening: { sections: listening.length, questions: listening.reduce((n, s) => n + s.size, 0) } } : {}),
     recommended: adaptive ? publicAdaptiveDefaultCount(found.pool.length) : null,
     teacherGraded: questions.some((q) => isAssignmentTeacherGradedQuestion(q)),
     plays: Math.max(0, Number(counts?.plays) || 0),
@@ -8558,6 +8572,7 @@ async function signPublicPlay(env, assignment, attempt) {
     d: attempt.submitted ? attempt.submittedAt : 0,
     a: attempt.answersByQ || {},
     ...(attempt.adaptive ? { ad: attempt.adaptive } : {}),
+    ...(attempt.sectionsSubmitted && Object.keys(attempt.sectionsSubmitted).length ? { ss: attempt.sectionsSubmitted } : {}),
   };
   const payloadB64 = b64urlEncodeBytes(new TextEncoder().encode(JSON.stringify(claim)));
   return `${payloadB64}.${b64urlEncodeBytes(await hmacSignBytes(secret, payloadB64))}`;
@@ -8598,6 +8613,7 @@ function publicPlayAttempt(claim) {
     guest: true,
   };
   if (claim.ad && typeof claim.ad === 'object') attempt.adaptive = claim.ad;
+  if (claim.ss && typeof claim.ss === 'object') attempt.sectionsSubmitted = claim.ss;
   return attempt;
 }
 
@@ -8649,6 +8665,7 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
   if (attempt.submitted) return { status: 409, error: 'This game is finished.', code: 'PLAY_DONE' };
   if (!Number.isFinite(qIndex)) return { status: 400, error: 'qIndex required.' };
   const bet = sanitizeBet(rawBet);
+  if (attempt.adaptive?.block) return { status: 409, error: 'Answer listening sections on their sheet.', code: 'LISTENING_SECTION' };
   if (attempt.adaptive) {
     const st = attempt.adaptive;
     if (st.done || st.current == null) return { status: 409, error: 'All questions are answered.', code: 'ADAPTIVE_DONE' };
@@ -8670,6 +8687,44 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
     if (!question) return { status: 404, error: 'Question not found.' };
     if (attempt.answersByQ[String(qIndex)]) return { status: 409, error: 'Already answered.', code: 'ALREADY_ANSWERED' };
     attempt.answersByQ[String(qIndex)] = { answer: sanitizeAssignmentAnswer(question, rawAnswer), bet, teacherGrade: null, updatedAt: now };
+  }
+  attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+  attempt.updatedAt = now;
+  return null;
+}
+
+// Anonymous play keeps a section's answers in the page until Submit section,
+// which sends them all at once ({ qIndex: answer }, in the attempt's own
+// numbering). Adaptive: they fill the open block, which then goes to the
+// engine and the next thing is served. Returns null, or { status, error, code }.
+function applyPublicSectionAnswers(assignment, attempt, sectionId, rawAnswers, now = Date.now(), { submit = true } = {}) {
+  if (attempt.submitted) return { status: 409, error: 'This game is finished.', code: 'PLAY_DONE' };
+  const questions = assignment.quiz?.questions || [];
+  const answers = rawAnswers && typeof rawAnswers === 'object' ? rawAnswers : {};
+  const st = attempt.adaptive;
+  if (st) {
+    if (!st.block || st.block.id !== sectionId) {
+      return attemptSectionSubmitted(attempt, sectionId) ? null : { status: 409, error: 'That section is not open.', code: 'NOT_CURRENT' };
+    }
+    st.block.qis.forEach((qi, k) => {
+      const raw = answers[String(st.items.length + k)];
+      if (raw != null && questions[qi]) st.block.answers[String(k)] = sanitizeAssignmentAnswer(questions[qi], raw);
+    });
+    if (!submit && !Object.keys(st.block.answers).length) return null;
+    adaptiveAttemptCloseBlock(assignment, attempt, now);
+    adaptiveAttemptAdvance(assignment, st);
+  } else {
+    if (!(assignment.quiz?.listeningSections || []).some((s) => s.id === sectionId)) return { status: 404, error: 'Listening section not found.' };
+    if (attemptSectionSubmitted(attempt, sectionId)) return null;
+    let any = false;
+    questions.forEach((q, qi) => {
+      const raw = answers[String(qi)];
+      if (q?.listeningSection !== sectionId || raw == null || attempt.answersByQ[String(qi)]) return;
+      attempt.answersByQ[String(qi)] = { answer: sanitizeAssignmentAnswer(q, raw), bet: 0, teacherGrade: null, updatedAt: now };
+      any = true;
+    });
+    if (!submit && !any) return null;
+    attempt.sectionsSubmitted = { ...(attempt.sectionsSubmitted || {}), [sectionId]: now };
   }
   attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
   attempt.updatedAt = now;

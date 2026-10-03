@@ -496,18 +496,29 @@ async function initGameFromUrl() {
   try { document.title = card.title || document.title; } catch { /* ignore */ }
   if (joinTitleEl) joinTitleEl.textContent = card.title;
   if (joinModeHintEl) {
-    joinModeHintEl.textContent = card.adaptive
-      ? t('🎯 Adaptive quiz · {n} questions that adjust to your level {from}–{to}.',{ from: card.levels?.from || 'A1', to: card.levels?.to || 'C2', n: card.questionCount })
+    const levels = { from: card.levels?.from || 'A1', to: card.levels?.to || 'C2' };
+    const listening = card.adaptive ? card.listening : null;
+    let hint = card.adaptive
+      ? t('🎯 Adaptive quiz · {n} questions that adjust to your level {from}–{to}.', { ...levels, n: card.questionCount })
       : t('{n} questions', { n: card.questionCount });
+    if (listening && !Number(card.questionCount)) {
+      hint = t('🎯 Adaptive listening · {n} questions at your level {from}–{to}.', { ...levels, n: listening.questions });
+    } else if (listening) {
+      hint += ` ${listening.sections === 1
+        ? t('Plus a listening section at your level.')
+        : t('Plus {n} listening sections at your level.', { n: listening.sections })}`;
+    }
+    joinModeHintEl.textContent = hint;
   }
-  if (card.adaptive) renderGameCountPicker(card);
+  if (card.adaptive && Number(card.questionCount) > 0) renderGameCountPicker(card);
   if (joinStepIdentityEl) joinStepIdentityEl.classList.remove('hidden');
   await applyIdentityMode(true);
   syncGameEntry();
 }
 
 // Adaptive games: the player picks how many questions to play (the server
-// suggests a quarter of the quiz, at least 10, and caps the number).
+// suggests a third of the quiz, at least 10, and caps the number). Listening
+// sections come on top; a game of sections only has nothing to pick.
 function renderGameCountPicker(card) {
   const game = live.player.game;
   const total = Math.max(1, Number(card.questionCount) || 1);
@@ -5915,13 +5926,39 @@ async function api(path, opts = {}) {
   return apiFetch(path, opts);
 }
 
+// Anonymous games keep a listening section's answers in the page (the server
+// takes each /play answer once); Submit section, or finishing the game, sends
+// them all together.
+function publicGameSectionDrafts(attempt) {
+  const questions = attempt?.assignment?.quiz?.questions || [];
+  const done = attempt?.sectionsSubmitted || {};
+  const drafts = {};
+  Object.entries(attempt?.answersByQ || {}).forEach(([i, item]) => {
+    const id = questions[Number(i)]?.listeningSection;
+    if (!id || done[id] || item?.answer == null) return;
+    drafts[id] = drafts[id] || {};
+    drafts[id][i] = item.answer;
+  });
+  return drafts;
+}
+
 async function publicGameApi(path, opts = {}) {
   const game = live.player.game;
   const route = String(path).split('?')[0];
   const body = opts.body || {};
   const remember = (data) => {
+    // Keep section drafts typed in the page that the server doesn't have yet.
+    const drafts = publicGameSectionDrafts(game.last?.attempt);
     game.token = data.token;
     game.last = { ok: true, attempt: data.attempt };
+    const fresh = data.attempt;
+    if (fresh) {
+      fresh.answersByQ = fresh.answersByQ || {};
+      Object.values(drafts).forEach((answers) => Object.entries(answers).forEach(([i, answer]) => {
+        const id = fresh.assignment?.quiz?.questions?.[Number(i)]?.listeningSection;
+        if (id && !fresh.sectionsSubmitted?.[id] && !fresh.answersByQ[i]) fresh.answersByQ[i] = { answer };
+      }));
+    }
     return data.attempt;
   };
   const call = (route2, payload) => apiFetch(route2, { method: 'POST', body: payload });
@@ -5933,13 +5970,25 @@ async function publicGameApi(path, opts = {}) {
   }
   if (route === '/api/assignment/state') return game.last;
   if (route === '/api/assignment/answer') {
+    const attempt0 = game.last?.attempt;
+    const sectionId = attempt0?.assignment?.quiz?.questions?.[Number(body.qIndex)]?.listeningSection;
+    if (sectionId && !attempt0.sectionsSubmitted?.[sectionId]) {
+      attempt0.answersByQ = attempt0.answersByQ || {};
+      attempt0.answersByQ[String(body.qIndex)] = { answer: body.answer };
+      return { ok: true, saved: true, qIndex: body.qIndex, attempt: attempt0 };
+    }
     const attempt = remember(await call('/api/public/game/answer', {
       token: game.token, qIndex: body.qIndex, answer: body.answer, bet: body.bet,
     }));
     return { ok: true, saved: true, qIndex: body.qIndex, metrics: attempt?.metrics, attempt };
   }
+  if (route === '/api/assignment/submit-section') {
+    const answers = publicGameSectionDrafts(game.last?.attempt)[body.sectionId] || {};
+    return { ok: true, attempt: remember(await call('/api/public/game/section', { token: game.token, sectionId: body.sectionId, answers })) };
+  }
   if (route === '/api/assignment/submit') {
-    return { ok: true, alreadySubmitted: false, attempt: remember(await call('/api/public/game/finish', { token: game.token })) };
+    const sectionAnswers = publicGameSectionDrafts(game.last?.attempt);
+    return { ok: true, alreadySubmitted: false, attempt: remember(await call('/api/public/game/finish', { token: game.token, sectionAnswers })) };
   }
   // Review marks, self-correct, focus events, deleting: nothing is stored.
   return { ok: true };
