@@ -66,7 +66,13 @@ class Project:
         for sub in ('voices', 'lines', 'out'):
             os.makedirs(os.path.join(folder, sub), exist_ok=True)
         self.checks_path = os.path.join(folder, 'checks.json')
-        self.checks = json.load(open(self.checks_path, encoding='utf-8')) if os.path.exists(self.checks_path) else {}
+        self.checks = {}
+        if os.path.exists(self.checks_path):
+            try:
+                with open(self.checks_path, encoding='utf-8') as fh:
+                    self.checks = json.load(fh)
+            except (OSError, ValueError):  # being written right now: read it next time
+                self.checks = {}
         self.voices = Voices()
         self.checker = None
 
@@ -196,8 +202,9 @@ class Project:
             heard = self.checker.hear(clip, self.language)
             ok, diffs = compare(t['text'], heard, self.language)
             self.checks[key] = {'ok': ok, 'diffs': diffs, 'heard': heard}
-            with open(self.checks_path, 'w', encoding='utf-8') as fh:
+            with open(self.checks_path + '.tmp', 'w', encoding='utf-8') as fh:
                 json.dump(self.checks, fh, ensure_ascii=False, indent=1)
+            os.replace(self.checks_path + '.tmp', self.checks_path)
         return self.checks[key]
 
     def check_all(self, tasks):

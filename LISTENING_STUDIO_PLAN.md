@@ -386,6 +386,28 @@ line, in semitones; smaller is steadier.
 
 4. **The studio app:** server, page, launcher `.bat`, desktop icon, and setup
    of anything missing.
+   **Built 2026-10-03:**
+   - `listening-studio/PinPlay Listening Studio.bat`: a double-click starts
+     the studio in a minimised window, waits for it, and opens the browser.
+     If it's already running, it only opens the page. The first time it
+     creates the desktop icon (the volume-mixer speaker). If the Python
+     environment on D: is ever missing, it installs `requirements.txt`
+     (pinned) once.
+   - `server.py` (FastAPI, 127.0.0.1:8790, other websites refused): keeps
+     recordings in `D:\…\studio-dataecordings`, runs one job at a time
+     and reports progress. Its log is in `studio-data\studio-log.txt`.
+   - `ui/` (index.html, studio.js, studio.css) reads scripts with PinPlay's
+     own `listening-script.js`. It has recordings, the recording with ▶ and
+     💾 Save MP3, voices (description, fixed/acted, ▶ sample, ↻ new voice,
+     the age warning), lines (status, words ✓/⚠ with what was heard, ▶,
+     ↻ Try again), settings, the script (Save and make again, 📋 Copy
+     script / clean transcript), a progress bar with time left, a sound and
+     a notification when done, and ✨ Script prompt (topic, level,
+     language, characters, length → a prompt with the 11 rules).
+   - Checked in a browser: a 4-line script made from paste to MP3 (all
+     words ✓; the age warning caught a "cheerful" voice at 364 Hz);
+     ↻ Try again remade one line in about 3 min; the launcher started the
+     studio and created the icon.
 5. **PinPlay "🔊 Read the instruction aloud".** This is independent of the
    studio and can be done any time.
 6. **Later:**

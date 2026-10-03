@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PinPlay Listening Studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>" />
+  <link rel="stylesheet" href="studio.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">🎙️ PinPlay Listening Studio</div>
+    <div class="progress" id="progress" hidden>
+      <div class="progress-text" id="progressText"></div>
+      <div class="bar"><div class="bar-fill" id="progressFill"></div></div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="promptBtn" type="button">✨ Script prompt</button>
+      <button class="btn quiet" id="quitBtn" type="button" title="Close the studio and free the computer's memory">⏻ Quit</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="side">
+      <button class="btn primary wide" id="newBtn" type="button">＋ New recording</button>
+      <ul class="list" id="list"></ul>
+    </nav>
+
+    <main class="main" id="main">
+      <section class="card welcome" id="welcome">
+        <h1>Make a listening recording</h1>
+        <p class="muted">Paste a recording script (from PinPlay's <b>📋 Copy script</b>, or from the <b>✨ Script prompt</b>), or any text: plain text is read by one voice. The studio starts at once.</p>
+        <textarea id="newText" rows="16" spellcheck="false" placeholder="LANGUAGE: English&#10;AMBIENCE: station&#10;VOICE Mia: A young British woman of about nineteen…&#10;&#10;Mia (surprised): Forty minutes? You're joking!"></textarea>
+        <div class="notes" id="newNotes"></div>
+        <div class="row">
+          <button class="btn primary" id="createBtn" type="button">🎙️ Make the recording</button>
+        </div>
+      </section>
+
+      <div id="editor" hidden>
+        <div class="title-row">
+          <h1 id="title"></h1>
+          <span class="muted" id="summary"></span>
+          <button class="btn quiet danger" id="deleteBtn" type="button">🗑 Delete</button>
+        </div>
+
+        <section class="card" id="outCard">
+          <h2>🔊 The recording</h2>
+          <div id="parts" class="parts"></div>
+        </section>
+
+        <section class="card">
+          <h2>🎭 Voices</h2>
+          <p class="muted small">Each character's voice. <b>Fixed voice</b> keeps it exactly the same on every line (the default); <b>Acted</b> performs each line's direction, but the voice can vary a little. A new voice sample remakes that character's lines.</p>
+          <div id="voices" class="voices"></div>
+        </section>
+
+        <section class="card">
+          <h2>💬 Lines</h2>
+          <div id="lines" class="lines"></div>
+        </section>
+
+        <section class="card">
+          <h2>🎚️ Settings</h2>
+          <div class="settings">
+            <label>Background
+              <select id="setAmbience">
+                <option value="">As the script says</option>
+                <option value="none">None</option>
+                <option value="room">Room</option>
+                <option value="hall">Hall</option>
+                <option value="station">Station</option>
+                <option value="outdoors">Outdoors</option>
+              </select>
+            </label>
+            <label>Spacing between lines
+              <select id="setSpacing">
+                <option value="tight">Tight</option>
+                <option value="natural">Natural</option>
+                <option value="relaxed">Relaxed</option>
+              </select>
+            </label>
+            <label>Voice mode for everyone
+              <select id="setMode">
+                <option value="fixed">Fixed voice</option>
+                <option value="acted">Acted</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" id="setBatch" /> Make lines in batches (faster)</label>
+            <label class="check"><input type="checkbox" id="setCheck" /> Check every line's words (and try again once)</label>
+          </div>
+          <div class="row"><button class="btn primary" id="applyBtn" type="button">🎙️ Apply and make again</button>
+            <span class="muted small">Only what changed is made again.</span></div>
+        </section>
+
+        <section class="card">
+          <h2>📝 Script</h2>
+          <textarea id="text" rows="18" spellcheck="false"></textarea>
+          <div class="notes" id="notes"></div>
+          <div class="row">
+            <button class="btn primary" id="saveBtn" type="button">🎙️ Save and make again</button>
+            <button class="btn" id="copyScriptBtn" type="button">📋 Copy script</button>
+            <button class="btn" id="copyCleanBtn" type="button">📋 Copy clean transcript</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="promptDialog">
+    <form method="dialog" class="dialog">
+      <h2>✨ Script prompt</h2>
+      <p class="muted small">Instructions for an AI chatbot to write a recording script the studio can make with no changes. Paste the AI's answer into a new recording.</p>
+      <label>What is it about?<input id="pTopic" placeholder="e.g. two friends planning a weekend in London" /></label>
+      <div class="two">
+        <label>Level<input id="pLevel" placeholder="e.g. B1" /></label>
+        <label>Language<select id="pLanguage"></select></label>
+      </div>
+      <div class="two">
+        <label>Characters<input id="pCharacters" placeholder="e.g. two friends and a shop assistant" /></label>
+        <label>Length
+          <select id="pLength"><option value="1">About 1 minute</option><option value="2" selected>About 2 minutes</option><option value="3">About 3 minutes</option><option value="4">About 4 minutes</option></select>
+        </label>
+      </div>
+      <label>Anything else (optional)<input id="pNotes" placeholder="e.g. include a phone call and a station announcement" /></label>
+      <div class="row end">
+        <span class="muted small" id="pStatus"></span>
+        <button class="btn" value="cancel">Close</button>
+        <button class="btn primary" id="pCopy" type="button">📋 Copy prompt</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="listening-script.js"></script>
+  <script src="studio.js"></script>
+</body>
+</html>
