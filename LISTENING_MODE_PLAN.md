@@ -1,7 +1,8 @@
 # Listening sections: a scrollable exam sheet with one recording
 
 Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
-built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is still a plan;
+built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is planned as a
+local studio (LISTENING_STUDIO_PLAN.md, 2026-10-03);
 phase 6 (adaptive listening, section 10) planned 2026-10-03. Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
@@ -73,7 +74,8 @@ PinPlay adds no timer and no extra pressure; it removes friction.
 | After submitting | **A submitted section is locked**: it can be reviewed but not edited. |
 | Feedback | Any mode, **instant included**: with instant feedback the section shows its marks the moment it is submitted (the lock makes that safe). |
 | Media | **None inside a section's questions**: no images, GIFs, video, reading texts or per-question audio. Questions outside sections keep everything. |
-| The recording | Mostly an uploaded **audio file**. Keep the door open for **TTS-made audio, with several voices** (dialogues). |
+| The recording | Mostly an uploaded **audio file**. Keep the door open for **TTS-made audio, with several voices** (dialogues). **2026-10-03:** made by a local studio into one MP3 that the teacher checks and uploads (LISTENING_STUDIO_PLAN.md). |
+| Spoken instruction | **2026-10-03:** optional per section, "🔊 Read the instruction aloud", with PinPlay's own TTS before the recording. Never part of the recording script. |
 | Homework | Audio player at the top of the sheet. Never video. |
 | Live | Phones show the section's sheet; the projector plays **audio or video**. The sheet **stays open until the teacher moves on**; whatever each student has entered is autosaved and counts even if they never submitted. |
 | Plays allowed | **Per section**: 1, 2, 3 or unlimited. When limited, no rewinding or skipping. |
@@ -121,7 +123,8 @@ only offer the types above for questions in a section.
     list section fields one by one and never include it. Phase 3 can turn its
     "Name: …" lines into voices.
   - `audio`: `{ kind: 'file', url }` (uploaded to R2 like other media) or,
-    later, `{ kind: 'tts', lines: [{ voice, text }] }`.
+    later, `{ kind: 'tts', lines: [{ voice, text }] }`. (Superseded 2026-10-03:
+    TTS recordings are made by the studio into one MP3 and stored as `'file'`.)
   - `video`: optional, **live only** (played on the projector instead of the audio).
   - `playsAllowed`: 1–3, or 0 = unlimited. `pauseAllowed`: true/false.
 - Question: `listeningSection: '<id>'` marks it as part of that section.
@@ -180,9 +183,23 @@ player with the play count, section submit and lock.
 
 ## 7. TTS recordings with several voices (phase 3)
 
-A script of lines, each with a voice ("A: …", "B: …"), generated through the
+~~A script of lines, each with a voice ("A: …", "B: …"), generated through the
 existing TTS bridge into one MP3 per line and played back to back as one
-recording (a play = the whole script). Optional pauses between lines.
+recording (a play = the whole script). Optional pauses between lines.~~
+
+**Replaced 2026-10-03** by **LISTENING_STUDIO_PLAN.md**. After a bake-off of
+engines (Edge, Kokoro, Chatterbox, Qwen3-TTS, Dia2), the owner chose
+Qwen3-TTS. It runs in a local studio app on the owner's PC (double-click,
+browser page, no terminal), which turns a recording script (voices, lines
+with acting directions, phone/PA effects, sounds) into one checked MP3. The
+teacher listens to it and uploads it with the section's Recording button: the
+studio stays detached from PinPlay for now.
+
+Also decided (owner, 2026-10-03): scripts never include the spoken exam
+rubric. Instead, a section option **🔊 Read the instruction aloud** makes
+PinPlay read the section's instruction with its own TTS just before the
+recording (on the first play; it isn't counted as a play). In live games the
+projector plays it. See LISTENING_STUDIO_PLAN.md section 7.
 
 ## 8. Live (phase 4)
 
