@@ -18,7 +18,8 @@ before(() => {
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
-    'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'buildListeningPrompt',
+    'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
+    'normalizeCefr', 'listeningSectionLevelCounts',
   ]);
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
@@ -350,6 +351,48 @@ describe('listening prompt', () => {
     const write = lbuild({ source: 'write', parts: 3 });
     assert.equal(section(write, 'Transcript'), '');
     assert.match(write, /the scripts of 3 recordings/);
+  });
+
+  it('with levels: one question per level for every moment, tagged, in a Levels section', () => {
+    const text = lbuild({ levels: ['A2', 'B1', 'B2'] });
+    assert.match(section(text, 'Task'), /Levels: A2, B1, B2/);
+    assert.match(section(text, 'Task'), /6 moments, with one question per level for each moment \(18 questions\)/);
+    const levelsPart = section(text, 'Levels');
+    assert.match(levelsPart, /question k of every level is about moment k/);
+    assert.match(levelsPart, /never because it is longer/);
+    assert.match(section(text, 'Quiz fields'), /"cefr", "points"/);
+    assert.match(A.buildListeningPrompt({ ...lbase, levels: ['B1', 'A2'] }).filename, /^prompt-listening-levels-/);
+    // One level, or none: the plain listening prompt.
+    [[], ['B1']].forEach((levels) => {
+      const plain1 = lbuild({ levels });
+      assert.equal(section(plain1, 'Levels'), '');
+      assert.doesNotMatch(section(plain1, 'Quiz fields'), /"cefr"/);
+    });
+    assert.match(section(lbuild({ source: 'write', levels: ['A1', 'C2'] }), 'Levels'), /middle of these levels/);
+  });
+
+  it('the levelled example has every level at every moment, and the server keeps its levels', () => {
+    const all = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    const example = lexample(lbuild({ levels: all, selectedTypes: [...A.LISTENING_SECTION_TYPES] }));
+    assert.equal(example.listeningSections[0].title, `Part 1 — Questions 1–${A.LISTENING_PROMPT_LEVEL_EXAMPLE.length}`);
+    assert.deepEqual(example.questions.map((q) => q.cefr), plain(A.LISTENING_PROMPT_LEVEL_EXAMPLE.flatMap(() => all)));
+    const quiz = W.normalizeQuiz(example);
+    assert.equal(quiz.questions.length, all.length * A.LISTENING_PROMPT_LEVEL_EXAMPLE.length);
+    assert.deepEqual(plain(quiz.questions.map((q) => q.cefr)), plain(example.questions.map((q) => q.cefr)));
+    const counts = A.listeningSectionLevelCounts(quiz.questions, 'part1');
+    assert.deepEqual(plain(counts), { counts: Object.fromEntries(all.map((l) => [l, A.LISTENING_PROMPT_LEVEL_EXAMPLE.length])), shared: 0 });
+    quiz.questions.forEach((q) => { if (GRADABLE[q.type]) assert.ok(GRADABLE[q.type](q), `${q.id} is not gradable: ${JSON.stringify(q)}`); });
+    const said = A.LISTENING_PROMPT_EXAMPLE.transcript.toLowerCase();
+    quiz.questions.filter((q) => q.type === 'text').forEach((q) => assert.ok(q.accepted.some((a) => said.includes(String(a).toLowerCase())), q.id));
+    quiz.questions.filter((q) => q.type === 'context_gap').forEach((q) => q.gaps.forEach((g) => assert.ok(String(g).split(',').some((v) => said.includes(v.trim().toLowerCase())), g)));
+    // Only the requested levels and types.
+    const narrow = lexample(lbuild({ levels: ['A2', 'B1'], selectedTypes: ['mcq', 'tf'] }));
+    assert.ok(narrow.questions.every((q) => ['A2', 'B1'].includes(q.cefr) && ['mcq', 'tf'].includes(q.type)));
+  });
+
+  it('counts a section\'s questions per level, untagged ones as shared', () => {
+    const qs = [{ listeningSection: 's1', cefr: 'A2' }, { listeningSection: 's1', cefr: 'b1' }, { listeningSection: 's1' }, { listeningSection: 's2', cefr: 'A2' }, { cefr: 'A2' }];
+    assert.deepEqual(plain(A.listeningSectionLevelCounts(qs, 's1')), { counts: { A2: 1, B1: 1 }, shared: 1 });
   });
 
   it('asks for short questions and options, whatever the source', () => {

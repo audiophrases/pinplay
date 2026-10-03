@@ -599,6 +599,14 @@ textarea {
   width: auto;
 }
 
+.listening-section-panel [data-ls-levels]:empty {
+  display: none;
+}
+
+#promptListeningLevelsWrap select {
+  width: auto;
+}
+
 .listening-section-transcript summary {
   cursor: pointer;
 }

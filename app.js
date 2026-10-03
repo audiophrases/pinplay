@@ -1079,6 +1079,32 @@ function syncPromptKind() {
     levelEl.value = levelEl.dataset.savedValue || '';
   }
   syncListeningSource();
+  if (listening) syncListeningLevels();
+}
+
+// Several levels: the single Level field is cleared and locked, as for a
+// standard adaptive quiz (its text comes back when the box is unticked).
+function syncListeningLevels() {
+  const on = !!document.getElementById('promptListeningAdaptive')?.checked;
+  document.getElementById('promptListeningLevelsWrap')?.classList.toggle('hidden', !on);
+  const levelEl = document.getElementById('promptLevel');
+  if (!(levelEl instanceof HTMLInputElement)) return;
+  if (on && !levelEl.disabled) {
+    levelEl.dataset.savedValue = levelEl.value;
+    levelEl.value = '';
+  } else if (!on && levelEl.disabled) {
+    levelEl.value = levelEl.dataset.savedValue || '';
+  }
+  levelEl.disabled = on;
+}
+
+// The levels between the two pickers, whichever way round they are set.
+function listeningPromptLevels() {
+  if (!document.getElementById('promptListeningAdaptive')?.checked) return [];
+  const a = CEFR_LEVELS.indexOf(normalizeCefr(document.getElementById('promptListeningLevelFrom')?.value));
+  const b = CEFR_LEVELS.indexOf(normalizeCefr(document.getElementById('promptListeningLevelTo')?.value));
+  if (a < 0 || b < 0) return [];
+  return CEFR_LEVELS.slice(Math.min(a, b), Math.max(a, b) + 1);
 }
 
 function syncListeningSource() {
@@ -1103,6 +1129,7 @@ function bindBuilderEvents() {
   document.getElementById('promptKind')?.addEventListener('change', syncPromptKind);
   document.getElementById('promptListeningSource')?.addEventListener('change', syncListeningSource);
   document.getElementById('promptTranscript')?.addEventListener('input', syncTranscriptPartsInfo);
+  document.getElementById('promptListeningAdaptive')?.addEventListener('change', syncListeningLevels);
   syncPromptKind();
   if (exportPromptBtn) {
     exportPromptBtn.addEventListener('click', exportCreationPrompt);
@@ -2312,6 +2339,42 @@ function tidyListeningSections() {
   if (!quiz.listeningSections.length) delete quiz.listeningSections;
 }
 
+// A section's questions per level, and the untagged ones (shared by every
+// level in adaptive play; LISTENING_MODE_PLAN.md section 10).
+function listeningSectionLevelCounts(questions, id) {
+  const counts = {};
+  let shared = 0;
+  (questions || []).forEach((q) => {
+    if (q?.listeningSection !== id) return;
+    const level = normalizeCefr(q.cefr);
+    if (level) counts[level] = (counts[level] || 0) + 1;
+    else shared += 1;
+  });
+  return { counts, shared };
+}
+
+// "A2 6 · B1 6 · shared 1", with a warning when the levels don't line up
+// (adaptive play gives each level one question per moment of the recording).
+function listeningSectionLevelsHtml(id) {
+  const { counts, shared } = listeningSectionLevelCounts(quiz.questions, id);
+  const levels = CEFR_LEVELS.filter((l) => counts[l]);
+  if (!levels.length) return '';
+  const parts = levels.map((l) => `${l} ${counts[l]}`);
+  if (shared) parts.push(t('shared {n}', { n: shared }));
+  const notes = [];
+  if (levels.length > 1 && new Set(levels.map((l) => counts[l])).size > 1) {
+    notes.push(`<span class="small bad">${escapeHtml(t('For adaptive play, every level needs the same number of questions: one per moment of the recording.'))}</span>`);
+  }
+  if (levels.length > 1) notes.push(escapeHtml(t('Without adaptive, students see the questions of every level.')));
+  return `🎯 ${escapeHtml(parts.join(' · '))}${notes.length ? `<br>${notes.join(' ')}` : ''}`;
+}
+
+function refreshListeningSectionLevels() {
+  questionListEl.querySelectorAll('[data-ls-levels]').forEach((el) => {
+    el.innerHTML = listeningSectionLevelsHtml(el.dataset.lsLevels);
+  });
+}
+
 function buildListeningSectionPanel(sec) {
   const range = listeningSectionRange(sec.id) || { from: 1, to: 1 };
   const plays = Number(sec.playsAllowed);
@@ -2326,6 +2389,7 @@ function buildListeningSectionPanel(sec) {
       <span class="small muted">${escapeHtml(t('Questions {from}–{to}', range))}</span>
       <button type="button" class="btn btn-sm" data-ls-remove="${sec.id}" title="${escapeHtml(t('Remove the section (the questions stay)'))}">✕</button>
     </div>
+    <div class="small muted" data-ls-levels="${sec.id}">${listeningSectionLevelsHtml(sec.id)}</div>
     <label>${escapeHtml(t('Title (optional)'))}
       <input type="text" maxlength="120" data-ls-id="${sec.id}" data-ls-field="title" value="${escapeHtml(sec.title || '')}" placeholder="${escapeHtml(t('e.g. Part 1 — Questions {from}–{to}', range))}" />
     </label>
@@ -3669,6 +3733,7 @@ function syncQuizFromUI() {
       else delete q.cefr;
       const chip = questionListEl.querySelector(`[data-cefr-chip="${idx}"]`);
       if (chip) chip.textContent = cefr;
+      if (q.listeningSection) refreshListeningSectionLevels();
     }
     const mediaUrlEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
     const mediaProviderEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
@@ -4831,10 +4896,32 @@ const LISTENING_PROMPT_EXAMPLE = {
   ],
 };
 
-// req: { theme, language, level, source ('paste' | 'attach' | 'write'),
-// transcript, parts (scripts to write), questionCount (number or brief text),
-// playsAllowed (0–3), pauseAllowed, selectedTypes, notes, aiMode }.
-// Returns { text, filename }.
+// The same recording with levels: two moments, one question per level each.
+// The level comes from what is asked (openness, paraphrase, close options,
+// meaning rather than words), never from length.
+const LISTENING_PROMPT_LEVEL_EXAMPLE = [
+  {
+    A1: { type: 'tf', prompt: 'They will meet on Sunday.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
+    A2: { type: 'mcq', prompt: 'When will they meet?', answers: [{ text: 'Sunday at 10:30', correct: true }, { text: 'Saturday at 10:30', correct: false }, { text: 'Sunday at 11:30', correct: false }] },
+    B1: { type: 'context_gap', prompt: 'Meeting: Sunday at ____.', gaps: ['10:30, half past ten, ten thirty'] },
+    B2: { type: 'mcq', prompt: 'Why do they change the day?', answers: [{ text: 'Tom has to work', correct: true }, { text: 'Anna is busy', correct: false }, { text: 'The café is closed', correct: false }] },
+    C1: { type: 'multi', prompt: 'Which are true? Choose all the right answers.', answers: [{ text: 'Tom works on Saturday', correct: true }, { text: 'They will meet in the morning', correct: true }, { text: 'Anna suggests Sunday', correct: false }] },
+    C2: { type: 'mcq', prompt: 'How does Tom answer Anna\'s first question?', answers: [{ text: 'He turns down Saturday and offers another time', correct: true }, { text: 'He agrees but asks for a later time', correct: false }, { text: 'He suggests meeting at the café', correct: false }] },
+  },
+  {
+    A1: { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the library', correct: true }, { text: 'At the café', correct: false }, { text: 'At Tom\'s house', correct: false }] },
+    A2: { type: 'tf', prompt: 'The café is closed.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
+    B1: { type: 'text', prompt: 'Where will they meet?', accepted: ['the library', 'library', 'at the library'] },
+    B2: { type: 'mcq', prompt: 'Why don\'t they meet at the café?', answers: [{ text: 'It is being repaired', correct: true }, { text: 'It is too far', correct: false }, { text: 'It is closed on Sundays', correct: false }] },
+    C1: { type: 'error_hunt', prompt: 'They will meet at the café because the library is closed.', correctedVariants: ['They will meet at the library because the café is closed.'], corrected: 'They will meet at the library because the café is closed.' },
+    C2: { type: 'open', prompt: 'What problem does Tom point out, and what does he suggest?' },
+  },
+];
+
+// req: { theme, language, level, levels (CEFR levels for adaptive play, or
+// none), source ('paste' | 'attach' | 'write'), transcript, parts (scripts to
+// write), questionCount (number or brief text), playsAllowed (0–3),
+// pauseAllowed, selectedTypes, notes, aiMode }. Returns { text, filename }.
 function buildListeningPrompt(req) {
   const agent = req.aiMode === 'agent';
   const source = ['attach', 'write'].includes(req.source) ? req.source : 'paste';
@@ -4847,6 +4934,8 @@ function buildListeningPrompt(req) {
   const count = req.questionCount;
   const numeric = typeof count === 'number' ? count : null;
   const theme = String(req.theme || '').trim();
+  const levels = CEFR_LEVELS.filter((l) => (req.levels || []).map(normalizeCefr).includes(l));
+  const levelled = levels.length > 1;
 
   const quote = (v) => `"${String(v).trim()}"`;
   const teacherWords = [
@@ -4863,13 +4952,19 @@ function buildListeningPrompt(req) {
     write: `none yet. Write ${partCount === 1 ? 'the script of one recording' : `the scripts of ${partCount} recordings`}${theme ? ' on the theme' : ''}; the teacher records them or makes them with text-to-speech. One listening section per script.`,
   }[source];
   const perPart = partCount > 1 ? ' per section' : '';
-  const howMany = numeric ? `${numeric}${perPart}` : 'decide from the teacher\'s words (above)';
+  let howMany = numeric ? `${numeric}${perPart}` : 'decide from the teacher\'s words (above)';
+  if (levelled) {
+    howMany = numeric
+      ? `${numeric} moments${perPart}, with one question per level for each moment (${numeric * levels.length} questions${perPart})`
+      : 'decide how many moments from the teacher\'s words (above), with one question per level for each moment';
+  }
   const task = [
     `Recordings: ${recordings}`,
+    levelled ? `Levels: ${levels.join(', ')}, for adaptive play (see Levels)` : null,
     `Questions: ${howMany}, all in one JSON object`,
     `Question types: use only ${allowed.join(', ')}. In each section, choose what fits that recording (an exam part often keeps to one task type).`,
     `Every section: "playsAllowed": ${plays} (${plays ? 'times the recording can be played' : 'unlimited plays'}), "pauseAllowed": ${pause}`,
-  ];
+  ].filter(Boolean);
 
   const transcriptRule = {
     paste: 'Write every question from the transcript below. Copy each recording\'s transcript, word for word, into its section\'s "transcript".',
@@ -4881,7 +4976,9 @@ function buildListeningPrompt(req) {
     transcriptRule,
     'Every answer is said in the recording: a student who heard it can answer, one who didn\'t can\'t guess it from the question or from general knowledge.',
     'Keep every prompt and option short: while the recording plays, students listen, read the current question and glance at the others to keep their place. A question can be hard without being long.',
-    'Questions follow the order in which their answers are heard, spread over the whole recording; never two questions on the same piece of information.',
+    levelled
+      ? 'Within each level, questions follow the order in which their answers are heard, spread over the whole recording; never two questions of one level on the same piece of information.'
+      : 'Questions follow the order in which their answers are heard, spread over the whole recording; never two questions on the same piece of information.',
     'Prompts and options say things in other words than the recording, but written answers ("accepted", "gaps") are the words actually heard: short, one to three words or a number. List the forms a student may write for them: "15, fifteen", "10:30, half past ten", a name as it is spelled in the recording.',
     'Wrong options are near misses taken from the recording: something else that is mentioned, a plan that changes, a price or time that is corrected, what the other speaker suggests. Never absurd.',
     'No media: no "imageKeyword", "gifKeyword", "videoKeyword", "readingText", "media", "audioEnabled" or "audioText". Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
@@ -4889,12 +4986,25 @@ function buildListeningPrompt(req) {
     'Before you reply, check every answer against the transcript once more.',
   ];
 
-  const exampleQuestions = LISTENING_PROMPT_EXAMPLE.questions.filter((q) => allowed.includes(q.type))
-    .map((q, i) => ({ id: `q${i + 1}`, type: q.type, prompt: q.prompt, points: 1000, timeLimit: 0, listeningSection: 'part1',
-      ...JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(q).filter(([k]) => !['type', 'prompt'].includes(k))))) }));
+  const levelRules = levelled ? [
+    `Every question has "cefr": one of ${levels.join(', ')}.`,
+    `Choose the moments of each recording: points where something answerable is said, in the order heard, spread over the whole recording. Each student answers one question per moment, at their own level${numeric ? ` (${numeric} moments${perPart})` : ''}.`,
+    'For every moment, write one question at each level, all about that same moment. So question k of every level is about moment k, every level has the same number of questions, and every level covers the whole recording.',
+    'In the JSON, write the questions moment by moment: moment 1 at every level (easiest first), then moment 2, and so on.',
+    'A level is harder because of what its question asks, never because it is longer: the question type and how open it is (true/false and choosing, then gap fill, then a short written answer, then open, using the types in the task); how far the wording is from the recording (the same words, then synonyms and paraphrase); how close the wrong options are (several things that are all mentioned, a detail that gets corrected); and asking what a speaker means or implies rather than what they say.',
+    'Section titles count moments, which is what one student answers: "Part 1 — Questions 1–6" for 6 moments.',
+    source === 'write' ? 'Pitch each script at the middle of these levels: the questions, not the recording, make the difference between levels.' : null,
+  ].filter(Boolean) : [];
+
+  const exampleSource = levelled
+    ? LISTENING_PROMPT_LEVEL_EXAMPLE.flatMap((moment) => levels.map((l) => (moment[l] ? { ...moment[l], cefr: l } : null)).filter(Boolean))
+    : LISTENING_PROMPT_EXAMPLE.questions;
+  const exampleQuestions = exampleSource.filter((q) => allowed.includes(q.type))
+    .map((q, i) => ({ id: `q${i + 1}`, type: q.type, prompt: q.prompt, ...(q.cefr ? { cefr: q.cefr } : {}), points: 1000, timeLimit: 0, listeningSection: 'part1',
+      ...JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(q).filter(([k]) => !['type', 'prompt', 'cefr'].includes(k))))) }));
   const exampleSection = {
     id: 'part1',
-    title: `Part 1 — Questions 1–${exampleQuestions.length}`,
+    title: `Part 1 — Questions 1–${levelled ? LISTENING_PROMPT_LEVEL_EXAMPLE.length : exampleQuestions.length}`,
     text: LISTENING_PROMPT_EXAMPLE.text,
     transcript: LISTENING_PROMPT_EXAMPLE.transcript,
     playsAllowed: plays,
@@ -4917,6 +5027,10 @@ function buildListeningPrompt(req) {
     '## Rules',
     ...rules.map((r, i) => `${i + 1}. ${r}`),
   ];
+  if (levelled) {
+    out.push('', '## Levels', 'The quiz is played adaptively: each student gets one level\'s questions for a recording, or, before PinPlay knows their level, an easy-to-hard mix of the levels, one question per moment.',
+      ...levelRules.map((r, i) => `${i + 1}. ${r}`));
+  }
   if (source === 'paste') {
     out.push('', '## Transcript', `Typed or pasted by the teacher.${partCount > 1 ? ' One heading per recording.' : ''}`);
     parts.forEach((part, i) => {
@@ -4928,7 +5042,7 @@ function buildListeningPrompt(req) {
     '## Quiz fields',
     'Quiz: {"version": 3, "title": "…", "listeningSections": [ … ], "questions": [ … ]}',
     'Section: "id", "title", "text", "transcript", "playsAllowed", "pauseAllowed"',
-    'Every question has "id", "type", "prompt", "points", "timeLimit", "listeningSection", plus the fields of its type:',
+    `Every question has "id", "type", "prompt", ${levelled ? '"cefr", ' : ''}"points", "timeLimit", "listeningSection", plus the fields of its type:`,
     ...allowed.map((type) => `- ${type}: ${LISTENING_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
     '## Example',
@@ -4941,7 +5055,7 @@ function buildListeningPrompt(req) {
     '');
   return {
     text: out.join('\n'),
-    filename: `prompt-${agent ? 'agent-' : ''}listening${theme ? `-${name}` : ''}.md`,
+    filename: `prompt-${agent ? 'agent-' : ''}listening${levelled ? '-levels' : ''}${theme ? `-${name}` : ''}.md`,
   };
 }
 
@@ -5028,11 +5142,17 @@ async function exportListeningPrompt() {
     alert(t('Choose at least one question type.'));
     return;
   }
+  const levels = listeningPromptLevels();
+  if (document.getElementById('promptListeningAdaptive')?.checked && levels.length < 2) {
+    alert(t('Choose at least two levels for an adaptive listening.'));
+    return;
+  }
   const countRaw = valueOf('promptListeningCount');
   const { text, filename } = buildListeningPrompt({
     theme,
     language: valueOf('promptLanguage'),
-    level: valueOf('promptLevel'),
+    level: levels.length ? '' : valueOf('promptLevel'),
+    levels,
     source,
     transcript,
     parts: Number(valueOf('promptListeningParts')) || 1,

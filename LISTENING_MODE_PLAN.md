@@ -337,6 +337,17 @@ earlier parts point to.
 
 1. Authoring: the AI prompt's Levels option and the editor's counts per level.
    This lets the owner make real multilevel listening quizzes to test with.
+   **Built 2026-10-03:** the listening form has "🎯 Several levels
+   (adaptive)" with a From/To range (it locks the single Level field, as the
+   standard adaptive box does). The prompt then counts moments ("6 moments,
+   with one question per level for each moment (18 questions)"), adds a
+   Levels section (moments, one question per level per moment written moment
+   by moment, what makes a level harder, titles count moments, scripts
+   pitched at the middle of the range) and shows a worked example of two
+   moments at every requested level (`LISTENING_PROMPT_LEVEL_EXAMPLE`). The
+   section panel shows "🎯 A2 6 · B1 6 · shared 1", warns when the levels
+   have different counts, and notes that without adaptive students see every
+   level's questions.
 2. Engine and assignments: bands from sections, blocks and ladders, the ladder
    rule, where sections come, section submit feeding the engine, finishing
    the attempt, results. Tests with the real worker, as in phase 2.

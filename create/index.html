@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261003-listening-ai" />
+    <link rel="stylesheet" href="../styles.css?v=20261003-listening-levels" />
   </head>
   <body>
     <header class="topbar">
@@ -220,6 +220,24 @@
                         <input id="promptListeningPause" type="checkbox" />
                         <span data-i18n>Pausing allowed</span>
                       </label>
+                    </div>
+                    <div class="prompt-field">
+                      <label class="prompt-adaptive-toggle">
+                        <input id="promptListeningAdaptive" type="checkbox" />
+                        <span data-i18n>🎯 Several levels (adaptive)</span>
+                      </label>
+                      <div id="promptListeningLevelsWrap" class="row gap hidden">
+                        <label><span data-i18n>From</span>
+                          <select id="promptListeningLevelFrom">
+                            <option selected>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option>
+                          </select>
+                        </label>
+                        <label><span data-i18n>to</span>
+                          <select id="promptListeningLevelTo">
+                            <option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option><option selected>C2</option>
+                          </select>
+                        </label>
+                      </div>
                     </div>
                     <div class="prompt-field full-width">
                       <label><span data-i18n>Instructions for the AI (optional)</span>
@@ -669,7 +687,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261003-listening-ai"></script>
+    <script src="../i18n-fr.js?v=20261003-listening-levels"></script>
     <script src="../i18n.js"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
@@ -678,7 +696,7 @@
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
-    <script src="../app.js?v=20261003-listening-ai"></script>
+    <script src="../app.js?v=20261003-listening-levels"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261001-startkey"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
