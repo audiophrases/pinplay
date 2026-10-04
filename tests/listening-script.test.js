@@ -98,7 +98,7 @@ describe('the rules the AI gets', () => {
   const rules = S.LISTENING_SCRIPT_RULES.join('\n');
 
   it('cover what the studio needs, so no one has to fix the script', () => {
-    [/LANGUAGE/, /AMBIENCE/, /VOICE Name: description/, /never "girl", "boy"/, /\[phone\]/, /\[PA\]/, /\(direction\)/,
+    [/TITLE: …/, /LANGUAGE/, /AMBIENCE/, /VOICE Name: description/, /never "girl", "boy"/, /\[phone\]/, /\[PA\]/, /\(direction\)/,
       />>/, /Mia \+ Tom/, /\[chime\]/, /\[pause N\]/, /30 words/, /ten fifteen/, /Every answer must be said clearly/,
       /no "Now listen again"/].forEach((re) => assert.match(rules, re));
   });

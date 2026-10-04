@@ -4822,7 +4822,8 @@ const LISTENING_PROMPT_EXAMPLE = {
 // meaning rather than words), never from length.
 // The same recording as a script for the voice studio (listening-script.js):
 // the words are LISTENING_PROMPT_EXAMPLE's, so its questions still fit.
-const LISTENING_PROMPT_SCRIPT_EXAMPLE = `LANGUAGE: English
+const LISTENING_PROMPT_SCRIPT_EXAMPLE = `TITLE: Change of plan
+LANGUAGE: English
 AMBIENCE: room
 VOICE Anna: A young British woman of about twenty with a warm, clear, mid-range voice, friendly and quick.
 VOICE Tom [phone]: A young British man of about twenty with a relaxed, slightly deep voice, easy-going.
@@ -4971,6 +4972,7 @@ function buildListeningPrompt(req) {
     out.push('', '## Recording script',
       'The recording is made from the transcript you write, by a voice studio, with no human help. Write each section\'s "transcript" in this format (lines separated by \\n in the JSON string):',
       '```text',
+      'TITLE: A short name',
       'LANGUAGE: English',
       'AMBIENCE: station',
       'VOICE Name: what their everyday voice is like',

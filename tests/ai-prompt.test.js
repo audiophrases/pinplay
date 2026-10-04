@@ -368,6 +368,7 @@ describe('listening prompt', () => {
     assert.deepEqual(plain(script.notes), []);
     assert.deepEqual(Object.keys(script.voices).sort(), ['Anna', 'Tom']);
     assert.equal(script.voices.Tom.effect, 'phone');
+    assert.equal(script.title, 'Change of plan', 'the AI is shown a title to write');
     // Same words as the plain example, so its questions still fit.
     assert.equal(S.cleanListeningTranscript(transcript), A.LISTENING_PROMPT_EXAMPLE.transcript);
     assert.equal(W.normalizeQuiz(example).listeningSections[0].transcript, transcript);

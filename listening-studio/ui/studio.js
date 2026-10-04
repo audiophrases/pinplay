@@ -320,7 +320,8 @@ async function refreshQuietly() {
 }
 
 // ---------------------------------------------------------------- the script prompt
-const SCRIPT_EXAMPLE = `LANGUAGE: English
+const SCRIPT_EXAMPLE = `TITLE: Sunday plans
+LANGUAGE: English
 AMBIENCE: room
 VOICE Anna: A young British woman of about twenty with a warm, clear, mid-range voice, friendly and quick.
 VOICE Tom [phone]: A young British man of about twenty with a relaxed, slightly deep voice, easy-going.
@@ -347,6 +348,7 @@ function buildScriptPrompt(o) {
     '',
     'Reply with the script only, in one ```text code block, in this format:',
     '```text',
+    'TITLE: A short name',
     `LANGUAGE: ${o.language}`,
     'AMBIENCE: station',
     'VOICE Name: what their everyday voice is like',
