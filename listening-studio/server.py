@@ -39,7 +39,7 @@ import uvicorn  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
-from engine.project import Project  # noqa: E402
+from engine.project import Project, Stopped  # noqa: E402
 
 app = FastAPI()
 ALLOWED_ORIGINS = {f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}'}
@@ -85,17 +85,24 @@ def _result(rid):
 
 # ---------------------------------------------------------------- the job runner
 JOBS = queue.Queue()
-STATE = {'job': None, 'queue': [], 'last': None}
+STATE = {'job': None, 'queue': [], 'last': None, 'stop': False}
 LOCK = threading.Lock()
+
+
+def _script_for(rec):
+    """The parsed script, named with the recording's (editable) title."""
+    return {**(rec.get('script') or {}), 'title': rec.get('title') or 'recording'}
 
 
 def _worker():
     while True:
-        rid = JOBS.get()
+        rid, kind = JOBS.get()
         with LOCK:
-            if rid in STATE['queue']:
-                STATE['queue'].remove(rid)
-            STATE['job'] = {'id': rid, 'stage': 'start', 'done': 0, 'total': 0, 'text': '', 'started': time.time(), 'stages': {}}
+            if [rid, kind] in STATE['queue']:
+                STATE['queue'].remove([rid, kind])
+            STATE['stop'] = False
+            STATE['job'] = {'id': rid, 'kind': kind, 'stage': 'start', 'done': 0, 'total': 0, 'text': '',
+                            'started': time.time(), 'stages': {}}
 
         def progress(event):
             with LOCK:
@@ -104,13 +111,20 @@ def _worker():
                 job['stages'].setdefault(event['stage'], time.time())
                 job['at'] = time.time()
 
+        project = None
         try:
             rec = _load(rid)
-            Project(_folder(rid), rec['script'], rec.get('settings') or {}, progress).run()
-            outcome = {'id': rid, 'ok': True, 'finished': time.time()}
+            project = Project(_folder(rid), _script_for(rec), rec.get('settings') or {}, progress, lambda: STATE['stop'])
+            project.run(kind)
+            outcome = {'id': rid, 'kind': kind, 'ok': True, 'finished': time.time()}
+        except Stopped:
+            outcome = {'id': rid, 'kind': kind, 'ok': False, 'stopped': True, 'finished': time.time()}
         except Exception as err:  # shown in the page, in plain words
             traceback.print_exc()
-            outcome = {'id': rid, 'ok': False, 'error': str(err) or err.__class__.__name__, 'finished': time.time()}
+            outcome = {'id': rid, 'kind': kind, 'ok': False, 'error': str(err) or err.__class__.__name__, 'finished': time.time()}
+        finally:
+            if project is not None:
+                project.voices.unload()  # give the memory back
         with LOCK:
             STATE['job'] = None
             STATE['last'] = outcome
@@ -119,12 +133,26 @@ def _worker():
 threading.Thread(target=_worker, daemon=True).start()
 
 
-def _queue_job(rid):
+def _queue_job(rid, kind='all'):
+    """kind 'voices' (samples to approve) or 'all'. A recording waits in
+    the queue at most once per kind."""
     with LOCK:
-        busy = STATE['job'] and STATE['job']['id'] == rid
-        if rid not in STATE['queue'] and not busy:
-            STATE['queue'].append(rid)
-            JOBS.put(rid)
+        if [rid, kind] not in STATE['queue']:
+            STATE['queue'].append([rid, kind])
+            JOBS.put((rid, kind))
+
+
+def _make(rec, how):
+    """'voices': back to the voice stage and make the samples; 'all':
+    approved, make everything. Anything else: nothing to make."""
+    if how == 'all':
+        rec['stage'] = 'approved'
+    elif how == 'voices':
+        rec['stage'] = 'voices'
+    else:
+        return
+    _save(rec)
+    _queue_job(rec['id'], how)
 
 
 # ---------------------------------------------------------------- the API
@@ -154,10 +182,11 @@ async def create_recording(request: Request):
     rid = uuid.uuid4().hex[:12]
     os.makedirs(os.path.join(RECORDINGS, rid))
     rec = {'id': rid, 'created': time.time(), 'title': (body.get('script') or {}).get('title') or body.get('title') or 'Untitled',
-           'text': body.get('text') or '', 'script': body.get('script'), 'settings': body.get('settings') or {}}
+           'text': body.get('text') or '', 'script': body.get('script'), 'settings': body.get('settings') or {},
+           'stage': 'voices'}
     _save(rec)
     if body.get('make', True) and rec['script'] and rec['script'].get('parts'):
-        _queue_job(rid)
+        _make(rec, 'voices')  # the teacher approves the voices before the long part
     return {'id': rid}
 
 
@@ -166,7 +195,7 @@ def get_recording(rid: str):
     rec = _load(rid)
     lines = []
     if rec.get('script') and rec['script'].get('parts'):
-        project = Project(_folder(rid), rec['script'], rec.get('settings') or {})
+        project = Project(_folder(rid), _script_for(rec), rec.get('settings') or {})
         for t in project.tasks():
             key = project.line_key(t)
             check = project.checks.get(key) or {}
@@ -180,28 +209,50 @@ def get_recording(rid: str):
                             'effect': (rec['script']['voices'].get(name) or {}).get('effect', '')}
     else:
         voices = {}
-    return {'recording': rec, 'lines': lines, 'voices': voices, 'result': _result(rid)}
+    report_path = os.path.join(_folder(rid), 'voices.json')
+    try:
+        report = json.load(open(report_path, encoding='utf-8')) if os.path.exists(report_path) else {}
+    except ValueError:
+        report = {}
+    rec.setdefault('stage', 'approved' if _result(rid) else 'voices')
+    return {'recording': rec, 'lines': lines, 'voices': voices, 'voiceReport': report, 'result': _result(rid)}
 
 
 @app.put('/api/recordings/{rid}')
 async def update_recording(rid: str, request: Request):
     body = await request.json()
     rec = _load(rid)
-    for key in ('text', 'script', 'settings', 'title'):
+    for key in ('text', 'script', 'settings'):
         if key in body:
             rec[key] = body[key]
-    if 'script' in body and (body['script'] or {}).get('title'):
+    if 'title' in body:
+        rec['title'] = str(body['title'] or '').strip()[:120] or 'Untitled'
+    elif 'script' in body and (body['script'] or {}).get('title') and rec.get('title') in (None, '', 'Untitled'):
         rec['title'] = body['script']['title']
     _save(rec)
-    if body.get('make'):
-        _queue_job(rid)
+    how = body.get('make')
+    _make(rec, 'all' if how is True else how)
     return {'ok': True}
 
 
 @app.post('/api/recordings/{rid}/make')
-def make_recording(rid: str):
-    _load(rid)
-    _queue_job(rid)
+async def make_recording(rid: str, request: Request):
+    body = await request.json() if int(request.headers.get('content-length') or 0) else {}
+    _make(_load(rid), body.get('kind') or 'all')
+    return {'ok': True}
+
+
+@app.post('/api/stop')
+def stop_job():
+    """Stops the current work after its current step, and empties the queue."""
+    with LOCK:
+        STATE['stop'] = bool(STATE['job'])
+        STATE['queue'].clear()
+        while not JOBS.empty():
+            try:
+                JOBS.get_nowait()
+            except queue.Empty:
+                break
     return {'ok': True}
 
 

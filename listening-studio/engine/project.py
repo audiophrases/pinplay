@@ -41,6 +41,10 @@ AUTO_VOICES = [
 ]
 
 
+class Stopped(Exception):
+    """The teacher pressed Stop: the work ends after the current step."""
+
+
 def _key(*parts):
     return hashlib.sha1(json.dumps(parts, ensure_ascii=False).encode()).hexdigest()[:16]
 
@@ -57,8 +61,9 @@ def _safe(name):
 
 
 class Project:
-    def __init__(self, folder, script, settings=None, progress=None):
+    def __init__(self, folder, script, settings=None, progress=None, should_stop=None):
         self.folder = folder
+        self.should_stop = should_stop or (lambda: False)
         self.script = script
         self.settings = {**DEFAULTS, **(settings or {})}
         self.say = progress or (lambda event: None)
@@ -137,13 +142,21 @@ class Project:
         return os.path.join(self.folder, 'voices', f'{self.sample_key(name)}.wav')
 
     # ------------------------------------------------------------ making
+    def _stop_point(self):
+        if self.should_stop():
+            raise Stopped()
+
     def make_samples(self):
-        """Voice samples for every fixed-voice character, with the age check."""
+        """A voice sample for every character, with the age check: fixed
+        voices are copied from it, and for acted ones it previews the voice.
+        The report is saved at once, so the page can show it while the
+        teacher approves the voices."""
         report = {}
-        need = [s for s in self.speakers() if self.mode(s) == 'fixed']
+        need = self.speakers()
         for i, name in enumerate(need):
             path = self.sample_file(name)
             if not os.path.exists(path):
+                self._stop_point()
                 self.say({'stage': 'voices', 'done': i, 'total': len(need), 'text': f'Making a voice for {name}…'})
                 take = int((self.settings['sampleTakes'] or {}).get(name, 0))
                 wavs, sr = self.voices.design([self.sample_text(name)], [f'{self.description(name)} {NEUTRAL}'],
@@ -153,8 +166,15 @@ class Project:
             pitch = median_pitch(clip, audio.SR)
             report[name] = {'sample': path, 'pitch': round(pitch) if pitch else None,
                             'warning': age_warning(self.description(name), pitch)}
+            self._save_report(report)
         self.say({'stage': 'voices', 'done': len(need), 'total': len(need)})
         return report
+
+    def _save_report(self, report):
+        path = os.path.join(self.folder, 'voices.json')
+        with open(path + '.tmp', 'w', encoding='utf-8') as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=1)
+        os.replace(path + '.tmp', path)
 
     def make_lines(self, tasks, takes=None):
         """Makes the lines not made yet, a character's lines in batches.
@@ -175,6 +195,7 @@ class Project:
             groups.append(current)
         done, start = 0, time.time()
         for group in groups:
+            self._stop_point()
             first = group[0]
             name, take = first['speaker'], takes.get(first['id'], first['take'])
             self.say({'stage': 'lines', 'done': done, 'total': len(todo), 'elapsed': round(time.time() - start),
@@ -212,6 +233,7 @@ class Project:
         the better of the two is used. Returns {task id: chosen take}."""
         chosen, retry = {}, {}
         for i, t in enumerate(tasks):
+            self._stop_point()
             self.say({'stage': 'checks', 'done': i, 'total': len(tasks), 'text': t['text'][:60]})
             if not self.check(t)['ok']:
                 retry[t['id']] = t['take'] + 1
@@ -227,8 +249,17 @@ class Project:
         return chosen
 
     # ------------------------------------------------------------ all of it
-    def run(self):
+    def run(self, kind='all'):
+        """kind 'voices': only the voice samples, for the teacher to approve
+        before the long part; 'all': everything."""
         started = time.time()
+        if kind == 'voices':
+            try:
+                voices = self.make_samples()
+            finally:
+                self.voices.unload()
+            self.say({'stage': 'done', 'done': 1, 'total': 1})
+            return {'voices': voices, 'seconds': round(time.time() - started)}
         tasks = self.tasks()
         voices = self.make_samples()
         self.make_lines(tasks)

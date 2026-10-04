@@ -88,7 +88,7 @@ function settings() {
 
 function renderAll(keepText) {
   const rec = current.recording;
-  $('title').textContent = rec.title || 'Untitled';
+  if (document.activeElement !== $('titleInput')) $('titleInput').value = rec.title || 'Untitled';
   const nLines = current.lines.length;
   $('summary').textContent = `${Object.keys(current.voices).length} voices · ${nLines} lines`;
   if (!keepText) {
@@ -103,9 +103,35 @@ function renderAll(keepText) {
   $('setCheck').checked = s.check !== false;
   voicesDirty = false;
   $('applyBtn').textContent = '🎙️ Apply and make again';
+  renderStage();
   renderVoices();
   renderLines();
   renderParts();
+}
+
+const approved = () => current?.recording?.stage === 'approved';
+
+// Step 1: the voices are made first and the teacher approves them; step 2,
+// the long part, starts only then (a wrong voice is fixed in minutes, not
+// after the whole recording).
+function renderStage() {
+  const el = $('voiceStage');
+  const job = renderParts.job;
+  const makingVoices = job && job.id === currentId && job.kind === 'voices';
+  const names = Object.keys(current.voices);
+  const ready = names.length > 0 && names.every((n) => current.voices[n].sample);
+  if (approved()) {
+    el.className = 'stage';
+    el.innerHTML = '✅ Voices approved. To change one, edit its description and press <b>↻ Remake voice</b>: you will listen and approve again, and only that character\'s lines are made again.';
+    return;
+  }
+  el.className = 'stage todo';
+  let action;
+  if (makingVoices) action = '<span class="muted">⏳ Making the voices… (the first one takes longest: the voice model loads)</span>';
+  else if (ready) action = '<button class="btn primary" id="approveBtn" type="button">✅ Approve the voices and make the recording</button>';
+  else action = '<button class="btn" id="makeVoicesBtn" type="button">🎭 Make the voices</button>';
+  el.innerHTML = `<b>Step 1 of 2: listen to each voice.</b> If one doesn't sound right (too young, wrong accent…), change its description and press <b>↻ Remake voice</b>. When they all sound right, approve them: then the lines are made (the long part).
+    <div class="row">${action}</div>`;
 }
 
 function audioUrl(kind, name) {
@@ -121,12 +147,12 @@ function renderParts() {
         <audio controls preload="none" src="${audioUrl('out', base(p.mp3))}"></audio>
         <a class="btn primary" href="${audioUrl('out', base(p.mp3))}" download="${esc(base(p.mp3))}">💾 Save MP3</a></div>`).join('')
       + (making ? '<p class="muted small">Being made again: this is the previous version.</p>' : '')
-    : `<p class="muted">${making ? 'Being made… you can listen to each line below as soon as it is ready.' : 'Not made yet.'}</p>`;
+    : `<p class="muted">${!approved() ? 'Step 2: the recording is made after you approve the voices.' : making ? 'Being made… you can listen to each line below as soon as it is ready.' : 'Not made yet.'}</p>`;
 }
 
 function renderVoices() {
   const s = settings();
-  const result = current.result?.voices || {};
+  const result = { ...(current.result?.voices || {}), ...(current.voiceReport || {}) };
   $('voices').innerHTML = Object.entries(current.voices).map(([name, v]) => {
     const r = result[name];
     const warning = r && base(r.sample) === `${v.sampleKey}.wav` ? r.warning : '';
@@ -137,9 +163,10 @@ function renderVoices() {
           <option value="acted" ${v.mode === 'acted' ? 'selected' : ''}>Acted</option>
         </select></div>
       <textarea data-desc>${esc(s.descriptions[name] || v.description)}</textarea>
-      ${v.mode === 'fixed' ? (v.sample ? `<audio controls preload="none" src="${audioUrl('voices', `${v.sampleKey}.wav`)}"></audio>` : '<span class="muted small">Voice sample not made yet.</span>') : '<span class="muted small">Acted: each line is performed from its direction.</span>'}
-      ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") or try a new voice.</div>` : ''}
-      <div class="row" style="margin-top:0"><button class="btn small" data-newvoice ${v.mode === 'fixed' ? '' : 'disabled'}>↻ New voice sample</button></div>
+      ${v.sample ? `<audio controls preload="none" src="${audioUrl('voices', `${v.sampleKey}.wav`)}"></audio>` : '<span class="muted small">Voice not made yet.</span>'}
+      ${v.mode === 'acted' ? '<span class="muted small">Acted: each line is performed from its direction, in a voice like this one.</span>' : ''}
+      ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") and press ↻ Remake voice.</div>` : ''}
+      <div class="row" style="margin-top:0"><button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button></div>
     </div>`;
   }).join('') || '<p class="muted">No voices yet.</p>';
 }
@@ -175,13 +202,15 @@ function renderLines() {
       });
     });
   });
-  $('lines').innerHTML = rows.join('') || '<p class="muted">No lines yet.</p>';
+  const wait = approved() ? '' : '<p class="muted small">The lines are made after you approve the voices.</p>';
+  $('lines').innerHTML = wait + (rows.join('') || '<p class="muted">No lines yet.</p>');
 }
 
-async function saveSettings(make = true) {
+// make: 'voices' (back to step 1), 'all' (approved: make the recording) or false.
+async function saveSettings(make, message) {
   await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { settings: settings(), make } });
   askToNotify();
-  toast(make ? 'Saved. Making what changed…' : 'Saved.');
+  toast(message || (make === 'voices' ? 'Saved. Making the voices: listen, then approve.' : make ? 'Saved. Making what changed…' : 'Saved.'));
   await openRecording(currentId, { keepText: true });
 }
 
@@ -249,6 +278,7 @@ async function poll() {
     const frac = job.total ? job.done / job.total : 0;
     const pct = Math.round(from + (to - from) * frac);
     $('progress').hidden = false;
+    $('stopBtn').hidden = false;
     $('progressFill').style.width = `${pct}%`;
     const who = job.id === currentId ? '' : ' (another recording)';
     $('progressText').textContent = `${label}${job.total ? ` ${job.done}/${job.total}` : ''}${eta(job)}${who}${job.text ? ` · ${job.text}` : ''}${status.queue.length ? ` · ${status.queue.length} waiting` : ''}`;
@@ -257,15 +287,19 @@ async function poll() {
     if (job.id === currentId && polls % 3 === 0) refreshQuietly();
   } else {
     $('progress').hidden = true;
+    $('stopBtn').hidden = true;
     document.title = 'PinPlay Listening Studio';
     if (watching && status.last && status.last.id === watching.id) {
       const last = status.last;
       watching = null;
       ding();
-      const msg = last.ok ? '✅ The recording is ready.' : `❌ Something went wrong: ${last.error}`;
-      toast(msg, 8000);
+      let msg = '✅ The recording is ready.';
+      if (last.stopped) msg = '⏹ Stopped. Nothing finished is lost: making it again continues from there.';
+      else if (!last.ok) msg = `❌ Something went wrong: ${last.error}`;
+      else if (last.kind === 'voices') msg = '🎭 The voices are ready: listen to each one, then approve them.';
+      toast(msg, 9000);
       if (last.ok && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        new Notification('PinPlay Listening Studio', { body: 'The recording is ready.' });
+        new Notification('PinPlay Listening Studio', { body: last.kind === 'voices' ? 'The voices are ready to approve.' : 'The recording is ready.' });
       }
       await loadList();
       if (currentId === last.id) await openRecording(currentId, { keepText: true });
@@ -278,6 +312,7 @@ async function refreshQuietly() {
   const data = await api(`/api/recordings/${id}`).catch(() => null);
   if (!data || id !== currentId) return;
   current = data;
+  renderStage();
   renderLines();
   renderParts();
   const typing = document.activeElement && $('voices').contains(document.activeElement);
@@ -365,14 +400,14 @@ $('createBtn').addEventListener('click', guarded(async () => {
   $('newNotes').innerHTML = '';
   await loadList();
   await openRecording(id);
-  toast('Started. You can listen to each line as soon as it is ready.');
+  toast('Started: the voices come first (a few minutes). Listen to them and approve them, then the recording is made.', 9000);
 }));
 
 $('saveBtn').addEventListener('click', guarded(async () => {
   const text = $('text').value;
-  await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { text, script: parseListeningScript(text), make: true } });
+  await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { text, script: parseListeningScript(text), make: 'voices' } });
   askToNotify();
-  toast('Saved. Making what changed…');
+  toast('Saved. Check the voices (new characters get one), then approve.');
   await loadList();
   await openRecording(currentId);
 }));
@@ -384,8 +419,9 @@ $('applyBtn').addEventListener('click', guarded(async () => {
   s.mode = $('setMode').value;
   s.batch = $('setBatch').checked;
   s.check = $('setCheck').checked;
+  const changedVoices = voicesDirty;
   readVoiceCards();
-  await saveSettings(true);
+  await saveSettings(changedVoices ? 'voices' : approved() ? 'all' : false);
 }));
 
 $('voices').addEventListener('input', () => { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; });
@@ -393,14 +429,43 @@ $('voices').addEventListener('change', (e) => {
   if (e.target.matches('[data-mode]')) { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; }
 });
 $('voices').addEventListener('click', guarded(async (e) => {
-  const btn = e.target.closest('[data-newvoice]');
+  const btn = e.target.closest('[data-remake]');
   if (!btn) return;
-  const name = btn.closest('.voice').dataset.name;
-  if (!confirm(`Make a new voice for ${name}? All of ${name}'s lines will be made again with it.`)) return;
-  readVoiceCards();
+  const card = btn.closest('.voice');
+  const name = card.dataset.name;
   const s = settings();
-  s.sampleTakes[name] = (Number(s.sampleTakes[name]) || 0) + 1;
-  await saveSettings(true);
+  const before = s.descriptions[name] || current.voices[name].description;
+  readVoiceCards();
+  const after = s.descriptions[name] || (current.recording.script.voices[name] || {}).description || '';
+  // Same description: a different voice from it. New description: a voice from that.
+  if (after.trim() === String(before).trim()) s.sampleTakes[name] = (Number(s.sampleTakes[name]) || 0) + 1;
+  await saveSettings('voices', `Remaking ${name}'s voice (about 2 minutes). Listen, then approve.`);
+}));
+$('voiceStage').addEventListener('click', guarded(async (e) => {
+  if (e.target.closest('#approveBtn')) {
+    if (voicesDirty) {
+      readVoiceCards();
+      await saveSettings('voices', 'You changed a voice: remaking it first. Listen, then approve.');
+      return;
+    }
+    readVoiceCards();
+    await saveSettings('all', 'Voices approved. Making the recording: this is the long part.');
+  } else if (e.target.closest('#makeVoicesBtn')) {
+    readVoiceCards();
+    await saveSettings('voices');
+  }
+}));
+$('titleInput').addEventListener('change', guarded(async () => {
+  const title = $('titleInput').value.trim() || 'Untitled';
+  await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { title } });
+  current.recording.title = title;
+  await loadList();
+  toast('Title saved.');
+}));
+$('titleInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+$('stopBtn').addEventListener('click', guarded(async () => {
+  await api('/api/stop', { method: 'POST' });
+  toast('⏹ Stopping after the current step…', 6000);
 }));
 $('lines').addEventListener('click', guarded(async (e) => {
   const btn = e.target.closest('[data-retake]');
@@ -408,8 +473,12 @@ $('lines').addEventListener('click', guarded(async (e) => {
   const id = btn.closest('.line').dataset.task;
   if (!id) return;
   const s = settings();
+  if (!approved()) {
+    toast('Approve the voices first: the lines are made after that.');
+    return;
+  }
   s.lineTakes[id] = (Number(s.lineTakes[id]) || 0) + 1;
-  await saveSettings(true);
+  await saveSettings('all', 'Making that line again…');
 }));
 
 async function copy(text, what) {

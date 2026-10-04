@@ -14,6 +14,7 @@
       <div class="progress-text" id="progressText"></div>
       <div class="bar"><div class="bar-fill" id="progressFill"></div></div>
     </div>
+    <button class="btn small" id="stopBtn" type="button" hidden title="Stops after the current step; nothing finished is lost">⏹ Stop</button>
     <div class="top-actions">
       <button class="btn" id="promptBtn" type="button">✨ Script prompt</button>
       <button class="btn quiet" id="quitBtn" type="button" title="Close the studio and free the computer's memory">⏻ Quit</button>
@@ -39,7 +40,7 @@
 
       <div id="editor" hidden>
         <div class="title-row">
-          <h1 id="title"></h1>
+          <input id="titleInput" class="title-input" maxlength="120" title="The recording's name (also the MP3's name)" />
           <span class="muted" id="summary"></span>
           <button class="btn quiet danger" id="deleteBtn" type="button">🗑 Delete</button>
         </div>
@@ -51,7 +52,8 @@
 
         <section class="card">
           <h2>🎭 Voices</h2>
-          <p class="muted small">Each character's voice. <b>Fixed voice</b> keeps it exactly the same on every line (the default); <b>Acted</b> performs each line's direction, but the voice can vary a little. A new voice sample remakes that character's lines.</p>
+          <div id="voiceStage" class="stage"></div>
+          <p class="muted small">Each character's voice. <b>Fixed voice</b> keeps it exactly the same on every line (the default); <b>Acted</b> performs each line's direction, but the voice can vary a little. To change a voice, edit its description and press <b>↻ Remake voice</b>.</p>
           <div id="voices" class="voices"></div>
         </section>
 
