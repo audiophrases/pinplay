@@ -187,14 +187,15 @@ function renderLines() {
         n += 1;
         const l = byId[`${p}:${k}:${speaker}`] || {};
         let chip = '<span class="chip">waiting</span>';
-        if (l.ready && l.ok === true) chip = '<span class="chip ok">✓ words</span>';
-        else if (l.ready && l.ok === false) chip = '<span class="chip bad">⚠ words differ</span>';
+        if (l.ready && l.level === 'ok') chip = '<span class="chip ok">✓ words</span>';
+        else if (l.ready && l.level === 'minor') chip = '<span class="chip warn" title="A small difference: often just how Whisper spelled what it heard. Listen to be sure.">≈ check by ear</span>';
+        else if (l.ready && l.level === 'differs') chip = '<span class="chip bad">⚠ words differ</span>';
         else if (l.ready) chip = '<span class="chip">ready</span>';
         rows.push(`<div class="line" data-task="${esc(l.id || '')}">
           <span class="muted">${n}</span>
           <span class="who" title="${esc(speaker)}">${it.overlap ? '↪ ' : ''}${esc(speaker)}</span>
           <div class="say">${esc(it.text)}${it.direction ? ` <span class="how">(${esc(it.direction)})</span>` : ''}
-            ${l.ok === false ? `<div class="heard">Heard: “${esc(l.heard)}” · ${esc((l.diffs || []).join('; '))}</div>` : ''}</div>
+            ${l.level === 'minor' || l.level === 'differs' ? `<div class="heard ${l.level}">Heard: “${esc(l.heard)}” · ${esc((l.diffs || []).join('; '))}</div>` : ''}</div>
           <div class="acts">${chip}
             ${l.ready ? `<audio controls preload="none" src="${audioUrl('lines', `${l.key}.wav`)}"></audio>` : ''}
             <button class="btn small" data-retake title="Make this line again, differently">↻ Try again</button></div>

@@ -226,9 +226,10 @@ def get_recording(rid: str):
         project = Project(_folder(rid), _script_for(rec), rec.get('settings') or {})
         for t in project.tasks():
             key = project.line_key(t)
-            check = project.checks.get(key) or {}
+            check = project.verdict(t, key) or {}
             lines.append({**t, 'key': key, 'ready': os.path.exists(project.line_file(key)),
-                          'ok': check.get('ok'), 'diffs': check.get('diffs', []), 'heard': check.get('heard', '')})
+                          'ok': check.get('ok'), 'level': check.get('level'), 'diffs': check.get('diffs', []),
+                          'heard': check.get('heard', '')})
         voices = {}
         for name in project.speakers():
             voices[name] = {'description': project.description(name), 'mode': project.mode(name),

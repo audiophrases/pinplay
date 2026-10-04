@@ -86,6 +86,7 @@ textarea { width: 100%; font-family: Consolas, "Cascadia Mono", monospace; font-
 .line .say { min-width: 0; }
 .line .how { color: var(--muted); font-size: .82rem; font-style: italic; }
 .line .heard { color: var(--bad); font-size: .8rem; }
+.line .heard.minor { color: var(--warn); }
 .line .acts { display: flex; align-items: center; gap: .4rem; }
 .line audio { width: 210px; height: 30px; }
 .line.sound { color: var(--muted); font-size: .85rem; }

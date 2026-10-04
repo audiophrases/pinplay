@@ -224,28 +224,37 @@ class Project:
         self.say({'stage': 'lines', 'done': len(todo), 'total': len(todo), 'elapsed': round(time.time() - start)})
 
     # ------------------------------------------------------------ checking
+    def verdict(self, t, key):
+        """The word check of a line made already, judged again from what
+        Whisper heard (cheap: better judging also applies to old lines).
+        None while the line hasn't been heard."""
+        heard = (self.checks.get(key) or {}).get('heard')
+        if heard is None:
+            return None
+        v = compare(t['text'], heard, self.language)
+        return {**v, 'ok': v['level'] != 'differs', 'heard': heard}
+
     def check(self, t, take=None):
         key = self.line_key(t, take)
         if key not in self.checks:
             if self.checker is None:
                 self.checker = WordChecker()
             clip, _ = sf.read(self.line_file(key), dtype='float32')
-            heard = self.checker.hear(clip, self.language)
-            ok, diffs = compare(t['text'], heard, self.language)
-            self.checks[key] = {'ok': ok, 'diffs': diffs, 'heard': heard}
+            self.checks[key] = {'heard': self.checker.hear(clip, self.language)}
             with open(self.checks_path + '.tmp', 'w', encoding='utf-8') as fh:
                 json.dump(self.checks, fh, ensure_ascii=False, indent=1)
             os.replace(self.checks_path + '.tmp', self.checks_path)
-        return self.checks[key]
+        return self.verdict(t, key)
 
     def check_all(self, tasks):
-        """Checks every line; a line with wrong words gets one new take, and
-        the better of the two is used. Returns {task id: chosen take}."""
+        """Checks every line; a line whose words really differ gets one new
+        take, and the better of the two is used ("check by ear" lines are
+        only shown to the teacher). Returns {task id: chosen take}."""
         chosen, retry = {}, {}
         for i, t in enumerate(tasks):
             self._stop_point()
             self.say({'stage': 'checks', 'done': i, 'total': len(tasks), 'text': t['text'][:60]})
-            if not self.check(t)['ok']:
+            if self.check(t)['level'] == 'differs':
                 retry[t['id']] = t['take'] + 1
         if retry:
             self.say({'stage': 'retry', 'done': 0, 'total': len(retry), 'text': f'{len(retry)} line(s) again'})
@@ -253,7 +262,7 @@ class Project:
             for t in tasks:
                 if t['id'] in retry:
                     first, second = self.check(t), self.check(t, retry[t['id']])
-                    if second['ok'] or len(second['diffs']) < len(first['diffs']):
+                    if second['similarity'] > first['similarity']:
                         chosen[t['id']] = retry[t['id']]
         self.say({'stage': 'checks', 'done': len(tasks), 'total': len(tasks)})
         return chosen
@@ -278,9 +287,10 @@ class Project:
         lines = []
         for t in tasks:
             key = self.line_key(t, chosen.get(t['id']))
-            check = self.checks.get(key) or {}
+            check = self.verdict(t, key) or {}
             lines.append({**t, 'take': chosen.get(t['id'], t['take']), 'file': self.line_file(key),
-                          'ok': check.get('ok'), 'diffs': check.get('diffs', []), 'heard': check.get('heard', '')})
+                          'ok': check.get('ok'), 'level': check.get('level'), 'diffs': check.get('diffs', []),
+                          'heard': check.get('heard', '')})
         parts = self.mix(lines)
         result = {'voices': voices, 'lines': lines, 'parts': parts, 'seconds': round(time.time() - started)}
         _write_bytes(os.path.join(self.folder, 'result.json'), json.dumps(result, ensure_ascii=False, indent=1).encode('utf-8'))
