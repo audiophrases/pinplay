@@ -25,7 +25,7 @@ import soundfile as sf
 
 from . import audio
 from .checks import WordChecker, age_warning, compare, median_pitch
-from .voices import NEUTRAL, Voices
+from .voices import NEUTRAL, Stopped, Voices  # noqa: F401 (Stopped is used by the server)
 
 DEFAULTS = {'mode': 'fixed', 'modes': {}, 'descriptions': {}, 'sampleTakes': {}, 'lineTakes': {},
             'batch': True, 'spacing': 'natural', 'ambience': None, 'check': True}
@@ -41,10 +41,6 @@ AUTO_VOICES = [
 ]
 
 
-class Stopped(Exception):
-    """The teacher pressed Stop: the work ends after the current step."""
-
-
 def _key(*parts):
     return hashlib.sha1(json.dumps(parts, ensure_ascii=False).encode()).hexdigest()[:16]
 
@@ -54,6 +50,20 @@ def _resample(x, sr):
         return x
     import librosa
     return librosa.resample(x, orig_sr=sr, target_sr=audio.SR).astype(np.float32)
+
+
+def _write_wav(path, data):
+    """All or nothing: a stopped job never leaves a half-written file that
+    would then be taken as finished."""
+    tmp = f'{path[:-4]}.part.wav'
+    sf.write(tmp, data, audio.SR)
+    os.replace(tmp, path)
+
+
+def _write_bytes(path, data):
+    with open(path + '.part', 'wb') as fh:
+        fh.write(data)
+    os.replace(path + '.part', path)
 
 
 def _safe(name):
@@ -78,7 +88,7 @@ class Project:
                     self.checks = json.load(fh)
             except (OSError, ValueError):  # being written right now: read it next time
                 self.checks = {}
-        self.voices = Voices()
+        self.voices = Voices(should_stop=self.should_stop)
         self.checker = None
 
     # ------------------------------------------------------------ the plan
@@ -161,7 +171,7 @@ class Project:
                 take = int((self.settings['sampleTakes'] or {}).get(name, 0))
                 wavs, sr = self.voices.design([self.sample_text(name)], [f'{self.description(name)} {NEUTRAL}'],
                                               self.language, name, take)
-                sf.write(path, _resample(wavs[0], sr), audio.SR)
+                _write_wav(path, _resample(wavs[0], sr))
             clip, _ = sf.read(path, dtype='float32')
             pitch = median_pitch(clip, audio.SR)
             report[name] = {'sample': path, 'pitch': round(pitch) if pitch else None,
@@ -209,7 +219,7 @@ class Project:
                 wavs, sr = self.voices.copy(texts, self.sample_key(name), sample, audio.SR, self.sample_text(name),
                                             self.language, name, take)
             for t, w in zip(group, wavs):
-                sf.write(self.line_file(self.line_key(t, takes.get(t['id']))), _resample(w, sr), audio.SR)
+                _write_wav(self.line_file(self.line_key(t, takes.get(t['id']))), _resample(w, sr))
             done += len(group)
         self.say({'stage': 'lines', 'done': len(todo), 'total': len(todo), 'elapsed': round(time.time() - start)})
 
@@ -273,8 +283,7 @@ class Project:
                           'ok': check.get('ok'), 'diffs': check.get('diffs', []), 'heard': check.get('heard', '')})
         parts = self.mix(lines)
         result = {'voices': voices, 'lines': lines, 'parts': parts, 'seconds': round(time.time() - started)}
-        with open(os.path.join(self.folder, 'result.json'), 'w', encoding='utf-8') as fh:
-            json.dump(result, fh, ensure_ascii=False, indent=1)
+        _write_bytes(os.path.join(self.folder, 'result.json'), json.dumps(result, ensure_ascii=False, indent=1).encode('utf-8'))
         self.say({'stage': 'done', 'done': 1, 'total': 1})
         return result
 
@@ -297,7 +306,6 @@ class Project:
             mixed = audio.build_part(part['items'], voices, clips, self.settings['spacing'], kind)
             label = part.get('label') or (f'part {p + 1}' if len(self.script['parts']) > 1 else '')
             path = os.path.join(self.folder, 'out', f'{title}{"-" + _safe(label) if label else ""}.mp3')
-            with open(path, 'wb') as fh:
-                fh.write(audio.to_mp3(mixed))
+            _write_bytes(path, audio.to_mp3(mixed))
             parts.append({'label': label, 'mp3': path, 'seconds': round(len(mixed) / audio.SR, 1)})
         return parts

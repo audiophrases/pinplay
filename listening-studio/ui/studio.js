@@ -467,7 +467,7 @@ $('titleInput').addEventListener('change', guarded(async () => {
 $('titleInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 $('stopBtn').addEventListener('click', guarded(async () => {
   await api('/api/stop', { method: 'POST' });
-  toast('⏹ Stopping after the current step…', 6000);
+  toast('⏹ Stopping… every line already made is kept.', 6000);
 }));
 $('lines').addEventListener('click', guarded(async (e) => {
   const btn = e.target.closest('[data-retake]');

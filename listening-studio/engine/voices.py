@@ -22,8 +22,13 @@ MODELS = {
 NEUTRAL = 'Speaking naturally in a calm, relaxed, conversational tone.'
 
 
+class Stopped(Exception):
+    """The teacher pressed Stop."""
+
+
 class Voices:
-    def __init__(self, threads=None):
+    def __init__(self, threads=None, should_stop=None):
+        self.should_stop = should_stop or (lambda: False)
         self.kind = None
         self.model = None
         self.prompts = {}  # sample key -> voice prompt (copy model)
@@ -38,7 +43,18 @@ class Voices:
         torch.set_num_threads(self.threads)
         self.model = Qwen3TTSModel.from_pretrained(MODELS[kind], device_map='cpu', dtype=torch.float32)
         self.kind = kind
+        # Stop takes effect at the next step of making audio (a fraction of
+        # a second), not after a whole batch: Qwen3's own generate() drops
+        # stopping criteria, so a hook on the model checks the Stop button.
+        inner = getattr(self.model, 'model', None)
+        target = getattr(inner, 'talker', None) or inner
+        if target is not None:
+            target.register_forward_pre_hook(self._check_stop)
         return self.model
+
+    def _check_stop(self, _module, _args):
+        if self.should_stop():
+            raise Stopped()
 
     def unload(self):
         self.model = None

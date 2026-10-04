@@ -39,7 +39,8 @@ import uvicorn  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
-from engine.project import Project, Stopped  # noqa: E402
+from engine.project import Project  # noqa: E402
+import subprocess  # noqa: E402
 
 app = FastAPI()
 ALLOWED_ORIGINS = {f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}'}
@@ -85,7 +86,7 @@ def _result(rid):
 
 # ---------------------------------------------------------------- the job runner
 JOBS = queue.Queue()
-STATE = {'job': None, 'queue': [], 'last': None, 'stop': False}
+STATE = {'job': None, 'queue': [], 'last': None, 'stop': False, 'proc': None}
 LOCK = threading.Lock()
 
 
@@ -94,13 +95,26 @@ def _script_for(rec):
     return {**(rec.get('script') or {}), 'title': rec.get('title') or 'recording'}
 
 
+def _job_error(code, tail):
+    """The job process failed: the most useful thing to tell the teacher."""
+    for line in reversed(tail):
+        if line.strip() and not line.startswith(' ') and ('Error' in line or 'Exception' in line):
+            return line.strip()[:300]
+    if code in (3221225477, -1073741819, 3221226505) or code < 0:
+        return 'The voice engine stopped unexpectedly (probably not enough free memory: close other programs and try again)'
+    return f'The voice engine stopped (code {code})'
+
+
 def _worker():
+    """Each job runs in its own process (engine/job.py): when it ends, Windows
+    gets all its memory back (~7 GB), and Stop simply ends that process."""
     while True:
         rid, kind = JOBS.get()
         with LOCK:
             if [rid, kind] in STATE['queue']:
                 STATE['queue'].remove([rid, kind])
             STATE['stop'] = False
+            STATE['proc'] = None
             STATE['job'] = {'id': rid, 'kind': kind, 'stage': 'start', 'done': 0, 'total': 0, 'text': '',
                             'started': time.time(), 'stages': {}}
 
@@ -111,22 +125,36 @@ def _worker():
                 job['stages'].setdefault(event['stage'], time.time())
                 job['at'] = time.time()
 
-        project = None
+        tail = []
         try:
-            rec = _load(rid)
-            project = Project(_folder(rid), _script_for(rec), rec.get('settings') or {}, progress, lambda: STATE['stop'])
-            project.run(kind)
-            outcome = {'id': rid, 'kind': kind, 'ok': True, 'finished': time.time()}
-        except Stopped:
-            outcome = {'id': rid, 'kind': kind, 'ok': False, 'stopped': True, 'finished': time.time()}
+            proc = subprocess.Popen(
+                [sys.executable, '-u', '-m', 'engine.job', _folder(rid), kind], cwd=HERE,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            with LOCK:
+                STATE['proc'] = proc
+            for line in proc.stdout:
+                if line.startswith('@@'):
+                    try:
+                        progress(json.loads(line[2:]))
+                    except ValueError:
+                        pass
+                    continue
+                print(line, end='', flush=True)  # into the studio's log
+                tail = (tail + [line.rstrip()])[-40:]
+            code = proc.wait()
+            if STATE['stop']:
+                outcome = {'id': rid, 'kind': kind, 'ok': False, 'stopped': True, 'finished': time.time()}
+            elif code == 0:
+                outcome = {'id': rid, 'kind': kind, 'ok': True, 'finished': time.time()}
+            else:
+                outcome = {'id': rid, 'kind': kind, 'ok': False, 'error': _job_error(code, tail), 'finished': time.time()}
         except Exception as err:  # shown in the page, in plain words
             traceback.print_exc()
             outcome = {'id': rid, 'kind': kind, 'ok': False, 'error': str(err) or err.__class__.__name__, 'finished': time.time()}
-        finally:
-            if project is not None:
-                project.voices.unload()  # give the memory back
         with LOCK:
             STATE['job'] = None
+            STATE['proc'] = None
             STATE['last'] = outcome
 
 
@@ -244,9 +272,12 @@ async def make_recording(rid: str, request: Request):
 
 @app.post('/api/stop')
 def stop_job():
-    """Stops the current work after its current step, and empties the queue."""
+    """Stops the current work at once (its process ends; every line already
+    made is kept) and empties the queue."""
     with LOCK:
         STATE['stop'] = bool(STATE['job'])
+        if STATE['proc'] is not None and STATE['proc'].poll() is None:
+            STATE['proc'].terminate()
         STATE['queue'].clear()
         while not JOBS.empty():
             try:
