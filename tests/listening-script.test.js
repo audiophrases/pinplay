@@ -61,6 +61,13 @@ describe('reading a recording script', () => {
     assert.match(notes, /Jake has no VOICE line/);
   });
 
+  it('ignores the code block an AI chat wraps its answer in, and reads accented names', () => {
+    const pasted = "```text\nLANGUAGE: French\nVOICE Chloé: A young French woman.\nVOICE Léa: A young French woman.\n\nLéa (welcoming): Salut Chloé ! Ça va ?\nChloé: Je vais faire ma valise.\n```";
+    const s = S.parseListeningScript(pasted);
+    assert.deepEqual(s.notes, []);
+    assert.deepEqual(s.parts[0].items.map((it) => `${it.speakers[0]}: ${it.text}`), ['Léa: Salut Chloé ! Ça va ?', 'Chloé: Je vais faire ma valise.']);
+  });
+
   it('reads plain text as one voice, joining its lines', () => {
     const prose = S.parseListeningScript('I got my first job when I was 15, working at a car wash in the\nsummertime. A friend of mine, Rob, worked there.');
     assert.equal(prose.parts[0].items.length, 1);

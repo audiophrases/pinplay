@@ -37,6 +37,8 @@ function parseListeningScript(text) {
       last = null;
       return;
     }
+    // AI chats wrap their answer in a code block: "```text" … "```".
+    if (/^```/.test(line)) return;
     let m;
     if ((m = /^-{3,}\s*(.*?)\s*-*$/.exec(line))) {
       if (part.items.length || part.label) script.parts.push(part);

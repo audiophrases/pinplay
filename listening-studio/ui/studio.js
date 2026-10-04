@@ -199,8 +199,26 @@ function readVoiceCards() {
   });
 }
 
+// Asking to show "ready" notifications must never stop a button: some
+// browsers answer this differently (or throw).
 function askToNotify() {
-  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+  try {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const asked = Notification.requestPermission();
+      if (asked && typeof asked.catch === 'function') asked.catch(() => {});
+    }
+  } catch { /* no notifications: fine */ }
+}
+
+// Every button: an error is shown, never swallowed.
+function guarded(fn) {
+  return async (...args) => {
+    try {
+      await fn(...args);
+    } catch (err) {
+      toast(`❌ ${err?.message || err}. Is the studio still running? If not, double-click its desktop icon.`, 9000);
+    }
+  };
 }
 
 // ---------------------------------------------------------------- progress
@@ -325,7 +343,7 @@ $('list').addEventListener('click', (e) => {
 $('newText').addEventListener('input', () => { $('newNotes').innerHTML = notesHtml($('newText').value); });
 $('text').addEventListener('input', () => { $('notes').innerHTML = notesHtml($('text').value); });
 
-$('createBtn').addEventListener('click', async () => {
+$('createBtn').addEventListener('click', guarded(async () => {
   const text = $('newText').value;
   const script = parseListeningScript(text);
   if (!script.parts.some((p) => p.items.some((it) => it.type === 'line'))) {
@@ -333,24 +351,33 @@ $('createBtn').addEventListener('click', async () => {
     return;
   }
   askToNotify();
-  const { id } = await api('/api/recordings', { method: 'POST', body: { text, script, make: true } });
+  const btn = $('createBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting…';
+  let id;
+  try {
+    ({ id } = await api('/api/recordings', { method: 'POST', body: { text, script, make: true } }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🎙️ Make the recording';
+  }
   $('newText').value = '';
   $('newNotes').innerHTML = '';
   await loadList();
   await openRecording(id);
   toast('Started. You can listen to each line as soon as it is ready.');
-});
+}));
 
-$('saveBtn').addEventListener('click', async () => {
+$('saveBtn').addEventListener('click', guarded(async () => {
   const text = $('text').value;
   await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { text, script: parseListeningScript(text), make: true } });
   askToNotify();
   toast('Saved. Making what changed…');
   await loadList();
   await openRecording(currentId);
-});
+}));
 
-$('applyBtn').addEventListener('click', async () => {
+$('applyBtn').addEventListener('click', guarded(async () => {
   const s = settings();
   s.ambience = $('setAmbience').value || null;
   s.spacing = $('setSpacing').value;
@@ -359,13 +386,13 @@ $('applyBtn').addEventListener('click', async () => {
   s.check = $('setCheck').checked;
   readVoiceCards();
   await saveSettings(true);
-});
+}));
 
 $('voices').addEventListener('input', () => { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; });
 $('voices').addEventListener('change', (e) => {
   if (e.target.matches('[data-mode]')) { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; }
 });
-$('voices').addEventListener('click', async (e) => {
+$('voices').addEventListener('click', guarded(async (e) => {
   const btn = e.target.closest('[data-newvoice]');
   if (!btn) return;
   const name = btn.closest('.voice').dataset.name;
@@ -374,8 +401,8 @@ $('voices').addEventListener('click', async (e) => {
   const s = settings();
   s.sampleTakes[name] = (Number(s.sampleTakes[name]) || 0) + 1;
   await saveSettings(true);
-});
-$('lines').addEventListener('click', async (e) => {
+}));
+$('lines').addEventListener('click', guarded(async (e) => {
   const btn = e.target.closest('[data-retake]');
   if (!btn) return;
   const id = btn.closest('.line').dataset.task;
@@ -383,7 +410,7 @@ $('lines').addEventListener('click', async (e) => {
   const s = settings();
   s.lineTakes[id] = (Number(s.lineTakes[id]) || 0) + 1;
   await saveSettings(true);
-});
+}));
 
 async function copy(text, what) {
   try {
@@ -396,7 +423,7 @@ async function copy(text, what) {
 $('copyScriptBtn').addEventListener('click', () => copy($('text').value, 'Script'));
 $('copyCleanBtn').addEventListener('click', () => copy(cleanListeningTranscript($('text').value), 'Clean transcript'));
 
-$('deleteBtn').addEventListener('click', async () => {
+$('deleteBtn').addEventListener('click', guarded(async () => {
   if (!confirm('Delete this recording and everything made for it?')) return;
   try {
     await api(`/api/recordings/${currentId}`, { method: 'DELETE' });
@@ -406,14 +433,14 @@ $('deleteBtn').addEventListener('click', async () => {
   }
   await loadList();
   showWelcome();
-});
+}));
 
-$('quitBtn').addEventListener('click', async () => {
+$('quitBtn').addEventListener('click', guarded(async () => {
   const busy = !$('progress').hidden;
   if (!confirm(busy ? 'A recording is being made. Quit anyway? It stops, and continues from where it was next time you make it.' : 'Close the studio? This frees the computer\'s memory. Double-click the desktop icon to start it again.')) return;
   await api('/api/quit', { method: 'POST' }).catch(() => {});
   document.body.innerHTML = '<div class="card" style="max-width:520px;margin:15vh auto;text-align:center"><h1>🎙️ The studio is closed</h1><p class="muted">Double-click <b>PinPlay Listening Studio</b> on the desktop to start it again.</p></div>';
-});
+}));
 
 $('promptBtn').addEventListener('click', () => {
   const sel = $('pLanguage');
@@ -421,7 +448,7 @@ $('promptBtn').addEventListener('click', () => {
   $('pStatus').textContent = '';
   $('promptDialog').showModal();
 });
-$('pCopy').addEventListener('click', async () => {
+$('pCopy').addEventListener('click', guarded(async () => {
   const text = buildScriptPrompt({ topic: $('pTopic').value.trim(), level: $('pLevel').value.trim(), language: $('pLanguage').value,
     characters: $('pCharacters').value.trim(), length: $('pLength').value, notes: $('pNotes').value.trim() });
   try {
@@ -430,7 +457,7 @@ $('pCopy').addEventListener('click', async () => {
   } catch {
     $('pStatus').textContent = 'Could not copy.';
   }
-});
+}));
 
 // ---------------------------------------------------------------- start
 (async () => {
