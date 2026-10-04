@@ -634,3 +634,50 @@ describe('Replace, Use each answer: answerMediaKeyword', () => {
     ]) assert.equal(kw(q), '', q.type);
   });
 });
+
+describe('Move: moveQuestionsBefore and listeningSectionLosses', () => {
+  const M = loadDeclarations(APP_SRC, ['LISTENING_SECTION_TYPES', 'sanitizeListeningSectionId', 'assignListeningMembership',
+    'moveQuestionsBefore', 'listeningSectionLosses'], {});
+  const q = (id, listeningSection) => ({ id, type: 'mcq', ...(listeningSection ? { listeningSection } : {}) });
+  const ids = (order) => order.map((x) => x.id).join(' ');
+
+  it('moves the selected questions as one block, in quiz order, before a question', () => {
+    const [a, b, c, d, e] = ['a', 'b', 'c', 'd', 'e'].map((id) => q(id));
+    assert.equal(ids(M.moveQuestionsBefore([a, b, c, d, e], new Set([e, c]), a)), 'c e a b d');
+    assert.equal(ids(M.moveQuestionsBefore([a, b, c, d, e], new Set([a, b]), e)), 'c d a b e');
+  });
+
+  it('moves to the end with no target, or when the target is itself moving', () => {
+    const [a, b, c] = ['a', 'b', 'c'].map((id) => q(id));
+    assert.equal(ids(M.moveQuestionsBefore([a, b, c], new Set([a]))), 'b c a');
+    assert.equal(ids(M.moveQuestionsBefore([a, b, c], new Set([a, b]), b)), 'c a b');
+  });
+
+  it('moving a whole appended listening block elsewhere splits nothing', () => {
+    const [a, b, s1, s2, s3] = [q('a'), q('b'), q('s1', 'ls'), q('s2', 'ls'), q('s3', 'ls')];
+    const cur = [a, b, s1, s2, s3];
+    const next = M.moveQuestionsBefore(cur, new Set([s1, s2, s3]), a);
+    assert.equal(ids(next), 's1 s2 s3 a b');
+    assert.equal(ids(M.listeningSectionLosses(cur, next, ['ls'], new Set([s1, s2, s3]))), '');
+    // Reordering inside the section keeps everyone in it.
+    assert.equal(ids(M.listeningSectionLosses(cur, M.moveQuestionsBefore(cur, new Set([s3]), s1), ['ls'], new Set([s3]))), '');
+  });
+
+  it('a question pulled out of a section leaves it, not the ones left behind', () => {
+    const [a, b, s1, s2, s3] = [q('a'), q('b'), q('s1', 'ls'), q('s2', 'ls'), q('s3', 'ls')];
+    const cur = [a, b, s1, s2, s3];
+    const next = M.moveQuestionsBefore(cur, new Set([s2]), a);
+    assert.equal(ids(next), 's2 a b s1 s3');
+    assert.equal(ids(M.listeningSectionLosses(cur, next, ['ls'], new Set([s2]))), 's2');
+  });
+
+  it('reports the questions cut off when a move lands inside a section', () => {
+    const [a, s1, s2, s3] = [q('a'), q('s1', 'ls'), q('s2', 'ls'), q('s3', 'ls')];
+    const cur = [a, s1, s2, s3];
+    const next = M.moveQuestionsBefore(cur, new Set([a]), s2);
+    assert.equal(ids(next), 's1 a s2 s3');
+    assert.equal(ids(M.listeningSectionLosses(cur, next, ['ls'], new Set([a]))), 's2 s3');
+    // The real questions are not touched by the check.
+    assert.equal(s2.listeningSection, 'ls');
+  });
+});

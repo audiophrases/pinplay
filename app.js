@@ -18013,6 +18013,40 @@ function nextMediaSelection(selected, visible, clicked, { ctrl = false, shift = 
   return { selected: new Set([clicked]), anchor: clicked };
 }
 
+// Move…: the moving questions, kept in quiz order, as one block placed before
+// `beforeQ` (a question not moving), or at the end. Returns the new order.
+function moveQuestionsBefore(questions, moving, beforeQ = null) {
+  const block = questions.filter((q) => moving.has(q));
+  const rest = questions.filter((q) => !moving.has(q));
+  const at = beforeQ && !moving.has(beforeQ) ? rest.indexOf(beforeQ) : -1;
+  if (at === -1) return [...rest, ...block];
+  return [...rest.slice(0, at), ...block, ...rest.slice(at)];
+}
+
+// The questions the new order takes out of their listening section. A section
+// is one unbroken run; the run that keeps it is the one holding its questions
+// that did not move (so a question pulled out leaves, not the ones it left
+// behind), else its first run. Questions already outside in `current` don't count.
+function listeningSectionLosses(current, next, sectionIds, moving = new Set()) {
+  const copies = current.map((q) => ({ type: q?.type, listeningSection: q?.listeningSection }));
+  assignListeningMembership(copies, sectionIds);
+  const member = new Set(current.filter((q, i) => copies[i].listeningSection));
+  const runs = [];
+  next.forEach((q) => {
+    const id = member.has(q) ? q.listeningSection : '';
+    const last = runs[runs.length - 1];
+    if (id && last?.id === id) last.qs.push(q);
+    else runs.push({ id, qs: [q] });
+  });
+  const kept = new Map();
+  runs.filter((r) => r.id).forEach((r) => {
+    const anchored = r.qs.some((q) => !moving.has(q));
+    const prev = kept.get(r.id);
+    if (!prev || (anchored && !prev.anchored)) kept.set(r.id, { run: r, anchored });
+  });
+  return runs.filter((r) => r.id && kept.get(r.id).run !== r).flatMap((r) => r.qs);
+}
+
 // Regenerate: the result after the current one in the cached list (wrapping),
 // never the current one. `lastIndex` is where the current media came from when
 // its URL can't be matched (pictures are stored resized, not by source URL).
@@ -18277,7 +18311,7 @@ const mediaManagerState = {
   visible: [],
   job: null, // { label, total, done, cancelled, working: Set }
   notice: '',
-  form: '', // inline form in the selection bar: '' | 'remove' | 'replace' | 'voice'
+  form: '', // inline form in the selection bar: '' | 'remove' | 'replace' | 'voice' | 'reading' | 'move'
 };
 
 let mediaManagerRenderTimer = 0;
@@ -18556,6 +18590,23 @@ function refreshMediaSelection() {
     const keyOf = { gif: 'gifKeyword', image: 'imageKeyword', video: 'videoKeyword' };
     bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || '');
     setTimeout(() => bar.querySelector('[data-mm-replace-keyword]')?.focus(), 0);
+  } else if (n && state.form === 'move') {
+    const questions = quiz.questions;
+    const sectionTitle = (id) => (Array.isArray(quiz.listeningSections) ? quiz.listeningSections : []).find((sec) => sec.id === id)?.title || '';
+    const opts = questions.map((q, i) => {
+      if (state.selected.has(q)) return '';
+      const prompt = String(q?.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 50);
+      const sec = q?.listeningSection ? `🎧 ${sectionTitle(q.listeningSection) || t('Listening')} · ` : '';
+      return `<option value="${i}">${escapeHtml(t('Before Q{n}', { n: i + 1 }))}: ${escapeHtml(sec + prompt)}</option>`;
+    }).filter(Boolean);
+    const moveTitle = escapeHtml(t('Move {n} selected:', { n }));
+    bar.innerHTML = `<strong>${moveTitle}</strong>
+       <select data-mm-move-target aria-label="${escapeHtml(t('New position'))}" ${opts.length ? '' : 'disabled'}>
+         ${opts.length ? `${opts.join('')}<option value="end">${escapeHtml(t('To the end'))}</option>` : ''}
+       </select>
+       <button type="button" class="btn btn-sm primary" data-mm-move-apply ${opts.length ? '' : 'disabled'}>${escapeHtml(t('Move'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>
+       <span class="small muted">${escapeHtml(t('The selected questions keep their order and move together.'))}</span>`;
   } else if (n && state.form === 'reading') {
     bar.innerHTML = readingTextFormHtml([...state.selected]);
     setTimeout(() => bar.querySelector('[data-mm-reading]')?.focus(), 0);
@@ -18581,6 +18632,7 @@ function refreshMediaSelection() {
          <button type="button" class="btn btn-sm" data-mm-form="voice">${escapeHtml(t('🗣 Change voice…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="reading" title="${escapeHtml(t('Give the selected questions the same reading text, or change or remove it'))}">${escapeHtml(t('📖 Reading text…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="remove">${escapeHtml(t('🗑 Remove…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="move" title="${escapeHtml(t('Move the selected questions together to another position in the quiz'))}">${escapeHtml(t('↕ Move…'))}</button>
        </span>
        ${selectAllBtn}
        <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`;
@@ -18842,6 +18894,34 @@ function applyReadingText(text) {
   renderMediaManager();
 }
 
+// Moves the selected questions as one block before question `target` (an
+// index), or to the end ('end'). Warns first when that would split a
+// listening section, since the cut-off questions leave the section.
+function applyMoveQuestions(target) {
+  const state = mediaManagerState;
+  const questions = quiz.questions;
+  const moving = new Set([...state.selected].filter((q) => questions.includes(q)));
+  if (!moving.size) return;
+  const beforeQ = target === 'end' ? null : questions[Number(target)] || null;
+  const next = moveQuestionsBefore(questions, moving, beforeQ);
+  const sections = Array.isArray(quiz.listeningSections) ? quiz.listeningSections : [];
+  const lost = listeningSectionLosses(questions, next, sections.map((sec) => sec.id), moving);
+  if (lost.length) {
+    const titles = [...new Set(lost.map((q) => sections.find((sec) => sec.id === q.listeningSection)?.title || t('Listening')))];
+    if (!confirm(t('This move splits a listening section ({titles}): {n} question(s) would leave it and become ordinary questions. Move anyway?', { titles: titles.join(', '), n: lost.length }))) return;
+  }
+  // Untag them here, or tidyListeningSections would keep the section's first run instead.
+  lost.forEach((q) => { delete q.listeningSection; });
+  questions.splice(0, questions.length, ...next);
+  const first = questions.indexOf(next.find((q) => moving.has(q)));
+  state.form = '';
+  state.sort = { key: 'n', dir: 'asc' };
+  state.notice = t('Moved {n} question(s): now Q{from}–Q{to}.', { n: moving.size, from: first + 1, to: first + moving.size });
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  renderMediaManager();
+}
+
 function applyVoiceChange(voice) {
   const state = mediaManagerState;
   const changed = setTtsVoiceOn(mediaManagerJobQuestions('selected'), voice, quiz);
@@ -18981,6 +19061,10 @@ function openMediaManager() {
       return;
     }
     if (e.target.closest('[data-mm-reading-remove]')) { applyReadingText(''); return; }
+    if (e.target.closest('[data-mm-move-apply]')) {
+      applyMoveQuestions(overlay.querySelector('[data-mm-move-target]')?.value || 'end');
+      return;
+    }
     const sameBtn = e.target.closest('[data-mm-reading-same]');
     if (sameBtn) { selectSameReadingText(); return; }
 
