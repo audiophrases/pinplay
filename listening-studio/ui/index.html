@@ -33,6 +33,17 @@
         <p class="muted">Paste a recording script (from PinPlay's <b>📋 Copy script</b>, or from the <b>✨ Script prompt</b>), or any text: plain text is read by one voice. The studio starts at once.</p>
         <textarea id="newText" rows="16" spellcheck="false" placeholder="LANGUAGE: English&#10;AMBIENCE: station&#10;VOICE Mia: A young British woman of about nineteen…&#10;&#10;Mia (surprised): Forty minutes? You're joking!"></textarea>
         <div class="notes" id="newNotes"></div>
+        <div class="setup" id="setup" hidden>
+          <h2>🎛️ Set up the recording</h2>
+          <p class="muted small">Your script has no settings yet. Choose them here: they are added to the top of your script, and your words are not changed. Or let an AI do it: <b>✨ Script prompt → Voices and directions for my script</b>.</p>
+          <div class="settings">
+            <label>Title<input id="suTitle" placeholder="e.g. Au café" /></label>
+            <label>Language<select id="suLanguage"></select></label>
+            <label>Background<select id="suAmbience"><option value="none">None</option><option value="room">Room</option><option value="hall">Hall</option><option value="station">Station</option><option value="outdoors">Outdoors</option></select></label>
+          </div>
+          <h3 class="small">Characters <span class="muted">· untick anything that isn't a character (a heading, a scene description)</span></h3>
+          <div id="suVoices" class="voices"></div>
+        </div>
         <div class="row">
           <button class="btn primary" id="createBtn" type="button">🎙️ Make the recording</button>
         </div>
@@ -113,12 +124,19 @@
     <form method="dialog" class="dialog">
       <h2>✨ Script prompt</h2>
       <p class="muted small">Instructions for an AI chatbot to write a recording script the studio can make with no changes. Paste the AI's answer into a new recording.</p>
-      <label>What is it about?<input id="pTopic" placeholder="e.g. two friends planning a weekend in London" /></label>
-      <div class="two">
+      <label>What do you need?
+        <select id="pMode">
+          <option value="new">A new script</option>
+          <option value="own">Voices and directions for my script</option>
+        </select>
+      </label>
+      <label id="pScriptWrap" hidden>Your script (every word stays as it is)<textarea id="pScript" rows="8" spellcheck="false"></textarea></label>
+      <label id="pTopicWrap">What is it about?<input id="pTopic" placeholder="e.g. two friends planning a weekend in London" /></label>
+      <div class="two" id="pRowA">
         <label>Level<input id="pLevel" placeholder="e.g. B1" /></label>
         <label>Language<select id="pLanguage"></select></label>
       </div>
-      <div class="two">
+      <div class="two" id="pRowB">
         <label>Characters<input id="pCharacters" placeholder="e.g. two friends and a shop assistant" /></label>
         <label>Length
           <select id="pLength"><option value="1">About 1 minute</option><option value="2" selected>About 2 minutes</option><option value="3">About 3 minutes</option><option value="4">About 4 minutes</option></select>

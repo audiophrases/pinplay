@@ -39,6 +39,8 @@ function parseListeningScript(text) {
     }
     // AI chats wrap their answer in a code block: "```text" … "```".
     if (/^```/.test(line)) return;
+    // A "# …" line is a note, never said.
+    if (/^#/.test(line)) return;
     let m;
     if ((m = /^-{3,}\s*(.*?)\s*-*$/.exec(line))) {
       if (part.items.length || part.label) script.parts.push(part);

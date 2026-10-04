@@ -68,6 +68,11 @@ describe('reading a recording script', () => {
     assert.deepEqual(s.parts[0].items.map((it) => `${it.speakers[0]}: ${it.text}`), ['Léa: Salut Chloé ! Ça va ?', 'Chloé: Je vais faire ma valise.']);
   });
 
+  it('skips "# …" notes, and French spacing before the colon works', () => {
+    const s = S.parseListeningScript(['# a note', 'Paul : Salut Chloé !', '# another', 'Chloé : Ça va ?'].join(String.fromCharCode(10)));
+    assert.deepEqual(s.parts[0].items.map((it) => `${it.speakers[0]}|${it.text}`), ['Paul|Salut Chloé !', 'Chloé|Ça va ?']);
+  });
+
   it('reads plain text as one voice, joining its lines', () => {
     const prose = S.parseListeningScript('I got my first job when I was 15, working at a car wash in the\nsummertime. A friend of mine, Rob, worked there.');
     assert.equal(prose.parts[0].items.length, 1);

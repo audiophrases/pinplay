@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root {
   --bg: #f5f6fb;
   --card: #ffffff;
@@ -109,3 +110,9 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .stage.todo { border: 1px solid var(--accent); }
 .stage .row { margin-top: .5rem; }
 .voice.changed { border-color: var(--warn); }
+.setup { margin-top: 1rem; border: 1px solid var(--accent); border-radius: 12px; padding: .9rem; display: flex; flex-direction: column; gap: .7rem; }
+.setup h2, .setup h3 { margin: 0; }
+.voice.skipped { opacity: .5; }
+.voice.skipped textarea, .voice.skipped .types { display: none; }
+.types { display: flex; flex-wrap: wrap; gap: .3rem; }
+.voice-head label { display: flex; align-items: center; gap: .3rem; font-size: .85rem; margin-left: auto; }

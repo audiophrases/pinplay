@@ -381,7 +381,13 @@ $('newText').addEventListener('input', () => { $('newNotes').innerHTML = notesHt
 $('text').addEventListener('input', () => { $('notes').innerHTML = notesHtml($('text').value); });
 
 $('createBtn').addEventListener('click', guarded(async () => {
-  const text = $('newText').value;
+  let text = $('newText').value;
+  if (!$('setup').hidden) {
+    const missing = scriptSpeakers(parseListeningScript(text))
+      .filter((n) => setup.keep[n] !== false && !(setup.desc[n] || '').trim() && !parseListeningScript(text).voices[n]);
+    if (missing.length && !confirm(`No voice described for ${missing.join(', ')}: the studio will choose one. Continue?`)) return;
+    text = textWithSetup(text);
+  }
   const script = parseListeningScript(text);
   if (!script.parts.some((p) => p.items.some((it) => it.type === 'line'))) {
     toast('Paste a script or some text first.');
@@ -400,6 +406,8 @@ $('createBtn').addEventListener('click', guarded(async () => {
   }
   $('newText').value = '';
   $('newNotes').innerHTML = '';
+  $('setup').hidden = true;
+  Object.assign(setup, { desc: {}, keep: {}, touched: {} });
   await loadList();
   await openRecording(id);
   toast('Started: the voices come first (a few minutes). Listen to them and approve them, then the recording is made.', 9000);
@@ -517,11 +525,18 @@ $('promptBtn').addEventListener('click', () => {
   const sel = $('pLanguage');
   if (!sel.options.length) sel.innerHTML = LISTENING_SCRIPT_LANGUAGES.map((l) => `<option>${l}</option>`).join('');
   $('pStatus').textContent = '';
+  syncPromptMode();
   $('promptDialog').showModal();
 });
 $('pCopy').addEventListener('click', guarded(async () => {
-  const text = buildScriptPrompt({ topic: $('pTopic').value.trim(), level: $('pLevel').value.trim(), language: $('pLanguage').value,
-    characters: $('pCharacters').value.trim(), length: $('pLength').value, notes: $('pNotes').value.trim() });
+  if ($('pMode').value === 'own' && !$('pScript').value.trim()) {
+    $('pStatus').textContent = 'Paste your script into the box first.';
+    return;
+  }
+  const text = $('pMode').value === 'own'
+    ? buildOwnScriptPrompt({ script: $('pScript').value.trim(), notes: $('pNotes').value.trim() })
+    : buildScriptPrompt({ topic: $('pTopic').value.trim(), level: $('pLevel').value.trim(), language: $('pLanguage').value,
+      characters: $('pCharacters').value.trim(), length: $('pLength').value, notes: $('pNotes').value.trim() });
   try {
     await navigator.clipboard.writeText(text);
     $('pStatus').textContent = '✅ Copied: paste it into your AI chat.';
@@ -529,6 +544,186 @@ $('pCopy').addEventListener('click', guarded(async () => {
     $('pStatus').textContent = 'Could not copy.';
   }
 }));
+
+// ---------------------------------------------------------------- setting up a plain script
+// A script pasted without settings (a teacher's own dialogue): the form adds
+// TITLE, LANGUAGE, AMBIENCE and VOICE lines to the top; the words stay.
+const ACCENT = { English: 'British', French: 'French', Spanish: 'Spanish', German: 'German', Italian: 'Italian',
+  Portuguese: 'Portuguese', Russian: 'Russian', Chinese: 'Mandarin-speaking Chinese', Japanese: 'Japanese', Korean: 'Korean' };
+const VOICE_TYPES = [
+  ['Young woman', (a) => `A young ${a} woman of about twenty with a clear, natural, mid-range voice.`],
+  ['Young man', (a) => `A young ${a} man of about twenty with a relaxed, slightly deep voice.`],
+  ['Woman, 40s', (a) => `A ${a} woman in her forties with a warm, calm voice.`],
+  ['Man, 40s', (a) => `A ${a} man in his forties with a calm, fairly deep voice.`],
+  ['Older woman', (a) => `A ${a} woman in her sixties with a soft, slightly low voice.`],
+  ['Older man', (a) => `A ${a} man in his sixties with a slow, low, gravelly voice.`],
+  ['Narrator', (a) => `A calm, clear ${a} narrator in their forties, neutral and measured.`],
+];
+const HEADING_NAMES = /^(dialogue|dialog|diálogo|dialogo|titre|title|título|titolo|scène|scene|escena|escenario|situation|context|contexte)$/i;
+const LANG_WORDS = {
+  English: 'the and is you are to of it that with yes thank very what this have',
+  French: "le la les est et je tu vous nous une pas avec pour c'est ça très merci oui qui des du",
+  Spanish: 'el los las es y que pero muy gracias sí está con para una yo tú del por',
+  German: 'der die das und ist ich du nicht mit sehr danke ja ein eine wir auch',
+  Italian: 'il che è sono non per molto grazie sì una io tu con della gli',
+  Portuguese: 'não você obrigado obrigada muito sim uma com para eu está é os',
+};
+const setup = { desc: {}, keep: {}, touched: {} };
+
+function guessLanguage(text) {
+  if (/[\u3040-\u30ff]/.test(text)) return 'Japanese';
+  if (/[\uac00-\ud7af]/.test(text)) return 'Korean';
+  if (/[\u4e00-\u9fff]/.test(text)) return 'Chinese';
+  if (/[\u0400-\u04ff]/.test(text)) return 'Russian';
+  const words = String(text).toLowerCase().match(/[\p{L}']+/gu) || [];
+  let best = 'English';
+  let bestScore = 0;
+  Object.entries(LANG_WORDS).forEach(([lang, list]) => {
+    const set = new Set(list.split(' '));
+    const score = words.filter((w) => set.has(w)).length;
+    if (score > bestScore) { best = lang; bestScore = score; }
+  });
+  return best;
+}
+
+function scriptSpeakers(script) {
+  const names = [];
+  script.parts.forEach((p) => p.items.forEach((it) => {
+    if (it.type === 'line') it.speakers.forEach((s) => { if (!names.includes(s)) names.push(s); });
+  }));
+  return names;
+}
+
+function needsSetup(script) {
+  const names = scriptSpeakers(script);
+  return names.length > 0 && (!script.language || names.some((n) => !script.voices[n]));
+}
+
+function renderSetup() {
+  const text = $('newText').value;
+  const script = parseListeningScript(text);
+  const show = needsSetup(script);
+  $('setup').hidden = !show;
+  if (!show) return;
+  const lang = $('suLanguage');
+  if (!lang.options.length) lang.innerHTML = LISTENING_SCRIPT_LANGUAGES.map((l) => `<option>${l}</option>`).join('');
+  if (!setup.touched.language) lang.value = script.language && LISTENING_SCRIPT_LANGUAGES.includes(script.language) ? script.language : guessLanguage(text);
+  if (!setup.touched.ambience) $('suAmbience').value = LISTENING_SCRIPT_AMBIENCES.includes(script.ambience) ? script.ambience : 'room';
+  const names = scriptSpeakers(script);
+  if (!setup.touched.title) {
+    // "Dialogue : Chloé et Paul au café" → the text of that one line.
+    const heading = text.split(/[\r\n]+/).map((l) => /^\s*([^:]{1,30}?)\s*:\s*(.+)$/.exec(l)).find((m) => m && HEADING_NAMES.test(m[1].trim()));
+    $('suTitle').value = script.title || (heading ? heading[2].trim().slice(0, 80) : '');
+  }
+  $('suVoices').innerHTML = names.map((name) => {
+    if (setup.keep[name] === undefined) setup.keep[name] = !HEADING_NAMES.test(name);
+    const keep = setup.keep[name];
+    const desc = setup.desc[name] ?? (script.voices[name]?.description || '');
+    const first = script.parts.flatMap((p) => p.items).find((it) => it.type === 'line' && it.speakers.includes(name));
+    return `<div class="voice ${keep ? '' : 'skipped'}" data-name="${esc(name)}">
+      <div class="voice-head"><b>${esc(name)}</b>
+        <label><input type="checkbox" data-keep ${keep ? 'checked' : ''} /> it's a character</label></div>
+      <span class="muted small">“${esc((first?.text || '').slice(0, 70))}”</span>
+      <div class="types">${VOICE_TYPES.map(([label], i) => `<button type="button" class="btn small" data-type="${i}">${label}</button>`).join('')}</div>
+      <textarea data-sudesc placeholder="Click a type above, or describe the voice: gender, age, accent, voice quality…">${esc(desc)}</textarea>
+    </div>`;
+  }).join('');
+}
+
+function serializeScript(script, keep) {
+  const out = [];
+  script.parts.forEach((p, i) => {
+    if (p.label || i > 0) out.push(`--- ${p.label || `Part ${i + 1}`}`);
+    p.items.forEach((it) => {
+      if (it.type === 'sound') out.push(`[${it.sound}]`);
+      else if (it.type === 'pause') out.push(`[pause ${it.seconds}]`);
+      else {
+        const speakers = it.speakers.filter((s) => keep[s] !== false);
+        if (!speakers.length) return;
+        const fx = it.effect ? ` [${it.effect === 'pa' ? 'PA' : it.effect}]` : '';
+        out.push(`${it.overlap ? '>> ' : ''}${speakers.join(' + ')}${fx}${it.direction ? ` (${it.direction})` : ''}: ${it.text}`);
+      }
+    });
+  });
+  return out.join('\n');
+}
+
+// The pasted text plus the form's settings, as one complete script.
+function textWithSetup(raw) {
+  const script = parseListeningScript(raw);
+  const header = [];
+  const title = $('suTitle').value.trim();
+  if (title) header.push(`TITLE: ${title}`);
+  header.push(`LANGUAGE: ${$('suLanguage').value}`, `AMBIENCE: ${$('suAmbience').value}`);
+  scriptSpeakers(script).filter((n) => setup.keep[n] !== false).forEach((n) => {
+    const desc = (setup.desc[n] ?? script.voices[n]?.description ?? '').trim();
+    const effect = script.voices[n]?.effect;
+    if (desc) header.push(`VOICE ${n}${effect ? ` [${effect === 'pa' ? 'PA' : effect}]` : ''}: ${desc}`);
+  });
+  return `${header.join('\n')}\n\n${serializeScript(script, setup.keep)}`;
+}
+
+$('suVoices').addEventListener('change', (e) => {
+  if (!e.target.matches('[data-keep]')) return;
+  setup.keep[e.target.closest('.voice').dataset.name] = e.target.checked;
+  renderSetup();
+});
+$('suVoices').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-type]');
+  if (!btn) return;
+  const card = btn.closest('.voice');
+  const accent = ACCENT[$('suLanguage').value] || '';
+  setup.desc[card.dataset.name] = VOICE_TYPES[Number(btn.dataset.type)][1](accent).replace(/\s+/g, ' ');
+  card.querySelector('[data-sudesc]').value = setup.desc[card.dataset.name];
+});
+$('suVoices').addEventListener('input', (e) => {
+  if (e.target.matches('[data-sudesc]')) setup.desc[e.target.closest('.voice').dataset.name] = e.target.value;
+});
+['suTitle', 'suLanguage', 'suAmbience'].forEach((id) => $(id).addEventListener('input', () => {
+  setup.touched[{ suTitle: 'title', suLanguage: 'language', suAmbience: 'ambience' }[id]] = true;
+}));
+$('newText').addEventListener('input', renderSetup);
+
+// ---------------------------------------------------------------- the prompt for a teacher's own script
+function buildOwnScriptPrompt(o) {
+  return [
+    '# Turn my script into a recording script',
+    '',
+    'Below is my script for a listening recording. Rewrite it in the recording-script format below, so a voice studio can record it with no further changes.',
+    '- Keep every spoken word exactly as it is: don\'t add, remove, correct or translate anything that is said. Each speech turn stays a line of its own (split it into several lines of the same speaker only if it is longer than about 30 words).',
+    '- Headings, titles and scene descriptions are not said aloud: use them for TITLE and AMBIENCE instead.',
+    '- Add what the studio needs: TITLE, LANGUAGE (the script\'s own language), AMBIENCE, a VOICE line for every character, a direction for every line that isn\'t neutral, and effects or sounds where the scene calls for them.',
+    o.notes ? `- Also: "${o.notes}"` : null,
+    '',
+    'Reply with the script only, in one ```text code block, in this format:',
+    '```text',
+    'TITLE: A short name',
+    'LANGUAGE: …',
+    'AMBIENCE: room',
+    'VOICE Name: what their everyday voice is like',
+    'VOICE Name [effect]: …',
+    '[sound]',
+    'Name (direction): what they say',
+    '```',
+    '',
+    '## Rules for the voices, directions, effects and sounds',
+    'The rules about writing the dialogue itself don\'t apply here: the words are mine and stay as they are.',
+    ...LISTENING_SCRIPT_RULES.map((r, i) => `${i + 1}. ${r}`),
+    '',
+    '## My script',
+    '```text',
+    o.script,
+    '```',
+  ].filter((l) => l !== null).join('\n');
+}
+
+function syncPromptMode() {
+  const own = $('pMode').value === 'own';
+  $('pScriptWrap').hidden = !own;
+  ['pTopicWrap', 'pRowA', 'pRowB'].forEach((id) => { $(id).hidden = own; });
+  if (own && !$('pScript').value.trim()) $('pScript').value = $('newText').value;
+}
+$('pMode').addEventListener('change', syncPromptMode);
 
 // ---------------------------------------------------------------- start
 (async () => {
