@@ -42,6 +42,9 @@ describe('server: normalizeQuiz', () => {
     assert.equal(quiz.listeningSections.length, 1);
     assert.equal(quiz.listeningSections[0].playsAllowed, 0);
     assert.equal(quiz.listeningSections[0].pauseAllowed, false);
+    assert.equal(quiz.listeningSections[0].speedAllowed, true, 'speed is on unless turned off');
+    const off = W.normalizeQuiz({ title: 'L', listeningSections: [section('s1', { speedAllowed: false })], questions: [mcq('q1', { listeningSection: 's1' })] });
+    assert.equal(off.listeningSections[0].speedAllowed, false);
     assert.equal(quiz.listeningSections[0].title, 'Part 1');
   });
 
@@ -343,7 +346,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     assert.ok(started.status < 300, JSON.stringify(started.body));
     const attemptId = started.body.attempt.id;
     const pubQuiz = started.body.attempt.assignment.quiz;
-    assert.deepEqual(plain(pubQuiz.listeningSections), [{ id: 's1', title: 'Part 1', text: 'You will hear…', audioUrl: 'https://api.pinplay.win/api/media/quiz-1/listening/a.mp3', playsAllowed: 2, pauseAllowed: true }]);
+    assert.deepEqual(plain(pubQuiz.listeningSections), [{ id: 's1', title: 'Part 1', text: 'You will hear…', audioUrl: 'https://api.pinplay.win/api/media/quiz-1/listening/a.mp3', playsAllowed: 2, pauseAllowed: true, speedAllowed: true }]);
     assert.deepEqual(plain(pubQuiz.questions.map((q) => q.listeningSection || '')), ['', 's1', 's1']);
 
     const p1 = await post('/api/assignment/listen', { code, attemptId, sectionId: 's1' });

@@ -2208,7 +2208,7 @@ function addListeningSection(from, to) {
   const sections = quizListeningSections();
   if (sections.length >= LISTENING_MAX_SECTIONS) return t('A quiz can have up to {n} listening sections.', { n: LISTENING_MAX_SECTIONS });
   const id = `ls${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-  sections.push({ id, title: '', text: '', audio: null, playsAllowed: LISTENING_DEFAULT_PLAYS, pauseAllowed: true });
+  sections.push({ id, title: '', text: '', audio: null, playsAllowed: LISTENING_DEFAULT_PLAYS, pauseAllowed: true, speedAllowed: true });
   const msg = setListeningSectionRange(id, from, to);
   if (!quiz.questions.some((q) => q?.listeningSection === id)) {
     quiz.listeningSections = sections.filter((sec) => sec.id !== id);
@@ -2325,6 +2325,10 @@ function buildListeningSectionPanel(sec) {
         <input type="checkbox" data-ls-id="${sec.id}" data-ls-field="pauseAllowed" ${sec.pauseAllowed !== false ? 'checked' : ''} />
         ${escapeHtml(t('Pausing allowed'))}
       </label>
+      <label class="listening-section-check" title="${escapeHtml(t('Students can slow the recording down or speed it up, from 75% to 125%.'))}">
+        <input type="checkbox" data-ls-id="${sec.id}" data-ls-field="speedAllowed" ${sec.speedAllowed !== false ? 'checked' : ''} />
+        ${escapeHtml(t('Playback speed'))}
+      </label>
       <span class="listening-section-range">
         ${escapeHtml(t('Questions'))}
         <input type="number" min="1" data-ls-from="${sec.id}" value="${range.from}" />
@@ -2387,6 +2391,7 @@ function bindListeningSectionEvents() {
     if (!sec) return;
     const field = el.dataset.lsField;
     if (field === 'pauseAllowed') sec.pauseAllowed = !!el.checked;
+    else if (field === 'speedAllowed') sec.speedAllowed = !!el.checked;
     else if (field === 'playsAllowed') sec.playsAllowed = Number(el.value);
     else if (field === 'title') sec.title = String(el.value || '').slice(0, 120);
     else if (field === 'text') sec.text = String(el.value || '').slice(0, 600);
@@ -17130,6 +17135,7 @@ function normalizeListeningSectionList(raw) {
       audio: normalizeListeningAudio(s.audio),
       playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
       pauseAllowed: s.pauseAllowed !== false,
+      speedAllowed: s.speedAllowed !== false,
       ...(transcript ? { transcript } : {}),
     };
   }).filter(Boolean);

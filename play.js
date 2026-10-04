@@ -9751,6 +9751,62 @@ function formatListeningTime(sec) {
 // Unlimited plays: the browser's own player (pause, seek). Limited: our own
 // player with a bar you can't drag, "Play 1 of 2", and pause only if allowed.
 // A play counts on the server when it starts, so reloading never resets it.
+// Playback speed, 75%–125% in 1% steps, when the teacher allows it.
+// Remembered per section while the sheet is open.
+function addListeningSpeed(wrap, section, audio) {
+  const rates = (listeningSheet.rates ||= {});
+  const rate = section.speedAllowed === false ? 100 : (rates[section.id] || 100);
+  const apply = () => {
+    audio.playbackRate = rate / 100;
+    audio.defaultPlaybackRate = rate / 100;
+    audio.preservesPitch = true;
+  };
+  let current = rate;
+  const set = (v) => {
+    current = Math.max(75, Math.min(125, Math.round(v)));
+    rates[section.id] = current;
+    audio.playbackRate = current / 100;
+    audio.defaultPlaybackRate = current / 100;
+    slider.value = String(current);
+    label.textContent = `${current}%`;
+  };
+  apply();
+  if (section.speedAllowed === false) return;
+  const box = document.createElement('div');
+  box.className = 'ls-speed';
+  const name = document.createElement('span');
+  name.textContent = `🐢 ${t('Speed')}`;
+  const minus = document.createElement('button');
+  minus.type = 'button';
+  minus.className = 'ls-speed-step';
+  minus.textContent = '−';
+  minus.setAttribute('aria-label', t('Slower'));
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '75';
+  slider.max = '125';
+  slider.step = '1';
+  slider.setAttribute('aria-label', t('Playback speed'));
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.className = 'ls-speed-step';
+  plus.textContent = '+';
+  plus.setAttribute('aria-label', t('Faster'));
+  const label = document.createElement('span');
+  label.className = 'ls-speed-value';
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'ls-speed-reset';
+  reset.textContent = t('Normal');
+  slider.addEventListener('input', () => set(Number(slider.value)));
+  minus.addEventListener('click', () => set(current - 1));
+  plus.addEventListener('click', () => set(current + 1));
+  reset.addEventListener('click', () => set(100));
+  box.append(name, minus, slider, plus, label, reset);
+  wrap.appendChild(box);
+  set(rate);
+}
+
 function renderListeningPlayer(wrap, section, attempt, locked) {
   wrap.innerHTML = '';
   if (!section.audioUrl) {
@@ -9771,6 +9827,7 @@ function renderListeningPlayer(wrap, section, attempt, locked) {
     }
     audio.className = 'ls-native-audio';
     wrap.appendChild(audio);
+    addListeningSpeed(wrap, section, audio);
     return;
   }
 
@@ -9795,6 +9852,7 @@ function renderListeningPlayer(wrap, section, attempt, locked) {
   const note = document.createElement('span');
   note.className = 'ls-plays';
   wrap.append(btn, bar, time, note);
+  addListeningSpeed(wrap, section, audio);
 
   const plays = () => Number(live.player.assignment.state?.attempt?.listeningPlays?.[section.id] || 0);
   const midPlay = () => listeningSheet.playing || (audio.currentTime > 0 && !audio.ended);

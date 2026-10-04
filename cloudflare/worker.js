@@ -6383,6 +6383,7 @@ function liveListeningPublicSection(section) {
     audioUrl: String(section.audio?.url || ''),
     playsAllowed: Math.max(0, Math.min(3, Math.round(Number(section.playsAllowed) || 0))),
     pauseAllowed: !!section.pauseAllowed,
+    speedAllowed: section.speedAllowed !== false,
   };
 }
 
@@ -6823,6 +6824,7 @@ function normalizeListeningSectionList(raw) {
       audio: normalizeListeningAudio(s.audio),
       playsAllowed: [0, 1, 2, 3].includes(plays) ? plays : LISTENING_DEFAULT_PLAYS,
       pauseAllowed: s.pauseAllowed !== false,
+      speedAllowed: s.speedAllowed !== false,
       ...(transcript ? { transcript } : {}),
     };
   }).filter(Boolean);
@@ -9508,6 +9510,7 @@ function publicListeningSections(quiz) {
     audioUrl: String(s.audio?.url || ''),
     playsAllowed: Math.max(0, Math.min(3, Math.round(Number(s.playsAllowed) || 0))),
     pauseAllowed: !!s.pauseAllowed,
+    speedAllowed: s.speedAllowed !== false,
   }));
 }
 
