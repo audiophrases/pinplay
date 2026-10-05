@@ -22,9 +22,26 @@ except Exception:  # pythonw has no console
     pass
 
 PORT = 8790
+
+
+def _studio_home():
+    """The folder for the engine and recordings on this computer: chosen by the
+    launcher (PINPLAY_STUDIO_HOME, or studio-home.txt next to this file, which
+    cmd writes in the console's code page), else the usual folder on D:."""
+    home = os.environ.get('PINPLAY_STUDIO_HOME', '').strip()
+    if not home:
+        try:
+            with open(os.path.join(HERE, 'studio-home.txt'), encoding='oem' if os.name == 'nt' else 'utf-8') as f:
+                home = f.read().strip()
+        except (OSError, LookupError, UnicodeDecodeError):
+            home = ''
+    return home or r'D:\Admin\pinplay listening tts audio production'
+
+
+STUDIO_HOME = _studio_home()
 CONFIG = {
-    'data': r'D:\Admin\pinplay listening tts audio production\studio-data',
-    'hf_home': r'D:\Admin\pinplay listening tts audio production\qwen3\hf',
+    'data': os.path.join(STUDIO_HOME, 'studio-data'),
+    'hf_home': os.path.join(STUDIO_HOME, 'qwen3', 'hf'),
 }
 _config_path = os.path.join(HERE, 'config.json')
 if os.path.exists(_config_path):

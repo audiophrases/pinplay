@@ -48,3 +48,6 @@ QA_NOTES_2026-03-07.md
 pinplay-template.json
 quiz-template-all-question-types.json
 .vscode/settings.json
+
+# Listening studio: the folder chosen on each computer
+listening-studio/studio-home.txt

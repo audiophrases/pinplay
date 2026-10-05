@@ -437,3 +437,12 @@ Still open:
 - ~~The default voice mode~~: fixed voice, Base 1.7B, batched (decided 2026-10-03).
 - Read the instruction aloud: is "before the first play only" right, or
   should it come before every play?
+
+## Other computers (2026-10-05)
+
+The studio's folder was fixed to `D:\Admin\pinplay listening tts audio production`, the desktop PC's layout. On the laptop D: is a write-protected 20 GB partition ("LINKAT"), so setup failed with "The media is write protected" and then a misleading "Python 3.11 was not found".
+
+- The launcher uses the D: folder when it can write there (the desktop is unchanged); otherwise it asks once, suggests `C:\PinPlay Listening Studio`, checks the answer can be written to, and remembers it in `listening-studio\studio-home.txt` (not tracked: one per computer). It passes the folder to the studio (`PINPLAY_STUDIO_HOME`); `server.py` reads that, then `studio-home.txt`, then the D: default.
+- Python 3.11 is found through `py -0p` (which lists Pythons installed by uv, unlike `py -3.11`), then `python` if it is 3.11. No fallback to another version (the pinned packages are for 3.11).
+- Before the 2 GB download, a computer with less than 12 GB of memory is told the voice model needs ~7 GB on its own and asked whether to continue. The laptop (i3-1115G4, 7.8 GB, no usable GPU) is below that: expect it to be very slow or run out of memory.
+- `.gitattributes` keeps `.bat`/`.cmd` files in CRLF (cmd can mis-find `call :label` targets in LF files).
