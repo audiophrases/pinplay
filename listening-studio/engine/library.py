@@ -87,14 +87,14 @@ def delete(lib, vid):
             pass
 
 
-def _new(lib, clip, name, text, source):
+def _new(lib, clip, name, text, source, **extra):
     os.makedirs(lib, exist_ok=True)
     vid = uuid.uuid4().hex[:12]
     tmp = os.path.join(lib, f'{vid}.part.wav')
     sf.write(tmp, clip, audio.SR)
     os.replace(tmp, wav_path(lib, vid))
     meta = {'id': vid, 'name': (str(name or '').strip() or 'My voice')[:80], 'text': ' '.join(str(text).split()),
-            'seconds': round(len(clip) / audio.SR, 1), 'created': time.time(), 'source': source}
+            'seconds': round(len(clip) / audio.SR, 1), 'created': time.time(), 'source': source, **extra}
     _save_meta(lib, meta)
     return meta
 
@@ -134,6 +134,28 @@ def prepare(source):
     clip[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
     clip[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
     return clip.astype(np.float32)
+
+
+def set_extra(lib, vid, **fields):
+    """Adds details (where a voice came from, its credit) to a voice."""
+    meta = get(lib, vid)
+    if meta:
+        meta.update(fields)
+        _save_meta(lib, meta)
+    return meta
+
+
+def add_known(lib, wav, name, text, **extra):
+    """A sample whose words are known exactly (a catalog voice made of whole
+    sentences): prepared like a file, never cut, no Whisper needed."""
+    clip, sr = sf.read(wav, dtype='float32')
+    if clip.ndim > 1:
+        clip = clip.mean(axis=1)
+    clip = audio.level(clip)
+    peak = float(np.max(np.abs(clip))) or 1.0
+    if peak > 0.95:
+        clip = clip * (0.95 / peak)
+    return _new(lib, clip.astype(np.float32), name, text, 'catalog', **extra)
 
 
 def add_file(lib, source, language, name):

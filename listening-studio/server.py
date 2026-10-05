@@ -58,7 +58,7 @@ import uvicorn  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
-from engine import library  # noqa: E402
+from engine import catalog, library  # noqa: E402
 from engine.project import Project  # noqa: E402
 import subprocess  # noqa: E402
 
@@ -354,16 +354,21 @@ async def library_add(request: Request):
     with open(upload, 'wb') as fh:
         fh.write(data)
     try:
-        import asyncio
-        proc = await asyncio.to_thread(
-            subprocess.run, [sys.executable, '-u', '-m', 'engine.library', 'add', LIBRARY, upload, language, name],
-            cwd=HERE, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        return {'voice': await _add_sample_file(upload, language, name)}
     finally:
         try:
             os.remove(upload)
         except OSError:
             pass
+
+
+async def _add_sample_file(path, language, name):
+    """engine/library.py add, in a process of its own: the new voice."""
+    import asyncio
+    proc = await asyncio.to_thread(
+        subprocess.run, [sys.executable, '-u', '-m', 'engine.library', 'add', LIBRARY, path, language, name],
+        cwd=HERE, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     found = [ln for ln in (proc.stdout or '').splitlines() if ln.startswith('@@')]
     if not found:
         print(proc.stdout, proc.stderr, flush=True)
@@ -371,7 +376,51 @@ async def library_add(request: Request):
     result = json.loads(found[-1][2:])
     if result.get('error'):
         raise HTTPException(400, result['error'])
-    return {'voice': result}
+    return result
+
+
+# ---------------------------------------------------------------- 🌍 find a voice (engine/catalog.py)
+CATALOG_CACHE = os.path.join(CONFIG['data'], 'catalog-cache')
+
+
+@app.get('/api/catalog')
+def catalog_list():
+    if not os.path.exists(catalog.CATALOG):
+        raise HTTPException(404, 'The voice catalog is missing from this copy of the studio.')
+    return FileResponse(catalog.CATALOG, media_type='application/json')
+
+
+async def _catalog_sample(key):
+    import asyncio
+    if not catalog.voice(key):
+        raise HTTPException(404, 'This voice is not in the catalog.')
+    try:
+        return await asyncio.to_thread(catalog.sample, key, CATALOG_CACHE)
+    except catalog.Busy as err:
+        raise HTTPException(503, str(err))
+
+
+@app.get('/api/catalog/{key}/audio')
+async def catalog_audio(key: str):
+    """The voice's sample, to listen to before adding it (fetched once)."""
+    return FileResponse(await _catalog_sample(key), media_type='audio/wav')
+
+
+@app.post('/api/catalog/{key}/add')
+async def catalog_add(key: str, request: Request):
+    """A catalog voice into the library, with its credit."""
+    body = await request.json()
+    v = catalog.voice(key)
+    path = await _catalog_sample(key)
+    src = catalog.load()['sources'][v['source']]
+    name = (body.get('name') or key).strip()[:80]
+    extra = {'origin': src['name'], 'credit': src['credit'], 'license': src['license'], 'catalogKey': key}
+    if v.get('text'):  # whole sentences: the words are known
+        voice = library.add_known(LIBRARY, path, name, v['text'], **extra)
+    else:  # a long reading: cut to 15 s, words written down by Whisper
+        voice = await _add_sample_file(path, 'English', name)
+        voice = library.set_extra(LIBRARY, voice['id'], **extra)
+    return {'voice': voice}
 
 
 @app.post('/api/library/from-recording')

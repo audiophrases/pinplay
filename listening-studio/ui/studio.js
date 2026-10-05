@@ -184,6 +184,7 @@ function renderVoices() {
       ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") and press ↻ Remake voice, or use a sample of a real voice (🎙 below).</div>` : ''}`;
     const buttons = [
       own ? '' : '<button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button>',
+      '<button class="btn small" data-find title="Choose a real voice from open recordings (American and other native readers, English with an accent)">🌍 Find a voice</button>',
       '<button class="btn small" data-mic title="Record someone reading this character\'s lines, here and now">🎤 Record</button>',
       '<button class="btn small" data-upload title="A recording of one person talking calmly, 5–15 seconds (MP3, WAV, a phone recording…)">🎙 Use my own sample…</button>',
       !own && v.sample ? '<button class="btn small" data-keep-voice title="Keep this voice to use it in other recordings">📚 Save to library</button>' : '',
@@ -609,6 +610,10 @@ $('micUse').addEventListener('click', guarded(async () => {
 }));
 
 $('voices').addEventListener('click', guarded(async (e) => {
+  if (e.target.closest('[data-find]')) {
+    await openFinder(e.target.closest('.voice').dataset.name);
+    return;
+  }
   if (e.target.closest('[data-mic]')) {
     openMic(e.target.closest('.voice').dataset.name);
     return;
@@ -719,6 +724,7 @@ async function renderLibrary() {
         <button class="btn small danger" type="button" data-lib-delete>🗑 Delete</button></div>
       <audio controls preload="none" src="${libraryAudioUrl(v.id)}"></audio>
       <textarea data-lib-text title="What the sample says, exactly">${esc(v.text)}</textarea>
+      ${v.credit ? `<span class="muted small">From ${esc(v.credit)}</span>` : ''}
     </div>`).join('') || '<p class="muted">No voices yet.</p>';
 }
 $('libraryBtn').addEventListener('click', guarded(async () => {
@@ -742,6 +748,170 @@ $('libraryList').addEventListener('click', guarded(async (e) => {
   await api(`/api/library/${item.dataset.id}`, { method: 'DELETE' });
   await renderLibrary();
 }));
+
+// ---------------------------------------------------------------- 🌍 find a voice
+// Real voices from open recordings (catalog/voices.json): listen, then add
+// to the library or give to a character at once.
+const finder = { tab: 'librittsr', catalog: null, forName: null, shown: 40,
+  f: { accent: 'American', gender: '', pitch: '', manner: 'calm', pace: '', language: 'Spanish', age: '' } };
+const PITCH_GROUP = { 'very low': 'low', low: 'low', 'slightly low': 'low', moderate: 'moderate', 'slightly high': 'high', high: 'high', 'very high': 'high' };
+const PACE_GROUP = { 'very slow': 'slow', slow: 'slow', 'slightly slow': 'slow', moderate: 'moderate', 'slightly fast': 'fast', fast: 'fast', 'very fast': 'fast' };
+const FINDER_ABOUT = {
+  librittsr: 'LibriVox volunteers reading audiobooks, cleaned in a studio (LibriTTS-R, free to use with credit). Labelled by accent, pitch, pace and manner: "calm" voices copy best.',
+  accentarchive: 'People from all over the world reading the same English paragraph (Speech Accent Archive, George Mason University; free for teaching, not for selling). Choose their first language.',
+};
+
+async function openFinder(forName) {
+  finder.forName = forName || null;
+  if (!finder.catalog) finder.catalog = await api('/api/catalog');
+  $('findTitle').textContent = forName ? `🌍 Find a voice for ${forName}` : '🌍 Find a voice';
+  finder.shown = 40;
+  renderFinder();
+  if (!$('findDialog').open) $('findDialog').showModal();
+}
+
+function finderOptions(list, value, labels = {}) {
+  return list.map(([v, n]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(labels[v] || v || 'Any')}${n ? ` (${n})` : ''}</option>`).join('');
+}
+
+function counted(voices, field) {
+  const counts = {};
+  voices.forEach((v) => { if (v[field]) counts[v[field]] = (counts[v[field]] || 0) + 1; });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function finderMatches() {
+  const { f, tab } = finder;
+  const all = finder.catalog.voices.filter((v) => v.source === tab);
+  const sel = (key, val) => !val || key === val;
+  if (tab === 'librittsr') {
+    const rank = { calm: 0, mixed: 1, lively: 2 };
+    return all.filter((v) => sel(v.accent, f.accent) && sel(v.gender, f.gender) && sel(PITCH_GROUP[v.pitch], f.pitch)
+        && sel(PACE_GROUP[v.pace], f.pace) && (f.manner === 'any' || v.manner === 'calm' || (f.manner === 'mixed' && v.manner === 'mixed')))
+      .sort((a, b) => rank[a.manner] - rank[b.manner] || a.gender.localeCompare(b.gender) || a.hz - b.hz);
+  }
+  const ageOk = (a) => !f.age || (a && (f.age === 'young' ? a < 30 : f.age === 'middle' ? a >= 30 && a < 50 : a >= 50));
+  return all.filter((v) => sel(v.language, f.language) && sel(v.gender, f.gender) && ageOk(v.age))
+    .sort((a, b) => (a.gender ? 0 : 1) - (b.gender ? 0 : 1) || (a.age || 99) - (b.age || 99));
+}
+
+function finderLabel(v) {
+  const who = { female: 'Woman', male: 'Man' }[v.gender] || 'Speaker';
+  if (v.source === 'librittsr') {
+    return [`<b>${who} · ${esc(v.accent)}</b>`, `<span class="muted small">${esc(v.pitch)} voice · ${esc(v.manner)} · ${esc(v.pace)} pace · reader ${esc(v.speaker)}</span>`];
+  }
+  return [`<b>${who}${v.age ? `, ${v.age}` : ''} · first language ${esc(v.language)}</b>`,
+    `<span class="muted small">${v.birthplace ? `born in ${esc(v.birthplace)} · ` : ''}${esc(v.speaker)}</span>`];
+}
+
+function finderName(v) {
+  const who = { female: 'woman', male: 'man' }[v.gender] || 'speaker';
+  return v.source === 'librittsr'
+    ? `${v.accent} ${who}, ${v.pitch}, ${v.manner} (reader ${v.speaker})`
+    : `${v.language} accent, ${who}${v.age ? ` ${v.age}` : ''} (${v.speaker})`;
+}
+
+function renderFinder() {
+  const { f, tab } = finder;
+  document.querySelectorAll('#findDialog [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  $('findAbout').textContent = FINDER_ABOUT[tab];
+  const all = finder.catalog.voices.filter((v) => v.source === tab);
+  const gender = finderOptions([['', ''], ['female', ''], ['male', '']], f.gender, { '': 'Any', female: 'Woman', male: 'Man' });
+  $('findFilters').innerHTML = tab === 'librittsr'
+    ? `<label>Accent<select data-f="accent">${finderOptions(counted(all, 'accent'), f.accent)}</select></label>
+       <label>Man or woman<select data-f="gender">${gender}</select></label>
+       <label>Pitch<select data-f="pitch">${finderOptions([['', ''], ['low', ''], ['moderate', ''], ['high', '']], f.pitch, { '': 'Any', low: 'Low', moderate: 'Moderate', high: 'High' })}</select></label>
+       <label>Manner<select data-f="manner">${finderOptions([['calm', ''], ['mixed', ''], ['any', '']], f.manner, { calm: 'Calm only (copies best)', mixed: 'Calm or a little lively', any: 'Any' })}</select></label>
+       <label>Pace<select data-f="pace">${finderOptions([['', ''], ['slow', ''], ['moderate', ''], ['fast', '']], f.pace, { '': 'Any', slow: 'Slow', moderate: 'Moderate', fast: 'Fast' })}</select></label>`
+    : `<label>First language<select data-f="language">${finderOptions(counted(all, 'language'), f.language)}</select></label>
+       <label>Man or woman<select data-f="gender">${gender}</select></label>
+       <label>Age<select data-f="age">${finderOptions([['', ''], ['young', ''], ['middle', ''], ['older', '']], f.age, { '': 'Any', young: 'Under 30', middle: '30–49', older: '50 or more' })}</select></label>`;
+  const found = finderMatches();
+  const action = finder.forName ? `✅ Use for ${esc(finder.forName)}` : '➕ Add to library';
+  $('findList').innerHTML = found.slice(0, finder.shown).map((v) => {
+    const [title, sub] = finderLabel(v);
+    return `<div class="find-item" data-key="${esc(v.key)}"><div>${title}<br>${sub}</div>
+      <div class="acts"><button type="button" class="btn small" data-listen>▶ Listen</button>
+        <button type="button" class="btn small primary" data-take>${action}</button></div></div>`;
+  }).join('') + (found.length > finder.shown ? `<button type="button" class="btn" data-more>Show more (${found.length - finder.shown} left)</button>` : '')
+    + (found.length ? '' : '<p class="muted">No voice matches: change a filter.</p>');
+}
+
+$('findDialog').addEventListener('click', guarded(async (e) => {
+  const tab = e.target.closest('[data-tab]');
+  if (tab) {
+    finder.tab = tab.dataset.tab;
+    finder.f.gender = '';
+    finder.shown = 40;
+    renderFinder();
+    return;
+  }
+  if (e.target.closest('[data-more]')) {
+    finder.shown += 40;
+    renderFinder();
+    return;
+  }
+  const item = e.target.closest('.find-item');
+  if (!item) return;
+  const key = item.dataset.key;
+  if (e.target.closest('[data-listen]')) {
+    const btn = e.target.closest('[data-listen]');
+    item.querySelector('.err')?.remove();
+    let player = item.querySelector('audio');
+    if (player) { player.play().catch(() => {}); return; }
+    btn.disabled = true;
+    btn.textContent = '⏳ Fetching…';
+    try {
+      const res = await fetch(`/api/catalog/${encodeURIComponent(key)}/audio`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      player = document.createElement('audio');
+      player.controls = true;
+      player.src = URL.createObjectURL(await res.blob());
+      item.appendChild(player);
+      player.play().catch(() => {});
+    } catch (err) {
+      item.insertAdjacentHTML('beforeend', `<div class="err">❌ ${esc(err.message)}</div>`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '▶ Listen';
+    }
+    return;
+  }
+  if (e.target.closest('[data-take]')) {
+    const v = finder.catalog.voices.find((x) => x.key === key);
+    const name = prompt('A name for this voice in your library:', finderName(v));
+    if (name === null) return;
+    const btn = e.target.closest('[data-take]');
+    btn.disabled = true;
+    btn.textContent = v.text ? '⏳ Adding…' : '⏳ Adding (about a minute)…';
+    let voice;
+    try {
+      ({ voice } = await api(`/api/catalog/${encodeURIComponent(key)}/add`, { method: 'POST', body: { name } }));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = finder.forName ? `✅ Use for ${finder.forName}` : '➕ Add to library';
+    }
+    await loadLibrary();
+    if (finder.forName && currentId) {
+      const forName = finder.forName;
+      $('findDialog').close();
+      readVoiceCards();
+      settings().ownVoices[forName] = voice.id;
+      await saveSettings('voices', `✅ ${forName} now has the voice “${name}”. Listen, then approve.`);
+    } else {
+      toast(`📚 “${name}” added to the library.`);
+      if ($('libraryDialog').open) await renderLibrary();
+    }
+  }
+}));
+$('findDialog').addEventListener('change', (e) => {
+  const key = e.target.dataset.f;
+  if (!key) return;
+  finder.f[key] = e.target.value;
+  finder.shown = 40;
+  renderFinder();
+});
+$('libraryFindBtn').addEventListener('click', guarded(() => openFinder(null)));
 
 $('promptBtn').addEventListener('click', () => {
   const sel = $('pLanguage');

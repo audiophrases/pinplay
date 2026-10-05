@@ -126,9 +126,23 @@
       <h2>📚 Voice library</h2>
       <p class="muted small" style="margin:0">Voices any character can use: choose one on a voice card. Add one with <b>🎙 Use my own sample…</b> on a voice card (a recording of someone talking, 5–15 seconds), or keep a voice you liked with <b>📚 Save to library</b>.</p>
       <div id="libraryList" class="library"></div>
+      <div class="row end"><button class="btn" type="button" id="libraryFindBtn">🌍 Find a voice</button><button class="btn" value="close">Close</button></div>
+    </form>
+  </dialog>
+  <dialog id="findDialog" class="wide">
+    <form method="dialog" class="dialog">
+      <h2 id="findTitle">🌍 Find a voice</h2>
+      <div class="tabs">
+        <button type="button" class="btn" data-tab="librittsr">🇺🇸 Native English readers</button>
+        <button type="button" class="btn" data-tab="accentarchive">🌍 English with an accent</button>
+      </div>
+      <p id="findAbout" class="muted small" style="margin:0"></p>
+      <div class="row" id="findFilters" style="margin-top:0"></div>
+      <div id="findList" class="find-list"></div>
       <div class="row end"><button class="btn" value="close">Close</button></div>
     </form>
   </dialog>
+
   <dialog id="micDialog">
     <form method="dialog" class="dialog">
       <h2 id="micTitle">🎤 Record a voice</h2>

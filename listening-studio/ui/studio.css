@@ -123,6 +123,15 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .mic-level { flex: 1; height: 8px; background: var(--chip); border-radius: 99px; overflow: hidden; min-width: 120px; }
 #micLevel { height: 100%; width: 0; background: var(--ok); transition: width .08s; }
 #micRecord.recording { background: var(--bad); border-color: var(--bad); }
+dialog.wide { width: min(880px, 96vw); }
+.tabs { display: flex; gap: .4rem; flex-wrap: wrap; }
+.tabs .btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+#findFilters label { display: flex; flex-direction: column; gap: .2rem; font-size: .8rem; color: var(--muted); }
+.find-list { display: flex; flex-direction: column; gap: .4rem; max-height: 55vh; overflow: auto; }
+.find-item { display: grid; grid-template-columns: 1fr auto; gap: .3rem .6rem; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem; }
+.find-item .acts { display: flex; gap: .4rem; align-items: center; }
+.find-item audio { grid-column: 1 / -1; width: 100%; height: 32px; }
+.find-item .err { grid-column: 1 / -1; color: var(--bad); font-size: .82rem; }
 .library { display: flex; flex-direction: column; gap: .6rem; max-height: 60vh; overflow: auto; }
 .library .item { border: 1px solid var(--line); border-radius: 10px; padding: .6rem; display: flex; flex-direction: column; gap: .4rem; }
 .library .item .row { margin-top: 0; }
