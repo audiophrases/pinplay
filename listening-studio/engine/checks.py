@@ -161,8 +161,14 @@ class WordChecker:
         from faster_whisper import WhisperModel
         self.model = WhisperModel('small', device='cpu', compute_type='int8')
 
-    def hear(self, audio, language='English'):
-        segs, _info = self.model.transcribe(audio, language=WHISPER_LANG.get(language, 'en'), beam_size=5)
+    def hear(self, clip, language='English', sr=24000):
+        """What Whisper hears in a clip (sr: its sample rate). Whisper takes
+        16 kHz audio: a 24 kHz line given as it is would be heard 1.5 times
+        too slow and too low, and its words misheard."""
+        if sr != 16000:
+            import librosa
+            clip = librosa.resample(np.asarray(clip, dtype=np.float32), orig_sr=sr, target_sr=16000)
+        segs, _info = self.model.transcribe(clip, language=WHISPER_LANG.get(language, 'en'), beam_size=5)
         return ' '.join(s.text.strip() for s in segs)
 
 

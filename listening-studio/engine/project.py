@@ -9,6 +9,8 @@ The teacher's settings (all optional):
   modes        { Name: 'fixed' | 'acted' } per character
   descriptions { Name: description } overriding the script's VOICE line
   sampleTakes  { Name: n } "New voice sample"
+  ownVoices    { Name: library voice id } a sample from the voice library
+               (engine/library.py) instead of a designed voice: always fixed
   lineTakes    { 'part:item:Name': n } "Try again" on one line
   batch        True (default): several lines per call
   spacing      'tight' | 'natural' | 'relaxed'
@@ -23,11 +25,11 @@ import time
 import numpy as np
 import soundfile as sf
 
-from . import audio
+from . import audio, library
 from .checks import WordChecker, age_warning, compare, median_pitch
 from .voices import NEUTRAL, Stopped, Voices  # noqa: F401 (Stopped is used by the server)
 
-DEFAULTS = {'mode': 'fixed', 'modes': {}, 'descriptions': {}, 'sampleTakes': {}, 'lineTakes': {},
+DEFAULTS = {'mode': 'fixed', 'modes': {}, 'descriptions': {}, 'sampleTakes': {}, 'lineTakes': {}, 'ownVoices': {},
             'batch': True, 'spacing': 'natural', 'ambience': None, 'check': True}
 # More lines per call is faster, but a batch of 8 ran out of memory (16 GB)
 # when copying a voice: 4 is the safe size on this PC.
@@ -90,6 +92,7 @@ class Project:
                 self.checks = {}
         self.voices = Voices(should_stop=self.should_stop)
         self.checker = None
+        self.library = library.library_of(folder)
 
     # ------------------------------------------------------------ the plan
     def speakers(self):
@@ -107,7 +110,15 @@ class Project:
         unknown = [s for s in self.speakers() if not self.script['voices'].get(s)]
         return AUTO_VOICES[unknown.index(name) % len(AUTO_VOICES)]
 
+    def own(self, name):
+        """The library voice this character uses, or None (a designed voice;
+        also when that library voice was deleted)."""
+        vid = (self.settings['ownVoices'] or {}).get(name)
+        return library.get(self.library, vid) if vid else None
+
     def mode(self, name):
+        if self.own(name):
+            return 'fixed'  # a sample can only be copied
         return (self.settings['modes'] or {}).get(name) or self.settings['mode']
 
     def tasks(self):
@@ -126,7 +137,11 @@ class Project:
 
     def sample_text(self, name):
         """The voice sample says the character's own first lines (right
-        language, right vocabulary), about 15–40 words."""
+        language, right vocabulary), about 15–40 words. A library voice
+        says its own words."""
+        own = self.own(name)
+        if own:
+            return own['text']
         words = []
         for t in self.tasks():
             if t['speaker'] == name:
@@ -136,6 +151,9 @@ class Project:
         return ' '.join(words[:40])
 
     def sample_key(self, name):
+        own = self.own(name)
+        if own:
+            return _key('own', own['id'], own['text'])
         take = int((self.settings['sampleTakes'] or {}).get(name, 0))
         return _key('sample', self.description(name), self.language, self.sample_text(name), take)
 
@@ -149,6 +167,9 @@ class Project:
         return os.path.join(self.folder, 'lines', f'{key}.wav')
 
     def sample_file(self, name):
+        own = self.own(name)
+        if own:
+            return library.wav_path(self.library, own['id'])
         return os.path.join(self.folder, 'voices', f'{self.sample_key(name)}.wav')
 
     # ------------------------------------------------------------ making
@@ -175,7 +196,7 @@ class Project:
             clip, _ = sf.read(path, dtype='float32')
             pitch = median_pitch(clip, audio.SR)
             report[name] = {'sample': path, 'pitch': round(pitch) if pitch else None,
-                            'warning': age_warning(self.description(name), pitch)}
+                            'warning': '' if self.own(name) else age_warning(self.description(name), pitch)}
             self._save_report(report)
         self.say({'stage': 'voices', 'done': len(need), 'total': len(need)})
         return report

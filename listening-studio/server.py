@@ -50,12 +50,15 @@ CONFIG['data'] = os.environ.get('PINPLAY_STUDIO_DATA') or CONFIG['data']  # test
 os.environ.setdefault('HF_HOME', CONFIG['hf_home'])
 os.environ.setdefault('HF_HUB_DISABLE_XET', '1')
 RECORDINGS = os.path.join(CONFIG['data'], 'recordings')
+LIBRARY = os.path.join(CONFIG['data'], 'library')  # engine/library.py: library_of(any recording)
 os.makedirs(RECORDINGS, exist_ok=True)
+os.makedirs(LIBRARY, exist_ok=True)
 
 import uvicorn  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
+from engine import library  # noqa: E402
 from engine.project import Project  # noqa: E402
 import subprocess  # noqa: E402
 
@@ -251,7 +254,7 @@ def get_recording(rid: str):
         for name in project.speakers():
             voices[name] = {'description': project.description(name), 'mode': project.mode(name),
                             'sample': os.path.exists(project.sample_file(name)),
-                            'sampleKey': project.sample_key(name),
+                            'sampleKey': project.sample_key(name), 'own': project.own(name),
                             'effect': (rec['script']['voices'].get(name) or {}).get('effect', '')}
     else:
         voices = {}
@@ -326,6 +329,85 @@ def audio_file(rid: str, kind: str, name: str):
         raise HTTPException(404, 'Not made yet.')
     return FileResponse(path, media_type='audio/mpeg' if name.endswith('.mp3') else 'audio/wav',
                         headers={'Cache-Control': 'no-store'})
+
+
+# ---------------------------------------------------------------- the voice library
+@app.get('/api/library')
+def library_list():
+    return {'voices': library.all_voices(LIBRARY)}
+
+
+@app.post('/api/library')
+async def library_add(request: Request):
+    """An outside sample (the file itself is the request body): trimmed,
+    its words written down by Whisper, in a process of its own (Whisper
+    isn't kept in the studio's memory). About a minute."""
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, 'No file.')
+    if len(data) > 40 * 1024 * 1024:
+        raise HTTPException(400, 'This file is too big: use a short clip (5–15 seconds).')
+    ext = re.sub(r'[^a-z0-9]', '', (request.query_params.get('ext') or 'audio').lower())[:5] or 'audio'
+    language = request.query_params.get('language') or 'English'
+    name = (request.query_params.get('name') or 'My voice').strip()[:80]
+    upload = os.path.join(LIBRARY, f'upload-{uuid.uuid4().hex[:8]}.{ext}')
+    with open(upload, 'wb') as fh:
+        fh.write(data)
+    try:
+        import asyncio
+        proc = await asyncio.to_thread(
+            subprocess.run, [sys.executable, '-u', '-m', 'engine.library', 'add', LIBRARY, upload, language, name],
+            cwd=HERE, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    finally:
+        try:
+            os.remove(upload)
+        except OSError:
+            pass
+    found = [ln for ln in (proc.stdout or '').splitlines() if ln.startswith('@@')]
+    if not found:
+        print(proc.stdout, proc.stderr, flush=True)
+        raise HTTPException(500, _job_error(proc.returncode, (proc.stderr or proc.stdout or '').splitlines()[-40:]))
+    result = json.loads(found[-1][2:])
+    if result.get('error'):
+        raise HTTPException(400, result['error'])
+    return {'voice': result}
+
+
+@app.post('/api/library/from-recording')
+async def library_from_recording(request: Request):
+    """A character's designed voice, kept in the library for other recordings."""
+    body = await request.json()
+    rec = _load(body.get('id') or '')
+    project = Project(_folder(rec['id']), _script_for(rec), rec.get('settings') or {})
+    character = body.get('character') or ''
+    if character not in project.speakers() or not os.path.exists(project.sample_file(character)):
+        raise HTTPException(400, 'Make this voice first.')
+    voice = library.save_designed(LIBRARY, project.sample_file(character), project.sample_text(character),
+                                  body.get('name') or character)
+    return {'voice': voice}
+
+
+@app.put('/api/library/{vid}')
+async def library_update(vid: str, request: Request):
+    body = await request.json()
+    voice = library.update(LIBRARY, vid, body.get('name'), body.get('text'))
+    if not voice:
+        raise HTTPException(404, 'This voice is no longer in the library.')
+    return {'voice': voice}
+
+
+@app.delete('/api/library/{vid}')
+def library_delete(vid: str):
+    library.delete(LIBRARY, vid)
+    return {'ok': True}
+
+
+@app.get('/api/library/{vid}/audio')
+def library_audio(vid: str):
+    if not library.get(LIBRARY, vid):
+        raise HTTPException(404, 'Not found.')
+    return FileResponse(library.wav_path(LIBRARY, vid), media_type='audio/wav', headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/api/quit')

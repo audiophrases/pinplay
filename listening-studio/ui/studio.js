@@ -19,6 +19,7 @@ let current = null; // { recording, lines, voices, result }
 let voicesDirty = false;
 let watching = null; // the job we saw running
 let polls = 0;
+let voiceLibrary = []; // engine/library.py: samples any character can use
 
 function toast(msg, ms = 3500) {
   const el = $('toast');
@@ -70,9 +71,14 @@ function showWelcome() {
   $('newText').focus();
 }
 
+async function loadLibrary() {
+  voiceLibrary = (await api('/api/library').catch(() => ({ voices: [] }))).voices || [];
+  return voiceLibrary;
+}
+
 async function openRecording(id, { keepText = false } = {}) {
   currentId = id;
-  current = await api(`/api/recordings/${id}`);
+  [current] = await Promise.all([api(`/api/recordings/${id}`), loadLibrary()]);
   $('welcome').hidden = true;
   $('editor').hidden = false;
   document.querySelectorAll('#list li').forEach((li) => li.classList.toggle('active', li.dataset.id === id));
@@ -82,7 +88,7 @@ async function openRecording(id, { keepText = false } = {}) {
 // ---------------------------------------------------------------- the editor
 function settings() {
   const s = current.recording.settings || (current.recording.settings = {});
-  ['modes', 'descriptions', 'sampleTakes', 'lineTakes'].forEach((k) => { s[k] = s[k] || {}; });
+  ['modes', 'descriptions', 'sampleTakes', 'lineTakes', 'ownVoices'].forEach((k) => { s[k] = s[k] || {}; });
   return s;
 }
 
@@ -150,23 +156,47 @@ function renderParts() {
     : `<p class="muted">${!approved() ? 'Step 2: the recording is made after you approve the voices.' : making ? 'Being made… you can listen to each line below as soon as it is ready.' : 'Not made yet.'}</p>`;
 }
 
+const libraryAudioUrl = (id) => `/api/library/${encodeURIComponent(id)}/audio?t=${Date.now()}`;
+
+// Each card: where the voice comes from (designed from its description, or a
+// library sample), then that voice.
 function renderVoices() {
   const s = settings();
   const result = { ...(current.result?.voices || {}), ...(current.voiceReport || {}) };
   $('voices').innerHTML = Object.entries(current.voices).map(([name, v]) => {
     const r = result[name];
-    const warning = r && base(r.sample) === `${v.sampleKey}.wav` ? r.warning : '';
-    return `<div class="voice" data-name="${esc(name)}">
-      <div class="voice-head"><b>${esc(name)}</b>${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
-        <select data-mode style="margin-left:auto">
-          <option value="fixed" ${v.mode === 'fixed' ? 'selected' : ''}>Fixed voice</option>
-          <option value="acted" ${v.mode === 'acted' ? 'selected' : ''}>Acted</option>
-        </select></div>
-      <textarea data-desc>${esc(s.descriptions[name] || v.description)}</textarea>
+    const own = v.own;
+    const warning = !own && r && base(r.sample) === `${v.sampleKey}.wav` ? r.warning : '';
+    const source = `<select data-source title="Where this voice comes from">
+        <option value="">✨ Designed from a description</option>
+        ${voiceLibrary.map((lv) => `<option value="${esc(lv.id)}" ${own?.id === lv.id ? 'selected' : ''}>📚 ${esc(lv.name)}</option>`).join('')}
+      </select>`;
+    const body = own
+      ? `<div class="own">
+          <audio controls preload="none" src="${libraryAudioUrl(own.id)}"></audio>
+          <label class="muted small">What the sample says (exactly: correct Whisper if needed)
+            <textarea data-own-text data-id="${esc(own.id)}">${esc(own.text)}</textarea></label>
+          <span class="muted small">Every line is copied from this sample: its accent, pitch, pace and manner.</span>
+        </div>`
+      : `<textarea data-desc>${esc(s.descriptions[name] || v.description)}</textarea>
       ${v.sample ? `<audio controls preload="none" src="${audioUrl('voices', `${v.sampleKey}.wav`)}"></audio>` : '<span class="muted small">Voice not made yet.</span>'}
       ${v.mode === 'acted' ? '<span class="muted small">Acted: each line is performed from its direction, in a voice like this one.</span>' : ''}
-      ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") and press ↻ Remake voice.</div>` : ''}
-      <div class="row" style="margin-top:0"><button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button></div>
+      ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") and press ↻ Remake voice, or use a sample of a real voice (🎙 below).</div>` : ''}`;
+    const buttons = [
+      own ? '' : '<button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button>',
+      '<button class="btn small" data-mic title="Record someone reading this character\'s lines, here and now">🎤 Record</button>',
+      '<button class="btn small" data-upload title="A recording of one person talking calmly, 5–15 seconds (MP3, WAV, a phone recording…)">🎙 Use my own sample…</button>',
+      !own && v.sample ? '<button class="btn small" data-keep-voice title="Keep this voice to use it in other recordings">📚 Save to library</button>' : '',
+    ].join('');
+    return `<div class="voice" data-name="${esc(name)}">
+      <div class="voice-head"><b>${esc(name)}</b>${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
+        ${own ? '<span class="chip" style="margin-left:auto">Fixed voice</span>' : `<select data-mode style="margin-left:auto">
+          <option value="fixed" ${v.mode === 'fixed' ? 'selected' : ''}>Fixed voice</option>
+          <option value="acted" ${v.mode === 'acted' ? 'selected' : ''}>Acted</option>
+        </select>`}</div>
+      ${source}
+      ${body}
+      <div class="row" style="margin-top:0">${buttons}</div>
     </div>`;
   }).join('') || '<p class="muted">No voices yet.</p>';
 }
@@ -219,6 +249,7 @@ function readVoiceCards() {
   const s = settings();
   document.querySelectorAll('#voices .voice').forEach((card) => {
     const name = card.dataset.name;
+    if (!card.querySelector('[data-desc]')) return; // a library voice: nothing to read
     const desc = card.querySelector('[data-desc]').value.trim();
     const original = (current.recording.script.voices[name] || {}).description || '';
     if (desc && desc !== original) s.descriptions[name] = desc;
@@ -435,11 +466,168 @@ $('applyBtn').addEventListener('click', guarded(async () => {
   await saveSettings(changedVoices ? 'voices' : approved() ? 'all' : false);
 }));
 
-$('voices').addEventListener('input', () => { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; });
-$('voices').addEventListener('change', (e) => {
-  if (e.target.matches('[data-mode]')) { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; }
+$('voices').addEventListener('input', (e) => {
+  if (e.target.matches('[data-own-text]')) return; // saved on its own (change)
+  voicesDirty = true;
+  $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)';
 });
+$('voices').addEventListener('change', guarded(async (e) => {
+  if (e.target.matches('[data-mode]')) { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; }
+  const name = e.target.closest('.voice')?.dataset.name;
+  if (e.target.matches('[data-source]')) {
+    readVoiceCards();
+    const s = settings();
+    if (e.target.value) s.ownVoices[name] = e.target.value;
+    else delete s.ownVoices[name];
+    await saveSettings('voices', e.target.value ? `${name} now uses that library voice. Listen, then approve.` : `${name}'s voice is designed from its description again. Listen, then approve.`);
+  } else if (e.target.matches('[data-own-text]')) {
+    const text = e.target.value.trim();
+    if (!text) { toast('Write what the sample says.'); return; }
+    await api(`/api/library/${encodeURIComponent(e.target.dataset.id)}`, { method: 'PUT', body: { text } });
+    readVoiceCards();
+    await saveSettings('voices', 'Words saved. The lines in this voice will be made again after you approve.');
+  }
+}));
+
+// 🎙 Use my own sample: the file goes to the library (trimmed, its words
+// written down), and the character uses it.
+let uploadFor = null;
+async function uploadSample(file, name, ext = (file.name.split('.').pop() || 'audio').toLowerCase()) {
+  const voiceName = prompt('A name for this voice in your library (e.g. "Calm man, 40s, Spanish accent"):', `${name}'s voice`);
+  if (voiceName === null) return;
+  const language = current.recording.script?.language || 'English';
+  toast('⏳ Preparing the sample: trimming it and writing down its words (about a minute)…', 120000);
+  const res = await fetch(`/api/library?name=${encodeURIComponent(voiceName)}&language=${encodeURIComponent(language)}&ext=${encodeURIComponent(ext)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  readVoiceCards();
+  settings().ownVoices[name] = data.voice.id;
+  await saveSettings('voices', `✅ Sample added for ${name}. Check the words under it (they must match exactly), listen, then approve.`);
+}
+$('sampleFile').addEventListener('change', guarded(async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (file && uploadFor) await uploadSample(file, uploadFor);
+}));
+
+// 🎤 Record: the teacher (or a colleague) reads the character's own lines;
+// the recording then goes the same way as a sample file.
+const mic = { name: '', stream: null, recorder: null, chunks: [], blob: null, timer: null, meter: null, ctx: null };
+
+function micReadingText(name) {
+  const words = [];
+  current.lines.filter((l) => l.speaker === name).some((l) => { words.push(...l.text.split(/\s+/)); return words.length >= 30; });
+  return words.slice(0, 45).join(' ') || 'Hello! It\'s nice to meet you. I usually get up at about seven, have a coffee, and walk to work. What about you?';
+}
+
+function micStopAll() {
+  clearInterval(mic.timer);
+  cancelAnimationFrame(mic.meter);
+  if (mic.recorder && mic.recorder.state !== 'inactive') mic.recorder.stop();
+  mic.stream?.getTracks().forEach((t) => t.stop());
+  mic.ctx?.close().catch(() => {});
+  Object.assign(mic, { stream: null, ctx: null, timer: null, meter: null });
+  $('micRecord').classList.remove('recording');
+  $('micRecord').textContent = mic.blob ? '● Record again' : '● Record';
+  $('micLevel').style.width = '0';
+}
+
+function openMic(name) {
+  Object.assign(mic, { name, blob: null, chunks: [] });
+  $('micTitle').textContent = `🎤 Record a voice for ${name}`;
+  $('micText').textContent = micReadingText(name);
+  $('micTime').textContent = '0 s';
+  $('micPreview').hidden = true;
+  $('micPreview').removeAttribute('src');
+  $('micUse').disabled = true;
+  $('micStatus').textContent = '';
+  $('micRecord').textContent = '● Record';
+  $('micDialog').showModal();
+}
+
+async function micStart() {
+  try {
+    mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 } });
+  } catch {
+    $('micStatus').textContent = '❌ The microphone could not be used. Allow it when the browser asks (or in the 🔒 menu left of the address), and check one is plugged in.';
+    return;
+  }
+  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || '';
+  mic.recorder = new MediaRecorder(mic.stream, type ? { mimeType: type, audioBitsPerSecond: 128000 } : {});
+  mic.chunks = [];
+  mic.recorder.ondataavailable = (e) => { if (e.data.size) mic.chunks.push(e.data); };
+  mic.recorder.onstop = () => {
+    mic.blob = new Blob(mic.chunks, { type: mic.recorder.mimeType || 'audio/webm' });
+    $('micPreview').src = URL.createObjectURL(mic.blob);
+    $('micPreview').hidden = false;
+    $('micUse').disabled = false;
+    $('micRecord').textContent = '● Record again';
+    $('micStatus').textContent = 'Listen to it: calm and clear, no noise? Then use it, or record again.';
+  };
+  mic.recorder.start();
+  // A level meter, so a silent or too-quiet microphone shows at once.
+  try {
+    mic.ctx = new AudioContext();
+    const analyser = mic.ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    mic.ctx.createMediaStreamSource(mic.stream).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const draw = () => {
+      analyser.getFloatTimeDomainData(buf);
+      const peak = buf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      $('micLevel').style.width = `${Math.min(100, peak * 140)}%`;
+      $('micLevel').style.background = peak > 0.95 ? 'var(--bad)' : 'var(--ok)';
+      mic.meter = requestAnimationFrame(draw);
+    };
+    draw();
+  } catch { /* no meter: fine */ }
+  const started = Date.now();
+  $('micRecord').classList.add('recording');
+  $('micRecord').textContent = '■ Stop';
+  $('micUse').disabled = true;
+  $('micPreview').hidden = true;
+  $('micStatus').textContent = 'Recording… read the text above, then press Stop.';
+  mic.timer = setInterval(() => {
+    const s = Math.floor((Date.now() - started) / 1000);
+    $('micTime').textContent = `${s} s`;
+    if (s >= 25) micStopAll(); // more is cut anyway
+  }, 250);
+}
+
+$('micRecord').addEventListener('click', guarded(async () => {
+  if (mic.recorder && mic.recorder.state === 'recording') micStopAll();
+  else await micStart();
+}));
+$('micDialog').addEventListener('close', micStopAll);
+$('micUse').addEventListener('click', guarded(async () => {
+  if (!mic.blob) return;
+  const blob = mic.blob;
+  const ext = /ogg/.test(blob.type) ? 'ogg' : /mp4/.test(blob.type) ? 'm4a' : 'webm';
+  $('micDialog').close();
+  await uploadSample(blob, mic.name, ext);
+}));
+
 $('voices').addEventListener('click', guarded(async (e) => {
+  if (e.target.closest('[data-mic]')) {
+    openMic(e.target.closest('.voice').dataset.name);
+    return;
+  }
+  if (e.target.closest('[data-upload]')) {
+    uploadFor = e.target.closest('.voice').dataset.name;
+    $('sampleFile').click();
+    return;
+  }
+  if (e.target.closest('[data-keep-voice]')) {
+    const name = e.target.closest('.voice').dataset.name;
+    const voiceName = prompt('A name for this voice in your library:', `${name} (${current.recording.title || 'recording'})`);
+    if (voiceName === null) return;
+    await api('/api/library/from-recording', { method: 'POST', body: { id: currentId, character: name, name: voiceName } });
+    await loadLibrary();
+    renderVoices();
+    toast(`📚 Saved to the library as “${voiceName}”.`);
+    return;
+  }
   const btn = e.target.closest('[data-remake]');
   if (!btn) return;
   const card = btn.closest('.voice');
@@ -520,6 +708,39 @@ $('quitBtn').addEventListener('click', guarded(async () => {
   if (!confirm(busy ? 'A recording is being made. Quit anyway? It stops, and continues from where it was next time you make it.' : 'Close the studio? This frees the computer\'s memory. Double-click the desktop icon to start it again.')) return;
   await api('/api/quit', { method: 'POST' }).catch(() => {});
   document.body.innerHTML = '<div class="card" style="max-width:520px;margin:15vh auto;text-align:center"><h1>🎙️ The studio is closed</h1><p class="muted">Double-click <b>PinPlay Listening Studio</b> on the desktop to start it again.</p></div>';
+}));
+
+// ---------------------------------------------------------------- the library dialog
+async function renderLibrary() {
+  await loadLibrary();
+  $('libraryList').innerHTML = voiceLibrary.map((v) => `<div class="item" data-id="${esc(v.id)}">
+      <div class="row"><input data-lib-name value="${esc(v.name)}" title="Its name" />
+        <span class="muted small">${v.seconds} s · ${v.source === 'designed' ? 'designed' : 'own sample'}</span>
+        <button class="btn small danger" type="button" data-lib-delete>🗑 Delete</button></div>
+      <audio controls preload="none" src="${libraryAudioUrl(v.id)}"></audio>
+      <textarea data-lib-text title="What the sample says, exactly">${esc(v.text)}</textarea>
+    </div>`).join('') || '<p class="muted">No voices yet.</p>';
+}
+$('libraryBtn').addEventListener('click', guarded(async () => {
+  await renderLibrary();
+  $('libraryDialog').showModal();
+}));
+$('libraryDialog').addEventListener('close', () => { if (currentId) openRecording(currentId, { keepText: true }).catch(() => {}); });
+$('libraryList').addEventListener('change', guarded(async (e) => {
+  const id = e.target.closest('.item')?.dataset.id;
+  if (!id) return;
+  if (e.target.matches('[data-lib-name]')) await api(`/api/library/${id}`, { method: 'PUT', body: { name: e.target.value } });
+  else if (e.target.matches('[data-lib-text]')) await api(`/api/library/${id}`, { method: 'PUT', body: { text: e.target.value } });
+  else return;
+  toast('Saved.');
+}));
+$('libraryList').addEventListener('click', guarded(async (e) => {
+  if (!e.target.closest('[data-lib-delete]')) return;
+  const item = e.target.closest('.item');
+  const name = item.querySelector('[data-lib-name]').value;
+  if (!confirm(`Delete “${name}” from the library? Characters using it go back to a voice designed from their description.`)) return;
+  await api(`/api/library/${item.dataset.id}`, { method: 'DELETE' });
+  await renderLibrary();
 }));
 
 $('promptBtn').addEventListener('click', () => {

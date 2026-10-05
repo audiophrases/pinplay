@@ -17,6 +17,7 @@
     <button class="btn small" id="stopBtn" type="button" hidden title="Stops at once; every line already made is kept">⏹ Stop</button>
     <div class="top-actions">
       <button class="btn" id="promptBtn" type="button">✨ Script prompt</button>
+      <button class="btn quiet" id="libraryBtn" type="button" title="Voice samples you can give to any character">📚 Voice library</button>
       <button class="btn quiet" id="quitBtn" type="button" title="Close the studio and free the computer's memory">⏻ Quit</button>
     </div>
   </header>
@@ -119,6 +120,34 @@
       </div>
     </main>
   </div>
+
+  <dialog id="libraryDialog">
+    <form method="dialog" class="dialog">
+      <h2>📚 Voice library</h2>
+      <p class="muted small" style="margin:0">Voices any character can use: choose one on a voice card. Add one with <b>🎙 Use my own sample…</b> on a voice card (a recording of someone talking, 5–15 seconds), or keep a voice you liked with <b>📚 Save to library</b>.</p>
+      <div id="libraryList" class="library"></div>
+      <div class="row end"><button class="btn" value="close">Close</button></div>
+    </form>
+  </dialog>
+  <dialog id="micDialog">
+    <form method="dialog" class="dialog">
+      <h2 id="micTitle">🎤 Record a voice</h2>
+      <p class="muted small" style="margin:0">Read this aloud calmly, the way this character normally talks (about 10–15 seconds). A quiet room, the microphone about a hand's width away. Any words work: these are the character's own.</p>
+      <div id="micText" class="mic-text"></div>
+      <div class="row">
+        <button class="btn primary" type="button" id="micRecord">● Record</button>
+        <span id="micTime" class="muted">0 s</span>
+        <div class="mic-level"><div id="micLevel"></div></div>
+      </div>
+      <audio id="micPreview" controls hidden></audio>
+      <div id="micStatus" class="muted small"></div>
+      <div class="row end">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" type="button" id="micUse" disabled>✅ Use this recording</button>
+      </div>
+    </form>
+  </dialog>
+  <input type="file" id="sampleFile" accept="audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.webm,.flac,.aac" hidden />
 
   <dialog id="promptDialog">
     <form method="dialog" class="dialog">
