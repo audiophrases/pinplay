@@ -36,7 +36,7 @@ MAX_BATCH = 4
 AUTO_VOICES = [
     'An adult woman in her thirties with a clear, warm, mid-range voice.',
     'An adult man in his forties with a calm, fairly deep voice.',
-    'A young woman of about twenty with a bright, friendly voice.',
+    'A woman in her early twenties with a relaxed, natural, mid-range voice.',
     'A man in his sixties with a slow, low, gravelly voice.',
 ]
 
