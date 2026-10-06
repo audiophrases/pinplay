@@ -198,6 +198,47 @@ describe('adaptive listening: blocks and ladders', () => {
   });
 });
 
+describe('live levels: a classic game at the ticked levels', () => {
+  let E;
+  before(() => {
+    E = loadDeclarations(read('cloudflare/worker.js'), ['CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'listeningSectionMoments',
+      'liveLevelList', 'liveLevelSectionPick', 'liveLevelQuiz']);
+  });
+  const single = (id, cefr) => ({ id, type: 'mcq', ...(cefr ? { cefr } : {}) });
+  const sq = (id, cefr) => ({ id, type: 'mcq', listeningSection: 'p1', ...(cefr ? { cefr } : {}) });
+  // Untagged and A2–B2 single questions, then a section with 3 moments at A2, B1 and B2 (grouped by level) and a shared intro.
+  const quiz = () => ({
+    title: 'Levels',
+    listeningSections: [{ id: 'p1' }],
+    questions: [single('u'), single('a2', 'A2'), single('b1', 'B1'), single('b2', 'B2'), sq('intro'),
+      ...['A2', 'B1', 'B2'].flatMap((l) => [1, 2, 3].map((m) => sq(`${l}-${m}`, l))), single('end')],
+  });
+  const ids = (levels) => plain(E.liveLevelQuiz(quiz(), levels).questions.map((q) => q.id));
+
+  it('keeps the ticked levels\' single questions and every untagged one', () => {
+    assert.deepEqual(ids(['B1']), ['u', 'b1', 'intro', 'B1-1', 'B1-2', 'B1-3', 'end']);
+  });
+
+  it('gives a section one question per moment: one level, or easy to hard over several', () => {
+    assert.deepEqual(ids(['A2', 'B2']), ['u', 'a2', 'b2', 'intro', 'A2-1', 'B2-2', 'B2-3', 'end']);
+    assert.deepEqual(ids(['A2', 'B1', 'B2']), ['u', 'a2', 'b1', 'b2', 'intro', 'A2-1', 'B1-2', 'B2-3', 'end']);
+  });
+
+  it('keeps every section, at the nearest level it has (easier on a tie)', () => {
+    assert.deepEqual(ids(['A1']), ['u', 'intro', 'A2-1', 'A2-2', 'A2-3', 'end']);
+    assert.deepEqual(ids(['C2']), ['u', 'intro', 'B2-1', 'B2-2', 'B2-3', 'end']);
+    const gap = { listeningSections: [{ id: 'p1' }], questions: [sq('A2-1', 'A2'), sq('B2-1', 'B2')] };
+    assert.deepEqual(plain(E.liveLevelQuiz(gap, ['B1']).questions.map((q) => q.id)), ['A2-1']);
+  });
+
+  it('leaves the quiz alone without levels, and ignores unknown ones', () => {
+    const q = quiz();
+    assert.equal(E.liveLevelQuiz(q, []), q);
+    assert.equal(E.liveLevelQuiz(q, ['Z9', '']), q);
+    assert.deepEqual(plain(E.liveLevelList(['b2', 'A2', 'x'])), ['A2', 'B2']);
+  });
+});
+
 describe('PinPlay Cup', () => {
   it('never deals a listening-section question', () => {
     const room = { quiz: { questions: [mcq('q1'), mcq('q2', { listeningSection: 's1' }), mcq('q3')] } };
@@ -420,5 +461,31 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     const back = await post('/api/host/prev', { pin: game.pin }, host);
     assert.equal(back.body.currentIndex, 1, 'going back re-enters the section at its start');
     assert.equal(Object.fromEntries(back.body.players.map((p) => [p.id, p.score]))[ann.playerId], 0, 're-entering takes the points back');
+  });
+
+  it('live: a classic game plays the ticked levels, also after Apply live; PinPlay Cup ignores them', async () => {
+    const quiz = {
+      title: 'Live levels',
+      listeningSections: [section('s1')],
+      questions: [
+        mcq('u'), mcq('a2', { cefr: 'A2' }), mcq('b1', { cefr: 'B1' }),
+        mcq('s-a2', { cefr: 'A2', listeningSection: 's1' }), mcq('s-b1', { cefr: 'B1', listeningSection: 's1' }),
+      ],
+    };
+    const game = (await post('/api/create', { password: PW, options: { randomNames: true, levels: ['B1'] }, quiz })).body;
+    assert.ok(game.hostToken, JSON.stringify(game));
+    assert.deepEqual(plain(game.settings.levels), ['B1']);
+    const host = { Authorization: `Bearer ${game.hostToken}` };
+    const first = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.equal(first.totalQuestions, 3, 'u, b1 and the section at B1');
+    await post('/api/host/next', { pin: game.pin }, host);
+    const atSection = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.deepEqual(plain(atSection.listening.questions.map((q) => q.prompt)), ['Q s-b1?']);
+
+    const applied = (await post('/api/host/quiz/update', { pin: game.pin, quiz: { ...quiz, questions: [...quiz.questions, mcq('b1-new', { cefr: 'B1' }), mcq('a2-new', { cefr: 'A2' })] } }, host)).body;
+    assert.equal(applied.totalQuestions, 4, 'Apply live keeps the game at B1');
+
+    const cup = (await post('/api/create', { password: PW, options: { randomNames: true, gameMode: 'arena', levels: ['B1'] }, quiz })).body;
+    assert.equal(cup.settings.levels, undefined, 'PinPlay Cup has its own adaptive mode');
   });
 });

@@ -415,6 +415,8 @@ export default {
           // anyone with the PIN could read its answers through /api/media/.
           return json(await initRes.json(), 201);
         }
+        // A bad payload fails the same way on any PIN.
+        if (initRes.status === 400) return json(await initRes.json(), 400);
       }
 
       return json({ error: 'Could not allocate PIN. Try again.' }, 503);
@@ -4464,6 +4466,14 @@ export class QuizRoom {
         // it in the builder stays linked to the same cloud quiz.
         const cloudQuizId = sanitizeCloudQuizId(options.cloudQuizId);
         if (cloudQuizId) room.cloudQuizId = cloudQuizId;
+        // Classic games of a levelled quiz: the ticked levels only ("Apply
+        // live" applies them again to the edited quiz).
+        const levels = room.settings.gameMode === 'classic' ? liveLevelList(options.levels) : [];
+        if (levels.length) {
+          room.settings.levels = levels;
+          room.quiz = liveLevelQuiz(room.quiz, levels);
+          if (!room.quiz.questions.length) return json({ error: 'No questions at the chosen levels.' }, 400);
+        }
         if (room.settings.gameMode === 'arena') {
           const dur = Number(options.arenaDurationSec);
           room.arena = {
@@ -4721,7 +4731,8 @@ export class QuizRoom {
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
         const body = await safeJson(request);
-        const nextQuiz = normalizeQuiz(body?.quiz || {});
+        let nextQuiz = normalizeQuiz(body?.quiz || {});
+        if (room.settings?.levels?.length) nextQuiz = liveLevelQuiz(nextQuiz, room.settings.levels);
         if (!nextQuiz.questions?.length) return json({ error: 'Quiz must include at least one valid question.' }, 400);
 
         if (room.phase === 'question' && room.currentIndex >= nextQuiz.questions.length) {
@@ -6434,6 +6445,58 @@ function hostListeningState(room, range) {
     startedCount: players.filter((pid) => Object.values(drafts[pid] || {}).some(liveListeningAnswered)).length,
     finalized: !!room.listeningFinalized,
   };
+}
+
+// ---------------------------------------------------------------- live levels
+// A classic live game of a levelled quiz plays the levels the teacher ticks
+// on the create page: their single questions and every question without a
+// level. A listening section keeps one question per moment, as an adaptive
+// block does (LISTENING_MODE_PLAN.md section 10): at the ticked level, or
+// with several from the easiest to the hardest, each moment at the nearest
+// level the section has (easier on a tie). Every section stays in the game.
+function liveLevelList(levels) {
+  const wanted = (Array.isArray(levels) ? levels : []).map(normalizeCefrLevel);
+  return CEFR_LEVELS.filter((l) => wanted.includes(l));
+}
+
+function liveLevelSectionPick(questions, sectionId, chosen) {
+  const m = listeningSectionMoments(questions, sectionId);
+  const out = [];
+  const addShared = (k) => m.shared.filter((x) => (k === Infinity ? x.before >= m.moments : x.before === k)).forEach((x) => out.push(x.qi));
+  for (let k = 0; k < m.moments; k += 1) {
+    addShared(k);
+    const step = chosen.length === 1 || m.moments === 1 ? 0 : Math.round((k * (chosen.length - 1)) / (m.moments - 1));
+    const want = CEFR_LEVELS.indexOf(chosen[step]);
+    let best = null;
+    m.levels.forEach((l) => {
+      const qi = m.byLevel[l][k];
+      const d = Math.abs(CEFR_LEVELS.indexOf(l) - want);
+      if (qi != null && (best == null || d < best.d)) best = { qi, d };
+    });
+    if (best) out.push(best.qi);
+  }
+  addShared(Infinity);
+  return out;
+}
+
+function liveLevelQuiz(quiz, levels) {
+  const chosen = liveLevelList(levels);
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  if (!chosen.length) return quiz;
+  const out = [];
+  const seen = new Set();
+  questions.forEach((q) => {
+    const id = q?.listeningSection;
+    if (!id) {
+      const level = normalizeCefrLevel(q?.cefr);
+      if (!level || chosen.includes(level)) out.push(q);
+      return;
+    }
+    if (seen.has(id)) return;
+    seen.add(id);
+    liveLevelSectionPick(questions, id, chosen).forEach((qi) => out.push(questions[qi]));
+  });
+  return { ...quiz, questions: out };
 }
 
 function startQuestion(room, index) {

@@ -6168,3 +6168,9 @@ body.listening-sheet-open { overflow: hidden; }
 .host-listening-count { font-weight: 700; color: var(--muted); margin: 0 0 8px; }
 .host-listening-list { margin: 0; padding-left: 2rem; display: grid; gap: 10px; font-size: 1.1rem; text-align: left; }
 .host-listening-answer { color: var(--ok); font-weight: 700; margin-top: 2px; }
+.host-listening-plays { margin: 0; text-align: center; font-weight: 700; color: var(--muted); }
+
+/* ── Live Pin levels (levelled quizzes) ── */
+.live-levels-list { display: inline-flex; flex-wrap: wrap; gap: .45rem; }
+.live-level { display: inline-flex; align-items: center; gap: .2rem; cursor: pointer; }
+.live-level input { width: auto; margin: 0; }

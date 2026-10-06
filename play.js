@@ -7293,6 +7293,7 @@ function playAssignmentSfx(name) {
   // User has muted ambient/game music. Question audio is handled in
   // `playAssignmentQuestionAudio` and stays audible.
   if (assignmentMusicMuted) return;
+  if (name === 'answering' && listeningSheet.el) return;
   try {
     // Stop any currently playing ambient first
     stopAllAssignmentAmbient();
@@ -7455,6 +7456,8 @@ function resumeAssignmentAnsweringAmbient() {
   // (with the question now marked answered) has loaded — and must not restart
   // ambient over the verdict. Cleared when the next question renders.
   if (live.player.assignment?.suppressAmbientResume) return;
+  // A listening sheet is open: its recording is the only sound.
+  if (listeningSheet.el) return;
   const s = live.player.assignment?.state;
   const attempt = s?.attempt;
   if (!attempt || attempt.submitted) return;
@@ -9264,6 +9267,10 @@ function maybeRenderListeningSheet(state) {
   }
   cancelPendingAssignmentQuestionAutoplay();
   stopAssignmentQuestionAudioPlayback();
+  // No answering music under a recording. The next question shown after the
+  // sheet (forward or back) counts as new, so its music starts again.
+  stopAllAssignmentAmbient();
+  lastRenderedQuestionIndex = -1;
   stopJoinTimer();
   // The 5-second state refresh must not rebuild the sheet under the student's
   // fingers: keep it, re-apply edits not saved yet, refresh the count.

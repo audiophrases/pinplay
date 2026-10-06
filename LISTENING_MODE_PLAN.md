@@ -99,6 +99,21 @@ Phase 4 as built (live):
   redrawn area so pushes never stop it), "N of M submitted · K started", the
   questions, and after reveal the correct answers. The Answers counter counts
   submitted sheets. Video on the projector is not built yet.
+- Checked 2026-10-06 (owner's questions):
+  - No answering music during a section, on the projector or on a homework
+    sheet (it used to start as for any question); it comes back with the
+    next normal question.
+  - The projector no longer lists the questions while the recording plays:
+    they are on the phones, as on an exam paper, and a list of bare prompts
+    only crowded the screen. It shows title, instruction, the player, the
+    count, and lists the questions with their answers after the reveal, for
+    the class correction.
+  - With Plays allowed set, the projector counts plays ("Play it twice",
+    then "Play 1 of 2"). **P** plays or pauses the recording. Space on the
+    player just clicked plays or pauses it instead of revealing, which would
+    close every sheet.
+  - Classic games of a levelled quiz: the teacher ticks the levels
+    (section 10b, Live).
 
 ## 3. Question types inside a section
 
@@ -275,7 +290,7 @@ earlier parts point to.
 | Counting | Section questions come **on top of** the N questions per student. Every student does every section once. |
 | Questions with no level | **Shared**: everyone gets them, at every level and in the ladder. They earn points but don't move the level. |
 | Where a section comes | **Where it sits**: a section with k normal questions before it in the quiz comes after the student's k-th served question (capped at N). Sections that follow each other come back to back. In a quiz made only of sections, the parts come in order. |
-| Live | Unchanged: classic live isn't adaptive, PinPlay Cup never deals sections. |
+| Live | Classic live isn't adaptive, PinPlay Cup never deals sections. **2026-10-06:** a classic game of a levelled quiz plays the levels the teacher ticks; a section then gives one question per moment at those levels (ADAPTIVE_MODE_PLAN.md 5b). |
 
 ### 10c. How a section is written: moments
 

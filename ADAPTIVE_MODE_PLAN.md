@@ -188,6 +188,20 @@ inspects the page code can find the tag, and that's fine.
 - After the game, the host board shows a **📥 Level report** button that downloads a CSV (never shown on the projector): questions answered, usual level (most answers in the second half), final and highest level, right/answered per level, and the level path. The history kept per student is capped at the last 200 answers; per-level totals are running counts.
 - Level movement: `correct` is right; a partial round (Spelling Bee, Word Guess…) is right from 70% of its points, **neutral from 40%** (since 2026-09-26: counts as an answer, so the level steadies, but doesn't move it, and breaks a run of misses), wrong below. Cup's own "correct" for points and chests stays at 50%. Cup never serves teacher-graded questions.
 
+## 5b. Classic live (Live Pin): the teacher picks the levels
+
+Not adaptive: the class moves together. Built 2026-10-06 (owner's request):
+for a quiz with 2+ tagged levels, Game controls shows **🎯 Levels** with a box
+per level, next to Live Pin, all ticked for each newly loaded quiz (at least
+one stays ticked). The game plays the ticked levels' single questions and
+every untagged one. A listening section gives one question per moment: at the
+ticked level, or with several ticked from the easiest to the hardest (the
+ladder of LISTENING_MODE_PLAN.md 10d), each moment at the nearest level the
+section has, so every section stays in the game. The room keeps the levels
+(`room.settings.levels`, `liveLevelQuiz` in the worker) and **Apply live**
+applies them again. PinPlay Cup ignores them (it follows 🎯 Adaptive). Never
+shown on the projector or phones.
+
 ## 6. Assignments
 
 As built (phase 3):

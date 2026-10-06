@@ -1382,7 +1382,9 @@ window.PINPLAY_FR_DICT = {
   "🔊 Listen to the recording in class.": "🔊 Écoute l'enregistrement en classe.",
   "Questions {from}–{to} · {submitted} of {players} submitted · {started} started": "Questions {from}–{to} · {submitted} sur {players} envoyées · {started} commencées",
   "Answers revealed. Press Next to continue.": "Réponses affichées. Appuie sur Suivant pour continuer.",
-  "Play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.": "Lance l'enregistrement. Les élèves répondent sur leur téléphone ; appuie sur Suivant (ou Révéler) quand ils ont fini. Tout ce qu'ils ont saisi compte.",
+  "Press P to play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.": "Appuie sur P pour lancer l'enregistrement. Les élèves répondent sur leur téléphone ; appuie sur Suivant (ou Révéler) quand ils ont fini. Tout ce qu'ils ont saisi compte.",
+  "Play it once.": "À écouter une fois.",
+  "Play it {total} times.": "À écouter {total} fois.",
   "↕ Move…": "↕ Déplacer…",
   "Move the selected questions together to another position in the quiz": "Déplacer ensemble les questions sélectionnées à un autre endroit du quiz",
   "Move {n} selected:": "Déplacer {n} sélectionnée(s) :",
@@ -1393,4 +1395,5 @@ window.PINPLAY_FR_DICT = {
   "The selected questions keep their order and move together.": "Les questions sélectionnées gardent leur ordre et se déplacent ensemble.",
   "This move splits a listening section ({titles}): {n} question(s) would leave it and become ordinary questions. Move anyway?": "Ce déplacement coupe une section d'écoute ({titles}) : {n} question(s) en sortiraient et deviendraient des questions ordinaires. Déplacer quand même ?",
   "Moved {n} question(s): now Q{from}–Q{to}.": "{n} question(s) déplacée(s) : maintenant Q{from}–Q{to}.",
+  "Live Pin plays the questions of the ticked levels and every question without a level. A listening section gives one question per moment of the recording: at the ticked level, or from easy to hard when several are ticked. PinPlay Cup follows 🎯 Adaptive in Assignments.": "Le PIN en direct joue les questions des niveaux cochés et toutes les questions sans niveau. Une section d'écoute donne une question par moment de l'enregistrement : au niveau coché, ou du plus facile au plus difficile si plusieurs sont cochés. PinPlay Cup suit la case 🎯 Adaptatif des devoirs.",
 };

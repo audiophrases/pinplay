@@ -5280,6 +5280,7 @@ function bindLiveEvents() {
   if (assignmentExamModeBtn) assignmentExamModeBtn.addEventListener('click', toggleAssignmentExamMode);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   initAssignmentAdaptiveControl();
+  initLiveLevelsControl();
   initListeningSectionTools();
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
@@ -5477,6 +5478,7 @@ async function createLiveGame(opts = {}) {
           randomNames: isRandomNamesEnabled(),
           gameMode: arenaMode ? 'arena' : 'classic',
           arenaAdaptive,
+          levels: arenaMode ? [] : liveLevelsForGame(),
           cloudQuizId: quiz._r2QuizId || '',
         },
       },
@@ -11441,7 +11443,9 @@ function handleHostHotkeys(e) {
   if (e.key === 'p' || e.key === 'P') {
     e.preventDefault();
     const q = live.host.state?.question;
-    if (q && hasQuestionAudio(q)) {
+    if (live.host.state?.phase === 'question' && live.host.state.listening) {
+      toggleHostListeningAudio();
+    } else if (q && hasQuestionAudio(q)) {
       playQuestionAudio(q).then(() => {
         const s = live.host.state;
         if (s && s.phase === 'question' && !s.questionClosed) {
@@ -11497,6 +11501,9 @@ function handleHostHotkeys(e) {
 
   if (e.key === ' ' || e.code === 'Space') {
     if (state.phase !== 'question' || state.questionClosed) return;
+    // A focused player (just clicked) keeps Space for play/pause: revealing a
+    // listening section by accident would close every student's sheet.
+    if (hotkeyTag === 'audio' || hotkeyTag === 'video') return;
     e.preventDefault();
     hostRevealQuestion();
   }
@@ -12279,7 +12286,8 @@ function renderHostState(state) {
       const answeringKey = `answering_q${Number.isFinite(qIndex) ? qIndex : 'preview'}`;
       primeAnsweringFx(answeringKey);
       stopFx('answering'); // Stop immediately so it doesn't play yet
-    } else {
+    } else if (!state.listening) {
+      // A listening section gets no answering loop: its recording is the only sound.
       playFx('answering');
     }
     animatePulse(hostQuestionWrap || hostCardEl || hallCardEl);
@@ -12353,7 +12361,9 @@ function renderHostState(state) {
 
 // Live listening section: the projector shows the title, instruction and the
 // recording's player (kept outside the redrawn area so new answers never stop
-// it), how many students have submitted, and after the reveal the answers.
+// it) and how many students have submitted. The questions are on the phones,
+// as on an exam paper; the projector lists them with their answers after the
+// reveal, for the class correction.
 const hostListening = { el: null, audio: null, sectionKey: '' };
 
 function hideHostListeningPlayer() {
@@ -12394,6 +12404,23 @@ function renderHostListening(state) {
       audio.className = 'host-listening-audio';
       box.appendChild(audio);
       hostListening.audio = audio;
+      // The section's "Plays allowed" is the teacher's to follow here: count
+      // each play from the start so they know when the class has heard it enough.
+      const allowed = Number(L.section.playsAllowed) || 0;
+      if (allowed > 0) {
+        const plays = document.createElement('p');
+        plays.className = 'host-listening-plays';
+        let started = 0;
+        const show = () => {
+          if (started) plays.textContent = t('Play {n} of {total}', { n: started, total: allowed });
+          else plays.textContent = allowed === 1 ? t('Play it once.') : t('Play it {total} times.', { total: allowed });
+        };
+        audio.addEventListener('play', () => {
+          if (audio.currentTime < 0.5) { started += 1; show(); }
+        });
+        show();
+        box.appendChild(plays);
+      }
     } else {
       const none = document.createElement('p');
       none.className = 'small muted';
@@ -12411,29 +12438,38 @@ function renderHostListening(state) {
   });
   hostQuestionAnswersEl.appendChild(count);
 
-  const list = document.createElement('ol');
-  list.className = 'host-listening-list';
-  list.start = L.first + 1;
-  (L.questions || []).forEach((q) => {
-    const li = document.createElement('li');
-    const prompt = document.createElement('div');
-    prompt.textContent = q?.prompt || '';
-    li.appendChild(prompt);
-    if (closed) {
-      const ans = document.createElement('div');
-      ans.className = 'host-listening-answer';
+  if (closed) {
+    const list = document.createElement('ol');
+    list.className = 'host-listening-list';
+    list.start = L.first + 1;
+    (L.questions || []).forEach((q) => {
+      const li = document.createElement('li');
+      const prompt = document.createElement('div');
+      prompt.textContent = q?.prompt || '';
+      li.appendChild(prompt);
       const text = String(q?.answerText || '');
       if (text) {
+        const ans = document.createElement('div');
+        ans.className = 'host-listening-answer';
         ans.textContent = `✓ ${text}`;
         li.appendChild(ans);
       }
-    }
-    list.appendChild(li);
-  });
-  hostQuestionAnswersEl.appendChild(list);
+      list.appendChild(li);
+    });
+    hostQuestionAnswersEl.appendChild(list);
+  }
   hostQuestionHintEl.textContent = closed
     ? t('Answers revealed. Press Next to continue.')
-    : t('Play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.');
+    : t('Press P to play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.');
+}
+
+// P on a listening section plays or pauses its recording on the projector.
+function toggleHostListeningAudio() {
+  const a = hostListening.audio;
+  if (!a) return false;
+  if (a.paused || a.ended) a.play().catch(() => { });
+  else a.pause();
+  return true;
 }
 
 function renderHostQuestion(state) {
@@ -13736,6 +13772,7 @@ function isHostVideoPlaying() {
 function resumeFx(name) {
   if (name === 'answering') {
     if (isHostVideoPlaying()) return;
+    if (live.host.state?.phase === 'question' && live.host.state.listening) return;
     const a = live.host.currentAnsweringFx;
     if (!a) return;
     try {
@@ -16530,6 +16567,60 @@ function syncAssignmentAdaptiveControl() {
   }
 }
 
+// Live Pin (classic live) of a levelled quiz: the teacher ticks the levels to
+// play, all by default. The server keeps their single questions, every
+// question without a level and one question per moment of each listening
+// section (liveLevelQuiz in the worker). Kept as the unticked levels, so a
+// level tagged later starts ticked; a newly loaded quiz starts with all.
+let liveLevelsFor = null;
+let liveLevelsOff = new Set();
+
+function quizLevelsPresent() {
+  const { counts } = cefrCoverage(quiz?.questions);
+  return CEFR_LEVELS.filter((l) => counts[l] > 0);
+}
+
+function syncLiveLevelsControl() {
+  const wrap = document.getElementById('liveLevelsWrap');
+  const list = document.getElementById('liveLevelsList');
+  if (!wrap || !list) return;
+  const levels = quizLevelsPresent();
+  const available = levels.length >= 2;
+  wrap.classList.toggle('hidden', !available);
+  if (liveLevelsFor !== quiz) {
+    liveLevelsFor = quiz;
+    liveLevelsOff = new Set();
+  }
+  if (!available) {
+    list.innerHTML = '';
+    return;
+  }
+  if (levels.every((l) => liveLevelsOff.has(l))) liveLevelsOff.delete(levels[0]);
+  list.innerHTML = levels.map((l) => `<label class="live-level"><input type="checkbox" value="${l}" ${liveLevelsOff.has(l) ? '' : 'checked'} /> ${l}</label>`).join(''); // i18n-ignore (level codes)
+}
+
+// The levels to send with a new Live Pin game, or none (the whole quiz).
+function liveLevelsForGame() {
+  const levels = quizLevelsPresent();
+  return levels.length >= 2 ? levels.filter((l) => !liveLevelsOff.has(l)) : [];
+}
+
+function initLiveLevelsControl() {
+  const list = document.getElementById('liveLevelsList');
+  list?.addEventListener('change', (e) => {
+    const box = e.target.closest('input[type="checkbox"]');
+    if (!box) return;
+    if (box.checked) liveLevelsOff.delete(box.value);
+    else liveLevelsOff.add(box.value);
+    // At least one level stays ticked.
+    if (!liveLevelsForGame().length) {
+      liveLevelsOff.delete(box.value);
+      box.checked = true;
+    }
+  });
+  syncLiveLevelsControl();
+}
+
 // Tagged questions the engine can serve one at a time (outside listening sections).
 function adaptiveSingleQuestionCount() {
   return (quiz?.questions || []).filter((q) => isAdaptiveEligibleQuestion(q) && !q.listeningSection && normalizeCefr(q.cefr)).length;
@@ -16553,6 +16644,7 @@ function initAssignmentAdaptiveControl() {
 
 function renderLevelCoverage() {
   syncAssignmentAdaptiveControl();
+  syncLiveLevelsControl();
   const el = document.getElementById('levelCoverage');
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);
