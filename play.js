@@ -9165,11 +9165,17 @@ function round(n, d = 0) {
 // question stacked below. Each change autosaves; "Submit section" locks it
 // (the server refuses later answers), and only then do instant marks appear.
 // Live games use the same sheet: answers save as drafts on the room, the
-// recording plays on the projector, and the teacher's reveal brings the marks.
-const listeningSheet = { el: null, sectionId: '', mode: 'assignment', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false, live: null, liveAnswers: {}, liveKey: '' };
+// recording plays on the projector, and the teacher's reveal starts the class
+// correction: each question's mark comes as the projector shows its answer.
+const listeningSheet = { el: null, sectionId: '', mode: 'assignment', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false, live: null, liveAnswers: {}, liveKey: '', reviewCurrent: null };
 
 function liveListeningLocked(L) {
   return !!(L?.submitted || L?.closed);
+}
+
+// Everything that changes what a live sheet shows: the sheet is redrawn when it does.
+function liveListeningStage(L) {
+  return JSON.stringify([liveListeningLocked(L), !!L?.closed, L?.review || null, L?.marks || null]);
 }
 
 function maybeRenderLiveListeningSheet(state) {
@@ -9179,6 +9185,7 @@ function maybeRenderLiveListeningSheet(state) {
   const key = `${L.section.id}|${state.questionStartedAt || ''}`;
   if (listeningSheet.liveKey !== key) {
     listeningSheet.liveKey = key;
+    listeningSheet.reviewCurrent = null;
     listeningSheet.liveAnswers = { ...(L.answers || {}) };
     listeningSheet.saveTimers.forEach((e) => clearTimeout(e.timer));
     listeningSheet.saveTimers.clear();
@@ -9187,8 +9194,7 @@ function maybeRenderLiveListeningSheet(state) {
   listeningSheet.mode = 'live';
   stopJoinTimer();
   const info = { section: L.section, first: L.first, last: L.last };
-  const locked = liveListeningLocked(L);
-  const stage = `${locked}|${!!L.closed}`;
+  const stage = liveListeningStage(L);
   if (listeningSheet.el && listeningSheet.sectionId === L.section.id && listeningSheet.el.dataset.locked === stage) {
     updateListeningProgress(info);
     return true;
@@ -9317,7 +9323,7 @@ function renderListeningSheet(info) {
   const el = document.createElement('div');
   el.id = 'listeningSheet';
   el.className = 'listening-sheet' + (locked ? ' is-locked' : '');
-  el.dataset.locked = isLive ? `${locked}|${!!L.closed}` : String(locked);
+  el.dataset.locked = isLive ? liveListeningStage(L) : String(locked);
   el.setAttribute('role', 'region');
   el.setAttribute('aria-label', section.title || t('Listening'));
 
@@ -9352,9 +9358,10 @@ function renderListeningSheet(info) {
   if (locked) {
     const note = document.createElement('p');
     note.className = 'ls-locked-note';
-    note.textContent = isLive && !L.closed
-      ? t('Submitted ✅ Wait for your teacher to move on.')
-      : (isLive ? t('Your teacher has closed this section.') : t('This section is submitted. You can look at it but not change it.'));
+    if (isLive && !L.closed) note.textContent = t('Submitted ✅ Wait for your teacher to move on.');
+    else if (isLive && L.review) note.textContent = t('Correction: your teacher shows the answers one by one.');
+    else if (isLive) note.textContent = t('Your teacher has closed this section.');
+    else note.textContent = t('This section is submitted. You can look at it but not change it.');
     pageEl.appendChild(note);
   }
 
@@ -9370,8 +9377,15 @@ function renderListeningSheet(info) {
     questions = attempt.assignment.quiz.questions;
     marks = new Map((attempt.answersWithCorrectness || []).map((a) => [Number(a.qIndex), a]));
   }
+  // During the class correction a question's mark waits for its reveal, and
+  // the question being corrected stands out.
+  const review = isLive && L.closed ? L.review : null;
+  const revealed = review ? new Set(review.revealed || []) : null;
   for (let i = first; i <= last; i += 1) {
-    pageEl.appendChild(renderListeningQuestion(questions[i], i, locked, marks.get(i)));
+    pageEl.appendChild(renderListeningQuestion(questions[i], i, locked, marks.get(i), {
+      pending: !!(revealed && !revealed.has(i)),
+      current: review?.current === i,
+    }));
   }
 
   const status = document.createElement('div');
@@ -9411,6 +9425,10 @@ function renderListeningSheet(info) {
   else renderListeningPlayer(playerWrap, section, attempt, locked);
   updateListeningProgress(info);
   el.scrollTop = scrollTop;
+  if (review && listeningSheet.reviewCurrent !== review.current) {
+    listeningSheet.reviewCurrent = review.current;
+    el.querySelector(`.ls-q[data-q-index="${review.current}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 
 function listeningStatus(text, mode = '') {
@@ -9436,9 +9454,9 @@ function updateListeningProgress(info) {
   el.textContent = t('{done} of {total} answered', { done: answered, total: count });
 }
 
-function renderListeningQuestion(q, qIndex, locked, mark) {
+function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, current = false } = {}) {
   const card = document.createElement('div');
-  card.className = 'ls-q';
+  card.className = 'ls-q' + (current ? ' is-current' : '');
   card.dataset.qIndex = String(qIndex);
   const prompt = document.createElement('div');
   prompt.className = 'ls-q-prompt';
@@ -9563,7 +9581,7 @@ function renderListeningQuestion(q, qIndex, locked, mark) {
   }
   card.appendChild(body);
 
-  if (locked) {
+  if (locked && !pending) {
     const fb = document.createElement('div');
     fb.className = 'ls-q-mark';
     const answered = listeningAnswered(saved);

@@ -4756,26 +4756,33 @@ export class QuizRoom {
           if (room.quiz.questions.length > 0) startQuestion(room, 0);
         } else if (room.phase === 'question') {
           const range = roomListeningRange(room, room.currentIndex);
-          if (range) {
-            finalizeListeningSection(room);
-            room.currentIndex = range.last;
-          }
-          if (room.currentIndex + 1 < room.quiz.questions.length) {
-            startQuestion(room, room.currentIndex + 1);
-          } else {
-            room.phase = 'results';
-            room.questionStartedAt = null;
-            room.questionClosed = true;
-            room.questionClosedAt = Date.now();
-            room.questionCloseReason = 'finished';
-            appendRoomEvent(room, 'game_finished', {
-              totalQuestions: Number(room.quiz?.questions?.length || 0),
-              finishedAt: room.questionClosedAt,
-            });
-            // Persist a login-required game as an assignment (best-effort; the
-            // /host/state poll retries if this DO-to-DO call fails here).
-            await maybeSnapshotLiveGame(room, this.env);
+          if (range && room.listeningFinalized && room.currentIndex < range.last) {
+            // Correcting a section: on to its next question.
+            room.currentIndex += 1;
             room.updatedAt = Date.now();
+          } else {
+            if (range) {
+              // An open section is marked as it stands (Next skips the correction).
+              finalizeListeningSection(room);
+              room.currentIndex = range.last;
+            }
+            if (room.currentIndex + 1 < room.quiz.questions.length) {
+              startQuestion(room, room.currentIndex + 1);
+            } else {
+              room.phase = 'results';
+              room.questionStartedAt = null;
+              room.questionClosed = true;
+              room.questionClosedAt = Date.now();
+              room.questionCloseReason = 'finished';
+              appendRoomEvent(room, 'game_finished', {
+                totalQuestions: Number(room.quiz?.questions?.length || 0),
+                finishedAt: room.questionClosedAt,
+              });
+              // Persist a login-required game as an assignment (best-effort; the
+              // /host/state poll retries if this DO-to-DO call fails here).
+              await maybeSnapshotLiveGame(room, this.env);
+              room.updatedAt = Date.now();
+            }
           }
         }
 
@@ -4790,8 +4797,13 @@ export class QuizRoom {
 
         closeQuestionIfTimedOut(room);
 
+        const range = room.phase === 'question' ? roomListeningRange(room, room.currentIndex) : null;
         if (room.phase === 'results') {
           if (room.quiz.questions.length > 0) startQuestion(room, room.quiz.questions.length - 1);
+        } else if (range && room.listeningFinalized && room.currentIndex > range.first) {
+          // Correcting a section: back to its previous question.
+          room.currentIndex -= 1;
+          room.updatedAt = Date.now();
         } else if (room.phase === 'question' && room.currentIndex > 0) {
           startQuestion(room, room.currentIndex - 1);
         }
@@ -4805,8 +4817,15 @@ export class QuizRoom {
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
 
         if (room.phase === 'question') {
-          finalizeListeningSection(room);
-          closeCurrentQuestion(room, 'manual_reveal');
+          const range = roomListeningRange(room, room.currentIndex);
+          if (range && room.listeningFinalized) {
+            // Correcting a section: this question's answer, on the projector and the phones.
+            revealListeningAnswer(room, range);
+          } else {
+            // A section closes (everyone's answers marked) and its correction starts at its first question.
+            finalizeListeningSection(room);
+            closeCurrentQuestion(room, 'manual_reveal');
+          }
           await this.#setRoom(room);
         }
 
@@ -5984,7 +6003,8 @@ function hostState(room) {
 
   const totalQs = Number(room.quiz?.questions?.length || 0);
   const answerHistory = [];
-  for (let i = Math.max(0, totalQs - 8); i < totalQs; i++) {
+  const lastShown = Math.min(totalQs - 1, Math.max(0, qIndex));
+  for (let i = Math.max(0, lastShown - 7); i <= lastShown; i++) {
     const questionRef = room.quiz?.questions?.[i];
     if (!questionRef) continue;
     const perQ = room.responsesByQuestion?.[i] || {};
@@ -6381,9 +6401,97 @@ function finalizeListeningSection(room) {
     });
   }
   room.listeningFinalized = true;
+  room.listeningDone = room.listeningDone || {};
+  room.listeningDone[range.section.id] = { revealed: [], submitted: { ...(room.sectionSubmitted || {}) } };
   appendRoomEvent(room, 'listening_section_closed', { sectionId: range.section.id, first: range.first, last: range.last });
   room.updatedAt = now;
   return true;
+}
+
+// The correction of a marked section (owner, 2026-10-06): the room's current
+// question is the one being corrected (Next and Prev move through the section,
+// so open answers are graded where they are shown), and Reveal shows its
+// answer on the projector while each phone gets that question's mark. The
+// revealed questions are kept per section as positions in it.
+function listeningRevealedIndexes(room, range) {
+  const done = room.listeningDone?.[range.section.id];
+  // A section marked before corrections existed shows every mark.
+  if (!done) return null;
+  return new Set((done.revealed || []).map((k) => range.first + Number(k)).filter((i) => i >= range.first && i <= range.last));
+}
+
+function revealListeningAnswer(room, range) {
+  room.listeningDone = room.listeningDone || {};
+  const done = room.listeningDone[range.section.id] = room.listeningDone[range.section.id] || { revealed: [], submitted: {} };
+  const k = room.currentIndex - range.first;
+  if (done.revealed.includes(k)) return false;
+  done.revealed.push(k);
+  appendRoomEvent(room, 'listening_answer_revealed', { sectionId: range.section.id, qIndex: room.currentIndex });
+  room.updatedAt = Date.now();
+  return true;
+}
+
+// Coming back to a section that was already marked reopens its correction as
+// it was left, answers, marks and points kept: at its first question from
+// before it, at its last from after it.
+function reopenListeningCorrection(room, range, qIndex) {
+  const done = room.listeningDone[range.section.id];
+  const drafts = {};
+  for (let i = range.first; i <= range.last; i += 1) {
+    Object.entries(room.responsesByQuestion?.[i] || {}).forEach(([pid, r]) => {
+      drafts[pid] = drafts[pid] || {};
+      drafts[pid][String(i)] = r?.answer ?? null;
+    });
+  }
+  const now = Date.now();
+  room.sectionDrafts = drafts;
+  room.sectionSubmitted = { ...(done.submitted || {}) };
+  room.listeningFinalized = true;
+  room.phase = 'question';
+  room.currentIndex = qIndex;
+  room.questionStartedAt = now;
+  room.questionClosed = true;
+  room.questionClosedAt = now;
+  room.questionCloseReason = 'manual_reveal';
+  appendRoomEvent(room, 'listening_section_reopened', { sectionId: range.section.id, qIndex });
+  room.updatedAt = now;
+  return true;
+}
+
+// How the class answered one question, for the projector's correction.
+function listeningQuestionStats(room, qIndex) {
+  const question = room.quiz.questions[qIndex];
+  const responses = Object.entries(room.responsesByQuestion?.[qIndex] || {})
+    .filter(([pid]) => room.players?.[pid])
+    .map(([, r]) => r);
+  const stats = {
+    players: Object.keys(room.players || {}).length,
+    answered: responses.length,
+    correct: responses.filter((r) => r?.correct).length,
+    partial: responses.filter((r) => !r?.correct && Number(r?.partialScore || 0) > 0).length,
+  };
+  if (isLiveTeacherGraded(question)) stats.graded = responses.filter((r) => r?.graded).length;
+  if (['mcq', 'tf', 'multi'].includes(question?.type)) {
+    const counts = (question.answers || []).map(() => 0);
+    responses.forEach((r) => {
+      (Array.isArray(r?.answer) ? r.answer : [r?.answer]).forEach((a) => {
+        const i = Number(a);
+        if (a != null && Number.isInteger(i) && i >= 0 && i < counts.length) counts[i] += 1;
+      });
+    });
+    stats.options = counts;
+  }
+  return stats;
+}
+
+// A gap text with its gaps filled in (the first accepted answer of each).
+function listeningFilledGapText(question) {
+  const gaps = contextGapList(question);
+  let i = 0;
+  return String(question?.prompt || '').replace(/_{2,}|\[\s*\]/g, (m) => {
+    const fill = String(gaps[i++] || '').split(/\s*[,|]\s*/)[0].trim();
+    return fill || m;
+  });
 }
 
 function liveListeningPublicSection(section) {
@@ -6402,9 +6510,11 @@ function liveListeningPublicSection(section) {
 // it submitted, and once the teacher reveals, its marks.
 function playerListeningState(room, playerId, range) {
   const closed = !!room.questionClosed || !!room.listeningFinalized;
+  const shown = closed ? listeningRevealedIndexes(room, range) : null;
   const marks = {};
   if (closed) {
     for (let i = range.first; i <= range.last; i += 1) {
+      if (shown && !shown.has(i)) continue;
       const q = room.quiz.questions[i];
       const r = room.responsesByQuestion?.[i]?.[playerId];
       if (!r) continue;
@@ -6424,6 +6534,8 @@ function playerListeningState(room, playerId, range) {
     submitted: !!room.sectionSubmitted?.[playerId],
     closed,
     marks: closed ? marks : null,
+    // The question being corrected, and those whose answers are out.
+    review: closed && shown ? { current: room.currentIndex, revealed: [...shown].sort((a, b) => a - b) } : null,
   };
 }
 
@@ -6444,6 +6556,24 @@ function hostListeningState(room, range) {
     submittedCount: players.filter((pid) => submitted[pid]).length,
     startedCount: players.filter((pid) => Object.values(drafts[pid] || {}).some(liveListeningAnswered)).length,
     finalized: !!room.listeningFinalized,
+    review: room.listeningFinalized ? hostListeningReview(room, range) : null,
+  };
+}
+
+function hostListeningReview(room, range) {
+  const q = room.quiz.questions[room.currentIndex];
+  const shown = listeningRevealedIndexes(room, range);
+  return {
+    qIndex: room.currentIndex,
+    step: room.currentIndex - range.first,
+    count: range.last - range.first + 1,
+    revealed: !shown || shown.has(room.currentIndex),
+    question: {
+      ...hostQuestionPayload(q),
+      answerText: isLiveTeacherGraded(q) ? '' : hostCorrectSummary(q),
+      ...(q?.type === 'context_gap' ? { filledText: listeningFilledGapText(q) } : {}),
+    },
+    stats: listeningQuestionStats(room, room.currentIndex),
   };
 }
 
@@ -6507,8 +6637,10 @@ function startQuestion(room, index) {
   let qIndex = Number(index);
   if (!Number.isFinite(qIndex)) return false;
   if (qIndex < 0 || qIndex >= room.quiz.questions.length) return false;
-  // Entering a section from either side lands on its first question.
+  // Entering a section from either side lands on its first question, unless
+  // it was already marked: then its correction comes back as it was left.
   const range = roomListeningRange(room, qIndex);
+  if (range && room.listeningDone?.[range.section.id]) return reopenListeningCorrection(room, range, qIndex === range.last ? range.last : range.first);
   if (range) qIndex = range.first;
   room.sectionDrafts = {};
   room.sectionSubmitted = {};

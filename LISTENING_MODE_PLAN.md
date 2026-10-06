@@ -85,35 +85,60 @@ PinPlay adds no timer and no extra pressure; it removes friction.
 
 Phase 4 as built (live):
 - The room treats a section as one step: entering it from either side lands on
-  its first question; Next leaves the whole section; Prev re-enters it at its
-  start (points earned there are taken back and re-earned). No timer.
+  its first question. No timer. (Since 2026-10-06 Next and Prev move through
+  its correction once it is marked, and a marked section comes back as it
+  was left; see below.)
 - Phones show the same sheet (no player: "Listen to the recording in class").
   Each change saves as a draft on the room (`/api/section/answer`), "Submit
   section" locks it for that student (`/api/section/submit`). The sheet is
   never rebuilt by the live pushes while the student types.
 - Reveal or Next grades everyone's drafts, submitted or not
   (`finalizeListeningSection`): flat points per question (no speed bonus, no
-  bets), open answers wait for the teacher as usual. Reveal shows the marks on
-  each phone and the answers on the projector.
+  bets), open answers wait for the teacher as usual.
 - Projector: title, instruction, the recording's player (kept outside the
-  redrawn area so pushes never stop it), "N of M submitted · K started", the
-  questions, and after reveal the correct answers. The Answers counter counts
-  submitted sheets. Video on the projector is not built yet.
+  redrawn area so pushes never stop it), "N of M submitted · K started". The
+  Answers counter counts submitted sheets. Video on the projector is not
+  built yet.
 - Checked 2026-10-06 (owner's questions):
   - No answering music during a section, on the projector or on a homework
     sheet (it used to start as for any question); it comes back with the
     next normal question.
   - The projector no longer lists the questions while the recording plays:
     they are on the phones, as on an exam paper, and a list of bare prompts
-    only crowded the screen. It shows title, instruction, the player, the
-    count, and lists the questions with their answers after the reveal, for
-    the class correction.
+    only crowded the screen.
   - With Plays allowed set, the projector counts plays ("Play it twice",
     then "Play 1 of 2"). **P** plays or pauses the recording. Space on the
     player just clicked plays or pauses it instead of revealing, which would
     close every sheet.
   - Classic games of a levelled quiz: the teacher ticks the levels
     (section 10b, Live).
+- **The class correction (owner, 2026-10-06).** Once the recording has been
+  played and the students have answered, the projector becomes the
+  correction screen, which a normal live question doesn't need:
+  - **Reveal** (Space) marks everyone and starts the correction at the
+    section's first question: the question large, with its options lettered
+    as on the sheet. **Space** shows its answer and how the class answered
+    (options: how many chose each; written answers: "15 of 25 right · 4
+    partly right"; a gap text shown filled in; match pairs listed). **→**
+    goes to the next question, **←** back; after the last question → moves
+    on in the game. **Next** on an open section still marks it and moves on
+    without a correction.
+  - The phones show each question's mark only when its answer is revealed;
+    the question being corrected is highlighted and scrolled into view, and
+    the sheet says "Correction: your teacher shows the answers one by one."
+  - The room's current question is the one being corrected, so the
+    projector's "❓ 7 / 20" follows it and an open answer is graded from the
+    Answers panel while it is on screen (before, only a section's first
+    question could be). The panel shows the eight questions up to the
+    current one (it showed the quiz's last eight, so long quizzes had none).
+  - Coming back to a marked section (← from the next question) reopens its
+    correction as it was left, at its last question, answers, marks and
+    points kept; it is never answered twice (before, it restarted empty and
+    took the points back). ← at its first question goes on back as usual.
+  - Server: `room.listeningDone[sectionId]` (`revealed` positions,
+    `submitted`), `revealListeningAnswer`, `reopenListeningCorrection`,
+    `listeningQuestionStats`; `listening.review` in the host state and the
+    phones' state. Tests in `tests/listening-sections.test.js`.
 
 ## 3. Question types inside a section
 

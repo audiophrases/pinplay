@@ -11500,7 +11500,10 @@ function handleHostHotkeys(e) {
   }
 
   if (e.key === ' ' || e.code === 'Space') {
-    if (state.phase !== 'question' || state.questionClosed) return;
+    if (state.phase !== 'question') return;
+    // In a listening section's correction, Space shows the current answer.
+    const review = state.listening?.review;
+    if (state.questionClosed && !(review && !review.revealed)) return;
     // A focused player (just clicked) keeps Space for play/pause: revealing a
     // listening section by accident would close every student's sheet.
     if (hotkeyTag === 'audio' || hotkeyTag === 'video') return;
@@ -12267,6 +12270,7 @@ function renderHostState(state) {
     openSig,
     modelSig,
     state.listening ? `${state.listening.startedCount}:${state.listening.finalized ? 1 : 0}` : '',
+    state.listening?.review ? `${state.listening.review.revealed ? 1 : 0}:${JSON.stringify(state.listening.review.stats || {})}` : '',
   ].join(':');
 
   if (live.host.lastQuestionRenderKey !== questionRenderKey) {
@@ -12295,10 +12299,17 @@ function renderHostState(state) {
     live.host.lastRevealKey = null;
   }
 
+  // A listening section's correction plays the sting as each answer is revealed.
   const revealKey =
-    state.phase === 'question' && state.questionClosed
+    state.phase === 'question' && state.questionClosed && !state.listening
       ? `${state.currentIndex}:${state.questionClosedAt || 0}:${state.questionCloseReason || ''}`
       : null;
+  const review = state.phase === 'question' ? state.listening?.review : null;
+  const prevReview = prevState?.phase === 'question' ? prevState.listening?.review : null;
+  if (review?.revealed && prevReview && prevReview.qIndex === review.qIndex && !prevReview.revealed) {
+    stopFx('answering');
+    playFx('answered');
+  }
 
   if (state.phase !== 'question' || state.questionClosed) {
     stopFx('answering');
@@ -12362,8 +12373,9 @@ function renderHostState(state) {
 // Live listening section: the projector shows the title, instruction and the
 // recording's player (kept outside the redrawn area so new answers never stop
 // it) and how many students have submitted. The questions are on the phones,
-// as on an exam paper; the projector lists them with their answers after the
-// reveal, for the class correction.
+// as on an exam paper. Reveal marks everyone and starts the correction: one
+// question at a time, Space shows its answer and how the class answered,
+// → and ← move through the section (LISTENING_MODE_PLAN.md, phase 4).
 const hostListening = { el: null, audio: null, sectionKey: '' };
 
 function hideHostListeningPlayer() {
@@ -12377,10 +12389,9 @@ function hideHostListeningPlayer() {
 
 function renderHostListening(state) {
   const L = state.listening;
-  const closed = !!state.questionClosed || !!L.finalized;
+  const review = L.finalized ? L.review : null;
   hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('hidden', 'center-stage');
-  hostQuestionPromptEl.textContent = `🎧 ${L.section.title || t('Listening')}`;
   hostQuestionAnswersEl.classList.remove('has-question-image');
   hostQuestionAnswersEl.innerHTML = '';
 
@@ -12430,37 +12441,103 @@ function renderHostListening(state) {
     hostQuestionWrap.insertBefore(box, hostQuestionAnswersEl);
     hostListening.el = box;
   }
+  // The instruction gives way to the question being corrected.
+  hostListening.el?.classList.toggle('is-review', !!review);
 
+  if (review) {
+    renderHostListeningReview(state, L, review);
+    return;
+  }
+  hostQuestionPromptEl.textContent = `🎧 ${L.section.title || t('Listening')}`;
   const count = document.createElement('p');
   count.className = 'host-listening-count';
   count.textContent = t('Questions {from}–{to} · {submitted} of {players} submitted · {started} started', {
     from: L.first + 1, to: L.last + 1, submitted: state.responseCount || 0, players: state.playerCount || 0, started: L.startedCount || 0,
   });
   hostQuestionAnswersEl.appendChild(count);
+  hostQuestionHintEl.textContent = t('P plays the recording. When the students are done, Space starts the correction (→ moves on without it). Whatever they entered counts.');
+}
 
-  if (closed) {
-    const list = document.createElement('ol');
-    list.className = 'host-listening-list';
-    list.start = L.first + 1;
-    (L.questions || []).forEach((q) => {
-      const li = document.createElement('li');
-      const prompt = document.createElement('div');
-      prompt.textContent = q?.prompt || '';
-      li.appendChild(prompt);
-      const text = String(q?.answerText || '');
-      if (text) {
-        const ans = document.createElement('div');
-        ans.className = 'host-listening-answer';
-        ans.textContent = `✓ ${text}`;
-        li.appendChild(ans);
-      }
-      list.appendChild(li);
+// One question of the correction: its options (A, B, C as on the phones' sheet),
+// and once revealed the answer and how the class answered.
+function renderHostListeningReview(state, L, review) {
+  const q = review.question || {};
+  const stats = review.stats || {};
+  const revealed = !!review.revealed;
+  const last = review.step >= review.count - 1;
+  hostQuestionPromptEl.textContent = `${review.qIndex + 1}. ${q.prompt || ''}`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'host-review';
+  const head = document.createElement('p');
+  head.className = 'host-listening-count';
+  head.textContent = `🎧 ${L.section.title || t('Listening')} · ${t('Correction {n} of {total}', { n: review.step + 1, total: review.count })}`; // i18n-ignore (pieces are t()-wrapped)
+  wrap.appendChild(head);
+
+  const teacherGraded = stats.graded != null;
+  if (['mcq', 'tf', 'multi'].includes(q.type)) {
+    const correct = new Set(Array.isArray(q.correctIndexes) ? q.correctIndexes : []);
+    (q.answers || []).forEach((a, i) => {
+      const row = document.createElement('div');
+      row.className = 'host-review-option';
+      if (revealed && correct.has(i)) row.classList.add('is-correct');
+      const letter = document.createElement('span');
+      letter.className = 'host-review-letter';
+      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + i);
+      const text = document.createElement('span');
+      text.textContent = q.type === 'tf' ? t(String(a?.text || '')) : String(a?.text || '');
+      const count = document.createElement('span');
+      count.className = 'host-review-count';
+      count.textContent = revealed ? String(Number(stats.options?.[i] || 0)) : '';
+      row.append(letter, text, count);
+      wrap.appendChild(row);
     });
-    hostQuestionAnswersEl.appendChild(list);
+  } else if (revealed && q.type === 'match_pairs') {
+    (q.pairs || []).forEach((pair) => {
+      const row = document.createElement('div');
+      row.className = 'host-review-option host-review-plain is-correct';
+      const text = document.createElement('span');
+      text.textContent = `${pair.left} → ${pair.right}`;
+      row.appendChild(text);
+      wrap.appendChild(row);
+    });
+  } else if (revealed && (q.filledText || q.answerText)) {
+    const ans = document.createElement('div');
+    ans.className = 'project-text-reveal';
+    ans.textContent = q.filledText || q.answerText;
+    wrap.appendChild(ans);
   }
-  hostQuestionHintEl.textContent = closed
-    ? t('Answers revealed. Press Next to continue.')
-    : t('Press P to play the recording. Students answer on their phones; press Next (or Reveal) when they are done. Whatever they entered counts.');
+  if (teacherGraded) {
+    // Answers the teacher chose to show as models (from the answers panel).
+    (Array.isArray(state.modelResponses) ? state.modelResponses : []).forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'host-review-option host-review-plain';
+      const text = document.createElement('span');
+      text.textContent = String(r.correction || '').trim() || String(r.answer || '');
+      row.appendChild(text);
+      wrap.appendChild(row);
+    });
+  }
+
+  const result = document.createElement('p');
+  result.className = 'host-review-result';
+  const players = Number(stats.players || 0);
+  if (teacherGraded) {
+    result.textContent = t('{answered} of {players} answered · {graded} marked', { answered: Number(stats.answered || 0), players, graded: Number(stats.graded || 0) });
+  } else if (revealed) {
+    const partly = Number(stats.partial || 0);
+    result.textContent = t('{correct} of {players} right', { correct: Number(stats.correct || 0), players })
+      + (partly ? ` · ${t('{n} partly right', { n: partly })}` : '');
+  } else {
+    result.textContent = t('{answered} of {players} answered', { answered: Number(stats.answered || 0), players });
+  }
+  wrap.appendChild(result);
+  hostQuestionAnswersEl.appendChild(wrap);
+
+  const hint = [];
+  if (!revealed) hint.push(t('Space shows the answer.'));
+  hint.push(last ? t('→ continues the game.') : t('→ next question, ← previous.'));
+  hostQuestionHintEl.textContent = hint.join(' ');
 }
 
 // P on a listening section plays or pauses its recording on the projector.

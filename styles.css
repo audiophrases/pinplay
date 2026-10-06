@@ -6127,6 +6127,7 @@ body.listening-sheet-open { overflow: hidden; }
 .ls-instruction { font-style: italic; margin: 4px 0 16px; line-height: 1.45; }
 .ls-locked-note { background: rgba(96,93,255,0.08); border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; margin: 0 0 12px; }
 .ls-q { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+.ls-q.is-current { margin: 0 -8px; padding: 12px 8px 14px; border-radius: 8px; background: rgba(96,93,255,0.08); box-shadow: inset 3px 0 0 var(--primary); }
 .ls-q-prompt { line-height: 1.5; margin-bottom: 8px; }
 .ls-q-num { font-weight: 700; margin-right: 2px; }
 .ls-q-body { display: grid; gap: 4px; }
@@ -6166,8 +6167,16 @@ body.listening-sheet-open { overflow: hidden; }
 .host-listening-instruction { font-size: 1.25rem; font-style: italic; margin: 0; }
 .host-listening-audio { width: 100%; max-width: 720px; margin: 0 auto; }
 .host-listening-count { font-weight: 700; color: var(--muted); margin: 0 0 8px; }
-.host-listening-list { margin: 0; padding-left: 2rem; display: grid; gap: 10px; font-size: 1.1rem; text-align: left; }
-.host-listening-answer { color: var(--ok); font-weight: 700; margin-top: 2px; }
+.host-listening-box.is-review .host-listening-instruction { display: none; }
+
+/* The class correction, one question at a time */
+.host-review { display: grid; gap: .55rem; width: 100%; }
+.host-review-option { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; text-align: left; font-size: clamp(1rem, 2.1vw, 1.3rem); background: #fff; border: 1px solid var(--line); border-radius: .65rem; padding: .55rem .8rem; }
+.host-review-option.host-review-plain { display: block; }
+.host-review-option.is-correct { background: #e8f8ee; border-color: #6fcf97; box-shadow: inset 0 0 0 2px rgba(19, 138, 54, .18); }
+.host-review-letter { font-weight: 800; color: var(--muted); }
+.host-review-count { font-weight: 800; min-width: 2ch; text-align: right; }
+.host-review-result { font-weight: 700; font-size: 1.15rem; margin: .2rem 0 0; text-align: center; }
 .host-listening-plays { margin: 0; text-align: center; font-weight: 700; color: var(--muted); }
 
 /* ── Live Pin levels (levelled quizzes) ── */

@@ -254,6 +254,7 @@ describe('PinPlay Cup', () => {
 
 describe('assignments with listening sections (real worker, in-memory storage)', () => {
   let post;
+  let get;
   const PW = 'teacher-secret';
   before(async () => {
     const os = require('node:os');
@@ -278,6 +279,10 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     };
     post = async (p, body, headers = {}) => {
       const res = await mod.default.fetch(new Request(`https://api.test${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }), env);
+      return { status: res.status, body: await res.json() };
+    };
+    get = async (p, headers = {}) => {
+      const res = await mod.default.fetch(new Request(`https://api.test${p}`, { method: 'GET', headers }), env);
       return { status: res.status, body: await res.json() };
     };
   });
@@ -418,7 +423,7 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     assert.equal(outside.status, 200);
   });
 
-  it('live: a section is one step, drafts autosave, and count when the teacher moves on', async () => {
+  it('live: a section is one step, drafts autosave, count when the teacher reveals, then the class corrects it', async () => {
     const quiz = {
       title: 'Live listening',
       listeningSections: [section('s1', { transcript: 'SECRET TRANSCRIPT' })],
@@ -457,16 +462,88 @@ describe('assignments with listening sections (real worker, in-memory storage)',
     const hs = (await post('/api/host/reveal', { pin: game.pin }, host)).body;
     assert.equal(hs.listening.submittedCount, 1);
     assert.equal(hs.listening.finalized, true);
-    const scores = Object.fromEntries(hs.players.map((p) => [p.id, p.score]));
+    const scoresOf = (state) => Object.fromEntries(state.players.map((p) => [p.id, p.score]));
+    const scores = scoresOf(hs);
     assert.ok(scores[ann.playerId] === 2000 && scores[bob.playerId] === 0, JSON.stringify(scores));
     assert.equal((await sec('answer', bob, { qIndex: 2, answer: 'coffee' })).body.code, 'QUESTION_ENDED');
 
+    // The correction starts at the section's first question, answer hidden.
+    const mine = async (pl) => (await get(`/api/player/state?pin=${game.pin}&playerId=${pl.playerId}`, as(pl))).body.listening;
+    assert.deepEqual(plain([hs.listening.review.qIndex, hs.listening.review.step, hs.listening.review.count, hs.listening.review.revealed]), [1, 0, 2, false]);
+    assert.deepEqual(plain(hs.listening.review.stats), { players: 2, answered: 2, correct: 1, partial: 0, options: [1, 1] });
+    assert.deepEqual(plain((await mine(ann)).marks), {}, 'no marks on the phones before their reveal');
+    assert.equal((await mine(ann)).review.current, 1);
+
+    const shown = (await post('/api/host/reveal', { pin: game.pin }, host)).body;
+    assert.equal(shown.listening.review.revealed, true);
+    assert.deepEqual(plain(Object.keys((await mine(ann)).marks)), ['1'], 'the phones get the revealed question\'s mark only');
+    assert.equal((await mine(bob)).marks['1'].correct, false);
+
+    const second = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.equal(second.currentIndex, 2, 'next goes through the section first');
+    assert.deepEqual(plain([second.listening.review.step, second.listening.review.revealed, second.listening.review.question.answerText]), [1, false, 'coffee']);
+    assert.deepEqual(plain(second.listening.review.stats), { players: 2, answered: 1, correct: 1, partial: 0 });
+
     const after = await post('/api/host/next', { pin: game.pin }, host);
-    assert.equal(after.body.currentIndex, 3, 'next leaves the whole section');
+    assert.equal(after.body.currentIndex, 3, 'after its last question, next leaves the section');
     assert.equal(after.body.listening, undefined);
-    const back = await post('/api/host/prev', { pin: game.pin }, host);
-    assert.equal(back.body.currentIndex, 1, 'going back re-enters the section at its start');
-    assert.equal(Object.fromEntries(back.body.players.map((p) => [p.id, p.score]))[ann.playerId], 0, 're-entering takes the points back');
+
+    // Back into a corrected section: its correction as it was left, points kept.
+    const back = (await post('/api/host/prev', { pin: game.pin }, host)).body;
+    assert.deepEqual(plain([back.currentIndex, back.listening.review.step, back.listening.review.revealed]), [2, 1, false]);
+    assert.equal(scoresOf(back)[ann.playerId], 2000, 'coming back keeps the points');
+    const annBack = await mine(ann);
+    assert.deepEqual(plain([annBack.answers['1'], annBack.answers['2'], Object.keys(annBack.marks)]), [0, 'coffee', ['1']]);
+    const first = (await post('/api/host/prev', { pin: game.pin }, host)).body;
+    assert.deepEqual(plain([first.currentIndex, first.listening.review.revealed]), [1, true]);
+    const before = (await post('/api/host/prev', { pin: game.pin }, host)).body;
+    assert.equal(before.currentIndex, 0, 'prev at the first question leaves the section backwards');
+    const again = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.deepEqual(plain([again.currentIndex, again.listening.review.step, scoresOf(again)[ann.playerId]]), [1, 0, 2000]);
+  });
+
+  it('live: an open answer is graded while the correction shows it', async () => {
+    const quiz = {
+      title: 'Live listening, open answer',
+      listeningSections: [section('s1')],
+      questions: [mcq('q1', { listeningSection: 's1' }), { id: 'q2', type: 'open', prompt: 'Why?', listeningSection: 's1' }, mcq('q3')],
+    };
+    const game = (await post('/api/create', { password: PW, options: { randomNames: true }, quiz })).body;
+    const host = { Authorization: `Bearer ${game.hostToken}` };
+    const ann = (await post('/api/join', { pin: game.pin, clientId: 'c_open', name: 'ann' })).body;
+    const as = { 'X-Player-Token': ann.playerToken };
+    await post('/api/host/next', { pin: game.pin }, host);
+    await post('/api/section/answer', { pin: game.pin, playerId: ann.playerId, sectionId: 's1', qIndex: 1, answer: 'Because it is fun.' }, as);
+    await post('/api/host/reveal', { pin: game.pin }, host);
+    const atOpen = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.equal(atOpen.currentIndex, 1);
+    assert.deepEqual(plain(atOpen.listening.review.stats), { players: 1, answered: 1, correct: 0, partial: 0, graded: 0 });
+    assert.ok(atOpen.answerHistory.some((b) => b.qIndex === 1 && b.entries.length === 1), 'the answers panel lists it');
+    const graded = await post('/api/host/grade-open', { pin: game.pin, playerId: ann.playerId, points: 800 }, host);
+    assert.equal(graded.status, 200, JSON.stringify(graded.body));
+    const after = (await post('/api/host/reveal', { pin: game.pin }, host)).body;
+    assert.equal(after.listening.review.stats.graded, 1);
+    assert.equal(after.players[0].score, 800);
+    const mine = (await get(`/api/player/state?pin=${game.pin}&playerId=${ann.playerId}`, as)).body.listening;
+    assert.deepEqual(plain(mine.marks['1']), { teacher: true, graded: true, pointsAwarded: 800, correction: '' });
+  });
+
+  it('live: next on an open section marks it and skips the correction', async () => {
+    const quiz = {
+      title: 'Live listening, no correction',
+      listeningSections: [section('s1')],
+      questions: [mcq('q1', { listeningSection: 's1' }), mcq('q2', { listeningSection: 's1' }), mcq('q3')],
+    };
+    const game = (await post('/api/create', { password: PW, options: { randomNames: true }, quiz })).body;
+    const host = { Authorization: `Bearer ${game.hostToken}` };
+    const ann = (await post('/api/join', { pin: game.pin, clientId: 'c_skip', name: 'ann' })).body;
+    await post('/api/host/next', { pin: game.pin }, host);
+    await post('/api/section/answer', { pin: game.pin, playerId: ann.playerId, sectionId: 's1', qIndex: 1, answer: 0 }, { 'X-Player-Token': ann.playerToken });
+    const on = (await post('/api/host/next', { pin: game.pin }, host)).body;
+    assert.equal(on.currentIndex, 2);
+    assert.equal(on.players[0].score, 1000, 'whatever was entered counts');
+    const back = (await post('/api/host/prev', { pin: game.pin }, host)).body;
+    assert.deepEqual(plain([back.currentIndex, back.listening.review.step, back.listening.review.revealed]), [1, 1, false]);
   });
 
   it('live: a classic game plays the ticked levels, also after Apply live; PinPlay Cup ignores them', async () => {
