@@ -197,7 +197,9 @@ one stays ticked). The game plays the ticked levels' single questions and
 every untagged one. A listening section gives one question per moment: at the
 ticked level, or with several ticked from the easiest to the hardest (the
 ladder of LISTENING_MODE_PLAN.md 10d), each moment at the nearest level the
-section has, so every section stays in the game. The room keeps the levels
+section has, so every section stays in the game. With every level of a
+section ticked (owner, 2026-10-06), it keeps all its questions, moment by
+moment, easiest level first (moment 1 A2, B1, B2, then moment 2…). The room keeps the levels
 (`room.settings.levels`, `liveLevelQuiz` in the worker) and **Apply live**
 applies them again. PinPlay Cup ignores them (it follows 🎯 Adaptive). Never
 shown on the projector or phones.

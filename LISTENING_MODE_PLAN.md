@@ -290,7 +290,7 @@ earlier parts point to.
 | Counting | Section questions come **on top of** the N questions per student. Every student does every section once. |
 | Questions with no level | **Shared**: everyone gets them, at every level and in the ladder. They earn points but don't move the level. |
 | Where a section comes | **Where it sits**: a section with k normal questions before it in the quiz comes after the student's k-th served question (capped at N). Sections that follow each other come back to back. In a quiz made only of sections, the parts come in order. |
-| Live | Classic live isn't adaptive, PinPlay Cup never deals sections. **2026-10-06:** a classic game of a levelled quiz plays the levels the teacher ticks; a section then gives one question per moment at those levels (ADAPTIVE_MODE_PLAN.md 5b). |
+| Live | Classic live isn't adaptive, PinPlay Cup never deals sections. **2026-10-06:** a classic game of a levelled quiz plays the levels the teacher ticks; a section then gives one question per moment at those levels, or, with all its levels ticked, every question by moment then level (ADAPTIVE_MODE_PLAN.md 5b). |
 
 ### 10c. How a section is written: moments
 

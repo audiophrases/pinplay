@@ -6453,7 +6453,9 @@ function hostListeningState(room, range) {
 // level. A listening section keeps one question per moment, as an adaptive
 // block does (LISTENING_MODE_PLAN.md section 10): at the ticked level, or
 // with several from the easiest to the hardest, each moment at the nearest
-// level the section has (easier on a tie). Every section stays in the game.
+// level the section has (easier on a tie). With every level of the section
+// ticked, it keeps all its questions, by moment then level. Every section
+// stays in the game.
 function liveLevelList(levels) {
   const wanted = (Array.isArray(levels) ? levels : []).map(normalizeCefrLevel);
   return CEFR_LEVELS.filter((l) => wanted.includes(l));
@@ -6463,8 +6465,15 @@ function liveLevelSectionPick(questions, sectionId, chosen) {
   const m = listeningSectionMoments(questions, sectionId);
   const out = [];
   const addShared = (k) => m.shared.filter((x) => (k === Infinity ? x.before >= m.moments : x.before === k)).forEach((x) => out.push(x.qi));
+  // Every level the section has is ticked: all its questions, moment by
+  // moment, easiest level first (owner, 2026-10-06).
+  const all = m.levels.length > 1 && m.levels.every((l) => chosen.includes(l));
   for (let k = 0; k < m.moments; k += 1) {
     addShared(k);
+    if (all) {
+      m.levels.forEach((l) => { if (m.byLevel[l][k] != null) out.push(m.byLevel[l][k]); });
+      continue;
+    }
     const step = chosen.length === 1 || m.moments === 1 ? 0 : Math.round((k * (chosen.length - 1)) / (m.moments - 1));
     const want = CEFR_LEVELS.indexOf(chosen[step]);
     let best = null;
