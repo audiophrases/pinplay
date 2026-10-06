@@ -14,3 +14,5 @@ QA_NOTES_2026-03-07.md
 TEACHER_GUIDE_BATCHES.md
 .gitignore
 .gitattributes
+.codegraph/
+.claude/
