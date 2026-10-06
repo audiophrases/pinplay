@@ -219,13 +219,15 @@ describe('live levels: a classic game at the ticked levels', () => {
     assert.deepEqual(ids(['B1']), ['u', 'b1', 'intro', 'B1-1', 'B1-2', 'B1-3', 'end']);
   });
 
-  it('gives a section one question per moment: one level, or easy to hard over several', () => {
-    assert.deepEqual(ids(['A2', 'B2']), ['u', 'a2', 'b2', 'intro', 'A2-1', 'B2-2', 'B2-3', 'end']);
-  });
-
-  it('with every level of the section ticked, keeps all its questions, by moment then easiest level first', () => {
+  it('keeps the questions of a section at the ticked levels, by moment then easiest level first', () => {
+    assert.deepEqual(ids(['A2', 'B2']), ['u', 'a2', 'b2', 'intro', 'A2-1', 'B2-1', 'A2-2', 'B2-2', 'A2-3', 'B2-3', 'end']);
     assert.deepEqual(ids(['A2', 'B1', 'B2']), ['u', 'a2', 'b1', 'b2', 'intro',
       'A2-1', 'B1-1', 'B2-1', 'A2-2', 'B1-2', 'B2-2', 'A2-3', 'B1-3', 'B2-3', 'end']);
+  });
+
+  it('turns ticked levels a section lacks into its nearest ones, without doubles', () => {
+    assert.deepEqual(ids(['A1', 'A2']), ['u', 'a2', 'intro', 'A2-1', 'A2-2', 'A2-3', 'end']);
+    assert.deepEqual(ids(['A1', 'C1']), ['u', 'intro', 'A2-1', 'B2-1', 'A2-2', 'B2-2', 'A2-3', 'B2-3', 'end']);
   });
 
   it('keeps every section, at the nearest level it has (easier on a tie)', () => {

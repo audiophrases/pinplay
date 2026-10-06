@@ -194,12 +194,11 @@ Not adaptive: the class moves together. Built 2026-10-06 (owner's request):
 for a quiz with 2+ tagged levels, Game controls shows **🎯 Levels** with a box
 per level, next to Live Pin, all ticked for each newly loaded quiz (at least
 one stays ticked). The game plays the ticked levels' single questions and
-every untagged one. A listening section gives one question per moment: at the
-ticked level, or with several ticked from the easiest to the hardest (the
-ladder of LISTENING_MODE_PLAN.md 10d), each moment at the nearest level the
-section has, so every section stays in the game. With every level of a
-section ticked (owner, 2026-10-06), it keeps all its questions, moment by
-moment, easiest level first (moment 1 A2, B1, B2, then moment 2…). The room keeps the levels
+every untagged one. A listening section keeps the ticked levels' questions,
+moment by moment, easiest level first (moment 1 A2, B1, then moment 2…;
+owner, 2026-10-06). A ticked level the section lacks becomes the nearest one
+it has (easier on a tie), so every section stays in the game. Students scroll
+through the whole sheet as usual. The room keeps the levels
 (`room.settings.levels`, `liveLevelQuiz` in the worker) and **Apply live**
 applies them again. PinPlay Cup ignores them (it follows 🎯 Adaptive). Never
 shown on the projector or phones.

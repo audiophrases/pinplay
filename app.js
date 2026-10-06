@@ -16568,9 +16568,9 @@ function syncAssignmentAdaptiveControl() {
 }
 
 // Live Pin (classic live) of a levelled quiz: the teacher ticks the levels to
-// play, all by default. The server keeps their single questions, every
-// question without a level and one question per moment of each listening
-// section (liveLevelQuiz in the worker). Kept as the unticked levels, so a
+// play, all by default. The server keeps their questions (in a listening
+// section, moment by moment, easiest first) and every question without a
+// level (liveLevelQuiz in the worker). Kept as the unticked levels, so a
 // level tagged later starts ticked; a newly loaded quiz starts with all.
 let liveLevelsFor = null;
 let liveLevelsOff = new Set();

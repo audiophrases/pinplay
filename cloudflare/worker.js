@@ -6450,12 +6450,11 @@ function hostListeningState(room, range) {
 // ---------------------------------------------------------------- live levels
 // A classic live game of a levelled quiz plays the levels the teacher ticks
 // on the create page: their single questions and every question without a
-// level. A listening section keeps one question per moment, as an adaptive
-// block does (LISTENING_MODE_PLAN.md section 10): at the ticked level, or
-// with several from the easiest to the hardest, each moment at the nearest
-// level the section has (easier on a tie). With every level of the section
-// ticked, it keeps all its questions, by moment then level. Every section
-// stays in the game.
+// level. A listening section keeps the ticked levels' questions, moment by
+// moment, easiest level first (moment 1 A2, B1, then moment 2 A2, B1…; owner,
+// 2026-10-06). A ticked level the section lacks becomes the nearest one it has
+// (easier on a tie), so every section stays in the game; a moment none of
+// those levels has borrows the nearest level's question.
 function liveLevelList(levels) {
   const wanted = (Array.isArray(levels) ? levels : []).map(normalizeCefrLevel);
   return CEFR_LEVELS.filter((l) => wanted.includes(l));
@@ -6463,26 +6462,22 @@ function liveLevelList(levels) {
 
 function liveLevelSectionPick(questions, sectionId, chosen) {
   const m = listeningSectionMoments(questions, sectionId);
+  const rank = (l) => CEFR_LEVELS.indexOf(l);
+  // The level of the section nearest to a level on the A1..C2 scale (easier on a tie).
+  const nearest = (target, has = () => true) => m.levels.filter(has)
+    .reduce((best, l) => (best == null || Math.abs(rank(l) - target) < Math.abs(rank(best) - target) ? l : best), null);
+  const use = new Set(chosen.map((l) => nearest(rank(l))).filter(Boolean));
+  const levels = m.levels.filter((l) => use.has(l));
   const out = [];
   const addShared = (k) => m.shared.filter((x) => (k === Infinity ? x.before >= m.moments : x.before === k)).forEach((x) => out.push(x.qi));
-  // Every level the section has is ticked: all its questions, moment by
-  // moment, easiest level first (owner, 2026-10-06).
-  const all = m.levels.length > 1 && m.levels.every((l) => chosen.includes(l));
   for (let k = 0; k < m.moments; k += 1) {
     addShared(k);
-    if (all) {
-      m.levels.forEach((l) => { if (m.byLevel[l][k] != null) out.push(m.byLevel[l][k]); });
-      continue;
+    const here = levels.filter((l) => m.byLevel[l][k] != null);
+    if (!here.length && levels.length) {
+      const borrow = nearest(rank(levels[0]), (l) => m.byLevel[l][k] != null);
+      if (borrow) here.push(borrow);
     }
-    const step = chosen.length === 1 || m.moments === 1 ? 0 : Math.round((k * (chosen.length - 1)) / (m.moments - 1));
-    const want = CEFR_LEVELS.indexOf(chosen[step]);
-    let best = null;
-    m.levels.forEach((l) => {
-      const qi = m.byLevel[l][k];
-      const d = Math.abs(CEFR_LEVELS.indexOf(l) - want);
-      if (qi != null && (best == null || d < best.d)) best = { qi, d };
-    });
-    if (best) out.push(best.qi);
+    here.forEach((l) => out.push(m.byLevel[l][k]));
   }
   addShared(Infinity);
   return out;
