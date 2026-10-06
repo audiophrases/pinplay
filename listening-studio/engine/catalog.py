@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 
 import numpy as np
 import soundfile as sf
@@ -100,7 +101,9 @@ def sample(key, cache_dir):
     if not v:
         raise KeyError(key)
     os.makedirs(cache_dir, exist_ok=True)
-    path = os.path.join(cache_dir, f"{key.replace('/', '-')}.wav")
+    # Named by the exact clips: a rebuilt catalog never reuses an old sample.
+    clips = zlib.crc32(json.dumps([v['source'], v['split'], v['offsets']]).encode())
+    path = os.path.join(cache_dir, f"{key.replace('/', '-')}-{clips:08x}.wav")
     if os.path.exists(path):
         return path
     import librosa

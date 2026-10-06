@@ -752,14 +752,15 @@ $('libraryList').addEventListener('click', guarded(async (e) => {
 // ---------------------------------------------------------------- 🌍 find a voice
 // Real voices from open recordings (catalog/voices.json): listen, then add
 // to the library or give to a character at once.
-const finder = { tab: 'librittsr', catalog: null, forName: null, shown: 40,
-  f: { accent: 'American', gender: '', pitch: '', manner: 'calm', pace: '', language: 'Spanish', age: '' } };
+const finder = { tab: 'readers', catalog: null, forName: null, shown: 40,
+  f: { readerLanguage: 'English', accent: 'American', gender: '', pitch: '', manner: 'calm', pace: '', language: 'Spanish', age: '' } };
 const PITCH_GROUP = { 'very low': 'low', low: 'low', 'slightly low': 'low', moderate: 'moderate', 'slightly high': 'high', high: 'high', 'very high': 'high' };
 const PACE_GROUP = { 'very slow': 'slow', slow: 'slow', 'slightly slow': 'slow', moderate: 'moderate', 'slightly fast': 'fast', fast: 'fast', 'very fast': 'fast' };
 const FINDER_ABOUT = {
-  librittsr: 'LibriVox volunteers reading audiobooks, cleaned in a studio (LibriTTS-R, free to use with credit). Labelled by accent, pitch, pace and manner: "calm" voices copy best.',
+  readers: 'LibriVox volunteers reading audiobooks, cleaned in a studio (free to use with credit). Labelled by pitch, pace and manner: "calm" voices copy best.',
   accentarchive: 'People from all over the world reading the same English paragraph (Speech Accent Archive, George Mason University; free for teaching, not for selling). Choose their first language.',
 };
+const READER_SOURCES = ['librittsr', 'cmltts', 'mls'];
 
 async function openFinder(forName) {
   finder.forName = forName || null;
@@ -782,14 +783,15 @@ function counted(voices, field) {
 
 function finderMatches() {
   const { f, tab } = finder;
-  const all = finder.catalog.voices.filter((v) => v.source === tab);
   const sel = (key, val) => !val || key === val;
-  if (tab === 'librittsr') {
+  if (tab === 'readers') {
+    const all = finder.catalog.voices.filter((v) => READER_SOURCES.includes(v.source) && v.language === f.readerLanguage);
     const rank = { calm: 0, mixed: 1, lively: 2 };
     return all.filter((v) => sel(v.accent, f.accent) && sel(v.gender, f.gender) && sel(PITCH_GROUP[v.pitch], f.pitch)
         && sel(PACE_GROUP[v.pace], f.pace) && (f.manner === 'any' || v.manner === 'calm' || (f.manner === 'mixed' && v.manner === 'mixed')))
       .sort((a, b) => rank[a.manner] - rank[b.manner] || a.gender.localeCompare(b.gender) || a.hz - b.hz);
   }
+  const all = finder.catalog.voices.filter((v) => v.source === 'accentarchive');
   const ageOk = (a) => !f.age || (a && (f.age === 'young' ? a < 30 : f.age === 'middle' ? a >= 30 && a < 50 : a >= 50));
   return all.filter((v) => sel(v.language, f.language) && sel(v.gender, f.gender) && ageOk(v.age))
     .sort((a, b) => (a.gender ? 0 : 1) - (b.gender ? 0 : 1) || (a.age || 99) - (b.age || 99));
@@ -797,8 +799,8 @@ function finderMatches() {
 
 function finderLabel(v) {
   const who = { female: 'Woman', male: 'Man' }[v.gender] || 'Speaker';
-  if (v.source === 'librittsr') {
-    return [`<b>${who} · ${esc(v.accent)}</b>`, `<span class="muted small">${esc(v.pitch)} voice · ${esc(v.manner)} · ${esc(v.pace)} pace · reader ${esc(v.speaker)}</span>`];
+  if (READER_SOURCES.includes(v.source)) {
+    return [`<b>${who}${v.accent ? ` · ${esc(v.accent)}` : ''}</b>`, `<span class="muted small">${esc(v.pitch)} voice · ${esc(v.manner)} · ${esc(v.pace)} pace · reader ${esc(v.speaker)}</span>`];
   }
   return [`<b>${who}${v.age ? `, ${v.age}` : ''} · first language ${esc(v.language)}</b>`,
     `<span class="muted small">${v.birthplace ? `born in ${esc(v.birthplace)} · ` : ''}${esc(v.speaker)}</span>`];
@@ -806,8 +808,8 @@ function finderLabel(v) {
 
 function finderName(v) {
   const who = { female: 'woman', male: 'man' }[v.gender] || 'speaker';
-  return v.source === 'librittsr'
-    ? `${v.accent} ${who}, ${v.pitch}, ${v.manner} (reader ${v.speaker})`
+  return READER_SOURCES.includes(v.source)
+    ? `${v.accent ? `${v.accent} ` : `${v.language} `}${who}, ${v.pitch}, ${v.manner} (reader ${v.speaker})`
     : `${v.language} accent, ${who}${v.age ? ` ${v.age}` : ''} (${v.speaker})`;
 }
 
@@ -815,17 +817,22 @@ function renderFinder() {
   const { f, tab } = finder;
   document.querySelectorAll('#findDialog [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $('findAbout').textContent = FINDER_ABOUT[tab];
-  const all = finder.catalog.voices.filter((v) => v.source === tab);
   const gender = finderOptions([['', ''], ['female', ''], ['male', '']], f.gender, { '': 'Any', female: 'Woman', male: 'Man' });
-  $('findFilters').innerHTML = tab === 'librittsr'
-    ? `<label>Accent<select data-f="accent">${finderOptions(counted(all, 'accent'), f.accent)}</select></label>
+  if (tab === 'readers') {
+    const readerLangs = counted(finder.catalog.voices.filter((v) => READER_SOURCES.includes(v.source)), 'language');
+    const all = finder.catalog.voices.filter((v) => READER_SOURCES.includes(v.source) && v.language === f.readerLanguage);
+    $('findFilters').innerHTML = `<label>Language<select data-f="readerLanguage">${finderOptions(readerLangs, f.readerLanguage)}</select></label>
+       ${all.some((v) => v.accent) ? `<label>Accent<select data-f="accent">${finderOptions(counted(all, 'accent'), f.accent)}</select></label>` : ''}
        <label>Man or woman<select data-f="gender">${gender}</select></label>
        <label>Pitch<select data-f="pitch">${finderOptions([['', ''], ['low', ''], ['moderate', ''], ['high', '']], f.pitch, { '': 'Any', low: 'Low', moderate: 'Moderate', high: 'High' })}</select></label>
        <label>Manner<select data-f="manner">${finderOptions([['calm', ''], ['mixed', ''], ['any', '']], f.manner, { calm: 'Calm only (copies best)', mixed: 'Calm or a little lively', any: 'Any' })}</select></label>
-       <label>Pace<select data-f="pace">${finderOptions([['', ''], ['slow', ''], ['moderate', ''], ['fast', '']], f.pace, { '': 'Any', slow: 'Slow', moderate: 'Moderate', fast: 'Fast' })}</select></label>`
-    : `<label>First language<select data-f="language">${finderOptions(counted(all, 'language'), f.language)}</select></label>
+       <label>Pace<select data-f="pace">${finderOptions([['', ''], ['slow', ''], ['moderate', ''], ['fast', '']], f.pace, { '': 'Any', slow: 'Slow', moderate: 'Moderate', fast: 'Fast' })}</select></label>`;
+  } else {
+    const all = finder.catalog.voices.filter((v) => v.source === 'accentarchive');
+    $('findFilters').innerHTML = `<label>First language<select data-f="language">${finderOptions(counted(all, 'language'), f.language)}</select></label>
        <label>Man or woman<select data-f="gender">${gender}</select></label>
        <label>Age<select data-f="age">${finderOptions([['', ''], ['young', ''], ['middle', ''], ['older', '']], f.age, { '': 'Any', young: 'Under 30', middle: '30–49', older: '50 or more' })}</select></label>`;
+  }
   const found = finderMatches();
   const action = finder.forName ? `✅ Use for ${esc(finder.forName)}` : '➕ Add to library';
   $('findList').innerHTML = found.slice(0, finder.shown).map((v) => {
@@ -842,6 +849,7 @@ $('findDialog').addEventListener('click', guarded(async (e) => {
   if (tab) {
     finder.tab = tab.dataset.tab;
     finder.f.gender = '';
+    finder.f.accent = '';
     finder.shown = 40;
     renderFinder();
     return;
