@@ -2305,6 +2305,7 @@ function buildListeningSectionPanel(sec) {
       <textarea rows="6" maxlength="${LISTENING_MAX_TRANSCRIPT}" data-ls-id="${sec.id}" data-ls-field="transcript" placeholder="${escapeHtml(t('What is said in the recording, for checking answers. Students never see it.'))}">${escapeHtml(sec.transcript || '')}</textarea>
       <div class="listening-section-row">
         <button type="button" class="btn btn-sm" data-ls-copy="${sec.id}">${escapeHtml(t('📋 Copy script'))}</button>
+        ${creatorRole === 'owner' && typeof openVoiceActors === 'function' ? `<button type="button" class="btn btn-sm" data-ls-voices="${sec.id}" title="${escapeHtml(t('Volunteers record the lines of this script'))}">${escapeHtml(t('🎙 Voice actors'))}</button>` : ''}
         <span class="small muted" data-ls-script="${sec.id}">${escapeHtml(listeningScriptSummary(sec.transcript))}</span>
       </div>
     </details>
@@ -2419,6 +2420,12 @@ function bindListeningSectionEvents() {
         () => { copyBtn.textContent = t('✅ Copied'); setTimeout(() => { copyBtn.textContent = t('📋 Copy script'); }, 2000); },
         () => alert(t('Could not copy. Select the text in the box and copy it instead.')),
       );
+      return;
+    }
+    const voicesBtn = e.target.closest('[data-ls-voices]');
+    if (voicesBtn) {
+      syncQuizFromUI();
+      openVoiceActors({ sectionId: voicesBtn.dataset.lsVoices });
       return;
     }
     const removeBtn = e.target.closest('[data-ls-remove]');

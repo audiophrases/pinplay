@@ -176,6 +176,7 @@ export default {
         else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
         else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
         else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
+        else if (obj.httpMetadata?.contentType) headers['Content-Type'] = obj.httpMetadata.contentType;
         Object.assign(headers, CORS_HEADERS);
         return new Response(obj.body, { headers });
       } catch (e) {
@@ -1115,6 +1116,60 @@ export default {
         try { await deleteR2Prefix(env.QUIZ_MEDIA, `assign-${code}`); } catch { /* */ }
       }
       return withCors(deleteResp);
+    }
+
+    // ---------- Voice actors (VOICE_ACTORS_PLAN.md) ----------
+    // Volunteers: GET /api/rec/actor?s=ID (their view of the session) and
+    // POST /api/rec/take?s=ID&line=L&ms=DURATION (the raw audio of one take).
+    // Teacher (password): /api/rec/create | list | get | save | delete.
+    if (url.pathname.startsWith('/api/rec/')) {
+      const stub = assignmentsStub(env);
+      const forward = async (route, payload) => withCors(await stub.fetch(`https://room/rec/${route}`, {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      }));
+      if (url.pathname === '/api/rec/actor' && request.method === 'GET') {
+        const id = sanitizeRecSessionId(url.searchParams.get('s'));
+        if (!id) return json({ error: 'This recording session was not found.' }, 404);
+        return forward('actor', { id });
+      }
+      if (url.pathname === '/api/rec/take' && request.method === 'POST') {
+        const id = sanitizeRecSessionId(url.searchParams.get('s'));
+        const lineId = sanitizeRecLineId(url.searchParams.get('line'));
+        if (!id || !lineId) return json({ error: 'Session or line missing.' }, 400);
+        const mime = String(request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        const ext = REC_TAKE_TYPES[mime];
+        if (!ext) return json({ error: 'Unsupported audio format.' }, 415);
+        if (Number(request.headers.get('content-length') || 0) > REC_TAKE_MAX_BYTES) return json({ error: 'This take is too long.' }, 413);
+        const bytes = await request.arrayBuffer();
+        if (!bytes.byteLength) return json({ error: 'Empty recording.' }, 400);
+        if (bytes.byteLength > REC_TAKE_MAX_BYTES) return json({ error: 'This take is too long.' }, 413);
+        // A new object per take, so a refused take never overwrites a kept one.
+        const key = `voice-actors/${id}/${lineId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}${ext}`;
+        await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
+        const durMs = clamp(Math.round(Number(url.searchParams.get('ms') || 0)), 0, REC_TAKE_MAX_MS);
+        const res = await forward('take', { id, lineId, key, mime, durMs });
+        const data = await res.clone().json().catch(() => ({}));
+        if (!res.ok) {
+          try { await env.QUIZ_MEDIA.delete(key); } catch { /* deleting the session clears its folder */ }
+        } else if (data.previousKey) {
+          try { await env.QUIZ_MEDIA.delete(data.previousKey); } catch { /* deleting the session clears its folder */ }
+        }
+        return res;
+      }
+      if (request.method === 'POST') {
+        const route = url.pathname.slice('/api/rec/'.length);
+        if (!['create', 'list', 'get', 'save', 'delete'].includes(route)) return json({ error: 'Not found' }, 404);
+        const body = await safeJson(request);
+        if (!(await verifyCreatePassword(env, String(body?.password || ''), request))) return json({ error: 'Wrong password.' }, 401);
+        const { password, ...payload } = body || {};
+        const res = await forward(route, payload);
+        const id = sanitizeRecSessionId(payload.id);
+        if (route === 'delete' && res.ok && id && env.QUIZ_MEDIA) {
+          try { await deleteR2Prefix(env.QUIZ_MEDIA, `voice-actors/${id}`); } catch { /* */ }
+        }
+        return res;
+      }
     }
 
     if (url.pathname === '/api/assignments/create' && request.method === 'POST') {
@@ -2717,6 +2772,52 @@ export class QuizRoom {
 
       if (request.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+
+      // ---------- Voice actors: one row per session (vs:<id>) ----------
+      if (url.pathname.startsWith('/rec/') && request.method === 'POST') {
+        const body = await safeJson(request);
+        const storage = this.state.storage;
+        const route = url.pathname.slice('/rec/'.length);
+        if (route === 'list') {
+          const rows = await storage.list({ prefix: 'vs:' });
+          const sessions = [...rows.values()].map(recSessionSummary).sort((a, b) => b.updatedAt - a.updatedAt);
+          return json({ ok: true, sessions });
+        }
+        if (route === 'create') {
+          const session = newRecSession(body);
+          if (!session.lines.length) return json({ error: 'The script has no lines to record.' }, 400);
+          await storage.put(`vs:${session.id}`, session);
+          return json({ ok: true, session });
+        }
+        const id = sanitizeRecSessionId(body?.id);
+        const session = id ? await storage.get(`vs:${id}`) : null;
+        if (!session) return json({ error: 'This recording session was not found.' }, 404);
+        if (route === 'get') return json({ ok: true, session });
+        if (route === 'actor') return json({ ok: true, session: recActorView(session) });
+        if (route === 'take') {
+          const line = session.lines.find((l) => l.id === sanitizeRecLineId(body?.lineId));
+          if (!line) return json({ error: 'This line is not in the script.' }, 404);
+          if (line.status === 'ok') return json({ error: 'Your teacher has already approved this line.', reason: 'approved' }, 409);
+          const previousKey = String(line.take?.key || '');
+          line.take = { key: String(body.key || ''), mime: String(body.mime || ''), durMs: Number(body.durMs) || 0, at: Date.now() };
+          line.status = 'recorded';
+          line.trim = null;
+          session.updatedAt = Date.now();
+          await storage.put(`vs:${id}`, session);
+          return json({ ok: true, line: recActorLine(line), previousKey: previousKey && previousKey !== line.take.key ? previousKey : '' });
+        }
+        if (route === 'save') {
+          recApplySave(session, body);
+          session.updatedAt = Date.now();
+          await storage.put(`vs:${id}`, session);
+          return json({ ok: true, session });
+        }
+        if (route === 'delete') {
+          await storage.delete(`vs:${id}`);
+          return json({ ok: true });
+        }
+        return json({ error: 'Not found' }, 404);
       }
 
       if (url.pathname === '/assignments/create' && request.method === 'POST') {
@@ -6318,6 +6419,104 @@ function liveStateKey(msg) {
   // eslint-disable-next-line no-unused-vars
   const { serverNow, rev, ...state } = msg?.state || {};
   return JSON.stringify({ state, attempts: msg?.attempts });
+}
+
+// ---------------------------------------------------------------- voice actors
+// Volunteers record a listening script line by line (VOICE_ACTORS_PLAN.md).
+// A session is one row: the lines in script order, each with its latest take
+// (an R2 key), the teacher's trim (ms, null = automatic in the teacher's
+// browser), status and pause before it (seconds, null = the session default).
+const REC_TAKE_TYPES = {
+  'audio/webm': '.webm', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac',
+  'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav',
+};
+const REC_TAKE_MAX_BYTES = 3 * 1024 * 1024;
+const REC_TAKE_MAX_MS = 90 * 1000;
+const REC_MAX_LINES = 300;
+const REC_STATUSES = ['todo', 'recorded', 'ok', 'redo'];
+
+function sanitizeRecSessionId(value) {
+  const v = String(value || '').trim().toLowerCase();
+  return /^[a-z0-9]{8,16}$/.test(v) ? v : '';
+}
+
+function sanitizeRecLineId(value) {
+  const v = String(value || '').trim();
+  return /^l\d{1,4}$/.test(v) ? v : '';
+}
+
+function recGap(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(clamp(n, 0, 10) * 100) / 100 : null;
+}
+
+function newRecSession(body, now = Date.now()) {
+  const lines = (Array.isArray(body?.lines) ? body.lines : []).slice(0, REC_MAX_LINES)
+    .map((l) => ({
+      speaker: String(l?.speaker || '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Voice',
+      text: String(l?.text || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+      direction: String(l?.direction || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+    }))
+    .filter((l) => l.text)
+    .map((l, i) => ({ id: `l${i + 1}`, n: i + 1, ...l, take: null, trim: null, status: 'todo', gap: null }));
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+  return {
+    id,
+    title: String(body?.title || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Recording',
+    sectionId: String(body?.sectionId || '').slice(0, 60),
+    defaultGap: recGap(body?.defaultGap) ?? 0.6,
+    createdAt: now,
+    updatedAt: now,
+    lines,
+  };
+}
+
+function recSessionSummary(session) {
+  const lines = Array.isArray(session?.lines) ? session.lines : [];
+  return {
+    id: session.id,
+    title: session.title,
+    sectionId: session.sectionId || '',
+    updatedAt: Number(session.updatedAt) || 0,
+    total: lines.length,
+    recorded: lines.filter((l) => l.take).length,
+    approved: lines.filter((l) => l.status === 'ok').length,
+    redo: lines.filter((l) => l.status === 'redo').length,
+  };
+}
+
+// What a volunteer sees of a line: the text, whether it is done, and their take
+// to listen back to. No trims or pauses.
+function recActorLine(line) {
+  return {
+    id: line.id, n: line.n, speaker: line.speaker, text: line.text, direction: line.direction,
+    status: line.status, take: line.take ? { key: line.take.key, at: line.take.at } : null,
+  };
+}
+
+function recActorView(session) {
+  return { id: session.id, title: session.title, lines: (session.lines || []).map(recActorLine) };
+}
+
+// The teacher's batched edits: title, default pause, and per line trim
+// ({ s, e } in ms, or null for automatic), status and pause.
+function recApplySave(session, body) {
+  if (typeof body?.title === 'string' && body.title.trim()) session.title = body.title.replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (body?.defaultGap !== undefined) session.defaultGap = recGap(body.defaultGap) ?? session.defaultGap;
+  const byId = new Map((session.lines || []).map((l) => [l.id, l]));
+  (Array.isArray(body?.lines) ? body.lines : []).forEach((edit) => {
+    const line = byId.get(sanitizeRecLineId(edit?.id));
+    if (!line) return;
+    if (edit.trim === null) line.trim = null;
+    else if (edit.trim && typeof edit.trim === 'object') {
+      const s = Math.max(0, Math.round(Number(edit.trim.s) || 0));
+      const e = Math.max(s, Math.round(Number(edit.trim.e) || 0));
+      line.trim = { s, e };
+    }
+    if (REC_STATUSES.includes(edit.status) && (edit.status !== 'ok' || line.take)) line.status = edit.status;
+    if (edit.gap === null) line.gap = null;
+    else if (edit.gap !== undefined) line.gap = recGap(edit.gap);
+  });
 }
 
 function closeQuestionIfTimedOut(room) {

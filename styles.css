@@ -6183,3 +6183,71 @@ body.listening-sheet-open { overflow: hidden; }
 .live-levels-list { display: inline-flex; flex-wrap: wrap; gap: .45rem; }
 .live-level { display: inline-flex; align-items: center; gap: .2rem; cursor: pointer; }
 .live-level input { width: auto; margin: 0; }
+
+/* ── Voice actors: the volunteers' page (record/) ── */
+.rec-main { max-width: 640px; }
+.rec-title { margin: .5rem 0 .25rem; }
+.rec-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+.rec-card[hidden] { display: none; }
+.rec-card h3 { margin: 0; }
+.rec-choice { width: 100%; min-height: 48px; text-align: left; font-size: 1.05rem; }
+.rec-characters { display: grid; gap: 8px; }
+.rec-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rec-prev { margin: 0; border-left: 3px solid var(--line); padding-left: 10px; }
+.rec-line { display: grid; gap: 6px; }
+.rec-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 1.05rem; }
+.rec-text { margin: 0; font-size: clamp(1.25rem, 4.5vw, 1.6rem); line-height: 1.4; font-weight: 600; }
+.rec-badge { font-size: .85rem; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+.rec-badge:empty { display: none; }
+.rec-badge-ok { background: #e8f8ee; color: var(--ok); }
+.rec-badge-redo { background: #fdecec; color: var(--bad); }
+.rec-badge-recorded { background: #eef0ff; color: var(--primary-2); }
+.rec-meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.rec-meter span { display: block; height: 100%; width: 0; background: #2fb36b; transition: width 60ms linear; }
+.rec-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rec-controls .rec-big { grid-column: 1 / -1; min-height: 64px; font-size: 1.25rem; font-weight: 800; background: #d93a3a; color: #fff; border-color: #d93a3a; }
+.rec-controls .rec-big.rec-on { background: #1c2430; border-color: #1c2430; animation: rec-blink 1.2s ease-in-out infinite; }
+.rec-controls .btn { min-height: 48px; }
+.rec-nav { display: flex; justify-content: space-between; gap: 8px; }
+@keyframes rec-blink { 50% { opacity: .75; } }
+@media (prefers-reduced-motion: reduce) { .rec-controls .rec-big.rec-on { animation: none; } }
+
+/* ── Voice actors: the teacher's panel ── */
+.dialog-card.va-panel { width: min(980px, 96vw); max-height: 92vh; overflow: auto; display: grid; gap: 10px; align-content: start; }
+.va-panel h3 { margin: 0; }
+.va-sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.va-session { display: flex; gap: 6px; align-items: stretch; }
+.va-session-open { flex: 1; display: grid; gap: 2px; text-align: left; }
+.va-new { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.va-new[open] { display: grid; }
+.va-new label { display: grid; gap: 4px; }
+.va-new textarea { width: 100%; font: inherit; }
+.va-head { display: flex; gap: 8px; align-items: center; }
+.va-title-input { flex: 1; font-weight: 700; }
+.va-link { display: flex; gap: 12px; align-items: center; }
+.va-link img { border-radius: 6px; flex: none; }
+.va-link p { margin: 0 0 4px; }
+.va-link input { flex: 1; min-width: 0; }
+.va-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; top: -16px; background: var(--card); padding: 6px 0; z-index: 1; }
+.va-tools label { display: inline-flex; gap: 6px; align-items: center; }
+.va-tools select { width: auto; }
+.va-tools input { width: 5em; padding: 4px 6px; }
+.va-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.va-line { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; }
+.va-line.va-ok { border-color: #6fcf97; }
+.va-line.va-redo { border-color: #e79a9a; }
+.va-line.va-todo { opacity: .7; }
+.va-line.is-playing { box-shadow: 0 0 0 3px rgba(96, 93, 255, .35); }
+.va-line-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.va-n { color: var(--muted); font-weight: 700; min-width: 2ch; }
+.va-status { color: var(--muted); }
+.va-gap { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+.va-gap input { width: 4.5em; padding: 2px 6px; }
+.va-text { margin: 0; }
+.va-wave { width: 100%; height: 56px; cursor: ew-resize; touch-action: none; background: #f4f5f9; border-radius: 6px; }
+.va-line-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.va-build { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
+@media (max-width: 560px) {
+  .va-link { flex-direction: column; align-items: stretch; }
+  .va-gap { margin-left: 0; }
+}

@@ -112,6 +112,12 @@
       avail: () => !live.host.isPrimaryAudioHost,
       run: () => runManualMediaCheck(),
     },
+    {
+      id: 'fn:voiceActors', area: QUIZ, kw: 'voice actors volunteers record lines script voices listening recording',
+      label: () => t('🎙 Voice actors'),
+      avail: () => creatorRole === 'owner' && typeof openVoiceActors === 'function',
+      run: () => openVoiceActors(),
+    },
 
     // Live game
     B('createLiveBtn', LIVE, 'start new live game pin host'),
