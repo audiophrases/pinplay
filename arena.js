@@ -137,6 +137,80 @@
     try { localStorage.setItem(AVATAR_KEY, JSON.stringify(a)); } catch { /* blocked storage */ }
   }
 
+  // The Cup lobby's avatar editor for the classic live lobby: same look, ‹ ›
+  // per part, ↑/↓ pick a part and ←/→ change it while it's on screen. Every
+  // change is saved for the next game (Cup or classic) and passed to onChange.
+  function mountAvatarEditor(container, { avatar, onChange } = {}) {
+    const parts = Object.keys(AVATAR_PARTS);
+    const valid = (a) => a && typeof a === 'object' && parts.every((k) => Number.isInteger(a[k]) && a[k] >= 0 && a[k] < AVATAR_PARTS[k]);
+    let current = valid(avatar) ? { ...avatar } : (loadSavedAvatar() || randomAvatar());
+    let partIdx = 0;
+    const categories = ['character', ...parts];
+    container.innerHTML = `<p class="small">${esc(tr('Build your avatar'))}</p>
+      <div class="arena-avatar-editor">
+        <div class="arena-avatar-side">
+          <div class="arena-avatar-preview" data-ae="preview"></div>
+          <button type="button" class="btn small" data-ae="random">${esc(tr('Surprise me'))}</button>
+        </div>
+        <div class="arena-avatar-parts">${categories.map((k, i) => `<div class="arena-part-row" data-ae-row="${i}">
+          <button type="button" class="arena-part-btn" data-ae-part="${k}" data-dir="-1" aria-label="${esc(tr('Previous'))}">‹</button>
+          <span>${esc(tr(k === 'character' ? 'Character' : AVATAR_LABELS[k]))}</span>
+          <button type="button" class="arena-part-btn" data-ae-part="${k}" data-dir="1" aria-label="${esc(tr('Next'))}">›</button>
+        </div>`).join('')}</div>
+      </div>`;
+    const rows = [...container.querySelectorAll('[data-ae-row]')];
+    const draw = () => {
+      container.querySelector('[data-ae="preview"]').innerHTML = avatarSvg(current, 'arena-av arena-av-big');
+      rows.forEach((r, j) => r.classList.toggle('active', j === partIdx));
+    };
+    const set = (a) => {
+      current = a;
+      saveAvatar(a);
+      draw();
+      if (onChange) onChange({ ...a });
+    };
+    const step = (k, dir) => {
+      if (k === 'character') {
+        const at = AV.presets.findIndex((p) => parts.every((key) => (p.avatar[key] || 0) === (current[key] || 0)));
+        set({ ...AV.presets[(Math.max(0, at) + dir + AV.presets.length) % AV.presets.length].avatar });
+        return;
+      }
+      const n = AVATAR_PARTS[k];
+      set({ ...current, [k]: ((current[k] || 0) + dir + n) % n });
+    };
+    container.addEventListener('click', (e) => {
+      const part = e.target.closest('[data-ae-part]');
+      if (part) {
+        partIdx = Number(part.closest('[data-ae-row]').dataset.aeRow);
+        step(part.dataset.aePart, Number(part.dataset.dir));
+        return;
+      }
+      if (e.target.closest('[data-ae="random"]')) set(randomAvatar());
+    });
+    const onKey = (e) => {
+      if (!container.isConnected || !container.offsetParent) return; // not on screen
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        partIdx = (partIdx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+        draw();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        step(categories[partIdx], e.key === 'ArrowRight' ? 1 : -1);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    draw();
+    return {
+      get avatar() { return { ...current }; },
+      destroy() {
+        document.removeEventListener('keydown', onKey);
+        container.innerHTML = '';
+      },
+    };
+  }
+
   function wsUrl(pin) {
     const base = (normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
     return `${base.replace(/^http/i, 'ws')}/api/arena/ws?pin=${encodeURIComponent(pin)}`;
@@ -913,5 +987,6 @@
     // Classic live games show the same avatars (lobby, ranking, header).
     avatarSvg,
     savedAvatar: loadSavedAvatar,
+    mountAvatarEditor,
   };
 })();

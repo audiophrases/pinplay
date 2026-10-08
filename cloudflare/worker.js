@@ -169,15 +169,35 @@ export default {
       const key = url.pathname.replace('/api/media/', '');
       if (!key || key.length < 3) return json({ error: 'Invalid media path' }, 400);
       try {
-        const obj = await env.QUIZ_MEDIA.get(key);
+        // Byte ranges: browsers only let you seek in audio/video served with
+        // them (without, the player jumps back to 0:00).
+        let ranged = /^bytes=\d*-\d*$/.test(String(request.headers.get('range') || '').trim());
+        let obj;
+        try {
+          obj = await env.QUIZ_MEDIA.get(key, ranged ? { range: request.headers } : undefined);
+        } catch (err) {
+          if (!ranged) throw err;
+          // A range past the end: send the whole file.
+          ranged = false;
+          obj = await env.QUIZ_MEDIA.get(key);
+        }
         if (!obj) return json({ error: 'File not found' }, 404);
-        const headers = { 'Cache-Control': 'public, max-age=31536000' };
+        const headers = { 'Cache-Control': 'public, max-age=31536000', 'Accept-Ranges': 'bytes' };
         if (key.endsWith('.mp3')) headers['Content-Type'] = 'audio/mpeg';
         else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) headers['Content-Type'] = 'image/jpeg';
         else if (key.endsWith('.png')) headers['Content-Type'] = 'image/png';
         else if (key.endsWith('.webp')) headers['Content-Type'] = 'image/webp';
         else if (obj.httpMetadata?.contentType) headers['Content-Type'] = obj.httpMetadata.contentType;
         Object.assign(headers, CORS_HEADERS);
+        const r = obj.range;
+        if (ranged && r && Number.isFinite(obj.size)) {
+          const offset = r.suffix != null ? Math.max(0, obj.size - r.suffix) : Number(r.offset || 0);
+          const length = r.suffix != null ? obj.size - offset : (r.length != null ? r.length : obj.size - offset);
+          headers['Content-Range'] = `bytes ${offset}-${offset + length - 1}/${obj.size}`;
+          headers['Content-Length'] = String(length);
+          return new Response(obj.body, { status: 206, headers });
+        }
+        if (Number.isFinite(obj.size)) headers['Content-Length'] = String(obj.size);
         return new Response(obj.body, { headers });
       } catch (e) {
         return json({ error: 'Failed to load media' }, 500);
@@ -2263,6 +2283,22 @@ export default {
       return withCors(await stub.fetch(`https://room${url.pathname.replace('/api/', '/')}`, {
         method: 'POST',
         body: JSON.stringify({ playerId, playerToken, sectionId: body?.sectionId, qIndex: body?.qIndex, answer: body?.answer }),
+      }));
+    }
+
+    // Classic live games: the student's avatar, built in the lobby.
+    if (url.pathname === '/api/avatar' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const playerId = sanitizeId(body?.playerId);
+      const playerToken = request.headers.get('X-Player-Token') || '';
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!playerId) return json({ error: 'playerId required.' }, 400);
+      if (!playerToken) return json({ error: 'player token required.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(await stub.fetch('https://room/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ playerId, playerToken, avatar: body?.avatar }),
       }));
     }
 
@@ -5430,6 +5466,21 @@ export class QuizRoom {
         room.updatedAt = Date.now();
         await this.#setRoom(room);
         return json({ ok: true, state: playerState(room, playerId) });
+      }
+
+      if (url.pathname === '/avatar' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const playerId = sanitizeId(body?.playerId);
+        const player = room.players[playerId];
+        if (!player || player.token !== String(body?.playerToken || '')) return json({ error: 'Unauthorized player.' }, 401);
+        const avatar = arenaSanitizeAvatar(body?.avatar);
+        if (!avatar) return json({ error: 'Invalid avatar.' }, 400);
+        if (JSON.stringify(player.avatar || null) !== JSON.stringify(avatar)) {
+          player.avatar = avatar;
+          room.updatedAt = Date.now();
+          await this.#setRoom(room);
+        }
+        return json({ ok: true, avatar });
       }
 
       if (url.pathname === '/react' && request.method === 'POST') {

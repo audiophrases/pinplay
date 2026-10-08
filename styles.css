@@ -5813,6 +5813,9 @@ body.arena-mode #reactionRow { display: none !important; }
 .arena-av-chip { width: 22px; height: 22px; }
 .arena-av-row { width: 36px; height: 36px; }
 .arena-av-big { width: 150px; height: 150px; background: #ecebff; border-radius: 50%; }
+/* Classic live lobby: the Cup's avatar editor on the student page */
+.join-avatar-editor { margin-top: 12px; text-align: center; }
+.join-avatar-editor .arena-avatar-parts { text-align: left; }
 .arena-avatar-editor { display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
 .arena-avatar-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .arena-avatar-parts { display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
@@ -6166,6 +6169,7 @@ body.listening-sheet-open { overflow: hidden; }
 .host-listening-box { display: grid; gap: 12px; margin: 8px 0 12px; }
 .host-listening-instruction { font-size: 1.25rem; font-style: italic; margin: 0; }
 .host-listening-audio { width: 100%; max-width: 720px; margin: 0 auto; }
+.host-listening-box .ls-speed { justify-content: center; font-size: 1rem; margin-top: 0; }
 .host-listening-count { font-weight: 700; color: var(--muted); margin: 0 0 8px; }
 .host-listening-box.is-review .host-listening-instruction { display: none; }
 

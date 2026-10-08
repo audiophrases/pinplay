@@ -97,6 +97,29 @@ function answerDisplayOrder(question) {
   return seededShuffleIndices(length, questionShuffleSeed(question, attemptId));
 }
 
+// A listening sheet's options, lettered A, B, C… in this order. Seeded by the
+// prompt and the options too (a section's prompts are often all the same), and
+// mirrored in app.js so the projector's correction shows the same letters.
+function listeningOptionOrder(question) {
+  const answers = question.answers || [];
+  if (question.type === 'tf') return answers.map((_, i) => i);
+  const attemptId = live.player.mode === 'assignment' ? (live.player.assignment?.attemptId || '') : '';
+  const seed = { prompt: `${question.prompt || ''}|${answers.map((a) => a?.text || '').join('|')}` };
+  return seededShuffleIndices(answers.length, questionShuffleSeed(seed, attemptId));
+}
+
+// The server writes a choice answer as "2. Paris" (its place as written);
+// the sheet shows the letter the student saw instead: "C. Paris".
+function listeningAnswerLabel(question, text) {
+  if (!['mcq', 'multi', 'tf'].includes(question?.type)) return text;
+  const order = listeningOptionOrder(question);
+  return String(text || '').split(' | ').map((piece) => piece.replace(/^(\d+)\.\s*/, (m, n) => {
+    if (question.type === 'tf') return '';
+    const pos = order.indexOf(Number(n) - 1);
+    return pos >= 0 ? `${String.fromCharCode(65 + pos)}. ` : m;
+  })).join(' | ');
+}
+
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
@@ -3456,6 +3479,7 @@ window.onLocaleChange = function () {
 
 function renderPlayerState(state) {
   _i18nLastPlayerState = state;
+  syncLobbyAvatarEditor(state);
   if (maybeRenderListeningSheet(state)) return;
   // Clear liveRevealApplied when the question changes (different index)
   if (live.player.liveRevealApplied && state.currentIndex !== live.player.liveRevealForIndex) {
@@ -3717,7 +3741,8 @@ function renderPlayerState(state) {
     if (state.phase === 'lobby') {
       setStatus(joinStatusEl, t('Waiting for teacher to start…'), 'ok');
     } else if (state.phase === 'results') {
-      if (!assignmentFinalPlayed) {
+      // A live game's end music plays on the live screen only.
+      if (live.player.mode === 'assignment' && !assignmentFinalPlayed) {
         playAssignmentSfx('final');
         assignmentFinalPlayed = true;
       }
@@ -6397,6 +6422,37 @@ function setJoinAvatar(avatar) {
   el.dataset.key = key;
   el.innerHTML = avatar && window.PinArena?.avatarSvg ? window.PinArena.avatarSvg(avatar, 'join-avatar') : '';
   el.classList.toggle('hidden', !el.innerHTML);
+}
+
+// Classic live lobby: students build their avatar as in a Cup, until the game
+// starts. A change is sent once they stop clicking (one request, not one per click).
+const lobbyAvatar = { editor: null, timer: null };
+
+function syncLobbyAvatarEditor(state) {
+  const box = document.getElementById('joinAvatarEditor');
+  if (!box) return;
+  const on = live.player.mode === 'live' && state?.phase === 'lobby' && !!live.player.token
+    && !window.PinArena?.active && typeof window.PinArena?.mountAvatarEditor === 'function';
+  box.classList.toggle('hidden', !on);
+  if (!on) {
+    if (lobbyAvatar.editor) { lobbyAvatar.editor.destroy(); lobbyAvatar.editor = null; }
+    return;
+  }
+  if (!lobbyAvatar.editor) {
+    lobbyAvatar.editor = window.PinArena.mountAvatarEditor(box, { avatar: state.avatar, onChange: queueLobbyAvatar });
+  }
+}
+
+function queueLobbyAvatar(avatar) {
+  clearTimeout(lobbyAvatar.timer);
+  lobbyAvatar.timer = setTimeout(() => {
+    if (!live.player.pin || !live.player.id || !live.player.token) return;
+    api('/api/avatar', {
+      method: 'POST',
+      headers: { 'X-Player-Token': live.player.token },
+      body: { pin: live.player.pin, playerId: live.player.id, avatar },
+    }).catch(() => { /* the next change tries again */ });
+  }, 700);
 }
 
 // Bet selection toggle
@@ -9479,7 +9535,9 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
   if (q.type === 'mcq' || q.type === 'tf' || q.type === 'multi') {
     const multi = q.type === 'multi';
     const picked = multi ? new Set(Array.isArray(saved) ? saved.map(Number) : []) : (saved == null ? null : Number(saved));
-    (q.answers || []).forEach((a, i) => {
+    // Shown shuffled; the saved answer is still the option's own index.
+    listeningOptionOrder(q).forEach((i, pos) => {
+      const a = q.answers[i] || {};
       const row = document.createElement('label');
       row.className = 'ls-option';
       const input = document.createElement('input');
@@ -9490,13 +9548,13 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       input.disabled = locked;
       const letter = document.createElement('span');
       letter.className = 'ls-option-letter';
-      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + i);
+      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + pos);
       const text = document.createElement('span');
       text.textContent = q.type === 'tf' ? t(String(a.text || '')) : String(a.text || '');
       row.append(input, letter, text);
       input.addEventListener('change', () => {
         if (multi) {
-          const vals = [...body.querySelectorAll('input:checked')].map((x) => Number(x.value));
+          const vals = [...body.querySelectorAll('input:checked')].map((x) => Number(x.value)).sort((x, y) => x - y);
           save(vals.length ? vals : null);
         } else {
           save(i);
@@ -9596,7 +9654,7 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       const partial = !mark.correct && Number(mark.partialScore || 0) > 0;
       fb.dataset.verdict = mark.correct ? 'correct' : (partial ? 'partial' : 'wrong');
       const verdict = mark.correct ? `✓ ${t('Correct')}` : (partial ? `◐ ${mark.partialScore}/${mark.partialTotal}` : `✗ ${t('Wrong')}`);
-      fb.textContent = mark.correct || !mark.correctAnswer ? verdict : `${verdict} · ${t('Answer: {answer}', { answer: mark.correctAnswer })}`;
+      fb.textContent = mark.correct || !mark.correctAnswer ? verdict : `${verdict} · ${t('Answer: {answer}', { answer: listeningAnswerLabel(q, mark.correctAnswer) })}`;
     } else if (!answered && !(listeningSheet.mode === 'live' && !listeningSheet.live?.closed)) {
       fb.dataset.verdict = 'wrong';
       fb.textContent = t('Not answered');

@@ -12383,7 +12383,61 @@ function renderHostState(state) {
 // as on an exam paper. Reveal marks everyone and starts the correction: one
 // question at a time, Space shows its answer and how the class answered,
 // → and ← move through the section (LISTENING_MODE_PLAN.md, phase 4).
-const hostListening = { el: null, audio: null, sectionKey: '' };
+const hostListening = { el: null, audio: null, sectionKey: '', rates: {} };
+
+// The students' speed control (75%–125% in 1% steps) for the projector's
+// player: always there for the teacher, whatever the section allows students.
+// Remembered per section while the page is open.
+function addHostListeningSpeed(box, audio, sectionId) {
+  let current = hostListening.rates[sectionId] || 100;
+  const row = document.createElement('div');
+  row.className = 'ls-speed';
+  const name = document.createElement('span');
+  name.textContent = `🐢 ${t('Speed')}`;
+  const button = (cls, text, label) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = text;
+    if (label) b.setAttribute('aria-label', label);
+    return b;
+  };
+  const minus = button('ls-speed-step', '−', t('Slower'));
+  const plus = button('ls-speed-step', '+', t('Faster'));
+  const reset = button('ls-speed-reset', t('Normal'));
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '75';
+  slider.max = '125';
+  slider.step = '1';
+  slider.setAttribute('aria-label', t('Playback speed'));
+  const label = document.createElement('span');
+  label.className = 'ls-speed-value';
+  const show = () => {
+    slider.value = String(current);
+    label.textContent = `${current}%`;
+  };
+  const set = (v) => {
+    current = Math.max(75, Math.min(125, Math.round(v)));
+    hostListening.rates[sectionId] = current;
+    audio.preservesPitch = true;
+    audio.playbackRate = current / 100;
+    audio.defaultPlaybackRate = current / 100;
+    show();
+  };
+  slider.addEventListener('input', () => set(Number(slider.value)));
+  minus.addEventListener('click', () => set(current - 1));
+  plus.addEventListener('click', () => set(current + 1));
+  reset.addEventListener('click', () => set(100));
+  // The browser player's own speed menu moves the slider too.
+  audio.addEventListener('ratechange', () => {
+    const v = Math.round(audio.playbackRate * 100);
+    if (v !== current) { current = v; hostListening.rates[sectionId] = v; show(); }
+  });
+  row.append(name, minus, slider, plus, label, reset);
+  box.appendChild(row);
+  set(current);
+}
 
 function hideHostListeningPlayer() {
   if (!hostListening.el) return;
@@ -12422,6 +12476,7 @@ function renderHostListening(state) {
       audio.className = 'host-listening-audio';
       box.appendChild(audio);
       hostListening.audio = audio;
+      addHostListeningSpeed(box, audio, L.section.id);
       // The section's "Plays allowed" is the teacher's to follow here: count
       // each play from the start so they know when the class has heard it enough.
       const allowed = Number(L.section.playsAllowed) || 0;
@@ -12484,13 +12539,14 @@ function renderHostListeningReview(state, L, review) {
   const teacherGraded = stats.graded != null;
   if (['mcq', 'tf', 'multi'].includes(q.type)) {
     const correct = new Set(Array.isArray(q.correctIndexes) ? q.correctIndexes : []);
-    (q.answers || []).forEach((a, i) => {
+    listeningOptionOrder(q).forEach((i, pos) => {
+      const a = q.answers[i] || {};
       const row = document.createElement('div');
       row.className = 'host-review-option';
       if (revealed && correct.has(i)) row.classList.add('is-correct');
       const letter = document.createElement('span');
       letter.className = 'host-review-letter';
-      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + i);
+      letter.textContent = q.type === 'tf' ? '' : String.fromCharCode(65 + pos);
       const text = document.createElement('span');
       text.textContent = q.type === 'tf' ? t(String(a?.text || '')) : String(a?.text || '');
       const count = document.createElement('span');
@@ -20338,6 +20394,15 @@ function answerDisplayOrder(question) {
   const length = (question.answers || []).length;
   if (question.type === 'tf') return Array.from({ length }, (_, i) => i);
   return seededShuffleIndices(length, questionShuffleSeed(question));
+}
+
+// A listening section's options in the correction, lettered A, B, C… as on
+// the phones' sheet (play.js listeningOptionOrder, live mode).
+function listeningOptionOrder(question) {
+  const answers = question.answers || [];
+  if (question.type === 'tf') return answers.map((_, i) => i);
+  const seed = { prompt: `${question.prompt || ''}|${answers.map((a) => a?.text || '').join('|')}` };
+  return seededShuffleIndices(answers.length, questionShuffleSeed(seed));
 }
 
 function supportsQuestionAudio(type) {
