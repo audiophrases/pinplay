@@ -3,7 +3,9 @@
 Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
 built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is planned as a
 local studio (LISTENING_STUDIO_PLAN.md, 2026-10-03);
-phase 6 (adaptive listening, section 10) planned 2026-10-03. Decisions settled with the owner on 2026-10-02 (section 2).
+phase 6 (adaptive listening, section 10) planned 2026-10-03; phase 7 (timed
+moments: hear the answer in the correction, section 12) planned 2026-10-09.
+Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
 - `listeningSections` on the quiz and `listeningSection` on each question, kept
@@ -476,3 +478,125 @@ earlier parts point to.
 4. Live.
 5. AI prompt variant.
 6. Adaptive listening (section 10).
+7. Timed moments (section 12).
+
+## 12. Timed moments: hear the answer in the correction (phase 7, plan)
+
+Planned with the owner on 2026-10-09. When the class corrects a section, each
+question's answer comes with **the moment of the recording it is based on**:
+the projector shows the spoken line and plays just that bit, so everyone
+hears the answer being said, and a student who got it wrong sees on their own
+sheet the words they missed. The same later for homework, after a section is
+submitted.
+
+### 12a. Decisions (owner, 2026-10-09)
+
+| Topic | Decision |
+|---|---|
+| Where timings come from | The **Listening Studio** (exact: it places every line itself), **voice actors** (exact: the builder places every take), or a **subtitle file** (`.vtt` / `.srt`) uploaded with any other recording. Plain transcripts without timings: later, Whisper alignment in the Studio (desktop only). |
+| Question → line | An **automatic first guess**, then the **teacher checks** it (▶ to hear each moment, click another line to change it). Later the AI prompt names the line for each question. |
+| Live correction | On reveal (Space) the projector shows the answer **and** the line(s), with the answer words highlighted, and **plays the moment** (about 1 s before the line to just after it). P replays it; the full player stays for anything else; the speed setting applies. |
+| Phones in class | After the reveal, a student whose answer was wrong, partly right or blank sees **"You heard: …"** with the line under their mark. No sound on phones in class (the projector plays it). |
+| Homework (step 2) | Once a section is submitted and the assignment shows answers, each mark has the line and **▶ Hear it** (the student's own device). |
+| Privacy | Timings, lines and links are **teacher-only** until a question is revealed / its marks are shown: they give the answers away. |
+
+### 12b. Data
+
+- Section: `cues: [{ s, e, who, text }]`: start and end in seconds (2
+  decimals), the speaker if known, what is said (≤ 300 characters). Up to
+  400 cues. Left out when empty.
+- Question: `heard: { from, to, by }`: the first and last cue of its moment
+  (indexes into the section's cues), `by: 'auto' | 'teacher'`. A teacher's
+  choice is never overwritten by a new guess. Step 2 adds `heard.quote` (the
+  AI's words, used to find the line).
+- Both normalizers keep `cues` and `heard` (the shared section functions,
+  identical in app.js and worker.js) and drop a `heard` that points past the
+  cues. The student payloads list fields one by one, so neither reaches a
+  phone unless added on purpose (12e); a test checks every student payload.
+
+### 12c. Timings in
+
+- **Studio**: `build_part` records each line's start and end as it places it
+  (overlaps and "Mia + Tom" included) and writes them **inside the MP3** (an
+  ID3 tag with the cues) and as a `.vtt` next to it. One file to upload, so
+  the timings can't be forgotten.
+- **Section panel**: picking a recording reads the tag if there is one, then
+  **uploads the audio without it** (the public file never carries the lines).
+  A "🕒 Timings…" button takes a `.vtt` / `.srt` (also accepted together with
+  the audio in the same picker).
+- **Voice actors**: "Use in the listening section" passes one cue per line
+  (where the trimmed take lands in the built MP3).
+- A new recording replaces the cues (or clears them if it has none). Links
+  stay; any past the new cue count are dropped; if the line texts changed the
+  panel asks to check the links.
+
+### 12d. The automatic guess and the check (editor)
+
+- Runs in the teacher's browser when timings arrive, or on "↻ Guess again".
+- What it looks for, by type: the right option(s) (mcq, multi); the accepted
+  answers (text, voice_text, error_hunt); the gap answers **and** the gap
+  sentence without its blanks (gap sentences often follow the script); the
+  right-hand items (match_pairs); the prompt for every type (a weaker clue);
+  open questions: the prompt only, usually left for the teacher.
+- Score per line, and per pair of neighbouring lines (an answer split over two
+  lines): share of the content words found, a bonus for the exact phrase,
+  numbers compared both as digits and as words.
+- Order: a section's questions follow the recording, so the guesses never go
+  backwards (best non-decreasing choice over the section; for levelled
+  sections, per level, moment by moment).
+- Below a threshold: not linked, shown as "⚠ choose the line".
+- The panel line: "🕒 42 lines timed · 9 of 10 questions linked · Check".
+  **Check** opens a dialog: each question with its answer and its line(s), ▶
+  to hear the moment, **Change** (click a line, shift-click to extend), "↻
+  Guess again" (only `by: 'auto'` links change).
+
+### 12e. Live correction
+
+- Server: `hostListeningReview` adds `moment: { start, end, lines: [{ who,
+  text }] }` for the current question **once it is revealed** (start = first
+  cue − 1 s, never before 0; end = last cue + 0.4 s).
+- Projector: under the revealed answer, the line(s) as a caption, the answer
+  words highlighted; the moment plays straight away (the section's player
+  jumps there and stops at the end: needs the byte ranges added 2026-10-08).
+  P replays; → / ← move on as now and stop it.
+- Phones: `playerListeningState` marks of revealed questions add `heard: "Tom:
+  It's forty minutes late."` when the answer was wrong, partly right or blank.
+  Shown under the mark as "You heard: …".
+- A section video (live only) works the same when it has timings.
+
+### 12f. Homework (step 2)
+
+- Marks shown after a section is submitted (and only when the assignment
+  shows answers) add the line and ▶ Hear it, played from the section's
+  recording on the student's device (it replays freely once submitted).
+  /play games too.
+- AI prompt: each section question gets `"heard": "the exact words from the
+  script where the answer is"`; the guess matches that quote first.
+
+### 12g. Quota
+
+Nothing new to speak of: the cues ride inside the quiz (a few KB for a 40-line
+script) and in the review state the projector already receives; phones get a
+line of text in the marks they already get. Jumping to a moment is one or two
+range requests to the media route (about a dozen per correction).
+
+### 12h. Order of work
+
+1. Data: `cues`, `heard`, both normalizers, student payloads leak test.
+2. Timings in: `.vtt` / `.srt` parser, Studio cues (ID3 tag + `.vtt`), tag
+   read and stripped on upload, voice actors cues.
+3. The guess and the Check dialog.
+4. Live correction: projector caption + playback, phones' "You heard".
+   Tests: parser, matcher on AI-written fixtures (right answer first, same
+   prompt everywhere), review payload only after reveal, end to end in Chrome
+   with a projector and a phone.
+5. Step 2: homework ▶ Hear it, AI prompt `heard`.
+
+### 12i. Details to settle while building
+
+- Lead-in and tail lengths (1 s / 0.4 s to start); "one line earlier" if a
+  moment needs more context.
+- A question whose answer is heard twice (said, then corrected by another
+  speaker): the moment covers both lines.
+- Subtitle files cut differently from the script lines (two lines in one cue):
+  the caption shows the cue as it is.
