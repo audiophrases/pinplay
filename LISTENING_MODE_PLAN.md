@@ -484,10 +484,10 @@ earlier parts point to.
 
 Planned with the owner on 2026-10-09. When the class corrects a section, each
 question's answer comes with **the moment of the recording it is based on**:
-the projector shows the spoken line and plays just that bit, so everyone
-hears the answer being said, and a student who got it wrong sees on their own
-sheet the words they missed. The same later for homework, after a section is
-submitted.
+the projector plays just that bit, so everyone hears the answer being said,
+and only then, when the teacher chooses, shows the words: on the projector,
+and on the sheet of each student who got it wrong. **Hear first, then
+read.** The same later for homework, after a section is submitted.
 
 ### 12a. Decisions (owner, 2026-10-09)
 
@@ -495,9 +495,9 @@ submitted.
 |---|---|
 | Where timings come from | The **Listening Studio** (exact: it places every line itself), **voice actors** (exact: the builder places every take), or a **subtitle file** (`.vtt` / `.srt`) uploaded with any other recording. Plain transcripts without timings: later, Whisper alignment in the Studio (desktop only). |
 | Question → line | An **automatic first guess**, then the **teacher checks** it (▶ to hear each moment, click another line to change it). Later the AI prompt names the line for each question. |
-| Live correction | On reveal (Space) the projector shows the answer **and** the line(s), with the answer words highlighted, and **plays the moment** (about 1 s before the line to just after it). P replays it; the full player stays for anything else; the speed setting applies. |
-| Phones in class | After the reveal, a student whose answer was wrong, partly right or blank sees **"You heard: …"** with the line under their mark. No sound on phones in class (the projector plays it). |
-| Homework (step 2) | Once a section is submitted and the assignment shows answers, each mark has the line and **▶ Hear it** (the student's own device). |
+| Live correction | On reveal (Space) the projector shows the answer and **plays the moment** (about 1 s before the line to just after it). **The words are not shown by default**: hearing comes first. **T** (or a "Show the words" button) then shows the line(s), with the answer words highlighted. P replays the moment; the full player stays for anything else; the speed setting applies. |
+| Phones in class | When the teacher shows the words (T), a student whose answer was wrong, partly right or blank sees **"You heard: …"** with the line under their mark. Not before: they hear it first too. No sound on phones in class (the projector plays it). |
+| Homework (step 2) | Once a section is submitted and the assignment shows answers, each mark has **▶ Hear it** (the student's own device); the words come after, with "Show the words". |
 | Privacy | Timings, lines and links are **teacher-only** until a question is revealed / its marks are shown: they give the answers away. |
 
 ### 12b. Data
@@ -552,24 +552,29 @@ submitted.
 
 ### 12e. Live correction
 
-- Server: `hostListeningReview` adds `moment: { start, end, lines: [{ who,
-  text }] }` for the current question **once it is revealed** (start = first
-  cue − 1 s, never before 0; end = last cue + 0.4 s).
-- Projector: under the revealed answer, the line(s) as a caption, the answer
-  words highlighted; the moment plays straight away (the section's player
-  jumps there and stops at the end: needs the byte ranges added 2026-10-08).
-  P replays; → / ← move on as now and stop it.
-- Phones: `playerListeningState` marks of revealed questions add `heard: "Tom:
-  It's forty minutes late."` when the answer was wrong, partly right or blank.
-  Shown under the mark as "You heard: …".
+- Server: `hostListeningReview` adds `moment: { start, end }` for the current
+  question **once it is revealed** (start = first cue − 1 s, never before 0;
+  end = last cue + 0.4 s), and `moment.lines: [{ who, text }]` only once the
+  teacher has shown the words. Showing them is one host request
+  (`/api/host/listening/words`) that marks the question in the room
+  (`listeningWordsShown`); moving on keeps it marked, so going back shows them
+  again.
+- Projector: on reveal, the answer and the moment playing (the section's
+  player jumps there and stops at the end: needs the byte ranges added
+  2026-10-08); a "Show the words" button under it. **T** or the button: the
+  line(s) as a caption under the answer, the answer words highlighted.
+  P replays the moment; → / ← move on as now and stop it.
+- Phones: `playerListeningState` marks add `heard: "Tom: It's forty minutes
+  late."` for questions whose words the teacher has shown, when the answer
+  was wrong, partly right or blank. Shown under the mark as "You heard: …".
 - A section video (live only) works the same when it has timings.
 
 ### 12f. Homework (step 2)
 
 - Marks shown after a section is submitted (and only when the assignment
-  shows answers) add the line and ▶ Hear it, played from the section's
-  recording on the student's device (it replays freely once submitted).
-  /play games too.
+  shows answers) add ▶ Hear it, played from the section's recording on the
+  student's device (it replays freely once submitted), then "Show the words"
+  for the line. /play games too.
 - AI prompt: each section question gets `"heard": "the exact words from the
   script where the answer is"`; the guess matches that quote first.
 
@@ -586,7 +591,8 @@ range requests to the media route (about a dozen per correction).
 2. Timings in: `.vtt` / `.srt` parser, Studio cues (ID3 tag + `.vtt`), tag
    read and stripped on upload, voice actors cues.
 3. The guess and the Check dialog.
-4. Live correction: projector caption + playback, phones' "You heard".
+4. Live correction: the moment plays on reveal, then T / "Show the words"
+   shows the line on the projector and the phones' "You heard".
    Tests: parser, matcher on AI-written fixtures (right answer first, same
    prompt everywhere), review payload only after reveal, end to end in Chrome
    with a projector and a phone.
