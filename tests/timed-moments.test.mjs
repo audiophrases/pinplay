@@ -102,7 +102,7 @@ const QUIZ = () => ({
   listeningSections: [SECTION],
   questions: [
     mcq('forty minutes', 'fourteen minutes', 'four minutes', { heard: { from: 1, to: 2, by: 'teacher' } }),
-    mcq('a problem with the signals', 'a strike', 'bad weather', { heard: { from: 3, to: 3 } }),
+    mcq('a problem with the signals', 'a strike', 'bad weather', { heard: { from: 3, to: 3, quote: "There's a problem with the signals near York." } }),
     { type: 'tf', prompt: 'Ready?', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }], points: 1000, timeLimit: 20 },
   ],
 });
@@ -119,16 +119,31 @@ describe('stored and cleaned', () => {
     assert.deepEqual({ ...W.normalizeListeningHeard({ from: 2 }) }, { from: 2, to: 2, by: 'auto' });
     assert.equal(W.normalizeListeningHeard({ from: 3, to: 1 }), null);
     assert.equal(W.normalizeListeningHeard({ from: 0, to: 9 }), null, 'at most six lines');
+    // An AI quiz's "heard" is the AI's quote: kept, linked or not.
+    assert.deepEqual({ ...W.normalizeListeningHeard('  Forty   minutes? ') }, { quote: 'Forty minutes?' });
+    assert.deepEqual({ ...W.normalizeListeningHeard({ from: 2, quote: 'x' }) }, { from: 2, to: 2, by: 'auto', quote: 'x' });
+    assert.deepEqual({ ...W.normalizeListeningHeard({ from: 0, to: 9, quote: 'x' }) }, { quote: 'x' }, 'a bad link leaves the quote');
   });
 
   it('a teacher\'s quiz keeps them; a link past the cues goes', async () => {
     const quiz = QUIZ();
-    quiz.questions[1].heard = { from: 40, to: 40 };
+    quiz.questions[1].heard = { ...quiz.questions[1].heard, from: 40, to: 40 };
     const r = await post('/api/assignments/create', { password: TEACHER_PW, title: 'Station', quiz, randomNames: true });
     const code = r.body.assignment.code;
     const full = (await post('/api/assignments/get-quiz', { password: TEACHER_PW, code })).body.quiz;
     assert.equal(full.listeningSections[0].cues.length, CUES.length);
     assert.deepEqual(full.questions[0].heard, { from: 1, to: 2, by: 'teacher' });
+    assert.deepEqual(full.questions[1].heard, { quote: "There's a problem with the signals near York." }, 'the link past the cues goes, the quote stays');
+  });
+
+  it('an AI quiz\'s quote is kept without timings, and only inside a section', async () => {
+    const quiz = { title: 'AI', listeningSections: [{ ...SECTION, cues: undefined }], questions: [
+      mcq('the train is late', 'she is hungry', 'it is cold', { heard: "Forty minutes? You're joking!" }),
+      { type: 'tf', prompt: 'Ready?', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }], heard: 'not in a section' },
+    ] };
+    const r = await post('/api/assignments/create', { password: TEACHER_PW, title: 'AI', quiz, randomNames: true });
+    const full = (await post('/api/assignments/get-quiz', { password: TEACHER_PW, code: r.body.assignment.code })).body.quiz;
+    assert.deepEqual(full.questions[0].heard, { quote: "Forty minutes? You're joking!" });
     assert.equal('heard' in full.questions[1], false);
   });
 });
@@ -216,7 +231,14 @@ describe('timings in (editor)', () => {
   before(() => {
     A = loadDeclarations(fs.readFileSync(path.join(REPO, 'app.js'), 'utf8'), [
       'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'parseCueTime', 'parseSubtitleCues', 'readMp3Cues',
+      'normalizeListeningHeard', 'contextGapList', 'normalizeImportedQuestion',
     ], sandbox);
+  });
+
+  it('an imported AI quiz\'s "heard" becomes the quote', () => {
+    const q = A.normalizeImportedQuestion({ type: 'mcq', prompt: 'How does Mia feel?', answers: [], heard: "  Forty minutes? You're joking! " });
+    assert.deepEqual({ ...q.heard }, { quote: "Forty minutes? You're joking!" });
+    assert.equal('heard' in A.normalizeImportedQuestion({ type: 'mcq', prompt: 'x', heard: '' }), false);
   });
 
   it('reads the Studio\'s MP3 tag and finds where the audio starts', () => {
@@ -248,7 +270,7 @@ describe('the automatic guess', () => {
   before(() => {
     A = loadDeclarations(fs.readFileSync(path.join(REPO, 'app.js'), 'utf8'), [
       'normalizeCefr', 'contextGapList', 'listeningSectionQuestions', 'LISTENING_STOPWORDS', 'LISTENING_NUMBER_WORDS', 'LISTENING_TENS',
-      'listeningNumberWords', 'listeningStem', 'listeningMatchTokens', 'listeningMatchKeys', 'guessListeningMoments',
+      'listeningNumberWords', 'listeningStem', 'listeningMatchTokens', 'listeningMatchKeys', 'listeningHeardLinked', 'setListeningHeard', 'guessListeningMoments',
     ], sandbox);
   });
 
@@ -288,6 +310,23 @@ describe('the automatic guess', () => {
     assert.equal(at[1], 4);
     assert.equal(qs[1].heard.by, 'teacher');
     assert.ok(at[0] <= 4 && at[2] >= 4, `around it: ${at}`);
+  });
+
+  it('the AI\'s quote links a reworded question, and stays with the link', () => {
+    const qs = questions();
+    // "How does Mia feel? → surprised": no word of it in the line.
+    qs[1] = mcq('surprised', 'angry', 'bored', { prompt: 'How does Mia feel?' });
+    let at = run(qs.map((q) => ({ ...q })));
+    assert.equal(at[1], null, 'without a quote: left for the teacher');
+    qs[1].heard = { quote: "Forty minutes? You're joking!" };
+    at = run(qs);
+    assert.equal(at[1], 2);
+    assert.deepEqual({ ...qs[1].heard }, { from: 2, to: 2, by: 'auto', quote: "Forty minutes? You're joking!" });
+    // A quote never forces a line: one that isn't in the recording is just a hint.
+    const lost = questions();
+    lost[3].heard = { quote: 'Words nobody says.' };
+    assert.equal(run(lost)[3], 6);
+    assert.equal(lost[3].heard.quote, 'Words nobody says.');
   });
 
   it('levelled sections are guessed level by level', () => {

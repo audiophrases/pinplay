@@ -584,6 +584,12 @@ read.** The same later for homework, after a section is submitted.
   for the line. /play games too.
 - AI prompt: each section question gets `"heard": "the exact words from the
   script where the answer is"`; the guess matches that quote first.
+  **Built 2026-10-09**, ahead of the homework part: the prompt's rule and
+  every example (single-level and levelled) carry a quote; an imported string
+  becomes `heard.quote`, kept with or without a link (both normalizers), only
+  inside a section, never in a student payload. The guess gives the quote the
+  strongest weight but never forces a line it can't find; the Check dialog
+  shows it ("AI: …") under each question.
 
 ### 12g. Quota
 
@@ -603,7 +609,7 @@ range requests to the media route (about a dozen per correction).
    Tests: parser, matcher on AI-written fixtures (right answer first, same
    prompt everywhere), review payload only after reveal, end to end in Chrome
    with a projector and a phone.
-5. Step 2: homework ▶ Hear it, AI prompt `heard`.
+5. Step 2: homework ▶ Hear it (AI prompt `heard`: built 2026-10-09).
 
 ### 12i. Details to settle while building
 

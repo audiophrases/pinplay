@@ -1517,4 +1517,5 @@ window.PINPLAY_FR_DICT = {
   "Auto: the reveal plays the moment, then shows the words. Manual: you choose when.": "Auto : la correction fait entendre le moment, puis affiche les mots. Manuel : vous choisissez quand.",
   "Auto": "Auto",
   "Manual": "Manuel",
+  "AI: \"{quote}\"": "IA : « {quote} »",
 };

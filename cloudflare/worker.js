@@ -7373,14 +7373,19 @@ function normalizeListeningCues(raw) {
     .slice(0, LISTENING_MAX_CUES);
 }
 
-// Which cues a section question's answer is heard in: { from, to, by } with
-// by 'teacher' (chosen in the editor, never re-guessed) or 'auto'.
+// Where a section question's answer is heard: { from, to, by } the cues
+// (by 'teacher': chosen in the editor, never re-guessed; or 'auto'), and/or
+// quote: the AI's copy of the words (a string from an AI quiz becomes the
+// quote), which the guess looks for first. Teacher-only, like the cues.
 function normalizeListeningHeard(raw) {
+  if (typeof raw === 'string') raw = { quote: raw };
   if (!raw || typeof raw !== 'object') return null;
+  const quote = String(raw.quote || '').replace(/\s+/g, ' ').trim().slice(0, LISTENING_MAX_CUE_TEXT);
   const from = Math.round(Number(raw.from));
   const to = Math.round(Number(raw.to ?? raw.from));
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to - from > 5) return null;
-  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto' };
+  const linked = Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to >= from && to - from <= 5;
+  if (!linked) return quote ? { quote } : null;
+  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto', ...(quote ? { quote } : {}) };
 }
 
 // Which questions belong to which section, fixed in place. A question stays in
@@ -7436,7 +7441,13 @@ function normalizeListeningSections(rawSections, questions) {
     if (!q || !('heard' in q)) return;
     const heard = normalizeListeningHeard(q.heard);
     const cues = sections.find((s) => s.id === q.listeningSection)?.cues || [];
-    if (heard && heard.to < cues.length) q.heard = heard;
+    // A link past the cues goes; the AI's quote stays for the next guess.
+    if (heard && 'from' in heard && heard.to >= cues.length) {
+      delete heard.from;
+      delete heard.to;
+      delete heard.by;
+    }
+    if (heard && q.listeningSection && Object.keys(heard).length) q.heard = heard;
     else delete q.heard;
   });
   return sections.filter((s) => used.has(s.id));

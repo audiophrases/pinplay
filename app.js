@@ -2472,6 +2472,18 @@ function readMp3Cues(buffer) {
   return null;
 }
 
+// A question is linked once it has cues; the AI's quote alone is only a hint.
+function listeningHeardLinked(q) {
+  return Number.isInteger(q?.heard?.from);
+}
+
+function setListeningHeard(q, link) {
+  const quote = typeof q.heard === 'string' ? q.heard : q.heard?.quote;
+  if (link) q.heard = { from: link.from, to: link.to, by: link.by || 'auto', ...(quote ? { quote } : {}) };
+  else if (quote) q.heard = { quote };
+  else delete q.heard;
+}
+
 function listeningSectionQuestions(sectionId) {
   const out = [];
   (quiz.questions || []).forEach((q, i) => { if (q?.listeningSection === sectionId) out.push({ q, i }); });
@@ -2487,7 +2499,7 @@ function setListeningSectionCues(sec, rawCues) {
   else delete sec.cues;
   const items = listeningSectionQuestions(sec.id);
   const teacherLinks = items.filter(({ q }) => q.heard?.by === 'teacher').length;
-  items.forEach(({ q }) => { if (q.heard && (!cues.length || q.heard.to >= cues.length)) delete q.heard; });
+  items.forEach(({ q }) => { if (listeningHeardLinked(q) && (!cues.length || q.heard.to >= cues.length)) setListeningHeard(q, null); });
   if (cues.length) guessListeningMoments(sec);
   const changed = !!oldText && oldText !== cues.map((c) => c.text).join('\n');
   return { cues: cues.length, checkLinks: changed && teacherLinks > 0 };
@@ -2542,6 +2554,9 @@ function listeningMatchKeys(q) {
     add(prompt, 0.9);
   } else if (q.type === 'match_pairs') (q.pairs || []).forEach((p) => { add(p.right, 0.8); add(p.left, 0.6); });
   if (q.type === 'tf') add(prompt, 0.9);
+  // The AI's copy of the words where the answer is said.
+  const quote = typeof q.heard === 'string' ? q.heard : q.heard?.quote;
+  if (quote) add(quote, 1.5);
   return { keys, prompt };
 }
 
@@ -2638,9 +2653,9 @@ function guessListeningMoments(sec) {
       if (!step) break;
       const q = group[j].q;
       if (step.skip) {
-        if (q.heard?.by !== 'teacher') delete q.heard;
+        if (q.heard?.by !== 'teacher') setListeningHeard(q, null);
       } else if (!step.cand.fixed) {
-        q.heard = { from: step.cand.from, to: step.cand.to, by: 'auto' };
+        setListeningHeard(q, { from: step.cand.from, to: step.cand.to, by: 'auto' });
       }
       k = step.prev;
     }
@@ -2655,7 +2670,7 @@ function listeningMomentsSummaryHtml(sec) {
   if (!cues.length) {
     return `<span class="small muted">${escapeHtml(t('🕒 No timings yet. With them, the correction plays the moment of each answer: use a recording from the Listening Studio or voice actors, or add a subtitle file.'))}</span> ${timingsBtn}`;
   }
-  const linked = items.filter(({ q }) => q.heard).length;
+  const linked = items.filter(({ q }) => listeningHeardLinked(q)).length;
   return `<span class="small">${escapeHtml(t('🕒 {lines} lines timed · {linked} of {total} questions linked', { lines: cues.length, linked, total: items.length }))}</span>
     <button type="button" class="btn btn-sm" data-ls-check="${sec.id}">${escapeHtml(t('Check'))}</button> ${timingsBtn}`;
 }
@@ -2745,20 +2760,21 @@ function openListeningMomentsDialog(id) {
         <div class="row gap"><button type="button" class="btn btn-sm" data-lm-guess>${escapeHtml(t('↻ Guess again'))}</button>
           <span class="small muted">${escapeHtml(t('The lines you chose stay; the others are guessed again.'))}</span></div>
         <ol class="lm-list">${items.map(({ q, i }) => `
-          <li class="lm-q${q.heard ? '' : ' lm-missing'}">
+          <li class="lm-q${listeningHeardLinked(q) ? '' : ' lm-missing'}">
             <div class="lm-q-head"><strong>${i + 1}.</strong> ${escapeHtml(String(q.prompt || '').replace(/_{2,}/g, '___').slice(0, 160))}
               ${q.cefr ? `<span class="small muted">${escapeHtml(q.cefr)}</span>` : ''}</div>
             ${listeningQuestionAnswerText(q) ? `<div class="small lm-answer">✓ ${escapeHtml(listeningQuestionAnswerText(q).slice(0, 200))}</div>` : ''}
-            <div class="lm-line">${q.heard
+            <div class="lm-line">${listeningHeardLinked(q)
               ? `<span class="lm-time">${formatCueClock(cues[q.heard.from]?.s)}</span> ${escapeHtml(lineText(q.heard))} ${q.heard.by === 'teacher' ? `<span class="small muted">${escapeHtml(t('(chosen)'))}</span>` : ''}`
               : `<span class="bad">${escapeHtml(t('⚠ Choose the line'))}</span>`}</div>
+            ${q.heard?.quote ? `<div class="small muted">${escapeHtml(t('AI: "{quote}"', { quote: q.heard.quote }))}</div>` : ''}
             <div class="row gap">
-              ${q.heard ? `<button type="button" class="btn btn-sm" data-lm-play="${i}">▶</button>` : ''}
+              ${listeningHeardLinked(q) ? `<button type="button" class="btn btn-sm" data-lm-play="${i}">▶</button>` : ''}
               <button type="button" class="btn btn-sm" data-lm-change="${i}" aria-pressed="${picking === i}">${escapeHtml(picking === i ? t('Done') : t('Change'))}</button>
-              ${q.heard ? `<button type="button" class="btn btn-sm" data-lm-unlink="${i}">${escapeHtml(t('Not linked'))}</button>` : ''}
+              ${listeningHeardLinked(q) ? `<button type="button" class="btn btn-sm" data-lm-unlink="${i}">${escapeHtml(t('Not linked'))}</button>` : ''}
             </div>
             ${picking === i ? `<ol class="lm-cues">${cues.map((c, k) => `
-              <li><button type="button" class="lm-cue${q.heard && k >= q.heard.from && k <= q.heard.to ? ' is-on' : ''}" data-lm-cue="${k}">
+              <li><button type="button" class="lm-cue${listeningHeardLinked(q) && k >= q.heard.from && k <= q.heard.to ? ' is-on' : ''}" data-lm-cue="${k}">
                 <span class="lm-time">${formatCueClock(c.s)}</span> ${c.who ? `<strong>${escapeHtml(c.who)}:</strong> ` : ''}${escapeHtml(c.text)}</button></li>`).join('')}</ol>` : ''}
           </li>`).join('')}</ol>
       </div>`;
@@ -2777,7 +2793,8 @@ function openListeningMomentsDialog(id) {
     if (e.target.closest('[data-lm-guess]')) { guessListeningMoments(sec); render(); return; }
     if (e.target.closest('[data-lm-play]')) {
       const btn = e.target.closest('[data-lm-play]');
-      const heard = q('data-lm-play')?.heard;
+      const question = q('data-lm-play');
+      const heard = listeningHeardLinked(question) ? question.heard : null;
       if (heard) { btn.textContent = '■'; previewListeningMoment(sec, heard, () => { btn.textContent = '▶'; }); }
       return;
     }
@@ -2790,7 +2807,7 @@ function openListeningMomentsDialog(id) {
     }
     if (e.target.closest('[data-lm-unlink]')) {
       const question = q('data-lm-unlink');
-      if (question) delete question.heard;
+      if (question) setListeningHeard(question, null);
       render();
       return;
     }
@@ -2799,9 +2816,9 @@ function openListeningMomentsDialog(id) {
       const k = Number(cueBtn.dataset.lmCue);
       const question = quiz.questions[picking];
       if (e.shiftKey && anchor != null && Math.abs(k - anchor) <= 5) {
-        question.heard = { from: Math.min(k, anchor), to: Math.max(k, anchor), by: 'teacher' };
+        setListeningHeard(question, { from: Math.min(k, anchor), to: Math.max(k, anchor), by: 'teacher' });
       } else {
-        question.heard = { from: k, to: k, by: 'teacher' };
+        setListeningHeard(question, { from: k, to: k, by: 'teacher' });
         anchor = k;
       }
       previewListeningMoment(sec, question.heard);
@@ -5283,14 +5300,14 @@ const LISTENING_PROMPT_EXAMPLE = {
   transcript: 'Anna: Hi Tom! Are we still meeting on Saturday?\nTom: Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?\nAnna: Sure. At the café on Bridge Street?\nTom: It\'s closed for repairs. Let\'s meet at the library instead. Bring your notebook: we need to finish the history project.\nAnna: OK. Is Emma coming?\nTom: Yes, and Leo too, but he\'ll be a bit late.',
   // In the order their answers are heard.
   questions: [
-    { type: 'text', prompt: 'What time will they meet?', accepted: ['10:30', 'half past ten', 'ten thirty'] },
-    { type: 'tf', prompt: 'The café on Bridge Street is open as usual.', answers: [{ text: 'True', correct: false }, { text: 'False', correct: true }] },
-    { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the café', correct: false }, { text: 'At the library', correct: true }, { text: 'At Tom\'s work', correct: false }] },
-    { type: 'context_gap', prompt: 'Bring: your ____ for the ____ project.', gaps: ['notebook', 'history'] },
-    { type: 'multi', prompt: 'Who else is coming? Choose all the right answers.', answers: [{ text: 'Emma', correct: true }, { text: 'Leo', correct: true }, { text: 'Tom\'s sister', correct: false }] },
-    { type: 'error_hunt', prompt: 'Leo will arrive early.', correctedVariants: ['Leo will arrive late.', 'Leo will be late.', 'Leo will be a bit late.'], corrected: 'Leo will arrive late.' },
-    { type: 'match_pairs', prompt: 'Match each person with what they say or do.', pairs: [{ left: 'Anna', right: 'suggests the café' }, { left: 'Tom', right: 'is working on Saturday' }, { left: 'Emma', right: 'is coming too' }] },
-    { type: 'open', prompt: 'Why can\'t they meet at the café?' },
+    { type: 'text', prompt: 'What time will they meet?', accepted: ['10:30', 'half past ten', 'ten thirty'], heard: 'Can we do Sunday at half past ten?' },
+    { type: 'tf', prompt: 'The café on Bridge Street is open as usual.', answers: [{ text: 'True', correct: false }, { text: 'False', correct: true }], heard: 'It\'s closed for repairs.' },
+    { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the café', correct: false }, { text: 'At the library', correct: true }, { text: 'At Tom\'s work', correct: false }], heard: 'Let\'s meet at the library instead.' },
+    { type: 'context_gap', prompt: 'Bring: your ____ for the ____ project.', gaps: ['notebook', 'history'], heard: 'Bring your notebook: we need to finish the history project.' },
+    { type: 'multi', prompt: 'Who else is coming? Choose all the right answers.', answers: [{ text: 'Emma', correct: true }, { text: 'Leo', correct: true }, { text: 'Tom\'s sister', correct: false }], heard: 'Is Emma coming? Yes, and Leo too' },
+    { type: 'error_hunt', prompt: 'Leo will arrive early.', correctedVariants: ['Leo will arrive late.', 'Leo will be late.', 'Leo will be a bit late.'], corrected: 'Leo will arrive late.', heard: 'but he\'ll be a bit late.' },
+    { type: 'match_pairs', prompt: 'Match each person with what they say or do.', pairs: [{ left: 'Anna', right: 'suggests the café' }, { left: 'Tom', right: 'is working on Saturday' }, { left: 'Emma', right: 'is coming too' }], heard: 'At the café on Bridge Street?' },
+    { type: 'open', prompt: 'Why can\'t they meet at the café?', heard: 'It\'s closed for repairs.' },
   ],
 };
 
@@ -5315,20 +5332,20 @@ Tom (laughing): Yes, and Leo too, but he'll be a bit late.`;
 
 const LISTENING_PROMPT_LEVEL_EXAMPLE = [
   {
-    A1: { type: 'tf', prompt: 'They will meet on Sunday.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
-    A2: { type: 'mcq', prompt: 'When will they meet?', answers: [{ text: 'Sunday at 10:30', correct: true }, { text: 'Saturday at 10:30', correct: false }, { text: 'Sunday at 11:30', correct: false }] },
-    B1: { type: 'context_gap', prompt: 'Meeting: Sunday at ____.', gaps: ['10:30, half past ten, ten thirty'] },
-    B2: { type: 'mcq', prompt: 'Why do they change the day?', answers: [{ text: 'Tom has to work', correct: true }, { text: 'Anna is busy', correct: false }, { text: 'The café is closed', correct: false }] },
-    C1: { type: 'multi', prompt: 'Which are true? Choose all the right answers.', answers: [{ text: 'Tom works on Saturday', correct: true }, { text: 'They will meet in the morning', correct: true }, { text: 'Anna suggests Sunday', correct: false }] },
-    C2: { type: 'mcq', prompt: 'How does Tom answer Anna\'s first question?', answers: [{ text: 'He turns down Saturday and offers another time', correct: true }, { text: 'He agrees but asks for a later time', correct: false }, { text: 'He suggests meeting at the café', correct: false }] },
+    A1: { type: 'tf', prompt: 'They will meet on Sunday.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
+    A2: { type: 'mcq', prompt: 'When will they meet?', answers: [{ text: 'Sunday at 10:30', correct: true }, { text: 'Saturday at 10:30', correct: false }, { text: 'Sunday at 11:30', correct: false }], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
+    B1: { type: 'context_gap', prompt: 'Meeting: Sunday at ____.', gaps: ['10:30, half past ten, ten thirty'], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
+    B2: { type: 'mcq', prompt: 'Why do they change the day?', answers: [{ text: 'Tom has to work', correct: true }, { text: 'Anna is busy', correct: false }, { text: 'The café is closed', correct: false }], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
+    C1: { type: 'multi', prompt: 'Which are true? Choose all the right answers.', answers: [{ text: 'Tom works on Saturday', correct: true }, { text: 'They will meet in the morning', correct: true }, { text: 'Anna suggests Sunday', correct: false }], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
+    C2: { type: 'mcq', prompt: 'How does Tom answer Anna\'s first question?', answers: [{ text: 'He turns down Saturday and offers another time', correct: true }, { text: 'He agrees but asks for a later time', correct: false }, { text: 'He suggests meeting at the café', correct: false }], heard: 'Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?' },
   },
   {
-    A1: { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the library', correct: true }, { text: 'At the café', correct: false }, { text: 'At Tom\'s house', correct: false }] },
-    A2: { type: 'tf', prompt: 'The café is closed.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
-    B1: { type: 'text', prompt: 'Where will they meet?', accepted: ['the library', 'library', 'at the library'] },
-    B2: { type: 'mcq', prompt: 'Why don\'t they meet at the café?', answers: [{ text: 'It is being repaired', correct: true }, { text: 'It is too far', correct: false }, { text: 'It is closed on Sundays', correct: false }] },
-    C1: { type: 'error_hunt', prompt: 'They will meet at the café because the library is closed.', correctedVariants: ['They will meet at the library because the café is closed.'], corrected: 'They will meet at the library because the café is closed.' },
-    C2: { type: 'open', prompt: 'What problem does Tom point out, and what does he suggest?' },
+    A1: { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the library', correct: true }, { text: 'At the café', correct: false }, { text: 'At Tom\'s house', correct: false }], heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
+    A2: { type: 'tf', prompt: 'The café is closed.', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }], heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
+    B1: { type: 'text', prompt: 'Where will they meet?', accepted: ['the library', 'library', 'at the library'], heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
+    B2: { type: 'mcq', prompt: 'Why don\'t they meet at the café?', answers: [{ text: 'It is being repaired', correct: true }, { text: 'It is too far', correct: false }, { text: 'It is closed on Sundays', correct: false }], heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
+    C1: { type: 'error_hunt', prompt: 'They will meet at the café because the library is closed.', correctedVariants: ['They will meet at the library because the café is closed.'], corrected: 'They will meet at the library because the café is closed.', heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
+    C2: { type: 'open', prompt: 'What problem does Tom point out, and what does he suggest?', heard: 'It\'s closed for repairs. Let\'s meet at the library instead.' },
   },
 ];
 
@@ -5393,6 +5410,7 @@ function buildListeningPrompt(req) {
     levelled
       ? 'Within each level, questions follow the order in which their answers are heard, spread over the whole recording; never two questions of one level on the same piece of information.'
       : 'Questions follow the order in which their answers are heard, spread over the whole recording; never two questions on the same piece of information.',
+    'Every question has "heard": the words of the transcript where its answer is said, copied exactly, without the speaker\'s name or directions. One sentence, or two short ones when the answer comes from two speakers; if it is heard in several places, the first. PinPlay plays that moment of the recording in the class correction; students never see it.',
     'Prompts and options say things in other words than the recording, but written answers ("accepted", "gaps") are the words actually heard: short, one to three words or a number. List the forms a student may write for them: "15, fifteen", "10:30, half past ten", a name as it is spelled in the recording.',
     'Wrong options are near misses taken from the recording: something else that is mentioned, a plan that changes, a price or time that is corrected, what the other speaker suggests. Never absurd.',
     'No media: no "imageKeyword", "gifKeyword", "videoKeyword", "readingText", "media", "audioEnabled" or "audioText". Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
@@ -5478,7 +5496,7 @@ function buildListeningPrompt(req) {
     '## Quiz fields',
     'Quiz: {"version": 3, "title": "…", "listeningSections": [ … ], "questions": [ … ]}',
     'Section: "id", "title", "text", "transcript", "playsAllowed", "pauseAllowed"',
-    `Every question has "id", "type", "prompt", ${levelled ? '"cefr", ' : ''}"points", "timeLimit", "listeningSection", plus the fields of its type:`,
+    `Every question has "id", "type", "prompt", ${levelled ? '"cefr", ' : ''}"points", "timeLimit", "listeningSection", "heard", plus the fields of its type:`,
     ...allowed.map((type) => `- ${type}: ${LISTENING_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
     '## Example',
@@ -18058,14 +18076,19 @@ function normalizeListeningCues(raw) {
     .slice(0, LISTENING_MAX_CUES);
 }
 
-// Which cues a section question's answer is heard in: { from, to, by } with
-// by 'teacher' (chosen in the editor, never re-guessed) or 'auto'.
+// Where a section question's answer is heard: { from, to, by } the cues
+// (by 'teacher': chosen in the editor, never re-guessed; or 'auto'), and/or
+// quote: the AI's copy of the words (a string from an AI quiz becomes the
+// quote), which the guess looks for first. Teacher-only, like the cues.
 function normalizeListeningHeard(raw) {
+  if (typeof raw === 'string') raw = { quote: raw };
   if (!raw || typeof raw !== 'object') return null;
+  const quote = String(raw.quote || '').replace(/\s+/g, ' ').trim().slice(0, LISTENING_MAX_CUE_TEXT);
   const from = Math.round(Number(raw.from));
   const to = Math.round(Number(raw.to ?? raw.from));
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to - from > 5) return null;
-  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto' };
+  const linked = Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to >= from && to - from <= 5;
+  if (!linked) return quote ? { quote } : null;
+  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto', ...(quote ? { quote } : {}) };
 }
 
 // Which questions belong to which section, fixed in place. A question stays in
@@ -18121,7 +18144,13 @@ function normalizeListeningSections(rawSections, questions) {
     if (!q || !('heard' in q)) return;
     const heard = normalizeListeningHeard(q.heard);
     const cues = sections.find((s) => s.id === q.listeningSection)?.cues || [];
-    if (heard && heard.to < cues.length) q.heard = heard;
+    // A link past the cues goes; the AI's quote stays for the next guess.
+    if (heard && 'from' in heard && heard.to >= cues.length) {
+      delete heard.from;
+      delete heard.to;
+      delete heard.by;
+    }
+    if (heard && q.listeningSection && Object.keys(heard).length) q.heard = heard;
     else delete q.heard;
   });
   return sections.filter((s) => used.has(s.id));
@@ -20717,6 +20746,12 @@ function formatReadingTextHtml(text) {
 function normalizeImportedQuestion(q) {
   const next = { ...q };
   if (!next.prompt && next.question) next.prompt = next.question;
+  // An AI quiz's "heard" (the words where the answer is said) becomes the quote.
+  if ('heard' in next) {
+    const heard = normalizeListeningHeard(next.heard);
+    if (heard) next.heard = heard;
+    else delete next.heard;
+  }
   if (next.type === 'context_gap' && Array.isArray(next.gaps)) next.gaps = contextGapList(next);
   // Bots sometimes write a typed-answer question with an mcq-style
   // "answers" array. The correct ones are exactly the accepted answers.

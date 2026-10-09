@@ -414,6 +414,26 @@ describe('listening prompt', () => {
     assert.ok(narrow.questions.every((q) => ['A2', 'B1'].includes(q.cefr) && ['mcq', 'tf'].includes(q.type)));
   });
 
+  it('asks where each answer is heard, and the examples quote the transcript exactly', () => {
+    ['paste', 'attach', 'write'].forEach((source) => {
+      const text = lbuild({ source });
+      assert.match(section(text, 'Rules'), /Every question has "heard": the words of the transcript where its answer is said, copied exactly/, source);
+      assert.match(text, /"listeningSection", "heard", plus the fields of its type/, source);
+    });
+    const said = A.LISTENING_PROMPT_EXAMPLE.transcript;
+    [false, true].forEach((levelled) => {
+      const example = lexample(lbuild({ selectedTypes: [...A.LISTENING_SECTION_TYPES], ...(levelled ? { levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] } : {}) }));
+      example.questions.forEach((q) => {
+        assert.ok(q.heard, `${q.id} has no "heard"`);
+        // One sentence, or two from two speakers: each is in the transcript.
+        q.heard.split(/(?<=[.?!])\s+/).forEach((part) => assert.ok(said.includes(part), `${q.id}: "${part}"`));
+      });
+      // Imported, the quote stays with the question (teacher-only).
+      const quiz = W.normalizeQuiz(example);
+      quiz.questions.forEach((q, i) => assert.deepEqual(plain(q.heard), { quote: example.questions[i].heard }, q.id));
+    });
+  });
+
   it('counts a section\'s questions per level, untagged ones as shared', () => {
     const qs = [{ listeningSection: 's1', cefr: 'A2' }, { listeningSection: 's1', cefr: 'b1' }, { listeningSection: 's1' }, { listeningSection: 's2', cefr: 'A2' }, { cefr: 'A2' }];
     assert.deepEqual(plain(A.listeningSectionLevelCounts(qs, 's1')), { counts: { A2: 1, B1: 1 }, shared: 1 });
