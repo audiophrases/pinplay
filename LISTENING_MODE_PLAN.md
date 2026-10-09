@@ -4,7 +4,8 @@ Status: **phases 1 (data model + editor), 2 (homework sheet) and 4 (live)
 built 2026-10-02; phase 5 (AI prompt) built 2026-10-03.** Phase 3 is planned as a
 local studio (LISTENING_STUDIO_PLAN.md, 2026-10-03);
 phase 6 (adaptive listening, section 10) planned 2026-10-03; phase 7 (timed
-moments: hear the answer in the correction, section 12) planned 2026-10-09.
+moments: hear the answer in the correction, section 12) planned 2026-10-09,
+steps 1-4 (live) built 2026-10-09.
 Decisions settled with the owner on 2026-10-02 (section 2).
 
 Phase 1 as built:
@@ -612,3 +613,32 @@ range requests to the media route (about a dozen per correction).
   speaker): the moment covers both lines.
 - Subtitle files cut differently from the script lines (two lines in one cue):
   the caption shows the cue as it is.
+
+### 12j. Built (2026-10-09): steps 1-4
+
+- Data: `normalizeListeningCues` / `normalizeListeningHeard` in the shared
+  section functions (app.js = worker.js); `heard` kept by both question
+  normalizers. Student payloads list their fields, so neither reaches a
+  student; `tests/timed-moments.test.mjs` checks the homework and live
+  payloads.
+- Timings in: the Studio's `build_part` records each line; `project.mix`
+  writes an ID3v2.3 tag (TXXX "PinPlay timings", JSON `{ v: 1, cues: [[s, e,
+  who, text]] }`) before the MP3 frames, and a `.vtt` next to it. The section
+  panel reads the tag (`readMp3Cues`) and uploads the audio without it; the
+  recording picker also takes a `.vtt` / `.srt` with it, and "🕒 Timings…"
+  adds one later (`parseSubtitleCues`). Voice actors pass where each take
+  lands.
+- The guess (`guessListeningMoments`): the keys of 12d, words weighted by how
+  rare they are in the recording, numbers as words ("platform 2" finds
+  "platform two"), the speaker's name counts as a word of the line. Best
+  non-decreasing choice per level; teacher links fixed.
+- Live: `hostListeningReview.moment` once revealed (`lines` once shown);
+  `/api/host/listening/words` (one host request) records the question in
+  `listeningDone[section].words`; `playerListeningState.heard` for wrong,
+  partly right or blank answers. Projector: Auto / Manual button (a button,
+  not a checkbox, so the keys keep working), "▶ Hear it", "Show the words",
+  P and T; the caption highlights the answer words.
+- Checked in Chrome with a projector and a phone: the Studio MP3's tag read
+  and stripped, the guess (4 of 4 linked), Check → Change, Auto (moment 5.0 →
+  9.4 s, then the words, then "You heard" on the wrong phone only) and Manual
+  (nothing on reveal, P plays, T shows).

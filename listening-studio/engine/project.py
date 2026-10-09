@@ -334,9 +334,13 @@ class Project:
                 if it['type'] == 'line':
                     files = by_item[(p, k)]
                     clips[k] = [sf.read(files[s], dtype='float32')[0] for s in it['speakers']]
-            mixed = audio.build_part(part['items'], voices, clips, self.settings['spacing'], kind)
+            cues = []
+            mixed = audio.build_part(part['items'], voices, clips, self.settings['spacing'], kind, cues)
             label = part.get('label') or (f'part {p + 1}' if len(self.script['parts']) > 1 else '')
             path = os.path.join(self.folder, 'out', f'{title}{"-" + _safe(label) if label else ""}.mp3')
-            _write_bytes(path, audio.to_mp3(mixed))
-            parts.append({'label': label, 'mp3': path, 'seconds': round(len(mixed) / audio.SR, 1)})
+            # The timings ride inside the MP3 (PinPlay reads them and uploads the
+            # audio without them) and in a .vtt next to it.
+            _write_bytes(path, audio.timings_tag(cues) + audio.to_mp3(mixed))
+            _write_bytes(path[:-4] + '.vtt', audio.to_vtt(cues).encode('utf-8'))
+            parts.append({'label': label, 'mp3': path, 'seconds': round(len(mixed) / audio.SR, 1), 'lines': len(cues)})
         return parts

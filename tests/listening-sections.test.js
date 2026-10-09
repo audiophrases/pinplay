@@ -7,7 +7,7 @@ const { extractDeclaration, loadDeclarations } = require('./helpers/extract-decl
 // Listening sections, phase 1 (LISTENING_MODE_PLAN.md): the data model as the
 // server and the page clean it, recordings in cloud storage, no adaptive.
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const SHARED = ['LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT',
+const SHARED = ['LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT', 'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'normalizeListeningHeard',
   'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList',
   'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections'];
 

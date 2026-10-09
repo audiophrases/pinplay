@@ -6255,3 +6255,27 @@ body.listening-sheet-open { overflow: hidden; }
   .va-link { flex-direction: column; align-items: stretch; }
   .va-gap { margin-left: 0; }
 }
+
+/* ── Timed moments (LISTENING_MODE_PLAN.md section 12) ── */
+.host-moment { display: grid; gap: .5rem; justify-items: center; margin: .2rem 0; }
+.host-moment-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: center; }
+.host-moment-mode { color: var(--muted); }
+.host-moment-mode[aria-pressed="true"] { color: var(--primary-2); border-color: var(--primary); }
+.host-moment-lines { width: 100%; max-width: 900px; background: #f4f6ff; border-left: 4px solid var(--primary); border-radius: .5rem; padding: .5rem .9rem; }
+.host-moment-lines p { margin: .2rem 0; font-size: clamp(1.05rem, 2.2vw, 1.45rem); line-height: 1.45; }
+.host-moment-lines mark { background: #ffe58a; border-radius: .2rem; padding: 0 .1rem; }
+.ls-heard { margin-top: .35rem; padding: .35rem .6rem; background: #f4f6ff; border-left: 3px solid var(--primary); border-radius: 6px; font-size: .92rem; }
+.ls-heard p { margin: .1rem 0; }
+.ls-heard-label { font-weight: 700; color: var(--muted); font-size: .82rem; }
+.dialog-card.lm-panel { width: min(900px, 96vw); max-height: 92vh; overflow: auto; display: grid; gap: 10px; align-content: start; }
+.lm-panel h3 { margin: 0; }
+.lm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lm-q { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 5px; }
+.lm-q.lm-missing { border-color: #e79a9a; }
+.lm-answer { color: var(--ok); }
+.lm-line { font-size: .95rem; }
+.lm-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; }
+.lm-cues { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.lm-cue { display: block; width: 100%; text-align: left; font: inherit; font-size: .92rem; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 5px 8px; cursor: pointer; }
+.lm-cue:hover { background: #f4f6ff; }
+.lm-cue.is-on { background: #e8e7ff; font-weight: 600; }

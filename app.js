@@ -2312,9 +2312,10 @@ function buildListeningSectionPanel(sec) {
     <div class="listening-section-recording">
       <span>${escapeHtml(t('Recording'))}</span>
       ${recording}
-      <input type="file" accept="audio/*" data-ls-audio="${sec.id}" />
+      <input type="file" accept="audio/*,.vtt,.srt" multiple data-ls-audio="${sec.id}" />
       <span class="small" data-ls-audio-status="${sec.id}"></span>
     </div>
+    <div class="listening-section-row" data-ls-moments="${sec.id}">${listeningMomentsSummaryHtml(sec)}</div>
     <div class="listening-section-row">
       <label>${escapeHtml(t('Plays allowed'))}
         <select data-ls-id="${sec.id}" data-ls-field="playsAllowed">
@@ -2344,7 +2345,7 @@ function buildListeningSectionPanel(sec) {
 // The recording goes to cloud storage right away: it is too big to keep in
 // the quiz (the browser's local copy has a ~5 MB limit). If the upload fails,
 // it stays embedded and the server uploads it when the quiz is assigned.
-async function attachListeningRecording(id, file) {
+async function attachListeningRecording(id, file, { cues = null } = {}) {
   const sec = findListeningSection(id);
   const statusEl = () => questionListEl.querySelector(`[data-ls-audio-status="${id}"]`);
   if (!sec || !file) return;
@@ -2352,6 +2353,20 @@ async function attachListeningRecording(id, file) {
     alert(t('Please choose an audio file.'));
     return;
   }
+  // A Listening Studio MP3 carries its timings: keep them, upload the audio
+  // without them (the public file must not hold the script).
+  if (!cues && (/mpeg|mp3/.test(String(file.type)) || /\.mp3$/i.test(String(file.name || '')))) {
+    try {
+      const buffer = await file.arrayBuffer();
+      const tag = readMp3Cues(buffer);
+      if (tag) {
+        cues = tag.cues;
+        file = new File([buffer.slice(tag.end)], file.name || 'recording.mp3', { type: 'audio/mpeg' });
+      }
+    } catch { /* no tag: plain recording */ }
+  }
+  // A new recording brings its own timings, or none.
+  const timing = setListeningSectionCues(sec, cues || []);
   const show = (msg, cls = '') => { const el = statusEl(); if (el) { el.textContent = msg; el.className = `small ${cls}`; } };
   show(t('⏳ Uploading the recording…'));
   let dataUrl;
@@ -2371,6 +2386,10 @@ async function attachListeningRecording(id, file) {
     sec.audio = { kind: 'file', url: `${loadBackendUrl() || 'https://api.pinplay.win'}/api/media/${key}`, name };
     renderBuilder();
     try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+    if (timing.checkLinks) {
+      const el = statusEl();
+      if (el) { el.textContent = t('The timings changed: check the lines (🕒 Check).'); el.className = 'small bad'; }
+    }
   } catch (err) {
     sec.audio = { kind: 'file', url: dataUrl, name };
     renderBuilder();
@@ -2380,6 +2399,436 @@ async function attachListeningRecording(id, file) {
       el.className = 'small bad';
     }
   }
+}
+
+// ---------------------------------------------------------------- timed moments
+// LISTENING_MODE_PLAN.md section 12: a section's timings (one cue per spoken
+// line) and, per question, the cues its answer is heard in, so the live
+// correction can play that moment. Timings come from the Listening Studio (a
+// tag inside its MP3), voice actors, or a subtitle file.
+
+// "00:01:02.500", "01:02,5" or "62.5" → seconds.
+function parseCueTime(raw) {
+  const m = /^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(String(raw || '').trim());
+  if (!m) return NaN;
+  return Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(`0.${m[4] || 0}`);
+}
+
+// WebVTT or SubRip → [{ s, e, who, text }]. The speaker comes from a <v Name>
+// tag or a "Name: …" start.
+function parseSubtitleCues(text) {
+  const cues = [];
+  const blocks = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split(/\n{2,}/);
+  blocks.forEach((block) => {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const at = lines.findIndex((l) => l.includes('-->'));
+    if (at < 0) return;
+    const [rawStart, rawRest] = lines[at].split('-->');
+    const s = parseCueTime(rawStart);
+    const e = parseCueTime(String(rawRest || '').trim().split(/\s+/)[0]);
+    if (!Number.isFinite(s) || !Number.isFinite(e)) return;
+    let body = lines.slice(at + 1).join(' ');
+    let who = '';
+    const voice = /<v(?:\.[^\s>]*)?\s+([^>]+)>/i.exec(body);
+    if (voice) who = voice[1].trim();
+    body = body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const named = !who && /^([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'.-]*(?: [A-Z][A-Za-zÀ-ÖØ-öø-ÿ'.-]*){0,2}(?: \+ [A-Z][A-Za-zÀ-ÖØ-öø-ÿ'.-]*)*):\s+(.+)$/.exec(body);
+    if (named) { who = named[1]; body = named[2]; }
+    if (body) cues.push({ s, e, who, text: body });
+  });
+  return cues;
+}
+
+// The Listening Studio writes its timings into the MP3 (an ID3 "TXXX" frame
+// named "PinPlay timings"). Returns { cues, end } (end = where the audio
+// starts after the tag), or null.
+function readMp3Cues(buffer) {
+  const b = new Uint8Array(buffer);
+  if (b.length < 10 || b[0] !== 0x49 || b[1] !== 0x44 || b[2] !== 0x33) return null;
+  const version = b[3];
+  const syncsafe = (i) => ((b[i] & 0x7f) << 21) | ((b[i + 1] & 0x7f) << 14) | ((b[i + 2] & 0x7f) << 7) | (b[i + 3] & 0x7f);
+  const end = 10 + syncsafe(6) + ((b[5] & 0x10) ? 10 : 0);
+  let i = 10;
+  if (b[5] & 0x40) i += version >= 4 ? syncsafe(10) : ((b[10] << 24) | (b[11] << 16) | (b[12] << 8) | b[13]) + 4;
+  while (i + 10 <= Math.min(end, b.length)) {
+    const id = String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+    if (!/^[A-Z0-9]{4}$/.test(id)) break;
+    const size = version >= 4 ? syncsafe(i + 4) : ((b[i + 4] << 24) | (b[i + 5] << 16) | (b[i + 6] << 8) | b[i + 7]) >>> 0;
+    const body = b.subarray(i + 10, i + 10 + size);
+    if (id === 'TXXX' && body.length > 1) {
+      const enc = body[0];
+      const zero = body.indexOf(0, 1);
+      const decode = (bytes) => new TextDecoder(enc === 3 ? 'utf-8' : 'latin1').decode(bytes);
+      if (zero > 0 && decode(body.subarray(1, zero)) === 'PinPlay timings') {
+        try {
+          const data = JSON.parse(decode(body.subarray(zero + 1)).replace(/\0+$/, ''));
+          const cues = (Array.isArray(data?.cues) ? data.cues : []).map((c) => (Array.isArray(c) ? { s: c[0], e: c[1], who: c[2], text: c[3] } : c));
+          return { cues: normalizeListeningCues(cues), end };
+        } catch { return null; }
+      }
+    }
+    i += 10 + size;
+  }
+  return null;
+}
+
+function listeningSectionQuestions(sectionId) {
+  const out = [];
+  (quiz.questions || []).forEach((q, i) => { if (q?.listeningSection === sectionId) out.push({ q, i }); });
+  return out;
+}
+
+// New timings for a section: links past the new lines go, the automatic ones
+// are guessed again, the teacher's stay. Returns how the section stands.
+function setListeningSectionCues(sec, rawCues) {
+  const cues = normalizeListeningCues(rawCues);
+  const oldText = (sec.cues || []).map((c) => c.text).join('\n');
+  if (cues.length) sec.cues = cues;
+  else delete sec.cues;
+  const items = listeningSectionQuestions(sec.id);
+  const teacherLinks = items.filter(({ q }) => q.heard?.by === 'teacher').length;
+  items.forEach(({ q }) => { if (q.heard && (!cues.length || q.heard.to >= cues.length)) delete q.heard; });
+  if (cues.length) guessListeningMoments(sec);
+  const changed = !!oldText && oldText !== cues.map((c) => c.text).join('\n');
+  return { cues: cues.length, checkLinks: changed && teacherLinks > 0 };
+}
+
+// ---- The automatic guess (section 12d).
+const LISTENING_STOPWORDS = new Set(('a an the and or but of to in on at by for from with without about into over under is are was were be been being am do does did done have has had having '
+  + 'i you he she it we they me him her us them my your his its our their this that these those there here what which who whom whose when where why how '
+  + 'not no yes so too very just can could will would shall should may might must s t d ll re ve m oh um uh well okay ok')
+  .split(' '));
+const LISTENING_NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const LISTENING_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+
+function listeningNumberWords(n) {
+  if (n < 20) return [LISTENING_NUMBER_WORDS[n]];
+  if (n < 100) return [LISTENING_TENS[Math.floor(n / 10)], ...(n % 10 ? [LISTENING_NUMBER_WORDS[n % 10]] : [])];
+  if (n < 1000) return [LISTENING_NUMBER_WORDS[Math.floor(n / 100)], 'hundred', ...(n % 100 ? listeningNumberWords(n % 100) : [])];
+  if (n < 1000000) return [...listeningNumberWords(Math.floor(n / 1000)), 'thousand', ...(n % 1000 ? listeningNumberWords(n % 1000) : [])];
+  return [String(n)];
+}
+
+function listeningStem(w) {
+  if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
+  if (w.length > 4 && w.endsWith('ed')) return w.slice(0, -2);
+  if (w.length > 4 && w.endsWith('es')) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+  return w;
+}
+
+// Words to compare: lower case, no accents, numbers as said, light stemming.
+function listeningMatchTokens(text) {
+  const out = [];
+  const raw = String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  raw.forEach((w) => {
+    if (/^\d+$/.test(w) && w.length <= 6) listeningNumberWords(Number(w)).forEach((x) => out.push(x));
+    else out.push(w);
+  });
+  return out.map(listeningStem);
+}
+
+// What to look for in the recording, by question type: [{ text, weight }].
+function listeningMatchKeys(q) {
+  const keys = [];
+  const add = (text, weight = 1) => { if (String(text || '').trim()) keys.push({ text: String(text), weight }); };
+  const prompt = String(q.prompt || '').replace(/_{2,}/g, ' ');
+  if (q.type === 'mcq' || q.type === 'multi') (q.answers || []).forEach((a) => { if (a?.correct) add(a.text); });
+  else if (q.type === 'text' || q.type === 'voice_text') (q.accepted || []).forEach((a) => String(a || '').split(/\s+or\s+|\|/).forEach((x) => add(x)));
+  else if (q.type === 'error_hunt') add(q.corrected || (q.correctedVariants || [])[0]);
+  else if (q.type === 'context_gap') {
+    contextGapList(q).forEach((g) => String(g || '').split(/[|/]/).forEach((x) => add(x)));
+    add(prompt, 0.9);
+  } else if (q.type === 'match_pairs') (q.pairs || []).forEach((p) => { add(p.right, 0.8); add(p.left, 0.6); });
+  if (q.type === 'tf') add(prompt, 0.9);
+  return { keys, prompt };
+}
+
+// The guess for one section, in the teacher's browser. Questions follow the
+// recording, so the links never go backwards (per level in a levelled
+// section); a question with no good line stays unlinked. Teacher links stay.
+function guessListeningMoments(sec) {
+  const cues = sec.cues || [];
+  if (!cues.length) return;
+  const cueTokens = cues.map((c) => listeningMatchTokens(`${c.who || ''} ${c.text}`));
+  const df = new Map();
+  cueTokens.forEach((toks) => new Set(toks).forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
+  const idf = (w) => Math.log(1 + cues.length / (1 + (df.get(w) || 0)));
+  const spans = [];
+  cues.forEach((c, i) => {
+    spans.push({ from: i, to: i, toks: cueTokens[i], factor: 1 });
+    if (i + 1 < cues.length) spans.push({ from: i, to: i + 1, toks: [...cueTokens[i], ...cueTokens[i + 1]], factor: 0.95 });
+  });
+  spans.forEach((sp) => { sp.set = new Set(sp.toks); sp.joined = ` ${sp.toks.join(' ')} `; });
+  // A key's words, prepared once: content words weighted by how rare they are
+  // in the recording, and the whole phrase for an exact-match bonus.
+  const prep = (text) => {
+    const toks = listeningMatchTokens(text);
+    let content = toks.filter((w) => !LISTENING_STOPWORDS.has(w));
+    if (!content.length) content = toks;
+    return { content, total: content.reduce((n, w) => n + idf(w), 0), phrase: toks.length > 1 ? ` ${toks.join(' ')} ` : '' };
+  };
+  const keyScore = (key, sp) => {
+    if (!key.total) return 0;
+    const found = key.content.filter((w) => sp.set.has(w)).reduce((n, w) => n + idf(w), 0);
+    return found / key.total + (key.phrase && sp.joined.includes(key.phrase) ? 0.25 : 0);
+  };
+  const items = listeningSectionQuestions(sec.id);
+  const groups = new Map();
+  items.forEach((it) => {
+    const k = normalizeCefr(it.q.cefr) || '';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(it);
+  });
+  const THRESHOLD = 0.5;
+  groups.forEach((group) => {
+    // Best score per question per starting line.
+    const best = group.map(({ q }) => {
+      const raw = listeningMatchKeys(q);
+      const keys = raw.keys.map((k) => ({ ...prep(k.text), weight: k.weight }));
+      const prompt = raw.prompt ? prep(raw.prompt) : null;
+      const byStart = new Array(cues.length).fill(null);
+      spans.forEach((sp) => {
+        const main = keys.length ? Math.max(...keys.map((k) => k.weight * keyScore(k, sp))) : 0;
+        // The prompt is a weaker clue; alone (open questions) it counts double.
+        const score = (main + (prompt ? 0.25 * keyScore(prompt, sp) : 0) * (keys.length ? 1 : 2)) * sp.factor;
+        if (score >= THRESHOLD && (!byStart[sp.from] || score > byStart[sp.from].score)) byStart[sp.from] = { score, from: sp.from, to: sp.to };
+      });
+      return byStart;
+    });
+    // Best non-decreasing choice: state k = 0 before any link, k = c + 1 when
+    // the last linked question starts at line c. Teacher links are fixed.
+    const n = cues.length;
+    let f = new Array(n + 1).fill(-Infinity);
+    f[0] = 0;
+    const steps = [];
+    group.forEach(({ q }, j) => {
+      const fixed = q.heard?.by === 'teacher' ? q.heard : null;
+      const g = new Array(n + 1);
+      const ga = new Array(n + 1);
+      let maxF = -Infinity;
+      let argF = 0;
+      for (let k = 0; k <= n; k += 1) {
+        if (k === 0 || f[k] > g[k - 1]) { g[k] = f[k]; ga[k] = k; } else { g[k] = g[k - 1]; ga[k] = ga[k - 1]; }
+        if (f[k] > maxF) { maxF = f[k]; argF = k; }
+      }
+      const next = new Array(n + 1).fill(-Infinity);
+      const back = new Array(n + 1).fill(null);
+      if (!fixed) {
+        for (let k = 0; k <= n; k += 1) if (f[k] > next[k]) { next[k] = f[k]; back[k] = { skip: true, prev: k }; }
+      }
+      for (let c = 0; c < n; c += 1) {
+        const k = c + 1;
+        const cand = fixed ? (fixed.from === c ? { score: 1, fixed: true } : null) : best[j][c];
+        if (!cand) continue;
+        // A teacher link out of order still stands; the guesses around it adapt.
+        const before = g[k] !== -Infinity ? g[k] : (fixed ? maxF : -Infinity);
+        if (before === -Infinity) continue;
+        const v = before + cand.score;
+        if (v > next[k]) { next[k] = v; back[k] = { cand, prev: g[k] !== -Infinity ? ga[k] : argF }; }
+      }
+      steps.push(back);
+      f = next;
+    });
+    let k = 0;
+    for (let x = 1; x <= n; x += 1) if (f[x] > f[k]) k = x;
+    for (let j = group.length - 1; j >= 0; j -= 1) {
+      const step = steps[j][k];
+      if (!step) break;
+      const q = group[j].q;
+      if (step.skip) {
+        if (q.heard?.by !== 'teacher') delete q.heard;
+      } else if (!step.cand.fixed) {
+        q.heard = { from: step.cand.from, to: step.cand.to, by: 'auto' };
+      }
+      k = step.prev;
+    }
+  });
+}
+
+// ---- The section panel line and the Check dialog.
+function listeningMomentsSummaryHtml(sec) {
+  const items = listeningSectionQuestions(sec.id);
+  const cues = sec.cues || [];
+  const timingsBtn = `<label class="btn btn-sm" title="${escapeHtml(t('A subtitle file (.vtt or .srt) with the timings of this recording'))}">${escapeHtml(t('🕒 Timings…'))}<input type="file" accept=".vtt,.srt,text/vtt,application/x-subrip" data-ls-cues="${sec.id}" hidden /></label>`;
+  if (!cues.length) {
+    return `<span class="small muted">${escapeHtml(t('🕒 No timings yet. With them, the correction plays the moment of each answer: use a recording from the Listening Studio or voice actors, or add a subtitle file.'))}</span> ${timingsBtn}`;
+  }
+  const linked = items.filter(({ q }) => q.heard).length;
+  return `<span class="small">${escapeHtml(t('🕒 {lines} lines timed · {linked} of {total} questions linked', { lines: cues.length, linked, total: items.length }))}</span>
+    <button type="button" class="btn btn-sm" data-ls-check="${sec.id}">${escapeHtml(t('Check'))}</button> ${timingsBtn}`;
+}
+
+function refreshListeningMomentsSummary(id) {
+  const el = questionListEl?.querySelector(`[data-ls-moments="${id}"]`);
+  const sec = findListeningSection(id);
+  if (el && sec) el.innerHTML = listeningMomentsSummaryHtml(sec);
+}
+
+function formatCueClock(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function listeningQuestionAnswerText(q) {
+  // The editor keeps empty answer slots: leave them out.
+  const list = (items) => items.map((x) => String(x || '').trim()).filter(Boolean).join(' | ');
+  if (q.type === 'mcq' || q.type === 'multi' || q.type === 'tf') return list((q.answers || []).filter((a) => a?.correct).map((a) => a.text));
+  if (q.type === 'text' || q.type === 'voice_text') return list(q.accepted || []);
+  if (q.type === 'context_gap') return list(contextGapList(q));
+  if (q.type === 'error_hunt') return String(q.corrected || '').trim();
+  if (q.type === 'match_pairs') return list((q.pairs || []).filter((p) => p?.left || p?.right).map((p) => `${p.left} → ${p.right}`));
+  return '';
+}
+
+// Plays a moment of the section's recording in the editor.
+const listeningPreview = { audio: null, watch: null };
+function previewListeningMoment(sec, heard, onStop) {
+  const cues = sec.cues || [];
+  if (!sec.audio?.url || !cues[heard.from] || !cues[heard.to]) return;
+  stopListeningPreview();
+  if (!listeningPreview.audio || listeningPreview.audio.dataset.src !== sec.audio.url) {
+    listeningPreview.audio = new Audio(sec.audio.url);
+    listeningPreview.audio.dataset.src = sec.audio.url;
+  }
+  const a = listeningPreview.audio;
+  const start = Math.max(0, cues[heard.from].s - 1);
+  const end = cues[heard.to].e + 0.4;
+  const watch = {};
+  listeningPreview.watch = watch;
+  const begin = () => {
+    a.currentTime = start;
+    a.play().catch(() => { });
+    const tick = () => {
+      if (listeningPreview.watch !== watch) return;
+      if (a.currentTime >= end || (a.paused && !a.seeking)) {
+        a.pause();
+        listeningPreview.watch = null;
+        if (onStop) onStop();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  if (a.readyState >= 1) begin();
+  else a.addEventListener('loadedmetadata', begin, { once: true });
+}
+
+function stopListeningPreview() {
+  listeningPreview.watch = null;
+  if (listeningPreview.audio) { try { listeningPreview.audio.pause(); } catch { /* */ } }
+}
+
+function openListeningMomentsDialog(id) {
+  const sec = findListeningSection(id);
+  if (!sec?.cues?.length) return;
+  syncQuizFromUI();
+  document.getElementById('listeningMomentsOverlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'listeningMomentsOverlay';
+  overlay.className = 'dialog-overlay';
+  let picking = null; // the question whose line is being chosen
+  let anchor = null;
+  const render = () => {
+    const items = listeningSectionQuestions(sec.id);
+    const cues = sec.cues || [];
+    const lineText = (h) => cues.slice(h.from, h.to + 1).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join(' / ');
+    overlay.innerHTML = `
+      <div class="dialog-card lm-panel" role="dialog" aria-modal="true" aria-labelledby="lmTitle" tabindex="-1">
+        <div class="row spread gap">
+          <h3 id="lmTitle">${escapeHtml(t('🕒 Where each answer is heard'))}</h3>
+          <button type="button" class="btn" data-lm-close>${escapeHtml(t('Close'))}</button>
+        </div>
+        <p class="small muted">${escapeHtml(t('In the live correction, each answer comes with this moment of the recording. ▶ plays it here; Change picks another line (Shift+click a second line for two).'))}</p>
+        <div class="row gap"><button type="button" class="btn btn-sm" data-lm-guess>${escapeHtml(t('↻ Guess again'))}</button>
+          <span class="small muted">${escapeHtml(t('The lines you chose stay; the others are guessed again.'))}</span></div>
+        <ol class="lm-list">${items.map(({ q, i }) => `
+          <li class="lm-q${q.heard ? '' : ' lm-missing'}">
+            <div class="lm-q-head"><strong>${i + 1}.</strong> ${escapeHtml(String(q.prompt || '').replace(/_{2,}/g, '___').slice(0, 160))}
+              ${q.cefr ? `<span class="small muted">${escapeHtml(q.cefr)}</span>` : ''}</div>
+            ${listeningQuestionAnswerText(q) ? `<div class="small lm-answer">✓ ${escapeHtml(listeningQuestionAnswerText(q).slice(0, 200))}</div>` : ''}
+            <div class="lm-line">${q.heard
+              ? `<span class="lm-time">${formatCueClock(cues[q.heard.from]?.s)}</span> ${escapeHtml(lineText(q.heard))} ${q.heard.by === 'teacher' ? `<span class="small muted">${escapeHtml(t('(chosen)'))}</span>` : ''}`
+              : `<span class="bad">${escapeHtml(t('⚠ Choose the line'))}</span>`}</div>
+            <div class="row gap">
+              ${q.heard ? `<button type="button" class="btn btn-sm" data-lm-play="${i}">▶</button>` : ''}
+              <button type="button" class="btn btn-sm" data-lm-change="${i}" aria-pressed="${picking === i}">${escapeHtml(picking === i ? t('Done') : t('Change'))}</button>
+              ${q.heard ? `<button type="button" class="btn btn-sm" data-lm-unlink="${i}">${escapeHtml(t('Not linked'))}</button>` : ''}
+            </div>
+            ${picking === i ? `<ol class="lm-cues">${cues.map((c, k) => `
+              <li><button type="button" class="lm-cue${q.heard && k >= q.heard.from && k <= q.heard.to ? ' is-on' : ''}" data-lm-cue="${k}">
+                <span class="lm-time">${formatCueClock(c.s)}</span> ${c.who ? `<strong>${escapeHtml(c.who)}:</strong> ` : ''}${escapeHtml(c.text)}</button></li>`).join('')}</ol>` : ''}
+          </li>`).join('')}</ol>
+      </div>`;
+  };
+  const close = () => {
+    stopListeningPreview();
+    overlay.remove();
+    try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+    refreshListeningMomentsSummary(sec.id);
+  };
+  overlay.addEventListener('pointerdown', (e) => { overlay.dataset.pressedOnBackdrop = e.target === overlay ? '1' : ''; });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  overlay.addEventListener('click', (e) => {
+    if ((e.target === overlay && overlay.dataset.pressedOnBackdrop === '1') || e.target.closest('[data-lm-close]')) { close(); return; }
+    const q = (attr) => quiz.questions[Number(e.target.closest(`[${attr}]`)?.getAttribute(attr))];
+    if (e.target.closest('[data-lm-guess]')) { guessListeningMoments(sec); render(); return; }
+    if (e.target.closest('[data-lm-play]')) {
+      const btn = e.target.closest('[data-lm-play]');
+      const heard = q('data-lm-play')?.heard;
+      if (heard) { btn.textContent = '■'; previewListeningMoment(sec, heard, () => { btn.textContent = '▶'; }); }
+      return;
+    }
+    if (e.target.closest('[data-lm-change]')) {
+      const i = Number(e.target.closest('[data-lm-change]').dataset.lmChange);
+      picking = picking === i ? null : i;
+      anchor = null;
+      render();
+      return;
+    }
+    if (e.target.closest('[data-lm-unlink]')) {
+      const question = q('data-lm-unlink');
+      if (question) delete question.heard;
+      render();
+      return;
+    }
+    const cueBtn = e.target.closest('[data-lm-cue]');
+    if (cueBtn && picking != null) {
+      const k = Number(cueBtn.dataset.lmCue);
+      const question = quiz.questions[picking];
+      if (e.shiftKey && anchor != null && Math.abs(k - anchor) <= 5) {
+        question.heard = { from: Math.min(k, anchor), to: Math.max(k, anchor), by: 'teacher' };
+      } else {
+        question.heard = { from: k, to: k, by: 'teacher' };
+        anchor = k;
+      }
+      previewListeningMoment(sec, question.heard);
+      render();
+    }
+  });
+  render();
+  document.body.appendChild(overlay);
+  overlay.querySelector('.lm-panel')?.focus();
+}
+
+// Timings for the section's current recording from a .vtt / .srt file.
+async function addListeningSubtitles(id, file) {
+  const sec = findListeningSection(id);
+  if (!sec || !file) return;
+  const show = (msg, cls = '') => {
+    const el = questionListEl.querySelector(`[data-ls-audio-status="${id}"]`);
+    if (el) { el.textContent = msg; el.className = `small ${cls}`; }
+  };
+  let cues = [];
+  try { cues = parseSubtitleCues(await file.text()); } catch { /* unreadable */ }
+  if (!cues.length) { show(t('No timings found in that file (use .vtt or .srt).'), 'bad'); return; }
+  syncQuizFromUI();
+  const timing = setListeningSectionCues(sec, cues);
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  show(timing.checkLinks ? t('The timings changed: check the lines (🕒 Check).') : t('🕒 {n} lines timed.', { n: timing.cues }), timing.checkLinks ? 'bad' : 'ok');
 }
 
 function bindListeningSectionEvents() {
@@ -2408,7 +2857,18 @@ function bindListeningSectionEvents() {
   questionListEl.addEventListener('change', (e) => {
     onField(e);
     const fileEl = e.target.closest('[data-ls-audio]');
-    if (fileEl) attachListeningRecording(fileEl.dataset.lsAudio, fileEl.files?.[0]);
+    if (fileEl) {
+      const files = [...(fileEl.files || [])];
+      const audio = files.find((f) => String(f.type || '').startsWith('audio/'));
+      const subs = files.find((f) => /\.(vtt|srt)$/i.test(String(f.name || '')));
+      if (subs && !audio) addListeningSubtitles(fileEl.dataset.lsAudio, subs);
+      else if (audio) {
+        (subs ? subs.text().then(parseSubtitleCues).catch(() => null) : Promise.resolve(null))
+          .then((cues) => attachListeningRecording(fileEl.dataset.lsAudio, audio, { cues }));
+      }
+    }
+    const cuesEl = e.target.closest('[data-ls-cues]');
+    if (cuesEl?.files?.[0]) addListeningSubtitles(cuesEl.dataset.lsCues, cuesEl.files[0]);
   });
   questionListEl.addEventListener('click', (e) => {
     const copyBtn = e.target.closest('[data-ls-copy]');
@@ -2420,6 +2880,11 @@ function bindListeningSectionEvents() {
         () => { copyBtn.textContent = t('✅ Copied'); setTimeout(() => { copyBtn.textContent = t('📋 Copy script'); }, 2000); },
         () => alert(t('Could not copy. Select the text in the box and copy it instead.')),
       );
+      return;
+    }
+    const checkBtn = e.target.closest('[data-ls-check]');
+    if (checkBtn) {
+      openListeningMomentsDialog(checkBtn.dataset.lsCheck);
       return;
     }
     const voicesBtn = e.target.closest('[data-ls-voices]');
@@ -11451,7 +11916,7 @@ function handleHostHotkeys(e) {
     e.preventDefault();
     const q = live.host.state?.question;
     if (live.host.state?.phase === 'question' && live.host.state.listening) {
-      toggleHostListeningAudio();
+      if (!toggleHostListeningMoment()) toggleHostListeningAudio();
     } else if (q && hasQuestionAudio(q)) {
       playQuestionAudio(q).then(() => {
         const s = live.host.state;
@@ -11481,6 +11946,13 @@ function handleHostHotkeys(e) {
   if (e.key === 'f' || e.key === 'F') {
     e.preventDefault();
     toggleProjectorFullscreen();
+    return;
+  }
+
+  // T in a listening correction: the words of the moment just heard.
+  if ((e.key === 't' || e.key === 'T') && live.host.state?.listening?.review?.moment) {
+    e.preventDefault();
+    hostShowListeningWords();
     return;
   }
 
@@ -12277,7 +12749,7 @@ function renderHostState(state) {
     openSig,
     modelSig,
     state.listening ? `${state.listening.startedCount}:${state.listening.finalized ? 1 : 0}` : '',
-    state.listening?.review ? `${state.listening.review.revealed ? 1 : 0}:${JSON.stringify(state.listening.review.stats || {})}` : '',
+    state.listening?.review ? `${state.listening.review.revealed ? 1 : 0}:${state.listening.review.wordsShown ? 1 : 0}:${JSON.stringify(state.listening.review.stats || {})}` : '',
   ].join(':');
 
   if (live.host.lastQuestionRenderKey !== questionRenderKey) {
@@ -12383,7 +12855,7 @@ function renderHostState(state) {
 // as on an exam paper. Reveal marks everyone and starts the correction: one
 // question at a time, Space shows its answer and how the class answered,
 // → and ← move through the section (LISTENING_MODE_PLAN.md, phase 4).
-const hostListening = { el: null, audio: null, sectionKey: '', rates: {} };
+const hostListening = { el: null, audio: null, sectionKey: '', rates: {}, moment: null, autoPlayed: new Set(), reviewKey: '' };
 
 // The students' speed control (75%–125% in 1% steps) for the projector's
 // player: always there for the teacher, whatever the section allows students.
@@ -12440,6 +12912,7 @@ function addHostListeningSpeed(box, audio, sectionId) {
 }
 
 function hideHostListeningPlayer() {
+  stopHostListeningMoment();
   if (!hostListening.el) return;
   if (hostListening.audio) { try { hostListening.audio.pause(); } catch {} }
   hostListening.el.remove();
@@ -12582,6 +13055,24 @@ function renderHostListeningReview(state, L, review) {
     });
   }
 
+  // A new question in the correction stops the moment of the previous one.
+  const reviewKey = `${hostListening.sectionKey}|${review.qIndex}`;
+  if (hostListening.reviewKey !== reviewKey) {
+    if (hostListening.reviewKey) stopHostListeningMoment({ pause: true });
+    hostListening.reviewKey = reviewKey;
+  }
+  const moment = revealed && review.moment && hostListening.audio ? review.moment : null;
+  if (moment) {
+    wrap.appendChild(hostListeningMomentBox(q, moment, !!review.wordsShown));
+    // Auto: the reveal plays the moment once, and its end shows the words.
+    if (listeningCorrectionMode() === 'auto' && !hostListening.autoPlayed.has(reviewKey)) {
+      hostListening.autoPlayed.add(reviewKey);
+      playHostListeningMoment(moment, () => {
+        if (listeningCorrectionMode() === 'auto' && hostListening.reviewKey === reviewKey) hostShowListeningWords();
+      });
+    }
+  }
+
   const result = document.createElement('p');
   result.className = 'host-review-result';
   const players = Number(stats.players || 0);
@@ -12599,8 +13090,179 @@ function renderHostListeningReview(state, L, review) {
 
   const hint = [];
   if (!revealed) hint.push(t('Space shows the answer.'));
+  if (moment) hint.push(review.wordsShown ? t('P plays the moment.') : t('P plays the moment, T shows the words.'));
   hint.push(last ? t('→ continues the game.') : t('→ next question, ← previous.'));
   hostQuestionHintEl.textContent = hint.join(' ');
+}
+
+// ---- Timed moments in the correction (LISTENING_MODE_PLAN.md section 12e).
+// Auto: the reveal plays the moment and its end shows the words. Manual: the
+// teacher plays it (P) and shows the words (T) when they choose. Kept per device.
+const LISTENING_CORRECTION_MODE_KEY = 'pinplay.listeningCorrection.v1';
+
+function listeningCorrectionMode() {
+  try { return localStorage.getItem(LISTENING_CORRECTION_MODE_KEY) === 'manual' ? 'manual' : 'auto'; } catch { return 'auto'; }
+}
+
+function setListeningCorrectionMode(mode) {
+  try { localStorage.setItem(LISTENING_CORRECTION_MODE_KEY, mode === 'manual' ? 'manual' : 'auto'); } catch { /* storage off */ }
+}
+
+// Plays one moment of the section's recording and stops at its end. Pausing or
+// moving the player by hand ends it without onEnd.
+function playHostListeningMoment(moment, onEnd) {
+  const a = hostListening.audio;
+  if (!a || !moment) return false;
+  stopHostListeningMoment();
+  const watch = { moment };
+  hostListening.moment = watch;
+  const begin = () => {
+    if (hostListening.moment !== watch) return;
+    a.currentTime = moment.start;
+    a.play().catch(() => { });
+    const tick = () => {
+      if (hostListening.moment !== watch) return;
+      const at = a.currentTime;
+      if (at >= moment.end) {
+        a.pause();
+        hostListening.moment = null;
+        refreshHostMomentButtons();
+        if (onEnd) onEnd();
+        return;
+      }
+      if ((a.paused && !a.seeking) || at < moment.start - 0.5) {
+        hostListening.moment = null;
+        refreshHostMomentButtons();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    refreshHostMomentButtons();
+  };
+  if (a.readyState >= 1) begin();
+  else a.addEventListener('loadedmetadata', begin, { once: true });
+  refreshHostMomentButtons();
+  return true;
+}
+
+function stopHostListeningMoment({ pause = false } = {}) {
+  const playing = !!hostListening.moment;
+  hostListening.moment = null;
+  if (pause && playing && hostListening.audio) { try { hostListening.audio.pause(); } catch { /* */ } }
+  refreshHostMomentButtons();
+}
+
+function refreshHostMomentButtons() {
+  document.querySelectorAll('[data-moment-play]').forEach((b) => {
+    b.textContent = hostListening.moment ? t('■ Stop') : t('▶ Hear it');
+  });
+}
+
+// P in the correction: the moment, when the question has one.
+function toggleHostListeningMoment() {
+  const review = live.host.state?.listening?.review;
+  if (!review?.revealed || !review.moment || !hostListening.audio) return false;
+  if (hostListening.moment) stopHostListeningMoment({ pause: true });
+  else playHostListeningMoment(review.moment);
+  return true;
+}
+
+async function hostShowListeningWords() {
+  const review = live.host.state?.listening?.review;
+  if (!review?.revealed || !review.moment || review.wordsShown) return false;
+  try {
+    ensureHostReady();
+    await api('/api/host/listening/words', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${live.host.token}` },
+      body: { pin: live.host.pin },
+    });
+    await pollHostState();
+  } catch (err) {
+    setStatus(hostStatusEl, err.message, 'bad');
+  }
+  return true;
+}
+
+// The words of the answer in a line: the right options, accepted answers or
+// gap words, as whole words.
+function listeningAnswerWords(q) {
+  const phrases = [];
+  if (q.type === 'tf') return new Set();
+  if (['mcq', 'multi'].includes(q.type)) (q.answers || []).forEach((a) => { if (a?.isCorrect) phrases.push(a.text); });
+  else String(q.answerText || '').split(' | ').forEach((p) => phrases.push(p));
+  const words = new Set();
+  phrases.forEach((p) => String(p || '').toLowerCase().split(/[^\p{L}\p{N}']+/u).forEach((w) => {
+    if (w.length >= 3 || /\d/.test(w)) words.add(w);
+  }));
+  return words;
+}
+
+function hostListeningMomentBox(q, moment, wordsShown) {
+  const box = document.createElement('div');
+  box.className = 'host-moment';
+  const row = document.createElement('div');
+  row.className = 'host-moment-row';
+  const hear = document.createElement('button');
+  hear.type = 'button';
+  hear.className = 'btn';
+  hear.dataset.momentPlay = '1';
+  hear.textContent = hostListening.moment ? t('■ Stop') : t('▶ Hear it');
+  hear.addEventListener('click', () => toggleHostListeningMoment());
+  row.appendChild(hear);
+  if (!wordsShown) {
+    const show = document.createElement('button');
+    show.type = 'button';
+    show.className = 'btn';
+    show.textContent = t('Show the words');
+    show.addEventListener('click', () => hostShowListeningWords());
+    row.appendChild(show);
+  }
+  // A button, not a checkbox: a focused form field would swallow the
+  // projector's keys (Space, arrows, P, T).
+  const mode = document.createElement('button');
+  mode.type = 'button';
+  mode.className = 'btn btn-sm host-moment-mode';
+  mode.title = t('Auto: the reveal plays the moment, then shows the words. Manual: you choose when.');
+  const showMode = () => {
+    const auto = listeningCorrectionMode() === 'auto';
+    mode.textContent = auto ? t('Auto') : t('Manual');
+    mode.setAttribute('aria-pressed', String(auto));
+  };
+  mode.addEventListener('click', () => {
+    setListeningCorrectionMode(listeningCorrectionMode() === 'auto' ? 'manual' : 'auto');
+    showMode();
+  });
+  showMode();
+  row.appendChild(mode);
+  box.appendChild(row);
+  if (wordsShown && Array.isArray(moment.lines)) {
+    const words = listeningAnswerWords(q);
+    const caption = document.createElement('div');
+    caption.className = 'host-moment-lines';
+    moment.lines.forEach((line) => {
+      const p = document.createElement('p');
+      if (line.who) {
+        const who = document.createElement('strong');
+        who.textContent = `${line.who}: `;
+        p.appendChild(who);
+      }
+      String(line.text || '').split(/([^\p{L}\p{N}']+)/u).forEach((part) => {
+        if (!part) return;
+        if (words.has(part.toLowerCase())) {
+          const mark = document.createElement('mark');
+          mark.textContent = part;
+          p.appendChild(mark);
+        } else {
+          p.appendChild(document.createTextNode(part));
+        }
+      });
+      caption.appendChild(p);
+    });
+    box.appendChild(caption);
+  }
+  return box;
 }
 
 // P on a listening section plays or pauses its recording on the projector.
@@ -17336,6 +17998,8 @@ const LISTENING_DEFAULT_PLAYS = 2;
 // A section's transcript is for the teacher (checking answers, making the
 // recording); students never receive it.
 const LISTENING_MAX_TRANSCRIPT = 20000;
+const LISTENING_MAX_CUES = 400;
+const LISTENING_MAX_CUE_TEXT = 300;
 
 function sanitizeListeningSectionId(value) {
   const id = String(value || '').trim();
@@ -17360,6 +18024,7 @@ function normalizeListeningSectionList(raw) {
     seen.add(id);
     const plays = Number(s.playsAllowed);
     const transcript = String(s.transcript || '').trim().slice(0, LISTENING_MAX_TRANSCRIPT);
+    const cues = normalizeListeningCues(s.cues);
     return {
       id,
       title: String(s.title || '').trim().slice(0, 120),
@@ -17369,8 +18034,38 @@ function normalizeListeningSectionList(raw) {
       pauseAllowed: s.pauseAllowed !== false,
       speedAllowed: s.speedAllowed !== false,
       ...(transcript ? { transcript } : {}),
+      ...(cues.length ? { cues } : {}),
     };
   }).filter(Boolean);
+}
+
+// A section's timings (LISTENING_MODE_PLAN.md section 12): what is said when,
+// one cue per spoken line, in the order heard. Teacher-only: never in a
+// student payload before the teacher shows it.
+function normalizeListeningCues(raw) {
+  const num = (v) => Math.round(Math.max(0, Number(v)) * 100) / 100;
+  return (Array.isArray(raw) ? raw : [])
+    .map((c) => {
+      const s = num(c?.s);
+      const e = num(c?.e);
+      const text = String(c?.text || '').replace(/\s+/g, ' ').trim().slice(0, LISTENING_MAX_CUE_TEXT);
+      if (!Number.isFinite(s) || !Number.isFinite(e) || !text) return null;
+      const who = String(c?.who || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      return { s, e: Math.max(s, e), ...(who ? { who } : {}), text };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.s - b.s)
+    .slice(0, LISTENING_MAX_CUES);
+}
+
+// Which cues a section question's answer is heard in: { from, to, by } with
+// by 'teacher' (chosen in the editor, never re-guessed) or 'auto'.
+function normalizeListeningHeard(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const from = Math.round(Number(raw.from));
+  const to = Math.round(Number(raw.to ?? raw.from));
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to - from > 5) return null;
+  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto' };
 }
 
 // Which questions belong to which section, fixed in place. A question stays in
@@ -17422,6 +18117,13 @@ function normalizeListeningSections(rawSections, questions) {
   const sections = normalizeListeningSectionList(rawSections);
   const used = assignListeningMembership(questions, sections.map((s) => s.id));
   (questions || []).forEach((q) => { if (q?.listeningSection) stripListeningQuestionMedia(q); });
+  (questions || []).forEach((q) => {
+    if (!q || !('heard' in q)) return;
+    const heard = normalizeListeningHeard(q.heard);
+    const cues = sections.find((s) => s.id === q.listeningSection)?.cues || [];
+    if (heard && heard.to < cues.length) q.heard = heard;
+    else delete q.heard;
+  });
   return sections.filter((s) => used.has(s.id));
 }
 
@@ -17468,6 +18170,7 @@ function normalizeQuizForLive(raw) {
       media: normalizeQuestionMedia(q.media),
       ...(normalizeCefr(q.cefr) ? { cefr: normalizeCefr(q.cefr) } : {}),
       ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
+      ...(normalizeListeningHeard(q.heard) ? { heard: normalizeListeningHeard(q.heard) } : {}),
     };
 
     if (base.ttsLanguage === 'OTHER' && !String(q.language || '').trim() && !String(raw.language || '').trim()) {

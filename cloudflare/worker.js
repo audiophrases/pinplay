@@ -658,6 +658,19 @@ export default {
       );
     }
 
+    if (url.pathname === '/api/host/listening/words' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const pin = sanitizePin(body?.pin);
+      const token = readBearer(request);
+      if (!pin) return json({ error: 'PIN required.' }, 400);
+      if (!token) return json({ error: 'Host auth required.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(pin));
+      return withCors(await stub.fetch('https://room/host/listening/words', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }));
+    }
+
     if (url.pathname === '/api/host/settings' && request.method === 'POST') {
       const body = await safeJson(request);
       const pin = sanitizePin(body?.pin);
@@ -4969,6 +4982,14 @@ export class QuizRoom {
         return json(hostState(room));
       }
 
+      if (url.pathname === '/host/listening/words' && request.method === 'POST') {
+        const token = readBearer(request);
+        if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
+        const range = room.phase === 'question' ? roomListeningRange(room, room.currentIndex) : null;
+        if (range && room.listeningFinalized && showListeningWords(room, range)) await this.#setRoom(room);
+        return json(hostState(room));
+      }
+
       if (url.pathname === '/host/settings' && request.method === 'POST') {
         const token = readBearer(request);
         if (token !== room.hostToken) return json({ error: 'Unauthorized host.' }, 401);
@@ -6681,6 +6702,38 @@ function revealListeningAnswer(room, range) {
   return true;
 }
 
+// Timed moments (LISTENING_MODE_PLAN.md section 12): where a question's
+// answer is heard, from 1 s before its first cue to just after its last.
+// The words come only once the teacher has shown them: hear first, then read.
+function listeningMoment(range, question, withWords) {
+  const cues = range.section.cues || [];
+  const h = question?.heard;
+  if (!h || !cues[h.from] || !cues[h.to]) return null;
+  return {
+    start: Math.max(0, Math.round((cues[h.from].s - 1) * 100) / 100),
+    end: Math.round((cues[h.to].e + 0.4) * 100) / 100,
+    ...(withWords ? { lines: cues.slice(h.from, h.to + 1).map((c) => ({ who: c.who || '', text: c.text })) } : {}),
+  };
+}
+
+function listeningWordsShownIndexes(room, range) {
+  const done = room.listeningDone?.[range.section.id];
+  return new Set((done?.words || []).map((k) => range.first + Number(k)));
+}
+
+// The words of the question being corrected, on the projector and on the
+// phones of those who missed it. They come with the answer if it isn't out yet.
+function showListeningWords(room, range) {
+  revealListeningAnswer(room, range);
+  const done = room.listeningDone[range.section.id];
+  done.words = done.words || [];
+  const k = room.currentIndex - range.first;
+  if (done.words.includes(k)) return false;
+  done.words.push(k);
+  room.updatedAt = Date.now();
+  return true;
+}
+
 // Coming back to a section that was already marked reopens its correction as
 // it was left, answers, marks and points kept: at its first question from
 // before it, at its last from after it.
@@ -6773,6 +6826,19 @@ function playerListeningState(room, playerId, range) {
         : { correct: !!r.correct, points: Number(r.pointsAwarded || 0), partialScore: r.partialScore, partialTotal: r.partialTotal, correctAnswer: hostCorrectSummary(q) };
     }
   }
+  // "You heard: …" once the teacher shows the words, for a wrong, partly
+  // right or blank answer.
+  const heard = {};
+  if (closed) {
+    const words = listeningWordsShownIndexes(room, range);
+    words.forEach((i) => {
+      if (i < range.first || i > range.last) return;
+      const r = room.responsesByQuestion?.[i]?.[playerId];
+      if (r?.correct) return;
+      const moment = listeningMoment(range, room.quiz.questions[i], true);
+      if (moment) heard[i] = moment.lines;
+    });
+  }
   const questions = [];
   for (let i = range.first; i <= range.last; i += 1) questions.push(publicQuestion(room.quiz.questions[i]));
   return {
@@ -6780,6 +6846,7 @@ function playerListeningState(room, playerId, range) {
     first: range.first,
     last: range.last,
     questions,
+    ...(Object.keys(heard).length ? { heard } : {}),
     answers: room.sectionDrafts?.[playerId] || {},
     submitted: !!room.sectionSubmitted?.[playerId],
     closed,
@@ -6813,11 +6880,15 @@ function hostListeningState(room, range) {
 function hostListeningReview(room, range) {
   const q = room.quiz.questions[room.currentIndex];
   const shown = listeningRevealedIndexes(room, range);
+  const revealed = !shown || shown.has(room.currentIndex);
+  const wordsShown = listeningWordsShownIndexes(room, range).has(room.currentIndex);
   return {
     qIndex: room.currentIndex,
     step: room.currentIndex - range.first,
     count: range.last - range.first + 1,
-    revealed: !shown || shown.has(room.currentIndex),
+    revealed,
+    moment: revealed ? listeningMoment(range, q, wordsShown) : null,
+    wordsShown,
     question: {
       ...hostQuestionPayload(q),
       answerText: isLiveTeacherGraded(q) ? '' : hostCorrectSummary(q),
@@ -7242,6 +7313,8 @@ const LISTENING_DEFAULT_PLAYS = 2;
 // A section's transcript is for the teacher (checking answers, making the
 // recording); students never receive it.
 const LISTENING_MAX_TRANSCRIPT = 20000;
+const LISTENING_MAX_CUES = 400;
+const LISTENING_MAX_CUE_TEXT = 300;
 
 function sanitizeListeningSectionId(value) {
   const id = String(value || '').trim();
@@ -7266,6 +7339,7 @@ function normalizeListeningSectionList(raw) {
     seen.add(id);
     const plays = Number(s.playsAllowed);
     const transcript = String(s.transcript || '').trim().slice(0, LISTENING_MAX_TRANSCRIPT);
+    const cues = normalizeListeningCues(s.cues);
     return {
       id,
       title: String(s.title || '').trim().slice(0, 120),
@@ -7275,8 +7349,38 @@ function normalizeListeningSectionList(raw) {
       pauseAllowed: s.pauseAllowed !== false,
       speedAllowed: s.speedAllowed !== false,
       ...(transcript ? { transcript } : {}),
+      ...(cues.length ? { cues } : {}),
     };
   }).filter(Boolean);
+}
+
+// A section's timings (LISTENING_MODE_PLAN.md section 12): what is said when,
+// one cue per spoken line, in the order heard. Teacher-only: never in a
+// student payload before the teacher shows it.
+function normalizeListeningCues(raw) {
+  const num = (v) => Math.round(Math.max(0, Number(v)) * 100) / 100;
+  return (Array.isArray(raw) ? raw : [])
+    .map((c) => {
+      const s = num(c?.s);
+      const e = num(c?.e);
+      const text = String(c?.text || '').replace(/\s+/g, ' ').trim().slice(0, LISTENING_MAX_CUE_TEXT);
+      if (!Number.isFinite(s) || !Number.isFinite(e) || !text) return null;
+      const who = String(c?.who || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      return { s, e: Math.max(s, e), ...(who ? { who } : {}), text };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.s - b.s)
+    .slice(0, LISTENING_MAX_CUES);
+}
+
+// Which cues a section question's answer is heard in: { from, to, by } with
+// by 'teacher' (chosen in the editor, never re-guessed) or 'auto'.
+function normalizeListeningHeard(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const from = Math.round(Number(raw.from));
+  const to = Math.round(Number(raw.to ?? raw.from));
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to - from > 5) return null;
+  return { from, to, by: raw.by === 'teacher' ? 'teacher' : 'auto' };
 }
 
 // Which questions belong to which section, fixed in place. A question stays in
@@ -7328,6 +7432,13 @@ function normalizeListeningSections(rawSections, questions) {
   const sections = normalizeListeningSectionList(rawSections);
   const used = assignListeningMembership(questions, sections.map((s) => s.id));
   (questions || []).forEach((q) => { if (q?.listeningSection) stripListeningQuestionMedia(q); });
+  (questions || []).forEach((q) => {
+    if (!q || !('heard' in q)) return;
+    const heard = normalizeListeningHeard(q.heard);
+    const cues = sections.find((s) => s.id === q.listeningSection)?.cues || [];
+    if (heard && heard.to < cues.length) q.heard = heard;
+    else delete q.heard;
+  });
   return sections.filter((s) => used.has(s.id));
 }
 
@@ -7361,6 +7472,7 @@ function normalizeQuiz(quiz) {
       media: normalizeQuestionMedia(q),
       ...(normalizeCefrLevel(q.cefr) ? { cefr: normalizeCefrLevel(q.cefr) } : {}),
       ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
+      ...(normalizeListeningHeard(q.heard) ? { heard: normalizeListeningHeard(q.heard) } : {}),
     };
 
     if (['mcq', 'multi'].includes(q.type)) {

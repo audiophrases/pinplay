@@ -2,6 +2,7 @@
 levels, the four effects (phone, PA, far, radio), sounds (chime, ring,
 beep), backgrounds, the timeline of one recording, and MP3 export.
 Plain numpy/scipy: no ffmpeg needed. Everything is mono float32 at SR."""
+import json
 import math
 
 import numpy as np
@@ -130,11 +131,12 @@ def ambience(seconds, kind, rng=None):
 
 
 # ---------------------------------------------------------------- the timeline
-def build_part(items, voices, clips, spacing='natural', ambience_kind='none'):
+def build_part(items, voices, clips, spacing='natural', ambience_kind='none', cues=None):
     """One recording from one part of a parsed script.
     items: the part's items (listening-script.js). voices: { Name: {effect} }.
     clips: for line number k (index in items) a list of float arrays, one per
-    speaker. Returns a float32 array."""
+    speaker. Returns a float32 array. If a list is given as cues, each spoken
+    line is added to it as {s, e, who, text} (seconds): PinPlay's timings."""
     gap = SPACING.get(spacing, SPACING['natural'])
     placed = []  # (start_seconds, audio)
     cursor = 0.4
@@ -157,9 +159,13 @@ def build_part(items, voices, clips, spacing='natural', ambience_kind='none'):
                 seg = EFFECTS[effect](seg)
             segs.append(seg)
         start = max(0.4, cursor - OVERLAP) if it.get('overlap') else cursor + gap
+        end = start
         for j, seg in enumerate(segs):
             placed.append((start + j * TOGETHER, seg))
+            end = max(end, start + j * TOGETHER + len(seg) / SR)
             cursor = max(cursor, start + j * TOGETHER + len(seg) / SR)
+        if cues is not None:
+            cues.append({'s': round(start, 2), 'e': round(end, 2), 'who': ' + '.join(it['speakers']), 'text': it['text']})
     total = cursor + 0.6
     out = np.zeros(int(total * SR) + 1, dtype=np.float32)
     for start, seg in placed:
@@ -170,6 +176,33 @@ def build_part(items, voices, clips, spacing='natural', ambience_kind='none'):
     if peak > 0.98:
         out *= 0.98 / peak
     return out
+
+
+def timings_tag(cues):
+    """An ID3v2.3 tag with the timings in a TXXX frame named "PinPlay timings"
+    (JSON, ASCII only). PinPlay reads it when the MP3 is added to a listening
+    section, then uploads the audio without it."""
+    rows = [[c['s'], c['e'], c.get('who', ''), c['text']] for c in cues]
+    value = json.dumps({'v': 1, 'cues': rows}, ensure_ascii=True, separators=(',', ':')).encode('ascii')
+    body = b'\x00' + b'PinPlay timings\x00' + value
+    frame = b'TXXX' + len(body).to_bytes(4, 'big') + b'\x00\x00' + body
+    size = len(frame)
+    syncsafe = bytes([(size >> 21) & 0x7f, (size >> 14) & 0x7f, (size >> 7) & 0x7f, size & 0x7f])
+    return b'ID3\x03\x00\x00' + syncsafe + frame
+
+
+def to_vtt(cues):
+    """The same timings as WebVTT subtitles, for PinPlay or any player."""
+    def clock(t):
+        ms = int(round(t * 1000))
+        return f'{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d}.{ms % 1000:03d}'
+    out = ['WEBVTT', '']
+    for c in cues:
+        out.append(f"{clock(c['s'])} --> {clock(c['e'])}")
+        text = c['text'].replace('-->', '->')
+        out.append(f"<v {c['who']}>{text}" if c.get('who') else text)
+        out.append('')
+    return '\n'.join(out)
 
 
 def to_mp3(x, kbps=96):

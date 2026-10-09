@@ -575,9 +575,12 @@ async function vaRender() {
   total += lead;
   const off = new OfflineAudioContext(1, Math.ceil(total * VA_RATE), VA_RATE);
   let at = lead;
+  // Where each line lands: the section's timings (LISTENING_MODE_PLAN.md 12c).
+  const cues = [];
   lines.forEach((line, i) => {
     const trim = vaTrimOf(line);
     if (i > 0) at += vaLineGap(line);
+    cues.push({ s: at, e: at + (trim.e - trim.s) / 1000, who: line.speaker, text: line.text });
     const src = off.createBufferSource();
     src.buffer = va.buffers.get(line.take.key);
     const gain = off.createGain();
@@ -587,7 +590,7 @@ async function vaRender() {
     src.start(at, trim.s / 1000, dur);
     at += dur;
   });
-  return { rendered: await off.startRendering(), skipped: va.session.lines.length - lines.length };
+  return { rendered: await off.startRendering(), skipped: va.session.lines.length - lines.length, cues };
 }
 
 function vaToInt16(floats) {
@@ -628,7 +631,7 @@ async function vaBuild(kind) {
   vaStop();
   vaStatus(t('⏳ Putting the recording together…'));
   try {
-    const { rendered, skipped } = await vaRender();
+    const { rendered, skipped, cues } = await vaRender();
     const { blob, ext } = await vaEncode(rendered);
     const name = `${String(va.session.title || 'recording').replace(/[\\/:*?"<>|]+/g, '').trim() || 'recording'}.${ext}`;
     const note = skipped ? ` ${t('({n} lines not recorded were left out.)', { n: skipped })}` : '';
@@ -645,7 +648,7 @@ async function vaBuild(kind) {
     }
     const secId = vaEl('[data-va-target]')?.value;
     if (!secId) return;
-    await attachListeningRecording(secId, new File([blob], name, { type: blob.type }));
+    await attachListeningRecording(secId, new File([blob], name, { type: blob.type }), { cues });
     vaStatus(t('✅ The recording is in the listening section.') + note, 'ok');
   } catch (err) {
     vaStatus(t('Could not build the recording ({msg}).', { msg: err.message }), 'bad');

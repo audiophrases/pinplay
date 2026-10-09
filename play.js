@@ -9231,7 +9231,7 @@ function liveListeningLocked(L) {
 
 // Everything that changes what a live sheet shows: the sheet is redrawn when it does.
 function liveListeningStage(L) {
-  return JSON.stringify([liveListeningLocked(L), !!L?.closed, L?.review || null, L?.marks || null]);
+  return JSON.stringify([liveListeningLocked(L), !!L?.closed, L?.review || null, L?.marks || null, L?.heard || null]);
 }
 
 function maybeRenderLiveListeningSheet(state) {
@@ -9660,8 +9660,31 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       fb.textContent = t('Not answered');
     }
     if (fb.textContent) card.appendChild(fb);
+    // Live correction: the words of the moment, once the teacher shows them.
+    const heard = listeningSheet.mode === 'live' ? listeningSheet.live?.heard?.[qIndex] : null;
+    if (Array.isArray(heard) && heard.length) card.appendChild(listeningHeardBox(heard));
   }
   return card;
+}
+
+function listeningHeardBox(lines) {
+  const box = document.createElement('div');
+  box.className = 'ls-heard';
+  const label = document.createElement('span');
+  label.className = 'ls-heard-label';
+  label.textContent = t('You heard:');
+  box.appendChild(label);
+  lines.forEach((line) => {
+    const p = document.createElement('p');
+    if (line?.who) {
+      const who = document.createElement('strong');
+      who.textContent = `${line.who}: `;
+      p.appendChild(who);
+    }
+    p.appendChild(document.createTextNode(String(line?.text || '')));
+    box.appendChild(p);
+  });
+  return box;
 }
 
 // Same rule as the one-question screen: the changed words are the "found" errors.
