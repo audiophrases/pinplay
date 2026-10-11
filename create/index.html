@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261009-moments" />
+    <link rel="stylesheet" href="../styles.css?v=20261011-buildup" />
   </head>
   <body>
     <header class="topbar">
@@ -551,18 +551,22 @@
                   <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
                   <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
                   <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
-                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level." data-i18n-title>
+                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level. Build up: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
                     <input id="assignmentAdaptive" type="checkbox" />
-                    <span data-i18n>🎯 Adaptive</span>
+                    <select id="assignmentAdaptiveMode" aria-label="Adaptive or Build up" data-i18n-aria disabled>
+                      <option value="adaptive" data-i18n>🎯 Adaptive</option>
+                      <option value="buildup" data-i18n>⛰️ Build up</option>
+                    </select>
                     <span id="assignmentAdaptiveRange" class="small muted"></span>
                     <span id="assignmentAdaptiveCountWrap">
                       <input id="assignmentAdaptiveCount" type="number" min="1" value="20" disabled aria-label="Questions per student" data-i18n-aria />
-                      <span class="small" data-i18n>questions per student</span>
+                      <span id="assignmentAdaptiveCountLabel" class="small" data-i18n>questions per student</span>
                     </span>
                     <span id="assignmentAdaptiveSections" class="small muted hidden" data-i18n>+ listening sections at each student's level</span>
                   </label>
                   <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
                 </div>
+                <p id="assignmentBuildupNote" class="small muted hidden" data-i18n>⛰️ Build up: everyone starts at the bottom and climbs step by step; a wrong answer goes one step back; it ends at the summit. Instant feedback, single auto-graded questions only.</p>
                 <p id="assignmentStatus" class="small muted"></p>
                 <div class="top-space">
                   <div class="row spread gap">
@@ -694,8 +698,9 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261009-heard"></script>
+    <script src="../i18n-fr.js?v=20261011-buildup"></script>
     <script src="../i18n.js"></script>
+    <script src="../buildup.js?v=20261011-buildup"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
     <script src="../wordle-lexicon-ca.js"></script>
@@ -704,7 +709,7 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261005-calm"></script>
-    <script src="../app.js?v=20261009-heard"></script>
+    <script src="../app.js?v=20261011-buildup"></script>
     <script src="../voice-actors.js?v=20261009-moments"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261008-voices"></script>

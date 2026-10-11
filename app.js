@@ -357,6 +357,9 @@ const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
 // Adaptive assignments: questions each student answers unless the teacher sets another number.
 const ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT = 20;
+// Build up (BUILDUP_MODE_PLAN.md): the cap is a safety net, 4 answers per step.
+const BUILDUP_COUNT_PER_STEP = 4;
+const BUILDUP_MAX_COUNT = 100;
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
@@ -5956,9 +5959,11 @@ async function createLiveGame(opts = {}) {
     const payload = normalizeQuizForLive(quiz);
     // PinPlay Cup follows the Assignments "🎯 Adaptive" checkbox (shown only
     // for quizzes with 2+ tagged levels); the board itself has no toggle.
+    // (Build up is for homework: a Cup ignores it and plays as usual.)
     const arenaAdaptive = arenaMode
       && !!document.getElementById('assignmentAdaptive')?.checked
-      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
+      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden')
+      && !assignmentBuildupSelected();
     const data = await api('/api/create', {
       method: 'POST',
       body: {
@@ -9948,7 +9953,12 @@ function renderAssignmentResults(safeCode, data) {
     const nameWrap = document.createElement('span');
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
     const lv = a?.adaptive;
-    const levelBadge = lv?.usualLevel
+    const bu = lv?.buildup;
+    const buCamp = (i) => (window.PinBuildup ? `${window.PinBuildup.campName(i, bu.n)}${bu.bands?.[i] ? ` (${bu.bands[i]})` : ''} · ${window.PinBuildup.fmtAlt(window.PinBuildup.altitude(i, bu.n))}` : '');
+    const levelBadge = bu
+      ? `<span class="badge-buildup" title="${escapeHtml(t('Build up: highest {best} · now {now}', { best: buCamp(bu.best), now: buCamp(bu.rung) }))}${lv.path ? `
+${escapeHtml(lv.path)}` : ''}">⛰️ ${escapeHtml(bu.summit ? t('Summit') : window.PinBuildup ? window.PinBuildup.campName(bu.best, bu.n) : '')}${bu.stuck ? ' ⚠️' : ''}</span>`
+      : lv?.usualLevel
       ? `<span class="badge-adaptive" title="${escapeHtml(t('Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' }))}${lv.path ? `
 ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
       : '';
@@ -9980,7 +9990,11 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
       meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
     }
     let levelsLine = null;
-    if (lv?.usualLevel) {
+    if (bu) {
+      levelsLine = document.createElement('div');
+      levelsLine.className = 'small muted';
+      levelsLine.textContent = `${bu.summit ? t('⛰️ Summit reached') : t('⛰️ Highest {best}', { best: buCamp(bu.best) })} · ${t('now {now}', { now: buCamp(bu.rung) })}${bu.stuck ? ` · ${t('⚠️ stuck: three wrong answers in a row')}` : ''}`;  // i18n-ignore (text is t()-wrapped)
+    } else if (lv?.usualLevel) {
       levelsLine = document.createElement('div');
       levelsLine.className = 'small muted';
       const perLevel = CEFR_LEVELS
@@ -11153,7 +11167,9 @@ function buildAssignmentListItem(a) {
   const attemptsCountTag = attemptsCount > 0
     ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
     : '';
-  const sizeTag = a?.adaptiveCount
+  const sizeTag = a?.buildup
+    ? `<span class="badge-buildup" title="${escapeHtml(t('For students who need to build a skill: everyone starts at the bottom and climbs step by step. A wrong answer goes one step back.'))}">${escapeHtml(t('⛰️ Build up · up to {n} questions per student', { n: Number(a.adaptiveCount || 0) }))}</span>`
+    : a?.adaptiveCount
     ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} questions per student', { n: Number(a.adaptiveCount) }))}</span>`
     : `${Number(a?.totalQuestions || 0)}q`;
   title.innerHTML = `<strong>${escapeHtml(String(a?.title || 'Assignment'))}</strong> · ${escapeHtml(code)} · ${sizeTag}${attemptsCountTag}${pendingBadge}${archivedTag}${liveTag}${publicTag}`;
@@ -11404,9 +11420,15 @@ async function createAssignmentFromCurrentQuiz() {
 
     const adaptiveOn = !!document.getElementById('assignmentAdaptive')?.checked
       && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
-    const adaptiveCount = adaptiveOn && adaptiveSingleQuestionCount() > 0
-      ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
-      : 0;
+    const buildupOn = adaptiveOn && assignmentBuildupSelected();
+    if (buildupOn && buildupAvailableLevels().length < 2) {
+      throw new Error(t('Build up needs auto-graded questions tagged with at least two levels.'));
+    }
+    const adaptiveCount = buildupOn
+      ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableLevels().length))))
+      : (adaptiveOn && adaptiveSingleQuestionCount() > 0
+        ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
+        : 0);
 
     const data = await api('/api/assignments/create', {
       method: 'POST',
@@ -11421,6 +11443,7 @@ async function createAssignmentFromCurrentQuiz() {
         examMode: assignmentExamMode,
         adaptiveCount,
         adaptive: adaptiveOn,
+        buildup: buildupOn,
         cloudQuizId: quiz._r2QuizId || '',
         quiz: normalizeQuizForLive(quiz),
       },
@@ -11430,7 +11453,9 @@ async function createAssignmentFromCurrentQuiz() {
     const link = buildAssignmentJoinLink(code);
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
     const createdCount = Number(data?.assignment?.adaptiveCount || 0);
-    const adaptiveLabel = createdCount ? ` · ${t('🎯 Adaptive · {n} questions per student', { n: createdCount })}` : '';
+    const adaptiveLabel = createdCount
+      ? ` · ${data?.assignment?.buildup ? t('⛰️ Build up · up to {n} questions per student', { n: createdCount }) : t('🎯 Adaptive · {n} questions per student', { n: createdCount })}`
+      : '';
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}${adaptiveLabel}`;
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("{p1} · Link: {p2}", { p1: msg, p2: link });
@@ -17346,6 +17371,26 @@ let levelTagSnapshot = null;
 // levelled quiz starts ticked while an untick sticks as the teacher edits.
 let adaptiveDefaultedFor = null;
 
+// Build up serves one question at a time from the bottom: single, auto-graded,
+// tagged questions only (the server checks too).
+function isBuildupQuestion(q) {
+  return isAdaptiveEligibleQuestion(q) && !q.listeningSection
+    && !['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)
+    && !(q.type === 'text' && !(Array.isArray(q.accepted) && q.accepted.some((a) => String(a || '').trim())));
+}
+
+function buildupAvailableLevels() {
+  const found = new Set((quiz?.questions || []).filter(isBuildupQuestion).map((q) => normalizeCefr(q.cefr)).filter(Boolean));
+  return CEFR_LEVELS.filter((l) => found.has(l));
+}
+
+// The Adaptive box plus the mode picker set to Build up.
+function assignmentBuildupSelected() {
+  return !!document.getElementById('assignmentAdaptive')?.checked
+    && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden')
+    && document.getElementById('assignmentAdaptiveMode')?.value === 'buildup';
+}
+
 // Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
 // questions tagged with at least two levels (the server checks too).
 // Ticked by default; the same box makes PinPlay Cup games adaptive.
@@ -17374,7 +17419,33 @@ function syncAssignmentAdaptiveControl() {
     box.checked = true;
   }
   if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
-  if (countEl) {
+  // Adaptive or Build up: Build up needs two levels of auto-graded questions.
+  const modeEl = document.getElementById('assignmentAdaptiveMode');
+  const buildupLevels = buildupAvailableLevels();
+  if (modeEl) {
+    const opt = modeEl.querySelector('option[value="buildup"]');
+    if (opt) opt.disabled = buildupLevels.length < 2;
+    if (buildupLevels.length < 2 && modeEl.value === 'buildup') modeEl.value = 'adaptive';
+    modeEl.disabled = !box?.checked;
+  }
+  const buildup = assignmentBuildupSelected();
+  document.getElementById('assignmentBuildupNote')?.classList.toggle('hidden', !buildup);
+  if (buildup) {
+    // No sections in a build up; the number is a cap, not a list of questions.
+    document.getElementById('assignmentAdaptiveCountWrap')?.classList.remove('hidden');
+    document.getElementById('assignmentAdaptiveSections')?.classList.add('hidden');
+    if (rangeEl) rangeEl.textContent = `${buildupLevels[0]}–${buildupLevels[buildupLevels.length - 1]}`;
+  }
+  if (countEl && buildup) {
+    const wanted = Number(countEl.dataset.wantedBuildup) || buildupDefaultCount(buildupLevels.length);
+    countEl.max = String(BUILDUP_MAX_COUNT);
+    countEl.value = String(Math.max(1, Math.min(wanted, BUILDUP_MAX_COUNT)));
+    countEl.disabled = !box?.checked;
+    const label = document.getElementById('assignmentAdaptiveCountLabel');
+    if (label) label.textContent = t('questions at most per student');
+  } else if (countEl) {
+    const label = document.getElementById('assignmentAdaptiveCountLabel');
+    if (label) label.textContent = t('questions per student');
     // The teacher's number (or the default), capped at what this quiz can
     // serve. Only while the control is offered: with no levelled quiz loaded
     // yet there is nothing to cap against, and the default must survive.
@@ -17446,12 +17517,26 @@ function adaptiveSingleQuestionCount() {
   return (quiz?.questions || []).filter((q) => isAdaptiveEligibleQuestion(q) && !q.listeningSection && normalizeCefr(q.cefr)).length;
 }
 
+function buildupDefaultCount(steps) {
+  return Math.max(4, Math.min(BUILDUP_MAX_COUNT, steps * BUILDUP_COUNT_PER_STEP));
+}
+
 function initAssignmentAdaptiveControl() {
   const box = document.getElementById('assignmentAdaptive');
   if (!box) return;
   const countEl = document.getElementById('assignmentAdaptiveCount');
   // Remember what the teacher typed, so a smaller quiz only caps it for now.
-  countEl?.addEventListener('input', () => { countEl.dataset.wanted = countEl.value; });
+  countEl?.addEventListener('input', () => {
+    if (assignmentBuildupSelected()) countEl.dataset.wantedBuildup = countEl.value;
+    else countEl.dataset.wanted = countEl.value;
+  });
+  document.getElementById('assignmentAdaptiveMode')?.addEventListener('change', () => {
+    // Build up learns from every miss: instant feedback.
+    if (assignmentBuildupSelected()) {
+      for (let i = 0; i < 3 && assignmentFeedbackMode !== 'instant'; i++) toggleInstantFeedbackMode();
+    }
+    syncAssignmentAdaptiveControl();
+  });
   box.addEventListener('change', () => {
     // Adaptive pairs best with instant feedback; the teacher can still change it.
     if (box.checked) {

@@ -16,7 +16,7 @@ const NAMES = [
   'adaptiveNext', 'adaptiveBand', 'clamp', 'sanitizeBet', 'sanitizeAssignmentAnswer', 'adaptiveRecord', 'adaptiveRecordPending',
   'adaptiveOutcome', 'evaluate', 'adaptivePathOk', 'ADAPTIVE_PATH_MAX', 'adaptiveTally', 'adaptiveStepScale', 'ADAPTIVE_STEP_SETTLED',
   'ADAPTIVE_STEP_NEW', 'ADAPTIVE_SETTLE_HALF', 'ADAPTIVE_UP', 'adaptiveAttemptAdvance', 'adaptiveRebase', 'evaluateAssignmentAttempt',
-  'adaptiveAttemptView', 'verdictScoreFraction', 'applyBetScore', 'round', 'studentSessionSecret', 'sha256Hex', 'b64urlEncodeBytes',
+  'adaptiveAttemptView', 'assignmentBuildupOn', 'buildupView', 'buildupNeed', 'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'verdictScoreFraction', 'applyBetScore', 'round', 'studentSessionSecret', 'sha256Hex', 'b64urlEncodeBytes',
   'b64urlDecodeBytes', 'constantTimeEqual', 'hmacSignBytes', 'publicAssignmentAttempt', 'hostCorrectSummary',
   'sanitizeAssignmentAttemptId', 'sanitizeAssignmentStudentKey', 'normalizeStudentKeyInput', 'sanitizeName', 'sanitizeEmail',
   'sanitizeClassName', 'publicAssignment', 'publicListeningSections', 'attemptSectionSubmitted', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'normalizeListeningHeard', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'normalizeTimeLimitValue', 'minTimeByType', 'normalizeQuestionMedia',

@@ -3480,6 +3480,7 @@ window.onLocaleChange = function () {
 function renderPlayerState(state) {
   _i18nLastPlayerState = state;
   syncLobbyAvatarEditor(state);
+  syncClimbTrail();
   if (maybeRenderListeningSheet(state)) return;
   // Clear liveRevealApplied when the question changes (different index)
   if (live.player.liveRevealApplied && state.currentIndex !== live.player.liveRevealForIndex) {
@@ -3588,7 +3589,12 @@ function renderPlayerState(state) {
   }
   setJoinAvatar(state?.avatar);
 
-  if (joinProgressEl) joinProgressEl.textContent = `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
+  if (joinProgressEl) {
+    // Build up has no number to reach: the trail is the progress.
+    joinProgressEl.textContent = currentClimb()
+      ? t('Question {n}', { n: Math.max(0, state.currentIndex + 1) })
+      : `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
+  }
   if (joinScoreEl) {
     // In deferred-feedback assignments, the running score leaks correctness — hide it
     // until the student submits. Live mode and instant-feedback assignments still show it.
@@ -3798,8 +3804,9 @@ function renderPlayerState(state) {
     setJoinStatusHud(t('All answers saved ✅'), 'ok');
     setStatus(joinStatusEl, isGame ? t('That was the last question.') : t('End of quiz reached. Submit assignment to finish.'), 'ok');
     const allowEditing = state.feedbackMode !== 'instant' && !live.player.assignment.state?.attempt?.adaptive;
-    showAssignmentCompleteMessage(isGame ? t('See your score and your answers.') : 'All answers are saved. You reached the end of the quiz.', {
-      title: 'End of quiz 🎉',
+    const climbEnd = climbEndText();
+    showAssignmentCompleteMessage(climbEnd ? climbEnd.text : (isGame ? t('See your score and your answers.') : 'All answers are saved. You reached the end of the quiz.'), {
+      title: climbEnd ? climbEnd.title : 'End of quiz 🎉',
       showFinishButton: true,
       finishLabel: isGame ? t('🏁 See my score') : 'Submit assignment',
       showReviewButton: allowEditing,
@@ -3979,7 +3986,7 @@ function renderPlayerState(state) {
         : assignmentSubmitted
           ? 'Assignment submitted. Waiting for teacher review.'
           : adaptiveOpen
-            ? t('Answered {done}/{total}', { done: answered.size, total })
+            ? (currentClimb() ? t('Answered: {n}', { n: answered.size }) : t('Answered {done}/{total}', { done: answered.size, total }))
             : `Answered ${answered.size}/${total}. Use Next unanswered to continue.`;
     }
   } else {
@@ -6410,6 +6417,66 @@ function setJoinTitle(name = '') {
   // Also update player name in header row
   const playerNameEl = document.getElementById('joinPlayerName');
   if (playerNameEl) playerNameEl.textContent = safe ? safe : '';
+}
+
+// ---------------------------------------------------------------- Build up
+// An adaptive quiz assigned as a climb (BUILDUP_MODE_PLAN.md): the server sends
+// attempt.climb with every state; buildup.js draws the Everest trail.
+let climbTrail = null;
+
+function currentClimb() {
+  const a = live.player.assignment;
+  if (live.player.mode !== 'assignment' || a?.reviewMode) return null;
+  const c = a?.state?.attempt?.climb;
+  return c && c.n >= 2 ? c : null;
+}
+
+function syncClimbTrail() {
+  const c = currentClimb();
+  document.body.classList.toggle('climb-active', !!c);
+  if (!c) {
+    if (climbTrail) climbTrail.el.classList.add('hidden');
+    return;
+  }
+  if (!window.PinBuildup) return;
+  if (!climbTrail) climbTrail = window.PinBuildup.mountTrail(document.body, { onToken: openClimbAvatarEditor });
+  const attempt = live.player.assignment.state.attempt;
+  climbTrail.update(c, { name: attempt.studentName || live.player.displayName });
+  // The words about the last move go with the feedback on the question just
+  // answered; on a fresh question there is nothing to say yet.
+  const served = Number(attempt.adaptive?.step || 0);
+  const viewing = Number(live.player.assignment.currentIndex || 0);
+  climbTrail.say(viewing < served || attempt.submitted ? c : null);
+}
+
+// The end screen: the summit, or how high the climb got.
+function climbEndText() {
+  const c = currentClimb();
+  if (!c || !window.PinBuildup) return null;
+  const B = window.PinBuildup;
+  const high = B.fmtAlt(B.altitude(c.best, c.n));
+  if (c.summit) return { title: t('Summit reached! 🚩'), text: t('You climbed all the way to {alt}. Well done!', { alt: high }) };
+  return { title: t('Great climb! 🏔️'), text: t('You reached {camp} ({alt}). Come back and climb higher!', { camp: B.campName(c.best, c.n), alt: high }) };
+}
+
+// Tap the token to choose another climber: the same avatar editor as in a Cup.
+function openClimbAvatarEditor() {
+  const arena = window.PinArena;
+  if (!arena || typeof arena.mountAvatarEditor !== 'function' || document.getElementById('climbAvatarModal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'climbAvatarModal';
+  overlay.className = 'climb-modal';
+  overlay.innerHTML = `<div class="climb-modal-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(t('Choose your climber'))}">
+    <h3>${escapeHtml(t('Choose your climber'))}</h3>
+    <div data-climb-editor></div>
+    <button type="button" class="btn primary" data-climb-close>${escapeHtml(t('Done'))}</button></div>`;
+  document.body.appendChild(overlay);
+  const close = () => { overlay.remove(); syncClimbTrail(); };
+  const attempt = live.player.assignment?.state?.attempt;
+  arena.mountAvatarEditor(overlay.querySelector('[data-climb-editor]'), { avatar: window.PinBuildup.avatarFor(attempt?.studentName || live.player.displayName) });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.closest('[data-climb-close]')) close(); });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  overlay.querySelector('[data-climb-close]').focus();
 }
 
 // Classic live games: the student's avatar next to their name in the header.

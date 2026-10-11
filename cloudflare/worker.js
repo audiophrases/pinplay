@@ -1227,7 +1227,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), adaptive: body?.adaptive === true, cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), adaptive: body?.adaptive === true, buildup: body?.buildup === true, cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
       }));
     }
 
@@ -2900,7 +2900,17 @@ export class QuizRoom {
         // (LISTENING_MODE_PLAN.md section 10). A quiz of sections only has N = 0.
         const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
         const sectionPlan = adaptiveSectionPlan(quiz);
-        if (adaptiveCount > 0 || (body?.adaptive === true && sectionPlan.length)) {
+        if (body?.buildup === true && adaptiveCount > 0) {
+          // Build up: single auto-graded questions only, from the bottom, with
+          // instant feedback (the student learns from every miss).
+          const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: true });
+          if (bands.length < 2 || !pool.length) {
+            return json({ error: 'Build up needs auto-graded questions tagged with at least two levels.' }, 400);
+          }
+          assignment.adaptive = { count: clamp(adaptiveCount, 1, BUILDUP_MAX_COUNT), mode: 'buildup' };
+          assignment.feedbackMode = 'instant';
+          assignment.examMode = false;
+        } else if (adaptiveCount > 0 || (body?.adaptive === true && sectionPlan.length)) {
           const { bands, pool } = assignmentAdaptivePool(assignment);
           if (bands.length < 2) {
             return json({ error: 'Adaptive mode needs questions tagged with at least two levels.' }, 400);
@@ -3265,13 +3275,14 @@ export class QuizRoom {
         // Signed-in students pick up their saved level (roster rows live in
         // this DO); anonymous ones start at the bottom. From /play a tagged
         // quiz is always adaptive, with the number of questions the player chose.
+        const buildupOn = !via && assignmentBuildupOn(assignment);
         const adaptiveOn = via ? !!publicAdaptivePool(assignment) : assignmentAdaptiveOn(assignment);
-        const savedLevel = adaptiveOn && studentEmail
+        const savedLevel = adaptiveOn && !buildupOn && studentEmail
           ? (await this.state.storage.get(rosterKey(studentEmail)))?.level
           : null;
         const adaptive = !adaptiveOn ? null : via
           ? publicAdaptiveAttemptInit(assignment, body?.count, savedLevel)
-          : adaptiveAttemptInit(assignment, savedLevel);
+          : (buildupOn ? buildupAttemptInit(assignment) : adaptiveAttemptInit(assignment, savedLevel));
         if (adaptive) attempt.adaptive = adaptive;
 
         assignment.attempts[attempt.id] = attempt;
@@ -3562,6 +3573,7 @@ export class QuizRoom {
           attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
           attempt.answersByQ[String(qi)] = { answer: safeAnswer, bet, teacherGrade: null, updatedAt: now };
           if (teacher) adaptiveRecordPending(st, qi, qBand);
+          else if (st.bu) buildupRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
           else adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
           adaptiveAttemptAdvance(assignment, st);
           if (st.done) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
@@ -8861,10 +8873,13 @@ function adaptiveSectionPlan(quiz, { autoOnly = false } = {}) {
 
 // Questions per student: N singles plus every section's block.
 function adaptiveAttemptTotal(st) {
+  // Build up ends at the summit, before the cap: what was answered is the total.
+  if (st?.bu && st.done) return (st.items || []).length;
   return Number(st?.count || 0) + (st?.sections || []).reduce((n, s) => n + Number(s.size || 0), 0);
 }
 
 function assignmentAdaptiveTotal(assignment) {
+  if (assignmentBuildupOn(assignment)) return assignmentAdaptiveCount(assignment);
   return assignmentAdaptiveCount(assignment) + adaptiveSectionPlan(assignment?.quiz).reduce((n, s) => n + s.size, 0);
 }
 
@@ -8893,6 +8908,12 @@ function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdapt
 function adaptiveAttemptServe(assignment, st, pool) {
   st.current = null;
   const singles = (st.items || []).filter((it) => !it.section).length;
+  if (st.bu) {
+    // Build up: no sections; the summit (or the cap) ends the attempt.
+    if (!st.bu.summit && singles < st.count) st.current = buildupNext(st, pool);
+    if (st.current == null) st.done = true;
+    return;
+  }
   const next = (st.sections || []).find((s) => !s.done);
   if (next && (next.after <= singles || singles >= st.count)) {
     adaptiveAttemptOpenBlock(assignment, st, next);
@@ -8955,7 +8976,8 @@ function adaptiveAttemptCloseBlock(assignment, attempt, now = Date.now()) {
 
 function adaptiveAttemptAdvance(assignment, st) {
   const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
-  adaptiveRebase(st, bands);
+  if (st.bu) buildupRebase(st, bands);
+  else adaptiveRebase(st, bands);
   adaptiveAttemptServe(assignment, st, pool);
 }
 
@@ -8993,6 +9015,7 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
 // new answers. Teacher grades applied so far are now on the roster too.
 async function adaptiveAttemptSaveLevel(storage, attempt) {
   const st = attempt?.adaptive;
+  if (st?.bu) return; // Build up never touches the saved level
   const email = sanitizeEmail(attempt?.studentEmail);
   const result = email ? adaptiveSessionResult(st) : null;
   if (!result) return;
@@ -9406,6 +9429,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     out.assignment.totalQuestions = adaptiveAttemptTotal(st);
     // Progress only: levels stay teacher-side.
     out.adaptive = { step: (st.items || []).length, total: adaptiveAttemptTotal(st), done: !!st.done };
+    if (st.bu) out.climb = buildupView(st);
     return out;
   }
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
@@ -10053,6 +10077,7 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     quizTitle: String(assignment.quiz?.title || ''),
     totalQuestions: (assignment.adaptive && assignmentAdaptiveTotal(assignment)) || Number(assignment.quiz?.questions?.length || 0),
     adaptiveCount: (assignment.adaptive && assignmentAdaptiveTotal(assignment)) || undefined,
+    ...(assignmentBuildupOn(assignment) ? { buildup: true } : {}),
     public: !!assignment.public,
     publishedAt: Number(assignment.publishedAt || 0) || null,
   };
@@ -10576,6 +10601,7 @@ function adaptiveSummary(st) {
     // ~ neutral · … waiting for the teacher's grade
     path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? (p.held ? '(✗)' : '✗') : '~'))}`).join(' '),
     perLevel: st.perLevel || {},
+    ...(st.bu ? { buildup: buildupSummary(st) } : {}),
     ...(Array.isArray(st.sectionResults) && st.sectionResults.length ? { sections: st.sectionResults } : {}),
   };
 }
@@ -10619,6 +10645,162 @@ function adaptiveNext(st, pool, rng = Math.random) {
     return top[Math.floor(rng() * top.length)].qi;
   }
   return pool.length === 1 && !(pool[0].teacher && st.seen[pool[0].qi]) ? pool[0].qi : null;
+}
+
+// ---------------------------------------------------------------- build up mode
+// Build up (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb for
+// students who need to build a skill step by step. The levels the quiz holds
+// are the steps, always from the bottom (no saved level is read or written).
+// A right answer fills a pip, enough pips climb a step; a wrong answer drops
+// one step. Students see an Everest trail (camps and altitude), never CEFR.
+const BUILDUP_NEED = 2;           // right answers in a row to leave a step
+const BUILDUP_NEED_EASY = 1;      // the first step, and any step already cleared
+const BUILDUP_TIP_AFTER = 3;      // wrong answers in a row that open the guide's tip
+const BUILDUP_MAX_COUNT = 100;    // most answers a student can be given
+
+function assignmentBuildupOn(assignment) {
+  return !!assignment?.adaptive && assignment.adaptive.mode === 'buildup';
+}
+
+function buildupInit(bands) {
+  const st = adaptiveInit(bands, null);
+  st.score = 0;
+  st.known = false;
+  st.autoOnly = true;
+  st.bu = { rung: 0, pips: 0, best: 0, cleared: [], wrongRun: 0, moved: null, flag: null, summit: false };
+  return st;
+}
+
+// Right answers needed to leave a step: one on the first step and on a step
+// the student already cleared (they are coming back up), else two.
+function buildupNeed(st, rung = st.bu.rung) {
+  return rung === 0 || st.bu.cleared.includes(rung) ? BUILDUP_NEED_EASY : BUILDUP_NEED;
+}
+
+// The answer to the served question moves the student. bu.moved says what
+// happened (for the trail): up, pip, down, hold, summit. bu.flag is a camp
+// reached for the first time.
+function buildupRecord(st, qi, qBand, outcome) {
+  const bu = st.bu;
+  const result = outcome === true ? 'right' : (outcome === false ? 'wrong' : outcome);
+  const level = st.bands[qBand] || '';
+  st.path.push({ qi, level, band: st.bands[bu.rung] || '', ok: adaptivePathOk(result) });
+  if (st.path.length > ADAPTIVE_PATH_MAX) st.path.splice(0, st.path.length - ADAPTIVE_PATH_MAX);
+  adaptiveTally(st, level, result).answered += 1;
+  const seen = st.seen[qi] || (st.seen[qi] = { n: 0, ok: false });
+  seen.n += 1;
+  seen.ok = result === 'right';
+  bu.moved = 'hold';
+  bu.flag = null;
+  if (result === 'right') {
+    bu.wrongRun = 0;
+    bu.pips += 1;
+    if (bu.pips >= buildupNeed(st)) {
+      if (bu.rung >= st.bands.length - 1) {
+        bu.summit = true;
+        bu.moved = 'summit';
+      } else {
+        if (!bu.cleared.includes(bu.rung)) bu.cleared.push(bu.rung);
+        bu.rung += 1;
+        bu.pips = 0;
+        bu.moved = 'up';
+        if (bu.rung > bu.best) {
+          bu.best = bu.rung;
+          bu.flag = bu.rung;
+        }
+      }
+    } else {
+      bu.moved = 'pip';
+    }
+  } else if (result === 'wrong') {
+    bu.wrongRun += 1;
+    bu.pips = 0;
+    if (bu.rung > 0) {
+      bu.rung -= 1;
+      bu.moved = 'down';
+    }
+  }
+  st.score = bu.rung;
+  st.answered += 1;
+  st.last = qi;
+}
+
+// Next question: the current step's pool, least seen first (a question just
+// missed comes before one answered right), never the one just answered unless
+// it is the only one. An empty step borrows the nearest one below, then above.
+function buildupNext(st, pool, rng = Math.random) {
+  if (!pool.length) return null;
+  const rung = st.bu.rung;
+  const order = [rung];
+  for (let d = 1; d < st.bands.length; d++) order.push(rung - d, rung + d);
+  for (const b of order) {
+    const all = pool.filter((p) => p.band === b);
+    if (!all.length) continue;
+    const cands = all.filter((p) => p.qi !== st.last);
+    const from = cands.length ? cands : all;
+    const rank = (p) => (st.seen[p.qi]?.n || 0) * 2 + (st.seen[p.qi]?.ok ? 1 : 0);
+    const best = Math.min(...from.map(rank));
+    const top = from.filter((p) => rank(p) === best);
+    return top[Math.floor(rng() * top.length)].qi;
+  }
+  return null;
+}
+
+// The quiz was edited and now holds different levels: stay on the same level
+// (or the nearest one above it), with the pips cleared.
+function buildupRebase(st, bands) {
+  if (!bands.length || bands.join() === st.bands.join()) return;
+  const cur = st.bands[st.bu.rung];
+  let idx = bands.indexOf(cur);
+  if (idx < 0) idx = bands.findIndex((b) => CEFR_LEVELS.indexOf(b) > CEFR_LEVELS.indexOf(cur));
+  if (idx < 0) idx = bands.length - 1;
+  st.bands = bands.slice();
+  st.bu.rung = idx;
+  st.bu.pips = 0;
+  st.bu.best = Math.min(st.bu.best, bands.length - 1);
+  st.bu.cleared = st.bu.cleared.filter((r) => r < bands.length - 1);
+  st.score = idx;
+  st.retry = [];
+}
+
+// What the student's screen needs for the trail: the camps (one per level of
+// the quiz, plus the Summit as the goal after the top level), the position,
+// the pips and the last move. No levels, no questions.
+function buildupView(st) {
+  const bu = st.bu;
+  const n = st.bands.length + 1;
+  return {
+    n,
+    rung: bu.summit ? n - 1 : bu.rung,
+    pips: bu.summit ? 0 : bu.pips,
+    need: buildupNeed(st),
+    best: bu.summit ? n - 1 : bu.best,
+    moved: bu.moved || null,
+    flag: bu.flag == null ? null : bu.flag,
+    tip: bu.wrongRun >= BUILDUP_TIP_AFTER,
+    summit: !!bu.summit,
+    done: !!st.done,
+  };
+}
+
+// Teacher-only: where the student ended and how far they got (camps as in
+// buildupView; `bands` names the level of each camp below the Summit).
+function buildupSummary(st) {
+  const bu = st.bu;
+  const n = st.bands.length + 1;
+  return { n, bands: st.bands.slice(), rung: bu.summit ? n - 1 : bu.rung, best: bu.summit ? n - 1 : bu.best, summit: !!bu.summit, stuck: bu.wrongRun >= BUILDUP_TIP_AFTER };
+}
+
+function buildupAttemptInit(assignment) {
+  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: true });
+  if (bands.length < 2 || !pool.length) return null;
+  const st = buildupInit(bands);
+  st.count = clamp(Math.round(Number(assignment?.adaptive?.count) || 0), 1, BUILDUP_MAX_COUNT);
+  st.items = [];
+  st.done = false;
+  st.current = null;
+  adaptiveAttemptServe(assignment, st, pool);
+  return st;
 }
 
 // Signed-in students show by first name only on the Cup screens; random

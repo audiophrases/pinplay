@@ -66,6 +66,23 @@
 - [ ] Sign-in rules: roster-only mode refuses an unlisted school account
 - [ ] Random-name games and assignments still need no sign-in at all
 
+## 6d) Build up (Everest climb)
+- [ ] Assignments row: with 2+ tagged levels, the Adaptive box has a mode picker (Adaptive / Build up); Build up is greyed out without 2 levels of auto-graded questions
+- [ ] Choosing Build up sets the count to 4 per level (editable, up to 100), switches instant feedback on, shows the note under the row
+- [ ] The assignment list shows "⛰️ Build up · up to N questions per student"
+- [ ] A Cup started while Build up is chosen plays as a normal Cup
+- [ ] Student (Chromebook, 1366x768 and 1366x657): side trail with camps and altitude; the question area is not covered
+- [ ] Student (phone): the trail is a strip under the header; the question moves down to make room
+- [ ] Everyone starts at Base Camp, including a student with a saved high level (nothing is read or saved)
+- [ ] Base Camp: 1 right answer climbs; other camps: 2 (pips fill); after a drop, a camp already cleared takes 1
+- [ ] Wrong answer: token slides back one camp with a gentle line, the correct answer shows; flags and the gold trail stay
+- [ ] Three wrong answers in a row: the guide's tip card shows; the teacher result shows a warning
+- [ ] The Summit comes after the top level; the attempt ends there ("Summit reached! 🚩"), or at the cap ("Great climb! 🏔️")
+- [ ] Tap the token: choose another climber (the Cup avatar editor); a reload keeps it
+- [ ] Sounds: verdict stingers, the ambient loop and the mute button work as in other assignments
+- [ ] Results: badge with the highest camp, a line "highest · now" with the level beside it, the ✓/✗ path
+- [ ] French: camp names, messages and the teacher row are translated
+
 ## 7) Reliability
 - [ ] Question close reasons (timeout/all_answered/manual) are consistent
 - [ ] State polling survives intermittent failures

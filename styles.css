@@ -6279,3 +6279,134 @@ body.listening-sheet-open { overflow: hidden; }
 .lm-cue { display: block; width: 100%; text-align: left; font: inherit; font-size: .92rem; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 5px 8px; cursor: pointer; }
 .lm-cue:hover { background: #f4f6ff; }
 .lm-cue.is-on { background: #e8e7ff; font-weight: 600; }
+
+/* ==========================================================================
+   BUILD UP: the Everest trail (buildup.js, BUILDUP_MODE_PLAN.md)
+   A side panel on a Chromebook-sized screen, a strip above the question on
+   a narrow one. Only while a question is on screen.
+   ========================================================================== */
+:root { --climb-w: 250px; --climb-h: 0px; }
+
+.climb {
+  display: none;
+  --lw: 96px;
+  --gold: #e0a82e;
+  --ice: #b9c6d6;
+}
+body.question-active .climb:not(.hidden) { display: flex; }
+
+@media (min-width: 900px) {
+  .climb {
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--climb-w); z-index: 105;
+    flex-direction: column;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 60' preserveAspectRatio='none'%3E%3Cpath d='M0 60 L0 44 L18 24 L26 32 L44 6 L62 34 L70 26 L100 46 L100 60 Z' fill='%23ffffff' fill-opacity='.5'/%3E%3Cpath d='M44 6 L36 19 L42 17 L47 21 L52 16 L56 19 Z' fill='%23ffffff'/%3E%3C/svg%3E") bottom / 100% 34% no-repeat,
+      linear-gradient(to top, #d9cbb6 0%, #c4d8ea 30%, #d7ebfb 66%, #fff1df 100%);
+    border-right: 1px solid #c9d6e4;
+    box-shadow: 2px 0 12px rgba(30, 60, 100, .08);
+    padding: 12px 10px 12px;
+    gap: 8px;
+  }
+  body.climb-active.question-active #joinQuestionWrap { left: var(--climb-w); }
+  body.climb-active.question-active #joinHeaderRow,
+  body.climb-active.question-active #joinQuestionInteractive { left: var(--climb-w) !important; }
+  body.climb-active.question-active #joinPrompt { left: var(--climb-w) !important; width: auto !important; }
+  .climb-head { text-align: center; line-height: 1.15; }
+  .climb-alt { font-size: 1.5rem; font-weight: 800; color: #17324f; letter-spacing: .01em; }
+  .climb-camp { font-size: .8rem; font-weight: 700; color: #4a6785; text-transform: uppercase; letter-spacing: .06em; }
+  .climb-board { position: relative; flex: 1 1 auto; min-height: 220px; margin: 4px 0; }
+  .climb-path { position: absolute; top: 0; bottom: 0; left: var(--lw); right: 0; width: calc(100% - var(--lw)); height: 100%; overflow: visible; }
+  .climb-line-h { display: none; }
+  .climb-node { position: absolute; left: 0; right: 0; height: 0; bottom: calc(var(--vy) * 100%); }
+  .climb-label { position: absolute; left: 2px; top: 0; transform: translateY(-50%); width: calc(var(--lw) - 6px); display: flex; flex-direction: column; line-height: 1.15; }
+  .climb-label b { font-size: .8rem; color: #1d3a58; }
+  .climb-label small { font-size: .7rem; color: #5d7690; }
+  .climb-spot { position: absolute; top: 0; left: calc(var(--lw) + (100% - var(--lw)) * var(--vx)); transform: translate(-50%, -50%); }
+  .climb-token { position: absolute; left: calc(var(--lw) + (100% - var(--lw)) * var(--vx)); bottom: calc(var(--vy) * 100%); transform: translate(-50%, 50%); transition: left .8s ease, bottom .8s cubic-bezier(.3, 1.35, .5, 1); }
+  .climb-msg { margin: 0; }
+}
+
+@media (max-width: 899px) {
+  :root { --climb-w: 0px; }
+  .climb {
+    position: fixed; left: 0; right: 0; top: 46px; z-index: 101;
+    flex-direction: column;
+    background: linear-gradient(to right, #d9cbb6, #c4d8ea 45%, #fff1df);
+    border-bottom: 1px solid #c9d6e4;
+    padding: 4px 10px 4px;
+  }
+  body.climb-active.question-active #joinPrompt { top: calc(46px + var(--climb-h)) !important; }
+  body.climb-active.question-active #joinQuestionWrap { padding-top: calc(120px + var(--climb-h)) !important; }
+  .climb-head { display: flex; align-items: baseline; gap: .5rem; justify-content: space-between; }
+  .climb-alt { font-size: 1rem; font-weight: 800; color: #17324f; }
+  .climb-camp { font-size: .72rem; font-weight: 700; color: #4a6785; text-transform: uppercase; }
+  .climb-board { position: relative; height: 38px; margin: 2px 6px; }
+  .climb-path { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .climb-line-v { display: none; }
+  .climb-node { position: absolute; top: 0; bottom: 0; width: 0; left: calc(var(--hx) * 100%); }
+  .climb-label { display: none; }
+  .climb-spot { position: absolute; left: 0; top: calc(var(--hy) * 100%); transform: translate(-50%, -50%); }
+  .climb-token { position: absolute; left: calc(var(--hx) * 100%); top: calc(var(--hy) * 100%); transform: translate(-50%, -50%); transition: left .8s ease, top .8s cubic-bezier(.3, 1.35, .5, 1); }
+  .climb-msg { margin: 0; padding: 2px 6px; }
+  .climb-tip { margin: 2px 0 0; }
+}
+
+.climb-nodes { list-style: none; margin: 0; padding: 0; }
+.climb-line { fill: none; stroke: rgba(70, 100, 140, .45); stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.climb-line-done { stroke: var(--gold); stroke-dasharray: none; stroke-width: 4; }
+
+.climb-spot {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #fff; border: 3px solid var(--ice);
+  box-shadow: 0 2px 6px rgba(30, 60, 100, .15);
+  transition: border-color .4s ease, background-color .4s ease, box-shadow .4s ease;
+}
+.climb-icon { font-size: 18px; line-height: 1; filter: grayscale(.7) opacity(.7); transition: filter .4s ease; }
+.climb-flag { position: absolute; right: -8px; top: -12px; font-size: 14px; line-height: 1; display: none; transform-origin: bottom left; }
+.climb-node.is-reached .climb-spot { border-color: var(--gold); background: #fff7de; }
+.climb-node.is-reached .climb-icon { filter: none; }
+.climb-node.is-flag .climb-flag { display: block; animation: climb-plant .6s cubic-bezier(.3, 1.6, .5, 1); }
+.climb-node.is-here .climb-spot { box-shadow: 0 0 0 5px rgba(96, 93, 255, .18), 0 2px 6px rgba(30, 60, 100, .15); }
+.climb-node.is-here .climb-label b { color: var(--primary-2); }
+.climb-pips { font-size: .7rem; letter-spacing: .15em; color: var(--primary-2); font-weight: 800; min-height: 1em; }
+
+.climb-token {
+  z-index: 2; width: 50px; height: 50px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: #fff; border: 3px solid var(--primary); overflow: hidden;
+  box-shadow: 0 4px 10px rgba(30, 60, 100, .3);
+}
+.climb-token:focus-visible { outline: 3px solid var(--primary-2); outline-offset: 2px; }
+.climb-av, .climb-av-fallback { width: 100%; height: 100%; display: block; }
+.climb-av-fallback { font-size: 28px; line-height: 44px; text-align: center; }
+.climb-token.is-up { animation: climb-hop .8s ease; }
+.climb-token.is-down { animation: climb-sink .8s ease; }
+@keyframes climb-hop { 0% { filter: none; } 40% { filter: drop-shadow(0 8px 6px rgba(30, 60, 100, .3)); } 100% { filter: none; } }
+@keyframes climb-sink { 0% { opacity: 1; } 45% { opacity: .75; } 100% { opacity: 1; } }
+@keyframes climb-plant { 0% { transform: scale(0) rotate(-30deg); } 100% { transform: scale(1) rotate(0); } }
+
+.climb-msg { font-size: .8rem; font-weight: 600; line-height: 1.3; color: #1d3a58; border-radius: 10px; background: rgba(255, 255, 255, .88); padding: 6px 10px; }
+.climb-msg:empty { display: none; }
+.climb-msg[data-kind="up"], .climb-msg[data-kind="pip"] { color: #0f6f2c; }
+.climb-msg[data-kind="summit"] { color: #8a5a00; background: #fff3cf; }
+.climb-msg[data-kind="down"] { color: #1f4d8a; }
+.climb-tip { margin: 0; font-size: .75rem; line-height: 1.3; color: #3a4a5d; background: rgba(255, 255, 255, .92); border-left: 4px solid #6b7f95; border-radius: 8px; padding: 6px 8px; }
+
+.climb.is-storm { filter: saturate(.7) brightness(.95); }
+.climb.is-summit .climb-node:last-child .climb-spot { border-color: var(--gold); background: #fff3cf; animation: climb-glow 1.6s ease-in-out infinite; }
+@keyframes climb-glow { 0%, 100% { box-shadow: 0 0 0 4px rgba(224, 168, 46, .25); } 50% { box-shadow: 0 0 0 10px rgba(224, 168, 46, .1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .climb-token, .climb-spot { transition: none; }
+  .climb-token.is-up, .climb-token.is-down, .climb-node.is-flag .climb-flag, .climb.is-summit .climb-node:last-child .climb-spot { animation: none; }
+}
+
+/* Choose your climber */
+.climb-modal { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 1rem; }
+.climb-modal-card { background: #fff; border-radius: 16px; padding: 1rem 1.25rem; max-width: 440px; width: 100%; max-height: 92vh; overflow-y: auto; text-align: center; }
+.climb-modal-card h3 { margin: 0 0 .5rem; }
+.climb-modal-card .btn { margin-top: .75rem; }
+
+/* Teacher pages: the build up badge */
+.badge-buildup { background: #fff3cf; color: #7a5200; border-radius: 12px; padding: 2px 8px; font-size: .7rem; font-weight: 700; }
+.assignment-adaptive select { margin: 0; width: auto; font-weight: 600; }
