@@ -7703,7 +7703,27 @@ function normalizeQuiz(quiz) {
   const listeningSections = normalizeListeningSections(quiz.listeningSections, normalized.questions);
   if (listeningSections.length) normalized.listeningSections = listeningSections;
 
+  const stepsPlan = normalizeStepsPlan(quiz.stepsPlan);
+  if (stepsPlan.length) normalized.stepsPlan = stepsPlan;
+
   return normalized;
+}
+
+// Build up: the AI's plan of the steps, one entry per level (step) of the
+// quiz: a title, what is new compared with the step before (teacher only) and
+// the rule students see as the guide's tip. Identical in app.js and worker.js.
+const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+function normalizeStepsPlan(raw) {
+  const out = [];
+  (Array.isArray(raw) ? raw : []).forEach((item) => {
+    const cefr = String(item?.cefr || '').trim().toUpperCase();
+    if (!STEPS_PLAN_LEVELS.includes(cefr) || out.some((p) => p.cefr === cefr)) return;
+    const text = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
+    const step = { cefr, title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
+    if (!step.title && !step.change && !step.rule) return;
+    out.push(step);
+  });
+  return out.sort((a, b) => STEPS_PLAN_LEVELS.indexOf(a.cefr) - STEPS_PLAN_LEVELS.indexOf(b.cefr));
 }
 
 function stableShuffle(arr, seedInput) {
@@ -9429,7 +9449,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     out.assignment.totalQuestions = adaptiveAttemptTotal(st);
     // Progress only: levels stay teacher-side.
     out.adaptive = { step: (st.items || []).length, total: adaptiveAttemptTotal(st), done: !!st.done };
-    if (st.bu) out.climb = buildupView(st);
+    if (st.bu) out.climb = buildupView(st, assignment?.quiz?.stepsPlan);
     return out;
   }
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
@@ -10766,9 +10786,14 @@ function buildupRebase(st, bands) {
 // What the student's screen needs for the trail: the camps (one per level of
 // the quiz, plus the Summit as the goal after the top level), the position,
 // the pips and the last move. No levels, no questions.
-function buildupView(st) {
+function buildupView(st, plan = null) {
   const bu = st.bu;
   const n = st.bands.length + 1;
+  // The AI's rule for the step the student is on (quiz.stepsPlan), shown as
+  // the guide's tip on arriving at a camp for the first time, at the very
+  // start, and after three wrong answers in a row.
+  const rule = bu.summit ? '' : String((Array.isArray(plan) ? plan : []).find((p) => p.cefr === st.bands[bu.rung])?.rule || '');
+  const showRule = !!rule && (bu.wrongRun >= BUILDUP_TIP_AFTER || bu.flag != null || !(st.items || []).length);
   return {
     n,
     rung: bu.summit ? n - 1 : bu.rung,
@@ -10780,6 +10805,7 @@ function buildupView(st) {
     tip: bu.wrongRun >= BUILDUP_TIP_AFTER,
     summit: !!bu.summit,
     done: !!st.done,
+    ...(showRule ? { rule } : {}),
   };
 }
 

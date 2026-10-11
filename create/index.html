@@ -75,6 +75,7 @@
                         <select id="promptKind">
                           <option value="standard" selected data-i18n>Standard quiz</option>
                           <option value="listening" data-i18n>🎧 Listening (questions about a recording)</option>
+                          <option value="buildup" data-i18n>⛰️ Build up (one skill, small steps)</option>
                         </select>
                       </label>
                     </div>
@@ -178,6 +179,40 @@
                           <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
                         <input id="promptReadingTextCustom" class="top-space hidden" type="text" placeholder="e.g. the grammar rule needed to answer, on every A1–A2 question" data-i18n-ph />
+                      </label>
+                    </div>
+                  </div>
+                  <div id="promptBuildupWrap" class="creation-prompt-grid top-space hidden">
+                    <div class="prompt-field full-width">
+                      <p class="small muted" data-i18n>Build up: one skill taught in small steps, for students who need to build it gradually. Put the skill in Theme (e.g. present simple third person -s). Assign the quiz with "⛰️ Build up" (or as Adaptive: it works in both).</p>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Steps</span>
+                        <input id="promptBuildupSteps" type="number" value="5" min="2" max="6" />
+                      </label>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Questions per step</span>
+                        <input id="promptBuildupItems" type="number" value="5" min="3" max="10" />
+                      </label>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Students' first language (optional)</span>
+                        <input id="promptBuildupFirstLanguage" type="text" placeholder="e.g. Catalan, Spanish" data-i18n-ph />
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width">
+                      <label><span data-i18n>Mistakes I see in my class (optional)</span>
+                        <textarea id="promptBuildupErrors" rows="2" placeholder="e.g. they forget the -s with he/she; they add -s after they" data-i18n-ph></textarea>
+                      </label>
+                    </div>
+                    <div class="prompt-field full-width">
+                      <label><span data-i18n>Question types</span></label>
+                      <div class="prompt-types-grid" id="promptBuildupTypes"></div>
+                    </div>
+                    <div class="prompt-field full-width">
+                      <label><span data-i18n>Instructions for the AI (optional)</span>
+                        <textarea id="promptBuildupNotes" rows="2" placeholder="e.g. use football and school vocabulary; keep every sentence under 8 words" data-i18n-ph></textarea>
                       </label>
                     </div>
                   </div>
@@ -396,6 +431,7 @@
                   <details id="levelTools" class="level-tools top-space">
                     <summary><span data-i18n>🎯 Levels</span> <span id="levelCoverage" class="level-coverage"></span></summary>
                     <div class="level-tools-body">
+                      <div id="levelStepsPlan" class="steps-plan hidden"></div>
                       <p class="small muted" data-i18n>Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions and polls are skipped. Teacher-graded questions move the level once you grade them (assignments only; PinPlay Cup skips them).</p>
                       <div class="level-tools-row">
                         <label><span data-i18n>From question</span>

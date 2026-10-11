@@ -392,3 +392,205 @@ describe('the trail helpers (buildup.js)', () => {
     keys.forEach((k) => assert.ok(dict[k], `no French for: ${k}`));
   });
 });
+
+describe('the Build up AI prompt and the steps plan', () => {
+  const { extractDeclaration } = require('./helpers/extract-declaration');
+  let A;
+  before(() => {
+    A = loadDeclarations(read('app.js'), [
+      'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename',
+      'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS',
+      'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
+    ]);
+  });
+  const req = (over = {}) => ({ skill: 'present simple third person -s', language: 'English', level: 'weak A2 students', firstLanguage: 'Catalan', errors: 'they forget the -s', steps: 5, itemsPerStep: 5, selectedTypes: [], notes: '', aiMode: 'chatbot', ...over });
+  const build = (over) => A.buildBuildupPrompt(req(over)).text;
+  const section = (text, name) => { const i = text.indexOf(`## ${name}\n`); const j = text.indexOf('\n## ', i + 3); return i < 0 ? '' : text.slice(i, j < 0 ? undefined : j); };
+  const exampleOf = (text) => { const b = section(text, 'Example'); return JSON.parse(b.slice(b.indexOf('```json') + 7, b.lastIndexOf('```'))); };
+
+  it('quotes what the teacher typed and states the steps, tags and counts', () => {
+    const text = build();
+    const words = section(text, "The teacher's own words");
+    assert.match(words, /Skill: "present simple third person -s"/);
+    assert.match(words, /first language: "Catalan"/);
+    assert.match(words, /Mistakes I see in my class: "they forget the -s"/);
+    const task = section(text, 'Task');
+    assert.match(task, /Steps: 5, tagged "A1", "A2", "B1", "B2", "C1" in this order/);
+    assert.match(task, /5 per step, 25 in all/);
+  });
+
+  it('asks for the plan first, one new thing per step, equivalent questions and one defensible answer', () => {
+    const rules = section(build(), 'Rules');
+    assert.match(rules, /First write "stepsPlan", before any question/);
+    assert.match(rules, /ONE thing that is new compared with the step before/);
+    assert.match(rules, /Exactly 5 questions per step/);
+    assert.match(rules, /equivalent/);
+    assert.match(rules, /Exactly ONE defensible answer/);
+    assert.match(rules, /real mistakes students make/);
+    assert.match(rules, /a wrong answer sends them one step back/);
+    assert.match(rules, /Step 1 is so easy/);
+  });
+
+  it('keeps the steps between 2 and 6 and the questions per step between 3 and 10', () => {
+    assert.match(section(build({ steps: 1 }), 'Task'), /Steps: 2,/);
+    assert.match(section(build({ steps: 9 }), 'Task'), /Steps: 6, tagged "A1", "A2", "B1", "B2", "C1", "C2"/);
+    assert.match(section(build({ itemsPerStep: 1 }), 'Task'), /3 per step, 15 in all/);
+    assert.match(section(build({ itemsPerStep: 50 }), 'Task'), /10 per step, 50 in all/);
+    assert.match(section(build({ steps: undefined, itemsPerStep: undefined }), 'Task'), /5 per step, 25 in all/);
+  });
+
+  it('names the fields of the chosen types only, with the typed-answer warning', () => {
+    const fields = (text) => section(text, 'Quiz fields').split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
+    assert.deepEqual(fields(build({ selectedTypes: ['mcq', 'text'] })), ['mcq', 'text']);
+    assert.deepEqual(fields(build()), ['mcq', 'tf', 'text', 'context_gap', 'error_hunt']);
+    assert.match(section(build({ selectedTypes: ['text'] }), 'Quiz fields'), /A typed answer that is right but missing here sends the student back/);
+    assert.doesNotMatch(build({ selectedTypes: ['mcq'] }), /list every correct form in "accepted"/);
+  });
+
+  it('adds the check-the-grammar line only for an AI agent', () => {
+    assert.doesNotMatch(build(), /reliable source/);
+    assert.match(build({ aiMode: 'agent' }), /Check the grammar or rule you teach against a reliable source/);
+    assert.match(A.buildBuildupPrompt(req({ aiMode: 'agent' })).filename, /^prompt-agent-build-up-/);
+  });
+
+  it('has a valid example: a plan entry for each tag the questions use, and the server takes it', async () => {
+    const ex = exampleOf(build());
+    assert.equal(ex.version, 3);
+    const plan = A.normalizeStepsPlan(ex.stepsPlan);
+    assert.equal(plan.length, ex.stepsPlan.length, 'nothing dropped');
+    assert.deepEqual(plain(plan.map((p) => p.cefr)), ['A1', 'A2', 'B1']);
+    assert.ok(plan.every((p) => p.title && p.change && p.rule));
+    assert.ok(ex.questions.every((q) => plan.some((p) => p.cefr === q.cefr)));
+    assert.ok(ex.questions.filter((q) => q.type === 'text').every((q) => q.accepted.length));
+  });
+
+  it('uses one identical copy of the plan cleaner in app.js and worker.js', () => {
+    ['STEPS_PLAN_LEVELS', 'normalizeStepsPlan'].forEach((name) => assert.equal(extractDeclaration(read('app.js'), name), extractDeclaration(read('cloudflare/worker.js'), name), name));
+  });
+
+  it('cleans a plan: known tags only, no repeats, in order, texts trimmed and capped', () => {
+    const plan = A.normalizeStepsPlan([
+      { cefr: 'b1', title: '  Third  ', rule: 'r'.repeat(500) },
+      { cefr: 'A1', title: 'First', change: 'c', rule: 'x' },
+      { cefr: 'A1', title: 'Again' },
+      { cefr: 'X9', title: 'No' },
+      { cefr: 'A2' },
+      null,
+    ]);
+    assert.deepEqual(plain(plan.map((p) => [p.cefr, p.title])), [['A1', 'First'], ['B1', 'Third']]);
+    assert.equal(plan[1].rule.length, 240);
+    assert.deepEqual(plain(A.normalizeStepsPlan('nope')), []);
+  });
+});
+
+describe('the guide\'s tip carries the step\'s rule', () => {
+  let E;
+  before(() => {
+    E = loadDeclarations(read('cloudflare/worker.js'), [
+      'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
+      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupView',
+    ]);
+  });
+  const plan = [{ cefr: 'A1', rule: 'Rule one.' }, { cefr: 'A2', rule: 'Rule two.' }, { cefr: 'B1', rule: 'Rule three.' }];
+  const st = () => { const s = E.buildupInit(['A1', 'A2', 'B1']); s.items = []; return s; };
+  const answer = (s, ok) => { E.buildupRecord(s, 0, s.bu.rung, ok); s.items.push({}); };
+
+  it('shows the first step\'s rule at the very start', () => {
+    assert.equal(E.buildupView(st(), plan).rule, 'Rule one.');
+  });
+
+  it('shows a step\'s rule on arriving at its camp for the first time, not on every answer', () => {
+    const s = st();
+    answer(s, true); // up to A2, a camp reached for the first time
+    assert.equal(E.buildupView(s, plan).rule, 'Rule two.');
+    answer(s, true); // one pip, nothing new
+    assert.equal(E.buildupView(s, plan).rule, undefined);
+    answer(s, false); // dropped to A1: no flag, not three misses
+    assert.equal(E.buildupView(s, plan).rule, undefined);
+  });
+
+  it('shows the rule again after three wrong answers in a row', () => {
+    const s = st();
+    answer(s, true); answer(s, true); answer(s, true); // B1
+    answer(s, false); answer(s, false); answer(s, false);
+    const v = E.buildupView(s, plan);
+    assert.equal(v.tip, true);
+    assert.equal(v.rule, 'Rule one.', 'the step the student is on now');
+  });
+
+  it('has no rule without a plan, or for a step the plan lacks, or at the Summit', () => {
+    assert.equal(E.buildupView(st(), null).rule, undefined);
+    assert.equal(E.buildupView(st(), [{ cefr: 'B1', rule: 'x' }]).rule, undefined);
+    const s = st();
+    [true, true, true, true, true].forEach((ok) => answer(s, ok));
+    answer(s, true);
+    assert.equal(s.bu.summit, true);
+    assert.equal(E.buildupView(s, plan).rule, undefined);
+  });
+});
+
+describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
+  let post;
+  before(async () => {
+    const tmp = path.join(os.tmpdir(), `pinplay-worker-buildup-plan-${process.pid}-${Date.now()}.mjs`);
+    fs.writeFileSync(tmp, read('cloudflare/worker.js'));
+    const mod = await import(`file://${tmp.replace(/\\/g, '/')}`);
+    fs.unlinkSync(tmp);
+    const storage = () => {
+      const map = new Map();
+      return {
+        async get(k) { return map.has(k) ? structuredClone(map.get(k)) : undefined; },
+        async put(k, v) { map.set(k, structuredClone(v)); },
+        async delete(k) { return map.delete(k); },
+        async list({ prefix = '' } = {}) { return new Map([...map].filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k, structuredClone(v)])); },
+      };
+    };
+    const rooms = new Map();
+    const env = {
+      CREATE_PASSWORD_HASH: require('node:crypto').createHash('sha256').update(PW).digest('hex'),
+      ROOMS: { idFromName: (n) => n, get: (n) => { if (!rooms.has(n)) rooms.set(n, new mod.QuizRoom({ storage: storage() }, env)); const r = rooms.get(n); return { fetch: (u, i) => r.fetch(new Request(u, i)) }; } },
+      QUIZ_MEDIA: null,
+    };
+    post = async (p, body) => {
+      const res = await mod.default.fetch(new Request(`https://api.test${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env);
+      return { status: res.status, body: await res.json() };
+    };
+  });
+
+  const planned = () => ({
+    ...quiz(['A1', 'A2'], 3),
+    stepsPlan: [{ cefr: 'A1', title: 'One', change: 'simplest', rule: 'Rule A1.' }, { cefr: 'A2', title: 'Two', change: 'plural', rule: 'Rule A2.' }, { cefr: 'ZZ', title: 'dropped' }],
+  });
+  const send = async (code, id, state, right) => {
+    const r = await post('/api/assignment/answer', { code, attemptId: id, qIndex: state.attempt.assignment.quiz.questions.length - 1, answer: right ? 0 : 1 });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return r.body;
+  };
+
+  it('keeps the plan, gives the student only the rule of the step they are on', async () => {
+    const created = await post('/api/assignments/create', { password: PW, quiz: planned(), buildup: true, adaptive: true, adaptiveCount: 8, randomNames: true });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const code = created.body.assignment.code;
+    const started = await post('/api/assignment/start', { code, studentKey: 'anon-plan', studentName: 'Kid' });
+    let s = started.body;
+    const id = s.attempt.id;
+    assert.equal(s.attempt.climb.rule, 'Rule A1.');
+    assert.equal(JSON.stringify(s).includes('Rule A2.'), false, 'later rules and the whole plan stay on the server');
+    assert.equal(JSON.stringify(s).includes('simplest'), false, 'the teacher\'s notes too');
+    s = await send(code, id, s, true); // up to A2
+    assert.equal(s.attempt.climb.rule, 'Rule A2.');
+    s = await send(code, id, s, true); // a pip
+    assert.equal(s.attempt.climb.rule, undefined);
+  });
+
+  it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildBuildupPrompt']);
+    const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
+    const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
+    const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const started = await post('/api/assignment/start', { code: created.body.assignment.code, studentKey: 'anon-ex', studentName: 'Kid' });
+    assert.equal(started.body.attempt.climb.n, 4);
+    assert.ok(started.body.attempt.climb.rule);
+  });
+});

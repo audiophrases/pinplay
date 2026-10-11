@@ -1,8 +1,9 @@
 # Build up: an adaptive quiz assigned as an Everest climb
 
 Status: **built 2026-10-11** (worker, assignment toggle, student trail, teacher
-results, FR strings, tests). The Build up AI prompt and a finer `step` tag are
-the next steps (section 8). Decisions settled with the owner on 2026-10-10/11.
+results, FR strings, tests); **the AI prompt built 2026-10-11** (section 8). A
+finer `step` tag is still a later option. Decisions settled with the owner on
+2026-10-10/11.
 
 ## 1. Why
 
@@ -86,11 +87,40 @@ tip, results, plain adaptive unchanged, saved level untouched).
 | Steps | The adaptive levels of the quiz (a finer tag later if six is too few) |
 | Sounds | Reuse the assignment ones |
 
-## 8. Next
+## 8. The AI prompt and the steps plan (built 2026-10-11)
 
-1. **The Build up AI prompt**: one skill, tiny steps (one new thing per step),
-   equivalent items per step, fixed simple vocabulary, real student errors as
-   distractors, one defensible answer, a plan the teacher can read.
-2. A finer `step` tag (1 to N) if six levels are too few.
-3. Per-step hint cards and a "bridge with AI" prompt for the step where the
-   class gets stuck; a live-class version (counts per camp on the projector).
+"Kind of quiz" in the AI Creation Prompt has a third choice, **⛰️ Build up (one
+skill, small steps)** (`buildBuildupPrompt` in `app.js`). The teacher gives the
+skill (Theme), language, the students, their first language, the mistakes seen in
+class, steps (2 to 6, default 5), questions per step (3 to 10, default 5), the
+question types (mcq, tf, text, context_gap; error_hunt off by default) and notes.
+
+What the prompt makes the AI do:
+1. Write `stepsPlan` first: per step a tag, a title, **the ONE thing that is new**
+   compared with the step before (teacher only) and a one-sentence **rule**.
+2. One new thing per step; demand grows slowly (two options, three, a gap, typed);
+   the last step mixes the rest; step 1 cannot be got wrong after reading its rule.
+3. Fixed, very basic vocabulary reused across steps, so grammar is the only difficulty.
+4. Equivalent questions inside a step (a student sent back meets a new one).
+5. Exactly one defensible answer; every correct typed form listed; distractors are
+   the students' real mistakes (the teacher's list, plus first-language ones).
+6. Tags are only step numbers ("A1" = step 1), not a language level.
+
+Data: `quiz.stepsPlan = [{ cefr, title, change, rule }]`, kept by both
+normalizers through one shared function (`normalizeStepsPlan`, identical in
+`app.js` and `worker.js`; a test checks it) and by cloud save. It is **never sent
+to students whole**: the climb view carries only the current step's `rule`.
+
+The rule is the **guide's tip**: shown at the very start, on arriving at a camp
+for the first time, and after three wrong answers in a row (the general advice
+shows when a quiz has no plan). The editor's Levels panel lists the plan with the
+question count per step and a warning under three.
+
+Quizzes made this way are ordinary level-tagged quizzes: they also play as Adaptive.
+
+## 9. Next
+
+1. A finer `step` tag (1 to N) if six levels are too few.
+2. A "bridge with AI" prompt for the step where the class gets stuck (its
+   questions and most common wrong answers go into the prompt).
+3. A live-class version (counts per camp on the projector).

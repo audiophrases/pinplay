@@ -6410,3 +6410,8 @@ body.question-active .climb:not(.hidden) { display: flex; }
 /* Teacher pages: the build up badge */
 .badge-buildup { background: #fff3cf; color: #7a5200; border-radius: 12px; padding: 2px 8px; font-size: .7rem; font-weight: 700; }
 .assignment-adaptive select { margin: 0; width: auto; font-weight: 600; }
+
+/* Build up: the steps plan in the Levels panel */
+.steps-plan { margin-bottom: .6rem; padding: .5rem .7rem; border: 1px solid #ecd9a0; background: #fff9e6; border-radius: 10px; }
+.steps-plan-list { margin: .3rem 0 0; padding-left: 1.2rem; }
+.steps-plan-list li { margin-bottom: .35rem; }

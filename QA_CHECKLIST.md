@@ -82,6 +82,10 @@
 - [ ] Sounds: verdict stingers, the ambient loop and the mute button work as in other assignments
 - [ ] Results: badge with the highest camp, a line "highest · now" with the level beside it, the ✓/✗ path
 - [ ] French: camp names, messages and the teacher row are translated
+- [ ] AI prompt: "Kind of quiz" → ⛰️ Build up shows its own fields (steps, questions per step, first language, mistakes, types); Generate downloads and copies the file
+- [ ] An AI answer with a stepsPlan imports; the Levels panel lists the plan with a count per step and warns under 3
+- [ ] The guide's tip shows the step's rule at the start, on reaching a camp, and after three wrong answers; a quiz without a plan shows the general advice
+- [ ] The same quiz also plays as Adaptive; the plan never reaches students whole (only the current rule)
 
 ## 7) Reliability
 - [ ] Question close reasons (timeout/all_answered/manual) are consistent

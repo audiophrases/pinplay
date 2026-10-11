@@ -179,9 +179,14 @@
       el.classList.toggle('is-summit', !!c.summit);
       el.classList.toggle('is-storm', !!c.tip);
       el.setAttribute('aria-label', `${tr('Your climb')}: ${campName(c.rung, n)}, ${fmtAlt(altitude(c.rung, n))}`);
+      // The guide's tip: the step's own rule when the quiz has one (on
+      // arriving, and when the weather closes in), else the general advice.
       const tip = $('tip');
-      tip.classList.toggle('hidden', !c.tip);
-      tip.textContent = c.tip ? tr("Guide's tip: the weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : '';
+      const text = c.rule
+        ? tr("Guide's tip: {rule}", { rule: c.rule })
+        : (c.tip ? tr("Guide's tip: the weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : '');
+      tip.classList.toggle('hidden', !text);
+      tip.textContent = text;
     }
 
     // The words about the move that was just made (shown with the feedback).

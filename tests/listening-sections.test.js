@@ -16,7 +16,7 @@ before(() => {
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
-    'countErrorHuntRequiredTokens', 'normalizeWordle', 'detectQuestionMediaProvider', ...SHARED, 'normalizeQuiz',
+    'countErrorHuntRequiredTokens', 'normalizeWordle', 'detectQuestionMediaProvider', ...SHARED, 'normalizeQuiz', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     'extractMediaPrefixesFromQuiz', 'extractBase64MediaToR2', 'arenaEligibleIndexes', 'autoGradedQuestionIndexes',
     'isAssignmentTeacherGradedQuestion', 'isTeacherGradedTextQuestion',
   ], { crypto: require('node:crypto').webcrypto, atob, btoa });

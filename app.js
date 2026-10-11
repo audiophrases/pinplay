@@ -1071,13 +1071,16 @@ function renderListeningPromptTypes() {
 
 // "Standard" or "Listening": each kind shows only its own fields.
 function syncPromptKind() {
-  const listening = document.getElementById('promptKind')?.value === 'listening';
-  document.querySelectorAll('#creationPromptBody .prompt-standard-only').forEach((el) => el.classList.toggle('hidden', listening));
+  const kind = document.getElementById('promptKind')?.value;
+  const listening = kind === 'listening';
+  const buildup = kind === 'buildup';
+  document.querySelectorAll('#creationPromptBody .prompt-standard-only').forEach((el) => el.classList.toggle('hidden', listening || buildup));
   document.getElementById('promptListeningWrap')?.classList.toggle('hidden', !listening);
-  if (listening) document.getElementById('promptLevelNotesWrap')?.classList.add('hidden');
+  document.getElementById('promptBuildupWrap')?.classList.toggle('hidden', !buildup);
+  if (listening || buildup) document.getElementById('promptLevelNotesWrap')?.classList.add('hidden');
   else syncAdaptivePromptFields();
   const levelEl = document.getElementById('promptLevel');
-  if (levelEl instanceof HTMLInputElement && listening && levelEl.disabled) {
+  if (levelEl instanceof HTMLInputElement && (listening || buildup) && levelEl.disabled) {
     levelEl.disabled = false;
     levelEl.value = levelEl.dataset.savedValue || '';
   }
@@ -1129,6 +1132,7 @@ function syncTranscriptPartsInfo() {
 function bindBuilderEvents() {
   renderPromptTypesList();
   renderListeningPromptTypes();
+  renderBuildupPromptTypes();
   document.getElementById('promptKind')?.addEventListener('change', syncPromptKind);
   document.getElementById('promptListeningSource')?.addEventListener('change', syncListeningSource);
   document.getElementById('promptTranscript')?.addEventListener('input', syncTranscriptPartsInfo);
@@ -5521,6 +5525,10 @@ async function exportCreationPrompt() {
     await exportListeningPrompt();
     return;
   }
+  if (document.getElementById('promptKind')?.value === 'buildup') {
+    await exportBuildupPrompt();
+    return;
+  }
   const theme = document.getElementById('promptTheme')?.value.trim();
   const adaptive = !!document.getElementById('promptAdaptive')?.checked;
   const goalEl = document.getElementById('promptGoal') instanceof HTMLSelectElement ? document.getElementById('promptGoal') : null;
@@ -5621,6 +5629,153 @@ async function exportListeningPrompt() {
     aiMode: valueOf('promptAiMode') || 'chatbot',
   });
   await deliverPromptFile(text, filename);
+}
+
+// ---------------------------------------------------------------- AI build up prompt
+// BUILDUP_MODE_PLAN.md section 8: one skill taught in small steps, for an
+// assignment played in Build up mode (a wrong answer sends the student one
+// step back). The steps are the quiz's level tags in order; the AI writes the
+// plan first ("stepsPlan"), then equivalent questions for each step.
+
+const BUILDUP_PROMPT_TYPES = ['mcq', 'tf', 'text', 'context_gap', 'error_hunt'];
+const BUILDUP_PROMPT_DEFAULT_STEPS = 5;
+const BUILDUP_PROMPT_DEFAULT_ITEMS = 5;
+const BUILDUP_PROMPT_MAX_ITEMS = 10;
+
+// Where a type reads differently in a build up quiz (a wrong answer costs a step).
+const BUILDUP_PROMPT_TYPE_FIELDS = {
+  text: '"accepted": ["…", "…"] — EVERY form a student could correctly type, as plain strings (not "answers"): contractions and full forms ("doesn\'t", "does not"). Capitals and punctuation don\'t matter. A typed answer that is right but missing here sends the student back a step for nothing.',
+  error_hunt: 'the prompt is ONLY a sentence with one mistake. "correctedVariants": every full sentence, corrected, that you accept (a mistake can often be fixed by changing a different word); "corrected": the first of them. Use it only where the mistake has one clear fix.',
+};
+
+// One small skill built in three steps, two questions each: the shape of the
+// answer, with its plan. Different from any real request.
+const BUILDUP_PROMPT_EXAMPLE = {
+  stepsPlan: [
+    { cefr: 'A1', title: 'He / she / it + -s, easy verbs', change: 'The simplest case: regular verbs, the subject is he or she, two options.', rule: 'With he, she and it, the verb ends in -s: he plays, she likes.' },
+    { cefr: 'A2', title: 'Is it -s or not?', change: 'New: they and we sit beside he and she, so the student must decide; still regular verbs.', rule: 'Only he, she and it take -s. With I, you, we and they: no -s.' },
+    { cefr: 'B1', title: 'Verbs ending in -ch, -sh', change: 'New: verbs that take -es (watches, brushes); the subject is always he, she or it.', rule: 'Verbs ending in -ch or -sh take -es: she watches, he brushes.' },
+  ],
+  questions: [
+    { id: 'q1', type: 'mcq', prompt: 'He ___ tennis.', points: 1000, timeLimit: 0, cefr: 'A1', answers: [{ text: 'plays', correct: true }, { text: 'play', correct: false }] },
+    { id: 'q2', type: 'mcq', prompt: 'She ___ music.', points: 1000, timeLimit: 0, cefr: 'A1', answers: [{ text: 'likes', correct: true }, { text: 'like', correct: false }] },
+    { id: 'q3', type: 'mcq', prompt: 'My friends ___ pizza.', points: 1000, timeLimit: 0, cefr: 'A2', answers: [{ text: 'like', correct: true }, { text: 'likes', correct: false }] },
+    { id: 'q4', type: 'mcq', prompt: 'My brother ___ to school.', points: 1000, timeLimit: 0, cefr: 'A2', answers: [{ text: 'goes', correct: true }, { text: 'go', correct: false }] },
+    { id: 'q5', type: 'text', prompt: 'She ____ TV every day. (watch)', points: 1000, timeLimit: 0, cefr: 'B1', accepted: ['watches'] },
+    { id: 'q6', type: 'text', prompt: 'He ____ his teeth. (brush)', points: 1000, timeLimit: 0, cefr: 'B1', accepted: ['brushes'] },
+  ],
+};
+
+function buildBuildupPrompt(req) {
+  const agent = req.aiMode === 'agent';
+  const steps = Math.max(2, Math.min(CEFR_LEVELS.length, Math.round(Number(req.steps) || BUILDUP_PROMPT_DEFAULT_STEPS)));
+  const items = Math.max(3, Math.min(BUILDUP_PROMPT_MAX_ITEMS, Math.round(Number(req.itemsPerStep) || BUILDUP_PROMPT_DEFAULT_ITEMS)));
+  const tags = CEFR_LEVELS.slice(0, steps);
+  const selected = (req.selectedTypes || []).filter((type) => BUILDUP_PROMPT_TYPES.includes(type));
+  const allowed = BUILDUP_PROMPT_TYPES.filter((type) => !selected.length || selected.includes(type));
+  const skill = String(req.skill || req.theme || '').trim();
+  const quote = (v) => `"${String(v).trim()}"`;
+  const teacherWords = [
+    `Skill: ${quote(skill)}`,
+    req.language ? `Language of the quiz: ${quote(req.language)}` : null,
+    req.level ? `The students: ${quote(req.level)}` : null,
+    req.firstLanguage ? `The students' first language: ${quote(req.firstLanguage)}` : null,
+    req.errors ? `Mistakes I see in my class: ${quote(req.errors)}` : null,
+    req.notes ? `Instructions: ${quote(req.notes)}` : null,
+  ].filter(Boolean);
+  const name = toSafeFilename(skill) || 'build-up';
+  const total = steps * items;
+
+  const task = [
+    `One skill: the one in "Skill" above, and nothing else.`,
+    `Steps: ${steps}, tagged ${tags.map((t) => `"${t}"`).join(', ')} in this order (step 1 is the easiest). The tag is only the step's number: PinPlay uses it to order the steps, it does not say what level of language a step is.`,
+    `Questions: ${items} per step, ${total} in all, in one JSON object`,
+    `Question types: use only ${allowed.join(', ')}.`,
+  ];
+  const rules = [
+    'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
+    'How it is played: every student starts at step 1 and climbs. A right answer helps them up a step (two in a row on most steps); a wrong answer sends them one step back, where they get a different question of that step. So each step must be climbable by a student who has just got the step before right, and a student sent back must meet a question like the ones they already know.',
+    agent ? 'Check the grammar or rule you teach against a reliable source (a grammar reference or a dictionary) before you write the plan; do not invent rules or exceptions.' : undefined,
+    'First write "stepsPlan", before any question: one entry per step, in order, with "cefr" (the step\'s tag), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
+    'One new thing per step, and only one: the form, OR the kind of subject or word, OR the kind of answer. Increase the demand slowly: choose between two options first, then three close ones, then fill a gap, and type the answer last. The last step mixes what the earlier steps taught.',
+    `Every question practises the skill and nothing else. Use only very common, short words (the first words a beginner learns) and keep reusing the same small set of about 15 to 20 words and names across all the steps, so grammar is the only difficulty. Sentences are about everyday life in the students' world.`,
+    `Exactly ${items} questions per step. The questions of a step are equivalent: the same pattern, the same difficulty, different words, and none is a copy of another. A student sent back to a step must not meet the same question again straight away.`,
+    'Step 1 is so easy that a student who has read its rule cannot get it wrong: a clear case and no distraction.',
+    'Exactly ONE defensible answer per question. Check each question against its step\'s rule: if another option could also be right in some context, change the question.' + (allowed.includes('text') || allowed.includes('context_gap') ? ' For typed answers and gaps list every correct form in "accepted" / "gaps" (see the field list), because a right answer marked wrong costs the student a step.' : ''),
+    'Wrong options are the real mistakes students make with this skill (use the teacher\'s list of mistakes if there is one, and the usual mistakes of speakers of their first language), one mistake per question. Never silly or impossible options; no trick questions.',
+    'Prompts and options are short. Never a hint inside a question that gives the answer away.',
+    'Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "cefr": its step\'s tag. No pictures, audio, video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
+    `Before you reply, walk through the steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`,
+  ].filter(Boolean);
+
+  const out = [
+    '# PinPlay build up quiz instructions',
+    '',
+    `Create a "build up" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it up gradually. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
+    '',
+    '## The teacher\'s own words',
+    'Typed by the teacher, word for word, in quotes. Everything after this section is PinPlay\'s general instructions. Where they contradict the teacher\'s words, the teacher\'s words win.',
+    ...teacherWords.map((line) => `- ${line}`),
+    '',
+    '## Task',
+    ...task.map((line) => `- ${line}`),
+    '',
+    '## Rules',
+    ...rules.map((r, i) => `${i + 1}. ${r}`),
+    '',
+    '## Quiz fields',
+    'Quiz: {"version": 3, "title": "…", "stepsPlan": [ … ], "questions": [ … ]}',
+    'stepsPlan entry: {"cefr": "A1", "title": "…", "change": "…", "rule": "…"}',
+    'Every question has "id", "type", "prompt", "points", "timeLimit", "cefr", plus the fields of its type:',
+    ...allowed.map((type) => `- ${type}: ${BUILDUP_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
+    '',
+    '## Example',
+    `Shape only (3 steps and 2 questions each): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each.`,
+    '```json',
+    `{"version": 3, "title": "Present simple: -s", "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${BUILDUP_PROMPT_EXAMPLE.questions.map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
+    '```',
+    '',
+    'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions, follow the teacher. Only the JSON format and field names are fixed.',
+    '',
+  ];
+  return { text: out.join('\n'), filename: `prompt-${agent ? 'agent-' : ''}build-up-${name}.md` };
+}
+
+async function exportBuildupPrompt() {
+  const valueOf = (id) => String(document.getElementById(id)?.value || '').trim();
+  const skill = valueOf('promptTheme');
+  if (!skill) {
+    alert(t('Say which skill to build up: fill in the Theme (e.g. present simple third person -s).'));
+    document.getElementById('promptTheme')?.focus();
+    return;
+  }
+  const selectedTypes = Array.from(document.querySelectorAll('#promptBuildupTypes input:checked')).map((cb) => cb.value);
+  if (!selectedTypes.length) {
+    alert(t('Choose at least one question type.'));
+    return;
+  }
+  const { text, filename } = buildBuildupPrompt({
+    skill,
+    language: valueOf('promptLanguage'),
+    level: valueOf('promptLevel'),
+    firstLanguage: valueOf('promptBuildupFirstLanguage'),
+    errors: valueOf('promptBuildupErrors'),
+    steps: Number(valueOf('promptBuildupSteps')) || BUILDUP_PROMPT_DEFAULT_STEPS,
+    itemsPerStep: Number(valueOf('promptBuildupItems')) || BUILDUP_PROMPT_DEFAULT_ITEMS,
+    selectedTypes,
+    notes: valueOf('promptBuildupNotes'),
+    aiMode: valueOf('promptAiMode') || 'chatbot',
+  });
+  await deliverPromptFile(text, filename);
+}
+
+function renderBuildupPromptTypes() {
+  const listEl = document.getElementById('promptBuildupTypes');
+  if (!listEl) return;
+  const labels = Object.fromEntries(QUESTION_TYPE_CATALOG.map((item) => [item.type, item.label]));
+  listEl.innerHTML = BUILDUP_PROMPT_TYPES
+    .map((type) => `<label class="type-pill"><input type="checkbox" value="${type}" ${type === 'error_hunt' ? '' : 'checked'}> <span>${escapeHtml(t(labels[type] || type))}</span></label>`) // i18n-ignore (type names are t()-wrapped)
+    .join('');
 }
 
 // The file is short enough to paste as well: download it and copy the same text.
@@ -10450,6 +10605,7 @@ async function importQuizSources(files) {
         }
         quiz.questions.push(...parsed.questions);
         if (parsed.title && !quiz.title) quiz.title = parsed.title;
+        if (!quiz.stepsPlan && parsed.stepsPlan) quiz.stepsPlan = normalizeStepsPlan(parsed.stepsPlan);
         if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
           quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
         }
@@ -17547,12 +17703,34 @@ function initAssignmentAdaptiveControl() {
   syncAssignmentAdaptiveControl();
 }
 
+// Build up: the AI's plan of the steps (quiz.stepsPlan), with how many
+// questions each step has. A step with fewer than three gets a warning: a
+// student sent back to it would meet the same questions again.
+const STEPS_PLAN_MIN_ITEMS = 3;
+function renderStepsPlan(counts) {
+  const el = document.getElementById('levelStepsPlan');
+  if (!el) return;
+  const plan = normalizeStepsPlan(quiz?.stepsPlan);
+  el.classList.toggle('hidden', !plan.length);
+  if (!plan.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<strong>${escapeHtml(t('⛰️ Steps plan'))}</strong>`
+    + `<ol class="steps-plan-list">${plan.map((p, i) => {
+      const n = counts[p.cefr] || 0;
+      const thin = n < STEPS_PLAN_MIN_ITEMS ? ` <span class="bad">${escapeHtml(t('⚠ only {n} questions', { n }))}</span>` : '';
+      return `<li><b>${escapeHtml(p.cefr)}</b> · ${escapeHtml(p.title)} <span class="muted">(${n})</span>${thin}`
+        + (p.change ? `<div class="small muted">${escapeHtml(p.change)}</div>` : '')
+        + (p.rule ? `<div class="small">${escapeHtml(t('Rule shown to students: {rule}', { rule: p.rule }))}</div>` : '')
+        + '</li>'; // i18n-ignore (text is t()-wrapped)
+    }).join('')}</ol>`;
+}
+
 function renderLevelCoverage() {
   syncAssignmentAdaptiveControl();
   syncLiveLevelsControl();
   const el = document.getElementById('levelCoverage');
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);
+  renderStepsPlan(counts);
   if (!tagged) {
     el.textContent = untagged ? t('none tagged yet') : '';
     return;
@@ -18477,7 +18655,27 @@ function normalizeQuizForLive(raw) {
   const listeningSections = normalizeListeningSections(raw.listeningSections, normalized.questions);
   if (listeningSections.length) normalized.listeningSections = listeningSections;
 
+  const stepsPlan = normalizeStepsPlan(raw.stepsPlan);
+  if (stepsPlan.length) normalized.stepsPlan = stepsPlan;
+
   return normalized;
+}
+
+// Build up: the AI's plan of the steps, one entry per level (step) of the
+// quiz: a title, what is new compared with the step before (teacher only) and
+// the rule students see as the guide's tip. Identical in app.js and worker.js.
+const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+function normalizeStepsPlan(raw) {
+  const out = [];
+  (Array.isArray(raw) ? raw : []).forEach((item) => {
+    const cefr = String(item?.cefr || '').trim().toUpperCase();
+    if (!STEPS_PLAN_LEVELS.includes(cefr) || out.some((p) => p.cefr === cefr)) return;
+    const text = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
+    const step = { cefr, title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
+    if (!step.title && !step.change && !step.rule) return;
+    out.push(step);
+  });
+  return out.sort((a, b) => STEPS_PLAN_LEVELS.indexOf(a.cefr) - STEPS_PLAN_LEVELS.indexOf(b.cefr));
 }
 
 function collectMissingOtherTtsVoiceIssues(targetQuiz) {
