@@ -5666,10 +5666,17 @@ const BUILDUP_PROMPT_EXAMPLE = {
   ],
 };
 
+// A number the teacher typed: empty or not a number takes the default, but a
+// typed 0 is a number (and is then held to the minimum).
+function buildupPromptNumber(value, fallback) {
+  const n = Number(value);
+  return value === '' || value == null || !Number.isFinite(n) ? fallback : n;
+}
+
 function buildBuildupPrompt(req) {
   const agent = req.aiMode === 'agent';
-  const steps = Math.max(2, Math.min(CEFR_LEVELS.length, Math.round(Number(req.steps) || BUILDUP_PROMPT_DEFAULT_STEPS)));
-  const items = Math.max(3, Math.min(BUILDUP_PROMPT_MAX_ITEMS, Math.round(Number(req.itemsPerStep) || BUILDUP_PROMPT_DEFAULT_ITEMS)));
+  const steps = Math.max(2, Math.min(CEFR_LEVELS.length, Math.round(buildupPromptNumber(req.steps, BUILDUP_PROMPT_DEFAULT_STEPS))));
+  const items = Math.max(3, Math.min(BUILDUP_PROMPT_MAX_ITEMS, Math.round(buildupPromptNumber(req.itemsPerStep, BUILDUP_PROMPT_DEFAULT_ITEMS))));
   const tags = CEFR_LEVELS.slice(0, steps);
   const selected = (req.selectedTypes || []).filter((type) => BUILDUP_PROMPT_TYPES.includes(type));
   const allowed = BUILDUP_PROMPT_TYPES.filter((type) => !selected.length || selected.includes(type));
@@ -5760,8 +5767,8 @@ async function exportBuildupPrompt() {
     level: valueOf('promptLevel'),
     firstLanguage: valueOf('promptBuildupFirstLanguage'),
     errors: valueOf('promptBuildupErrors'),
-    steps: Number(valueOf('promptBuildupSteps')) || BUILDUP_PROMPT_DEFAULT_STEPS,
-    itemsPerStep: Number(valueOf('promptBuildupItems')) || BUILDUP_PROMPT_DEFAULT_ITEMS,
+    steps: valueOf('promptBuildupSteps'),
+    itemsPerStep: valueOf('promptBuildupItems'),
     selectedTypes,
     notes: valueOf('promptBuildupNotes'),
     aiMode: valueOf('promptAiMode') || 'chatbot',

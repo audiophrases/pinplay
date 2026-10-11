@@ -1564,4 +1564,6 @@ window.PINPLAY_FR_DICT = {
   "⛰️ Steps plan": "⛰️ Plan des marches",
   "⚠ only {n} questions": "⚠ seulement {n} questions",
   "Rule shown to students: {rule}": "Règle montrée aux élèves : {rule}",
+  "You have started the climb 🧗": "Vous avez commencé l'ascension 🧗",
+  "You are at Base Camp. Come back and try again: every try builds you up!": "Vous êtes au camp de base. Revenez réessayer : chaque essai vous fait progresser !",
 };

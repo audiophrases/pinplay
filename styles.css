@@ -6307,6 +6307,8 @@ body.question-active .climb:not(.hidden) { display: flex; }
     padding: 12px 10px 12px;
     gap: 8px;
   }
+  /* The Self-correct banner is a fixed bar over the top: the trail starts under it. */
+  body.retake-mode-active .climb { top: 44px; }
   body.climb-active.question-active #joinQuestionWrap { left: var(--climb-w); }
   body.climb-active.question-active #joinHeaderRow,
   body.climb-active.question-active #joinQuestionInteractive { left: var(--climb-w) !important; }

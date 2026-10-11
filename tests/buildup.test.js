@@ -400,7 +400,7 @@ describe('the Build up AI prompt and the steps plan', () => {
     A = loadDeclarations(read('app.js'), [
       'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename',
       'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS',
-      'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
+      'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     ]);
   });
   const req = (over = {}) => ({ skill: 'present simple third person -s', language: 'English', level: 'weak A2 students', firstLanguage: 'Catalan', errors: 'they forget the -s', steps: 5, itemsPerStep: 5, selectedTypes: [], notes: '', aiMode: 'chatbot', ...over });
@@ -437,6 +437,12 @@ describe('the Build up AI prompt and the steps plan', () => {
     assert.match(section(build({ itemsPerStep: 1 }), 'Task'), /3 per step, 15 in all/);
     assert.match(section(build({ itemsPerStep: 50 }), 'Task'), /10 per step, 50 in all/);
     assert.match(section(build({ steps: undefined, itemsPerStep: undefined }), 'Task'), /5 per step, 25 in all/);
+    // A typed 0 is a number held to the minimum, not a blank that takes the default.
+    assert.match(section(build({ steps: 0, itemsPerStep: 0 }), 'Task'), /Steps: 2,[^\n]*\n- Questions: 3 per step, 6 in all/);
+    // What the form sends: text, empty when untouched.
+    assert.match(section(build({ steps: '4', itemsPerStep: '7' }), 'Task'), /Steps: 4,[^\n]*\n- Questions: 7 per step, 28 in all/);
+    assert.match(section(build({ steps: '', itemsPerStep: '' }), 'Task'), /5 per step, 25 in all/);
+    assert.match(section(build({ steps: 'abc', itemsPerStep: null }), 'Task'), /5 per step, 25 in all/);
   });
 
   it('names the fields of the chosen types only, with the typed-answer warning', () => {
@@ -584,7 +590,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   });
 
   it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
-    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildBuildupPrompt']);
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt']);
     const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
     const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
     const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });

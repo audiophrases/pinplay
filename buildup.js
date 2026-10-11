@@ -144,7 +144,7 @@
         </li>`).join('');
     }
 
-    function update(c, { name, avatar } = {}) {
+    function update(c, { name, avatar, quiet } = {}) {
       if (!c || !c.n || c.n < 2) { el.classList.add('hidden'); return; }
       el.classList.remove('hidden');
       if (state.n !== c.n) { build(c.n); state.rung = -1; }
@@ -177,14 +177,14 @@
         pips.textContent = i === c.rung && !c.done ? Array.from({ length: c.need }, (_, p) => (p < c.pips ? '●' : '○')).join(' ') : '';
       });
       el.classList.toggle('is-summit', !!c.summit);
-      el.classList.toggle('is-storm', !!c.tip);
+      el.classList.toggle('is-storm', !!c.tip && !quiet);
       el.setAttribute('aria-label', `${tr('Your climb')}: ${campName(c.rung, n)}, ${fmtAlt(altitude(c.rung, n))}`);
       // The guide's tip: the step's own rule when the quiz has one (on
       // arriving, and when the weather closes in), else the general advice.
       const tip = $('tip');
-      const text = c.rule
+      const text = quiet ? '' : (c.rule
         ? tr("Guide's tip: {rule}", { rule: c.rule })
-        : (c.tip ? tr("Guide's tip: the weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : '');
+        : (c.tip ? tr("Guide's tip: the weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : ''));
       tip.classList.toggle('hidden', !text);
       tip.textContent = text;
     }

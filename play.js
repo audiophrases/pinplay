@@ -6441,12 +6441,16 @@ function syncClimbTrail() {
   if (!window.PinBuildup) return;
   if (!climbTrail) climbTrail = window.PinBuildup.mountTrail(document.body, { onToken: openClimbAvatarEditor });
   const attempt = live.player.assignment.state.attempt;
-  climbTrail.update(c, { name: attempt.studentName || live.player.displayName });
+  // Once the climb is over and the last feedback has been read, the end
+  // screen speaks: the trail keeps its picture but drops the line about the
+  // last move and the tip.
+  const ending = c.done && !live.player.assignment.pendingComplete;
+  climbTrail.update(c, { name: attempt.studentName || live.player.displayName, quiet: ending });
   // The words about the last move go with the feedback on the question just
   // answered; on a fresh question there is nothing to say yet.
   const served = Number(attempt.adaptive?.step || 0);
   const viewing = Number(live.player.assignment.currentIndex || 0);
-  climbTrail.say(viewing < served || attempt.submitted ? c : null);
+  climbTrail.say(!ending && (viewing < served || attempt.submitted) ? c : null);
 }
 
 // The end screen: the summit, or how high the climb got.
@@ -6456,6 +6460,8 @@ function climbEndText() {
   const B = window.PinBuildup;
   const high = B.fmtAlt(B.altitude(c.best, c.n));
   if (c.summit) return { title: t('Summit reached! 🚩'), text: t('You climbed all the way to {alt}. Well done!', { alt: high }) };
+  // Never left Base Camp: no "great climb", just an invitation to try again.
+  if (c.best === 0) return { title: t('You have started the climb 🧗'), text: t('You are at Base Camp. Come back and try again: every try builds you up!') };
   return { title: t('Great climb! 🏔️'), text: t('You reached {camp} ({alt}). Come back and climb higher!', { camp: B.campName(c.best, c.n), alt: high }) };
 }
 
