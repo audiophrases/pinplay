@@ -19,6 +19,30 @@ from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import edge_tts
+import edge_tts.communicate as _edge_comm
+from aiohttp import WSServerHandshakeError
+
+# Microsoft is moving Edge Read Aloud to a new host (2026-10, rany2/edge-tts#490);
+# the legacy host now answers 403 for many regions. The new host still accepts the
+# legacy Sec-MS-GEC token, so try it first and fall back to the legacy host.
+_LEGACY_WSS = _edge_comm.WSS_URL
+_TOKEN = _LEGACY_WSS.split("TrustedClientToken=")[-1]
+_WSS_URLS = [
+    f"wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key={_TOKEN}",
+    _LEGACY_WSS,
+]
+
+
+async def synthesize_to_file(text, voice, rate, out_path):
+    last = None
+    for wss in _WSS_URLS:
+        _edge_comm.WSS_URL = wss
+        try:
+            await edge_tts.Communicate(text=text, voice=voice, rate=rate).save(out_path)
+            return
+        except WSServerHandshakeError as e:
+            last = e
+    raise last
 
 
 class TTSRequest(BaseModel):
@@ -51,8 +75,7 @@ async def tts(req: TTSRequest, background_tasks: BackgroundTasks, authorization:
     os.close(fd)
 
     try:
-        communicate = edge_tts.Communicate(text=text, voice=req.voice, rate=req.rate)
-        await communicate.save(out_path)
+        await synthesize_to_file(text, req.voice, req.rate, out_path)
         
         # Define a cleanup function to delete the file after response is sent
         def cleanup():
