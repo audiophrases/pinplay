@@ -722,7 +722,7 @@ function init() {
 function pingEdgeTtsBridgeWarmup() {
   // Best-effort wake ping whenever create app is loaded.
   // Use /health (200) instead of / (404), and do a second delayed ping for cold starts.
-  const url = 'https://edge-tts-bridge.onrender.com/health';
+  const url = 'https://pinplay-tts-bridge-27sk.onrender.com/health';
   const ping = () => {
     try {
       fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => { });

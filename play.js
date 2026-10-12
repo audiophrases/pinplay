@@ -457,7 +457,7 @@ function freezeActiveGameRound() {
 function pingEdgeTtsBridgeWarmup() {
   // Student-side best-effort wake ping so TTS bridge is warm before playback is needed.
   // Same wake pattern as teacher/create side.
-  const url = 'https://edge-tts-bridge.onrender.com/health';
+  const url = 'https://pinplay-tts-bridge-27sk.onrender.com/health';
   const ping = () => {
     try {
       fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }).catch(() => { });
