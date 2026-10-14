@@ -7882,6 +7882,11 @@ function normalizeErrorHuntToken(text) {
 // and the diff flags the untouched word as an edit. Internal punctuation
 // (don't, e-mail) stays attached to the core. Uses Unicode letter/number
 // classes so accented characters (á, ñ, ü) count as part of the word.
+//
+// A hyphen joining two words (sis-mil) is its own token, marked with a word
+// joiner so it can be told from a spaced dash. "sis-mil" -> "sis mil" is then
+// ONE edit (the hyphen goes) rather than a substitution plus an insertion.
+const ERROR_HUNT_JOIN = '⁠';
 function tokenizeErrorHunt(text) {
   const out = [];
   for (const w of tokenizeWords(text)) {
@@ -7889,7 +7894,13 @@ function tokenizeErrorHunt(text) {
     if (!m) { out.push(w); continue; }
     const [, lead, core, trail] = m;
     if (lead) out.push(lead);
-    if (core) out.push(core);
+    if (core) {
+      const parts = core.split(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/u);
+      parts.forEach((part, i) => {
+        if (i > 0) out.push(ERROR_HUNT_JOIN + '-');
+        out.push(part);
+      });
+    }
     if (trail) out.push(trail);
   }
   return out;
@@ -8047,12 +8058,25 @@ function renderErrorHuntDiff(original, current) {
   // the common case here; leading marks like "¿" are rare in this English app.
   const isPunctTok = (s) => /^[^\p{L}\p{N}]+$/u.test(String(s || ''));
   let html = '';
+  let glueNext = false;
   ops.forEach((o, idx) => {
-    const span = `<span class="${clsFor(o.kind)}">${escapeHtml(o.text)}</span>`;
-    html += (idx === 0 || isPunctTok(o.text)) ? span : ' ' + span;
+    const isJoin = String(o.text).startsWith(ERROR_HUNT_JOIN);
+    const span = `<span class="${clsFor(o.kind)}">${escapeHtml(isJoin ? '-' : o.text)}</span>`;
+    html += (idx === 0 || isJoin || glueNext || isPunctTok(o.text)) ? span : ' ' + span;
+    glueNext = isJoin;
   });
 
-  return { editedCount: errorPositions.size, html };
+  // Every piece of one hyphenated word (quatre-mil) counts as a single place to
+  // edit, so rewriting the whole compound is one edit, not three.
+  const groupOf = [];
+  src.forEach((tok, k) => {
+    const joined = tok.startsWith(ERROR_HUNT_JOIN) || (k > 0 && src[k - 1].startsWith(ERROR_HUNT_JOIN));
+    groupOf.push(joined && k > 0 ? groupOf[k - 1] : k);
+    if (tok.startsWith(ERROR_HUNT_JOIN) && k > 0) groupOf[k] = groupOf[k - 1];
+  });
+  const editedPlaces = new Set([...errorPositions].map((pos) => (pos in groupOf ? groupOf[pos] : pos)));
+
+  return { editedCount: editedPlaces.size, html };
 }
 
 // ===== Voice Record =====
