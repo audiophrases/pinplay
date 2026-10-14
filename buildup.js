@@ -1,5 +1,5 @@
 /*
- * Build up mode: the Everest trail.
+ * Climb mode: the Everest trail.
  *
  * An adaptive quiz assigned as a climb (BUILDUP_MODE_PLAN.md). The levels of
  * the quiz are the camps of the trail; the student's avatar is the token that
@@ -39,7 +39,7 @@
   const DROP_LINES = [
     'Climb high, sleep low: back to {camp} to get used to the air.',
     'Even the best climbers go back down to {camp} to rest, then try again.',
-    'One step back to {camp}. This is how you build up.',
+    'One step back to {camp}. This is how you climb.',
   ];
   let dropCount = 0;
 

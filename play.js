@@ -3590,7 +3590,7 @@ function renderPlayerState(state) {
   setJoinAvatar(state?.avatar);
 
   if (joinProgressEl) {
-    // Build up has no number to reach: the trail is the progress.
+    // Climb has no number to reach: the trail is the progress.
     joinProgressEl.textContent = currentClimb()
       ? t('Question {n}', { n: Math.max(0, state.currentIndex + 1) })
       : `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
@@ -6419,7 +6419,7 @@ function setJoinTitle(name = '') {
   if (playerNameEl) playerNameEl.textContent = safe ? safe : '';
 }
 
-// ---------------------------------------------------------------- Build up
+// ---------------------------------------------------------------- Climb
 // An adaptive quiz assigned as a climb (BUILDUP_MODE_PLAN.md): the server sends
 // attempt.climb with every state; buildup.js draws the Everest trail.
 let climbTrail = null;

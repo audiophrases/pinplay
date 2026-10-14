@@ -66,11 +66,11 @@
 - [ ] Sign-in rules: roster-only mode refuses an unlisted school account
 - [ ] Random-name games and assignments still need no sign-in at all
 
-## 6d) Build up (Everest climb)
-- [ ] Assignments row: with 2+ tagged levels, the Adaptive box has a mode picker (Adaptive / Build up); Build up is greyed out without 2 levels of auto-graded questions
-- [ ] Choosing Build up sets the count to 4 per level (editable, up to 100), switches instant feedback on, shows the note under the row
-- [ ] The assignment list shows "⛰️ Build up · up to N questions per student"
-- [ ] A Cup started while Build up is chosen plays as a normal Cup
+## 6d) Climb (Everest climb)
+- [ ] Assignments row: with 2+ tagged levels, the Adaptive box has a mode picker (Adaptive / Climb); Climb is greyed out without 2 levels of auto-graded questions
+- [ ] Choosing Climb sets the count to 4 per level (editable, up to 100), switches instant feedback on, shows the note under the row
+- [ ] The assignment list shows "🏔️ Climb · up to N questions per student"
+- [ ] A Cup started while Climb is chosen plays as a normal Cup
 - [ ] Student (Chromebook, 1366x768 and 1366x657): side trail with camps and altitude; the question area is not covered
 - [ ] Student (phone): the trail is a strip under the header; the question moves down to make room
 - [ ] Everyone starts at Base Camp, including a student with a saved high level (nothing is read or saved)
@@ -82,7 +82,7 @@
 - [ ] Sounds: verdict stingers, the ambient loop and the mute button work as in other assignments
 - [ ] Results: badge with the highest camp, a line "highest · now" with the level beside it, the ✓/✗ path
 - [ ] French: camp names, messages and the teacher row are translated
-- [ ] AI prompt: "Kind of quiz" → ⛰️ Build up shows its own fields (steps, questions per step, first language, mistakes, types); Generate downloads and copies the file
+- [ ] AI prompt: "Kind of quiz" → 🏔️ Climb shows its own fields (steps, questions per step, first language, mistakes, types); Generate downloads and copies the file
 - [ ] An AI answer with a stepsPlan imports; the Levels panel lists the plan with a count per step and warns under 3
 - [ ] The guide's tip shows the step's rule at the start, on reaching a camp, and after three wrong answers; a quiz without a plan shows the general advice
 - [ ] The same quiz also plays as Adaptive; the plan never reaches students whole (only the current rule)

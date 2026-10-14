@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261011-buildup" />
+    <link rel="stylesheet" href="../styles.css?v=20261014-climb" />
   </head>
   <body>
     <header class="topbar">
@@ -75,7 +75,7 @@
                         <select id="promptKind">
                           <option value="standard" selected data-i18n>Standard quiz</option>
                           <option value="listening" data-i18n>🎧 Listening (questions about a recording)</option>
-                          <option value="buildup" data-i18n>⛰️ Build up (one skill, small steps)</option>
+                          <option value="buildup" data-i18n>🏔️ Climb (one skill, small steps)</option>
                         </select>
                       </label>
                     </div>
@@ -184,7 +184,7 @@
                   </div>
                   <div id="promptBuildupWrap" class="creation-prompt-grid top-space hidden">
                     <div class="prompt-field full-width">
-                      <p class="small muted" data-i18n>Build up: one skill taught in small steps, for students who need to build it gradually. Put the skill in Theme (e.g. present simple third person -s). Assign the quiz with "⛰️ Build up" (or as Adaptive: it works in both).</p>
+                      <p class="small muted" data-i18n>Climb: one skill taught in small steps, for students who need to build it gradually. Put the skill in Theme (e.g. present simple third person -s). Assign the quiz with "🏔️ Climb" (or as Adaptive: it works in both).</p>
                     </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Steps</span>
@@ -587,11 +587,11 @@
                   <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
                   <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
                   <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
-                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level. Build up: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
+                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
                     <input id="assignmentAdaptive" type="checkbox" />
-                    <select id="assignmentAdaptiveMode" aria-label="Adaptive or Build up" data-i18n-aria disabled>
+                    <select id="assignmentAdaptiveMode" aria-label="Adaptive or Climb" data-i18n-aria disabled>
                       <option value="adaptive" data-i18n>🎯 Adaptive</option>
-                      <option value="buildup" data-i18n>⛰️ Build up</option>
+                      <option value="buildup" data-i18n>🏔️ Climb</option>
                     </select>
                     <span id="assignmentAdaptiveRange" class="small muted"></span>
                     <span id="assignmentAdaptiveCountWrap">
@@ -602,7 +602,7 @@
                   </label>
                   <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
                 </div>
-                <p id="assignmentBuildupNote" class="small muted hidden" data-i18n>⛰️ Build up: everyone starts at the bottom and climbs step by step; a wrong answer goes one step back; it ends at the summit. Instant feedback, single auto-graded questions only.</p>
+                <p id="assignmentBuildupNote" class="small muted hidden" data-i18n>🏔️ Climb: everyone starts at the bottom and climbs step by step; a wrong answer goes one step back; it ends at the summit. Instant feedback, single auto-graded questions only.</p>
                 <p id="assignmentStatus" class="small muted"></p>
                 <div class="top-space">
                   <div class="row spread gap">
@@ -734,9 +734,9 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261011-buildup"></script>
+    <script src="../i18n-fr.js?v=20261014-climb"></script>
     <script src="../i18n.js"></script>
-    <script src="../buildup.js?v=20261011-buildup"></script>
+    <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
     <script src="../wordle-lexicon-en.js"></script>
     <script src="../wordle-lexicon-ca.js"></script>
@@ -745,7 +745,7 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261005-calm"></script>
-    <script src="../app.js?v=20261011-buildup"></script>
+    <script src="../app.js?v=20261014-climb"></script>
     <script src="../voice-actors.js?v=20261009-moments"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261008-voices"></script>

@@ -357,7 +357,7 @@ const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
 // Adaptive assignments: questions each student answers unless the teacher sets another number.
 const ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT = 20;
-// Build up (BUILDUP_MODE_PLAN.md): the cap is a safety net, 4 answers per step.
+// Climb (BUILDUP_MODE_PLAN.md): the cap is a safety net, 4 answers per step.
 const BUILDUP_COUNT_PER_STEP = 4;
 const BUILDUP_MAX_COUNT = 100;
 
@@ -5633,7 +5633,7 @@ async function exportListeningPrompt() {
 
 // ---------------------------------------------------------------- AI build up prompt
 // BUILDUP_MODE_PLAN.md section 8: one skill taught in small steps, for an
-// assignment played in Build up mode (a wrong answer sends the student one
+// assignment played in Climb mode (a wrong answer sends the student one
 // step back). The steps are the quiz's level tags in order; the AI writes the
 // plan first ("stepsPlan"), then equivalent questions for each step.
 
@@ -5716,9 +5716,9 @@ function buildBuildupPrompt(req) {
   ].filter(Boolean);
 
   const out = [
-    '# PinPlay build up quiz instructions',
+    '# PinPlay climb quiz instructions',
     '',
-    `Create a "build up" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it up gradually. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
+    `Create a "climb" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it gradually. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
     '',
     '## The teacher\'s own words',
     'Typed by the teacher, word for word, in quotes. Everything after this section is PinPlay\'s general instructions. Where they contradict the teacher\'s words, the teacher\'s words win.',
@@ -5752,7 +5752,7 @@ async function exportBuildupPrompt() {
   const valueOf = (id) => String(document.getElementById(id)?.value || '').trim();
   const skill = valueOf('promptTheme');
   if (!skill) {
-    alert(t('Say which skill to build up: fill in the Theme (e.g. present simple third person -s).'));
+    alert(t('Say which skill to climb: fill in the Theme (e.g. present simple third person -s).'));
     document.getElementById('promptTheme')?.focus();
     return;
   }
@@ -6121,7 +6121,7 @@ async function createLiveGame(opts = {}) {
     const payload = normalizeQuizForLive(quiz);
     // PinPlay Cup follows the Assignments "🎯 Adaptive" checkbox (shown only
     // for quizzes with 2+ tagged levels); the board itself has no toggle.
-    // (Build up is for homework: a Cup ignores it and plays as usual.)
+    // (Climb is for homework: a Cup ignores it and plays as usual.)
     const arenaAdaptive = arenaMode
       && !!document.getElementById('assignmentAdaptive')?.checked
       && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden')
@@ -10118,8 +10118,8 @@ function renderAssignmentResults(safeCode, data) {
     const bu = lv?.buildup;
     const buCamp = (i) => (window.PinBuildup ? `${window.PinBuildup.campName(i, bu.n)}${bu.bands?.[i] ? ` (${bu.bands[i]})` : ''} · ${window.PinBuildup.fmtAlt(window.PinBuildup.altitude(i, bu.n))}` : '');
     const levelBadge = bu
-      ? `<span class="badge-buildup" title="${escapeHtml(t('Build up: highest {best} · now {now}', { best: buCamp(bu.best), now: buCamp(bu.rung) }))}${lv.path ? `
-${escapeHtml(lv.path)}` : ''}">⛰️ ${escapeHtml(bu.summit ? t('Summit') : window.PinBuildup ? window.PinBuildup.campName(bu.best, bu.n) : '')}${bu.stuck ? ' ⚠️' : ''}</span>`
+      ? `<span class="badge-buildup" title="${escapeHtml(t('Climb: highest {best} · now {now}', { best: buCamp(bu.best), now: buCamp(bu.rung) }))}${lv.path ? `
+${escapeHtml(lv.path)}` : ''}">🏔️ ${escapeHtml(bu.summit ? t('Summit') : window.PinBuildup ? window.PinBuildup.campName(bu.best, bu.n) : '')}${bu.stuck ? ' ⚠️' : ''}</span>`
       : lv?.usualLevel
       ? `<span class="badge-adaptive" title="${escapeHtml(t('Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' }))}${lv.path ? `
 ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
@@ -10155,7 +10155,7 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
     if (bu) {
       levelsLine = document.createElement('div');
       levelsLine.className = 'small muted';
-      levelsLine.textContent = `${bu.summit ? t('⛰️ Summit reached') : t('⛰️ Highest {best}', { best: buCamp(bu.best) })} · ${t('now {now}', { now: buCamp(bu.rung) })}${bu.stuck ? ` · ${t('⚠️ stuck: three wrong answers in a row')}` : ''}`;  // i18n-ignore (text is t()-wrapped)
+      levelsLine.textContent = `${bu.summit ? t('🏔️ Summit reached') : t('🏔️ Highest {best}', { best: buCamp(bu.best) })} · ${t('now {now}', { now: buCamp(bu.rung) })}${bu.stuck ? ` · ${t('⚠️ stuck: three wrong answers in a row')}` : ''}`;  // i18n-ignore (text is t()-wrapped)
     } else if (lv?.usualLevel) {
       levelsLine = document.createElement('div');
       levelsLine.className = 'small muted';
@@ -11331,7 +11331,7 @@ function buildAssignmentListItem(a) {
     ? ` · <span class="small muted" title="Total attempts started across all students">${attemptsCount} attempt${attemptsCount === 1 ? '' : 's'}</span>`
     : '';
   const sizeTag = a?.buildup
-    ? `<span class="badge-buildup" title="${escapeHtml(t('For students who need to build a skill: everyone starts at the bottom and climbs step by step. A wrong answer goes one step back.'))}">${escapeHtml(t('⛰️ Build up · up to {n} questions per student', { n: Number(a.adaptiveCount || 0) }))}</span>`
+    ? `<span class="badge-buildup" title="${escapeHtml(t('For students who need to build a skill: everyone starts at the bottom and climbs step by step. A wrong answer goes one step back.'))}">${escapeHtml(t('🏔️ Climb · up to {n} questions per student', { n: Number(a.adaptiveCount || 0) }))}</span>`
     : a?.adaptiveCount
     ? `<span class="badge-adaptive" title="${escapeHtml(t('Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.'))}">${escapeHtml(t('🎯 Adaptive · {n} questions per student', { n: Number(a.adaptiveCount) }))}</span>`
     : `${Number(a?.totalQuestions || 0)}q`;
@@ -11585,7 +11585,7 @@ async function createAssignmentFromCurrentQuiz() {
       && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
     const buildupOn = adaptiveOn && assignmentBuildupSelected();
     if (buildupOn && buildupAvailableLevels().length < 2) {
-      throw new Error(t('Build up needs auto-graded questions tagged with at least two levels.'));
+      throw new Error(t('Climb needs auto-graded questions tagged with at least two levels.'));
     }
     const adaptiveCount = buildupOn
       ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableLevels().length))))
@@ -11617,7 +11617,7 @@ async function createAssignmentFromCurrentQuiz() {
     const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
     const createdCount = Number(data?.assignment?.adaptiveCount || 0);
     const adaptiveLabel = createdCount
-      ? ` · ${data?.assignment?.buildup ? t('⛰️ Build up · up to {n} questions per student', { n: createdCount }) : t('🎯 Adaptive · {n} questions per student', { n: createdCount })}`
+      ? ` · ${data?.assignment?.buildup ? t('🏔️ Climb · up to {n} questions per student', { n: createdCount }) : t('🎯 Adaptive · {n} questions per student', { n: createdCount })}`
       : '';
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}${adaptiveLabel}`;
 
@@ -17534,7 +17534,7 @@ let levelTagSnapshot = null;
 // levelled quiz starts ticked while an untick sticks as the teacher edits.
 let adaptiveDefaultedFor = null;
 
-// Build up serves one question at a time from the bottom: single, auto-graded,
+// Climb serves one question at a time from the bottom: single, auto-graded,
 // tagged questions only (the server checks too).
 function isBuildupQuestion(q) {
   return isAdaptiveEligibleQuestion(q) && !q.listeningSection
@@ -17547,7 +17547,7 @@ function buildupAvailableLevels() {
   return CEFR_LEVELS.filter((l) => found.has(l));
 }
 
-// The Adaptive box plus the mode picker set to Build up.
+// The Adaptive box plus the mode picker set to Climb.
 function assignmentBuildupSelected() {
   return !!document.getElementById('assignmentAdaptive')?.checked
     && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden')
@@ -17582,7 +17582,7 @@ function syncAssignmentAdaptiveControl() {
     box.checked = true;
   }
   if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
-  // Adaptive or Build up: Build up needs two levels of auto-graded questions.
+  // Adaptive or Climb: Climb needs two levels of auto-graded questions.
   const modeEl = document.getElementById('assignmentAdaptiveMode');
   const buildupLevels = buildupAvailableLevels();
   if (modeEl) {
@@ -17694,7 +17694,7 @@ function initAssignmentAdaptiveControl() {
     else countEl.dataset.wanted = countEl.value;
   });
   document.getElementById('assignmentAdaptiveMode')?.addEventListener('change', () => {
-    // Build up learns from every miss: instant feedback.
+    // Climb learns from every miss: instant feedback.
     if (assignmentBuildupSelected()) {
       for (let i = 0; i < 3 && assignmentFeedbackMode !== 'instant'; i++) toggleInstantFeedbackMode();
     }
@@ -17710,7 +17710,7 @@ function initAssignmentAdaptiveControl() {
   syncAssignmentAdaptiveControl();
 }
 
-// Build up: the AI's plan of the steps (quiz.stepsPlan), with how many
+// Climb: the AI's plan of the steps (quiz.stepsPlan), with how many
 // questions each step has. A step with fewer than three gets a warning: a
 // student sent back to it would meet the same questions again.
 const STEPS_PLAN_MIN_ITEMS = 3;
@@ -17720,7 +17720,7 @@ function renderStepsPlan(counts) {
   const plan = normalizeStepsPlan(quiz?.stepsPlan);
   el.classList.toggle('hidden', !plan.length);
   if (!plan.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<strong>${escapeHtml(t('⛰️ Steps plan'))}</strong>`
+  el.innerHTML = `<strong>${escapeHtml(t('🏔️ Steps plan'))}</strong>`
     + `<ol class="steps-plan-list">${plan.map((p, i) => {
       const n = counts[p.cefr] || 0;
       const thin = n < STEPS_PLAN_MIN_ITEMS ? ` <span class="bad">${escapeHtml(t('⚠ only {n} questions', { n }))}</span>` : '';
@@ -18668,7 +18668,7 @@ function normalizeQuizForLive(raw) {
   return normalized;
 }
 
-// Build up: the AI's plan of the steps, one entry per level (step) of the
+// Climb: the AI's plan of the steps, one entry per level (step) of the
 // quiz: a title, what is new compared with the step before (teacher only) and
 // the rule students see as the guide's tip. Identical in app.js and worker.js.
 const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];

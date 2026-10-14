@@ -2901,11 +2901,11 @@ export class QuizRoom {
         const adaptiveCount = Math.round(Number(body?.adaptiveCount || 0));
         const sectionPlan = adaptiveSectionPlan(quiz);
         if (body?.buildup === true && adaptiveCount > 0) {
-          // Build up: single auto-graded questions only, from the bottom, with
+          // Climb: single auto-graded questions only, from the bottom, with
           // instant feedback (the student learns from every miss).
           const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: true });
           if (bands.length < 2 || !pool.length) {
-            return json({ error: 'Build up needs auto-graded questions tagged with at least two levels.' }, 400);
+            return json({ error: 'Climb needs auto-graded questions tagged with at least two levels.' }, 400);
           }
           assignment.adaptive = { count: clamp(adaptiveCount, 1, BUILDUP_MAX_COUNT), mode: 'buildup' };
           assignment.feedbackMode = 'instant';
@@ -7709,7 +7709,7 @@ function normalizeQuiz(quiz) {
   return normalized;
 }
 
-// Build up: the AI's plan of the steps, one entry per level (step) of the
+// Climb: the AI's plan of the steps, one entry per level (step) of the
 // quiz: a title, what is new compared with the step before (teacher only) and
 // the rule students see as the guide's tip. Identical in app.js and worker.js.
 const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
@@ -8893,7 +8893,7 @@ function adaptiveSectionPlan(quiz, { autoOnly = false } = {}) {
 
 // Questions per student: N singles plus every section's block.
 function adaptiveAttemptTotal(st) {
-  // Build up ends at the summit, before the cap: what was answered is the total.
+  // Climb ends at the summit, before the cap: what was answered is the total.
   if (st?.bu && st.done) return (st.items || []).length;
   return Number(st?.count || 0) + (st?.sections || []).reduce((n, s) => n + Number(s.size || 0), 0);
 }
@@ -8929,7 +8929,7 @@ function adaptiveAttemptServe(assignment, st, pool) {
   st.current = null;
   const singles = (st.items || []).filter((it) => !it.section).length;
   if (st.bu) {
-    // Build up: no sections; the summit (or the cap) ends the attempt.
+    // Climb: no sections; the summit (or the cap) ends the attempt.
     if (!st.bu.summit && singles < st.count) st.current = buildupNext(st, pool);
     if (st.current == null) st.done = true;
     return;
@@ -9035,7 +9035,7 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
 // new answers. Teacher grades applied so far are now on the roster too.
 async function adaptiveAttemptSaveLevel(storage, attempt) {
   const st = attempt?.adaptive;
-  if (st?.bu) return; // Build up never touches the saved level
+  if (st?.bu) return; // Climb never touches the saved level
   const email = sanitizeEmail(attempt?.studentEmail);
   const result = email ? adaptiveSessionResult(st) : null;
   if (!result) return;
@@ -10668,7 +10668,7 @@ function adaptiveNext(st, pool, rng = Math.random) {
 }
 
 // ---------------------------------------------------------------- build up mode
-// Build up (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb for
+// Climb (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb for
 // students who need to build a skill step by step. The levels the quiz holds
 // are the steps, always from the bottom (no saved level is read or written).
 // A right answer fills a pip, enough pips climb a step; a wrong answer drops

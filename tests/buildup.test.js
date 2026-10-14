@@ -6,7 +6,7 @@ const os = require('node:os');
 const { loadDeclarations } = require('./helpers/extract-declaration');
 const { seeded } = require('./helpers/adaptive-sim');
 
-// Build up mode (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb,
+// Climb mode (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb,
 // always from the bottom, a wrong answer drops one step. These tests run the
 // real functions of cloudflare/worker.js, and real assignments on the real
 // worker with in-memory storage.
@@ -340,7 +340,7 @@ describe('build up assignments (real worker, in-memory storage)', () => {
   });
 });
 
-describe('Build up never touches the saved level', () => {
+describe('Climb never touches the saved level', () => {
   it('adaptiveAttemptSaveLevel does nothing for a build up attempt', async () => {
     const E = loadDeclarations(read('cloudflare/worker.js'), ['adaptiveAttemptSaveLevel'], {
       sanitizeEmail: (e) => e,
@@ -393,7 +393,7 @@ describe('the trail helpers (buildup.js)', () => {
   });
 });
 
-describe('the Build up AI prompt and the steps plan', () => {
+describe('the Climb AI prompt and the steps plan', () => {
   const { extractDeclaration } = require('./helpers/extract-declaration');
   let A;
   before(() => {
