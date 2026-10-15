@@ -422,6 +422,8 @@ const assignmentSectionToggleEl = document.getElementById('assignmentSectionTogg
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 const workspacesSectionToggleEl = document.getElementById('workspacesSectionToggle');
 const workspacesCardBodyEl = document.getElementById('workspacesCardBody');
+const voiceActorsSectionToggleEl = document.getElementById('voiceActorsSectionToggle');
+const voiceActorsCardBodyEl = document.getElementById('voiceActorsCardBody');
 const builderMaintenanceToggleEl = document.getElementById('builderMaintenanceToggle');
 const builderMaintenanceBodyEl = document.getElementById('builderMaintenanceBody');
 
@@ -886,6 +888,7 @@ function getTeacherCollapsibleSectionPairs() {
     [assignmentSectionToggleEl, assignmentSectionBodyEl],
     [studentsSectionToggleEl, studentsSectionBodyEl],
     [workspacesSectionToggleEl, workspacesCardBodyEl],
+    [voiceActorsSectionToggleEl, voiceActorsCardBodyEl],
   ].filter(([triggerEl, bodyEl]) => !!triggerEl && !!bodyEl);
 }
 
@@ -916,6 +919,7 @@ function bindCollapsibleSections() {
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
   bindSectionToggle(workspacesSectionToggleEl, workspacesCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(voiceActorsSectionToggleEl, voiceActorsCardBodyEl, { defaultCollapsed: true, keyboard: true });
 
   bindSectionToggle(studentsSectionToggleEl, studentsSectionBodyEl, { defaultCollapsed: true, keyboard: false });
 

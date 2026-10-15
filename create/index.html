@@ -46,11 +46,15 @@
 
           <!-- Voice actors (owner only): students record a script; no quiz needed -->
           <div class="card owner-only" id="voiceActorsCard">
-            <h2 data-i18n>🎙 Voice actors</h2>
-            <p class="small muted" data-i18n>Students record the lines of a script on their phone, from one link. No quiz needed: start with the script and write the questions later.</p>
-            <div class="va-entry-row">
-              <button id="voiceActorsNewBtn" class="btn primary" type="button" data-i18n>+ New recording session</button>
-              <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
+            <h2 id="voiceActorsSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+              <span data-i18n>🎙 Voice actors</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
+            </h2>
+            <div id="voiceActorsCardBody" class="hidden">
+              <p class="small muted" data-i18n>Students record the lines of a script on their phone, from one link. No quiz needed: start with the script and write the questions later.</p>
+              <div class="va-entry-row">
+                <button id="voiceActorsNewBtn" class="btn primary" type="button" data-i18n>+ New recording session</button>
+                <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
+              </div>
             </div>
           </div>
 
@@ -755,7 +759,7 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261005-calm"></script>
-    <script src="../app.js?v=20261014-climb"></script>
+    <script src="../app.js?v=20261015-voices"></script>
     <script src="../voice-actors.js?v=20261015-voices"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261008-voices"></script>
