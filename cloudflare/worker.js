@@ -1152,8 +1152,9 @@ export default {
     }
 
     // ---------- Voice actors (VOICE_ACTORS_PLAN.md) ----------
-    // Volunteers: GET /api/rec/actor?s=ID (their view of the session) and
-    // POST /api/rec/take?s=ID&line=L&ms=DURATION (the raw audio of one take).
+    // Volunteers: GET /api/rec/actor?s=ID (their view of the session),
+    // POST /api/rec/take?s=ID&line=L&ms=DURATION (the raw audio of one take)
+    // and POST /api/rec/edit (new words for a line, when the session allows it).
     // Teacher (password): /api/rec/create | list | get | save | delete.
     if (url.pathname.startsWith('/api/rec/')) {
       const stub = assignmentsStub(env);
@@ -1189,6 +1190,14 @@ export default {
           try { await env.QUIZ_MEDIA.delete(data.previousKey); } catch { /* deleting the session clears its folder */ }
         }
         return res;
+      }
+      // A volunteer changes the words of a line: { s, line, text }.
+      if (url.pathname === '/api/rec/edit' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const id = sanitizeRecSessionId(body?.s);
+        const lineId = sanitizeRecLineId(body?.line);
+        if (!id || !lineId) return json({ error: 'Session or line missing.' }, 400);
+        return forward('edit', { id, lineId, text: body?.text });
       }
       if (request.method === 'POST') {
         const route = url.pathname.slice('/api/rec/'.length);
@@ -2855,6 +2864,18 @@ export class QuizRoom {
           session.updatedAt = Date.now();
           await storage.put(`vs:${id}`, session);
           return json({ ok: true, line: recActorLine(line), previousKey: previousKey && previousKey !== line.take.key ? previousKey : '' });
+        }
+        if (route === 'edit') {
+          const line = session.lines.find((l) => l.id === sanitizeRecLineId(body?.lineId));
+          if (!line) return json({ error: 'This line is not in the script.' }, 404);
+          if (session.allowEdits === false) return json({ error: 'Your teacher has turned off changing the lines.', reason: 'locked' }, 403);
+          if (line.status === 'ok') return json({ error: 'Your teacher has already approved this line.', reason: 'approved' }, 409);
+          const text = recLineText(body?.text);
+          if (!text) return json({ error: 'A line can\'t be empty.' }, 400);
+          recSetLineText(line, text);
+          session.updatedAt = Date.now();
+          await storage.put(`vs:${id}`, session);
+          return json({ ok: true, line: recActorLine(line) });
         }
         if (route === 'save') {
           recApplySave(session, body);
@@ -6534,11 +6555,23 @@ function recGap(value) {
   return Number.isFinite(n) ? Math.round(clamp(n, 0, 10) * 100) / 100 : null;
 }
 
+function recLineText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+}
+
+// New words for a line, keeping the script's own words in `original` so the
+// teacher sees every change. Going back to the original clears the mark.
+function recSetLineText(line, text) {
+  const original = line.original || line.text;
+  line.text = text;
+  line.original = text === original ? null : original;
+}
+
 function newRecSession(body, now = Date.now()) {
   const lines = (Array.isArray(body?.lines) ? body.lines : []).slice(0, REC_MAX_LINES)
     .map((l) => ({
       speaker: String(l?.speaker || '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Voice',
-      text: String(l?.text || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+      text: recLineText(l?.text),
       direction: String(l?.direction || '').replace(/\s+/g, ' ').trim().slice(0, 80),
     }))
     .filter((l) => l.text)
@@ -6549,6 +6582,7 @@ function newRecSession(body, now = Date.now()) {
     title: String(body?.title || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Recording',
     sectionId: String(body?.sectionId || '').slice(0, 60),
     defaultGap: recGap(body?.defaultGap) ?? 0.6,
+    allowEdits: body?.allowEdits !== false,
     createdAt: now,
     updatedAt: now,
     lines,
@@ -6566,27 +6600,31 @@ function recSessionSummary(session) {
     recorded: lines.filter((l) => l.take).length,
     approved: lines.filter((l) => l.status === 'ok').length,
     redo: lines.filter((l) => l.status === 'redo').length,
+    edited: lines.filter((l) => l.original).length,
   };
 }
 
-// What a volunteer sees of a line: the text, whether it is done, and their take
-// to listen back to. No trims or pauses.
+// What a volunteer sees of a line: the text (and the script's own words if
+// they changed it), whether it is done, and their take to listen back to.
+// No trims or pauses.
 function recActorLine(line) {
   return {
-    id: line.id, n: line.n, speaker: line.speaker, text: line.text, direction: line.direction,
+    id: line.id, n: line.n, speaker: line.speaker, text: line.text, original: line.original || null, direction: line.direction,
     status: line.status, take: line.take ? { key: line.take.key, at: line.take.at } : null,
   };
 }
 
 function recActorView(session) {
-  return { id: session.id, title: session.title, lines: (session.lines || []).map(recActorLine) };
+  return { id: session.id, title: session.title, allowEdits: session.allowEdits !== false, lines: (session.lines || []).map(recActorLine) };
 }
 
-// The teacher's batched edits: title, default pause, and per line trim
-// ({ s, e } in ms, or null for automatic), status and pause.
+// The teacher's batched edits: title, default pause, whether volunteers may
+// change the words, and per line trim ({ s, e } in ms, or null for
+// automatic), status, pause and `revert` (back to the script's own words).
 function recApplySave(session, body) {
   if (typeof body?.title === 'string' && body.title.trim()) session.title = body.title.replace(/\s+/g, ' ').trim().slice(0, 120);
   if (body?.defaultGap !== undefined) session.defaultGap = recGap(body.defaultGap) ?? session.defaultGap;
+  if (typeof body?.allowEdits === 'boolean') session.allowEdits = body.allowEdits;
   const byId = new Map((session.lines || []).map((l) => [l.id, l]));
   (Array.isArray(body?.lines) ? body.lines : []).forEach((edit) => {
     const line = byId.get(sanitizeRecLineId(edit?.id));
@@ -6600,6 +6638,7 @@ function recApplySave(session, body) {
     if (REC_STATUSES.includes(edit.status) && (edit.status !== 'ok' || line.take)) line.status = edit.status;
     if (edit.gap === null) line.gap = null;
     else if (edit.gap !== undefined) line.gap = recGap(edit.gap);
+    if (edit.revert === true && line.original) recSetLineText(line, line.original);
   });
 }
 

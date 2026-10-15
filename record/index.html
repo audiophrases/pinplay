@@ -7,7 +7,7 @@
     <meta name="robots" content="noindex" />
     <title>PinPlay · Record your lines</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261008-voices" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-voices" />
   </head>
   <body class="rec-page">
     <header class="topbar">
@@ -35,6 +35,17 @@
         <div class="rec-line">
           <div class="rec-who"><strong id="recSpeaker"></strong> <span id="recDirection" class="muted"></span> <span id="recBadge" class="rec-badge"></span></div>
           <p id="recText" class="rec-text"></p>
+          <p id="recOriginal" class="rec-original small muted" hidden></p>
+          <div id="recEditBox" class="rec-edit" hidden>
+            <label for="recEditText" class="small muted" data-i18n>Write the line the way you will say it. Your teacher sees what you changed.</label>
+            <textarea id="recEditText" rows="3" maxlength="600"></textarea>
+            <div class="rec-edit-actions">
+              <button type="button" class="btn btn-sm primary" id="recEditSave" data-i18n>✓ Save the words</button>
+              <button type="button" class="btn btn-sm" id="recEditCancel" data-i18n>Cancel</button>
+              <button type="button" class="btn btn-sm" id="recEditOriginal" hidden data-i18n>↩ Back to the original</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm rec-edit-btn" id="recEditBtn" hidden data-i18n>✏️ Change the words</button>
         </div>
         <div class="rec-meter" aria-hidden="true"><span id="recLevel"></span></div>
         <div class="rec-controls">
@@ -56,8 +67,8 @@
       </section>
     </main>
 
-    <script src="../i18n-fr.js?v=20261008-voices"></script>
+    <script src="../i18n-fr.js?v=20261015-voices"></script>
     <script src="../i18n.js"></script>
-    <script src="../record.js?v=20261008-voices"></script>
+    <script src="../record.js?v=20261015-voices"></script>
   </body>
 </html>

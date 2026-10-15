@@ -1,8 +1,11 @@
 /*
  * PinPlay voice actors page (/record/?s=ID): volunteers record the lines of a
  * listening script, one take per line, on any device with a microphone. The
- * whole script in order, or one character's lines. Each take is one upload;
- * the page never polls (↻ reloads the lines). See VOICE_ACTORS_PLAN.md.
+ * whole script in order, or one character's lines (&c=NAME in the link goes
+ * straight to them). Each take is one upload; the page never polls (↻ reloads
+ * the lines). When the teacher allows it, a volunteer can change the words of
+ * a line: the server keeps the script's own words so the teacher sees every
+ * change. See VOICE_ACTORS_PLAN.md.
  */
 (() => {
   const BACKEND_KEY = 'pinplay.backend.v1';
@@ -22,9 +25,13 @@
     record: $('recRecord'), listen: $('recListen'), save: $('recSave'),
     prevBtn: $('recPrevBtn'), nextBtn: $('recNextBtn'),
     back: $('recBack'), refresh: $('recRefresh'), doneBack: $('recDoneBack'),
+    original: $('recOriginal'), editBtn: $('recEditBtn'), editBox: $('recEditBox'), editText: $('recEditText'),
+    editSave: $('recEditSave'), editCancel: $('recEditCancel'), editOriginal: $('recEditOriginal'),
   };
 
-  const sessionId = (new URLSearchParams(location.search).get('s') || '').trim().toLowerCase();
+  const params = new URLSearchParams(location.search);
+  const sessionId = (params.get('s') || '').trim().toLowerCase();
+  const linkCharacter = (params.get('c') || '').trim();
   let session = null;
   let mode = 'all'; // 'all', or a character's name
   let queue = []; // the lines being recorded, in script order
@@ -36,6 +43,7 @@
   let pending = null; // { blob, url, durMs } — the take not saved yet
   let player = null;
   let busy = false;
+  let editing = false;
 
   function backendUrl() {
     let raw = '';
@@ -123,9 +131,13 @@
     if (player) { player.pause(); player = null; }
   }
 
+  // Only when the server says so (an older API has no /api/rec/edit).
+  const canEdit = (line) => session.allowEdits === true && line.status !== 'ok';
+
   function renderLine() {
     const line = queue[idx];
     if (!line) return;
+    if (!canEdit(line)) editing = false;
     const pos = session.lines.indexOf(line);
     const before = pos > 0 ? session.lines[pos - 1] : null;
     el.prev.textContent = before ? `${before.speaker}: ${before.text}` : '';
@@ -133,6 +145,13 @@
     el.speaker.textContent = line.speaker;
     el.direction.textContent = line.direction ? `(${line.direction})` : '';
     el.text.textContent = line.text;
+    el.text.hidden = editing;
+    el.original.hidden = editing || !line.original;
+    el.original.textContent = line.original ? t('✏️ You changed this line. The script said: “{text}”', { text: line.original }) : '';
+    el.editBox.hidden = !editing;
+    el.editOriginal.hidden = !line.original;
+    el.editBtn.hidden = editing || !canEdit(line);
+    el.editBtn.disabled = !!recorder || busy;
     const badges = {
       ok: t('✓ Approved'),
       redo: t('↻ Please record again'),
@@ -146,11 +165,11 @@
     el.prevBtn.disabled = idx === 0;
     el.nextBtn.disabled = idx >= queue.length - 1;
     const approved = line.status === 'ok';
-    el.record.disabled = approved || busy;
+    el.record.disabled = approved || busy || editing;
     el.record.textContent = recorder ? t('■ Stop') : (pending || line.take ? t('● Record again') : t('● Record'));
     el.record.classList.toggle('rec-on', !!recorder);
-    el.listen.disabled = !!recorder || !(pending || line.take);
-    el.save.disabled = !!recorder || !pending || busy;
+    el.listen.disabled = !!recorder || editing || !(pending || line.take);
+    el.save.disabled = !!recorder || !pending || busy || editing;
     if (approved) el.hint.textContent = t('Your teacher has approved this line.');
     else if (recorder) el.hint.textContent = t('Recording… press ■ Stop when you finish the line.');
     else if (pending) el.hint.textContent = t('Listen to your take. Happy? ✓ Save & next. If not, record again.');
@@ -162,6 +181,7 @@
     if (recorder || i < 0 || i >= queue.length) return;
     stopPlayer();
     dropPending();
+    editing = false;
     idx = i;
     renderLine();
   }
@@ -270,6 +290,61 @@
     renderLine();
   }
 
+  // ---------- changing the words ----------
+  function startEdit() {
+    const line = queue[idx];
+    if (!line || recorder || !canEdit(line)) return;
+    editing = true;
+    el.editText.value = line.text;
+    renderLine();
+    el.editText.focus();
+  }
+
+  function cancelEdit() {
+    editing = false;
+    renderLine();
+  }
+
+  async function saveEdit(text) {
+    const line = queue[idx];
+    if (!line || busy) return;
+    const words = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!words) { setStatus(t('A line can\'t be empty.'), 'bad'); return; } // i18n-ignore (already in t())
+    if (words === line.text) { cancelEdit(); return; }
+    busy = true;
+    renderLine();
+    setStatus(t('⏳ Saving…'));
+    try {
+      const res = await fetch(`${backendUrl()}/api/rec/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ s: sessionId, line: line.id, text: words }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.reason === 'approved') {
+        line.status = 'ok';
+        editing = false;
+        setStatus(t('Your teacher has already approved this line.'), 'ok'); // i18n-ignore (already in t())
+      } else if (res.status === 403 && data.reason === 'locked') {
+        session.allowEdits = false;
+        editing = false;
+        setStatus(t('Your teacher has turned off changing the lines.'), 'bad'); // i18n-ignore (already in t())
+      } else if (!res.ok) {
+        throw new Error(data.error || `${res.status}`);
+      } else {
+        Object.assign(line, data.line);
+        editing = false;
+        setStatus(line.take || pending
+          ? t('✅ Words saved. Record the line again so your take matches them.')
+          : t('✅ Words saved.'), 'ok');
+      }
+    } catch (err) {
+      setStatus(t('Not saved ({msg}). Check the connection and try again.', { msg: err.message }), 'bad');
+    }
+    busy = false;
+    renderLine();
+  }
+
   async function refresh() {
     if (recorder) return;
     setStatus(t('Loading…'));
@@ -285,6 +360,7 @@
     const same = queue.findIndex((l) => l.id === currentId);
     idx = redo >= 0 ? redo : Math.max(0, same);
     dropPending();
+    editing = false;
     setStatus(redo >= 0 ? t('Lines to record again: {n}.', { n: queue.filter((l) => l.status === 'redo').length }) : t('Up to date.'));
     show(el.studio);
     renderLine();
@@ -299,6 +375,14 @@
   el.record.addEventListener('click', toggleRecording);
   el.listen.addEventListener('click', listen);
   el.save.addEventListener('click', saveTake);
+  el.editBtn.addEventListener('click', startEdit);
+  el.editCancel.addEventListener('click', cancelEdit);
+  el.editSave.addEventListener('click', () => saveEdit(el.editText.value));
+  el.editOriginal.addEventListener('click', () => { const line = queue[idx]; if (line?.original) saveEdit(line.original); });
+  el.editText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(el.editText.value); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+  });
   el.prevBtn.addEventListener('click', () => goTo(idx - 1));
   el.nextBtn.addEventListener('click', () => goTo(idx + 1));
   el.refresh.addEventListener('click', refresh);
@@ -306,6 +390,7 @@
     if (recorder) return;
     stopPlayer();
     dropPending();
+    editing = false;
     renderChoose();
   });
   el.doneBack.addEventListener('click', () => { show(el.studio); renderLine(); });
@@ -317,7 +402,7 @@
     else if (e.key === 'Enter' && !el.save.disabled) { e.preventDefault(); saveTake(); }
   });
   window.addEventListener('beforeunload', (e) => {
-    if (pending || recorder) { e.preventDefault(); e.returnValue = ''; }
+    if (pending || recorder || editing) { e.preventDefault(); e.returnValue = ''; }
   });
 
   (async () => {
@@ -333,5 +418,8 @@
       return;
     }
     renderChoose();
+    // A link for one character (&c=NAME) opens their lines straight away.
+    const mine = session.lines.flatMap(speakersOf).find((n) => n.toLowerCase() === linkCharacter.toLowerCase());
+    if (linkCharacter && mine) startMode(mine);
   })();
 })();

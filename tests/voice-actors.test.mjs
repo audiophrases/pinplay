@@ -125,7 +125,8 @@ describe('volunteers', () => {
     const r = await call(`/api/rec/actor?s=${s.id}`);
     assert.equal(r.status, 200);
     assert.equal(r.body.session.lines.length, 3);
-    assert.deepEqual(Object.keys(r.body.session.lines[0]).sort(), ['direction', 'id', 'n', 'speaker', 'status', 'take', 'text']);
+    assert.deepEqual(Object.keys(r.body.session.lines[0]).sort(), ['direction', 'id', 'n', 'original', 'speaker', 'status', 'take', 'text']);
+    assert.equal(r.body.session.allowEdits, true, 'changing the words is on by default');
   });
 
   it('upload a take per line; a new take replaces the old object', async () => {
@@ -170,6 +171,56 @@ describe('volunteers', () => {
     assert.equal((await take(s.id, '../x')).status, 400);
     assert.equal((await call('/api/rec/actor?s=nope')).status, 404);
     assert.ok(![...bucket.objects.keys()].some((k) => k.includes('l99') || k.includes('zzzz')), 'refused takes leave nothing behind');
+  });
+});
+
+describe('changing the words', () => {
+  const edit = (s, line, text) => call('/api/rec/edit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ s, line, text }),
+  });
+
+  it("keeps the script's words so the teacher sees the change", async () => {
+    const s = await create();
+    const r = await edit(s.id, 'l2', '  I know,   I really know. ');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.line.text, 'I know, I really know.');
+    assert.equal(r.body.line.original, 'I know, I know.');
+    // A second change keeps the first original.
+    await edit(s.id, 'l2', 'Yes, I know.');
+    const full = (await post('get', { id: s.id })).body.session;
+    assert.equal(full.lines[1].text, 'Yes, I know.');
+    assert.equal(full.lines[1].original, 'I know, I know.');
+    assert.ok((await post('list')).body.sessions.some((x) => x.id === s.id && x.edited === 1));
+    // Back to the original words clears the mark.
+    const back = await edit(s.id, 'l2', 'I know, I know.');
+    assert.equal(back.body.line.original, null);
+  });
+
+  it("the teacher can go back to the script's words", async () => {
+    const s = await create();
+    await edit(s.id, 'l1', 'Forty minutes? No way!');
+    const r = await post('save', { id: s.id, lines: [{ id: 'l1', revert: true }] });
+    assert.equal(r.body.session.lines[0].text, 'Forty minutes? You are joking!');
+    assert.equal(r.body.session.lines[0].original, null);
+  });
+
+  it('is refused when the teacher turned it off, on approved lines and for empty words', async () => {
+    const s = await create();
+    assert.equal((await edit(s.id, 'l1', '   ')).status, 400);
+    await take(s.id, 'l1');
+    await post('save', { id: s.id, lines: [{ id: 'l1', status: 'ok' }] });
+    const approved = await edit(s.id, 'l1', 'New words');
+    assert.equal(approved.status, 409);
+    assert.equal(approved.body.reason, 'approved');
+    await post('save', { id: s.id, allowEdits: false });
+    assert.equal((await call(`/api/rec/actor?s=${s.id}`)).body.session.allowEdits, false);
+    const locked = await edit(s.id, 'l2', 'New words');
+    assert.equal(locked.status, 403);
+    assert.equal(locked.body.reason, 'locked');
+    assert.equal((await edit('zzzzzzzzzz', 'l2', 'x')).status, 404);
+    assert.equal((await edit(s.id, '../x', 'x')).status, 400);
+    const off = (await post('create', { title: 'Off', lines: LINES, allowEdits: false })).body.session;
+    assert.equal(off.allowEdits, false);
   });
 });
 
@@ -247,6 +298,26 @@ describe('teacher panel helpers', () => {
       { speaker: 'Mia', direction: 'surprised', text: 'Forty minutes?' },
       { speaker: 'Mia + Tom', direction: '', text: 'Let us go. and quickly.' },
     ]);
+  });
+
+  it("writes the script back, with the volunteers' changes", () => {
+    const lines = [
+      { speaker: 'Mia', direction: 'surprised', text: 'Forty minutes? No way!', original: 'Forty minutes?' },
+      { speaker: 'Mia + Tom', direction: '', text: 'Let us go.', original: null },
+    ];
+    assert.equal(va.vaScriptText(lines), 'Mia (surprised): Forty minutes? No way!\nMia + Tom: Let us go.');
+    assert.deepEqual(va.vaLinesFromScript(va.vaScriptText(lines)).map((l) => l.text), ['Forty minutes? No way!', 'Let us go.']);
+    assert.deepEqual(va.vaCharacters(lines), ['Mia', 'Tom']);
+    const section = 'TITLE: Late\nMia (surprised): Forty minutes?\n[pause 2]\nMia + Tom: Let us go.';
+    assert.deepEqual(va.vaApplyEdits(section, lines), {
+      text: 'TITLE: Late\nMia (surprised): Forty minutes? No way!\n[pause 2]\nMia + Tom: Let us go.', missed: 0,
+    });
+    assert.equal(va.vaApplyEdits('Mia: Something else', lines).missed, 1);
+  });
+
+  it('gives each character a link of their own', () => {
+    assert.match(va.vaLink('abcdefgh23', 'Mia + Tom'), /\?s=abcdefgh23&c=Mia%20%2B%20Tom$/);
+    assert.match(va.vaLink('abcdefgh23'), /\?s=abcdefgh23$/);
   });
 
   it('trims the silence around speech, keeping a little air', () => {

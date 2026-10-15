@@ -66,3 +66,24 @@ a listening section. Decided with the owner on 2026-10-08.
   loaded only when building; WAV if it can't load).
 - Tests: `tests/voice-actors.test.mjs` (routes on the real worker, script
   reading, automatic trim); checked in Chrome with a fake microphone.
+
+## Easier to find, and volunteers may change the words (2026-10-15)
+
+The owner couldn't find the panel without a quiz open: they want students to
+record first and write the questions afterwards.
+
+| Topic | Decision |
+|---|---|
+| Entry point | A **🎙 Voice actors** card on the teacher page (owner only), right under Guest workspaces: **+ New recording session** and **Recording sessions**. No quiz needed: with no listening sections, the form says to paste the script and put the recording into a section later. The section's 🎙 button and Ctrl+K still work. |
+| One link per character | The session view lists each character with **📋 Copy link** (`record/?s=ID&c=NAME`): the link opens only that character's lines. The link for the whole session stays. |
+| Changing the words | A session setting, **on by default** ("Volunteers can change the words of their lines"), set in the new-session form and in the session view. The volunteer presses **✏️ Change the words**, edits the line and saves. Approved lines can't be changed. |
+| Tracking | The server keeps the script's own words in `line.original` the first time a line changes (later changes keep that original; going back to it clears the mark). The teacher sees **✏️ Changed**, the script's words struck through, **↩ Script's words** to go back, a **Changed by volunteers** filter and the count in the sessions list. The volunteer sees what the script said, and **↩ Back to the original**. |
+| A take after a change | The take stays. The volunteer is told to record the line again; the teacher can send it back with ↻ Redo. |
+| Into the quiz | **📋 Copy the script** copies the script with the changes (listening script format). When the recording goes into a section: an empty section script becomes the session's; otherwise each changed line is replaced in the section's script, in order, keeping directions and sounds. If a changed line isn't found word for word, the teacher is asked before the whole script is replaced. |
+
+- Worker: `POST /api/rec/edit` `{ s, line, text }` (volunteers; one DO
+  write; 403 `locked` when the setting is off, 409 `approved`, 400 empty),
+  `allowEdits` on the session (create and save), `revert` in a save,
+  `original` in the volunteer's view, `edited` in the sessions list.
+- The record page shows ✏️ only when the session says `allowEdits: true`,
+  so the page is safe before the API is deployed.

@@ -4,8 +4,12 @@
  * and the review: each take with its waveform, the silence at both ends
  * trimmed automatically (two handles adjust it), ✓ OK / ↻ Redo, the pause
  * before each line, ▶ from any line, and the put-together recording as an
- * MP3 for download or for the listening section. All audio work happens here,
- * in the browser; edits are saved in batches. Uses app.js globals (api, t,
+ * MP3 for download or for the listening section. A session needs no quiz: it
+ * can start from a pasted script (🎙 Voice actors card on the teacher page)
+ * and go into a listening section later. Volunteers may change the words of
+ * a line (on by default); the changes show here with the script's own words.
+ * All audio work happens here, in the browser; edits are saved in batches.
+ * Uses app.js globals (api, t,
  * escapeHtml, createSessionPassword, quiz, attachListeningRecording…).
  */
 
@@ -28,6 +32,7 @@ const va = {
   playing: null, // { sources, timers }
   filter: '',
   newFrom: '', // listening section id the new-session form starts from
+  openNew: false, // the new-session form starts open
 };
 
 function vaApi(route, body = {}) {
@@ -40,8 +45,25 @@ function vaAudioCtx() {
   return va.ctx;
 }
 
-function vaLink(id) {
-  return `${VA_RECORD_PAGE}?s=${encodeURIComponent(id)}`;
+// The volunteers' link; with a character, it opens that character's lines.
+function vaLink(id, character = '') {
+  return `${VA_RECORD_PAGE}?s=${encodeURIComponent(id)}${character ? `&c=${encodeURIComponent(character)}` : ''}`;
+}
+
+const vaLinesCount = (n) => (n === 1 ? t('1 line') : t('{n} lines', { n }));
+
+const vaSpeakersOf = (line) => String(line.speaker || '').split('+').map((n) => n.trim()).filter(Boolean);
+
+function vaCharacters(lines) {
+  const names = [];
+  lines.forEach((l) => vaSpeakersOf(l).forEach((n) => { if (!names.includes(n)) names.push(n); }));
+  return names;
+}
+
+// The session's script as it is now (with the volunteers' changes), in the
+// listening script format, ready for a listening section or the AI prompt.
+function vaScriptText(lines) {
+  return lines.map((l) => `${l.speaker}${l.direction ? ` (${l.direction})` : ''}: ${l.text}`).join('\n'); // i18n-ignore (script format)
 }
 
 // The script's spoken lines, in order: { speaker, direction, text }.
@@ -67,6 +89,7 @@ function openVoiceActors(opts = {}) {
   if (!createSessionPassword) { alert(t('Unlock the teacher page first.')); return; }
   document.getElementById('voiceActorsOverlay')?.remove();
   va.newFrom = opts.sectionId || '';
+  va.openNew = !!opts.newSession;
   const overlay = document.createElement('div');
   overlay.id = 'voiceActorsOverlay';
   overlay.className = 'dialog-overlay';
@@ -133,15 +156,16 @@ function vaRenderList() {
     <li class="va-session">
       <button type="button" class="btn va-session-open" data-va-open="${escapeHtml(s.id)}">
         <strong>${escapeHtml(s.title)}</strong>
-        <span class="small muted">${escapeHtml(t('{rec}/{n} recorded · {ok} approved', { rec: s.recorded, n: s.total, ok: s.approved }))}${s.redo ? ` · ${escapeHtml(t('{n} to redo', { n: s.redo }))}` : ''}</span>
+        <span class="small muted">${escapeHtml(t('{rec}/{n} recorded · {ok} approved', { rec: s.recorded, n: s.total, ok: s.approved }))}${s.redo ? ` · ${escapeHtml(t('{n} to redo', { n: s.redo }))}` : ''}${s.edited ? ` · ${escapeHtml(t('✏️ {n} changed', { n: s.edited }))}` : ''}</span>
       </button>
       <button type="button" class="btn btn-sm" data-va-delete="${escapeHtml(s.id)}" title="${escapeHtml(t('Delete the session and its recordings'))}">🗑</button>
     </li>`).join('');
   body.innerHTML = `
     <p class="small muted">${escapeHtml(t('Volunteers record the lines of a script on their own phone or computer, from one link. You review each take, trim the silence and build one recording.'))}</p>
     ${rows ? `<ul class="va-sessions">${rows}</ul>` : `<p class="small muted">${escapeHtml(t('No sessions yet.'))}</p>`}
-    <details class="va-new" ${va.newFrom || !rows ? 'open' : ''}>
+    <details class="va-new" ${va.newFrom || va.openNew || !rows ? 'open' : ''}>
       <summary><strong>${escapeHtml(t('+ New session'))}</strong></summary>
+      ${sourceOptions ? '' : `<p class="small muted">${escapeHtml(t('No quiz needed: paste the script now. Later, make a listening section in the quiz and put the recording in it from here.'))}</p>`}
       <label>${escapeHtml(t('Title'))}
         <input type="text" maxlength="120" data-va-new-title value="${escapeHtml(fromSec?.title || quiz?.title || '')}" />
       </label>
@@ -153,6 +177,7 @@ function vaRenderList() {
       </label>
       <textarea rows="8" data-va-new-script placeholder="${escapeHtml(VA_SCRIPT_EXAMPLE)}" ${fromSec ? 'hidden' : ''}></textarea>
       <div class="small muted" data-va-new-info></div>
+      <label class="va-allow small"><input type="checkbox" data-va-new-allow checked /> ${escapeHtml(t('Volunteers can change the words of their lines (you see every change)'))}</label>
       <button type="button" class="btn primary" data-va-create>${escapeHtml(t('Create the session'))}</button>
     </details>`;
   vaUpdateNewInfo();
@@ -179,8 +204,11 @@ async function vaCreate() {
   if (!lines.length) { vaStatus(t('The script has no lines to record.'), 'bad'); return; }
   vaStatus(t('⏳ Creating…'));
   try {
-    const data = await vaApi('create', { title: vaEl('[data-va-new-title]')?.value || '', sectionId: source, lines });
+    const data = await vaApi('create', {
+      title: vaEl('[data-va-new-title]')?.value || '', sectionId: source, lines, allowEdits: !!vaEl('[data-va-new-allow]')?.checked,
+    });
     va.newFrom = '';
+    va.openNew = false;
     vaShowSession(data.session);
   } catch (err) {
     vaStatus(t('Could not create the session ({msg}).', { msg: err.message }), 'bad');
@@ -224,6 +252,7 @@ function vaLineMatches(line) {
   if (va.filter === 'review') return line.status === 'recorded';
   if (va.filter === 'redo') return line.status === 'redo';
   if (va.filter === 'missing') return !line.take;
+  if (va.filter === 'changed') return !!line.original;
   return true;
 }
 
@@ -236,6 +265,20 @@ function vaRenderSession() {
   const sections = vaListeningSections();
   const target = sections.find((x) => x.id === s.sectionId) ? s.sectionId : (sections[0]?.id || '');
   const opt = (v, label) => `<option value="${v}" ${va.filter === v ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  const characters = vaCharacters(s.lines);
+  const edited = count((l) => l.original);
+  const characterLinks = characters.length > 1 ? `
+        <details class="small">
+          <summary>${escapeHtml(t('🎭 A link for each character'))}</summary>
+          <p class="small muted">${escapeHtml(t('Give each volunteer the link of their character: it opens only their lines.'))}</p>
+          <ul class="va-characters">
+            ${characters.map((name) => `<li>
+              <strong>${escapeHtml(name)}</strong>
+              <span class="small muted">${escapeHtml(vaLinesCount(s.lines.filter((l) => vaSpeakersOf(l).includes(name)).length))}</span>
+              <button type="button" class="btn btn-sm" data-va-copy-character="${escapeHtml(name)}">${escapeHtml(t('📋 Copy link'))}</button>
+            </li>`).join('')}
+          </ul>
+        </details>` : '';
   body.innerHTML = `
     <div class="va-head">
       <button type="button" class="btn btn-sm" data-va-back>${escapeHtml(t('◀ Sessions'))}</button>
@@ -250,12 +293,14 @@ function vaRenderSession() {
           <input type="text" readonly value="${escapeHtml(link)}" data-va-link />
           <button type="button" class="btn btn-sm" data-va-copy>${escapeHtml(t('📋 Copy'))}</button>
         </div>
-        <p class="small muted">${escapeHtml(t('{rec}/{n} recorded · {ok} approved · {redo} to redo', { rec: count((l) => l.take), n: s.lines.length, ok: count((l) => l.status === 'ok'), redo: count((l) => l.status === 'redo') }))}</p>
+        <p class="small muted">${escapeHtml(t('{rec}/{n} recorded · {ok} approved · {redo} to redo', { rec: count((l) => l.take), n: s.lines.length, ok: count((l) => l.status === 'ok'), redo: count((l) => l.status === 'redo') }))}${edited ? ` · ${escapeHtml(t('✏️ {n} changed', { n: edited }))}` : ''}</p>
+        <label class="va-allow small"><input type="checkbox" data-va-allow ${s.allowEdits !== false ? 'checked' : ''} /> ${escapeHtml(t('Volunteers can change the words of their lines (you see every change)'))}</label>
+        ${characterLinks}
       </div>
     </div>
     <div class="va-tools">
       <select data-va-filter aria-label="${escapeHtml(t('Show'))}">
-        ${opt('', t('All lines'))}${opt('review', t('To review'))}${opt('redo', t('To redo'))}${opt('missing', t('Not recorded'))}
+        ${opt('', t('All lines'))}${opt('review', t('To review'))}${opt('redo', t('To redo'))}${opt('missing', t('Not recorded'))}${opt('changed', t('Changed by volunteers'))}
       </select>
       <label class="small">${escapeHtml(t('Pause between lines (s)'))}
         <input type="number" min="0" max="5" step="0.1" value="${vaLineGapDefault()}" data-va-default-gap />
@@ -273,7 +318,9 @@ function vaRenderSession() {
           ${sections.map((x, i) => `<option value="${escapeHtml(x.id)}" ${x.id === target ? 'selected' : ''}>${escapeHtml(vaSectionLabel(x, i))}</option>`).join('')}
         </select>
         <button type="button" class="btn primary" data-va-build="section">${escapeHtml(t('🎧 Use in the listening section'))}</button>` : ''}
+      <button type="button" class="btn" data-va-copy-script title="${escapeHtml(t('The script with the volunteers\' changes, for a listening section or the AI prompt'))}">${escapeHtml(t('📋 Copy the script'))}</button>
       <span class="small muted">${escapeHtml(t('Joins the takes in script order, trimmed, with their pauses. Lines not recorded are left out.'))}</span>
+      ${sections.length ? '' : `<span class="small muted">${escapeHtml(t('To put it straight into a quiz: open the quiz, make a listening section, then come back here.'))}</span>`}
     </div>`;
   vaDrawAll();
 }
@@ -297,9 +344,14 @@ function vaLineHtml(line, i) {
         <strong>${escapeHtml(line.speaker)}</strong>
         ${line.direction ? `<span class="small muted">(${escapeHtml(line.direction)})</span>` : ''}
         <span class="va-status small">${escapeHtml(status)}</span>
+        ${line.original ? `<span class="va-changed small">${escapeHtml(t('✏️ Changed'))}</span>` : ''}
         ${gap}
       </div>
       <p class="va-text">${escapeHtml(line.text)}</p>
+      ${line.original ? `
+        <p class="va-original small">${escapeHtml(t('Script:'))} <del>${escapeHtml(line.original)}</del>
+          <button type="button" class="btn btn-sm" data-va-revert="${line.id}" title="${escapeHtml(t('Go back to the script\'s words. The take stays: send it back with ↻ Redo if it no longer matches.'))}">${escapeHtml(t('↩ Script\'s words'))}</button>
+        </p>` : ''}
       ${line.take ? `
         <canvas class="va-wave" height="56" data-va-wave="${line.id}" title="${escapeHtml(t('Drag the handles to trim · double-click: automatic trim'))}"></canvas>
         <div class="va-line-actions">
@@ -648,11 +700,54 @@ async function vaBuild(kind) {
     }
     const secId = vaEl('[data-va-target]')?.value;
     if (!secId) return;
+    const scriptNote = vaUpdateSectionScript(findListeningSection(secId));
     await attachListeningRecording(secId, new File([blob], name, { type: blob.type }), { cues });
-    vaStatus(t('✅ The recording is in the listening section.') + note, 'ok');
+    vaStatus(t('✅ The recording is in the listening section.') + note + scriptNote, 'ok');
   } catch (err) {
     vaStatus(t('Could not build the recording ({msg}).', { msg: err.message }), 'bad');
   }
+}
+
+// The volunteers' changes, written into a section's script: each changed
+// line's words replace the script's own where they are found, walking the
+// script in order (directions, sounds and parts stay as they are). `missed`
+// counts the changed lines not found.
+function vaApplyEdits(transcript, lines) {
+  let text = String(transcript || '');
+  let missed = 0;
+  let from = 0;
+  lines.forEach((l) => {
+    const was = l.original || l.text;
+    const at = text.indexOf(was, from);
+    if (at < 0) { if (l.original) missed += 1; return; }
+    if (l.original) text = text.slice(0, at) + l.text + text.slice(at + was.length);
+    from = at + (l.original ? l.text : was).length;
+  });
+  return { text, missed };
+}
+
+// Before the recording goes into a section: an empty script becomes the
+// session's; one the volunteers changed gets their changes.
+function vaUpdateSectionScript(sec) {
+  if (!sec) return '';
+  const lines = va.session.lines;
+  const max = typeof LISTENING_MAX_TRANSCRIPT === 'number' ? LISTENING_MAX_TRANSCRIPT : 20000;
+  if (!String(sec.transcript || '').trim()) {
+    sec.transcript = vaScriptText(lines).slice(0, max);
+    return ` ${t('The section\'s script is the session\'s.')}`;
+  }
+  if (!lines.some((l) => l.original)) return '';
+  const { text, missed } = vaApplyEdits(sec.transcript, lines);
+  if (!missed) {
+    if (text === sec.transcript) return '';
+    sec.transcript = text.slice(0, max);
+    return ` ${t('The section\'s script now has the volunteers\' changes.')}`;
+  }
+  if (!confirm(t('Some changed lines are not in the section\'s script word for word. Replace the section\'s script with the session\'s script (with the changes)?'))) {
+    return ` ${t('The section\'s script was not changed.')}`;
+  }
+  sec.transcript = vaScriptText(lines).slice(0, max);
+  return ` ${t('The section\'s script is the session\'s.')}`;
 }
 
 // ---------------------------------------------------------------- events --
@@ -671,6 +766,22 @@ function vaOnClick(e) {
   else if (d.vaCopy !== undefined) {
     const link = vaLink(va.session.id);
     navigator.clipboard?.writeText(link).then(() => vaStatus(t('✅ Copied'), 'ok'), () => vaEl('[data-va-link]')?.select());
+  } else if (d.vaCopyCharacter) {
+    const link = vaLink(va.session.id, d.vaCopyCharacter);
+    navigator.clipboard?.writeText(link).then(
+      () => vaStatus(t('✅ Copied the link for {name}', { name: d.vaCopyCharacter }), 'ok'),
+      () => prompt(t('Copy this link:'), link),
+    );
+  } else if (d.vaCopyScript !== undefined) {
+    const text = vaScriptText(va.session.lines);
+    navigator.clipboard?.writeText(text).then(() => vaStatus(t('✅ Copied'), 'ok'), () => prompt(t('Copy the script:'), text));
+  } else if (d.vaRevert) {
+    const line = va.session.lines.find((l) => l.id === d.vaRevert);
+    if (!line?.original) return;
+    line.text = line.original;
+    line.original = null;
+    vaQueueEdit(line.id, { revert: true });
+    vaRerenderLine(line);
   } else if (d.vaPlay) {
     const line = va.session.lines.find((l) => l.id === d.vaPlay);
     if (line) vaPlayLine(line);
@@ -683,13 +794,15 @@ function vaOnClick(e) {
     if (!line) return;
     line.status = line.status === status ? 'recorded' : status;
     vaQueueEdit(id, { status: line.status });
-    const li = vaEl(`[data-va-line="${id}"]`);
-    if (li) {
-      const i = va.session.lines.indexOf(line);
-      li.outerHTML = vaLineHtml(line, i);
-      vaDrawLine(line);
-    }
+    vaRerenderLine(line);
   } else if (d.vaBuild) vaBuild(d.vaBuild);
+}
+
+function vaRerenderLine(line) {
+  const li = vaEl(`[data-va-line="${line.id}"]`);
+  if (!li) return;
+  li.outerHTML = vaLineHtml(line, va.session.lines.indexOf(line));
+  vaDrawLine(line);
 }
 
 function vaOnChange(e) {
@@ -714,6 +827,9 @@ function vaOnChange(e) {
     if (!line) return;
     line.gap = el.value === '' ? null : Math.max(0, Math.min(10, Number(el.value) || 0));
     vaQueueEdit(line.id, { gap: line.gap });
+  } else if (el.matches('[data-va-allow]')) {
+    va.session.allowEdits = el.checked;
+    vaFlushSave({ allowEdits: el.checked });
   } else if (el.matches('[data-va-title]')) {
     const title = String(el.value || '').trim();
     if (title) { va.session.title = title; vaFlushSave({ title }); }
@@ -726,6 +842,12 @@ function vaOnInput(e) {
 
 window.addEventListener('resize', () => { if (va.view === 'session' && document.getElementById('voiceActorsOverlay')) vaDrawAll(); });
 
+// The 🎙 Voice actors card on the teacher page: no quiz needed.
+if (typeof document !== 'undefined') {
+  document.getElementById('voiceActorsNewBtn')?.addEventListener('click', () => openVoiceActors({ newSession: true }));
+  document.getElementById('voiceActorsOpenBtn')?.addEventListener('click', () => openVoiceActors());
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { vaLinesFromScript, vaAutoTrim };
+  module.exports = { vaLinesFromScript, vaAutoTrim, vaScriptText, vaApplyEdits, vaCharacters, vaLink };
 }
