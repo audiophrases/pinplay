@@ -145,3 +145,22 @@ describe('the script-only prompt (the Studio, and the teacher page\'s 🎧 card)
     assert.ok(items.length >= 6 && items.every((it) => it.type === 'line' && !it.overlap));
   });
 });
+
+describe('where each spoken line sits (voice actors change words in place)', () => {
+  const text = 'TITLE: Late\n  Mia (surprised): Forty minutes?\n# a note, never said\n>> Tom [phone]: Not now.\n   Later, maybe.\n[pause 2]\nA plain sentence.';
+
+  it('gives the rows and what comes before the words, when asked', () => {
+    const items = S.parseListeningScript(text, { positions: true }).parts[0].items.filter((it) => it.type === 'line');
+    assert.deepEqual(items.map(({ rows, prefix, text: words }) => ({ rows, prefix, words })), [
+      { rows: [1], prefix: 'Mia (surprised): ', words: 'Forty minutes?' },
+      { rows: [3, 4], prefix: '>> Tom [phone]: ', words: 'Not now. Later, maybe.' },
+      { rows: [6], prefix: '', words: 'A plain sentence.' },
+    ]);
+  });
+
+  it('leaves the items as they were otherwise', () => {
+    const item = S.parseListeningScript(text).parts[0].items[0];
+    assert.equal('rows' in item, false);
+    assert.equal('prefix' in item, false);
+  });
+});

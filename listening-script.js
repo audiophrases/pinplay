@@ -26,7 +26,11 @@ function listeningScriptEffect(raw) {
 //   parts: [{ label, items }], notes } where an item is
 // { type: 'line', speakers, direction, effect, text, overlap },
 // { type: 'sound', sound } or { type: 'pause', seconds }.
-function parseListeningScript(text) {
+// With { positions: true }, a spoken line also says where it is in the text,
+// so its words can be changed in place (voice actors): rows (the text's line
+// numbers from 0: its own and those it wraps onto) and prefix (what comes
+// before the words, such as "Mia (surprised): ").
+function parseListeningScript(text, { positions = false } = {}) {
   const script = { title: '', language: '', ambience: '', voices: {}, parts: [], notes: [] };
   let part = { label: '', items: [] };
   let last = null; // the line a wrapped line continues
@@ -66,11 +70,14 @@ function parseListeningScript(text) {
     } else if ((m = LISTENING_SPEECH_RE.exec(line))) {
       const speakers = m[2].split('+').map((s) => voiceKey(s.trim()));
       last = { type: 'line', speakers, direction: (m[4] || '').trim(), effect: listeningScriptEffect(m[3]), text: m[5].trim(), overlap: !!m[1] };
+      if (positions) Object.assign(last, { rows: [n], prefix: line.slice(0, line.length - m[5].length) });
       part.items.push(last);
     } else if (last) {
       last.text += ` ${line}`;
+      if (positions) last.rows.push(n);
     } else {
       last = { type: 'line', speakers: ['Narrator'], direction: '', effect: '', text: line, overlap: false };
+      if (positions) Object.assign(last, { rows: [n], prefix: '' });
       part.items.push(last);
     }
   });

@@ -79,7 +79,7 @@ record first and write the questions afterwards.
 | Changing the words | A session setting, **on by default** ("Volunteers can change the words of their lines"), set in the new-session form and in the session view. The volunteer presses **✏️ Change the words**, edits the line and saves. Approved lines can't be changed. |
 | Tracking | The server keeps the script's own words in `line.original` the first time a line changes (later changes keep that original; going back to it clears the mark). The teacher sees **✏️ Changed**, the script's words struck through, **↩ Script's words** to go back, a **Changed by volunteers** filter and the count in the sessions list. The volunteer sees what the script said, and **↩ Back to the original**. |
 | A take after a change | The take stays. The volunteer is told to record the line again; the teacher can send it back with ↻ Redo. |
-| Into the quiz | **📋 Copy the script** copies the script with the changes (listening script format). When the recording goes into a section: an empty section script becomes the session's; otherwise each changed line is replaced in the section's script, in order, keeping directions and sounds. If a changed line isn't found word for word, the teacher is asked before the whole script is replaced. |
+| Into the quiz | **📋 Copy the script** copies the script with the changes (listening script format). When the recording goes into a section: an empty section script becomes the session's; otherwise each changed line is replaced in the section's script, in order, keeping directions and sounds. If a changed line isn't found word for word, the teacher is asked before the whole script is replaced (see "Putting the recording in again" below). |
 
 - Worker: `POST /api/rec/edit` `{ s, line, text }` (volunteers; one DO
   write; 403 `locked` when the setting is off, 409 `approved`, 400 empty),
@@ -118,3 +118,21 @@ on its own. Guests still see only the Quiz builder and 🧑‍🎓 Preview.
   take of its own), a fair share of lines per character, ≤ 25 words a line.
 - The page had one stray `</div>` that closed the workspace early; the cards
   after the Live game card need it gone.
+
+## Putting the recording in again (fix, 2026-10-15)
+
+Rebuilding into a section (after a redone take or a new pause) applied the
+volunteers' changes to the section's script again: added words doubled ("No
+way! No way!"), reworded lines asked to replace the whole script, and a short
+changed line ("Sorry.") could land inside an earlier line.
+
+- `vaApplyEdits` now matches whole spoken lines, in order: same speaker, same
+  words (spacing aside). The script's own words are replaced; a line that
+  already has the new words is left alone, so a rebuild changes nothing.
+- `parseListeningScript(text, { positions: true })` gives each spoken line its
+  `rows` and `prefix`, so a line's words change in place (a wrapped line
+  becomes one line). Without the option the items are unchanged.
+- When a changed line is found neither way, the question before replacing the
+  whole script says that the title, sounds and pauses go too.
+- Not covered: a line put back to the script's words after the recording went
+  in keeps the volunteer's words in the section's script.

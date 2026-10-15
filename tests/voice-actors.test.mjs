@@ -315,6 +315,56 @@ describe('teacher panel helpers', () => {
     assert.equal(va.vaApplyEdits('Mia: Something else', lines).missed, 1);
   });
 
+  it('puts each change into the section script once, however often the recording goes in', () => {
+    const added = [
+      { speaker: 'Mia', direction: 'surprised', text: 'Forty minutes? No way!', original: 'Forty minutes?' },
+      { speaker: 'Mia + Tom', direction: '', text: 'Let us go.', original: null },
+    ];
+    const once = va.vaApplyEdits('TITLE: Late\nMia (surprised): Forty minutes?\n[pause 2]\nMia + Tom: Let us go.', added);
+    assert.equal(once.text, 'TITLE: Late\nMia (surprised): Forty minutes? No way!\n[pause 2]\nMia + Tom: Let us go.');
+    assert.deepEqual(va.vaApplyEdits(once.text, added), { text: once.text, missed: 0 });
+    // Reworded: the script's words are gone after the first time, and nothing is asked again.
+    const reworded = [{ speaker: 'Anna', direction: '', text: 'Sure, see you then.', original: 'OK, see you.' }];
+    const first = va.vaApplyEdits('[ring]\nAnna: OK, see you.\n[pause 2]', reworded);
+    assert.deepEqual(first, { text: '[ring]\nAnna: Sure, see you then.\n[pause 2]', missed: 0 });
+    assert.deepEqual(va.vaApplyEdits(first.text, reworded), { text: first.text, missed: 0 });
+  });
+
+  it('changes the changed line only, never the same words inside another line', () => {
+    const lines = [
+      { speaker: 'Mia', direction: '', text: 'Sorry. Are you coming?', original: null },
+      { speaker: 'Tom', direction: '', text: "Sorry, I can't today.", original: 'Sorry.' },
+      { speaker: 'Mia', direction: '', text: 'OK, see you later.', original: null },
+    ];
+    // Typed by hand with two spaces: still Mia's line, and left as it is.
+    const section = 'Mia: Sorry.  Are you coming?\nTom: Sorry.\nMia: OK, see you later.';
+    assert.deepEqual(va.vaApplyEdits(section, lines), {
+      text: "Mia: Sorry.  Are you coming?\nTom: Sorry, I can't today.\nMia: OK, see you later.", missed: 0,
+    });
+  });
+
+  it("matches the speaker too: another character's same words stay", () => {
+    const lines = [{ speaker: 'Tom', direction: '', text: 'Yes, of course.', original: 'Yes.' }];
+    assert.deepEqual(va.vaApplyEdits('Mia: Yes.\nTom: Yes.', lines), { text: 'Mia: Yes.\nTom: Yes, of course.', missed: 0 });
+  });
+
+  it('keeps voices, sounds, directions, effects and interruptions, and joins a wrapped line it changes', () => {
+    const lines = [
+      { speaker: 'Anna', direction: 'surprised', text: 'The library? On Sunday?', original: 'The library? On a Sunday?' },
+      { speaker: 'Tom', direction: '', text: 'It opens at ten, trust me.', original: 'It opens at ten. Trust me, it does.' },
+    ];
+    const section = 'VOICE Tom [phone]: A calm voice.\n[ring]\n>> Anna (surprised): The library? On a Sunday?\nTom [phone]: It opens at ten.\n  Trust me, it does.\n--- Part 2\n[pause 2]';
+    assert.deepEqual(va.vaApplyEdits(section, lines), {
+      text: 'VOICE Tom [phone]: A calm voice.\n[ring]\n>> Anna (surprised): The library? On Sunday?\nTom [phone]: It opens at ten, trust me.\n--- Part 2\n[pause 2]',
+      missed: 0,
+    });
+  });
+
+  it('counts a changed line that is in the section script neither way', () => {
+    const lines = [{ speaker: 'Mia', direction: '', text: 'Forty minutes? No way!', original: 'Forty minutes?' }];
+    assert.deepEqual(va.vaApplyEdits('Tom: Forty minutes?', lines), { text: 'Tom: Forty minutes?', missed: 1 });
+  });
+
   it('gives each character a link of their own', () => {
     assert.match(va.vaLink('abcdefgh23', 'Mia + Tom'), /\?s=abcdefgh23&c=Mia%20%2B%20Tom$/);
     assert.match(va.vaLink('abcdefgh23'), /\?s=abcdefgh23$/);

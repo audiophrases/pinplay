@@ -715,22 +715,55 @@ async function vaBuild(kind) {
   }
 }
 
-// The volunteers' changes, written into a section's script: each changed
-// line's words replace the script's own where they are found, walking the
-// script in order (directions, sounds and parts stay as they are). `missed`
-// counts the changed lines not found.
+// The volunteers' changes, written into a section's script. Each session line
+// is looked for, in order, among the script's spoken lines: the same speaker
+// and the same words (spacing aside), never words inside another line. Where
+// the script still has the line's original words they are replaced; where it
+// already has the new words it is left alone, so putting the recording in
+// again changes nothing. Directions, sounds, pauses and parts stay as they
+// are; a changed line that was wrapped becomes one line. `missed` counts the
+// changed lines found neither way.
 function vaApplyEdits(transcript, lines) {
-  let text = String(transcript || '');
+  const source = String(transcript || '');
+  const textRows = source.replace(/\r\n?/g, '\n').split('\n');
+  const spoken = [];
+  parseListeningScript(source, { positions: true }).parts.forEach((p) => p.items.forEach((it) => {
+    if (it.type === 'line') spoken.push(it);
+  }));
+  const words = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  const who = (s) => words(s).toLowerCase();
+  const rewritten = new Map(); // a changed line's first row -> its new text
+  const dropped = new Set(); // the rows it wrapped onto
   let missed = 0;
-  let from = 0;
-  lines.forEach((l) => {
-    const was = l.original || l.text;
-    const at = text.indexOf(was, from);
-    if (at < 0) { if (l.original) missed += 1; return; }
-    if (l.original) text = text.slice(0, at) + l.text + text.slice(at + was.length);
-    from = at + (l.original ? l.text : was).length;
+  let next = 0; // the first spoken line not matched yet
+  (Array.isArray(lines) ? lines : []).forEach((l) => {
+    const speaker = who(l.speaker);
+    const now = words(l.text);
+    const was = l.original ? words(l.original) : '';
+    let at = -1;
+    for (let i = next; i < spoken.length && at < 0; i += 1) {
+      const said = words(spoken[i].text);
+      if (who(spoken[i].speakers.join(' + ')) === speaker && (said === now || (was && said === was))) at = i;
+    }
+    if (at < 0) {
+      if (was) missed += 1;
+      return;
+    }
+    const it = spoken[at];
+    if (was && words(it.text) !== now) {
+      const [first, ...wrapped] = it.rows;
+      rewritten.set(first, `${textRows[first].match(/^\s*/)[0]}${it.prefix}${l.text}`);
+      wrapped.forEach((r) => dropped.add(r));
+    }
+    next = at + 1;
   });
-  return { text, missed };
+  if (!rewritten.size) return { text: source, missed };
+  const out = [];
+  textRows.forEach((row, r) => {
+    if (rewritten.has(r)) out.push(rewritten.get(r));
+    else if (!dropped.has(r)) out.push(row);
+  });
+  return { text: out.join(source.includes('\r\n') ? '\r\n' : '\n'), missed };
 }
 
 // Before the recording goes into a section: an empty script becomes the
@@ -750,7 +783,7 @@ function vaUpdateSectionScript(sec) {
     sec.transcript = text.slice(0, max);
     return ` ${t('The section\'s script now has the volunteers\' changes.')}`;
   }
-  if (!confirm(t('Some changed lines are not in the section\'s script word for word. Replace the section\'s script with the session\'s script (with the changes)?'))) {
+  if (!confirm(t('Some changed lines are not in the section\'s script word for word. Replace the section\'s script with the session\'s lines, changes included? Everything else in it, such as the title, sounds and pauses, will be lost.'))) {
     return ` ${t('The section\'s script was not changed.')}`;
   }
   sec.transcript = vaScriptText(lines).slice(0, max);

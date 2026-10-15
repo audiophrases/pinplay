@@ -1591,7 +1591,7 @@ window.PINPLAY_FR_DICT = {
   "↩ Script's words": "↩ Texte du script",
   "The section's script is the session's.": "Le script de la section est celui de la session.",
   "The section's script now has the volunteers' changes.": "Le script de la section contient maintenant les changements des volontaires.",
-  "Some changed lines are not in the section's script word for word. Replace the section's script with the session's script (with the changes)?": "Certaines répliques modifiées ne figurent pas mot pour mot dans le script de la section. Remplacer le script de la section par celui de la session (avec les changements) ?",
+  "Some changed lines are not in the section's script word for word. Replace the section's script with the session's lines, changes included? Everything else in it, such as the title, sounds and pauses, will be lost.": "Certaines répliques modifiées ne figurent pas mot pour mot dans le script de la section. Remplacer le script de la section par les répliques de la session, changements compris ? Tout le reste, comme le titre, les sons et les pauses, sera perdu.",
   "The section's script was not changed.": "Le script de la section n'a pas été modifié.",
   "✅ Copied the link for {name}": "✅ Lien de {name} copié",
   "Copy this link:": "Copiez ce lien :",
