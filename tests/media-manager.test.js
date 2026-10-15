@@ -681,3 +681,82 @@ describe('Move: moveQuestionsBefore and listeningSectionLosses', () => {
     assert.equal(s2.listeningSection, 'ls');
   });
 });
+
+describe('❌ Delete questions: applyDeleteQuestions, undo and listeningSectionsEmptiedBy', () => {
+  const q = (id, listeningSection) => ({ id, type: 'mcq', ...(listeningSection ? { listeningSection } : {}) });
+  const ids = (list) => list.map((x) => x.id).join(' ');
+
+  // The real functions; the builder's re-render is the real section tidying.
+  function load(questions, sections) {
+    const sandbox = {
+      t: interpolate,
+      quiz: { questions, ...(sections ? { listeningSections: sections } : {}) },
+      saves: 0,
+      document: { querySelector: () => null },
+    };
+    const M = loadDeclarations(APP_SRC, ['LISTENING_SECTION_TYPES', 'sanitizeListeningSectionId', 'assignListeningMembership',
+      'quizListeningSections', 'tidyListeningSections', 'listeningSectionsEmptiedBy', 'mediaManagerState',
+      'applyDeleteQuestions', 'undoDeleteQuestions'], sandbox);
+    sandbox.renderBuilder = () => M.tidyListeningSections();
+    sandbox.renderMediaManager = () => {};
+    sandbox.saveQuiz = () => { sandbox.saves += 1; };
+    return { M, sandbox, state: M.mediaManagerState };
+  }
+
+  it('names the listening sections a deletion would leave without questions', () => {
+    const [a, s1, s2, m1] = [q('a'), q('s1', 'ls'), q('s2', 'ls'), q('m1', 'ms')];
+    const sections = [{ id: 'ls', title: 'Station' }, { id: 'ms', title: 'Market' }];
+    const { M } = load([a, s1, s2, m1], sections);
+    assert.deepEqual(M.listeningSectionsEmptiedBy([a, s1, s2, m1], new Set([a, s1, s2]), sections).map((s) => s.id), ['ls']);
+    assert.deepEqual(M.listeningSectionsEmptiedBy([a, s1, s2, m1], new Set([s1, m1]), sections).map((s) => s.id), ['ms']);
+  });
+
+  it('deletes the selected questions and an emptied section; undo puts it all back', () => {
+    const [a, b, s1, s2, c] = [q('a'), q('b'), q('s1', 'ls'), q('s2', 'ls'), q('c')];
+    const { M, sandbox, state } = load([a, b, s1, s2, c], [{ id: 'ls', title: 'Station' }]);
+    state.selected = new Set([s2, b, s1]);
+    M.applyDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a c');
+    assert.equal(sandbox.quiz.listeningSections, undefined);
+    assert.equal(state.selected.size, 0);
+    assert.equal(state.notice, 'Deleted 3 question(s).');
+    assert.equal(state.undo.notice, state.notice);
+    assert.equal(sandbox.saves, 1);
+
+    M.undoDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a b s1 s2 c');
+    assert.deepEqual(sandbox.quiz.listeningSections.map((s) => s.id), ['ls']);
+    assert.equal(s1.listeningSection, 'ls');
+    assert.equal(ids([...state.selected]), 's2 b s1');
+    assert.equal(state.notice, 'Put back 3 question(s).');
+    assert.equal(state.undo, null);
+    assert.equal(sandbox.saves, 2);
+  });
+
+  it('keeps a section that still has questions, and refuses to undo once the quiz changed', () => {
+    const [a, s1, s2, s3] = [q('a'), q('s1', 'ls'), q('s2', 'ls'), q('s3', 'ls')];
+    const { M, sandbox, state } = load([a, s1, s2, s3], [{ id: 'ls', title: 'Station' }]);
+    state.selected = new Set([s2]);
+    M.applyDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a s1 s3');
+    assert.deepEqual(sandbox.quiz.listeningSections.map((s) => s.id), ['ls']);
+    assert.equal(s3.listeningSection, 'ls');
+
+    sandbox.quiz.questions.push(q('new'));
+    M.undoDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a s1 s3 new');
+    assert.match(state.notice, /can no longer be put back/);
+  });
+
+  it('does nothing while a job runs, or with nothing selected', () => {
+    const [a, b] = [q('a'), q('b')];
+    const { M, sandbox, state } = load([a, b]);
+    M.applyDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a b');
+    state.selected = new Set([a]);
+    state.job = { cancelled: false };
+    M.applyDeleteQuestions();
+    assert.equal(ids(sandbox.quiz.questions), 'a b');
+    assert.equal(sandbox.saves, 0);
+  });
+});

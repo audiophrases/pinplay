@@ -281,3 +281,24 @@ time.
 - Esc in an open form closes the form; the step-3 hints now point to Replace.
 - Checked in headless Chrome: Replace by keyword on a Shift range, Pick by hand
   through the real GIF picker, Change voice surviving `syncQuizFromUI`.
+
+### Delete questions (2026-10-16)
+
+The owner asked for deleting the selected questions from the panel (big
+quizzes: cleaning out a level or a batch at once).
+
+- **❌ Delete questions…** in the selection bar, or the **Delete** key
+  (⌘+Backspace on a Mac) while rows are selected and no field has the focus:
+  a step in the bar asks "Delete N selected question(s)?", says how many of
+  them filters hide, and names the listening sections that would lose all
+  their questions (they go too, with their recording, as when the builder
+  deletes a section's last question: `listeningSectionsEmptiedBy`).
+- `applyDeleteQuestions` removes them, re-renders the builder (which tidies
+  the sections) and saves locally, as Move does. Not while a job runs.
+- **↩ Undo** in the notice line puts the questions back in place, with their
+  sections, and selects them again (`undoDeleteQuestions`). It lasts while the
+  notice shows and the panel stays open, and only if the quiz has not changed
+  since; otherwise it says so.
+- Tests in `tests/media-manager.test.js`; checked in headless Chrome on the real
+  teacher page (Shift range, emptied section, Undo, Delete key, Esc, typing
+  Delete in the search box, French strings).

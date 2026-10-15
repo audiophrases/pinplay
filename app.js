@@ -19748,6 +19748,16 @@ function moveQuestionsBefore(questions, moving, beforeQ = null) {
   return [...rest.slice(0, at), ...block, ...rest.slice(at)];
 }
 
+// ❌ Delete questions…: the listening sections whose questions would all be
+// deleted. They go too (tidyListeningSections), with their recording, as when
+// the builder deletes a section's last question.
+function listeningSectionsEmptiedBy(questions, deleting, sections) {
+  return (Array.isArray(sections) ? sections : []).filter((sec) => {
+    const own = (questions || []).filter((q) => q?.listeningSection === sec.id);
+    return own.length > 0 && own.every((q) => deleting.has(q));
+  });
+}
+
 // The questions the new order takes out of their listening section. A section
 // is one unbroken run; the run that keeps it is the one holding its questions
 // that did not move (so a question pulled out leaves, not the ones it left
@@ -20036,7 +20046,8 @@ const mediaManagerState = {
   visible: [],
   job: null, // { label, total, done, cancelled, working: Set }
   notice: '',
-  form: '', // inline form in the selection bar: '' | 'remove' | 'replace' | 'voice' | 'reading' | 'move'
+  form: '', // inline form in the selection bar: '' | 'remove' | 'replace' | 'voice' | 'reading' | 'move' | 'delete'
+  undo: null, // the last ❌ Delete questions, while its notice shows: { notice, quiz, before, after, sections, deleted }
 };
 
 let mediaManagerRenderTimer = 0;
@@ -20228,6 +20239,15 @@ function renderMediaManager() {
   const noticeEl = overlay.querySelector('[data-mm-notice]');
   noticeEl.textContent = state.notice;
   noticeEl.hidden = !state.notice;
+  // ↩ Undo, while the notice is still the deletion's.
+  if (state.undo && state.undo.notice === state.notice) {
+    const undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'btn btn-sm';
+    undoBtn.dataset.mmUndo = '';
+    undoBtn.textContent = t('↩ Undo');
+    noticeEl.append(' ', undoBtn);
+  }
 
   overlay.querySelectorAll('[data-mm-filter]').forEach((el) => {
     const v = state.filters[el.dataset.mmFilter] || '';
@@ -20332,6 +20352,23 @@ function refreshMediaSelection() {
        <button type="button" class="btn btn-sm primary" data-mm-move-apply ${opts.length ? '' : 'disabled'}>${escapeHtml(t('Move'))}</button>
        <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>
        <span class="small muted">${escapeHtml(t('The selected questions keep their order and move together.'))}</span>`;
+  } else if (n && state.form === 'delete') {
+    const emptied = listeningSectionsEmptiedBy(quiz.questions, state.selected, quiz.listeningSections);
+    const notes = [];
+    if (hiddenSelected) notes.push(t('{n} of them are hidden by filters.', { n: hiddenSelected }));
+    if (emptied.length) {
+      notes.push(t('Listening sections that lose all their questions go too, with their recording: {titles}.', {
+        titles: emptied.map((sec) => sec.title || t('Listening')).join(', '),
+      }));
+    }
+    notes.push(t('You can undo it until you close this panel.'));
+    const deleteTitle = escapeHtml(t('Delete {n} selected question(s)?', { n }));
+    const deleteLabel = escapeHtml(t('❌ Delete {n} question(s)', { n }));
+    bar.innerHTML = `<strong>${deleteTitle}</strong>
+       <button type="button" class="btn btn-sm bad" data-mm-delete-apply>${deleteLabel}</button>
+       <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>
+       <span class="small muted">${escapeHtml(notes.join(' '))}</span>`;
+    setTimeout(() => bar.querySelector('[data-mm-delete-apply]')?.focus(), 0);
   } else if (n && state.form === 'reading') {
     bar.innerHTML = readingTextFormHtml([...state.selected]);
     setTimeout(() => bar.querySelector('[data-mm-reading]')?.focus(), 0);
@@ -20358,6 +20395,7 @@ function refreshMediaSelection() {
          <button type="button" class="btn btn-sm" data-mm-form="reading" title="${escapeHtml(t('Give the selected questions the same reading text, or change or remove it'))}">${escapeHtml(t('📖 Reading text…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="remove">${escapeHtml(t('🗑 Remove…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="move" title="${escapeHtml(t('Move the selected questions together to another position in the quiz'))}">${escapeHtml(t('↕ Move…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="delete" title="${escapeHtml(t('Delete the selected questions from the quiz (the Delete key does it too)'))}">${escapeHtml(t('❌ Delete questions…'))}</button>
        </span>
        ${selectAllBtn}
        <button type="button" class="btn btn-sm" data-mm-select-none>${escapeHtml(t('Clear selection'))}</button>`;
@@ -20371,6 +20409,7 @@ function refreshMediaSelection() {
 function closeMediaManager() {
   if (mediaManagerState.job) mediaManagerState.job.cancelled = true;
   mediaManagerState.form = '';
+  mediaManagerState.undo = null;
   document.getElementById('mediaManagerOverlay')?.remove();
 }
 
@@ -20647,6 +20686,54 @@ function applyMoveQuestions(target) {
   renderMediaManager();
 }
 
+// ❌ Delete questions…: the selected questions leave the quiz, with any
+// listening section left without questions (renderBuilder tidies them).
+// ↩ Undo puts everything back while the panel is open and the quiz has not
+// changed since.
+function applyDeleteQuestions() {
+  const state = mediaManagerState;
+  if (state.job) return;
+  const before = quiz.questions.slice();
+  const deleting = new Set([...state.selected].filter((q) => before.includes(q)));
+  if (!deleting.size) return;
+  const sections = Array.isArray(quiz.listeningSections) ? quiz.listeningSections.slice() : null;
+  quiz.questions.splice(0, quiz.questions.length, ...before.filter((q) => !deleting.has(q)));
+  state.selected = new Set();
+  state.anchor = null;
+  state.form = '';
+  state.notice = t('Deleted {n} question(s).', { n: deleting.size });
+  renderBuilder();
+  state.undo = { notice: state.notice, quiz, before, after: quiz.questions.slice(), sections, deleted: deleting };
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  renderMediaManager();
+  document.querySelector('#mediaManagerOverlay .media-manager')?.focus();
+}
+
+function undoDeleteQuestions() {
+  const state = mediaManagerState;
+  const undo = state.undo;
+  if (!undo || state.job) return;
+  state.undo = null;
+  const unchanged = quiz === undo.quiz
+    && quiz.questions.length === undo.after.length
+    && quiz.questions.every((q, i) => q === undo.after[i]);
+  if (!unchanged) {
+    state.notice = t('The quiz has changed since the deletion: the questions can no longer be put back here.');
+    renderMediaManager();
+    return;
+  }
+  quiz.questions.splice(0, quiz.questions.length, ...undo.before);
+  if (undo.sections) quiz.listeningSections = undo.sections;
+  else delete quiz.listeningSections;
+  state.selected = new Set(undo.deleted);
+  state.anchor = null;
+  state.notice = t('Put back {n} question(s).', { n: undo.deleted.size });
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  renderMediaManager();
+  document.querySelector('#mediaManagerOverlay .media-manager')?.focus();
+}
+
 function applyVoiceChange(voice) {
   const state = mediaManagerState;
   const changed = setTtsVoiceOn(mediaManagerJobQuestions('selected'), voice, quiz);
@@ -20790,6 +20877,8 @@ function openMediaManager() {
       applyMoveQuestions(overlay.querySelector('[data-mm-move-target]')?.value || 'end');
       return;
     }
+    if (e.target.closest('[data-mm-delete-apply]')) { applyDeleteQuestions(); return; }
+    if (e.target.closest('[data-mm-undo]')) { undoDeleteQuestions(); return; }
     const sameBtn = e.target.closest('[data-mm-reading-same]');
     if (sameBtn) { selectSameReadingText(); return; }
 
@@ -20844,6 +20933,13 @@ function openMediaManager() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !inField) {
       e.preventDefault();
       selectAllShown();
+      return;
+    }
+    // Delete (⌘+Backspace on a Mac) opens the ❌ Delete questions… step.
+    if (!inField && state.selected.size && !state.job && (e.key === 'Delete' || (e.metaKey && e.key === 'Backspace'))) {
+      e.preventDefault();
+      state.form = 'delete';
+      refreshMediaSelection();
       return;
     }
     if (e.key === 'Enter' && e.target.matches('[data-mm-replace-keyword]')) {
