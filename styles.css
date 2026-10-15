@@ -6262,6 +6262,15 @@ body.listening-sheet-open { overflow: hidden; }
 .va-allow { display: inline-flex; gap: 6px; align-items: center; }
 .va-allow input { width: auto; }
 .va-entry-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 🎧 Listening recordings card: ① script, ② voices, ③ questions */
+.lr-step { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.lr-step h3 { margin: 0 0 6px; }
+.lr-step > p { margin: 6px 0 0; }
+.lr-step .creation-prompt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 12px; margin-top: 8px; }
+.lr-step .creation-prompt-grid .full-width { grid-column: 1 / -1; }
+.lr-script { display: grid; gap: 4px; margin-top: 12px; }
+.lr-script textarea { width: 100%; font: inherit; }
+#adminCardBody > .builder-section:first-child { margin-top: 1rem; }
 .va-wave { width: 100%; height: 56px; cursor: ew-resize; touch-action: none; background: #f4f5f9; border-radius: 6px; }
 .va-line-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .va-build { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }

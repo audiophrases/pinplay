@@ -353,56 +353,8 @@ async function refreshQuietly() {
 }
 
 // ---------------------------------------------------------------- the script prompt
-const SCRIPT_EXAMPLE = `TITLE: Sunday plans
-LANGUAGE: English
-AMBIENCE: room
-VOICE Anna: A young British woman of about twenty with a warm, clear, mid-range voice, friendly and quick.
-VOICE Tom [phone]: A young British man of about twenty with a relaxed, slightly deep voice, easy-going.
-
-[ring]
-Anna (cheerful): Hi Tom! Are we still meeting on Saturday?
-Tom (apologetic): Not Saturday, sorry, I'm working. Can we do Sunday at half past ten?
-Anna: Sure. At the café on Bridge Street?
-Tom: It's closed for repairs. Let's meet at the library instead.
->> Anna (surprised): The library? On a Sunday?
-Tom (laughing): It opens at ten. Trust me.`;
-
-function buildScriptPrompt(o) {
-  const minutes = Number(o.length) || 2;
-  const words = { 1: '120–160', 2: '250–320', 3: '380–450', 4: '500–600' }[minutes] || '250–320';
-  const lines = [
-    '# Write a listening recording script',
-    '',
-    `Write the script of a recording for a listening exercise${o.level ? ` at level ${o.level}` : ''}, in ${o.language}.`,
-    o.topic ? `- Topic: "${o.topic}"` : '- Topic: an everyday situation that suits the level.',
-    o.characters ? `- Characters: "${o.characters}"` : '- Characters: two to four people, easy to tell apart.',
-    `- Length: about ${minutes} minute${minutes > 1 ? 's' : ''} of speech (${words} words).`,
-    o.notes ? `- Also: "${o.notes}"` : null,
-    '',
-    'Reply with the script only, in one ```text code block, in this format:',
-    '```text',
-    'TITLE: A short name',
-    `LANGUAGE: ${o.language}`,
-    'AMBIENCE: station',
-    'VOICE Name: what their everyday voice is like',
-    'VOICE Name [effect]: …',
-    '[sound]',
-    'Name (direction): what they say',
-    '>> Name (direction): an interruption',
-    'Name + Name: said together',
-    '[pause 2]',
-    '```',
-    '',
-    '## Rules',
-    ...LISTENING_SCRIPT_RULES.map((r, i) => `${i + 1}. ${r}`),
-    '',
-    'Example (shape only):',
-    '```text',
-    SCRIPT_EXAMPLE,
-    '```',
-  ];
-  return lines.filter((l) => l !== null).join('\n');
-}
+// buildListeningScriptPrompt and its example live in listening-script.js
+// (shared with the teacher page's 🎧 Listening recordings card).
 
 // ---------------------------------------------------------------- events
 $('newBtn').addEventListener('click', showWelcome);
@@ -935,7 +887,7 @@ $('pCopy').addEventListener('click', guarded(async () => {
   }
   const text = $('pMode').value === 'own'
     ? buildOwnScriptPrompt({ script: $('pScript').value.trim(), notes: $('pNotes').value.trim() })
-    : buildScriptPrompt({ topic: $('pTopic').value.trim(), level: $('pLevel').value.trim(), language: $('pLanguage').value,
+    : buildListeningScriptPrompt({ topic: $('pTopic').value.trim(), level: $('pLevel').value.trim(), language: $('pLanguage').value,
       characters: $('pCharacters').value.trim(), length: $('pLength').value, notes: $('pNotes').value.trim() });
   try {
     await navigator.clipboard.writeText(text);

@@ -20,6 +20,8 @@
   // Collapsible sections: [toggle id, body id]. Revealing something inside a
   // collapsed body opens it first (outermost first).
   const SECTIONS = [
+    ['listeningSectionToggle', 'listeningCardBody'],
+    ['adminSectionToggle', 'adminCardBody'],
     ['builderSectionToggle', 'builderCardBody'],
     ['creationPromptToggle', 'creationPromptBody'],
     ['builderSettingsToggle', 'builderSettingsBody'],
@@ -81,7 +83,8 @@
   const LIVE = () => t('Live game');
   const ASSIGN = () => t('Assignments');
   const STUDENTS = () => t('Students');
-  const WORKSPACE = () => t('Workspace');
+  const LISTENING = () => t('Listening');
+  const ADMIN = () => t('Admin');
   const PAGE = () => t('Page');
 
   const ACTIONS = [
@@ -99,21 +102,24 @@
     S('builderSettingsToggle', QUIZ, 'quiz settings title audio voice language'),
     S('builderTypesToggle', QUIZ, 'add question types new'),
     S('builderQuestionsToggle', QUIZ, 'questions list edit'),
-    S('builderMaintenanceToggle', QUIZ, 'maintenance purge cleanup'),
+    S('builderMaintenanceToggle', ADMIN, 'maintenance purge cleanup storage'),
     B('collapseAllBtn', QUIZ, 'collapse expand all questions'),
     B('addMediaBatchBtn', QUIZ, 'add media batch images audio files'),
     B('bankSearchBtn', QUIZ, 'search question bank import'),
     B('levelAiCopyBtn', QUIZ, 'levels cefr adaptive ai tagging prompt copy'),
-    B('purgePreviewsBtn', QUIZ, 'purge preview backlog cleanup', { go: true }),
-    B('purgeOrphanMediaBtn', QUIZ, 'purge orphan media cleanup r2', { go: true }),
+    B('purgePreviewsBtn', ADMIN, 'purge preview backlog cleanup', { go: true }),
+    B('purgeOrphanMediaBtn', ADMIN, 'purge orphan media cleanup r2', { go: true }),
     {
       id: 'fn:mediaCheck', area: QUIZ, kw: 'media check manual audio images', key: 'M',
       label: () => t('Check media'),
       avail: () => !live.host.isPrimaryAudioHost,
       run: () => runManualMediaCheck(),
     },
+    S('listeningSectionToggle', LISTENING, 'listening recordings script voices record studio questions'),
+    B('lrCopyPromptBtn', LISTENING, 'ai script prompt listening write dialogue', { go: true }),
+    B('lrStudioBtn', LISTENING, 'listening studio tts ai voices'),
     {
-      id: 'fn:voiceActors', area: QUIZ, kw: 'voice actors volunteers record lines script voices listening recording',
+      id: 'fn:voiceActors', area: LISTENING, kw: 'voice actors volunteers students record lines script voices listening recording sessions',
       label: () => t('🎙 Voice actors'),
       avail: () => creatorRole === 'owner' && typeof openVoiceActors === 'function',
       run: () => openVoiceActors(),
@@ -163,10 +169,10 @@
     B('hostJoinBtn', LIVE, 'join as host pin'),
     B('hostAttemptsExportBtn', LIVE, 'export results csv attempts'),
     S('liveScreenSectionToggle', LIVE, 'live screen projector', { label: () => t('Live screen') }),
-    S('gameControlsSectionToggle', LIVE, 'game controls live'),
+    S('gameControlsSectionToggle', LIVE, 'game controls live game'),
 
     // Assignments
-    S('assignmentSectionToggle', ASSIGN, 'assignments homework list results'),
+    S('assignmentSectionToggle', ASSIGN, 'assignments homework list results grading'),
     B('createAssignmentBtn', ASSIGN, 'create new assignment homework assign', { go: true }),
     B('assignmentInstantFeedbackBtn', ASSIGN, 'assignment feedback instant end'),
     B('assignmentExamModeBtn', ASSIGN, 'assignment exam mode fullscreen'),
@@ -183,9 +189,10 @@
     B('studentsExportBtn', STUDENTS, 'export students csv'),
     B('studentsSettingsBtn', STUDENTS, 'sign in rules accounts login'),
 
-    // Workspaces and page
-    S('workspacesSectionToggle', WORKSPACE, 'workspaces guest teachers'),
-    B('createWorkspaceBtn', WORKSPACE, 'create new workspace guest invite', { go: true }),
+    // Admin and page
+    S('adminSectionToggle', ADMIN, 'admin settings workspaces maintenance'),
+    S('workspacesSectionToggle', ADMIN, 'workspaces guest teachers'),
+    B('createWorkspaceBtn', ADMIN, 'create new workspace guest invite', { go: true }),
     {
       id: 'fn:collapseSections', area: PAGE, kw: 'collapse expand all sections',
       label: () => t('Collapse or expand all sections'),

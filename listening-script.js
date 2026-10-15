@@ -120,9 +120,85 @@ const LISTENING_SCRIPT_RULES = [
   'Only the recording itself: no title or instruction read aloud ("Part two. You will hear…": PinPlay can read the section\'s instruction itself), no "Now listen again", no repeated passage, no questions read aloud.',
 ];
 
+// The same, for a script students read aloud (voice actors, VOICE_ACTORS_PLAN.md):
+// each line is one take on a phone, joined in order with pauses.
+const LISTENING_ACTOR_SCRIPT_RULES = [
+  'Students record the script on their phones, one line at a time, each student reading one character; the takes are joined in order. So: no VOICE, AMBIENCE, effect or sound lines (nothing adds them), no interruptions (">>") and no overlapping speech: every line is said on its own.',
+  'Start with "TITLE: …" (a short, catchy name, 2–5 words, in the language of the recording) and "LANGUAGE: …".',
+  'Give every character a fair share of lines, so each student has something to record; no character with a single short line, unless the teacher asks for it.',
+  'Speech lines: "Name (direction): text". The direction is short, in English, and helps a student act the line ("surprised", "a bit annoyed", "quietly", "with a short laugh"). Give one only when a line clearly isn\'t neutral.',
+  'At most about 25 words per line, so a student can read it in one go: split a longer speech into several lines of the same speaker. Avoid names and words that are hard to say for a learner at this level, unless they are the point.',
+  'Make it sound like real people: short reactions, fillers ("um", "well...", "I mean"), "..." for hesitation.',
+  'Write numbers, times, prices, dates and spellings as they are said: "ten fifteen", "four pounds fifty", "the twenty-third of May", "that\'s S-M-I-T-H". The questions\' accepted answers include the digits too.',
+  'Every answer must be said clearly, in a line of its own or at the end of one.',
+  'Only the recording itself: no title or instruction read aloud ("Part two. You will hear…"), no "Now listen again", no repeated passage, no questions read aloud.',
+];
+
+const LISTENING_SCRIPT_EXAMPLE = `TITLE: Sunday plans
+LANGUAGE: English
+AMBIENCE: room
+VOICE Anna: A young British woman of about twenty with a warm, clear, mid-range voice, friendly and quick.
+VOICE Tom [phone]: A young British man of about twenty with a relaxed, slightly deep voice, easy-going.
+
+[ring]
+Anna (cheerful): Hi Tom! Are we still meeting on Saturday?
+Tom (apologetic): Not Saturday, sorry, I'm working. Can we do Sunday at half past ten?
+Anna: Sure. At the café on Bridge Street?
+Tom: It's closed for repairs. Let's meet at the library instead.
+>> Anna (surprised): The library? On a Sunday?
+Tom (laughing): It opens at ten. Trust me.`;
+
+const LISTENING_ACTOR_SCRIPT_EXAMPLE = `TITLE: Sunday plans
+LANGUAGE: English
+
+Anna (cheerful): Hi Tom! Are we still meeting on Saturday?
+Tom (apologetic): Not Saturday, sorry, I'm working. Can we do Sunday at half past ten?
+Anna: Sure. At the café on Bridge Street?
+Tom: It's closed for repairs. Let's meet at the library instead.
+Anna (surprised): The library? On a Sunday?
+Tom (laughing): It opens at ten. Trust me.`;
+
+// The prompt for an AI chat that writes only the script (no questions): for
+// the Listening Studio (recordedBy 'studio', the default) or for students.
+function buildListeningScriptPrompt(o = {}) {
+  const students = o.recordedBy === 'students';
+  const language = o.language || 'English';
+  const minutes = Number(o.length) || 2;
+  const words = { 1: '120–160', 2: '250–320', 3: '380–450', 4: '500–600' }[minutes] || '250–320';
+  const format = students
+    ? ['TITLE: A short name', `LANGUAGE: ${language}`, 'Name (direction): what they say', 'Name: what they say']
+    : ['TITLE: A short name', `LANGUAGE: ${language}`, 'AMBIENCE: station', 'VOICE Name: what their everyday voice is like', 'VOICE Name [effect]: …',
+      '[sound]', 'Name (direction): what they say', '>> Name (direction): an interruption', 'Name + Name: said together', '[pause 2]'];
+  const lines = [
+    '# Write a listening recording script',
+    '',
+    `Write the script of a recording for a listening exercise${o.level ? ` at level ${o.level}` : ''}, in ${language}.`,
+    o.topic ? `- Topic: "${o.topic}"` : '- Topic: an everyday situation that suits the level.',
+    o.characters ? `- Characters: "${o.characters}"` : '- Characters: two to four people, easy to tell apart.',
+    `- Length: about ${minutes} minute${minutes > 1 ? 's' : ''} of speech (${words} words).`,
+    students ? '- Students of the class will record it: one student per character.' : null,
+    o.notes ? `- Also: "${o.notes}"` : null,
+    '',
+    'Reply with the script only, in one ```text code block, in this format:',
+    '```text',
+    ...format,
+    '```',
+    '',
+    '## Rules',
+    ...(students ? LISTENING_ACTOR_SCRIPT_RULES : LISTENING_SCRIPT_RULES).map((r, i) => `${i + 1}. ${r}`),
+    '',
+    'Example (shape only):',
+    '```text',
+    students ? LISTENING_ACTOR_SCRIPT_EXAMPLE : LISTENING_SCRIPT_EXAMPLE,
+    '```',
+  ];
+  return lines.filter((l) => l !== null).join('\n');
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LISTENING_SCRIPT_SOUNDS, LISTENING_SCRIPT_EFFECTS, LISTENING_SCRIPT_AMBIENCES, LISTENING_SCRIPT_LANGUAGES,
     parseListeningScript, isListeningScript, cleanListeningTranscript, LISTENING_SCRIPT_RULES,
+    LISTENING_ACTOR_SCRIPT_RULES, buildListeningScriptPrompt,
   };
 }

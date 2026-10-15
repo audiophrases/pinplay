@@ -114,3 +114,34 @@ describe('the rules the AI gets', () => {
     ['phone', 'PA', 'radio', 'far'].forEach((e) => assert.match(rules, new RegExp(`\\[${e}\\]`)));
   });
 });
+
+describe('the script-only prompt (the Studio, and the teacher page\'s 🎧 card)', () => {
+  const o = { topic: 'a weekend in London', level: 'B1', language: 'French', characters: 'two friends', length: '3', notes: 'past tense' };
+
+  it('asks for the script only, with the teacher\'s choices', () => {
+    const p = S.buildListeningScriptPrompt(o);
+    [/at level B1, in French/, /Topic: "a weekend in London"/, /Characters: "two friends"/, /about 3 minutes of speech \(380–450 words\)/,
+      /Also: "past tense"/, /script only, in one ```text code block/, /LANGUAGE: French/].forEach((re) => assert.match(p, re));
+    assert.doesNotMatch(p, /questions? (?:to|you) write/i);
+  });
+
+  it('for the Studio: voices, sounds and effects, and its example parses', () => {
+    const p = S.buildListeningScriptPrompt({ language: 'English' });
+    [/VOICE Name: what their everyday voice is like/, /\[pause 2\]/, /Qwen3-TTS/, /about 2 minutes/].forEach((re) => assert.match(p, re));
+    const example = p.split('Example (shape only):')[1];
+    assert.match(example, /VOICE Tom \[phone\]/);
+  });
+
+  it('for students: no voices, sounds, effects or interruptions, and a fair share of lines', () => {
+    const p = S.buildListeningScriptPrompt({ ...o, recordedBy: 'students' });
+    [/one student per character/, /fair share of lines/, /no VOICE, AMBIENCE, effect or sound lines/, /25 words/].forEach((re) => assert.match(p, re));
+    const format = p.split('```text')[1].split('```')[0];
+    assert.doesNotMatch(format, /VOICE|AMBIENCE|\[|>>|\+/);
+    const example = p.split('Example (shape only):')[1].replace(/```(text)?/g, '');
+    const script = S.parseListeningScript(example);
+    assert.equal(script.title, 'Sunday plans');
+    assert.deepEqual(Object.keys(script.voices), []);
+    const items = script.parts.flatMap((part) => part.items);
+    assert.ok(items.length >= 6 && items.every((it) => it.type === 'line' && !it.overlap));
+  });
+});

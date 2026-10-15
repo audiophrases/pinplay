@@ -87,3 +87,34 @@ record first and write the questions afterwards.
   `original` in the volunteer's view, `edited` in the sessions list.
 - The record page shows ✏️ only when the session says `allowEdits: true`,
   so the page is safe before the API is deployed.
+
+## The teacher page reordered, and 🎧 Listening recordings (2026-10-15)
+
+The Voice actors card had cut the AI script step off from the recording. The
+owner chose the full reorder, all three AI modes for listening, and no saved
+scripts of their own (a script lives on only as a recording session or a quiz).
+
+Cards, top to bottom (all collapsed): **🎧 Listening recordings** · 🛠️ Quiz
+builder · 📺 Live screen · 🎮 Live game (was Game controls) · **📋 Assignments &
+results** · **👥 Students** · **⚙️ Admin** (Guest workspaces + Storage
+maintenance, which left the Quiz builder). Assignments and Students were
+sections inside Game controls; they are cards of their own now, same ids.
+Live screen and Live game stay two cards: the projector card goes fullscreen
+on its own. Guests still see only the Quiz builder and 🧑‍🎓 Preview.
+
+| Step in 🎧 Listening recordings | What it does |
+|---|---|
+| ① Script | The AI writes **the script only** (topic, level, language, characters, length, who records it, notes → 📋 Copy the script prompt). The answer, or the teacher's own script, goes in the box. **✨ Script and questions together →** opens the Quiz builder's AI prompt set to Listening / the AI writes the script. |
+| ② Voices | **🎙 Students record it** opens a new recording session with the box's script (title from `TITLE:`). **🔊 Listening Studio** copies the script and opens the Studio on this computer (127.0.0.1:8790). |
+| ③ Questions | **✨ The questions, from this script →** opens the Quiz builder's AI prompt set to Listening / paste, with the script in it. A recording session has the same button (the script with the volunteers' changes). |
+
+- The three AI modes: the script only (① here, or the AI prompt's new
+  option "The AI writes only the script → 🎧 Listening recordings", which takes
+  you to ①), the script and the questions, and the questions from a script.
+- `buildListeningScriptPrompt` (listening-script.js) is shared with the
+  Listening Studio, which used to have its own copy: the Studio's prompt is
+  unchanged. `recordedBy: 'students'` uses `LISTENING_ACTOR_SCRIPT_RULES`: no
+  VOICE/AMBIENCE/sounds/effects, no interruptions or overlaps (every line is a
+  take of its own), a fair share of lines per character, ≤ 25 words a line.
+- The page had one stray `</div>` that closed the workspace early; the cards
+  after the Live game card need it gone.

@@ -422,8 +422,10 @@ const assignmentSectionToggleEl = document.getElementById('assignmentSectionTogg
 const assignmentSectionBodyEl = document.getElementById('assignmentSectionBody');
 const workspacesSectionToggleEl = document.getElementById('workspacesSectionToggle');
 const workspacesCardBodyEl = document.getElementById('workspacesCardBody');
-const voiceActorsSectionToggleEl = document.getElementById('voiceActorsSectionToggle');
-const voiceActorsCardBodyEl = document.getElementById('voiceActorsCardBody');
+const listeningSectionToggleEl = document.getElementById('listeningSectionToggle');
+const listeningCardBodyEl = document.getElementById('listeningCardBody');
+const adminSectionToggleEl = document.getElementById('adminSectionToggle');
+const adminCardBodyEl = document.getElementById('adminCardBody');
 const builderMaintenanceToggleEl = document.getElementById('builderMaintenanceToggle');
 const builderMaintenanceBodyEl = document.getElementById('builderMaintenanceBody');
 
@@ -888,7 +890,8 @@ function getTeacherCollapsibleSectionPairs() {
     [assignmentSectionToggleEl, assignmentSectionBodyEl],
     [studentsSectionToggleEl, studentsSectionBodyEl],
     [workspacesSectionToggleEl, workspacesCardBodyEl],
-    [voiceActorsSectionToggleEl, voiceActorsCardBodyEl],
+    [listeningSectionToggleEl, listeningCardBodyEl],
+    [adminSectionToggleEl, adminCardBodyEl],
   ].filter(([triggerEl, bodyEl]) => !!triggerEl && !!bodyEl);
 }
 
@@ -917,11 +920,12 @@ function bindCollapsibleSections() {
   bindSectionToggle(builderMaintenanceToggleEl, builderMaintenanceBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(liveScreenSectionToggleEl, liveScreenCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(gameControlsSectionToggleEl, gameControlsCardBodyEl, { defaultCollapsed: true, keyboard: true });
-  bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+  bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(workspacesSectionToggleEl, workspacesCardBodyEl, { defaultCollapsed: true, keyboard: true });
-  bindSectionToggle(voiceActorsSectionToggleEl, voiceActorsCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(listeningSectionToggleEl, listeningCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  bindSectionToggle(adminSectionToggleEl, adminCardBodyEl, { defaultCollapsed: true, keyboard: true });
 
-  bindSectionToggle(studentsSectionToggleEl, studentsSectionBodyEl, { defaultCollapsed: true, keyboard: false });
+  bindSectionToggle(studentsSectionToggleEl, studentsSectionBodyEl, { defaultCollapsed: true, keyboard: true });
 
   if (assignmentSectionToggleEl && assignmentSectionBodyEl) {
     assignmentSectionToggleEl.addEventListener('click', () => {
@@ -1133,12 +1137,47 @@ function syncTranscriptPartsInfo() {
     : t('Several recordings? Start each one with a line such as --- Part 2');
 }
 
+// Opens the Quiz builder's AI prompt set for a listening quiz, from the 🎧
+// Listening recordings card or a recording session: source 'write' = the AI
+// writes the script and the questions; 'paste' = the questions, from this
+// script. Theme and level are filled only where still empty.
+function openListeningPrompt({ source = 'paste', transcript = '', theme = '', level = '' } = {}) {
+  const set = (id, value, event = 'change') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value;
+    el.dispatchEvent(new Event(event, { bubbles: true }));
+  };
+  if (builderSectionToggleEl && builderCardBodyEl) setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
+  if (creationPromptToggleEl && creationPromptBodyEl) setSectionCollapsed(creationPromptToggleEl, creationPromptBodyEl, false);
+  set('promptKind', 'listening');
+  set('promptListeningSource', source);
+  if (transcript) set('promptTranscript', transcript, 'input');
+  const themeEl = document.getElementById('promptTheme');
+  if (theme && themeEl && !themeEl.value.trim()) themeEl.value = theme;
+  const levelEl = document.getElementById('promptLevel');
+  if (level && levelEl && !levelEl.disabled && !levelEl.value.trim()) levelEl.value = level;
+  creationPromptToggleEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function bindBuilderEvents() {
   renderPromptTypesList();
   renderListeningPromptTypes();
   renderBuildupPromptTypes();
   document.getElementById('promptKind')?.addEventListener('change', syncPromptKind);
-  document.getElementById('promptListeningSource')?.addEventListener('change', syncListeningSource);
+  // "Only the script" is made in the 🎧 Listening recordings card: the option
+  // takes you there and the choice goes back to what it was.
+  document.getElementById('promptListeningSource')?.addEventListener('change', (e) => {
+    const sel = e.target;
+    if (sel.value === 'script') {
+      sel.value = sel.dataset.last || 'paste';
+      if (typeof openListeningScriptStep === 'function') {
+        openListeningScriptStep({ theme: document.getElementById('promptTheme')?.value.trim(), level: document.getElementById('promptLevel')?.value.trim() });
+      }
+    }
+    sel.dataset.last = sel.value;
+    syncListeningSource();
+  });
   document.getElementById('promptTranscript')?.addEventListener('input', syncTranscriptPartsInfo);
   document.getElementById('promptListeningAdaptive')?.addEventListener('change', syncListeningLevels);
   syncPromptKind();

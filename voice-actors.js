@@ -33,6 +33,8 @@ const va = {
   filter: '',
   newFrom: '', // listening section id the new-session form starts from
   openNew: false, // the new-session form starts open
+  newScript: '', // a script the new-session form starts with (from the 🎧 card)
+  newTitle: '',
 };
 
 function vaApi(route, body = {}) {
@@ -90,6 +92,8 @@ function openVoiceActors(opts = {}) {
   document.getElementById('voiceActorsOverlay')?.remove();
   va.newFrom = opts.sectionId || '';
   va.openNew = !!opts.newSession;
+  va.newScript = String(opts.script || '');
+  va.newTitle = String(opts.title || '');
   const overlay = document.createElement('div');
   overlay.id = 'voiceActorsOverlay';
   overlay.className = 'dialog-overlay';
@@ -167,7 +171,7 @@ function vaRenderList() {
       <summary><strong>${escapeHtml(t('+ New session'))}</strong></summary>
       ${sourceOptions ? '' : `<p class="small muted">${escapeHtml(t('No quiz needed: paste the script now. Later, make a listening section in the quiz and put the recording in it from here.'))}</p>`}
       <label>${escapeHtml(t('Title'))}
-        <input type="text" maxlength="120" data-va-new-title value="${escapeHtml(fromSec?.title || quiz?.title || '')}" />
+        <input type="text" maxlength="120" data-va-new-title value="${escapeHtml(fromSec?.title || va.newTitle || quiz?.title || '')}" />
       </label>
       <label>${escapeHtml(t('Script'))}
         <select data-va-new-source>
@@ -175,7 +179,7 @@ function vaRenderList() {
           <option value="" ${fromSec ? '' : 'selected'}>${escapeHtml(t('Paste a script'))}</option>
         </select>
       </label>
-      <textarea rows="8" data-va-new-script placeholder="${escapeHtml(VA_SCRIPT_EXAMPLE)}" ${fromSec ? 'hidden' : ''}></textarea>
+      <textarea rows="8" data-va-new-script placeholder="${escapeHtml(VA_SCRIPT_EXAMPLE)}" ${fromSec ? 'hidden' : ''}>${escapeHtml(fromSec ? '' : va.newScript)}</textarea>
       <div class="small muted" data-va-new-info></div>
       <label class="va-allow small"><input type="checkbox" data-va-new-allow checked /> ${escapeHtml(t('Volunteers can change the words of their lines (you see every change)'))}</label>
       <button type="button" class="btn primary" data-va-create>${escapeHtml(t('Create the session'))}</button>
@@ -209,6 +213,8 @@ async function vaCreate() {
     });
     va.newFrom = '';
     va.openNew = false;
+    va.newScript = '';
+    va.newTitle = '';
     vaShowSession(data.session);
   } catch (err) {
     vaStatus(t('Could not create the session ({msg}).', { msg: err.message }), 'bad');
@@ -318,9 +324,10 @@ function vaRenderSession() {
           ${sections.map((x, i) => `<option value="${escapeHtml(x.id)}" ${x.id === target ? 'selected' : ''}>${escapeHtml(vaSectionLabel(x, i))}</option>`).join('')}
         </select>
         <button type="button" class="btn primary" data-va-build="section">${escapeHtml(t('🎧 Use in the listening section'))}</button>` : ''}
+      <button type="button" class="btn" data-va-questions title="${escapeHtml(t('Opens the Quiz builder\'s AI prompt with this script, the volunteers\' changes included'))}">${escapeHtml(t('✨ Questions from this script'))}</button>
       <button type="button" class="btn" data-va-copy-script title="${escapeHtml(t('The script with the volunteers\' changes, for a listening section or the AI prompt'))}">${escapeHtml(t('📋 Copy the script'))}</button>
       <span class="small muted">${escapeHtml(t('Joins the takes in script order, trimmed, with their pauses. Lines not recorded are left out.'))}</span>
-      ${sections.length ? '' : `<span class="small muted">${escapeHtml(t('To put it straight into a quiz: open the quiz, make a listening section, then come back here.'))}</span>`}
+      ${sections.length ? '' : `<span class="small muted">${escapeHtml(t('No listening section in the quiz yet: ✨ Questions from this script, import the AI\'s quiz, then come back here.'))}</span>`}
     </div>`;
   vaDrawAll();
 }
@@ -772,6 +779,10 @@ function vaOnClick(e) {
       () => vaStatus(t('✅ Copied the link for {name}', { name: d.vaCopyCharacter }), 'ok'),
       () => prompt(t('Copy this link:'), link),
     );
+  } else if (d.vaQuestions !== undefined) {
+    const { title, lines } = va.session;
+    closeVoiceActors();
+    openListeningPrompt({ source: 'paste', transcript: vaScriptText(lines), theme: title });
   } else if (d.vaCopyScript !== undefined) {
     const text = vaScriptText(va.session.lines);
     navigator.clipboard?.writeText(text).then(() => vaStatus(t('✅ Copied'), 'ok'), () => prompt(t('Copy the script:'), text));
@@ -842,11 +853,95 @@ function vaOnInput(e) {
 
 window.addEventListener('resize', () => { if (va.view === 'session' && document.getElementById('voiceActorsOverlay')) vaDrawAll(); });
 
-// The 🎙 Voice actors card on the teacher page: no quiz needed.
-if (typeof document !== 'undefined') {
-  document.getElementById('voiceActorsNewBtn')?.addEventListener('click', () => openVoiceActors({ newSession: true }));
-  document.getElementById('voiceActorsOpenBtn')?.addEventListener('click', () => openVoiceActors());
+// ------------------------------------------------- 🎧 Listening recordings --
+// The teacher page's card (owner only, no quiz needed): ① the script (an AI
+// prompt for the script only, or the script pasted), ② the voices (students,
+// or the Listening Studio), ③ the questions (the Quiz builder's AI prompt,
+// via openListeningPrompt in app.js). The script typed here is never saved on
+// its own: it lives on as a recording session or in a quiz.
+const LR_STUDIO_URL = 'http://127.0.0.1:8790/';
+
+const lrEl = (id) => document.getElementById(id);
+const lrValue = (id) => String(lrEl(id)?.value || '').trim();
+
+function lrStatus(msg, cls = '') {
+  const el = lrEl('lrStatus');
+  if (el) { el.textContent = msg || ''; el.className = `small ${cls}`; }
 }
+
+function lrScriptTitle(text) {
+  try { return parseListeningScript(text).title || ''; } catch { return ''; }
+}
+
+function lrUpdateInfo() {
+  const info = lrEl('lrScriptInfo');
+  if (!info) return;
+  const lines = vaLinesFromScript(lrValue('lrScript'));
+  info.textContent = lines.length ? t('{n} lines · characters: {names}', { n: lines.length, names: vaCharacters(lines).join(', ') }) : '';
+}
+
+async function lrCopy(text, okMsg, fileName) {
+  try {
+    await navigator.clipboard.writeText(text);
+    lrStatus(okMsg, 'ok');
+    return true;
+  } catch {
+    // No clipboard (an old browser, or not allowed): the text as a file.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    lrStatus(t('Could not copy: downloaded {name} instead.', { name: fileName }), 'ok');
+    return false;
+  }
+}
+
+// Step ① from elsewhere (the AI Creation Prompt's "only the script"):
+// opens the card at the script prompt, keeping what is already typed.
+function openListeningScriptStep({ theme = '', level = '' } = {}) {
+  if (listeningSectionToggleEl && listeningCardBodyEl) setSectionCollapsed(listeningSectionToggleEl, listeningCardBodyEl, false);
+  const topic = lrEl('lrTopic');
+  if (topic && theme && !topic.value.trim()) topic.value = theme;
+  const lvl = lrEl('lrLevel');
+  if (lvl && level && !lvl.value.trim()) lvl.value = level;
+  listeningSectionToggleEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  topic?.focus({ preventScroll: true });
+}
+
+function lrBind() {
+  const language = lrEl('lrLanguage');
+  if (!language) return;
+  language.innerHTML = LISTENING_SCRIPT_LANGUAGES.map((l) => `<option>${escapeHtml(l)}</option>`).join('');
+  lrEl('lrScript')?.addEventListener('input', lrUpdateInfo);
+  lrEl('lrCopyPromptBtn')?.addEventListener('click', async () => {
+    const text = buildListeningScriptPrompt({
+      topic: lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage'), characters: lrValue('lrCharacters'),
+      length: lrValue('lrLength'), notes: lrValue('lrNotes'), recordedBy: lrValue('lrRecordedBy'),
+    });
+    if (await lrCopy(text, t('✅ Copied: paste it into your AI chat, then paste its answer in the box below.'), 'prompt-listening-script.md')) lrEl('lrScript')?.focus();
+  });
+  lrEl('lrWriteBtn')?.addEventListener('click', () => openListeningPrompt({ source: 'write', theme: lrValue('lrTopic'), level: lrValue('lrLevel') }));
+  lrEl('voiceActorsNewBtn')?.addEventListener('click', () => {
+    const script = lrValue('lrScript');
+    openVoiceActors({ newSession: true, script, title: lrScriptTitle(script) || lrValue('lrTopic') });
+  });
+  lrEl('voiceActorsOpenBtn')?.addEventListener('click', () => openVoiceActors());
+  lrEl('lrStudioBtn')?.addEventListener('click', async () => {
+    const script = lrValue('lrScript');
+    window.open(LR_STUDIO_URL, '_blank', 'noopener');
+    if (script) await lrCopy(script, t('✅ Script copied: in the Listening Studio, start a new recording and paste it. (Is the Studio not open? Start it on this computer first.)'), 'listening-script.txt');
+    else lrStatus(t('The Listening Studio runs on this computer: if the page doesn\'t open, start it first.'));
+  });
+  lrEl('lrQuestionsBtn')?.addEventListener('click', () => {
+    const script = lrValue('lrScript');
+    openListeningPrompt({ source: 'paste', transcript: script, theme: lrScriptTitle(script) || lrValue('lrTopic'), level: lrValue('lrLevel') });
+  });
+}
+
+if (typeof document !== 'undefined') lrBind();
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { vaLinesFromScript, vaAutoTrim, vaScriptText, vaApplyEdits, vaCharacters, vaLink };
