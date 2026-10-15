@@ -128,7 +128,7 @@
     // Live game
     B('createLiveBtn', LIVE, 'start new live game pin host'),
     B('createArenaBtn', LIVE, 'start new cup arena pinplay cup game'),
-    B('randomNamesToggle', LIVE, 'login random names sign in mode'),
+    B('liveSignIn', LIVE, 'login random names sign in google players who plays mode', { go: true, label: () => t('Who plays the live game') }),
     B('hostStartBtn', LIVE, 'start game begin', { key: 'S' }),
     B('hostNextBtn', LIVE, 'next question forward', { key: '→', label: () => t('Next question') }),
     B('hostPrevBtn', LIVE, 'previous question back', { key: '←', label: () => t('Previous question') }),
@@ -174,6 +174,7 @@
     // Assignments
     S('assignmentSectionToggle', ASSIGN, 'assignments homework list results grading'),
     B('createAssignmentBtn', ASSIGN, 'create new assignment homework assign', { go: true }),
+    B('assignmentSignIn', ASSIGN, 'assignment login random names sign in google who does it', { go: true, label: () => t('Who does the assignment') }),
     B('assignmentInstantFeedbackBtn', ASSIGN, 'assignment feedback instant end'),
     B('assignmentExamModeBtn', ASSIGN, 'assignment exam mode fullscreen'),
     B('toggleArchivedAssignmentsBtn', ASSIGN, 'archived assignments show hide'),

@@ -6188,6 +6188,12 @@ body.listening-sheet-open { overflow: hidden; }
 .live-level { display: inline-flex; align-items: center; gap: .2rem; cursor: pointer; }
 .live-level input { width: auto; margin: 0; }
 
+/* ── Who plays: one choice for the live game, one for each new assignment ── */
+.sign-in-mode { width: auto; font-weight: 600; }
+#liveSignInHint { margin: .35rem 0 0; }
+#liveSignInHint:empty { display: none; }
+@media (max-width: 640px) { .sign-in-mode { width: 100%; } }
+
 /* ── Voice actors: the volunteers' page (record/) ── */
 .rec-main { max-width: 640px; }
 .rec-title { margin: .5rem 0 .25rem; }

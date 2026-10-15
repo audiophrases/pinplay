@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-layout" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-signin" />
   </head>
   <body>
     <header class="topbar">
@@ -617,13 +617,20 @@
             </h2>
             <div id="gameControlsCardBody" class="hidden">
             <div class="row gap top-space" id="hostActionRow">
-              <button id="randomNamesToggle" class="btn owner-only" type="button" data-i18n>Login</button>
-              <span id="liveLevelsWrap" class="assignment-adaptive live-levels owner-only hidden" title="Live Pin plays the questions of the ticked levels and every question without a level. In a listening section, the sheet has the ticked levels' questions for each moment of the recording, easiest first. PinPlay Cup follows 🎯 Adaptive in Assignments." data-i18n-title>
+              <select id="liveSignIn" class="sign-in-mode owner-only" title="Who plays the live game: the next one, and the one running now" aria-label="Who plays the live game" data-i18n-title data-i18n-aria>
+                <option value="random" selected data-i18n>🎲 Random names</option>
+                <option value="signin" data-i18n>👤 Students sign in</option>
+              </select>
+              <button id="createLiveBtn" class="btn primary owner-only" data-i18n>Live Pin</button>
+              <span id="liveLevelsWrap" class="assignment-adaptive live-levels owner-only hidden" title="Live Pin plays the questions of the ticked levels and every question without a level. In a listening section, the sheet has the ticked levels' questions for each moment of the recording, easiest first." data-i18n-title>
                 <span data-i18n>🎯 Levels</span>
                 <span id="liveLevelsList" class="live-levels-list"></span>
               </span>
-              <button id="createLiveBtn" class="btn primary owner-only" data-i18n>Live Pin</button>
               <button id="createArenaBtn" class="btn primary owner-only" type="button" title="Self-paced timed round with reward chests and a live board" data-i18n data-i18n-title>PinPlay Cup</button>
+              <label id="cupAdaptiveWrap" class="assignment-adaptive owner-only hidden" title="PinPlay Cup, adaptive: each student gets questions picked one at a time to match how they are doing. Signed-in students start at their saved level, and the game updates it. Students never see their level. Untick to play the quiz as usual." data-i18n-title>
+                <input id="cupAdaptive" type="checkbox" checked />
+                <span data-i18n>🎯 Adaptive</span>
+              </label>
               <button id="hostRefreshBtn" class="btn owner-only" data-i18n>Refresh</button>
               <button id="hostStartBtn" class="btn success owner-only" data-i18n>Start</button>
               <button id="hostPrevBtn" class="btn owner-only">←</button>
@@ -633,6 +640,7 @@
               <input id="hostJoinPin" type="text" maxlength="6" placeholder="PIN" style="width:78px;" class="owner-only" />
               <button id="hostJoinBtn" class="btn owner-only" data-i18n>Join as host</button>
             </div>
+            <p id="liveSignInHint" class="small muted owner-only"></p>
 
 
 
@@ -694,9 +702,13 @@
                   <input id="assignmentClass" type="text" placeholder="Class (optional)" data-i18n-ph style="max-width:150px;" />
                   <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" title="Due date (optional)" aria-label="Due date (optional)" data-i18n-title data-i18n-aria />
                   <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
+                  <select id="assignmentSignIn" class="sign-in-mode" title="👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name." aria-label="Who does the assignment" data-i18n-title data-i18n-aria>
+                    <option value="random" selected data-i18n>🎲 Random names</option>
+                    <option value="signin" data-i18n>👤 Students sign in</option>
+                  </select>
                   <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
                   <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
-                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
+                  <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
                     <input id="assignmentAdaptive" type="checkbox" />
                     <select id="assignmentAdaptiveMode" aria-label="Adaptive or Climb" data-i18n-aria disabled>
                       <option value="adaptive" data-i18n>🎯 Adaptive</option>
@@ -831,7 +843,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-layout"></script>
+    <script src="../i18n-fr.js?v=20261015-signin"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -842,10 +854,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-layout"></script>
-    <script src="../app.js?v=20261015-layout"></script>
+    <script src="../app.js?v=20261015-signin"></script>
     <script src="../voice-actors.js?v=20261015-layout"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-layout"></script>
+    <script src="../command-palette.js?v=20261015-signin"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>

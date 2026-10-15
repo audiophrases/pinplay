@@ -460,6 +460,7 @@ const hostJoinBtn = document.getElementById('hostJoinBtn');
 const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
+const assignmentSignInEl = document.getElementById('assignmentSignIn');
 const assignmentInstantFeedbackBtn = document.getElementById('assignmentInstantFeedbackBtn');
 const assignmentExamModeBtn = document.getElementById('assignmentExamModeBtn');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
@@ -507,7 +508,8 @@ const hostQuestionWrap = document.getElementById('hostQuestionWrap');
 const hostQuestionPromptEl = document.getElementById('hostQuestionPrompt');
 const hostQuestionAnswersEl = document.getElementById('hostQuestionAnswers');
 const hostQuestionHintEl = document.getElementById('hostQuestionHint');
-const randomNamesToggleEl = document.getElementById('randomNamesToggle');
+const liveSignInEl = document.getElementById('liveSignIn');
+const liveSignInHintEl = document.getElementById('liveSignInHint');
 const hallCardEl = document.getElementById('hallCard');
 const hostQuestionCardEl = document.getElementById('hostQuestionCard');
 const livePinBigEl = document.getElementById('livePinBig');
@@ -6129,8 +6131,9 @@ function bindLiveEvents() {
   }
   if (previewExitBtn) previewExitBtn.addEventListener('click', stopPreviewMode);
 
-  if (randomNamesToggleEl) {
-    randomNamesToggleEl.addEventListener('click', hostUpdateRandomNames);
+  if (liveSignInEl) {
+    liveSignInEl.addEventListener('change', hostUpdateRandomNames);
+    syncLiveSignInHint();
   }
 
   document.addEventListener('keydown', handleHostHotkeys);
@@ -6162,20 +6165,17 @@ async function createLiveGame(opts = {}) {
     if (!createSessionPassword) throw new Error('Teacher password is required.');
 
     const payload = normalizeQuizForLive(quiz);
-    // PinPlay Cup follows the Assignments "🎯 Adaptive" checkbox (shown only
-    // for quizzes with 2+ tagged levels); the board itself has no toggle.
-    // (Climb is for homework: a Cup ignores it and plays as usual.)
-    const arenaAdaptive = arenaMode
-      && !!document.getElementById('assignmentAdaptive')?.checked
-      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden')
-      && !assignmentBuildupSelected();
+    // PinPlay Cup: its own "🎯 Adaptive" switch beside its button, offered for
+    // quizzes with 2+ tagged levels (the server checks too). The Assignments
+    // box no longer decides it, and Climb is for homework only.
+    const arenaAdaptive = arenaMode && cupAdaptiveOn();
     const data = await api('/api/create', {
       method: 'POST',
       body: {
         quiz: payload,
         password: createSessionPassword,
         options: {
-          randomNames: isRandomNamesEnabled(),
+          randomNames: liveRandomNames(),
           gameMode: arenaMode ? 'arena' : 'classic',
           arenaAdaptive,
           levels: arenaMode ? [] : liveLevelsForGame(),
@@ -11385,7 +11385,8 @@ function buildAssignmentListItem(a) {
   const dueAt = Number(a?.dueAt || 0);
   const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
   const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
-  meta.textContent = t("{p1} · Attempts {p2} · {p3}", { p1: String(a?.className || '').trim() || 'All classes', p2: attemptsText, p3: dueText });
+  const signInText = a?.randomNames ? t('🎲 Random names') : t('👤 Students sign in');
+  meta.textContent = t('{p1} · Attempts {p2} · {p3} · {p4}', { p1: String(a?.className || '').trim() || t('All classes'), p2: attemptsText, p3: dueText, p4: signInText });
 
   headerText.append(title, meta);
 
@@ -11598,10 +11599,8 @@ async function createAssignmentFromCurrentQuiz() {
     if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
-    // Snapshot the current shared login/random-names toggle immediately on click.
-    // The same control is also synced by live polling, so we should not re-read it
-    // after async work and accidentally create the assignment with the wrong mode.
-    const randomNamesEnabled = isRandomNamesEnabled();
+    // The assignment's own choice, read on click; the live game's never decides it.
+    const randomNamesEnabled = assignmentRandomNames();
 
     await ensureQuizMediaReady({ contextLabel: 'create assignment', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
 
@@ -11657,7 +11656,7 @@ async function createAssignmentFromCurrentQuiz() {
 
     const code = String(data?.assignment?.code || '').trim();
     const link = buildAssignmentJoinLink(code);
-    const modeLabel = randomNamesEnabled ? 'Random names' : 'Login validation';
+    const modeLabel = randomNamesEnabled ? t('🎲 Random names') : t('👤 Students sign in');
     const createdCount = Number(data?.assignment?.adaptiveCount || 0);
     const adaptiveLabel = createdCount
       ? ` · ${data?.assignment?.buildup ? t('🏔️ Climb · up to {n} questions per student', { n: createdCount }) : t('🎯 Adaptive · {n} questions per student', { n: createdCount })}`
@@ -11761,9 +11760,11 @@ async function openAssignmentInBuilder(code, titleHint) {
   renderBuilder();
   try { saveQuiz(quiz); } catch { /* local-save is best-effort */ }
 
-  // Sync the Login / random-names toggle so the teacher sees this assignment's current setting.
-  if (typeof data?.assignment?.randomNames === 'boolean') {
-    setRandomNamesToggleState(!!data.assignment.randomNames);
+  // This assignment's sign-in choice goes into the Assignments form, which
+  // Apply to Assignment sends back (as Exam mode does). The live game's
+  // choice is left alone.
+  if (typeof data?.assignment?.randomNames === 'boolean' && assignmentSignInEl) {
+    assignmentSignInEl.value = data.assignment.randomNames ? 'random' : 'signin';
   }
 
   // Sync the Exam-mode toggle so editing preserves the flag round-trip.
@@ -11776,6 +11777,9 @@ async function openAssignmentInBuilder(code, titleHint) {
 
   setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
+  // The Quiz builder card starts collapsed: open it at Settings & Actions,
+  // where Apply to Assignment is.
+  if (builderSectionToggleEl && builderCardBodyEl) setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
   if (builderSettingsToggleEl && builderSettingsBodyEl) {
     setSectionCollapsed(builderSettingsToggleEl, builderSettingsBodyEl, false);
     builderSettingsToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -11814,7 +11818,7 @@ async function applyQuizToAssignment() {
         code,
         quiz: normalizeQuizForLive(quiz),
         title: String(quiz.title || '').trim(),
-        randomNames: isRandomNamesEnabled(),
+        randomNames: assignmentRandomNames(),
         examMode: assignmentExamMode,
         cloudQuizId: quiz._r2QuizId || '',
       },
@@ -11826,7 +11830,7 @@ async function applyQuizToAssignment() {
     const metaBits = [];
     if (data?.titleChanged) metaBits.push('title updated');
     if (data?.randomNamesChanged) {
-      metaBits.push(isRandomNamesEnabled() ? 'login → random names' : 'random names → login required');
+      metaBits.push(assignmentRandomNames() ? 'students sign in → random names' : 'random names → students sign in');
     }
     const metaNote = metaBits.length ? ` · ${metaBits.join(' · ')}` : '';
     const msg = `Assignment ${code} updated ✅ ${remapped} attempt${remapped === 1 ? '' : 's'} re-scored${droppedNote}${metaNote}`;
@@ -12050,24 +12054,35 @@ async function hostRevealQuestion() {
   }
 }
 
-function isRandomNamesEnabled() {
-  // UI active state means Login required, so random names is the inverse.
-  return !randomNamesToggleEl?.classList.contains('active');
+// Who plays: the live game and each assignment have their own choice. The
+// live one follows the running game (renderHostState); the assignment one is
+// the Assignments form's, which an assignment opened in the builder fills in.
+function liveRandomNames() {
+  return liveSignInEl?.value !== 'signin';
 }
 
-function setRandomNamesToggleState(enabled) {
-  if (!randomNamesToggleEl) return;
-  const loginRequired = !enabled;
-  randomNamesToggleEl.classList.toggle('active', !!loginRequired);
-  randomNamesToggleEl.textContent = t('Login');
-  randomNamesToggleEl.title = loginRequired ? 'Login required (username + password)' : 'Random names assigned';
+function assignmentRandomNames() {
+  return assignmentSignInEl?.value !== 'signin';
+}
+
+function setLiveSignInState(randomNames) {
+  if (!liveSignInEl) return;
+  const value = randomNames ? 'random' : 'signin';
+  if (liveSignInEl.value !== value) liveSignInEl.value = value;
+  syncLiveSignInHint();
+}
+
+function syncLiveSignInHint() {
+  if (!liveSignInHintEl) return;
+  liveSignInHintEl.textContent = liveRandomNames()
+    ? t('🎲 Each player gets a random name. The results are not kept in 📋 Assignments & results.')
+    : t('👤 Students sign in with Google. When the game ends, its results are saved in 📋 Assignments & results.');
 }
 
 async function hostUpdateRandomNames() {
-  if (!randomNamesToggleEl) return;
-  const prev = isRandomNamesEnabled();
-  const next = !prev;
-  setRandomNamesToggleState(next);
+  if (!liveSignInEl) return;
+  const next = liveRandomNames();
+  syncLiveSignInHint();
 
   try {
     if (!live.host.pin || !live.host.token) return;
@@ -12081,7 +12096,7 @@ async function hostUpdateRandomNames() {
     });
     await pollHostState();
   } catch (err) {
-    setRandomNamesToggleState(prev);
+    setLiveSignInState(!next);
     setStatus(hostStatusEl, err.message, 'bad');
   }
 }
@@ -12808,6 +12823,7 @@ function applyAdaptiveFitHost() {
 let _i18nLastHostState = null;
 window.onLocaleChange = function () {
   try { if (_i18nLastHostState) renderHostState(_i18nLastHostState); } catch (e) { console.error('locale re-render failed', e); }
+  syncLiveSignInHint();
   // The Media Manager rebuilds in the new language; its filters and selection are kept.
   try { if (document.getElementById('mediaManagerOverlay')) openMediaManager(); } catch (e) { console.error('media manager re-render failed', e); }
 };
@@ -12872,8 +12888,8 @@ function renderHostState(state) {
     renderProjectorScores(showScores ? (state.players || []) : [], { animate: live.host.rankingMode });
   }
 
-  if (randomNamesToggleEl && state.settings && typeof state.settings.randomNames === 'boolean') {
-    setRandomNamesToggleState(!!state.settings.randomNames);
+  if (state.settings && typeof state.settings.randomNames === 'boolean') {
+    setLiveSignInState(!!state.settings.randomNames);
   }
 
   if (hostPlayersCountEl) hostPlayersCountEl.textContent = String(state.playerCount || 0);
@@ -17599,7 +17615,7 @@ function assignmentBuildupSelected() {
 
 // Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
 // questions tagged with at least two levels (the server checks too).
-// Ticked by default; the same box makes PinPlay Cup games adaptive.
+// Ticked by default. (PinPlay Cup has its own switch: cupAdaptiveOn.)
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
   if (!wrap) return;
@@ -17684,9 +17700,15 @@ function syncLiveLevelsControl() {
   const levels = quizLevelsPresent();
   const available = levels.length >= 2;
   wrap.classList.toggle('hidden', !available);
+  // PinPlay Cup's own 🎯 Adaptive switch: offered for the same quizzes, on
+  // for each newly loaded one.
+  const cupWrap = document.getElementById('cupAdaptiveWrap');
+  cupWrap?.classList.toggle('hidden', !available);
   if (liveLevelsFor !== quiz) {
     liveLevelsFor = quiz;
     liveLevelsOff = new Set();
+    const cupBox = document.getElementById('cupAdaptive');
+    if (cupBox) cupBox.checked = true;
   }
   if (!available) {
     list.innerHTML = '';
@@ -17694,6 +17716,12 @@ function syncLiveLevelsControl() {
   }
   if (levels.every((l) => liveLevelsOff.has(l))) liveLevelsOff.delete(levels[0]);
   list.innerHTML = levels.map((l) => `<label class="live-level"><input type="checkbox" value="${l}" ${liveLevelsOff.has(l) ? '' : 'checked'} /> ${l}</label>`).join(''); // i18n-ignore (level codes)
+}
+
+// A new PinPlay Cup game is adaptive: its switch is offered and ticked.
+function cupAdaptiveOn() {
+  const wrap = document.getElementById('cupAdaptiveWrap');
+  return !!wrap && !wrap.classList.contains('hidden') && !!document.getElementById('cupAdaptive')?.checked;
 }
 
 // The levels to send with a new Live Pin game, or none (the whole quiz).

@@ -298,6 +298,14 @@ window.PINPLAY_FR_DICT = {
 
   /* Game controls */
   'Login': 'Connexion',
+  '🎲 Random names': '🎲 Noms aléatoires',
+  '👤 Students sign in': '👤 Les élèves se connectent',
+  'Who plays the live game': 'Qui joue à la partie en direct',
+  'Who plays the live game: the next one, and the one running now': 'Qui joue à la partie en direct : la prochaine, et celle en cours',
+  '🎲 Each player gets a random name. The results are not kept in 📋 Assignments & results.':
+    '🎲 Chaque joueur reçoit un nom aléatoire. Les résultats ne sont pas gardés dans 📋 Devoirs et résultats.',
+  '👤 Students sign in with Google. When the game ends, its results are saved in 📋 Assignments & results.':
+    '👤 Les élèves se connectent avec Google. À la fin de la partie, ses résultats sont enregistrés dans 📋 Devoirs et résultats.',
   'Live Pin': 'PIN en direct',
   'Start': 'Démarrer',
   '🧑‍🎓 Preview': '🧑‍🎓 Aperçu',
@@ -312,6 +320,9 @@ window.PINPLAY_FR_DICT = {
   'Cycle: No feedback → Instant feedback → End feedback':
     'Cycle : Aucun retour → Retour instantané → Retour en fin',
   'Instant feedback': 'Retour instantané',
+  'Who does the assignment': 'Qui fait le devoir',
+  '👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name.':
+    '👤 Les élèves se connectent avec Google, et leurs résultats sont gardés à leur nom. 🎲 Toute personne ayant le lien joue sous un nom aléatoire.',
   'Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel.':
     "Mode examen : met en pause et grise la tentative quand l'élève quitte l'onglet ; consigne les pertes de focus dans le panneau des résultats.",
   'Exam mode: off': 'Mode examen : désactivé',
@@ -958,7 +969,7 @@ window.PINPLAY_FR_DICT = {
   "{p1} recipient(s) resolved · {p2} attempt(s) selected": "{p1} destinataire(s) résolu(s) · {p2} tentative(s) sélectionnée(s)",
   "{p1} selected": "{p1} sélectionné(s)",
   "{p1} vote(s)": "{p1} vote(s)",
-  "{p1} · Attempts {p2} · {p3}": "{p1} · Tentatives {p2} · {p3}",
+  "{p1} · Attempts {p2} · {p3} · {p4}": "{p1} · Tentatives {p2} · {p3} · {p4}",
   "{p1} · Link: {p2}": "{p1} · Lien : {p2}",
   "{p1} · No gradable attempts yet.": "{p1} · Aucune tentative à corriger pour l'instant.",
   "{p1} · Per-student grading · {p2} · Pick a student below.": "{p1} · Correction par élève · {p2} · Choisissez un élève ci-dessous.",
@@ -1091,7 +1102,7 @@ window.PINPLAY_FR_DICT = {
   'Path': 'Parcours',
   '🎯 Adaptive': '🎯 Adaptatif',
   'questions per student': 'questions par élève',
-  'Assignments: each student answers this many questions, picked one at a time to match how they are doing. PinPlay Cup games started while this is ticked are adaptive too. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back).': 'Devoirs : chaque élève répond à ce nombre de questions, choisies une à une selon ses réussites. Les parties PinPlay Cup lancées quand cette case est cochée sont aussi adaptatives. Les élèves ne voient jamais leur niveau. Ascension : pour les élèves qui doivent construire une compétence ; tout le monde part du bas et monte marche par marche (une mauvaise réponse fait redescendre d\'une marche).',
+  'Assignments: each student answers this many questions, picked one at a time to match how they are doing. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back).': 'Devoirs : chaque élève répond à ce nombre de questions, choisies une à une selon ses réussites. Les élèves ne voient jamais leur niveau. Ascension : pour les élèves qui doivent construire une compétence ; tout le monde part du bas et monte marche par marche (une mauvaise réponse fait redescendre d\'une marche).',
   'Questions per student': 'Questions par élève',
   'Each student answers this many questions, picked one at a time to match how they are doing. Students never see their level.': 'Chaque élève répond à ce nombre de questions, choisies une à une selon ses réussites. Les élèves ne voient jamais leur niveau.',
   '🎯 Adaptive · {n} questions per student': '🎯 Adaptatif · {n} questions par élève',
@@ -1390,7 +1401,8 @@ window.PINPLAY_FR_DICT = {
   "The selected questions keep their order and move together.": "Les questions sélectionnées gardent leur ordre et se déplacent ensemble.",
   "This move splits a listening section ({titles}): {n} question(s) would leave it and become ordinary questions. Move anyway?": "Ce déplacement coupe une section d'écoute ({titles}) : {n} question(s) en sortiraient et deviendraient des questions ordinaires. Déplacer quand même ?",
   "Moved {n} question(s): now Q{from}–Q{to}.": "{n} question(s) déplacée(s) : maintenant Q{from}–Q{to}.",
-  "Live Pin plays the questions of the ticked levels and every question without a level. In a listening section, the sheet has the ticked levels' questions for each moment of the recording, easiest first. PinPlay Cup follows 🎯 Adaptive in Assignments.": "Le PIN en direct joue les questions des niveaux cochés et toutes les questions sans niveau. Dans une section d'écoute, la feuille contient les questions des niveaux cochés pour chaque moment de l'enregistrement, de la plus facile à la plus difficile. PinPlay Cup suit la case 🎯 Adaptatif des devoirs.",
+  "Live Pin plays the questions of the ticked levels and every question without a level. In a listening section, the sheet has the ticked levels' questions for each moment of the recording, easiest first.": "Le PIN en direct joue les questions des niveaux cochés et toutes les questions sans niveau. Dans une section d'écoute, la feuille contient les questions des niveaux cochés pour chaque moment de l'enregistrement, de la plus facile à la plus difficile.",
+  "PinPlay Cup, adaptive: each student gets questions picked one at a time to match how they are doing. Signed-in students start at their saved level, and the game updates it. Students never see their level. Untick to play the quiz as usual.": "PinPlay Cup, adaptatif : chaque élève reçoit des questions choisies une à une selon ses réussites. Les élèves connectés commencent à leur niveau enregistré, et la partie le met à jour. Les élèves ne voient jamais leur niveau. Décochez pour jouer le quiz comme d'habitude.",
   "P plays the recording. When the students are done, Space starts the correction (→ moves on without it). Whatever they entered counts.": "P lance l'enregistrement. Quand les élèves ont fini, Espace lance la correction (→ passe à la suite sans correction). Tout ce qu'ils ont saisi compte.",
   "Correction {n} of {total}": "Correction {n} sur {total}",
   "{answered} of {players} answered · {graded} marked": "{answered} sur {players} ont répondu · {graded} notées",
