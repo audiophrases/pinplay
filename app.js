@@ -18983,7 +18983,10 @@ function normalizeQuizForLive(raw) {
 
     if (q.type === 'text' || q.type === 'voice_text') {
       const accepted = (q.accepted || []).slice(0, 20).map((x) => String(x || '').slice(0, 120));
-      normalized.questions.push({ ...base, accepted });
+      // The recognition language the teacher set (e.g. ca-ES). Left out, the
+      // student's browser fell back to the question's voice, often English.
+      const answerLanguage = q.type === 'voice_text' ? normalizeRecognitionLang(q.answerLanguage).value : '';
+      normalized.questions.push({ ...base, accepted, ...(answerLanguage ? { answerLanguage } : {}) });
       return;
     }
 
@@ -18998,7 +19001,9 @@ function normalizeQuizForLive(raw) {
     }
 
     if (q.type === 'voice_record') {
-      normalized.questions.push({ ...base });
+      // The language of the transcript the teacher sees with the recording.
+      const answerLanguage = normalizeRecognitionLang(q.answerLanguage).value;
+      normalized.questions.push({ ...base, ...(answerLanguage ? { answerLanguage } : {}) });
       return;
     }
 
