@@ -1,10 +1,13 @@
 @echo off
-if not exist _site mkdir _site
 echo Preparing Assets (staging _site)...
-rem Local tool state (the CodeGraph index is over the 25 MiB asset limit) never ships.
-if exist _site\.codegraph rmdir /s /q _site\.codegraph
-if exist _site\.claude rmdir /s /q _site\.claude
-robocopy . _site /S /XD .git .wrangler .codegraph .claude node_modules cloudflare tests _site question-bank /XF *.cmd *.bat *.log *.jsonc *.toml *.md .gitignore .wranglerignore > nul
+rem _site is built afresh each time, so a file deleted from the project stops
+rem being published. Local tools and their data never ship: the CodeGraph
+rem index (over the 25 MiB asset limit), the Listening Studio (it runs on this
+rem computer), the setup wizard's generated files, editor and git settings,
+rem and scratch files (test*.js, out*.txt, the REVERT note, t8.mp3).
+if exist _site rmdir /s /q _site
+mkdir _site
+robocopy . _site /S /XD .git .wrangler .codegraph .claude .vscode .githooks node_modules __pycache__ cloudflare tests _site question-bank listening-studio .generated /XF *.cmd *.bat *.sh *.log *.jsonc *.toml *.md .gitignore .gitattributes .wranglerignore test*.js out*.txt REVERT-commit-*.txt t8.mp3 feedback-test.html > nul
 
 echo.
 echo Deploying Assets (pinplay-cdn)...
