@@ -332,9 +332,23 @@ window.PINPLAY_FR_DICT = {
   'No exam mode': 'Sans mode examen',
   '🔒 Exam mode: turn on': '🔒 Mode examen : activer',
   '🔒 Exam mode: turn off': '🔒 Mode examen : désactiver',
-  'Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.':
-    'Essayez le quiz comme un élève, avec ces réglages de 📋 Devoirs : {feedback} · {exam}. Toutes les questions sont jouées, même si 🎯 Adaptatif ou 🏔️ Ascension est coché.',
   'Who does the assignment': 'Qui fait le devoir',
+  'Attempts: {n}': 'Tentatives : {n}',
+  'Due {date}': 'À rendre le {date}',
+  'No due date': 'Pas de date limite',
+  '⚙️ Settings': '⚙️ Réglages',
+  'Change its class, due date, attempts, who does it, feedback and exam mode.': 'Modifier sa classe, sa date limite, ses tentatives, qui le fait, le retour et le mode examen.',
+  '⚙️ {title} ({code})': '⚙️ {title} ({code})',
+  '🏔️ Climb: always feedback after each answer, no exam mode.': '🏔️ Ascension : toujours un retour après chaque réponse, sans mode examen.',
+  '{n} attempt(s) already started: after this change, those students start again under a new name. Their earlier answers stay in the results.':
+    '{n} tentative(s) déjà commencée(s) : après ce changement, ces élèves recommencent sous un nouveau nom. Leurs réponses précédentes restent dans les résultats.',
+  'Settings saved for {code}.': 'Réglages enregistrés pour {code}.',
+  'Try the quiz as a student, with the 📋 Assignments settings: {feedback} · {exam} · {questions}.':
+    'Essayez le quiz comme un élève, avec les réglages de 📋 Devoirs : {feedback} · {exam} · {questions}.',
+  'All the questions': 'Toutes les questions',
+  '🧑‍🎓 Try it as a student': "🧑‍🎓 L'essayer comme un élève",
+  'Opens the quiz as a student would get this assignment, with these settings (🎯 Adaptive and 🏔️ Climb too). It is deleted when you close its tab.':
+    "Ouvre le quiz tel qu'un élève recevrait ce devoir, avec ces réglages (🎯 Adaptatif et 🏔️ Ascension aussi). Il est supprimé quand vous fermez son onglet.",
   '👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name.':
     '👤 Les élèves se connectent avec Google, et leurs résultats sont gardés à leur nom. 🎲 Toute personne ayant le lien joue sous un nom aléatoire.',
   'Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel.':
@@ -991,7 +1005,6 @@ window.PINPLAY_FR_DICT = {
   "{p1} recipient(s) resolved · {p2} attempt(s) selected": "{p1} destinataire(s) résolu(s) · {p2} tentative(s) sélectionnée(s)",
   "{p1} selected": "{p1} sélectionné(s)",
   "{p1} vote(s)": "{p1} vote(s)",
-  "{p1} · Attempts {p2} · {p3} · {p4}": "{p1} · Tentatives {p2} · {p3} · {p4}",
   "{p1} · Link: {p2}": "{p1} · Lien : {p2}",
   "{p1} · No gradable attempts yet.": "{p1} · Aucune tentative à corriger pour l'instant.",
   "{p1} · Per-student grading · {p2} · Pick a student below.": "{p1} · Correction par élève · {p2} · Choisissez un élève ci-dessous.",

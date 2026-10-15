@@ -760,6 +760,11 @@ export default {
           randomNames: !!body?.randomNames,
           feedbackMode: String(body?.feedbackMode || 'none'),
           examMode: !!body?.examMode,
+          // The Assignments form's 🎯 Adaptive / 🏔️ Climb, so the preview plays
+          // as the assignment will (the DO checks the levels, as for a real one).
+          adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)),
+          adaptive: body?.adaptive === true,
+          buildup: body?.buildup === true,
           quiz,
         }),
       }));
@@ -1802,12 +1807,34 @@ export default {
 
       const forward = { code, quiz };
       if (typeof body?.title === 'string') forward.title = String(body.title).slice(0, 120);
+      // Older pages still send these with Apply; ⚙️ on the row edits them now.
       if (typeof body?.randomNames === 'boolean') forward.randomNames = !!body.randomNames;
       if (typeof body?.examMode === 'boolean') forward.examMode = !!body.examMode;
       if (sanitizeCloudQuizId(body?.cloudQuizId)) forward.cloudQuizId = body.cloudQuizId;
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/update-quiz', {
+        method: 'POST',
+        body: JSON.stringify(forward),
+      }));
+    }
+
+    // ⚙️ on an assignment's row: class, due date, attempts, sign-in, feedback
+    // and exam mode, after creation. One base-row read and write in the DO;
+    // attempts are untouched and read the new settings on their next request.
+    if (url.pathname === '/api/assignments/update-settings' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
+
+      const forward = { code };
+      for (const key of ['className', 'dueAt', 'attemptsLimit', 'randomNames', 'feedbackMode', 'examMode']) {
+        if (body && Object.prototype.hasOwnProperty.call(body, key)) forward[key] = body[key];
+      }
+      return withCors(await assignmentsStub(env).fetch('https://room/assignments/update-settings', {
         method: 'POST',
         body: JSON.stringify(forward),
       }));
@@ -4496,6 +4523,18 @@ export class QuizRoom {
         // cloudQuizId stays out of publicAssignment: students get that, and the
         // id names a quiz JSON (answers included) that /api/media/ serves.
         return json({ ok: true, assignment: meta, quiz: assignment.quiz || null, cloudQuizId: assignment.cloudQuizId || '' });
+      }
+
+      if (url.pathname === '/assignments/update-settings' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        if (!code) return json({ error: 'Assignment code required.' }, 400);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        Object.assign(assignment, assignmentSettingsUpdate(assignment, body));
+        assignment.updatedAt = Date.now();
+        await saveAssignmentBase(this.state.storage, code, assignment);
+        return json({ ok: true, assignment: publicAssignment(assignment, { includeQuiz: false }) });
       }
 
       if (url.pathname === '/assignments/update-quiz' && request.method === 'POST') {
@@ -10193,6 +10232,33 @@ function sanitizeEmail(value) {
 
 function sanitizeClassName(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+const ASSIGNMENT_FEEDBACK_MODES = ['none', 'instant', 'end'];
+
+// The settings a teacher may change on an assignment after creating it (⚙️ on
+// its row), cleaned from a request body: only the fields it carries. A Climb
+// keeps its instant feedback and no exam mode, as /assignments/create sets
+// them. The questions and title change through update-quiz; the adaptive size
+// is fixed once students start.
+function assignmentSettingsUpdate(assignment, body) {
+  const next = {};
+  if (typeof body?.className === 'string') next.className = sanitizeClassName(body.className);
+  if (body && Object.prototype.hasOwnProperty.call(body, 'dueAt')) {
+    const due = Number(body.dueAt || 0);
+    next.dueAt = Number.isFinite(due) && due > 0 ? Math.round(due) : null;
+  }
+  if (body?.attemptsLimit != null && Number.isFinite(Number(body.attemptsLimit))) {
+    next.attemptsLimit = clamp(Math.round(Number(body.attemptsLimit)), 0, 10);
+  }
+  if (typeof body?.randomNames === 'boolean') next.randomNames = body.randomNames;
+  if (ASSIGNMENT_FEEDBACK_MODES.includes(body?.feedbackMode)) next.feedbackMode = body.feedbackMode;
+  if (typeof body?.examMode === 'boolean') next.examMode = body.examMode;
+  if (assignment?.adaptive?.mode === 'buildup') {
+    if ('feedbackMode' in next) next.feedbackMode = 'instant';
+    if ('examMode' in next) next.examMode = false;
+  }
+  return next;
 }
 
 function normalizeStudentKeyInput(value) {

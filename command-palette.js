@@ -176,6 +176,7 @@
     // Assignments
     S('assignmentSectionToggle', ASSIGN, 'assignments homework list results grading'),
     B('createAssignmentBtn', ASSIGN, 'create new assignment homework assign', { go: true }),
+    B('assignmentPreviewBtn', ASSIGN, 'preview try assignment as a student test'),
     B('assignmentSignIn', ASSIGN, 'assignment login random names sign in google who does it', { go: true, label: () => t('Who does the assignment') }),
     B('assignmentFeedback', ASSIGN, 'assignment feedback instant end none answers', { go: true, label: () => t('Assignment feedback') }),
     B('assignmentExamMode', ASSIGN, 'assignment exam mode fullscreen tab', {

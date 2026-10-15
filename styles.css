@@ -6210,6 +6210,10 @@ body.listening-sheet-open { overflow: hidden; }
 .builder-apply-bar:has(.builder-apply-row:not(.hidden)) { margin-bottom: .75rem; }
 .builder-apply-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .7rem; border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 10px; }
 .builder-apply-row > span { flex: 1 1 240px; font-weight: 600; }
+
+/* ── ⚙️ on an assignment's row: the Assignments form's settings, in a dialog ── */
+.dialog-card.assignment-settings-dialog { width: min(640px, 96vw); }
+.assignment-settings-dialog .assignment-form { margin-top: .5rem; }
 @media (max-width: 640px) {
   #builderSectionToggle { flex-wrap: wrap; }
   #builderSectionToggle .quiz-strip { order: 3; flex-basis: 100%; }

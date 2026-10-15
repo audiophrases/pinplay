@@ -6142,6 +6142,10 @@ function bindLiveEvents() {
 
   const studentPreviewBtn = document.getElementById('studentPreviewBtn');
   if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment());
+  const assignmentPreviewBtn = document.getElementById('assignmentPreviewBtn');
+  if (assignmentPreviewBtn) {
+    assignmentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment({ button: assignmentPreviewBtn, statusEl: assignmentStatusEl }));
+  }
 
   const livePreviewBtn = document.getElementById('livePreviewBtn');
   if (livePreviewBtn) livePreviewBtn.addEventListener('click', () => launchLivePreview());
@@ -11441,10 +11445,17 @@ function buildAssignmentListItem(a) {
   const meta = document.createElement('div');
   meta.className = 'small muted';
   const dueAt = Number(a?.dueAt || 0);
-  const dueText = dueAt ? new Date(dueAt).toLocaleString() : 'No due date';
-  const attemptsText = Number(a?.attemptsLimit) === 0 ? 'Unlimited' : String(Number(a?.attemptsLimit || 1));
-  const signInText = a?.randomNames ? t('🎲 Random names') : t('👤 Students sign in');
-  meta.textContent = t('{p1} · Attempts {p2} · {p3} · {p4}', { p1: String(a?.className || '').trim() || t('All classes'), p2: attemptsText, p3: dueText, p4: signInText });
+  // Every setting ⚙️ can change, so the row says how the assignment runs.
+  const className = String(a?.className || '').trim();
+  const metaBits = className ? [className] : [];
+  metaBits.push(
+    t('Attempts: {n}', { n: Number(a?.attemptsLimit) === 0 ? t('Unlimited') : String(Number(a?.attemptsLimit || 1)) }),
+    dueAt ? t('Due {date}', { date: new Date(dueAt).toLocaleString() }) : t('No due date'),
+    a?.randomNames ? t('🎲 Random names') : t('👤 Students sign in'),
+    assignmentFeedbackText(a?.feedbackMode),
+  );
+  if (a?.examMode) metaBits.push(t('🔒 Exam mode'));
+  meta.textContent = metaBits.join(' · ');
 
   headerText.append(title, meta);
 
@@ -11607,7 +11618,14 @@ function buildAssignmentListItem(a) {
     }
   });
 
-  const actions = [copyLinkBtn, openQuizBtn, viewResultsBtn, toggleBtn, publicBtn];
+  const settingsBtn = document.createElement('button');
+  settingsBtn.className = 'btn';
+  settingsBtn.type = 'button';
+  settingsBtn.textContent = t('⚙️ Settings');
+  settingsBtn.title = t('Change its class, due date, attempts, who does it, feedback and exam mode.');
+  settingsBtn.addEventListener('click', () => openAssignmentSettingsDialog(a));
+
+  const actions = [copyLinkBtn, openQuizBtn, viewResultsBtn, settingsBtn, toggleBtn, publicBtn];
   if (a?.public) {
     const copyGameLinkBtn = document.createElement('button');
     copyGameLinkBtn.className = 'btn owner-only';
@@ -11621,6 +11639,120 @@ function buildAssignmentListItem(a) {
   row.append(...actions, archiveBtn, deleteBtn);
   li.append(header, row);
   return li;
+}
+
+// A datetime-local input's value for a timestamp, in local time.
+function toDatetimeLocalValue(ms) {
+  const d = new Date(Number(ms));
+  if (!Number.isFinite(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ⚙️ on an assignment's row: the Assignments form's settings, filled with this
+// assignment's and saved in one call. Students' next requests use them (they
+// are never copied onto attempts).
+function openAssignmentSettingsDialog(a) {
+  const code = String(a?.code || '').trim();
+  const source = document.getElementById('assignmentForm');
+  if (!code || !source) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card assignment-settings-dialog';
+
+  const head = document.createElement('div');
+  head.className = 'row spread gap';
+  const title = document.createElement('strong');
+  title.textContent = t('⚙️ {title} ({code})', { title: String(a?.title || t('Assignment')), code });
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('Close');
+  closeBtn.addEventListener('click', () => overlay.remove());
+  head.append(title, closeBtn);
+
+  // The form's own fields, cloned: same labels, options and language.
+  const form = source.cloneNode(true);
+  form.removeAttribute('id');
+  const field = {};
+  form.querySelectorAll('[id]').forEach((el) => { field[el.id] = el; el.removeAttribute('id'); });
+  const classOptions = field.assignmentClassOptions;
+  if (classOptions && field.assignmentClass) {
+    classOptions.id = 'assignmentSettingsClassOptions';
+    field.assignmentClass.setAttribute('list', classOptions.id);
+    field.assignmentClass.addEventListener('focus', async () => {
+      await loadAssignmentClassSuggestions();
+      if (assignmentClassOptionsEl) classOptions.replaceChildren(...[...assignmentClassOptionsEl.children].map((o) => o.cloneNode(true)));
+    });
+  }
+  field.assignmentClass.value = String(a?.className || '');
+  field.assignmentDueAt.value = Number(a?.dueAt || 0) > 0 ? toDatetimeLocalValue(a.dueAt) : '';
+  field.assignmentAttempts.value = String(Math.max(0, Math.min(10, Math.round(Number(a?.attemptsLimit ?? 1)))));
+  field.assignmentSignIn.value = a?.randomNames ? 'random' : 'signin';
+  field.assignmentFeedback.value = ['none', 'instant', 'end'].includes(a?.feedbackMode) ? a.feedbackMode : 'none';
+  field.assignmentExamMode.checked = !!a?.examMode;
+
+  const notes = document.createElement('div');
+  if (a?.buildup) {
+    field.assignmentFeedback.value = 'instant';
+    field.assignmentFeedback.disabled = true;
+    field.assignmentExamMode.checked = false;
+    field.assignmentExamMode.disabled = true;
+    const climbNote = document.createElement('p');
+    climbNote.className = 'small muted';
+    climbNote.textContent = t('🏔️ Climb: always feedback after each answer, no exam mode.');
+    notes.appendChild(climbNote);
+  }
+  // Switching who does it after students started gives them a new identity.
+  const started = Number(a?.attemptsCount || 0);
+  const signInWarn = document.createElement('p');
+  signInWarn.className = 'small bad hidden';
+  signInWarn.textContent = t('{n} attempt(s) already started: after this change, those students start again under a new name. Their earlier answers stay in the results.', { n: started });
+  notes.appendChild(signInWarn);
+  field.assignmentSignIn.addEventListener('change', () => {
+    const changed = (field.assignmentSignIn.value !== 'signin') !== !!a?.randomNames;
+    signInWarn.classList.toggle('hidden', !(changed && started > 0));
+  });
+
+  const status = document.createElement('p');
+  status.className = 'small top-space';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn primary top-space';
+  saveBtn.type = 'button';
+  saveBtn.textContent = t('Save');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    status.textContent = t('Saving…');
+    try {
+      const dueMs = field.assignmentDueAt.value ? new Date(field.assignmentDueAt.value).getTime() : 0;
+      await api('/api/assignments/update-settings', {
+        method: 'POST',
+        body: {
+          password: createSessionPassword,
+          code,
+          className: field.assignmentClass.value.trim(),
+          dueAt: Number.isFinite(dueMs) && dueMs > 0 ? dueMs : null,
+          attemptsLimit: Number(field.assignmentAttempts.value),
+          randomNames: field.assignmentSignIn.value !== 'signin',
+          feedbackMode: field.assignmentFeedback.value,
+          examMode: field.assignmentExamMode.checked,
+        },
+      });
+      overlay.remove();
+      if (assignmentStatusEl) assignmentStatusEl.textContent = t('Settings saved for {code}.', { code });
+      await refreshAssignmentsList();
+    } catch (err) {
+      status.textContent = t('Could not save: {msg}', { msg: err.message });
+      saveBtn.disabled = false;
+    }
+  });
+
+  dialog.append(head, form, notes, saveBtn, status);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function setAssignmentExamMode(on) {
@@ -11641,16 +11773,23 @@ function setAssignmentFeedbackMode(mode) {
 // the Assignments form's feedback and exam mode: its tooltip says so.
 function syncPreviewTitle() {
   const btn = document.getElementById('studentPreviewBtn');
-  if (!btn || creatorRole === 'guest') return;
-  const feedback = {
+  if (!btn || creatorRole !== 'owner') return;
+  const wrap = document.getElementById('assignmentAdaptiveWrap');
+  const adaptive = !!wrap && !wrap.classList.contains('hidden') && !!document.getElementById('assignmentAdaptive')?.checked;
+  const climb = adaptive && assignmentBuildupSelected();
+  btn.title = t('Try the quiz as a student, with the 📋 Assignments settings: {feedback} · {exam} · {questions}.', {
+    feedback: assignmentFeedbackText(climb ? 'instant' : assignmentFeedbackMode),
+    exam: assignmentExamMode && !climb ? t('🔒 Exam mode') : t('No exam mode'),
+    questions: climb ? t('🏔️ Climb') : adaptive ? t('🎯 Adaptive') : t('All the questions'),
+  });
+}
+
+function assignmentFeedbackText(mode) {
+  return {
     none: t('No feedback'),
     instant: t('Feedback after each answer'),
     end: t('Feedback at the end'),
-  }[assignmentFeedbackMode] || '';
-  btn.title = t('Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.', {
-    feedback,
-    exam: assignmentExamMode ? t('🔒 Exam mode') : t('No exam mode'),
-  });
+  }[mode] || t('No feedback');
 }
 
 // Class is a label only. It suggests the classes of 👥 Students and the labels
@@ -11685,6 +11824,23 @@ async function loadAssignmentClassSuggestions() {
 }
 
 
+// The Assignments form's 🎯 Adaptive / 🏔️ Climb, as a new assignment or its
+// preview sends them. Throws when Climb has too few levels.
+function assignmentAdaptiveSettings() {
+  const adaptive = !!document.getElementById('assignmentAdaptive')?.checked
+    && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
+  const buildup = adaptive && assignmentBuildupSelected();
+  if (buildup && buildupAvailableLevels().length < 2) {
+    throw new Error(t('Climb needs auto-graded questions tagged with at least two levels.'));
+  }
+  const adaptiveCount = buildup
+    ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableLevels().length))))
+    : (adaptive && adaptiveSingleQuestionCount() > 0
+      ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
+      : 0);
+  return { adaptive, buildup, adaptiveCount };
+}
+
 async function createAssignmentFromCurrentQuiz() {
   try {
     syncQuizFromUI();
@@ -11715,17 +11871,7 @@ async function createAssignmentFromCurrentQuiz() {
       if (Number.isFinite(t) && t > 0) dueAt = Math.round(t);
     }
 
-    const adaptiveOn = !!document.getElementById('assignmentAdaptive')?.checked
-      && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
-    const buildupOn = adaptiveOn && assignmentBuildupSelected();
-    if (buildupOn && buildupAvailableLevels().length < 2) {
-      throw new Error(t('Climb needs auto-graded questions tagged with at least two levels.'));
-    }
-    const adaptiveCount = buildupOn
-      ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableLevels().length))))
-      : (adaptiveOn && adaptiveSingleQuestionCount() > 0
-        ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
-        : 0);
+    const { adaptive: adaptiveOn, buildup: buildupOn, adaptiveCount } = assignmentAdaptiveSettings();
 
     const data = await api('/api/assignments/create', {
       method: 'POST',
@@ -11860,16 +12006,8 @@ async function openAssignmentInBuilder(code, titleHint) {
   renderBuilder();
   try { saveQuiz(quiz); } catch { /* local-save is best-effort */ }
 
-  // This assignment's sign-in choice goes into the Assignments form, which
-  // Apply to Assignment sends back (as Exam mode does). The live game's
-  // choice is left alone.
-  if (typeof data?.assignment?.randomNames === 'boolean' && assignmentSignInEl) {
-    assignmentSignInEl.value = data.assignment.randomNames ? 'random' : 'signin';
-  }
-
-  // Sync the Exam-mode box so editing preserves the flag round-trip.
-  setAssignmentExamMode(!!data?.assignment?.examMode);
-
+  // Apply sends the questions and title only: the assignment's settings are
+  // ⚙️ on its row, and the Assignments form stays for new assignments.
   setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
   // The Quiz builder card starts collapsed: open it at its top, where the
@@ -11911,8 +12049,6 @@ async function applyQuizToAssignment() {
         code,
         quiz: normalizeQuizForLive(quiz),
         title: String(quiz.title || '').trim(),
-        randomNames: assignmentRandomNames(),
-        examMode: assignmentExamMode,
         cloudQuizId: quiz._r2QuizId || '',
       },
     });
@@ -11920,12 +12056,7 @@ async function applyQuizToAssignment() {
     const remapped = Number(data?.remappedAttempts || 0);
     const dropped = Number(data?.droppedAnswers || 0);
     const droppedNote = dropped > 0 ? ` · ${dropped} stale answer${dropped === 1 ? '' : 's'} dropped` : '';
-    const metaBits = [];
-    if (data?.titleChanged) metaBits.push('title updated');
-    if (data?.randomNamesChanged) {
-      metaBits.push(assignmentRandomNames() ? 'students sign in → random names' : 'random names → students sign in');
-    }
-    const metaNote = metaBits.length ? ` · ${metaBits.join(' · ')}` : '';
+    const metaNote = data?.titleChanged ? ' · title updated' : '';
     const msg = `Assignment ${code} updated ✅ ${remapped} attempt${remapped === 1 ? '' : 's'} re-scored${droppedNote}${metaNote}`;
     if (assignmentStatusEl) assignmentStatusEl.textContent = msg;
     setStatus(hostStatusEl, msg, 'ok');
@@ -15981,35 +16112,31 @@ function cleanupPreviewPoll() {
   }
 }
 
-// Guests see a single flattened "Try your Quiz" button (no Game controls
-// heading); the owner keeps the "🧑‍🎓 Preview" label inside Game controls.
-function studentPreviewBtnLabel() {
-  return document.body.classList.contains('guest-mode')
-    ? t('Try your Quiz')
-    : t('🧑‍🎓 Preview');
-}
-
-async function launchStudentPreviewAssignment() {
+// 🧑‍🎓 Preview, from the Live game card or the Assignments form: a throwaway
+// assignment with the form's settings (Adaptive and Climb too), deleted when
+// its tab closes.
+async function launchStudentPreviewAssignment({ button = null, statusEl = hostStatusEl } = {}) {
+  const btn = button || document.getElementById('studentPreviewBtn');
+  const btnLabel = btn?.textContent || '';
   try {
     syncQuizFromUI();
-    if (!quiz.title?.trim()) {
-      setStatus(hostStatusEl, t('Add a quiz title first.'), 'bad');
-      return;
-    }
+    requireQuizTitle();
     if (!quiz.questions?.length) {
-      setStatus(hostStatusEl, t('Add at least 1 question first.'), 'bad');
+      setStatus(statusEl, t('Add at least 1 question first.'), 'bad');
       return;
     }
 
-    const btn = document.getElementById('studentPreviewBtn');
+    // Guests never see the Assignments form: their preview stays plain.
+    const adaptive = creatorRole === 'guest' ? {} : assignmentAdaptiveSettings();
+
     if (btn) { btn.disabled = true; btn.textContent = t('⏳ Creating…'); }
-    setStatus(hostStatusEl, t('Creating preview assignment…'), 'ok');
+    setStatus(statusEl, t('Creating preview assignment…'), 'ok');
 
     if (!createSessionPassword) {
       createSessionPassword = await customPasswordPrompt('Enter teacher password to create preview:');
       if (!createSessionPassword) {
-        if (btn) { btn.disabled = false; btn.textContent = studentPreviewBtnLabel(); }
-        setStatus(hostStatusEl, t('Preview cancelled.'), 'bad');
+        if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+        setStatus(statusEl, t('Preview cancelled.'), 'bad');
         return;
       }
     }
@@ -16031,6 +16158,7 @@ async function launchStudentPreviewAssignment() {
         randomNames: true,
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
+        ...adaptive,
         quiz: payload,
       },
     });
@@ -16053,12 +16181,11 @@ async function launchStudentPreviewAssignment() {
       };
     }
 
-    setStatus(hostStatusEl, t('Preview opened ({code}). Will auto-delete when you close the preview tab.', { code }), 'ok');
+    setStatus(statusEl, t('Preview opened ({code}). Will auto-delete when you close the preview tab.', { code }), 'ok');
   } catch (err) {
-    setStatus(hostStatusEl, t('Preview failed: {msg}', { msg: err?.message || err }), 'bad');
+    setStatus(statusEl, t('Preview failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
-    const btn = document.getElementById('studentPreviewBtn');
-    if (btn) { btn.disabled = false; btn.textContent = studentPreviewBtnLabel(); }
+    if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
   }
 }
 
@@ -17754,6 +17881,12 @@ function syncAssignmentAdaptiveControl() {
     document.getElementById('assignmentAdaptiveSections')?.classList.add('hidden');
     if (rangeEl) rangeEl.textContent = `${buildupLevels[0]}–${buildupLevels[buildupLevels.length - 1]}`;
   }
+  // Climb runs with instant feedback and no exam mode (the server sets them too).
+  if (assignmentFeedbackEl) assignmentFeedbackEl.disabled = buildup;
+  if (assignmentExamModeEl) assignmentExamModeEl.disabled = buildup;
+  if (buildup && assignmentFeedbackMode !== 'instant') setAssignmentFeedbackMode('instant');
+  if (buildup && assignmentExamMode) setAssignmentExamMode(false);
+  syncPreviewTitle();
   if (countEl && buildup) {
     const wanted = Number(countEl.dataset.wantedBuildup) || buildupDefaultCount(buildupLevels.length);
     countEl.max = String(BUILDUP_MAX_COUNT);
