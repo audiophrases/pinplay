@@ -346,6 +346,25 @@ window.PINPLAY_FR_DICT = {
   'Try the quiz as a student, with the 📋 Assignments settings: {feedback} · {exam} · {questions}.':
     'Essayez le quiz comme un élève, avec les réglages de 📋 Devoirs : {feedback} · {exam} · {questions}.',
   'All the questions': 'Toutes les questions',
+  'Change who may sign in': 'Modifier qui peut se connecter',
+  '{list} accounts': 'comptes {list}',
+  'any Google account': "n'importe quel compte Google",
+  'only students on your list': 'seulement les élèves de votre liste',
+  'Who may sign in: {who}.': 'Qui peut se connecter : {who}.',
+  'Tag questions with at least two levels to play them by level in 🎮 Live Pin, 🏆 PinPlay Cup and 📋 Assignments.':
+    'Marquez des questions avec au moins deux niveaux pour jouer par niveau dans 🎮 PIN en direct, 🏆 PinPlay Cup et 📋 Devoirs.',
+  'Where these levels are used': 'Où ces niveaux servent',
+  'every question': 'toutes les questions',
+  '🎮 Live Pin: {levels}, and the questions without a level': '🎮 PIN en direct : {levels}, et les questions sans niveau',
+  'every level': 'tous les niveaux',
+  'only {levels}': 'seulement {levels}',
+  '🏆 PinPlay Cup: {how}': '🏆 PinPlay Cup : {how}',
+  '🎯 adaptive': '🎯 adaptatif',
+  '📋 New assignments: {how}': '📋 Nouveaux devoirs : {how}',
+  '👥 {n} student(s) have a saved level: adaptive play starts there': '👥 {n} élève(s) ont un niveau enregistré : le jeu adaptatif part de là',
+  '👥 Saved levels, where adaptive play starts for signed-in students: in 👥 Students':
+    "👥 Niveaux enregistrés, d'où part le jeu adaptatif des élèves connectés : dans 👥 Élèves",
+  'Go →': 'Aller →',
   '🧑‍🎓 Try it as a student': "🧑‍🎓 L'essayer comme un élève",
   'Opens the quiz as a student would get this assignment, with these settings (🎯 Adaptive and 🏔️ Climb too). It is deleted when you close its tab.':
     "Ouvre le quiz tel qu'un élève recevrait ce devoir, avec ces réglages (🎯 Adaptatif et 🏔️ Ascension aussi). Il est supprimé quand vous fermez son onglet.",

@@ -6214,6 +6214,15 @@ body.listening-sheet-open { overflow: hidden; }
 /* ── ⚙️ on an assignment's row: the Assignments form's settings, in a dialog ── */
 .dialog-card.assignment-settings-dialog { width: min(640px, 96vw); }
 .assignment-settings-dialog .assignment-form { margin-top: .5rem; }
+
+/* ── Who may sign in, under each "👤 Students sign in" choice ── */
+.sign-in-rules { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .35rem 0 0; }
+.sign-in-rules .btn { padding: .15rem .55rem; }
+
+/* ── 🎯 Levels panel: where the quiz's levels are used, with a link to each ── */
+.level-usage:not(:empty) { margin: .4rem 0 .6rem; padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.level-usage-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .2rem 0; }
+.level-usage-row .btn { padding: .15rem .55rem; flex-shrink: 0; }
 @media (max-width: 640px) {
   #builderSectionToggle { flex-wrap: wrap; }
   #builderSectionToggle .quiz-strip { order: 3; flex-basis: 100%; }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-settings" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-phase3" />
   </head>
   <body>
     <header class="topbar">
@@ -515,6 +515,7 @@
                     <div class="level-tools-body">
                       <div id="levelStepsPlan" class="steps-plan hidden"></div>
                       <p class="small muted" data-i18n>Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions and polls are skipped. Teacher-graded questions move the level once you grade them (assignments only; PinPlay Cup skips them).</p>
+                      <div id="levelUsage" class="level-usage owner-only"></div>
                       <div class="level-tools-row">
                         <label><span data-i18n>From question</span>
                           <input id="levelRangeFrom" type="number" min="1" value="1" />
@@ -652,6 +653,7 @@
               <button id="hostJoinBtn" class="btn owner-only" data-i18n>Join as host</button>
             </div>
             <p id="liveSignInHint" class="small muted owner-only"></p>
+            <p id="liveSignInRules" class="small muted sign-in-rules owner-only hidden"><span></span> <button type="button" class="btn small" data-i18n>Change who may sign in</button></p>
 
 
 
@@ -743,6 +745,7 @@
                     <span data-i18n>🔒 Exam mode</span>
                   </label>
                 </div>
+                <p id="assignmentSignInRules" class="small muted sign-in-rules hidden"><span></span> <button type="button" class="btn small" data-i18n>Change who may sign in</button></p>
                 <div class="row gap top-space" id="assignmentActionRow">
                   <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
                     <input id="assignmentAdaptive" type="checkbox" />
@@ -880,7 +883,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-settings"></script>
+    <script src="../i18n-fr.js?v=20261015-phase3"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -891,10 +894,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-layout"></script>
-    <script src="../app.js?v=20261015-settings"></script>
-    <script src="../voice-actors.js?v=20261015-settings"></script>
+    <script src="../app.js?v=20261015-phase3"></script>
+    <script src="../voice-actors.js?v=20261015-phase3"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-settings"></script>
+    <script src="../command-palette.js?v=20261015-phase3"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>

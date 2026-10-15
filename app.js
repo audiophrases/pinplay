@@ -847,6 +847,8 @@ function setupCreateAccess() {
       if (creatorRole === 'owner') {
         initWorkspacesAdmin();
         syncPreviewTitle();
+        syncAllSignInRulesLines();
+        renderLevelUsage();
       }
     } catch (err) {
       setStatus(createAuthStatusEl, err?.message || 'Wrong password', 'bad');
@@ -5107,10 +5109,13 @@ async function saveQuizToCloud() {
     quiz._r2QuizId = quizId;
     quiz.title = quiz.title || 'Untitled Quiz';
 
-    // Skip upload if quiz JSON hasn't changed since last cloud save
-    const payload = JSON.stringify({ quiz, quizId });
+    // Skip the upload when nothing changed since the last ☁️ Save. That save's
+    // hash lives on the quiz, so it stays out of what is hashed and uploaded:
+    // kept in, every save looked changed and uploaded again.
+    const { _lastCloudHash: lastCloudHash, ...quizToSave } = quiz;
+    const payload = JSON.stringify({ quiz: quizToSave, quizId });
     const payloadHash = hashStringInt(payload);
-    if (quiz._lastCloudHash === payloadHash) {
+    if (lastCloudHash === payloadHash) {
       setStatus(hostStatusEl, t('✅ Already saved: {title} (no changes)', { title: quiz.title || 'Quiz' }), 'ok');
       return;
     }
@@ -6033,9 +6038,11 @@ function bindLiveEvents() {
   if (assignmentFeedbackEl) assignmentFeedbackEl.addEventListener('change', () => setAssignmentFeedbackMode(assignmentFeedbackEl.value));
   if (assignmentExamModeEl) assignmentExamModeEl.addEventListener('change', () => setAssignmentExamMode(assignmentExamModeEl.checked));
   if (assignmentClassEl) assignmentClassEl.addEventListener('focus', loadAssignmentClassSuggestions);
+  initSignInRulesLines();
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   initAssignmentAdaptiveControl();
   initLiveLevelsControl();
+  initLevelUsage();
   initListeningSectionTools();
   if (refreshAssignmentsBtn) refreshAssignmentsBtn.addEventListener('click', refreshAssignmentsList);
   if (toggleArchivedAssignmentsBtn) toggleArchivedAssignmentsBtn.addEventListener('click', () => {
@@ -10432,6 +10439,7 @@ async function refreshStudents() {
     studentsCache = Array.isArray(data?.students) ? data.students : [];
     renderStudentsList();
     syncAssignmentClassOptions();
+    renderLevelUsage();
     const migrated = Number(data?.migrated || 0);
     setStatus(
       studentsStatusEl,
@@ -10967,6 +10975,9 @@ function openStudentsSettingsDialog() {
         },
       });
       status.textContent = t('Saved ✅');
+      // The "Who may sign in" lines read the rules again, as the server keeps them.
+      signInRules = null;
+      syncAllSignInRulesLines();
     } catch (err) {
       status.textContent = t('Could not save: {msg}', { msg: err.message });
     } finally {
@@ -11711,9 +11722,18 @@ function openAssignmentSettingsDialog(a) {
   signInWarn.className = 'small bad hidden';
   signInWarn.textContent = t('{n} attempt(s) already started: after this change, those students start again under a new name. Their earlier answers stay in the results.', { n: started });
   notes.appendChild(signInWarn);
+  // Who may sign in, under its own "Who does it" (as in the Assignments form).
+  const rulesLine = document.getElementById('assignmentSignInRules')?.cloneNode(true);
+  if (rulesLine) {
+    rulesLine.removeAttribute('id');
+    rulesLine.querySelector('button')?.addEventListener('click', openStudentsSettingsDialog);
+    notes.appendChild(rulesLine);
+    syncSignInRulesLine(field.assignmentSignIn, rulesLine);
+  }
   field.assignmentSignIn.addEventListener('change', () => {
     const changed = (field.assignmentSignIn.value !== 'signin') !== !!a?.randomNames;
     signInWarn.classList.toggle('hidden', !(changed && started > 0));
+    if (rulesLine) syncSignInRulesLine(field.assignmentSignIn, rulesLine);
   });
 
   const status = document.createElement('p');
@@ -12301,6 +12321,64 @@ function syncLiveSignInHint() {
   liveSignInHintEl.textContent = liveRandomNames()
     ? t('🎲 Each player gets a random name. The results are not kept in 📋 Assignments & results.')
     : t('👤 Students sign in with Google. When the game ends, its results are saved in 📋 Assignments & results.');
+  syncSignInRulesLine(liveSignInEl, document.getElementById('liveSignInRules'));
+}
+
+// Who may sign in (👥 Students → Sign-in rules), shown under every choice set
+// to "👤 Students sign in": the live game's, the Assignments form's and ⚙️'s.
+// Read once per session, the first time one of them needs it.
+let signInRules = null; // { allowedDomains, policy } once read
+let signInRulesRequest = null;
+
+function loadSignInRules() {
+  if (signInRules) return Promise.resolve(signInRules);
+  if (!signInRulesRequest) {
+    signInRulesRequest = studentsApi('/api/students/settings', { method: 'GET' })
+      .then((data) => {
+        signInRules = {
+          allowedDomains: Array.isArray(data?.settings?.allowedDomains) ? data.settings.allowedDomains : [],
+          policy: String(data?.settings?.policy || 'open'),
+        };
+        return signInRules;
+      })
+      .catch(() => null)
+      .finally(() => { signInRulesRequest = null; });
+  }
+  return signInRulesRequest;
+}
+
+function signInRulesText(rules) {
+  const domains = (rules?.allowedDomains || []).filter(Boolean);
+  const who = [domains.length ? t('{list} accounts', { list: domains.join(', ') }) : t('any Google account')];
+  if (rules?.policy === 'roster') who.push(t('only students on your list'));
+  return t('Who may sign in: {who}.', { who: who.join(' · ') });
+}
+
+// lineEl: a .sign-in-rules line (text span + a button opening the rules).
+async function syncSignInRulesLine(selectEl, lineEl) {
+  if (!selectEl || !lineEl) return;
+  lineEl.signInSelect = selectEl;
+  const on = selectEl.value === 'signin' && creatorRole === 'owner';
+  lineEl.classList.toggle('hidden', !on);
+  if (!on) return;
+  const rules = await loadSignInRules();
+  if (selectEl.value !== 'signin') return;
+  lineEl.classList.toggle('hidden', !rules);
+  const span = lineEl.querySelector('span');
+  if (rules && span) span.textContent = signInRulesText(rules);
+}
+
+function syncAllSignInRulesLines() {
+  document.querySelectorAll('.sign-in-rules').forEach((line) => {
+    if (line.signInSelect) syncSignInRulesLine(line.signInSelect, line);
+  });
+}
+
+function initSignInRulesLines() {
+  document.querySelectorAll('.sign-in-rules button').forEach((btn) => btn.addEventListener('click', openStudentsSettingsDialog));
+  assignmentSignInEl?.addEventListener('change', () => syncSignInRulesLine(assignmentSignInEl, document.getElementById('assignmentSignInRules')));
+  syncSignInRulesLine(liveSignInEl, document.getElementById('liveSignInRules'));
+  syncSignInRulesLine(assignmentSignInEl, document.getElementById('assignmentSignInRules'));
 }
 
 async function hostUpdateRandomNames() {
@@ -18027,10 +18105,80 @@ function renderStepsPlan(counts) {
     }).join('')}</ol>`;
 }
 
+// 🎯 Levels panel: where this quiz's levels are used. Those settings live in
+// other cards, so each line says what it is set to and links there.
+function renderLevelUsage() {
+  const el = document.getElementById('levelUsage');
+  if (!el) return;
+  const levels = quizLevelsPresent();
+  if (creatorRole !== 'owner' || !levels.length) { el.innerHTML = ''; return; }
+  if (levels.length < 2) {
+    el.innerHTML = `<p class="small muted">${escapeHtml(t('Tag questions with at least two levels to play them by level in 🎮 Live Pin, 🏆 PinPlay Cup and 📋 Assignments.'))}</p>`;
+    return;
+  }
+  const ticked = liveLevelsForGame();
+  const wrap = document.getElementById('assignmentAdaptiveWrap');
+  const adaptive = !!wrap && !wrap.classList.contains('hidden') && !!document.getElementById('assignmentAdaptive')?.checked;
+  // The number only when the form shows one (a quiz of listening sections has none).
+  const countShown = !document.getElementById('assignmentAdaptiveCountWrap')?.classList.contains('hidden');
+  const count = countShown ? Number(document.getElementById('assignmentAdaptiveCount')?.value || 0) : 0;
+  let assignmentText = t('every question');
+  if (adaptive && assignmentBuildupSelected()) assignmentText = t('🏔️ Climb · up to {n} questions per student', { n: count });
+  else if (adaptive) assignmentText = count ? t('🎯 Adaptive · {n} questions per student', { n: count }) : t('🎯 Adaptive');
+  const saved = studentsCache.filter((s) => Number.isFinite(Number(s?.level?.cefr))).length;
+  const rows = [
+    ['live', t('🎮 Live Pin: {levels}, and the questions without a level', {
+      levels: ticked.length === levels.length ? t('every level') : t('only {levels}', { levels: ticked.join(', ') }),
+    })],
+    ['cup', t('🏆 PinPlay Cup: {how}', { how: cupAdaptiveOn() ? t('🎯 adaptive') : t('every question') })],
+    ['assign', t('📋 New assignments: {how}', { how: assignmentText })],
+    ['students', studentsCache.length
+      ? t('👥 {n} student(s) have a saved level: adaptive play starts there', { n: saved })
+      : t('👥 Saved levels, where adaptive play starts for signed-in students: in 👥 Students')],
+  ];
+  el.innerHTML = `<strong class="small">${escapeHtml(t('Where these levels are used'))}</strong>`
+    + rows.map(([go, text]) => `<div class="level-usage-row"><span class="small">${escapeHtml(text)}</span>`
+      + `<button type="button" class="btn small" data-level-go="${go}">${escapeHtml(t('Go →'))}</button></div>`).join('');
+}
+
+// Opens the card holding a level setting and points at it.
+function goToLevelControl(where) {
+  const targets = {
+    live: [gameControlsSectionToggleEl, gameControlsCardBodyEl, 'liveLevelsWrap'],
+    cup: [gameControlsSectionToggleEl, gameControlsCardBodyEl, 'cupAdaptiveWrap'],
+    assign: [assignmentSectionToggleEl, assignmentSectionBodyEl, 'assignmentAdaptiveWrap'],
+    students: [studentsSectionToggleEl, studentsSectionBodyEl, 'studentsList'],
+  };
+  const [toggle, body, id] = targets[where] || [];
+  if (!toggle || !body) return;
+  // A click, not just showing the body: Assignments and Students load on open.
+  if (body.classList.contains('hidden')) toggle.click();
+  const target = document.getElementById(id);
+  const el = target && target.offsetParent ? target : toggle;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.remove('cmdp-flash');
+  void el.offsetWidth;
+  el.classList.add('cmdp-flash');
+}
+
+function initLevelUsage() {
+  document.getElementById('levelUsage')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-level-go]');
+    if (btn) goToLevelControl(btn.dataset.levelGo);
+  });
+  // Changed in their own cards: keep the lines current.
+  ['liveLevelsList', 'cupAdaptive', 'assignmentAdaptive', 'assignmentAdaptiveMode'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('change', renderLevelUsage);
+  });
+  document.getElementById('assignmentAdaptiveCount')?.addEventListener('input', renderLevelUsage);
+  document.getElementById('levelTools')?.addEventListener('toggle', renderLevelUsage);
+}
+
 function renderLevelCoverage() {
   syncAssignmentAdaptiveControl();
   syncLiveLevelsControl();
   renderQuizStrip();
+  renderLevelUsage();
   const el = document.getElementById('levelCoverage');
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);
