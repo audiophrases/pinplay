@@ -1375,6 +1375,8 @@ function bindBuilderEvents() {
     });
   }
 
+  if (quizTitleEl) quizTitleEl.addEventListener('input', renderQuizStrip);
+
   if (quizTtsLanguageEl) {
     quizTtsLanguageEl.addEventListener('change', () => {
       const mode = quizTtsLanguageEl.value;
@@ -3012,6 +3014,39 @@ function renderListeningSummary() {
   if (!el) return;
   const n = quizHasListeningSections() ? quizListeningSections().length : 0;
   el.textContent = n ? t('{n} in this quiz', { n }) : '';
+}
+
+// The Quiz builder's header, shown even when the card is collapsed: the quiz
+// that Live Pin, PinPlay Cup, assignments and Preview all use.
+function renderQuizStrip() {
+  const el = document.getElementById('quizStrip');
+  if (!el) return;
+  const title = String(quizTitleEl?.value ?? quiz?.title ?? '').trim();
+  const count = Array.isArray(quiz?.questions) ? quiz.questions.length : 0;
+  const parts = [title || t('Untitled quiz')];
+  parts.push(count === 1 ? t('1 question') : t('{n} questions', { n: count }));
+  const levels = quizLevelsPresent();
+  if (levels.length) parts.push(levels.length > 1 ? `🎯 ${levels[0]}–${levels[levels.length - 1]}` : `🎯 ${levels[0]}`); // i18n-ignore (level codes)
+  const sections = quizHasListeningSections() ? quizListeningSections().length : 0;
+  if (sections) parts.push(sections === 1 ? t('🎧 1 listening section') : t('🎧 {n} listening sections', { n: sections }));
+  el.textContent = parts.join(' · ');
+  el.classList.toggle('quiz-strip-untitled', !title);
+  el.title = title ? '' : t('Give the quiz a title: Live Pin, PinPlay Cup and assignments need one.');
+}
+
+// Live Pin, PinPlay Cup and assignments need a title: open the Quiz builder at
+// it, so the teacher sees where it goes. Call after syncQuizFromUI().
+function requireQuizTitle() {
+  if (quiz.title?.trim()) return;
+  if (builderSectionToggleEl && builderCardBodyEl) setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
+  if (quizTitleEl) {
+    quizTitleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    quizTitleEl.focus({ preventScroll: true });
+    quizTitleEl.classList.remove('cmdp-flash');
+    void quizTitleEl.offsetWidth;
+    quizTitleEl.classList.add('cmdp-flash');
+  }
+  throw new Error(t('Give the quiz a title first: it is at the top of 🛠️ Quiz builder.'));
 }
 
 function renderBuilder() {
@@ -6157,7 +6192,7 @@ async function createLiveGame(opts = {}) {
   try {
     syncQuizFromUI();
 
-    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    requireQuizTitle();
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
     await ensureQuizMediaReady({ contextLabel: 'create live game', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
@@ -11637,7 +11672,7 @@ async function loadAssignmentClassSuggestions() {
 async function createAssignmentFromCurrentQuiz() {
   try {
     syncQuizFromUI();
-    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    requireQuizTitle();
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
     // The assignment's own choice, read on click; the live game's never decides it.
@@ -11834,7 +11869,7 @@ async function applyQuizToAssignment() {
     }
 
     syncQuizFromUI();
-    if (!quiz.title?.trim()) throw new Error('Add quiz title first.');
+    requireQuizTitle();
     if (!quiz.questions?.length) throw new Error('Add at least 1 question first.');
 
     await ensureQuizMediaReady({ contextLabel: 'apply to assignment', convertTtsToMp3: true, strictMediaCheck: true, materializeTts: true });
@@ -17838,6 +17873,7 @@ function renderStepsPlan(counts) {
 function renderLevelCoverage() {
   syncAssignmentAdaptiveControl();
   syncLiveLevelsControl();
+  renderQuizStrip();
   const el = document.getElementById('levelCoverage');
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);

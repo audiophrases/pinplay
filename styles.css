@@ -6200,6 +6200,17 @@ body.listening-sheet-open { overflow: hidden; }
 .assignment-form .assignment-exam { min-height: 2.6rem; margin: .5rem 0 0; }
 .assignment-form .assignment-exam input { margin: 0; }
 
+/* ── Quiz builder header: the quiz that every game and assignment uses ── */
+.quiz-strip { flex: 1; min-width: 0; font-size: .85rem; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quiz-strip.quiz-strip-untitled { color: #b45309; }
+.quiz-title-field { margin-top: 0; margin-bottom: .75rem; }
+@media (max-width: 640px) {
+  #builderSectionToggle { flex-wrap: wrap; }
+  #builderSectionToggle .quiz-strip { order: 3; flex-basis: 100%; }
+  /* 🎯 Adaptive / Levels pills: wrap instead of pushing the page sideways. */
+  .assignment-adaptive { white-space: normal; flex-wrap: wrap; }
+}
+
 /* ── Voice actors: the volunteers' page (record/) ── */
 .rec-main { max-width: 640px; }
 .rec-title { margin: .5rem 0 .25rem; }

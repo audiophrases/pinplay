@@ -1163,6 +1163,14 @@ window.PINPLAY_FR_DICT = {
   'questions': 'questions',
   'Questions to play': 'Questions à jouer',
   '{n} questions': '{n} questions',
+  '1 question': '1 question',
+  'Untitled quiz': 'Quiz sans titre',
+  '🎧 1 listening section': "🎧 1 section d'écoute",
+  '🎧 {n} listening sections': "🎧 {n} sections d'écoute",
+  'Give the quiz a title: Live Pin, PinPlay Cup and assignments need one.':
+    'Donnez un titre au quiz : le PIN en direct, PinPlay Cup et les devoirs en ont besoin.',
+  'Give the quiz a title first: it is at the top of 🛠️ Quiz builder.':
+    "Donnez d'abord un titre au quiz : il se trouve en haut de 🛠️ Créateur de quiz.",
   '▶ Play': '▶ Jouer',
   'Play anonymously': 'Jouer anonymement',
   'Sign in with Google for teacher corrections.': 'Connectez-vous avec Google pour recevoir les corrections de votre enseignant.',

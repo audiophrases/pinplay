@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-form" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-strip" />
   </head>
   <body>
     <header class="topbar">
@@ -121,9 +121,14 @@
 
           <div class="card" id="builderCard">
             <h2 id="builderSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              <span data-i18n>🛠️ Quiz builder</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
+              <span data-i18n>🛠️ Quiz builder</span>
+              <span id="quizStrip" class="quiz-strip"></span>
+              <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
             <div id="builderCardBody" class="hidden">
+              <label class="quiz-title-field"><span data-i18n>Quiz title</span>
+                <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" data-i18n-ph />
+              </label>
               <!-- Creation Prompt Section -->
               <div class="creation-prompt-section">
                 <button id="creationPromptToggle" class="section-toggle-btn prompt-toggle" type="button" aria-expanded="false">
@@ -396,10 +401,6 @@
                     <button id="exportBtn" class="btn" data-i18n>Export</button>
                     <button id="exportPdfBtn" class="btn" title="Export quiz as printable PDF for paper-based students. Voice record questions become written open answers." data-i18n-title data-i18n>📄 Export PDF</button>
                   </div>
-
-                  <label><span data-i18n>Quiz title</span>
-                    <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" data-i18n-ph />
-                  </label>
 
                   <div class="row gap top-space" id="quizAudioDefaultsRow">
                     <div style="min-width:220px;">
@@ -868,7 +869,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-form"></script>
+    <script src="../i18n-fr.js?v=20261015-strip"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -879,10 +880,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-layout"></script>
-    <script src="../app.js?v=20261015-form"></script>
+    <script src="../app.js?v=20261015-strip"></script>
     <script src="../voice-actors.js?v=20261015-layout"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-form"></script>
+    <script src="../command-palette.js?v=20261015-strip"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>
