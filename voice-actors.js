@@ -964,9 +964,10 @@ function lrBind() {
   lrEl('voiceActorsOpenBtn')?.addEventListener('click', () => openVoiceActors());
   lrEl('lrStudioBtn')?.addEventListener('click', async () => {
     const script = lrValue('lrScript');
-    window.open(LR_STUDIO_URL, '_blank', 'noopener');
+    // Copy first: once the Studio's tab has the focus, the browser may refuse.
     if (script) await lrCopy(script, t('✅ Script copied: in the Listening Studio, start a new recording and paste it. (Is the Studio not open? Start it on this computer first.)'), 'listening-script.txt');
     else lrStatus(t('The Listening Studio runs on this computer: if the page doesn\'t open, start it first.'));
+    window.open(LR_STUDIO_URL, '_blank', 'noopener');
   });
   lrEl('lrQuestionsBtn')?.addEventListener('click', () => {
     const script = lrValue('lrScript');

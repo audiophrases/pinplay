@@ -734,14 +734,14 @@
                     </select>
                   </label>
                   <label title="After each answer: students see right or wrong straight away, and can't change that answer. At the end: they see their answers once they submit." data-i18n-title><span data-i18n>Feedback</span>
-                    <select id="assignmentFeedback">
+                    <select id="assignmentFeedback" autocomplete="off">
                       <option value="none" data-i18n>No feedback</option>
                       <option value="instant" selected data-i18n>After each answer</option>
                       <option value="end" data-i18n>At the end</option>
                     </select>
                   </label>
                   <label class="prompt-adaptive-toggle assignment-exam" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title>
-                    <input id="assignmentExamMode" type="checkbox" />
+                    <input id="assignmentExamMode" type="checkbox" autocomplete="off" />
                     <span data-i18n>🔒 Exam mode</span>
                   </label>
                 </div>
@@ -883,7 +883,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-rebuild"></script>
+    <script src="../i18n-fr.js?v=20261015-fixes"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -894,8 +894,8 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-rebuild"></script>
-    <script src="../app.js?v=20261015-phase3"></script>
-    <script src="../voice-actors.js?v=20261015-rebuild"></script>
+    <script src="../app.js?v=20261015-fixes"></script>
+    <script src="../voice-actors.js?v=20261015-fixes"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261015-phase3"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

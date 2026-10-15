@@ -975,9 +975,11 @@ function bindSectionToggle(triggerEl, bodyEl, options = {}) {
 
   if (supportsKeyboard) {
     triggerEl.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
+      // The header's own keys only: a button inside it (Live screen) keeps them.
+      if (e.target !== triggerEl || (e.key !== 'Enter' && e.key !== ' ')) return;
       e.preventDefault();
-      toggle();
+      // A click, so the cards that load when opened (Assignments, Students) do.
+      triggerEl.click();
     });
   }
 
@@ -5054,7 +5056,11 @@ async function openQuizFromCloud() {
     const copies = cloudQuizzes.filter((q) => q.liveCopy);
     const removable = copies.filter((q) => savedTitles.has(titleKey(q)));
     const kept = copies.length - removable.length;
-    const deleteCloudQuiz = (quizKey) => fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
+    const deleteCloudQuiz = async (quizKey) => {
+      const res = await fetch(`${base}/api/quizzes/${quizKey}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionPassword}` } });
+      if (res.ok) forgetCloudSave(quizKey);
+      return res;
+    };
 
     showQuizManagerDialog({
       title: '☁️ Cloud quizzes (R2)',
@@ -5098,6 +5104,17 @@ async function openQuizFromCloud() {
 }
 
 
+// The last ☁️ Save from this page: { quizId, hash } of what was uploaded.
+// "Already saved" is said only while it matches, and ☁️ Open forgets it when
+// it deletes that quiz from the cloud. (Kept on the quiz, it outlived such a
+// deletion: an unchanged ☁️ Save then uploaded nothing.)
+let lastCloudSave = null;
+
+function forgetCloudSave(quizKey) {
+  const id = String(quizKey || '').split('/').pop().replace(/\.json$/, '');
+  if (lastCloudSave?.quizId === id) lastCloudSave = null;
+}
+
 // Save quiz to Cloud (R2)
 async function saveQuizToCloud() {
   try {
@@ -5109,13 +5126,13 @@ async function saveQuizToCloud() {
     quiz._r2QuizId = quizId;
     quiz.title = quiz.title || 'Untitled Quiz';
 
-    // Skip the upload when nothing changed since the last ☁️ Save. That save's
-    // hash lives on the quiz, so it stays out of what is hashed and uploaded:
-    // kept in, every save looked changed and uploaded again.
-    const { _lastCloudHash: lastCloudHash, ...quizToSave } = quiz;
+    // Skip the upload when this page already saved exactly this quiz. Quizzes
+    // saved before may still carry the old _lastCloudHash: it is not uploaded.
+    const quizToSave = { ...quiz };
+    delete quizToSave._lastCloudHash;
     const payload = JSON.stringify({ quiz: quizToSave, quizId });
     const payloadHash = hashStringInt(payload);
-    if (lastCloudHash === payloadHash) {
+    if (lastCloudSave?.quizId === quizId && lastCloudSave.hash === payloadHash) {
       setStatus(hostStatusEl, t('✅ Already saved: {title} (no changes)', { title: quiz.title || 'Quiz' }), 'ok');
       return;
     }
@@ -5131,7 +5148,8 @@ async function saveQuizToCloud() {
 
     if (!res.ok) throw new Error('Upload failed');
     const data = await res.json();
-    quiz._lastCloudHash = payloadHash;
+    lastCloudSave = { quizId, hash: payloadHash };
+    delete quiz._lastCloudHash;
 
     setStatus(hostStatusEl, t('✅ Saved: {title} (PIN when playing)', { title: quiz.title || 'Quiz' }), 'ok');
 
@@ -6151,7 +6169,7 @@ function bindLiveEvents() {
   if (studentPreviewBtn) studentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment());
   const assignmentPreviewBtn = document.getElementById('assignmentPreviewBtn');
   if (assignmentPreviewBtn) {
-    assignmentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment({ button: assignmentPreviewBtn, statusEl: assignmentStatusEl }));
+    assignmentPreviewBtn.addEventListener('click', () => launchStudentPreviewAssignment({ button: assignmentPreviewBtn, statusEl: assignmentStatusEl, followAdaptive: true }));
   }
 
   const livePreviewBtn = document.getElementById('livePreviewBtn');
@@ -11704,13 +11722,15 @@ function openAssignmentSettingsDialog(a) {
   field.assignmentSignIn.value = a?.randomNames ? 'random' : 'signin';
   field.assignmentFeedback.value = ['none', 'instant', 'end'].includes(a?.feedbackMode) ? a.feedbackMode : 'none';
   field.assignmentExamMode.checked = !!a?.examMode;
+  // The copy carries the form's own lock (the form may be set to 🏔️ Climb for
+  // a new assignment): this assignment decides it.
+  field.assignmentFeedback.disabled = !!a?.buildup;
+  field.assignmentExamMode.disabled = !!a?.buildup;
 
   const notes = document.createElement('div');
   if (a?.buildup) {
     field.assignmentFeedback.value = 'instant';
-    field.assignmentFeedback.disabled = true;
     field.assignmentExamMode.checked = false;
-    field.assignmentExamMode.disabled = true;
     const climbNote = document.createElement('p');
     climbNote.className = 'small muted';
     climbNote.textContent = t('🏔️ Climb: always feedback after each answer, no exam mode.');
@@ -11789,18 +11809,16 @@ function setAssignmentFeedbackMode(mode) {
   syncPreviewTitle();
 }
 
-// 🧑‍🎓 Preview, in the Live game card, plays the quiz as an assignment with
-// the Assignments form's feedback and exam mode: its tooltip says so.
+// 🧑‍🎓 Preview, in the Live game card, plays every question as an assignment
+// with the Assignments form's feedback and exam mode: its tooltip says so.
+// (The Assignments form's own "Try it as a student" follows 🎯 Adaptive and
+// 🏔️ Climb.)
 function syncPreviewTitle() {
   const btn = document.getElementById('studentPreviewBtn');
   if (!btn || creatorRole !== 'owner') return;
-  const wrap = document.getElementById('assignmentAdaptiveWrap');
-  const adaptive = !!wrap && !wrap.classList.contains('hidden') && !!document.getElementById('assignmentAdaptive')?.checked;
-  const climb = adaptive && assignmentBuildupSelected();
-  btn.title = t('Try the quiz as a student, with the 📋 Assignments settings: {feedback} · {exam} · {questions}.', {
-    feedback: assignmentFeedbackText(climb ? 'instant' : assignmentFeedbackMode),
-    exam: assignmentExamMode && !climb ? t('🔒 Exam mode') : t('No exam mode'),
-    questions: climb ? t('🏔️ Climb') : adaptive ? t('🎯 Adaptive') : t('All the questions'),
+  btn.title = t('Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.', {
+    feedback: assignmentFeedbackText(assignmentFeedbackMode),
+    exam: assignmentExamMode ? t('🔒 Exam mode') : t('No exam mode'),
   });
 }
 
@@ -16191,9 +16209,11 @@ function cleanupPreviewPoll() {
 }
 
 // 🧑‍🎓 Preview, from the Live game card or the Assignments form: a throwaway
-// assignment with the form's settings (Adaptive and Climb too), deleted when
-// its tab closes.
-async function launchStudentPreviewAssignment({ button = null, statusEl = hostStatusEl } = {}) {
+// assignment with the form's feedback and exam mode, deleted when its tab
+// closes. The Live game card's plays every question; the Assignments form's
+// "Try it as a student" (followAdaptive) plays as the assignment will, with
+// 🎯 Adaptive or 🏔️ Climb.
+async function launchStudentPreviewAssignment({ button = null, statusEl = hostStatusEl, followAdaptive = false } = {}) {
   const btn = button || document.getElementById('studentPreviewBtn');
   const btnLabel = btn?.textContent || '';
   try {
@@ -16205,7 +16225,7 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
     }
 
     // Guests never see the Assignments form: their preview stays plain.
-    const adaptive = creatorRole === 'guest' ? {} : assignmentAdaptiveSettings();
+    const adaptive = followAdaptive && creatorRole !== 'guest' ? assignmentAdaptiveSettings() : {};
 
     if (btn) { btn.disabled = true; btn.textContent = t('⏳ Creating…'); }
     setStatus(statusEl, t('Creating preview assignment…'), 'ok');
@@ -16592,7 +16612,7 @@ async function openWorkspaceQuiz(quizKey) {
     quiz = loadedQuiz;
     // Strip workspace prefix so ☁️ Save lands in the owner's own library.
     quiz._r2QuizId = quizKey.split('/').pop().replace(/\.json$/, '');
-    delete quiz._lastCloudHash; // force re-save next ☁️ Save
+    lastCloudSave = null; // the next ☁️ Save uploads it to your own library
     setApplyAssignmentTarget('', '');
     collapseAllQuestions(quiz);
     renderBuilder();

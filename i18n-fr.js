@@ -343,9 +343,8 @@ window.PINPLAY_FR_DICT = {
   '{n} attempt(s) already started: after this change, those students start again under a new name. Their earlier answers stay in the results.':
     '{n} tentative(s) déjà commencée(s) : après ce changement, ces élèves recommencent sous un nouveau nom. Leurs réponses précédentes restent dans les résultats.',
   'Settings saved for {code}.': 'Réglages enregistrés pour {code}.',
-  'Try the quiz as a student, with the 📋 Assignments settings: {feedback} · {exam} · {questions}.':
-    'Essayez le quiz comme un élève, avec les réglages de 📋 Devoirs : {feedback} · {exam} · {questions}.',
-  'All the questions': 'Toutes les questions',
+  'Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.':
+    'Essayez le quiz comme un élève, avec ces réglages de 📋 Devoirs : {feedback} · {exam}. Toutes les questions sont jouées, même si 🎯 Adaptatif ou 🏔️ Ascension est coché.',
   'Change who may sign in': 'Modifier qui peut se connecter',
   '{list} accounts': 'comptes {list}',
   'any Google account': "n'importe quel compte Google",
