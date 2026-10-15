@@ -6204,6 +6204,12 @@ body.listening-sheet-open { overflow: hidden; }
 .quiz-strip { flex: 1; min-width: 0; font-size: .85rem; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quiz-strip.quiz-strip-untitled { color: #b45309; }
 .quiz-title-field { margin-top: 0; margin-bottom: .75rem; }
+
+/* ── Quiz builder: where Apply goes (an assignment being edited, a Live Pin game on now) ── */
+.builder-apply-bar { display: grid; gap: .4rem; }
+.builder-apply-bar:has(.builder-apply-row:not(.hidden)) { margin-bottom: .75rem; }
+.builder-apply-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .7rem; border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 10px; }
+.builder-apply-row > span { flex: 1 1 240px; font-weight: 600; }
 @media (max-width: 640px) {
   #builderSectionToggle { flex-wrap: wrap; }
   #builderSectionToggle .quiz-strip { order: 3; flex-basis: 100%; }

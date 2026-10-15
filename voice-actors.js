@@ -923,7 +923,7 @@ function lrBind() {
     });
     if (await lrCopy(text, t('✅ Copied: paste it into your AI chat, then paste its answer in the box below.'), 'prompt-listening-script.md')) lrEl('lrScript')?.focus();
   });
-  lrEl('lrWriteBtn')?.addEventListener('click', () => openListeningPrompt({ source: 'write', theme: lrValue('lrTopic'), level: lrValue('lrLevel') }));
+  lrEl('lrWriteBtn')?.addEventListener('click', () => openListeningPrompt({ source: 'write', theme: lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage') }));
   lrEl('voiceActorsNewBtn')?.addEventListener('click', () => {
     const script = lrValue('lrScript');
     openVoiceActors({ newSession: true, script, title: lrScriptTitle(script) || lrValue('lrTopic') });
@@ -937,7 +937,7 @@ function lrBind() {
   });
   lrEl('lrQuestionsBtn')?.addEventListener('click', () => {
     const script = lrValue('lrScript');
-    openListeningPrompt({ source: 'paste', transcript: script, theme: lrScriptTitle(script) || lrValue('lrTopic'), level: lrValue('lrLevel') });
+    openListeningPrompt({ source: 'paste', transcript: script, theme: lrScriptTitle(script) || lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage') });
   });
 }
 

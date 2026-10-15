@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-strip" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-apply" />
   </head>
   <body>
     <header class="topbar">
@@ -126,6 +126,18 @@
               <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
             <div id="builderCardBody" class="hidden">
+              <!-- Shown only when the builder's quiz can go somewhere: an assignment opened for editing, a Live Pin game on now -->
+              <div id="builderApplyBar" class="builder-apply-bar">
+                <div id="applyAssignmentRow" class="builder-apply-row hidden">
+                  <span id="applyAssignmentLabel"></span>
+                  <button id="applyAssignmentBtn" class="btn primary" type="button" title="Saves these questions to the assignment; its students' answers are scored again." data-i18n-title data-i18n>Apply to the assignment</button>
+                  <button id="applyAssignmentStopBtn" class="btn" type="button" title="The quiz stays in the builder; Apply no longer goes to that assignment." data-i18n-title data-i18n>Stop editing it</button>
+                </div>
+                <div id="applyLiveRow" class="builder-apply-row owner-only hidden">
+                  <span id="applyLiveLabel"></span>
+                  <button id="hostApplyBuilderBtn" class="btn primary" type="button" title="Sends the builder's questions to the game that is on now." data-i18n-title data-i18n>Update the live game</button>
+                </div>
+              </div>
               <label class="quiz-title-field"><span data-i18n>Quiz title</span>
                 <input id="quizTitle" type="text" maxlength="120" placeholder="e.g. Vertebrates vs Invertebrates" data-i18n-ph />
               </label>
@@ -390,8 +402,6 @@
                 </button>
                 <div id="builderSettingsBody" class="section-collapsible-body hidden">
                   <div class="row gap quiz-actions" id="builderActionRow">
-                    <button id="hostApplyBuilderBtn" class="btn owner-only" data-i18n>Apply live</button>
-                    <button id="applyAssignmentBtn" class="btn" style="display:none" data-i18n>Apply to Assignment</button>
                     <button id="openLocalBtn" class="btn" data-i18n>Open</button>
                     <button id="saveBtn" class="btn" data-i18n>Save</button>
                     <button id="openCloudBtn" class="btn" data-i18n>☁️ Open</button>
@@ -869,7 +879,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-strip"></script>
+    <script src="../i18n-fr.js?v=20261015-apply"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -880,10 +890,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-layout"></script>
-    <script src="../app.js?v=20261015-strip"></script>
-    <script src="../voice-actors.js?v=20261015-layout"></script>
+    <script src="../app.js?v=20261015-apply"></script>
+    <script src="../voice-actors.js?v=20261015-apply"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-strip"></script>
+    <script src="../command-palette.js?v=20261015-apply"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>

@@ -98,6 +98,7 @@
     B('exportPdfBtn', QUIZ, 'export pdf print paper'),
     B('hostApplyBuilderBtn', QUIZ, 'apply live game editor push update'),
     B('applyAssignmentBtn', QUIZ, 'apply assignment editor push update'),
+    B('applyAssignmentStopBtn', QUIZ, 'stop editing assignment unlink close'),
     S('creationPromptToggle', QUIZ, 'ai prompt create quiz generate chatgpt gemini', { focus: 'promptTheme' }),
     B('quizTitle', QUIZ, 'quiz title name rename', { go: true, label: () => t('Quiz title') }),
     S('builderSettingsToggle', QUIZ, 'quiz settings audio voice language hear questions'),

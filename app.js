@@ -442,6 +442,11 @@ const hostCardEl = document.getElementById('hostCard');
 const createLiveBtn = document.getElementById('createLiveBtn');
 const hostApplyBuilderBtn = document.getElementById('hostApplyBuilderBtn');
 const applyAssignmentBtn = document.getElementById('applyAssignmentBtn');
+const applyAssignmentRowEl = document.getElementById('applyAssignmentRow');
+const applyAssignmentLabelEl = document.getElementById('applyAssignmentLabel');
+const applyAssignmentStopBtn = document.getElementById('applyAssignmentStopBtn');
+const applyLiveRowEl = document.getElementById('applyLiveRow');
+const applyLiveLabelEl = document.getElementById('applyLiveLabel');
 const hostRefreshBtn = document.getElementById('hostRefreshBtn');
 const hostStartBtn = document.getElementById('hostStartBtn');
 const hostPrevBtn = document.getElementById('hostPrevBtn');
@@ -1147,7 +1152,7 @@ function syncTranscriptPartsInfo() {
 // Listening recordings card or a recording session: source 'write' = the AI
 // writes the script and the questions; 'paste' = the questions, from this
 // script. Theme and level are filled only where still empty.
-function openListeningPrompt({ source = 'paste', transcript = '', theme = '', level = '' } = {}) {
+function openListeningPrompt({ source = 'paste', transcript = '', theme = '', level = '', language = '' } = {}) {
   const set = (id, value, event = 'change') => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1163,6 +1168,8 @@ function openListeningPrompt({ source = 'paste', transcript = '', theme = '', le
   if (theme && themeEl && !themeEl.value.trim()) themeEl.value = theme;
   const levelEl = document.getElementById('promptLevel');
   if (level && levelEl && !levelEl.disabled && !levelEl.value.trim()) levelEl.value = level;
+  const languageEl = document.getElementById('promptLanguage');
+  if (language && languageEl && !languageEl.value.trim()) languageEl.value = language;
   creationPromptToggleEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -3029,6 +3036,7 @@ function renderQuizStrip() {
   if (levels.length) parts.push(levels.length > 1 ? `🎯 ${levels[0]}–${levels[levels.length - 1]}` : `🎯 ${levels[0]}`); // i18n-ignore (level codes)
   const sections = quizHasListeningSections() ? quizListeningSections().length : 0;
   if (sections) parts.push(sections === 1 ? t('🎧 1 listening section') : t('🎧 {n} listening sections', { n: sections }));
+  if (applyTargetAssignmentCode) parts.push(t('✏️ editing assignment {code}', { code: applyTargetAssignmentCode }));
   el.textContent = parts.join(' · ');
   el.classList.toggle('quiz-strip-untitled', !title);
   el.title = title ? '' : t('Give the quiz a title: Live Pin, PinPlay Cup and assignments need one.');
@@ -5989,6 +5997,13 @@ function bindLiveEvents() {
   if (createArenaBtn) createArenaBtn.addEventListener('click', () => createLiveGame({ gameMode: 'arena' }));
   if (hostApplyBuilderBtn) hostApplyBuilderBtn.addEventListener('click', hostApplyBuilderToLive);
   if (applyAssignmentBtn) applyAssignmentBtn.addEventListener('click', applyQuizToAssignment);
+  if (applyAssignmentStopBtn) {
+    applyAssignmentStopBtn.addEventListener('click', () => {
+      const code = applyTargetAssignmentCode;
+      setApplyAssignmentTarget('', '');
+      setStatus(hostStatusEl, t('Stopped editing assignment {code}: the quiz stays in the builder.', { code }), 'ok');
+    });
+  }
   if (hostRefreshBtn) hostRefreshBtn.addEventListener('click', pollHostState);
 
   // No-login live games are ephemeral: when the host closes the tab AFTER the
@@ -6235,6 +6250,7 @@ async function createLiveGame(opts = {}) {
     live.host.timerForIndex = null;
     live.host.timerStartedAtMs = null;
     live.host.state = null;
+    syncApplyLiveRow();
     live.host.attemptsCache = null;
     live.host.attemptsFetchedAt = 0;
     live.host.isPrimaryAudioHost = true;
@@ -11475,7 +11491,7 @@ function buildAssignmentListItem(a) {
   const openQuizBtn = document.createElement('button');
   openQuizBtn.className = 'btn';
   openQuizBtn.textContent = t('Open Quiz');
-  openQuizBtn.title = t('Load this assignment’s quiz into the builder for editing. Use Apply to Assignment to save changes back.');
+  openQuizBtn.title = t('Load this assignment’s quiz into the builder for editing. “Apply to the assignment”, at the top of the builder, saves the changes back.');
   openQuizBtn.addEventListener('click', async () => {
     try {
       openQuizBtn.disabled = true;
@@ -11786,21 +11802,29 @@ async function hostApplyBuilderToLive() {
   }
 }
 
+// The assignment that Apply sends the builder's quiz to (Open Quiz on an
+// assignment), shown in a bar at the top of the Quiz builder.
 function setApplyAssignmentTarget(code, title) {
   applyTargetAssignmentCode = String(code || '').trim();
   applyTargetAssignmentTitle = String(title || '').trim();
-  if (!applyAssignmentBtn) return;
-  if (applyTargetAssignmentCode) {
-    applyAssignmentBtn.style.display = '';
-    applyAssignmentBtn.textContent = t("Apply to Assignment ({p1})", { p1: applyTargetAssignmentCode });
-    applyAssignmentBtn.title = applyTargetAssignmentTitle
-      ? `Save edits back to assignment "${applyTargetAssignmentTitle}" (${applyTargetAssignmentCode})`
-      : `Save edits back to assignment ${applyTargetAssignmentCode}`;
-  } else {
-    applyAssignmentBtn.style.display = 'none';
-    applyAssignmentBtn.textContent = t('Apply to Assignment');
-    applyAssignmentBtn.title = '';
+  applyAssignmentRowEl?.classList.toggle('hidden', !applyTargetAssignmentCode);
+  if (applyAssignmentLabelEl) {
+    applyAssignmentLabelEl.textContent = !applyTargetAssignmentCode ? ''
+      : applyTargetAssignmentTitle
+        ? t('✏️ You are editing the assignment “{title}” ({code}).', { title: applyTargetAssignmentTitle, code: applyTargetAssignmentCode })
+        : t('✏️ You are editing the assignment {code}.', { code: applyTargetAssignmentCode });
   }
+  renderQuizStrip();
+}
+
+// A Live Pin game on now (lobby or a question): Apply can send it the
+// builder's questions. PinPlay Cup runs on its own board and has no host
+// state here, so it never shows.
+function syncApplyLiveRow(st = live.host.state) {
+  if (!applyLiveRowEl) return;
+  const on = !!(live.host.pin && live.host.token && st && st.phase !== 'results');
+  applyLiveRowEl.classList.toggle('hidden', !on);
+  if (applyLiveLabelEl) applyLiveLabelEl.textContent = on ? t('🎮 Live Pin {pin} is on.', { pin: live.host.pin }) : '';
 }
 
 async function openAssignmentInBuilder(code, titleHint) {
@@ -11848,18 +11872,16 @@ async function openAssignmentInBuilder(code, titleHint) {
 
   setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
-  // The Quiz builder card starts collapsed: open it at Settings & Actions,
-  // where Apply to Assignment is.
-  if (builderSectionToggleEl && builderCardBodyEl) setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
-  if (builderSettingsToggleEl && builderSettingsBodyEl) {
-    setSectionCollapsed(builderSettingsToggleEl, builderSettingsBodyEl, false);
-    builderSettingsToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // The Quiz builder card starts collapsed: open it at its top, where the
+  // bar with Apply to the assignment is.
+  if (builderSectionToggleEl && builderCardBodyEl) {
+    setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
+    builderSectionToggleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  if (assignmentStatusEl) {
-    assignmentStatusEl.textContent = t("Opened assignment {p1} in the builder. Edit, then click \"Apply to Assignment\".", { p1: codeTrim });
-  }
-  setStatus(hostStatusEl, t('Editing assignment {code} — click Apply to Assignment to save changes.', { code: codeTrim }), 'ok');
+  const openedText = t('Assignment {code} is open in the 🛠️ Quiz builder: edit it, then click “Apply to the assignment” at the top of the builder.', { code: codeTrim });
+  if (assignmentStatusEl) assignmentStatusEl.textContent = openedText;
+  setStatus(hostStatusEl, openedText, 'ok');
 }
 
 async function applyQuizToAssignment() {
@@ -12963,6 +12985,7 @@ function renderHostState(state) {
   if (state.settings && typeof state.settings.randomNames === 'boolean') {
     setLiveSignInState(!!state.settings.randomNames);
   }
+  syncApplyLiveRow(state);
 
   if (hostPlayersCountEl) hostPlayersCountEl.textContent = String(state.playerCount || 0);
 
@@ -14992,6 +15015,7 @@ function stopHostPolling() {
   if (live.host.liveSocket) live.host.liveSocket.close();
   live.host.liveSocket = null;
   live.host.state = null;
+  syncApplyLiveRow();
   live.host.timerStartedAtMs = null;
   live.host.attemptsLoading = false;
   stopHostTimerTicker();
