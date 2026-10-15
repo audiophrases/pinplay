@@ -6194,6 +6194,12 @@ body.listening-sheet-open { overflow: hidden; }
 #liveSignInHint:empty { display: none; }
 @media (max-width: 640px) { .sign-in-mode { width: 100%; } }
 
+/* ── Assignments: the new-assignment settings, each with its label ── */
+.assignment-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 12px; align-items: end; }
+.assignment-form label { margin: .5rem 0 0; }
+.assignment-form .assignment-exam { min-height: 2.6rem; margin: .5rem 0 0; }
+.assignment-form .assignment-exam input { margin: 0; }
+
 /* ── Voice actors: the volunteers' page (record/) ── */
 .rec-main { max-width: 640px; }
 .rec-title { margin: .5rem 0 .25rem; }

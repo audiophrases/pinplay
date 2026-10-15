@@ -461,8 +461,9 @@ const assignmentClassEl = document.getElementById('assignmentClass');
 const assignmentDueAtEl = document.getElementById('assignmentDueAt');
 const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const assignmentSignInEl = document.getElementById('assignmentSignIn');
-const assignmentInstantFeedbackBtn = document.getElementById('assignmentInstantFeedbackBtn');
-const assignmentExamModeBtn = document.getElementById('assignmentExamModeBtn');
+const assignmentFeedbackEl = document.getElementById('assignmentFeedback');
+const assignmentExamModeEl = document.getElementById('assignmentExamMode');
+const assignmentClassOptionsEl = document.getElementById('assignmentClassOptions');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const toggleArchivedAssignmentsBtn = document.getElementById('toggleArchivedAssignmentsBtn');
@@ -838,7 +839,10 @@ function setupCreateAccess() {
       setStatus(createAuthStatusEl, t('Unlocked ✅'), 'ok');
       if (createPasswordEl) createPasswordEl.value = '';
       // Owner: initialize the guest-workspaces admin tile lazily on first expand.
-      if (creatorRole === 'owner') initWorkspacesAdmin();
+      if (creatorRole === 'owner') {
+        initWorkspacesAdmin();
+        syncPreviewTitle();
+      }
     } catch (err) {
       setStatus(createAuthStatusEl, err?.message || 'Wrong password', 'bad');
     } finally {
@@ -5976,8 +5980,9 @@ function bindLiveEvents() {
   if (hostPrevBtn) hostPrevBtn.addEventListener('click', hostPrevQuestion);
   if (hostNextBtn) hostNextBtn.addEventListener('click', hostNextQuestion);
   if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinLiveGameAsHostByPin);
-  if (assignmentInstantFeedbackBtn) assignmentInstantFeedbackBtn.addEventListener('click', toggleInstantFeedbackMode);
-  if (assignmentExamModeBtn) assignmentExamModeBtn.addEventListener('click', toggleAssignmentExamMode);
+  if (assignmentFeedbackEl) assignmentFeedbackEl.addEventListener('change', () => setAssignmentFeedbackMode(assignmentFeedbackEl.value));
+  if (assignmentExamModeEl) assignmentExamModeEl.addEventListener('change', () => setAssignmentExamMode(assignmentExamModeEl.checked));
+  if (assignmentClassEl) assignmentClassEl.addEventListener('focus', loadAssignmentClassSuggestions);
   if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
   initAssignmentAdaptiveControl();
   initLiveLevelsControl();
@@ -10371,6 +10376,7 @@ async function refreshStudents() {
     const data = await studentsApi('/api/students', { method: 'GET' });
     studentsCache = Array.isArray(data?.students) ? data.students : [];
     renderStudentsList();
+    syncAssignmentClassOptions();
     const migrated = Number(data?.migrated || 0);
     setStatus(
       studentsStatusEl,
@@ -11304,6 +11310,7 @@ function renderAssignmentsList() {
   assignmentListEl.innerHTML = '';
 
   const list = Array.isArray(assignmentsListCache) ? assignmentsListCache : [];
+  syncAssignmentClassOptions();
   const active = list.filter((a) => !a?.archived);
   const archived = list.filter((a) => !!a?.archived);
   const archivedPendingGrading = archived.reduce((sum, a) => sum + Number(a?.pendingGradingCount || 0), 0);
@@ -11565,31 +11572,65 @@ function buildAssignmentListItem(a) {
   return li;
 }
 
-function toggleAssignmentExamMode() {
-  assignmentExamMode = !assignmentExamMode;
-  if (!assignmentExamModeBtn) return;
-  assignmentExamModeBtn.textContent = assignmentExamMode ? 'Exam mode: on' : 'Exam mode: off';
-  assignmentExamModeBtn.classList.toggle('active', assignmentExamMode);
-  assignmentExamModeBtn.setAttribute('aria-pressed', assignmentExamMode ? 'true' : 'false');
+function setAssignmentExamMode(on) {
+  assignmentExamMode = !!on;
+  if (assignmentExamModeEl) assignmentExamModeEl.checked = assignmentExamMode;
+  syncPreviewTitle();
 }
 
-async function toggleInstantFeedbackMode() {
-  // Cycle through three modes: none → instant → end → none
-  const modes = ['none', 'instant', 'end'];
-  const currentIndex = modes.indexOf(assignmentFeedbackMode);
-  const nextIndex = (currentIndex + 1) % modes.length;
-  assignmentFeedbackMode = modes[nextIndex];
+// 'none', 'instant' (right or wrong after each answer) or 'end' (the answers
+// after submitting).
+function setAssignmentFeedbackMode(mode) {
+  assignmentFeedbackMode = ['none', 'instant', 'end'].includes(mode) ? mode : 'instant';
+  if (assignmentFeedbackEl) assignmentFeedbackEl.value = assignmentFeedbackMode;
+  syncPreviewTitle();
+}
 
-  if (assignmentInstantFeedbackBtn) {
-    const modeLabels = {
-      'none': 'No feedback',
-      'instant': 'Instant feedback',
-      'end': 'End feedback'
-    };
-    assignmentInstantFeedbackBtn.textContent = modeLabels[assignmentFeedbackMode];
-    assignmentInstantFeedbackBtn.classList.toggle('active', assignmentFeedbackMode !== 'none');
-    assignmentInstantFeedbackBtn.setAttribute('aria-pressed', assignmentFeedbackMode !== 'none' ? 'true' : 'false');
+// 🧑‍🎓 Preview, in the Live game card, plays the quiz as an assignment with
+// the Assignments form's feedback and exam mode: its tooltip says so.
+function syncPreviewTitle() {
+  const btn = document.getElementById('studentPreviewBtn');
+  if (!btn || creatorRole === 'guest') return;
+  const feedback = {
+    none: t('No feedback'),
+    instant: t('Feedback after each answer'),
+    end: t('Feedback at the end'),
+  }[assignmentFeedbackMode] || '';
+  btn.title = t('Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.', {
+    feedback,
+    exam: assignmentExamMode ? t('🔒 Exam mode') : t('No exam mode'),
+  });
+}
+
+// Class is a label only. It suggests the classes of 👥 Students and the labels
+// already used. The roster is fetched once at most, on the first focus, and
+// not at all when 👥 Students has loaded it.
+let assignmentRosterFetched = false;
+
+function syncAssignmentClassOptions() {
+  if (!assignmentClassOptionsEl) return;
+  const classes = new Set();
+  const add = (c) => { const v = String(c || '').trim(); if (v && v !== '__preview__') classes.add(v); };
+  studentsCache.forEach((s) => add(s?.className));
+  (assignmentsListCache || []).forEach((a) => add(a?.className));
+  assignmentClassOptionsEl.replaceChildren(...[...classes].sort((a, b) => a.localeCompare(b)).map((c) => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    return opt;
+  }));
+}
+
+async function loadAssignmentClassSuggestions() {
+  if (!assignmentRosterFetched && !studentsCache.length && createSessionPassword) {
+    assignmentRosterFetched = true;
+    try {
+      const data = await studentsApi('/api/students', { method: 'GET' });
+      if (!studentsCache.length && Array.isArray(data?.students)) studentsCache = data.students;
+    } catch {
+      // Suggestions only: the labels already used still show.
+    }
   }
+  syncAssignmentClassOptions();
 }
 
 
@@ -11767,13 +11808,8 @@ async function openAssignmentInBuilder(code, titleHint) {
     assignmentSignInEl.value = data.assignment.randomNames ? 'random' : 'signin';
   }
 
-  // Sync the Exam-mode toggle so editing preserves the flag round-trip.
-  if (assignmentExamModeBtn) {
-    assignmentExamMode = !!data?.assignment?.examMode;
-    assignmentExamModeBtn.textContent = assignmentExamMode ? 'Exam mode: on' : 'Exam mode: off';
-    assignmentExamModeBtn.classList.toggle('active', assignmentExamMode);
-    assignmentExamModeBtn.setAttribute('aria-pressed', assignmentExamMode ? 'true' : 'false');
-  }
+  // Sync the Exam-mode box so editing preserves the flag round-trip.
+  setAssignmentExamMode(!!data?.assignment?.examMode);
 
   setApplyAssignmentTarget(codeTrim, assignmentTitle);
 
@@ -12824,6 +12860,7 @@ let _i18nLastHostState = null;
 window.onLocaleChange = function () {
   try { if (_i18nLastHostState) renderHostState(_i18nLastHostState); } catch (e) { console.error('locale re-render failed', e); }
   syncLiveSignInHint();
+  if (creatorRole === 'owner') syncPreviewTitle();
   // The Media Manager rebuilds in the new language; its filters and selection are kept.
   try { if (document.getElementById('mediaManagerOverlay')) openMediaManager(); } catch (e) { console.error('media manager re-render failed', e); }
 };
@@ -17766,16 +17803,12 @@ function initAssignmentAdaptiveControl() {
   });
   document.getElementById('assignmentAdaptiveMode')?.addEventListener('change', () => {
     // Climb learns from every miss: instant feedback.
-    if (assignmentBuildupSelected()) {
-      for (let i = 0; i < 3 && assignmentFeedbackMode !== 'instant'; i++) toggleInstantFeedbackMode();
-    }
+    if (assignmentBuildupSelected()) setAssignmentFeedbackMode('instant');
     syncAssignmentAdaptiveControl();
   });
   box.addEventListener('change', () => {
     // Adaptive pairs best with instant feedback; the teacher can still change it.
-    if (box.checked) {
-      for (let i = 0; i < 3 && assignmentFeedbackMode !== 'instant'; i++) toggleInstantFeedbackMode();
-    }
+    if (box.checked) setAssignmentFeedbackMode('instant');
     syncAssignmentAdaptiveControl();
   });
   syncAssignmentAdaptiveControl();

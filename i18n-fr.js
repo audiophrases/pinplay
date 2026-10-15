@@ -314,18 +314,33 @@ window.PINPLAY_FR_DICT = {
 
   /* Assignments */
   'Assignments': 'Devoirs',
-  'Class (optional)': 'Classe (facultatif)',
+  'Class (label only)': 'Classe (étiquette seulement)',
+  "A label for your list only: it doesn't limit who can open the assignment. Suggestions: your classes in 👥 Students and the ones you've used.":
+    "Une simple étiquette pour votre liste : elle ne limite pas qui peut ouvrir le devoir. Suggestions : vos classes de 👥 Élèves et celles déjà utilisées.",
+  'e.g. 4B': 'p. ex. 4B',
   'Due date (optional)': "Date d'échéance (facultatif)",
-  '0 = unlimited': '0 = illimité',
-  'Cycle: No feedback → Instant feedback → End feedback':
-    'Cycle : Aucun retour → Retour instantané → Retour en fin',
-  'Instant feedback': 'Retour instantané',
+  'Attempts per student': 'Tentatives par élève',
+  'Who does it': 'Qui le fait',
+  'Feedback': 'Retour',
+  'No feedback': 'Aucun retour',
+  'After each answer': 'Après chaque réponse',
+  'At the end': 'À la fin',
+  "After each answer: students see right or wrong straight away, and can't change that answer. At the end: they see their answers once they submit.":
+    "Après chaque réponse : les élèves voient tout de suite si c'est juste ou faux, et ne peuvent plus modifier cette réponse. À la fin : ils voient leurs réponses une fois le devoir envoyé.",
+  'Feedback after each answer': 'Retour après chaque réponse',
+  'Feedback at the end': 'Retour à la fin',
+  'Assignment feedback': 'Retour du devoir',
+  '🔒 Exam mode': '🔒 Mode examen',
+  'No exam mode': 'Sans mode examen',
+  '🔒 Exam mode: turn on': '🔒 Mode examen : activer',
+  '🔒 Exam mode: turn off': '🔒 Mode examen : désactiver',
+  'Try the quiz as a student, with these settings from 📋 Assignments: {feedback} · {exam}. It plays every question, even with 🎯 Adaptive or 🏔️ Climb ticked.':
+    'Essayez le quiz comme un élève, avec ces réglages de 📋 Devoirs : {feedback} · {exam}. Toutes les questions sont jouées, même si 🎯 Adaptatif ou 🏔️ Ascension est coché.',
   'Who does the assignment': 'Qui fait le devoir',
   '👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name.':
     '👤 Les élèves se connectent avec Google, et leurs résultats sont gardés à leur nom. 🎲 Toute personne ayant le lien joue sous un nom aléatoire.',
   'Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel.':
     "Mode examen : met en pause et grise la tentative quand l'élève quitte l'onglet ; consigne les pertes de focus dans le panneau des résultats.",
-  'Exam mode: off': 'Mode examen : désactivé',
   'Create assignment': 'Créer un devoir',
   'Assignments list': 'Liste des devoirs',
   'Show or hide archived assignments': 'Afficher ou masquer les devoirs archivés',

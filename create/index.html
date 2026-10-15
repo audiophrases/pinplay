@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-signin" />
+    <link rel="stylesheet" href="../styles.css?v=20261015-form" />
   </head>
   <body>
     <header class="topbar">
@@ -698,16 +698,41 @@
               <span data-i18n>📋 Assignments &amp; results</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
               <div id="assignmentSectionBody" class="hidden">
+                <div class="assignment-form top-space" id="assignmentForm">
+                  <label title="A label for your list only: it doesn't limit who can open the assignment. Suggestions: your classes in 👥 Students and the ones you've used." data-i18n-title>
+                    <span data-i18n>Class (label only)</span>
+                    <input id="assignmentClass" type="text" list="assignmentClassOptions" autocomplete="off" placeholder="e.g. 4B" data-i18n-ph />
+                    <datalist id="assignmentClassOptions"></datalist>
+                  </label>
+                  <label><span data-i18n>Due date (optional)</span>
+                    <input id="assignmentDueAt" type="datetime-local" />
+                  </label>
+                  <label><span data-i18n>Attempts per student</span>
+                    <select id="assignmentAttempts">
+                      <option value="0" selected data-i18n>Unlimited</option>
+                      <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                      <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+                    </select>
+                  </label>
+                  <label title="👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name." data-i18n-title><span data-i18n>Who does it</span>
+                    <select id="assignmentSignIn">
+                      <option value="random" selected data-i18n>🎲 Random names</option>
+                      <option value="signin" data-i18n>👤 Students sign in</option>
+                    </select>
+                  </label>
+                  <label title="After each answer: students see right or wrong straight away, and can't change that answer. At the end: they see their answers once they submit." data-i18n-title><span data-i18n>Feedback</span>
+                    <select id="assignmentFeedback">
+                      <option value="none" data-i18n>No feedback</option>
+                      <option value="instant" selected data-i18n>After each answer</option>
+                      <option value="end" data-i18n>At the end</option>
+                    </select>
+                  </label>
+                  <label class="prompt-adaptive-toggle assignment-exam" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title>
+                    <input id="assignmentExamMode" type="checkbox" />
+                    <span data-i18n>🔒 Exam mode</span>
+                  </label>
+                </div>
                 <div class="row gap top-space" id="assignmentActionRow">
-                  <input id="assignmentClass" type="text" placeholder="Class (optional)" data-i18n-ph style="max-width:150px;" />
-                  <input id="assignmentDueAt" type="datetime-local" style="max-width:220px;" title="Due date (optional)" aria-label="Due date (optional)" data-i18n-title data-i18n-aria />
-                  <input id="assignmentAttempts" type="number" min="0" max="10" value="0" style="width:80px;" placeholder="0 = unlimited" data-i18n-ph />
-                  <select id="assignmentSignIn" class="sign-in-mode" title="👤 Students sign in with Google, and their results are kept under their name. 🎲 Anyone with the link plays under a random name." aria-label="Who does the assignment" data-i18n-title data-i18n-aria>
-                    <option value="random" selected data-i18n>🎲 Random names</option>
-                    <option value="signin" data-i18n>👤 Students sign in</option>
-                  </select>
-                  <button id="assignmentInstantFeedbackBtn" class="btn active" type="button" aria-pressed="true" title="Cycle: No feedback → Instant feedback → End feedback" data-i18n-title data-i18n>Instant feedback</button>
-                  <button id="assignmentExamModeBtn" class="btn" type="button" aria-pressed="false" title="Exam mode: pause + dim the attempt when the student leaves the tab; log focus-loss events to the results panel." data-i18n-title data-i18n>Exam mode: off</button>
                   <label id="assignmentAdaptiveWrap" class="assignment-adaptive hidden" title="Assignments: each student answers this many questions, picked one at a time to match how they are doing. Students never see their level. Climb: for students who need to build a skill; everyone starts at the bottom and climbs step by step (a wrong answer goes one step back)." data-i18n-title>
                     <input id="assignmentAdaptive" type="checkbox" />
                     <select id="assignmentAdaptiveMode" aria-label="Adaptive or Climb" data-i18n-aria disabled>
@@ -721,7 +746,7 @@
                     </span>
                     <span id="assignmentAdaptiveSections" class="small muted hidden" data-i18n>+ listening sections at each student's level</span>
                   </label>
-                  <button id="createAssignmentBtn" class="btn" data-i18n>Create assignment</button>
+                  <button id="createAssignmentBtn" class="btn primary" data-i18n>Create assignment</button>
                 </div>
                 <p id="assignmentBuildupNote" class="small muted hidden" data-i18n>🏔️ Climb: everyone starts at the bottom and climbs step by step; a wrong answer goes one step back; it ends at the summit. Instant feedback, single auto-graded questions only.</p>
                 <p id="assignmentStatus" class="small muted"></p>
@@ -843,7 +868,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261015-signin"></script>
+    <script src="../i18n-fr.js?v=20261015-form"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -854,10 +879,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-layout"></script>
-    <script src="../app.js?v=20261015-signin"></script>
+    <script src="../app.js?v=20261015-form"></script>
     <script src="../voice-actors.js?v=20261015-layout"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-signin"></script>
+    <script src="../command-palette.js?v=20261015-form"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>
