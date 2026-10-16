@@ -4,6 +4,7 @@ import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {buildCatalog} from './avatar-catalog.mjs';
+import {appAvatarStatus,pushAppAvatarFiles,pushDesignRepo} from './avatar-sync.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const DESIGN=fs.realpathSync(process.env.PINPLAY_DESIGN_DIR || path.join(ROOT,'../PinPlayCupMediaDesign'));
 const PORT=Number(process.env.STUDIO_PORT ?? 3005);
@@ -45,7 +46,8 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&pathname==='/api/health')return json(res,{app:'pinplay-studio',version:2});
   if(req.method==='GET'&&pathname==='/api/catalog')return json(res,buildCatalog(DESIGN));
   if(req.method==='GET'&&pathname==='/api/sync-status'){
-   const [code,assets]=await Promise.all([repoStatus(ROOT),repoStatus(DESIGN)]);
+   // PinPlay: only avatar files count as changes to sync (avatar-sync.mjs).
+   const [code,assets]=await Promise.all([appAvatarStatus(ROOT),repoStatus(DESIGN)]);
    return json(res,{success:true,code,assets});
   }
   if(req.method==='GET'&&staticFiles.has(pathname)){
@@ -93,10 +95,14 @@ const server=http.createServer(async(req,res)=>{
    }
    if(pathname==='/api/sync-push'){
     await body(req);
-    const pushCmd=`git add -A && (git diff-index --quiet HEAD || git commit -am "Avatar Studio Auto Sync") && git push`;
-    await Promise.all([gitExec(pushCmd,DESIGN),gitExec(pushCmd,ROOT)]);
-    await gitExec(`cd cloudflare && npx wrangler deploy`,ROOT);
-    return json(res,{success:true,message:'Pushed to cloud and deployed to Cloudflare!'});
+    // Avatar files only: the design repo (avatars only) and, in PinPlay, cup/
+    // plus the avatar line of worker.js. Nothing else is committed or pushed.
+    await pushDesignRepo(DESIGN);
+    const app=await pushAppAvatarFiles(ROOT,{deploy:()=>gitExec('npx wrangler deploy',path.join(ROOT,'cloudflare'))});
+    const parts=['Avatar files pushed to GitHub.'];
+    if(app.deployed)parts.push('API redeployed with the new avatar parts.');
+    parts.push(...app.notes);
+    return json(res,{success:true,message:parts.join(' ')});
    }
    if(pathname==='/api/sync-pull'){
     await body(req);
