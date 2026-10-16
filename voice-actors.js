@@ -936,6 +936,9 @@ async function lrCopy(text, okMsg, fileName) {
 // opens the card at the script prompt, keeping what is already typed.
 function openListeningScriptStep({ theme = '', level = '' } = {}) {
   if (listeningSectionToggleEl && listeningCardBodyEl) setSectionCollapsed(listeningSectionToggleEl, listeningCardBodyEl, false);
+  const stepToggle = lrEl('lrScriptToggle');
+  const stepBody = lrEl('lrScriptBody');
+  if (stepToggle && stepBody) setSectionCollapsed(stepToggle, stepBody, false);
   const topic = lrEl('lrTopic');
   if (topic && theme && !topic.value.trim()) topic.value = theme;
   const lvl = lrEl('lrLevel');

@@ -424,6 +424,8 @@ const workspacesSectionToggleEl = document.getElementById('workspacesSectionTogg
 const workspacesCardBodyEl = document.getElementById('workspacesCardBody');
 const listeningSectionToggleEl = document.getElementById('listeningSectionToggle');
 const listeningCardBodyEl = document.getElementById('listeningCardBody');
+// Its three steps, each collapsible (closed on page load).
+const LISTENING_STEP_SECTIONS = [['lrScriptToggle', 'lrScriptBody'], ['lrVoicesToggle', 'lrVoicesBody'], ['lrQuestionsToggle', 'lrQuestionsBody']];
 const adminSectionToggleEl = document.getElementById('adminSectionToggle');
 const adminCardBodyEl = document.getElementById('adminCardBody');
 const builderMaintenanceToggleEl = document.getElementById('builderMaintenanceToggle');
@@ -936,6 +938,9 @@ function bindCollapsibleSections() {
   bindSectionToggle(assignmentSectionToggleEl, assignmentSectionBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(workspacesSectionToggleEl, workspacesCardBodyEl, { defaultCollapsed: true, keyboard: true });
   bindSectionToggle(listeningSectionToggleEl, listeningCardBodyEl, { defaultCollapsed: true, keyboard: true });
+  LISTENING_STEP_SECTIONS.forEach(([toggleId, bodyId]) => {
+    bindSectionToggle(document.getElementById(toggleId), document.getElementById(bodyId), { defaultCollapsed: true, keyboard: true });
+  });
   bindSectionToggle(adminSectionToggleEl, adminCardBodyEl, { defaultCollapsed: true, keyboard: true });
 
   bindSectionToggle(studentsSectionToggleEl, studentsSectionBodyEl, { defaultCollapsed: true, keyboard: true });

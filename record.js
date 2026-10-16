@@ -5,7 +5,9 @@
  * straight to them). Each take is one upload; the page never polls (↻ reloads
  * the lines). When the teacher allows it, a volunteer can change the words of
  * a line: the server keeps the script's own words so the teacher sees every
- * change. See VOICE_ACTORS_PLAN.md.
+ * change. 📜 Whole script shows every line at once (the volunteer's own
+ * highlighted), with ✏️ to change words in place and 🎙 to record a line.
+ * See VOICE_ACTORS_PLAN.md.
  */
 (() => {
   const BACKEND_KEY = 'pinplay.backend.v1';
@@ -27,6 +29,9 @@
     back: $('recBack'), refresh: $('recRefresh'), doneBack: $('recDoneBack'),
     original: $('recOriginal'), editBtn: $('recEditBtn'), editBox: $('recEditBox'), editText: $('recEditText'),
     editSave: $('recEditSave'), editCancel: $('recEditCancel'), editOriginal: $('recEditOriginal'),
+    script: $('recScript'), scriptList: $('recScriptList'), scriptInfo: $('recScriptInfo'), scriptHint: $('recScriptHint'),
+    scriptBtn: $('recScriptBtn'), chooseScript: $('recChooseScript'), scriptBack: $('recScriptBack'),
+    scriptRefresh: $('recScriptRefresh'), scriptRecord: $('recScriptRecord'),
   };
 
   const params = new URLSearchParams(location.search);
@@ -44,6 +49,9 @@
   let player = null;
   let busy = false;
   let editing = false;
+  let scriptEditing = null; // the line being edited in 📜 Whole script (its id)
+  let scriptDraft = '';
+  let scriptFrom = 'choose'; // where 📜 Whole script goes back to: 'choose' or 'studio'
 
   function backendUrl() {
     let raw = '';
@@ -61,7 +69,7 @@
   }
 
   function show(section) {
-    [el.choose, el.studio, el.done].forEach((s) => { s.hidden = s !== section; });
+    [el.choose, el.studio, el.done, el.script].forEach((s) => { s.hidden = s !== section; });
   }
 
   // "Mia + Tom" speaks for both Mia and Tom.
@@ -134,6 +142,18 @@
   // Only when the server says so (an older API has no /api/rec/edit).
   const canEdit = (line) => session.allowEdits === true && line.status !== 'ok';
 
+  const badgeText = (status) => ({
+    ok: t('✓ Approved'),
+    redo: t('↻ Please record again'),
+    recorded: t('Recorded'),
+  }[status] || '');
+
+  // Re-draws whichever view is showing.
+  function renderViews() {
+    if (!el.studio.hidden) renderLine();
+    if (!el.script.hidden) renderScript();
+  }
+
   function renderLine() {
     const line = queue[idx];
     if (!line) return;
@@ -152,13 +172,7 @@
     el.editOriginal.hidden = !line.original;
     el.editBtn.hidden = editing || !canEdit(line);
     el.editBtn.disabled = !!recorder || busy;
-    const badges = {
-      ok: t('✓ Approved'),
-      redo: t('↻ Please record again'),
-      recorded: t('Recorded'),
-      todo: '',
-    };
-    el.badge.textContent = badges[line.status] || '';
+    el.badge.textContent = badgeText(line.status);
     el.badge.className = `rec-badge rec-badge-${line.status}`;
     const done = queue.filter((l) => l.take).length;
     el.progress.textContent = t('Line {i} of {n} · {done} recorded', { i: idx + 1, n: queue.length, done });
@@ -175,6 +189,158 @@
     else if (pending) el.hint.textContent = t('Listen to your take. Happy? ✓ Save & next. If not, record again.');
     else if (line.status === 'redo') el.hint.textContent = t('Your teacher asked for a new take of this line.');
     else el.hint.textContent = t('Read the line once to yourself, then press ● Record. Leave a second of silence before you start.');
+  }
+
+  // ---------- 📜 the whole script ----------
+  // Every line in order, so a volunteer can read the whole scene, not one line
+  // at a time. Their own lines stand out; ✏️ changes the words in place (when
+  // the teacher allows it) and 🎙 opens the line to record it.
+  const isMine = (line) => mode === 'all' || speakersOf(line).includes(mode);
+
+  function scriptButton(label, data, cls = 'btn btn-sm') {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = label;
+    Object.entries(data).forEach(([k, v]) => { b.dataset[k] = v; });
+    return b;
+  }
+
+  function scriptLineEl(line) {
+    const mine = isMine(line);
+    const li = document.createElement('li');
+    const current = scriptFrom === 'studio' && queue[idx] === line;
+    li.className = `rec-script-line${mine ? ' mine' : ''}${current ? ' current' : ''}`;
+    li.dataset.line = line.id;
+    const who = document.createElement('div');
+    who.className = 'rec-who';
+    const name = document.createElement('strong');
+    name.textContent = line.speaker;
+    who.append(name);
+    if (line.direction) {
+      const dir = document.createElement('span');
+      dir.className = 'muted';
+      dir.textContent = `(${line.direction})`;
+      who.append(dir);
+    }
+    const badge = document.createElement('span');
+    badge.className = `rec-badge rec-badge-${line.status}`;
+    badge.textContent = badgeText(line.status);
+    who.append(badge);
+    li.append(who);
+
+    if (scriptEditing === line.id) {
+      const box = document.createElement('div');
+      box.className = 'rec-edit';
+      const area = document.createElement('textarea');
+      area.rows = 3;
+      area.maxLength = 600;
+      area.value = scriptDraft;
+      area.dataset.scriptText = line.id;
+      area.setAttribute('aria-label', t('The words of this line'));
+      const actions = document.createElement('div');
+      actions.className = 'rec-edit-actions';
+      actions.append(
+        scriptButton(t('✓ Save the words'), { scriptSave: line.id }, 'btn btn-sm primary'),
+        scriptButton(t('Cancel'), { scriptCancel: line.id }),
+      );
+      if (line.original) actions.append(scriptButton(t('↩ Back to the original'), { scriptOriginal: line.id }));
+      box.append(area, actions);
+      li.append(box);
+      return li;
+    }
+
+    const text = document.createElement('p');
+    text.className = 'rec-script-text';
+    text.textContent = line.text;
+    li.append(text);
+    if (line.original) {
+      const was = document.createElement('p');
+      was.className = 'rec-original small muted';
+      was.textContent = t('✏️ Changed. The script said: “{text}”', { text: line.original });
+      li.append(was);
+    }
+    if (mine) {
+      const actions = document.createElement('div');
+      actions.className = 'rec-edit-actions';
+      if (line.status !== 'ok') actions.append(scriptButton(line.take ? t('🎙 Record again') : t('🎙 Record'), { scriptRecord: line.id }));
+      if (canEdit(line)) actions.append(scriptButton(t('✏️ Change the words'), { scriptEdit: line.id }));
+      if (actions.childElementCount) li.append(actions);
+    }
+    return li;
+  }
+
+  function renderScript() {
+    const done = session.lines.filter((l) => l.take).length;
+    el.scriptInfo.textContent = t('{done} of {n} lines recorded', { done, n: session.lines.length });
+    const hints = [];
+    if (mode !== 'all') hints.push(t('Your lines ({name}) are highlighted.', { name: mode }));
+    hints.push(session.allowEdits === true
+      ? t('🎙 records a line. ✏️ changes its words: your teacher sees every change.')
+      : t('🎙 records a line.'));
+    el.scriptHint.textContent = hints.join(' ');
+    el.scriptList.replaceChildren(...session.lines.map(scriptLineEl));
+  }
+
+  function openScript() {
+    if (recorder || busy) return;
+    stopPlayer();
+    scriptFrom = el.studio.hidden ? 'choose' : 'studio';
+    if (scriptFrom === 'choose') {
+      mode = 'all';
+      buildQueue();
+    }
+    editing = false;
+    scriptEditing = null;
+    renderScript();
+    show(el.script);
+    const current = scriptFrom === 'studio' ? el.scriptList.querySelector('.rec-script-line.current') : null;
+    if (current) current.scrollIntoView({ block: 'center' });
+    else window.scrollTo(0, 0);
+  }
+
+  function closeScript() {
+    if (busy) return;
+    scriptEditing = null;
+    if (scriptFrom === 'studio') {
+      show(el.studio);
+      renderLine();
+    } else {
+      renderChoose();
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // 🎙 on a line: open it in the recorder.
+  function recordLine(line) {
+    if (!line || recorder || busy) return;
+    if (!queue.includes(line)) {
+      mode = 'all';
+      buildQueue();
+    }
+    if (line !== queue[idx]) {
+      if (pending && !confirm(t('Your last take is not saved yet. Leave it and go to this line?'))) return;
+      stopPlayer();
+      dropPending();
+    }
+    editing = false;
+    scriptEditing = null;
+    idx = queue.indexOf(line);
+    show(el.studio);
+    renderLine();
+    window.scrollTo(0, 0);
+  }
+
+  function startScriptEdit(line) {
+    if (!line || !canEdit(line) || busy) return;
+    scriptEditing = line.id;
+    scriptDraft = line.text;
+    renderScript();
+    const area = el.scriptList.querySelector('[data-script-text]');
+    if (area) {
+      area.focus();
+      area.setSelectionRange(area.value.length, area.value.length);
+    }
   }
 
   function goTo(i) {
@@ -302,17 +468,18 @@
 
   function cancelEdit() {
     editing = false;
-    renderLine();
+    scriptEditing = null;
+    renderViews();
   }
 
-  async function saveEdit(text) {
-    const line = queue[idx];
+  // The words of a line: the current line (line view) or any line (📜 Whole script).
+  async function saveEdit(text, line = queue[idx]) {
     if (!line || busy) return;
     const words = String(text || '').replace(/\s+/g, ' ').trim();
     if (!words) { setStatus(t('A line can\'t be empty.'), 'bad'); return; } // i18n-ignore (already in t())
     if (words === line.text) { cancelEdit(); return; }
     busy = true;
-    renderLine();
+    renderViews();
     setStatus(t('⏳ Saving…'));
     try {
       const res = await fetch(`${backendUrl()}/api/rec/edit`, {
@@ -324,17 +491,20 @@
       if (res.status === 409 && data.reason === 'approved') {
         line.status = 'ok';
         editing = false;
+        scriptEditing = null;
         setStatus(t('Your teacher has already approved this line.'), 'ok'); // i18n-ignore (already in t())
       } else if (res.status === 403 && data.reason === 'locked') {
         session.allowEdits = false;
         editing = false;
+        scriptEditing = null;
         setStatus(t('Your teacher has turned off changing the lines.'), 'bad'); // i18n-ignore (already in t())
       } else if (!res.ok) {
         throw new Error(data.error || `${res.status}`);
       } else {
         Object.assign(line, data.line);
         editing = false;
-        setStatus(line.take || pending
+        scriptEditing = null;
+        setStatus(line.take || (pending && line === queue[idx])
           ? t('✅ Words saved. Record the line again so your take matches them.')
           : t('✅ Words saved.'), 'ok');
       }
@@ -342,11 +512,12 @@
       setStatus(t('Not saved ({msg}). Check the connection and try again.', { msg: err.message }), 'bad');
     }
     busy = false;
-    renderLine();
+    renderViews();
   }
 
   async function refresh() {
-    if (recorder) return;
+    if (recorder || busy) return;
+    const inScript = !el.script.hidden;
     setStatus(t('Loading…'));
     const currentId = queue[idx]?.id;
     try {
@@ -361,7 +532,12 @@
     idx = redo >= 0 ? redo : Math.max(0, same);
     dropPending();
     editing = false;
+    scriptEditing = null;
     setStatus(redo >= 0 ? t('Lines to record again: {n}.', { n: queue.filter((l) => l.status === 'redo').length }) : t('Up to date.'));
+    if (inScript) {
+      renderScript();
+      return;
+    }
     show(el.studio);
     renderLine();
   }
@@ -394,6 +570,36 @@
     renderChoose();
   });
   el.doneBack.addEventListener('click', () => { show(el.studio); renderLine(); });
+  el.scriptBtn.addEventListener('click', openScript);
+  el.chooseScript.addEventListener('click', openScript);
+  el.scriptBack.addEventListener('click', closeScript);
+  el.scriptRefresh.addEventListener('click', refresh);
+  el.scriptRecord.addEventListener('click', () => {
+    if (scriptFrom === 'studio') closeScript();
+    else startMode(mode);
+  });
+  const scriptLine = (id) => session.lines.find((l) => l.id === id);
+  el.scriptList.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || busy) return;
+    const d = b.dataset;
+    if (d.scriptRecord) recordLine(scriptLine(d.scriptRecord));
+    else if (d.scriptEdit) startScriptEdit(scriptLine(d.scriptEdit));
+    else if (d.scriptCancel) cancelEdit();
+    else if (d.scriptSave) saveEdit(scriptDraft, scriptLine(d.scriptSave));
+    else if (d.scriptOriginal) {
+      const line = scriptLine(d.scriptOriginal);
+      if (line?.original) saveEdit(line.original, line);
+    }
+  });
+  el.scriptList.addEventListener('input', (e) => {
+    if (e.target.matches('[data-script-text]')) scriptDraft = e.target.value;
+  });
+  el.scriptList.addEventListener('keydown', (e) => {
+    if (!e.target.matches('[data-script-text]')) return;
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(scriptDraft, scriptLine(e.target.dataset.scriptText)); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+  });
   // On a computer: Space records / stops, Enter saves.
   document.addEventListener('keydown', (e) => {
     if (el.studio.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -402,7 +608,7 @@
     else if (e.key === 'Enter' && !el.save.disabled) { e.preventDefault(); saveTake(); }
   });
   window.addEventListener('beforeunload', (e) => {
-    if (pending || recorder || editing) { e.preventDefault(); e.returnValue = ''; }
+    if (pending || recorder || editing || scriptEditing) { e.preventDefault(); e.returnValue = ''; }
   });
 
   (async () => {

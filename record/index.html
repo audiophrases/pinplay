@@ -7,7 +7,7 @@
     <meta name="robots" content="noindex" />
     <title>PinPlay · Record your lines</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-voices" />
+    <link rel="stylesheet" href="../styles.css?v=20261016-script" />
   </head>
   <body class="rec-page">
     <header class="topbar">
@@ -21,6 +21,7 @@
       <section id="recChoose" class="rec-card" hidden>
         <h3 data-i18n>What are you recording?</h3>
         <button type="button" class="btn primary rec-choice" data-rec-mode="all" data-i18n>📜 The whole script, in order</button>
+        <button type="button" class="btn rec-choice" id="recChooseScript" data-i18n>👀 Read the whole script first</button>
         <p class="small muted" data-i18n>Or only one character's lines:</p>
         <div id="recCharacters" class="rec-characters"></div>
       </section>
@@ -29,6 +30,7 @@
         <div class="rec-top">
           <button type="button" class="btn btn-sm" id="recBack" data-i18n>◀ Change</button>
           <span id="recProgress" class="small"></span>
+          <button type="button" class="btn btn-sm" id="recScriptBtn" title="See every line of the script at once" data-i18n-title data-i18n>📜 Whole script</button>
           <button type="button" class="btn btn-sm" id="recRefresh" title="Check for lines your teacher asked you to record again" data-i18n-title>↻</button>
         </div>
         <p id="recPrev" class="rec-prev small muted"></p>
@@ -60,6 +62,17 @@
         </div>
       </section>
 
+      <section id="recScript" class="rec-card" hidden>
+        <div class="rec-top">
+          <button type="button" class="btn btn-sm" id="recScriptBack" data-i18n>◀ Back</button>
+          <span id="recScriptInfo" class="small"></span>
+          <button type="button" class="btn btn-sm" id="recScriptRefresh" title="Check for lines your teacher asked you to record again" data-i18n-title>↻</button>
+        </div>
+        <p id="recScriptHint" class="small muted"></p>
+        <ol id="recScriptList" class="rec-script"></ol>
+        <button type="button" class="btn primary rec-choice" id="recScriptRecord" data-i18n>🎙 Record the lines</button>
+      </section>
+
       <section id="recDone" class="rec-card" hidden>
         <h3 data-i18n>🎉 All done, thank you!</h3>
         <p class="small muted" data-i18n>Every line here is recorded. Your teacher will listen to them and may ask you to record a few again: come back to this link later and press ↻.</p>
@@ -67,8 +80,8 @@
       </section>
     </main>
 
-    <script src="../i18n-fr.js?v=20261015-voices"></script>
+    <script src="../i18n-fr.js?v=20261016-script"></script>
     <script src="../i18n.js"></script>
-    <script src="../record.js?v=20261015-voices"></script>
+    <script src="../record.js?v=20261016-script"></script>
   </body>
 </html>
