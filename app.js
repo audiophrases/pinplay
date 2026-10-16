@@ -4605,26 +4605,35 @@ async function openImageSearchDialog(questionIdx) {
         // Openverse optional; continue with Pexels
       }
 
-      // 2) Fill rest from backend Pexels search
+      // 2) Fill rest from backend Pexels search. If Pexels refuses (e.g. its
+      // hourly limit), Openverse's results still show, with a note.
       const need = Math.max(0, targetTotal - allItems.length);
+      let pexelsError = '';
       if (need > 0) {
-        const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=${need}`, { method: 'GET' });
-        const pxItems = Array.isArray(data.items) ? data.items : [];
-        pxItems.forEach((it) => {
-          const url = String(it?.url || '');
-          if (url && !seen.has(url)) {
-            seen.add(url);
-            allItems.push(it);
-          }
-        });
+        try {
+          const data = await api(`/api/images/search?q=${encodeURIComponent(query)}&count=${need}`, { method: 'GET' });
+          const pxItems = Array.isArray(data.items) ? data.items : [];
+          pxItems.forEach((it) => {
+            const url = String(it?.url || '');
+            if (url && !seen.has(url)) {
+              seen.add(url);
+              allItems.push(it);
+            }
+          });
+        } catch (err) {
+          pexelsError = String(err?.message || err || '');
+        }
       }
 
       const items = allItems;
       if (!items.length) {
-        status.textContent = t('No images found.');
+        status.textContent = pexelsError
+          ? t('No images found. Pexels did not answer ({msg}): try again in a while.', { msg: pexelsError })
+          : t('No images found.');
         return;
       }
-      status.textContent = t("Found {p1} images. Click an image to import.", { p1: items.length });
+      status.textContent = t("Found {p1} images. Click an image to import.", { p1: items.length })
+        + (pexelsError ? ` ${t('(Openverse only: Pexels did not answer, {msg})', { msg: pexelsError })}` : '');
 
       items.forEach((item) => {
         const card = document.createElement('div');
@@ -4642,6 +4651,7 @@ async function openImageSearchDialog(questionIdx) {
 
         const importImage = async () => {
           try {
+            status.classList.remove('bad');
             card.style.opacity = '.55';
             card.style.pointerEvents = 'none';
             const imported = await api('/api/images/fetch', { method: 'POST', body: { url: item.url } });
@@ -4654,9 +4664,11 @@ async function openImageSearchDialog(questionIdx) {
             setStatus(hostStatusEl, t('Image added from web search.'), 'ok');
             overlay.remove();
           } catch (err) {
-            setStatus(hostStatusEl, err.message || 'Could not import image.', 'bad');
-            card.style.opacity = '1';
-            card.style.pointerEvents = 'auto';
+            // Said here, in the dialog: the page's status line may be in a collapsed card.
+            status.textContent = t('Could not import that image ({msg}). Try another one.', { msg: err?.message || t('error') });
+            status.classList.add('bad');
+            card.style.opacity = '.35';
+            card.title = status.textContent;
           }
         };
 
@@ -4762,7 +4774,10 @@ function searchImagesForKeyword(keyword) {
     const beUrl = (loadBackendUrl() || '').replace(/\/+$/, '');
     if (!beUrl) return [];
     const res = await fetch(`${beUrl}/api/images/search?q=${encodeURIComponent(query)}&count=${MEDIA_SEARCH_RESULTS}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    // A refusal (e.g. Pexels' hourly limit) is a failure, not "no results":
+    // it isn't cached, and the Media Manager shows the reason.
+    if (!res.ok) throw new Error(data?.error || t('Picture search failed ({status}).', { status: res.status }));
     return (data?.items || []).filter((it) => it?.url).map((it) => ({ url: String(it.url) }));
   });
 }
