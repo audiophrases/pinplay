@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261016-lrsteps" />
+    <link rel="stylesheet" href="../styles.css?v=20261019-assignment-setup" />
   </head>
   <body>
     <header class="topbar">
@@ -726,6 +726,12 @@
               <span data-i18n>📋 Assignments &amp; results</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
             </h2>
               <div id="assignmentSectionBody" class="hidden">
+                <div class="assignment-launch top-space">
+                  <div><strong data-i18n>Ready to assign this quiz?</strong><p class="small muted" data-i18n>Choose a preset, adjust the options, and get a link for your students.</p></div>
+                  <button id="createAssignmentBtn" type="button" class="btn primary" data-i18n>Create assignment</button>
+                </div>
+                <details class="assignment-current-options">
+                  <summary data-i18n>Current options &amp; student preview</summary>
                 <div class="assignment-form top-space" id="assignmentForm">
                   <label title="A label for your list only: it doesn't limit who can open the assignment. Suggestions: your classes in 👥 Students and the ones you've used." data-i18n-title>
                     <span data-i18n>Class (label only)</span>
@@ -775,10 +781,10 @@
                     </span>
                     <span id="assignmentAdaptiveSections" class="small muted hidden" data-i18n>+ listening sections at each student's level</span>
                   </label>
-                  <button id="createAssignmentBtn" class="btn primary" data-i18n>Create assignment</button>
                   <button id="assignmentPreviewBtn" class="btn" type="button" title="Opens the quiz as a student would get this assignment, with these settings (🎯 Adaptive and 🏔️ Climb too). It is deleted when you close its tab." data-i18n-title data-i18n>🧑‍🎓 Try it as a student</button>
                 </div>
                 <p id="assignmentBuildupNote" class="small muted hidden" data-i18n>🏔️ Climb: everyone starts at the bottom and climbs step by step; a wrong answer goes one step back; it ends at the summit. Instant feedback, single auto-graded questions only.</p>
+                </details>
                 <p id="assignmentStatus" class="small muted"></p>
                 <div class="top-space">
                   <div class="row spread gap">
@@ -898,7 +904,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261019-edit-script"></script>
+    <script src="../i18n-fr.js?v=20261019-assignment-setup"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -909,7 +915,8 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-rebuild"></script>
-    <script src="../app.js?v=20261016-lrsteps"></script>
+    <script src="../assignment-setup.js?v=20261019-assignment-setup"></script>
+    <script src="../app.js?v=20261019-assignment-setup"></script>
     <script src="../voice-actors.js?v=20261019-edit-script"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261016-lrsteps"></script>

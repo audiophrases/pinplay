@@ -6077,7 +6077,7 @@ function bindLiveEvents() {
   if (assignmentExamModeEl) assignmentExamModeEl.addEventListener('change', () => setAssignmentExamMode(assignmentExamModeEl.checked));
   if (assignmentClassEl) assignmentClassEl.addEventListener('focus', loadAssignmentClassSuggestions);
   initSignInRulesLines();
-  if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', createAssignmentFromCurrentQuiz);
+  if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', openAssignmentCreationDialog);
   initAssignmentAdaptiveControl();
   initLiveLevelsControl();
   initLevelUsage();
@@ -9259,7 +9259,7 @@ async function enterGradeByStudentMode(code) {
     const classBadge = a?._class
       ? ` <span style="background:rgba(0,0,0,0.07);border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:600;">${escapeHtml(String(a._class))}</span>`
       : '';
-    head.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}`;
+    head.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${classBadge}`;
 
     const counts = document.createElement('div');
     counts.className = 'small top-space';
@@ -10339,7 +10339,8 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
     const viaGamesBadge = a?.via === 'play'
       ? `<span class="badge-public" title="${escapeHtml(t('Played from the Games page (signed in)'))}">${escapeHtml(t('🌐 via Games'))}</span>`
       : '';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${a.gradeReleasedAt ? `<span class="small">${escapeHtml(t('Grade released: {n}/100', { n: a.releasedGrade }))}</span>` : ''}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
+    const releasedBadge = a.gradeReleasedAt ? `<span class="small">${escapeHtml(t('Grade released: {n}/100', { n: a.releasedGrade }))}</span>` : '';
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${releasedBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -11963,7 +11964,64 @@ function assignmentAdaptiveSettings() {
   return { adaptive, buildup, adaptiveCount };
 }
 
-async function createAssignmentFromCurrentQuiz() {
+async function openAssignmentCreationDialog() {
+  try {
+    syncQuizFromUI();
+    requireQuizTitle();
+    if (!quiz.questions?.length) throw new Error(t('Add at least 1 question first.'));
+    if (!window.PinAssignmentSetup) throw new Error(t('Reload the page to open assignment setup.'));
+    // A native modal sits above the password prompt; unlock before opening it.
+    if (!createSessionPassword) {
+      const typed = await customPasswordPrompt('Teacher password (needed once for assignment API):');
+      if (typed == null) return;
+      createSessionPassword = String(typed || '');
+      if (!createSessionPassword) throw new Error(t('Teacher password is required.'));
+    }
+    syncAssignmentAdaptiveControl();
+    const adaptive = assignmentAdaptiveSettings();
+    const classNames = () => [...new Set([
+      ...studentsCache.map(s => s.className), ...(assignmentsListCache || []).map(a => a.className),
+    ].filter(c => c && c !== '__preview__'))].sort((a, b) => a.localeCompare(b));
+    window.PinAssignmentSetup.open({
+      title: quiz.title,
+      questionCount: quiz.questions.length,
+      initial: {
+        className: assignmentClassEl?.value || '', dueAt: assignmentDueAtEl?.value || '',
+        attemptsLimit: Number(assignmentAttemptsEl?.value ?? 0), signIn: assignmentRandomNames() ? 'random' : 'signin',
+        feedbackMode: assignmentFeedbackMode, examMode: assignmentExamMode,
+        format: adaptive.buildup ? 'climb' : adaptive.adaptive ? 'adaptive' : 'all',
+        adaptiveCount: Number(document.getElementById('assignmentAdaptiveCount')?.value || 20),
+      },
+      adaptiveAvailable: !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden'),
+      climbAvailable: buildupAvailableLevels().length >= 2,
+      singleCount: adaptiveSingleQuestionCount(), hasSections: quizHasListeningSections(),
+      climbDefaultCount: buildupDefaultCount(buildupAvailableLevels().length),
+      classes: classNames(),
+      loadClasses: async () => { await loadAssignmentClassSuggestions(); return classNames(); },
+      onCreate: async options => {
+        assignmentClassEl.value = options.className;
+        assignmentDueAtEl.value = options.dueAt;
+        assignmentAttemptsEl.value = String(options.attemptsLimit);
+        assignmentSignInEl.value = options.signIn;
+        const box = document.getElementById('assignmentAdaptive');
+        const count = document.getElementById('assignmentAdaptiveCount');
+        box.checked = options.format !== 'all';
+        document.getElementById('assignmentAdaptiveMode').value = options.format === 'climb' ? 'buildup' : 'adaptive';
+        count.value = String(options.adaptiveCount);
+        count.dataset[options.format === 'climb' ? 'wantedBuildup' : 'wanted'] = String(options.adaptiveCount);
+        setAssignmentFeedbackMode(options.feedbackMode);
+        setAssignmentExamMode(options.examMode);
+        syncAssignmentAdaptiveControl();
+        syncSignInRulesLine(assignmentSignInEl, document.getElementById('assignmentSignInRules'));
+        return createAssignmentFromCurrentQuiz({ dialog: true });
+      },
+    });
+  } catch (err) {
+    setStatus(assignmentStatusEl, err.message, 'bad');
+  }
+}
+
+async function createAssignmentFromCurrentQuiz({ dialog = false } = {}) {
   try {
     syncQuizFromUI();
     requireQuizTitle();
@@ -12024,14 +12082,16 @@ async function createAssignmentFromCurrentQuiz() {
     const msg = `Assignment created ✅ Code: ${code}${className ? ` · Class: ${className}` : ''} · ${modeLabel}${adaptiveLabel}`;
 
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("{p1} · Link: {p2}", { p1: msg, p2: link });
-    setStatus(hostStatusEl, msg, 'ok');
+    if (!dialog) setStatus(hostStatusEl, msg, 'ok');
 
     window.dispatchEvent(new CustomEvent('pinplay:quiz-persisted', {
       detail: { source_id: code, quiz },
     }));
 
     await refreshAssignmentsList();
+    return { code, link };
   } catch (err) {
+    if (dialog) throw err;
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("Assignment error: {p1}", { p1: err.message });
     setStatus(hostStatusEl, err.message, 'bad');
   }
