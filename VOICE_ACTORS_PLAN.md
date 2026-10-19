@@ -136,3 +136,27 @@ changed line ("Sorry.") could land inside an earlier line.
   whole script says that the title, sounds and pauses go too.
 - Not covered: a line put back to the script's words after the recording went
   in keeps the volunteer's words in the section's script.
+
+## The whole script on the record page, and the steps collapsed (2026-10-16)
+
+The owner: the record page showed one line at a time, so a volunteer could not
+read the scene as a whole; and the 🎧 Listening recordings card should open
+with its steps closed.
+
+- **📜 Whole script** (record page): from the recorder's top bar, or **👀 Read
+  the whole script first** on the start screen. Every line in order with its
+  state (Recorded, ↻ Please record again, ✓ Approved) and the script's own
+  words under a changed line. The volunteer's lines are highlighted (all of
+  them from the start screen, one character's with a character link); only
+  those have **🎙 Record** (opens the line in the recorder) and, when the
+  session allows it, **✏️ Change the words**, edited in place through the
+  same `/api/rec/edit` (Enter saves, Esc cancels, ↩ Back to the original).
+  Approved lines have no buttons. Opened from the recorder, the current line
+  is marked and ◀ Back returns to it; 🎙 on another line with an unsaved take
+  asks first. ↻ reloads in place.
+- **🎧 Listening recordings**: ① Script, ② Voices and ③ Questions are
+  collapsible sections (the builder's sub-section style), closed on page load.
+  "The AI writes only the script" in the AI prompt opens ①, and Ctrl+K opens
+  the step around the button it points to.
+- Checked in headless Chrome with a faked session API (reading, editing,
+  Escape, 🎙, a character link, the steps on the teacher page).

@@ -6261,6 +6261,15 @@ body.listening-sheet-open { overflow: hidden; }
 .rec-edit textarea { width: 100%; font: inherit; font-size: 1.15rem; line-height: 1.4; }
 .rec-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .rec-edit-btn { justify-self: start; }
+/* 📜 The whole script: every line, the volunteer's own highlighted. */
+.rec-script { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rec-script-line { display: grid; gap: 4px; padding: 8px 10px; border-left: 3px solid transparent; border-radius: 8px; }
+.rec-script-line .rec-who { font-size: .95rem; }
+.rec-script-line:not(.mine) { color: var(--muted); }
+.rec-script-line.mine { background: #f6f7ff; border-left-color: var(--primary); }
+.rec-script-line.current { box-shadow: 0 0 0 2px var(--primary) inset; }
+.rec-script-text { margin: 0; font-size: 1.1rem; line-height: 1.45; }
+.rec-script-line.mine .rec-script-text { font-weight: 600; color: var(--text); }
 @keyframes rec-blink { 50% { opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { .rec-controls .rec-big.rec-on { animation: none; } }
 
@@ -6305,9 +6314,9 @@ body.listening-sheet-open { overflow: hidden; }
 .va-allow input { width: auto; }
 .va-entry-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* 🎧 Listening recordings card: ① script, ② voices, ③ questions */
-.lr-step { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
-.lr-step h3 { margin: 0 0 6px; }
-.lr-step > p { margin: 6px 0 0; }
+/* 🎧 Listening recordings: ① ② ③ are collapsible sections, closed on load. */
+.lr-step .section-collapsible-body > p { margin: 8px 0 0; }
+.lr-step .section-collapsible-body > p:first-child { margin-top: 0; }
 .lr-step .creation-prompt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 12px; margin-top: 8px; }
 .lr-step .creation-prompt-grid .full-width { grid-column: 1 / -1; }
 .lr-script { display: grid; gap: 4px; margin-top: 12px; }

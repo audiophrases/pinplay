@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261015-phase3" />
+    <link rel="stylesheet" href="../styles.css?v=20261016-lrsteps" />
   </head>
   <body>
     <header class="topbar">
@@ -35,8 +35,12 @@
             <div id="listeningCardBody" class="hidden">
               <p class="small muted" data-i18n>A recording for a listening quiz, in three steps: the script, the voices, then the questions. Start at any step. No quiz needed until step 3.</p>
 
-              <div class="lr-step">
-                <h3 data-i18n>① Script</h3>
+              <div class="builder-section lr-step">
+                <button id="lrScriptToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span data-i18n>① Script</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="lrScriptBody" class="section-collapsible-body hidden">
                 <p class="small muted" data-i18n>✨ The AI writes the script only, so it can be recorded before there are questions.</p>
                 <div class="creation-prompt-grid">
                   <div class="prompt-field full-width">
@@ -91,24 +95,35 @@
                   <textarea id="lrScript" rows="8" spellcheck="false" placeholder="Mia (surprised): Forty minutes? You're joking!&#10;Tom: I know, I know…" data-i18n-ignore></textarea>
                 </label>
                 <span id="lrScriptInfo" class="small muted"></span>
+                </div>
               </div>
 
-              <div class="lr-step">
-                <h3 data-i18n>② Voices</h3>
+              <div class="builder-section lr-step">
+                <button id="lrVoicesToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span data-i18n>② Voices</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="lrVoicesBody" class="section-collapsible-body hidden">
                 <div class="va-entry-row">
                   <button id="voiceActorsNewBtn" class="btn primary" type="button" data-i18n>🎙 Students record it</button>
                   <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
                   <button id="lrStudioBtn" class="btn" type="button" title="Copies the script and opens the Listening Studio on this computer (start it first)" data-i18n-title data-i18n>🔊 Listening Studio</button>
                 </div>
                 <p class="small muted" data-i18n>Students record their lines on their phones from one link; you check each take and build the MP3. The Listening Studio makes it with AI voices on this computer. A recording you already have goes straight into the quiz's listening section.</p>
+                </div>
               </div>
 
-              <div class="lr-step">
-                <h3 data-i18n>③ Questions</h3>
+              <div class="builder-section lr-step">
+                <button id="lrQuestionsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
+                  <span data-i18n>③ Questions</span>
+                  <span class="collapse-chevron" aria-hidden="true">▸</span>
+                </button>
+                <div id="lrQuestionsBody" class="section-collapsible-body hidden">
                 <div class="va-entry-row">
                   <button id="lrQuestionsBtn" class="btn primary" type="button" data-i18n>✨ The questions, from this script →</button>
                 </div>
                 <p class="small muted" data-i18n>Opens the Quiz builder's AI prompt with the script in it. Import the AI's quiz, then put the recording into its listening section (🎧 Use in the listening section, in the recording session).</p>
+                </div>
               </div>
               <p id="lrStatus" class="small" role="status"></p>
             </div>
@@ -883,7 +898,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261016-delete"></script>
+    <script src="../i18n-fr.js?v=20261016-imgsearch"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -894,10 +909,10 @@
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-rebuild"></script>
-    <script src="../app.js?v=20261016-voicelang"></script>
-    <script src="../voice-actors.js?v=20261015-fixes"></script>
+    <script src="../app.js?v=20261016-lrsteps"></script>
+    <script src="../voice-actors.js?v=20261016-lrsteps"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261015-phase3"></script>
+    <script src="../command-palette.js?v=20261016-lrsteps"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>

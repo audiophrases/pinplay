@@ -21,6 +21,9 @@
   // collapsed body opens it first (outermost first).
   const SECTIONS = [
     ['listeningSectionToggle', 'listeningCardBody'],
+    ['lrScriptToggle', 'lrScriptBody'],
+    ['lrVoicesToggle', 'lrVoicesBody'],
+    ['lrQuestionsToggle', 'lrQuestionsBody'],
     ['adminSectionToggle', 'adminCardBody'],
     ['builderSectionToggle', 'builderCardBody'],
     ['creationPromptToggle', 'creationPromptBody'],
