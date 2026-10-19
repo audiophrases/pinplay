@@ -1275,6 +1275,17 @@ export default {
       }));
     }
 
+    if (url.pathname === '/api/assignments/release-grades' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const code = sanitizeAssignmentCode(body?.code);
+      if (!code) return json({ error: 'Assignment code required.' }, 400);
+      if (!await verifyCreatePassword(env, String(body?.password || ''), request, { skipRateLimit: true })) return json({ error: 'Wrong password.' }, 401);
+      const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
+      return withCors(await stub.fetch('https://room/assignments/release-grades', {
+        method: 'POST', body: JSON.stringify({ code, attemptIds: body?.attemptIds }),
+      }));
+    }
+
     if (url.pathname === '/api/assignments/grade' && request.method === 'POST') {
       const body = await safeJson(request);
       const password = String(body?.password || '');
@@ -3372,6 +3383,27 @@ export class QuizRoom {
           assignment: publicAssignment(assignment, { includeQuiz: false }),
           attempts,
         });
+      }
+
+      if (url.pathname === '/assignments/release-grades' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const code = sanitizeAssignmentCode(body?.code);
+        const ids = Array.isArray(body?.attemptIds) ? [...new Set(body.attemptIds.map(sanitizeAssignmentAttemptId).filter(Boolean))] : [];
+        if (!code || !ids.length || ids.length > 500) return json({ error: 'Select between 1 and 500 attempts.' }, 400);
+        const assignment = await loadAssignmentBase(this.state.storage, code);
+        if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        const attempts = await Promise.all(ids.map(id => this.state.storage.get(`a:${code}:t:${id}`)));
+        if (attempts.some(a => !a)) return json({ error: 'Attempt not found.' }, 404);
+        if (attempts.some(a => !a.submitted || evaluateAssignmentAttempt(assignment, a).pendingTeacherGradeCount > 0)) {
+          return json({ error: 'Selected attempts must be submitted and fully graded.' }, 409);
+        }
+        for (let i = 0; i < ids.length; i++) {
+          const attempt = attempts[i];
+          attempt.releasedGrade = assignmentGradeOutOf100(assignment, attempt);
+          attempt.gradeReleasedAt = Date.now();
+          await saveAttempt(this.state.storage, code, ids[i], attempt);
+        }
+        return json({ ok: true, released: ids.length });
       }
 
       if (url.pathname === '/assignments/grade' && request.method === 'POST') {
@@ -9518,6 +9550,13 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 // has answered (instant feedback). includeAnswerKey: the whole quiz's answers,
 // only once the attempt is submitted (review, self-correct); an open attempt
 // never gets answers to questions still ahead.
+function assignmentGradeOutOf100(assignment, attempt) {
+  const view = attempt?.adaptive ? adaptiveAttemptView(assignment, attempt, { includeCurrent: false }) : { assignment, attempt };
+  const maximum = (view.assignment?.quiz?.questions || []).reduce((sum, q) => sum + (q && !q.isPoll ? Math.max(0, Number(q.points || 1000)) : 0), 0);
+  const score = evaluateAssignmentAttempt(assignment, attempt).totalScore;
+  return maximum > 0 ? round(Math.max(0, Math.min(100, score / maximum * 100)), 1) : 0;
+}
+
 function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers && !!attempt?.submitted } = {}) {
   if (attempt?.adaptive) {
     const st = attempt.adaptive;
@@ -9583,6 +9622,8 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     className: sanitizeClassName(attempt?.className),
     startedAt: Number(attempt?.startedAt || 0) || null,
     updatedAt: Number(attempt?.updatedAt || 0) || null,
+    releasedGrade: attempt?.submitted && attempt?.gradeReleasedAt ? Number(attempt.releasedGrade) : null,
+    gradeReleasedAt: Number(attempt?.gradeReleasedAt || 0) || null,
     submitted: !!attempt?.submitted,
     submittedAt: Number(attempt?.submittedAt || 0) || null,
     reviewedAt: Number(attempt?.reviewedAt || 0) || null,
@@ -9685,6 +9726,8 @@ function summarizePendingGrading(assignment) {
 function publicAssignmentAttemptSummary(assignment, attempt) {
   const full = publicAssignmentAttempt(assignment, attempt);
   return {
+    releasedGrade: full.releasedGrade,
+    gradeReleasedAt: full.gradeReleasedAt,
     id: full.id,
     studentKey: full.studentKey,
     studentName: full.studentName,

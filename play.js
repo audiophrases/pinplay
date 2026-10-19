@@ -2542,6 +2542,14 @@ function renderInstantFeedbackFromState() {
   // class should never be on. Clear it defensively in case anything still set it.
   document.body.classList.remove('post-submit-summary');
 
+  document.getElementById('assignmentReleasedGrade')?.remove();
+  if (feedbackMode === 'none' && attempt?.submitted && attempt?.releasedGrade != null) {
+    const grade = document.createElement('div');
+    grade.id = 'assignmentReleasedGrade';
+    grade.className = 'assignment-results';
+    grade.textContent = t('Your grade: {n}/100', { n: attempt.releasedGrade });
+    (joinQuestionWrap || joinCardEl)?.appendChild(grade);
+  }
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
 
   const wrap = joinQuestionWrap || joinCardEl;

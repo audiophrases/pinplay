@@ -10163,6 +10163,27 @@ function renderAssignmentResults(safeCode, data) {
     openNotifyModal(safeCode, assignment, chosen, () => fetchAssignmentResults(safeCode));
   });
 
+  const releaseBtn = document.createElement('button');
+  releaseBtn.className = 'btn';
+  releaseBtn.textContent = t('Release selected grades');
+  releaseBtn.title = t('Show only the grade out of 100. Selected attempts must be submitted and fully graded.');
+  releaseBtn.disabled = notifySelection.ids.size === 0;
+  releaseBtn.addEventListener('click', async () => {
+    releaseBtn.disabled = true;
+    try {
+      const result = await api('/api/assignments/release-grades', {
+        method: 'POST',
+        body: { password: createSessionPassword, code: safeCode, attemptIds: [...notifySelection.ids] },
+      });
+      setStatus(assignmentStatusEl, t('Released {n} grades.', { n: result.released }), 'ok');
+      await fetchAssignmentResults(safeCode);
+    } catch (err) {
+      setStatus(assignmentStatusEl, err.message, 'bad');
+    } finally {
+      releaseBtn.disabled = notifySelection.ids.size === 0;
+    }
+  });
+
   const deleteSelectedBtn = document.createElement('button');
   deleteSelectedBtn.className = 'btn';
   deleteSelectedBtn.textContent = t('Delete selected');
@@ -10198,7 +10219,7 @@ function renderAssignmentResults(safeCode, data) {
     await fetchAssignmentResults(safeCode);
   });
 
-  headerLi.append(selectAll, selectedCountEl, notifyBtn, deleteSelectedBtn);
+  headerLi.append(selectAll, selectedCountEl, releaseBtn, notifyBtn, deleteSelectedBtn);
   assignmentResultsListEl.appendChild(headerLi);
 
   filtered.forEach((a) => {
@@ -10213,12 +10234,13 @@ function renderAssignmentResults(safeCode, data) {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = notifySelection.ids.has(attemptId);
-    cb.title = t('Select for notify');
+    cb.title = t('Select student attempt');
     cb.style.cssText = 'width:18px; height:18px; cursor:pointer; flex:none; margin:0;';
     cb.addEventListener('change', () => {
       if (cb.checked) notifySelection.ids.add(attemptId);
       else notifySelection.ids.delete(attemptId);
       selectedCountEl.textContent = t("{p1} selected", { p1: notifySelection.ids.size });
+      releaseBtn.disabled = notifySelection.ids.size === 0;
       notifyBtn.disabled = notifySelection.ids.size === 0;
       deleteSelectedBtn.disabled = notifySelection.ids.size === 0;
       selectAll.checked = filtered.length > 0 && filtered.every((x) => notifySelection.ids.has(String(x?.id || '')));
@@ -10255,7 +10277,7 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
     const viaGamesBadge = a?.via === 'play'
       ? `<span class="badge-public" title="${escapeHtml(t('Played from the Games page (signed in)'))}">${escapeHtml(t('🌐 via Games'))}</span>`
       : '';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || 'Student'))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${a.gradeReleasedAt ? `<span class="small">${escapeHtml(t('Grade released: {n}/100', { n: a.releasedGrade }))}</span>` : ''}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
