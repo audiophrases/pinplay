@@ -6353,7 +6353,7 @@ body.listening-sheet-open { overflow: hidden; }
 .va-session-open { flex: 1; display: grid; gap: 2px; text-align: left; }
 .va-new { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
 .va-new[open] { display: grid; }
-.va-new label { display: grid; gap: 4px; }
+.va-new label:not(.va-allow) { display: grid; gap: 4px; }
 .va-new textarea { width: 100%; font: inherit; }
 .va-head { display: flex; gap: 8px; align-items: center; }
 .va-title-input { flex: 1; font-weight: 700; }
@@ -6383,7 +6383,7 @@ body.listening-sheet-open { overflow: hidden; }
 .va-characters { display: grid; gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; }
 .va-characters li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .va-allow { display: inline-flex; gap: 6px; align-items: center; }
-.va-allow input { width: auto; }
+.va-allow input { width: auto; margin: 0; flex-shrink: 0; }
 .va-entry-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* 🎧 Listening recordings card: ① script, ② voices, ③ questions */
 /* 🎧 Listening recordings: ① ② ③ are collapsible sections, closed on load. */
