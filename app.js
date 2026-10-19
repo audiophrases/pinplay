@@ -11769,17 +11769,18 @@ async function openAssignmentSettingsDialog(a) {
   const source = document.getElementById('assignmentForm');
   if (!code || !source) return;
   let formatOptions;
+  let shuffleSupported = false;
   try {
     const data = await api('/api/assignments/get-quiz', {
       method: 'POST', body: { password: createSessionPassword, code, includeSettings: true },
     });
     a = { ...a, ...data.assignment };
     formatOptions = data.settings;
+    shuffleSupported = typeof data.assignment?.shuffleQuestions === 'boolean';
   } catch (err) {
     setStatus(assignmentStatusEl, t('Could not load assignment settings: {msg}', { msg: err.message }), 'bad');
     return;
   }
-  const shuffleSupported = typeof a?.shuffleQuestions === 'boolean';
 
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
@@ -11817,7 +11818,7 @@ async function openAssignmentSettingsDialog(a) {
   field.assignmentSignIn.value = a?.randomNames ? 'random' : 'signin';
   field.assignmentFeedback.value = ['none', 'instant', 'end'].includes(a?.feedbackMode) ? a.feedbackMode : 'none';
   field.assignmentExamMode.checked = !!a?.examMode;
-  field.assignmentShuffleQuestions.checked = !!a?.shuffleQuestions;
+  field.assignmentShuffleQuestions.checked = shuffleSupported && !!a?.shuffleQuestions;
   field.assignmentShuffleQuestions.disabled = !!a?.adaptiveCount;
   // The copy carries the form's own lock (the form may be set to 🏔️ Climb for
   // a new assignment): this assignment decides it.
