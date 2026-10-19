@@ -1,3 +1,5 @@
+import { handleTaskflowAuth } from './taskflow-auth.mjs';
+
 const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 
 const CORS_HEADERS = {
@@ -111,6 +113,10 @@ const ASSIGNMENTS_DO_NAME = '__assignments_registry__';
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/api/taskflow/')) {
+      return handleTaskflowAuth(request, env);
+    }
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -3250,6 +3256,8 @@ export class QuizRoom {
             return {
               id: sanitizeAssignmentAttemptId(a?.id),
               attemptNumber: studentAttempts.indexOf(a) + 1,
+              releasedGrade: a?.gradeReleasedAt ? Number(a.releasedGrade) : null,
+              gradeReleasedAt: Number(a?.gradeReleasedAt || 0) || null,
               totalScore: Number(metrics?.totalScore ?? 0),
               accuracy: metrics?.accuracy ?? null,
               totalQuestions: a?.adaptive ? adaptiveAttemptTotal(a.adaptive) : Number(assignment?.quiz?.questions?.length || 0),
@@ -3419,7 +3427,9 @@ export class QuizRoom {
           attempt.gradeReleasedAt = Date.now();
           await saveAttempt(this.state.storage, code, ids[i], attempt);
         }
-        return json({ ok: true, released: ids.length });
+        return json({ ok: true, released: ids.length, grades: attempts.map((a, i) => ({
+          attemptId: ids[i], releasedGrade: a.releasedGrade, gradeReleasedAt: a.gradeReleasedAt,
+        })) });
       }
 
       if (url.pathname === '/assignments/grade' && request.method === 'POST') {
