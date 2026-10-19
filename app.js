@@ -10188,21 +10188,21 @@ function renderAssignmentResults(safeCode, data) {
   releaseStatus.style.cssText = 'flex-basis:100%; margin:0;';
   releaseStatus.setAttribute('role', 'status');
   releaseStatus.setAttribute('aria-live', 'polite');
-  releaseStatus.textContent = t('Release shows only the grade out of 100. Select submitted, fully graded attempts.');
+  releaseStatus.textContent = t('Release submits unfinished attempts and locks further edits. Students see only their grade out of 100. Teacher marking must be complete.');
 
   const releaseBtn = document.createElement('button');
   releaseBtn.type = 'button';
   releaseBtn.className = 'btn';
   releaseBtn.textContent = t('Release selected grades');
-  releaseBtn.title = t('Show only the grade out of 100. Selected attempts must be submitted and fully graded.');
+  releaseBtn.title = t('Submit unfinished attempts, lock further edits, and release the grade out of 100. Teacher marking must be complete.');
   releaseBtn.disabled = notifySelection.ids.size === 0;
   releaseBtn.addEventListener('click', async () => {
     const attemptIds = [...notifySelection.ids];
     const chosen = filtered.filter(a => attemptIds.includes(String(a?.id || '')));
     if (!chosen.length) return;
-    const ineligible = chosen.filter(a => !a.submitted || Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0);
+    const ineligible = chosen.filter(a => Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0);
     if (ineligible.length) {
-      setStatus(releaseStatus, t('Not released: these attempts must be submitted and fully graded: {names}', {
+      setStatus(releaseStatus, t('Not released: finish teacher marking for these attempts: {names}', {
         names: ineligible.map(a => a.studentName || a.id).join(', '),
       }), 'bad');
       return;
@@ -10226,6 +10226,9 @@ function renderAssignmentResults(safeCode, data) {
           if (!released) return;
           a.gradeReleasedAt = released.gradeReleasedAt;
           a.releasedGrade = released.releasedGrade;
+          a.submitted = released.submitted ?? a.submitted;
+          a.submittedAt = released.submittedAt ?? a.submittedAt;
+          a.updatedAt = released.updatedAt ?? a.updatedAt;
         });
         renderAssignmentResults(safeCode, data);
       } else {
@@ -10233,7 +10236,7 @@ function renderAssignmentResults(safeCode, data) {
         await fetchAssignmentResults(safeCode);
       }
       const status = document.getElementById('assignmentGradeReleaseStatus');
-      setStatus(status, t('Released {n} grades. Students can reopen the assignment link to see their grade out of 100.', { n: result.released }), 'ok');
+      setStatus(status, t('Released {n} grades and submitted {submitted} unfinished attempts. Students can reopen the assignment link to see their grade out of 100.', { n: result.released, submitted: Number(result.submitted || 0) }), 'ok');
     } catch (err) {
       setStatus(releaseStatus, t('Grades were not released: {message}', { message: err.message }), 'bad');
     } finally {

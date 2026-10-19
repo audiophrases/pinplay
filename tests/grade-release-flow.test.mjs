@@ -77,16 +77,81 @@ it('release survives a fresh server instance and appears in student check-status
   const other = await call('/api/assignment/check-status', { code, studentKey: 'student_other' });
   assert.equal(other.body.previousAttempts[0].releasedGrade, null);
 });
-it('unfinished and pending attempts reject the selection without releasing other students', async () => {
+it('pending teacher grades reject the selection without submitting or releasing other students', async () => {
   const pending = { ...attempt('pending'), answersByQ: { 0: { answer: 'essay' } } };
   const pendingAssignment = structuredClone(assignment);
   pendingAssignment.quiz.questions[0] = { type: 'open', prompt: 'Essay', points: 1000 };
   await storage.put(`ab:${code}`, pendingAssignment);
   await storage.put(`a:${code}:t:pending`, pending);
+  await storage.put(`a:${code}:t:other`, { ...attempt('other'), submitted: false, submittedAt: null, answersByQ: {} });
   const r = await call('/api/assignments/release-grades', { code, password: teacherPassword, attemptIds: ['other', 'pending'] });
   assert.equal(r.status, 409);
   assert.equal((await storage.get(`a:${code}:t:other`)).gradeReleasedAt, undefined);
+  assert.equal((await storage.get(`a:${code}:t:other`)).submitted, false);
   await storage.put(`ab:${code}`, assignment);
+});
+
+it('release force-submits selected unfinished and empty attempts, preserves submitted timestamps, and rejects late answers', async () => {
+  const partial = { ...attempt('partial'), submitted: false, submittedAt: null, answersByQ: { 0: { answer: 0 } } };
+  const empty = { ...attempt('empty'), submitted: false, submittedAt: null, answersByQ: {} };
+  await storage.put(`a:${code}:t:partial`, partial);
+  await storage.put(`a:${code}:t:empty`, empty);
+  const release = await call('/api/assignments/release-grades', { code, password: teacherPassword, attemptIds: ['partial', 'empty', 'selected'] });
+  assert.equal(release.status, 200, JSON.stringify(release.body));
+  assert.equal(release.body.submitted, 2);
+  assert.equal(release.body.released, 3);
+  assert.equal((await storage.get(`a:${code}:t:selected`)).submittedAt, 100);
+  assert.equal((await storage.get(`a:${code}:t:other`)).submitted, false);
+  newRoom();
+  for (const [id, grade] of [['partial', 50], ['empty', 0]]) {
+    const stored = await storage.get(`a:${code}:t:${id}`);
+    assert.equal(stored.submitted, true);
+    assert.ok(stored.submittedAt > 0);
+    const state = await call(`/api/assignment/state?code=${code}&attemptId=${id}`);
+    assert.equal(state.body.attempt.releasedGrade, grade);
+    assert.equal(state.body.attempt.answersWithCorrectness, null);
+    const status = await call('/api/assignment/check-status', { code, studentKey: `student_${id}` });
+    assert.equal(status.body.hasOpenAttempt, false);
+    assert.equal(status.body.previousAttempts[0].releasedGrade, grade);
+    for (const qIndex of [0, 1]) {
+      const late = await call('/api/assignment/answer', { code, attemptId: id, qIndex, answer: 1 });
+      assert.equal(late.status, 409);
+      assert.equal(late.body.error, 'Attempt already submitted.');
+    }
+    assert.deepEqual((await storage.get(`a:${code}:t:${id}`)).answersByQ, stored.answersByQ);
+  }
+  const timestamp = (await storage.get(`a:${code}:t:partial`)).submittedAt;
+  const again = await call('/api/assignments/release-grades', { code, password: teacherPassword, attemptIds: ['partial'] });
+  assert.equal(again.body.submitted, 0);
+  assert.equal((await storage.get(`a:${code}:t:partial`)).submittedAt, timestamp);
+});
+it('release includes autosaved answers from an unfinished adaptive listening block', async () => {
+  const section = { id: 's1', title: 'Listening', audio: { kind: 'file', url: 'https://example.com/audio.mp3' } };
+  const questions = ['A1', 'A2'].flatMap(cefr => [1, 2].map(n => ({
+    ...assignment.quiz.questions[0], id: `${cefr}-${n}`, prompt: `${cefr}-${n}`, cefr, listeningSection: 's1',
+  })));
+  const created = await call('/api/assignments/create', { password: teacherPassword, randomNames: true,
+    feedbackMode: 'none', examMode: true, adaptive: true, adaptiveCount: 0,
+    quiz: { title: 'Listening exam', listeningSections: [section], questions },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const adaptiveCode = created.body.assignment.code;
+  const started = await call('/api/assignment/start', { code: adaptiveCode, studentKey: 'listener', studentName: 'Listener' });
+  assert.equal(started.status, 201, JSON.stringify(started.body));
+  const attemptId = started.body.attempt.id;
+  const draft = await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 0, answer: 0 });
+  assert.equal(draft.status, 200);
+  const released = await call('/api/assignments/release-grades', { password: teacherPassword, code: adaptiveCode, attemptIds: [attemptId] });
+  assert.equal(released.status, 200, JSON.stringify(released.body));
+  assert.equal(released.body.submitted, 1);
+  assert.equal(released.body.grades[0].releasedGrade, 50);
+  const stored = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  assert.equal(stored.submitted, true);
+  assert.equal(stored.adaptive.block, null);
+  assert.equal(stored.adaptive.items.length, 2);
+  assert.ok(stored.sectionsSubmitted.s1);
+  const late = await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 1, answer: 0 });
+  assert.equal(late.status, 409);
 });
 
 // Small DOM harness: run the shipped renderers and click their handlers.
@@ -120,10 +185,21 @@ function teacherUi(attempts, api) {
   const button = d.nodes.find(n => n.textContent === 'Release selected grades');
   return { ...d, button };
 }
-it('release button shows a visible explanation for unsubmitted attempts', async () => {
-  const ui = teacherUi([{ id: 'a', studentName: 'Alex', submitted: false }], () => { throw new Error('Must not call API'); });
+it('release button explains pending teacher marking', async () => {
+  const ui = teacherUi([{ id: 'a', studentName: 'Alex', submitted: false, metrics: { pendingTeacherGradeCount: 1 } }], () => { throw new Error('Must not call API'); });
   await ui.button.listeners.click();
-  assert.match(ui.document.getElementById('assignmentGradeReleaseStatus').textContent, /must be submitted and fully graded: Alex/);
+  assert.match(ui.document.getElementById('assignmentGradeReleaseStatus').textContent, /finish teacher marking for these attempts: Alex/);
+});
+it('release button accepts unfinished attempts and updates their submitted state', async () => {
+  const a = { id: 'a', studentName: 'Alex', submitted: false };
+  const ui = teacherUi([a], async () => ({ ok: true, released: 1, submitted: 1,
+    grades: [{ attemptId: 'a', submitted: true, submittedAt: 456, updatedAt: 456, releasedGrade: 50, gradeReleasedAt: 456 }],
+  }));
+  await ui.button.listeners.click();
+  assert.equal(a.submitted, true);
+  assert.equal(a.submittedAt, 456);
+  assert.match(ui.document.getElementById('assignmentGradeReleaseStatus').textContent, /submitted 1 unfinished attempts/);
+  assert.ok(ui.nodes.some(n => n.innerHTML.includes('Grade released: 50\/100')));
 });
 it('release button displays server failures beside itself and re-enables retry', async () => {
   const ui = teacherUi([{ id: 'a', submitted: true }], async () => { throw new Error('Network unavailable'); });

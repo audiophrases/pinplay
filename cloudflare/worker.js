@@ -3418,17 +3418,38 @@ export class QuizRoom {
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
         const attempts = await Promise.all(ids.map(id => this.state.storage.get(`a:${code}:t:${id}`)));
         if (attempts.some(a => !a)) return json({ error: 'Attempt not found.' }, 404);
-        if (attempts.some(a => !a.submitted || evaluateAssignmentAttempt(assignment, a).pendingTeacherGradeCount > 0)) {
-          return json({ error: 'Selected attempts must be submitted and fully graded.' }, 409);
+        // The teacher's release finalizes unfinished work, including any
+        // autosaved answers in an open adaptive listening section. Validate
+        // every resulting grade before persisting any selected attempt.
+        for (const attempt of attempts) {
+          if (!attempt.submitted && attempt.adaptive?.block && Object.keys(attempt.adaptive.block.answers || {}).length) {
+            adaptiveAttemptCloseBlock(assignment, attempt);
+          }
         }
+        if (attempts.some(a => evaluateAssignmentAttempt(assignment, a).pendingTeacherGradeCount > 0)) {
+          return json({ error: 'Selected attempts must be fully graded before releasing grades.' }, 409);
+        }
+        const releasedAt = Date.now();
+        let submitted = 0;
         for (let i = 0; i < ids.length; i++) {
           const attempt = attempts[i];
+          if (!attempt.submitted) {
+            attempt.submitted = true;
+            attempt.submittedAt = releasedAt;
+            submitted += 1;
+            if (attempt.adaptive) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
+          }
+          attempt.updatedAt = releasedAt;
           attempt.releasedGrade = assignmentGradeOutOf100(assignment, attempt);
-          attempt.gradeReleasedAt = Date.now();
+          attempt.gradeReleasedAt = releasedAt;
+          attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
           await saveAttempt(this.state.storage, code, ids[i], attempt);
         }
-        return json({ ok: true, released: ids.length, grades: attempts.map((a, i) => ({
+        assignment.updatedAt = releasedAt;
+        await saveAssignmentBase(this.state.storage, code, assignment);
+        return json({ ok: true, released: ids.length, submitted, grades: attempts.map((a, i) => ({
           attemptId: ids[i], releasedGrade: a.releasedGrade, gradeReleasedAt: a.gradeReleasedAt,
+          submitted: a.submitted, submittedAt: a.submittedAt, updatedAt: a.updatedAt,
         })) });
       }
 
