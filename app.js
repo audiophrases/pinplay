@@ -10150,7 +10150,7 @@ function renderAssignmentResults(safeCode, data) {
   }
 
   const headerLi = document.createElement('li');
-  headerLi.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; background:rgba(59,130,246,0.08); border-radius:8px; margin-bottom:6px;';
+  headerLi.style.cssText = 'display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:8px 12px; background:rgba(59,130,246,0.08); border-radius:8px; margin-bottom:6px;';
 
   const selectAll = document.createElement('input');
   selectAll.type = 'checkbox';
@@ -10183,26 +10183,65 @@ function renderAssignmentResults(safeCode, data) {
     openNotifyModal(safeCode, assignment, chosen, () => fetchAssignmentResults(safeCode));
   });
 
+  const releaseStatus = document.createElement('p');
+  releaseStatus.className = 'small muted';
+  releaseStatus.style.cssText = 'flex-basis:100%; margin:0;';
+  releaseStatus.setAttribute('role', 'status');
+  releaseStatus.setAttribute('aria-live', 'polite');
+  releaseStatus.textContent = t('Release shows only the grade out of 100. Select submitted, fully graded attempts.');
+
   const releaseBtn = document.createElement('button');
+  releaseBtn.type = 'button';
   releaseBtn.className = 'btn';
   releaseBtn.textContent = t('Release selected grades');
   releaseBtn.title = t('Show only the grade out of 100. Selected attempts must be submitted and fully graded.');
   releaseBtn.disabled = notifySelection.ids.size === 0;
   releaseBtn.addEventListener('click', async () => {
+    const attemptIds = [...notifySelection.ids];
+    const chosen = filtered.filter(a => attemptIds.includes(String(a?.id || '')));
+    if (!chosen.length) return;
+    const ineligible = chosen.filter(a => !a.submitted || Number(a?.metrics?.pendingTeacherGradeCount || 0) > 0);
+    if (ineligible.length) {
+      setStatus(releaseStatus, t('Not released: these attempts must be submitted and fully graded: {names}', {
+        names: ineligible.map(a => a.studentName || a.id).join(', '),
+      }), 'bad');
+      return;
+    }
     releaseBtn.disabled = true;
+    releaseBtn.textContent = t('Releasing grades…');
+    setStatus(releaseStatus, t('Releasing {n} grades…', { n: attemptIds.length }));
     try {
       const result = await api('/api/assignments/release-grades', {
         method: 'POST',
-        body: { password: createSessionPassword, code: safeCode, attemptIds: [...notifySelection.ids] },
+        body: { password: createSessionPassword, code: safeCode, attemptIds },
       });
-      setStatus(assignmentStatusEl, t('Released {n} grades.', { n: result.released }), 'ok');
-      await fetchAssignmentResults(safeCode);
+      if (!result.ok || Number(result.released) !== attemptIds.length) {
+        throw new Error(t('The server did not confirm the grade release. Please reload and try again.'));
+      }
+      // Keep confirmation beside the action, and update the existing results
+      // without replacing the status with a loading screen or scrolling away.
+      if (Array.isArray(result.grades)) {
+        chosen.forEach(a => {
+          const released = result.grades.find(g => g.attemptId === a.id);
+          if (!released) return;
+          a.gradeReleasedAt = released.gradeReleasedAt;
+          a.releasedGrade = released.releasedGrade;
+        });
+        renderAssignmentResults(safeCode, data);
+      } else {
+        // Older Workers confirm the count without returning the grades.
+        await fetchAssignmentResults(safeCode);
+      }
+      const status = document.getElementById('assignmentGradeReleaseStatus');
+      setStatus(status, t('Released {n} grades. Students can reopen the assignment link to see their grade out of 100.', { n: result.released }), 'ok');
     } catch (err) {
-      setStatus(assignmentStatusEl, err.message, 'bad');
+      setStatus(releaseStatus, t('Grades were not released: {message}', { message: err.message }), 'bad');
     } finally {
+      releaseBtn.textContent = t('Release selected grades');
       releaseBtn.disabled = notifySelection.ids.size === 0;
     }
   });
+  releaseStatus.id = 'assignmentGradeReleaseStatus';
 
   const deleteSelectedBtn = document.createElement('button');
   deleteSelectedBtn.className = 'btn';
@@ -10239,7 +10278,7 @@ function renderAssignmentResults(safeCode, data) {
     await fetchAssignmentResults(safeCode);
   });
 
-  headerLi.append(selectAll, selectedCountEl, releaseBtn, notifyBtn, deleteSelectedBtn);
+  headerLi.append(selectAll, selectedCountEl, releaseBtn, notifyBtn, deleteSelectedBtn, releaseStatus);
   assignmentResultsListEl.appendChild(headerLi);
 
   filtered.forEach((a) => {

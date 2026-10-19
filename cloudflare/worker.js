@@ -3256,6 +3256,8 @@ export class QuizRoom {
             return {
               id: sanitizeAssignmentAttemptId(a?.id),
               attemptNumber: studentAttempts.indexOf(a) + 1,
+              releasedGrade: a?.gradeReleasedAt ? Number(a.releasedGrade) : null,
+              gradeReleasedAt: Number(a?.gradeReleasedAt || 0) || null,
               totalScore: Number(metrics?.totalScore ?? 0),
               accuracy: metrics?.accuracy ?? null,
               totalQuestions: a?.adaptive ? adaptiveAttemptTotal(a.adaptive) : Number(assignment?.quiz?.questions?.length || 0),
@@ -3425,7 +3427,9 @@ export class QuizRoom {
           attempt.gradeReleasedAt = Date.now();
           await saveAttempt(this.state.storage, code, ids[i], attempt);
         }
-        return json({ ok: true, released: ids.length });
+        return json({ ok: true, released: ids.length, grades: attempts.map((a, i) => ({
+          attemptId: ids[i], releasedGrade: a.releasedGrade, gradeReleasedAt: a.gradeReleasedAt,
+        })) });
       }
 
       if (url.pathname === '/assignments/grade' && request.method === 'POST') {

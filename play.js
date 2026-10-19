@@ -1314,6 +1314,8 @@ function mapAssignmentStateToPlayerState() {
     questionCloseReason: questionClosed ? 'manual_reveal' : null,
     answeredCurrent,
     feedbackMode: String(assignment.feedbackMode || 'none'),
+    releasedGrade: attempt?.releasedGrade ?? null,
+    gradeReleasedAt: attempt?.gradeReleasedAt || null,
     assignmentSubmitted: !!attempt?.submitted,
     answeredQIndexes: [...new Set([...(Array.isArray(attempt?.answeredQIndexes) ? attempt.answeredQIndexes : []), ...assignmentLockedIndexes(attempt)])],
     question,
@@ -2039,7 +2041,9 @@ function showReviewRetakeChoice(checkData, code, studentKey, username) {
 
       const score = document.createElement('span');
       score.className = 'rr-attempt-score';
-      score.textContent = t('{n} pts', { n: Number(a.totalScore || 0) });
+      score.textContent = a.gradeReleasedAt && a.releasedGrade != null
+        ? t('Grade: {n}/100', { n: a.releasedGrade })
+        : (checkData.feedbackMode === 'none' ? t('Grade not released') : t('{n} pts', { n: Number(a.totalScore || 0) }));
 
       const date = document.createElement('span');
       date.className = 'rr-attempt-date';
@@ -2207,6 +2211,7 @@ function exitAssignmentReviewMode(code, checkData) {
   const panel = document.getElementById('assignmentResultsPanel');
   if (panel) panel.remove();
   document.getElementById('assignmentResultsHandle')?.remove();
+  document.getElementById('assignmentReleasedGrade')?.remove();
 
   // Remove feedback panel
   const fp = document.getElementById('joinFeedbackPanel');
@@ -2510,7 +2515,23 @@ function showAssignmentCompleteMessage(text, opts = {}) {
   }
 }
 
+function renderReleasedAssignmentGrade() {
+  document.getElementById('assignmentReleasedGrade')?.remove();
+  const attempt = live.player.assignment.state?.attempt;
+  if (live.player.mode !== 'assignment' || live.player.assignment.retake?.active
+    || !attempt?.submitted || !attempt?.gradeReleasedAt || attempt?.releasedGrade == null) return;
+  const grade = document.createElement('div');
+  grade.id = 'assignmentReleasedGrade';
+  grade.className = 'assignment-results';
+  grade.setAttribute('role', 'status');
+  grade.textContent = t('Your grade: {n}/100', { n: attempt.releasedGrade });
+  // The question area is hidden/replaced by several submitted/review layouts.
+  // Keep the released grade in the stable card instead.
+  (joinCardEl || joinQuestionWrap)?.appendChild(grade);
+}
+
 function renderInstantFeedbackFromState() {
+  renderReleasedAssignmentGrade();
   // The results panel is a post-submission summary — hide it while the student
   // is in the retake loop (they're focused on one wrong question at a time).
   if (live.player.assignment?.retake?.active) {
@@ -2542,14 +2563,6 @@ function renderInstantFeedbackFromState() {
   // class should never be on. Clear it defensively in case anything still set it.
   document.body.classList.remove('post-submit-summary');
 
-  document.getElementById('assignmentReleasedGrade')?.remove();
-  if (feedbackMode === 'none' && attempt?.submitted && attempt?.releasedGrade != null) {
-    const grade = document.createElement('div');
-    grade.id = 'assignmentReleasedGrade';
-    grade.className = 'assignment-results';
-    grade.textContent = t('Your grade: {n}/100', { n: attempt.releasedGrade });
-    (joinQuestionWrap || joinCardEl)?.appendChild(grade);
-  }
   if (!shouldShowFeedback) { document.getElementById('assignmentResultsPanel')?.remove(); return; }
 
   const wrap = joinQuestionWrap || joinCardEl;
@@ -3604,17 +3617,19 @@ function renderPlayerState(state) {
       : `${Math.max(0, state.currentIndex + 1)} / ${state.totalQuestions}`;
   }
   if (joinScoreEl) {
-    // In deferred-feedback assignments, the running score leaks correctness — hide it
-    // until the student submits. Live mode and instant-feedback assignments still show it.
+    // Deferred feedback hides the running score until submission. With no
+    // feedback, only the grade explicitly released by the teacher is shown.
+    const releasedGrade = state.assignmentSubmitted && state.gradeReleasedAt && state.releasedGrade != null;
     const hideScore = live.player.mode === 'assignment'
-      && state.feedbackMode !== 'instant'
-      && !state.assignmentSubmitted
-      && !live.player.assignment.reviewMode;
+      && (state.feedbackMode === 'none' ? !releasedGrade
+        : state.feedbackMode !== 'instant' && !state.assignmentSubmitted && !live.player.assignment.reviewMode);
     if (hideScore) {
       joinScoreEl.textContent = '';
       joinScoreEl.classList.add('hidden');
     } else {
-      joinScoreEl.textContent = t('Score: {n}', { n: state.score });
+      joinScoreEl.textContent = releasedGrade
+        ? t('Grade: {n}/100', { n: state.releasedGrade })
+        : t('Score: {n}', { n: state.score });
       joinScoreEl.classList.remove('hidden');
     }
   }
