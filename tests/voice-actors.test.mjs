@@ -380,3 +380,52 @@ describe('teacher panel helpers', () => {
     assert.ok(trim.e >= 2180 && trim.e <= 2240, `end ${trim.e}`);
   });
 });
+
+
+describe('shared script editing', () => {
+  const change = (s, action, payload = {}) => call('/api/rec/script', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ s, action, ...payload }),
+  });
+  it('renames every occurrence including shared lines, retaining recordings', async () => {
+    const s = await create();
+    await take(s.id, 'l1');
+    const r = await change(s.id, 'rename', { speaker: 'Mia', name: 'Anna' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.session.lines.map((l) => l.speaker), ['Anna', 'Tom', 'Anna + Tom']);
+    assert.ok(r.body.session.lines[0].take);
+    assert.equal((await change(s.id, 'rename', { speaker: 'Anna', name: 'Tom' })).status, 400);
+    assert.equal((await change(s.id, 'rename', { speaker: 'Anna', name: 'A + B' })).status, 400);
+  });
+  it('inserts and removes lines without reusing recording IDs', async () => {
+    const s = await create();
+    await take(s.id, 'l2');
+    let r = await change(s.id, 'add', { line: 'l1', speaker: 'Tom', text: 'A new line.' });
+    assert.deepEqual(r.body.session.lines.map((l) => l.id), ['l1', 'l4', 'l2', 'l3']);
+    assert.deepEqual(r.body.session.lines.map((l) => l.n), [1, 2, 3, 4]);
+    assert.ok(r.body.session.lines[2].take);
+    await change(s.id, 'remove', { line: 'l4' });
+    r = await change(s.id, 'add', { speaker: 'Mia', text: 'Another line.' });
+    assert.equal(r.body.session.lines.at(-1).id, 'l5');
+    for (const l of r.body.session.lines) await change(s.id, 'remove', { line: l.id });
+    r = await change(s.id, 'add', { speaker: 'Tom', text: 'Start again.' });
+    assert.equal(r.body.session.lines[0].id, 'l6');
+    assert.equal(r.body.session.lines[0].n, 1);
+    assert.equal((await change(s.id, 'remove', { line: 'l999' })).status, 400);
+  });
+  it('lets teachers edit locked sessions and reopens approved text for recording', async () => {
+    const s = await create();
+    await take(s.id, 'l1');
+    await post('save', { id: s.id, allowEdits: false, lines: [{ id: 'l1', status: 'ok' }] });
+    assert.equal((await change(s.id, 'text', { line: 'l1', text: 'New words.' })).status, 403);
+    assert.equal((await change(s.id, 'rename', { speaker: 'Mia', name: 'Anna', password: 'bad' })).status, 401);
+    const r = await post('script', { id: s.id, action: 'text', line: 'l1', text: 'New words.' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.session.lines[0].status, 'redo');
+    assert.ok(r.body.session.lines[0].take);
+    assert.equal(r.body.session.lines[0].original, LINES[0].text);
+    await post('save', { id: s.id, allowEdits: true });
+    assert.equal((await change(s.id, 'text', { line: 'l1', text: '   ' })).status, 400);
+    assert.equal((await change('zzzzzzzzzz', 'add', { speaker: 'Mia', text: 'Hi' })).status, 404);
+  });
+});

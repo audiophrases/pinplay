@@ -181,7 +181,7 @@ function vaRenderList() {
       </label>
       <textarea rows="8" data-va-new-script placeholder="${escapeHtml(VA_SCRIPT_EXAMPLE)}" ${fromSec ? 'hidden' : ''}>${escapeHtml(fromSec ? '' : va.newScript)}</textarea>
       <div class="small muted" data-va-new-info></div>
-      <label class="va-allow small"><input type="checkbox" data-va-new-allow checked /> ${escapeHtml(t('Volunteers can change the words of their lines (you see every change)'))}</label>
+      <label class="va-allow small"><input type="checkbox" data-va-new-allow checked /> ${escapeHtml(t('Anyone with the recording link can edit the script, rename characters, and add or remove lines'))}</label>
       <button type="button" class="btn primary" data-va-create>${escapeHtml(t('Create the session'))}</button>
     </details>`;
   vaUpdateNewInfo();
@@ -300,7 +300,7 @@ function vaRenderSession() {
           <button type="button" class="btn btn-sm" data-va-copy>${escapeHtml(t('📋 Copy'))}</button>
         </div>
         <p class="small muted">${escapeHtml(t('{rec}/{n} recorded · {ok} approved · {redo} to redo', { rec: count((l) => l.take), n: s.lines.length, ok: count((l) => l.status === 'ok'), redo: count((l) => l.status === 'redo') }))}${edited ? ` · ${escapeHtml(t('✏️ {n} changed', { n: edited }))}` : ''}</p>
-        <label class="va-allow small"><input type="checkbox" data-va-allow ${s.allowEdits !== false ? 'checked' : ''} /> ${escapeHtml(t('Volunteers can change the words of their lines (you see every change)'))}</label>
+        <label class="va-allow small"><input type="checkbox" data-va-allow ${s.allowEdits !== false ? 'checked' : ''} /> ${escapeHtml(t('Anyone with the recording link can edit the script, rename characters, and add or remove lines'))}</label>
         ${characterLinks}
       </div>
     </div>
@@ -314,6 +314,7 @@ function vaRenderSession() {
       <button type="button" class="btn btn-sm" data-va-play-from="0">${escapeHtml(t('▶ Play all'))}</button>
       <button type="button" class="btn btn-sm" data-va-stop>${escapeHtml(t('■ Stop'))}</button>
     </div>
+    <button type="button" class="btn btn-sm" data-va-script-add="">${escapeHtml(t('Add line'))}</button>
     <ol class="va-lines">
       ${s.lines.map((line, i) => (vaLineMatches(line) ? vaLineHtml(line, i) : '')).join('')}
     </ol>
@@ -353,6 +354,12 @@ function vaLineHtml(line, i) {
         <span class="va-status small">${escapeHtml(status)}</span>
         ${line.original ? `<span class="va-changed small">${escapeHtml(t('✏️ Changed'))}</span>` : ''}
         ${gap}
+      </div>
+      <div class="va-line-actions">
+        <button type="button" class="btn btn-sm" data-va-script-text="${line.id}">${escapeHtml(t('Edit line'))}</button>
+        ${vaSpeakersOf(line).map((name) => `<button type="button" class="btn btn-sm" data-va-script-rename="${escapeHtml(name)}">${escapeHtml(t('Rename {name}', { name }))}</button>`).join('')}
+        <button type="button" class="btn btn-sm" data-va-script-add="${line.id}">${escapeHtml(t('Add line after'))}</button>
+        <button type="button" class="btn btn-sm" data-va-script-remove="${line.id}">${escapeHtml(t('Remove line'))}</button>
       </div>
       <p class="va-text">${escapeHtml(line.text)}</p>
       ${line.original ? `
@@ -790,6 +797,37 @@ function vaUpdateSectionScript(sec) {
   return ` ${t('The section\'s script is the session\'s.')}`;
 }
 
+async function vaChangeScript(action, lineId, speaker) {
+  if (va.scriptBusy) return;
+  const sessionId = va.session.id;
+  const body = { id: sessionId, action, line: lineId, speaker };
+  if (action === 'rename') {
+    body.name = prompt(t('New character name (updates every line):'), speaker);
+    if (body.name === null) return;
+  } else if (action === 'add') {
+    body.speaker = prompt(t('Character name:'), '');
+    if (body.speaker === null) return;
+    body.text = prompt(t('The words of this line:'));
+    if (body.text === null) return;
+  } else if (action === 'text') {
+    body.text = prompt(t('The words of this line:'), va.session.lines.find((l) => l.id === lineId)?.text || '');
+    if (body.text === null) return;
+  } else if (!confirm(t('Remove this line and its recording from the script?'))) return;
+  va.scriptBusy = true;
+  try {
+    vaStop();
+    await vaFlushSave();
+    if (va.edits.size) throw new Error(t('Save the pending changes before editing the script.'));
+    const data = await vaApi('script', body);
+    if (va.session?.id !== sessionId) return;
+    va.session = data.session;
+    vaRenderSession();
+    await vaLoadTakes();
+    vaStatus(t('Saved.'), 'ok');
+  } catch (err) { vaStatus(err.message, 'bad'); }
+  finally { va.scriptBusy = false; }
+}
+
 // ---------------------------------------------------------------- events --
 function vaOnClick(e) {
   const overlay = document.getElementById('voiceActorsOverlay');
@@ -798,7 +836,11 @@ function vaOnClick(e) {
   const btn = e.target.closest('button');
   if (!btn) return;
   const d = btn.dataset;
-  if (d.vaOpen) vaOpenSession(d.vaOpen);
+  if (d.vaScriptRename) vaChangeScript('rename', null, d.vaScriptRename);
+  else if (d.vaScriptAdd !== undefined) vaChangeScript('add', d.vaScriptAdd);
+  else if (d.vaScriptRemove) vaChangeScript('remove', d.vaScriptRemove);
+  else if (d.vaScriptText) vaChangeScript('text', d.vaScriptText);
+  else if (d.vaOpen) vaOpenSession(d.vaOpen);
   else if (d.vaDelete) vaDelete(d.vaDelete);
   else if (d.vaCreate !== undefined) vaCreate();
   else if (d.vaBack !== undefined) { vaStop(); vaFlushSave(); vaLoadList(); }

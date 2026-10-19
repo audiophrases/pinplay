@@ -1197,6 +1197,14 @@ export default {
         return res;
       }
       // A volunteer changes the words of a line: { s, line, text }.
+      if (url.pathname === '/api/rec/script' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const id = sanitizeRecSessionId(body?.s || body?.id);
+        if (!id) return json({ error: 'Session missing.' }, 400);
+        const teacher = body?.password !== undefined && await verifyCreatePassword(env, String(body.password), request);
+        if (body?.password !== undefined && !teacher) return json({ error: 'Wrong password.' }, 401);
+        return forward('script', { id, action: body?.action, lineId: body?.line, text: body?.text, speaker: body?.speaker, name: body?.name, teacher });
+      }
       if (url.pathname === '/api/rec/edit' && request.method === 'POST') {
         const body = await safeJson(request);
         const id = sanitizeRecSessionId(body?.s);
@@ -2914,6 +2922,14 @@ export class QuizRoom {
           session.updatedAt = Date.now();
           await storage.put(`vs:${id}`, session);
           return json({ ok: true, line: recActorLine(line) });
+        }
+        if (route === 'script') {
+          if (!body.teacher && session.allowEdits === false) return json({ error: 'Your teacher has turned off changing the lines.', reason: 'locked' }, 403);
+          const error = recEditScript(session, body);
+          if (error) return json({ error }, 400);
+          session.updatedAt = Date.now();
+          await storage.put(`vs:${id}`, session);
+          return json({ ok: true, session: body.teacher ? session : recActorView(session) });
         }
         if (route === 'save') {
           recApplySave(session, body);
@@ -6634,8 +6650,43 @@ function recLineText(value) {
 // teacher sees every change. Going back to the original clears the mark.
 function recSetLineText(line, text) {
   const original = line.original || line.text;
+  if (line.text !== text && line.take) line.status = 'redo';
   line.text = text;
   line.original = text === original ? null : original;
+}
+
+function recEditScript(session, body) {
+  const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+  const line = session.lines.find((l) => l.id === body.lineId);
+  if (body.action === 'rename') {
+    const old = clean(body.speaker), name = clean(body.name);
+    if (!old || !name || name.length > 40 || name.includes('+')) return 'Enter a character name of up to 40 characters, without +.';
+    const parts = (l) => l.speaker.split('+').map((n) => n.trim());
+    if (!session.lines.some((l) => parts(l).includes(old))) return 'Character not found.';
+    if (name !== old && session.lines.some((l) => parts(l).includes(name))) return 'That character name is already in use.';
+    session.lines.forEach((l) => { l.speaker = parts(l).map((n) => n === old ? name : n).join(' + '); });
+  } else if (body.action === 'add') {
+    if (session.lines.length >= REC_MAX_LINES) return 'The script has too many lines.';
+    const text = recLineText(body.text), speaker = clean(body.speaker);
+    if (!text || !speaker || speaker.length > 40) return 'Enter a speaker and words for the line.';
+    if (body.lineId && !line) return 'Line not found.';
+    const next = session.nextLineId || Math.max(0, ...session.lines.map((l) => Number(l.id.slice(1)))) + 1;
+    if (next > 9999) return 'This session has reached its line limit.';
+    session.nextLineId = next + 1;
+    session.lines.splice(line ? session.lines.indexOf(line) + 1 : session.lines.length, 0,
+      { id: `l${next}`, speaker, text, direction: '', take: null, trim: null, status: 'todo', gap: null });
+  } else if (body.action === 'remove') {
+    if (!line) return 'Line not found.';
+    session.nextLineId ||= Math.max(0, ...session.lines.map((l) => Number(l.id.slice(1)))) + 1;
+    session.lines.splice(session.lines.indexOf(line), 1);
+  } else if (body.action === 'text') {
+    if (!line) return 'Line not found.';
+    const text = recLineText(body.text);
+    if (!text) return 'A line cannot be empty.';
+    recSetLineText(line, text);
+  } else return 'Unknown script action.';
+  session.lines.forEach((l, i) => { l.n = i + 1; });
+  return '';
 }
 
 function newRecSession(body, now = Date.now()) {

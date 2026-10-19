@@ -140,7 +140,7 @@
   }
 
   // Only when the server says so (an older API has no /api/rec/edit).
-  const canEdit = (line) => session.allowEdits === true && line.status !== 'ok';
+  const canEdit = (line) => session.allowEdits === true;
 
   const badgeText = (status) => ({
     ok: t('✓ Approved'),
@@ -217,6 +217,9 @@
     const name = document.createElement('strong');
     name.textContent = line.speaker;
     who.append(name);
+    if (canEdit(line)) speakersOf(line).forEach((speaker) => {
+      who.append(scriptButton(t('Rename {name}', { name: speaker }), { scriptRename: speaker }));
+    });
     if (line.direction) {
       const dir = document.createElement('span');
       dir.className = 'muted';
@@ -260,11 +263,14 @@
       was.textContent = t('✏️ Changed. The script said: “{text}”', { text: line.original });
       li.append(was);
     }
-    if (mine) {
+    if (mine || canEdit(line)) {
       const actions = document.createElement('div');
       actions.className = 'rec-edit-actions';
-      if (line.status !== 'ok') actions.append(scriptButton(line.take ? t('🎙 Record again') : t('🎙 Record'), { scriptRecord: line.id }));
+      if (mine && line.status !== 'ok') actions.append(scriptButton(line.take ? t('🎙 Record again') : t('🎙 Record'), { scriptRecord: line.id }));
       if (canEdit(line)) actions.append(scriptButton(t('✏️ Change the words'), { scriptEdit: line.id }));
+      if (canEdit(line)) actions.append(
+        scriptButton(t('Add line after'), { scriptAdd: line.id }),
+        scriptButton(t('Remove line'), { scriptRemove: line.id }));
       if (actions.childElementCount) li.append(actions);
     }
     return li;
@@ -276,10 +282,15 @@
     const hints = [];
     if (mode !== 'all') hints.push(t('Your lines ({name}) are highlighted.', { name: mode }));
     hints.push(session.allowEdits === true
-      ? t('🎙 records a line. ✏️ changes its words: your teacher sees every change.')
+      ? t('Edit any line, rename characters across the script, or add and remove lines. 🎙 records a line.')
       : t('🎙 records a line.'));
     el.scriptHint.textContent = hints.join(' ');
     el.scriptList.replaceChildren(...session.lines.map(scriptLineEl));
+    if (session.allowEdits) {
+      const li = document.createElement('li');
+      li.append(scriptButton(t('Add line'), { scriptAdd: '' }));
+      el.scriptList.append(li);
+    }
   }
 
   function openScript() {
@@ -441,7 +452,7 @@
       } else if (!res.ok) {
         throw new Error(data.error || `${res.status}`);
       } else {
-        Object.assign(line, data.line);
+        Object.assign(line, data.session.lines.find((l) => l.id === line.id));
         dropPending();
         setStatus(t('✅ Saved.'), 'ok'); // i18n-ignore (already in t())
         const next = nextIndex(idx);
@@ -482,10 +493,10 @@
     renderViews();
     setStatus(t('⏳ Saving…'));
     try {
-      const res = await fetch(`${backendUrl()}/api/rec/edit`, {
+      const res = await fetch(`${backendUrl()}/api/rec/script`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ s: sessionId, line: line.id, text: words }),
+        body: JSON.stringify({ s: sessionId, action: 'text', line: line.id, text: words }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 409 && data.reason === 'approved') {
@@ -501,7 +512,7 @@
       } else if (!res.ok) {
         throw new Error(data.error || `${res.status}`);
       } else {
-        Object.assign(line, data.line);
+        Object.assign(line, data.session.lines.find((l) => l.id === line.id));
         editing = false;
         scriptEditing = null;
         setStatus(line.take || (pending && line === queue[idx])
@@ -513,6 +524,43 @@
     }
     busy = false;
     renderViews();
+  }
+
+  async function changeScript(action, lineId, speaker) {
+    if (busy || recorder || !session.allowEdits) return;
+    const body = { s: sessionId, action, line: lineId, speaker };
+    if (action === 'rename') {
+      body.name = prompt(t('New character name (updates every line):'), speaker);
+      if (body.name === null) return;
+    } else if (action === 'add') {
+      body.speaker = prompt(t('Character name:'), mode === 'all' ? '' : mode);
+      if (body.speaker === null) return;
+      body.text = prompt(t('The words of this line:'));
+      if (body.text === null) return;
+    } else if (!confirm(t('Remove this line and its recording from the script?'))) return;
+    if (pending && !confirm(t('Your last take is not saved yet. Leave it and edit the script?'))) return;
+    busy = true;
+    try {
+      const res = await fetch(`${backendUrl()}/api/rec/script`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || String(res.status));
+      const currentId = queue[idx]?.id;
+      session = data.session;
+      if (action === 'rename' && mode === speaker) mode = body.name.replace(/\s+/g, ' ').trim();
+      if (mode !== 'all' && !session.lines.some((l) => speakersOf(l).includes(mode))) mode = 'all';
+      buildQueue();
+      idx = Math.max(0, queue.findIndex((l) => l.id === currentId));
+      stopPlayer();
+      dropPending();
+      editing = false;
+      scriptEditing = null;
+      if (!queue.length) scriptFrom = 'choose';
+      renderScript();
+      setStatus(t('Saved.'), 'ok'); // i18n-ignore (message already in t())
+    } catch (err) { setStatus(err.message, 'bad'); } // i18n-ignore (API error)
+    finally { busy = false; }
   }
 
   async function refresh() {
@@ -538,6 +586,7 @@
       renderScript();
       return;
     }
+    if (!queue.length) { renderChoose(); return; }
     show(el.studio);
     renderLine();
   }
@@ -583,7 +632,10 @@
     const b = e.target.closest('button');
     if (!b || busy) return;
     const d = b.dataset;
-    if (d.scriptRecord) recordLine(scriptLine(d.scriptRecord));
+    if (d.scriptRename) changeScript('rename', null, d.scriptRename);
+    else if (d.scriptAdd !== undefined) changeScript('add', d.scriptAdd);
+    else if (d.scriptRemove) changeScript('remove', d.scriptRemove);
+    else if (d.scriptRecord) recordLine(scriptLine(d.scriptRecord));
     else if (d.scriptEdit) startScriptEdit(scriptLine(d.scriptEdit));
     else if (d.scriptCancel) cancelEdit();
     else if (d.scriptSave) saveEdit(scriptDraft, scriptLine(d.scriptSave));
