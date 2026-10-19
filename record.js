@@ -121,6 +121,9 @@
   }
 
   function startMode(m) {
+    if (!confirmLeaveEdits()) return;
+    editing = false;
+    scriptEditing = null;
     mode = m;
     buildQueue();
     if (!queue.length) return;
@@ -141,6 +144,18 @@
 
   // Only when the server says so (an older API has no /api/rec/edit).
   const canEdit = (line) => session.allowEdits === true;
+
+  function hasUnsavedWords() {
+    const clean = text => String(text || '').replace(/\s+/g, ' ').trim();
+    if (editing && clean(el.editText.value) !== clean(queue[idx]?.text)) return true;
+    const line = scriptEditing && session?.lines.find(line => line.id === scriptEditing);
+    return !!line && clean(scriptDraft) !== clean(line.text);
+  }
+
+  function confirmLeaveEdits() {
+    if (busy) return false;
+    return !hasUnsavedWords() || confirm(t('Your changes to this line are not saved. Discard them and continue?'));
+  }
 
   const badgeText = (status) => ({
     ok: t('✓ Approved'),
@@ -172,12 +187,16 @@
     el.editOriginal.hidden = !line.original;
     el.editBtn.hidden = editing || !canEdit(line);
     el.editBtn.disabled = !!recorder || busy;
+    el.editText.disabled = busy;
+    el.editSave.disabled = busy;
+    el.editCancel.disabled = busy;
+    el.editOriginal.disabled = busy;
     el.badge.textContent = badgeText(line.status);
     el.badge.className = `rec-badge rec-badge-${line.status}`;
     const done = queue.filter((l) => l.take).length;
     el.progress.textContent = t('Line {i} of {n} · {done} recorded', { i: idx + 1, n: queue.length, done });
-    el.prevBtn.disabled = idx === 0;
-    el.nextBtn.disabled = idx >= queue.length - 1;
+    el.prevBtn.disabled = busy || !!recorder || idx === 0;
+    el.nextBtn.disabled = busy || !!recorder || idx >= queue.length - 1;
     const approved = line.status === 'ok';
     el.record.disabled = approved || busy || editing;
     el.record.textContent = recorder ? t('■ Stop') : (pending || line.take ? t('● Record again') : t('● Record'));
@@ -239,6 +258,7 @@
       area.rows = 3;
       area.maxLength = 600;
       area.value = scriptDraft;
+      area.disabled = busy;
       area.dataset.scriptText = line.id;
       area.setAttribute('aria-label', t('The words of this line'));
       const actions = document.createElement('div');
@@ -294,7 +314,7 @@
   }
 
   function openScript() {
-    if (recorder || busy) return;
+    if (recorder || !confirmLeaveEdits()) return;
     stopPlayer();
     scriptFrom = el.studio.hidden ? 'choose' : 'studio';
     if (scriptFrom === 'choose') {
@@ -311,7 +331,7 @@
   }
 
   function closeScript() {
-    if (busy) return;
+    if (!confirmLeaveEdits()) return;
     scriptEditing = null;
     if (scriptFrom === 'studio') {
       show(el.studio);
@@ -324,7 +344,7 @@
 
   // 🎙 on a line: open it in the recorder.
   function recordLine(line) {
-    if (!line || recorder || busy) return;
+    if (!line || recorder || !confirmLeaveEdits()) return;
     if (!queue.includes(line)) {
       mode = 'all';
       buildQueue();
@@ -344,6 +364,7 @@
 
   function startScriptEdit(line) {
     if (!line || !canEdit(line) || busy) return;
+    if (scriptEditing === line.id || !confirmLeaveEdits()) return;
     scriptEditing = line.id;
     scriptDraft = line.text;
     renderScript();
@@ -355,7 +376,7 @@
   }
 
   function goTo(i) {
-    if (recorder || i < 0 || i >= queue.length) return;
+    if (recorder || i === idx || i < 0 || i >= queue.length || !confirmLeaveEdits()) return;
     stopPlayer();
     dropPending();
     editing = false;
@@ -470,7 +491,7 @@
   // ---------- changing the words ----------
   function startEdit() {
     const line = queue[idx];
-    if (!line || recorder || !canEdit(line)) return;
+    if (!line || recorder || busy || editing || !canEdit(line)) return;
     editing = true;
     el.editText.value = line.text;
     renderLine();
@@ -478,6 +499,7 @@
   }
 
   function cancelEdit() {
+    if (!confirmLeaveEdits()) return;
     editing = false;
     scriptEditing = null;
     renderViews();
@@ -527,7 +549,7 @@
   }
 
   async function changeScript(action, lineId, speaker) {
-    if (busy || recorder || !session.allowEdits) return;
+    if (recorder || !session.allowEdits || !confirmLeaveEdits()) return;
     const body = { s: sessionId, action, line: lineId, speaker };
     if (action === 'rename') {
       body.name = prompt(t('New character name (updates every line):'), speaker);
@@ -564,16 +586,21 @@
   }
 
   async function refresh() {
-    if (recorder || busy) return;
+    if (recorder || !confirmLeaveEdits()) return;
+    busy = true;
+    renderViews();
     const inScript = !el.script.hidden;
     setStatus(t('Loading…'));
     const currentId = queue[idx]?.id;
     try {
       await loadSession();
     } catch (err) {
+      busy = false;
+      renderViews();
       setStatus(t('Could not load the lines ({msg}).', { msg: err.message }), 'bad');
       return;
     }
+    busy = false;
     buildQueue();
     const redo = queue.findIndex((l) => l.status === 'redo');
     const same = queue.findIndex((l) => l.id === currentId);
@@ -612,7 +639,7 @@
   el.nextBtn.addEventListener('click', () => goTo(idx + 1));
   el.refresh.addEventListener('click', refresh);
   el.back.addEventListener('click', () => {
-    if (recorder) return;
+    if (recorder || !confirmLeaveEdits()) return;
     stopPlayer();
     dropPending();
     editing = false;
@@ -660,7 +687,7 @@
     else if (e.key === 'Enter' && !el.save.disabled) { e.preventDefault(); saveTake(); }
   });
   window.addEventListener('beforeunload', (e) => {
-    if (pending || recorder || editing || scriptEditing) { e.preventDefault(); e.returnValue = ''; }
+    if (pending || recorder || busy || hasUnsavedWords()) { e.preventDefault(); e.returnValue = ''; }
   });
 
   (async () => {
