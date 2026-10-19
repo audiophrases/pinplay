@@ -470,6 +470,7 @@ const assignmentAttemptsEl = document.getElementById('assignmentAttempts');
 const assignmentSignInEl = document.getElementById('assignmentSignIn');
 const assignmentFeedbackEl = document.getElementById('assignmentFeedback');
 const assignmentExamModeEl = document.getElementById('assignmentExamMode');
+const assignmentShuffleQuestionsEl = document.getElementById('assignmentShuffleQuestions');
 const assignmentClassOptionsEl = document.getElementById('assignmentClassOptions');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
@@ -11569,6 +11570,7 @@ function buildAssignmentListItem(a) {
     assignmentFeedbackText(a?.feedbackMode),
   );
   if (a?.examMode) metaBits.push(t('🔒 Exam mode'));
+  if (a?.shuffleQuestions && !a?.adaptiveCount) metaBits.push(t('Shuffle questions'));
   meta.textContent = metaBits.join(' · ');
 
   headerText.append(title, meta);
@@ -11764,8 +11766,8 @@ function toDatetimeLocalValue(ms) {
 }
 
 // ⚙️ on an assignment's row: the Assignments form's settings, filled with this
-// assignment's and saved in one call. Students' next requests use them (they
-// are never copied onto attempts).
+// assignment's and saved in one call. Question order is fixed at attempt start;
+// other settings apply to students' next requests.
 function openAssignmentSettingsDialog(a) {
   const code = String(a?.code || '').trim();
   const source = document.getElementById('assignmentForm');
@@ -11807,6 +11809,8 @@ function openAssignmentSettingsDialog(a) {
   field.assignmentSignIn.value = a?.randomNames ? 'random' : 'signin';
   field.assignmentFeedback.value = ['none', 'instant', 'end'].includes(a?.feedbackMode) ? a.feedbackMode : 'none';
   field.assignmentExamMode.checked = !!a?.examMode;
+  field.assignmentShuffleQuestions.checked = !!a?.shuffleQuestions;
+  field.assignmentShuffleQuestions.disabled = !!a?.adaptiveCount;
   // The copy carries the form's own lock (the form may be set to 🏔️ Climb for
   // a new assignment): this assignment decides it.
   field.assignmentFeedback.disabled = !!a?.buildup;
@@ -11863,6 +11867,7 @@ function openAssignmentSettingsDialog(a) {
           randomNames: field.assignmentSignIn.value !== 'signin',
           feedbackMode: field.assignmentFeedback.value,
           examMode: field.assignmentExamMode.checked,
+          shuffleQuestions: field.assignmentShuffleQuestions.checked,
         },
       });
       overlay.remove();
@@ -11989,6 +11994,7 @@ async function openAssignmentCreationDialog() {
         className: assignmentClassEl?.value || '', dueAt: assignmentDueAtEl?.value || '',
         attemptsLimit: Number(assignmentAttemptsEl?.value ?? 0), signIn: assignmentRandomNames() ? 'random' : 'signin',
         feedbackMode: assignmentFeedbackMode, examMode: assignmentExamMode,
+        shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
         format: adaptive.buildup ? 'climb' : adaptive.adaptive ? 'adaptive' : 'all',
         adaptiveCount: Number(document.getElementById('assignmentAdaptiveCount')?.value || 20),
       },
@@ -12011,6 +12017,7 @@ async function openAssignmentCreationDialog() {
         count.dataset[options.format === 'climb' ? 'wantedBuildup' : 'wanted'] = String(options.adaptiveCount);
         setAssignmentFeedbackMode(options.feedbackMode);
         setAssignmentExamMode(options.examMode);
+        if (assignmentShuffleQuestionsEl) assignmentShuffleQuestionsEl.checked = !!options.shuffleQuestions;
         syncAssignmentAdaptiveControl();
         syncSignInRulesLine(assignmentSignInEl, document.getElementById('assignmentSignInRules'));
         return createAssignmentFromCurrentQuiz({ dialog: true });
@@ -12064,6 +12071,7 @@ async function createAssignmentFromCurrentQuiz({ dialog = false } = {}) {
         randomNames: randomNamesEnabled,
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
+        shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
         adaptiveCount,
         adaptive: adaptiveOn,
         buildup: buildupOn,
@@ -16400,6 +16408,7 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
         randomNames: true,
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
+        shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
         ...adaptive,
         quiz: payload,
       },
@@ -18126,6 +18135,7 @@ function syncAssignmentAdaptiveControl() {
   // Climb runs with instant feedback and no exam mode (the server sets them too).
   if (assignmentFeedbackEl) assignmentFeedbackEl.disabled = buildup;
   if (assignmentExamModeEl) assignmentExamModeEl.disabled = buildup;
+  if (assignmentShuffleQuestionsEl) assignmentShuffleQuestionsEl.disabled = !!box?.checked;
   if (buildup && assignmentFeedbackMode !== 'instant') setAssignmentFeedbackMode('instant');
   if (buildup && assignmentExamMode) setAssignmentExamMode(false);
   syncPreviewTitle();

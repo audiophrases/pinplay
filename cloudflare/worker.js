@@ -766,6 +766,7 @@ export default {
           randomNames: !!body?.randomNames,
           feedbackMode: String(body?.feedbackMode || 'none'),
           examMode: !!body?.examMode,
+          shuffleQuestions: !!body?.shuffleQuestions,
           // The Assignments form's 🎯 Adaptive / 🏔️ Climb, so the preview plays
           // as the assignment will (the DO checks the levels, as for a real one).
           adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)),
@@ -1255,7 +1256,7 @@ export default {
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
       return withCors(await stub.fetch('https://room/assignments/create', {
         method: 'POST',
-        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), adaptive: body?.adaptive === true, buildup: body?.buildup === true, cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
+        body: JSON.stringify({ title, className, attemptsLimit, dueAt, randomNames: !!body?.randomNames, feedbackMode: String(body?.feedbackMode || 'none'), examMode: !!body?.examMode, shuffleQuestions: !!body?.shuffleQuestions, adaptiveCount: Math.round(Number(body?.adaptiveCount || 0)), adaptive: body?.adaptive === true, buildup: body?.buildup === true, cloudQuizId: sanitizeCloudQuizId(body?.cloudQuizId), quiz }),
       }));
     }
 
@@ -1856,7 +1857,7 @@ export default {
       if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
 
       const forward = { code };
-      for (const key of ['className', 'dueAt', 'attemptsLimit', 'randomNames', 'feedbackMode', 'examMode']) {
+      for (const key of ['className', 'dueAt', 'attemptsLimit', 'randomNames', 'feedbackMode', 'examMode', 'shuffleQuestions']) {
         if (body && Object.prototype.hasOwnProperty.call(body, key)) forward[key] = body[key];
       }
       return withCors(await assignmentsStub(env).fetch('https://room/assignments/update-settings', {
@@ -2968,6 +2969,7 @@ export class QuizRoom {
           randomNames: !!body?.randomNames,
           feedbackMode: String(body?.feedbackMode || 'none'),
           examMode: !!body?.examMode,
+          shuffleQuestions: !!body?.shuffleQuestions,
           active: true,
           quiz,
           pendingGradingCount: 0,
@@ -3367,6 +3369,11 @@ export class QuizRoom {
           ? publicAdaptiveAttemptInit(assignment, body?.count, savedLevel)
           : (buildupOn ? buildupAttemptInit(assignment) : adaptiveAttemptInit(assignment, savedLevel));
         if (adaptive) attempt.adaptive = adaptive;
+        // Snapshot the order once. Settings changes must never move questions
+        // in an attempt that has already started. Answers keep quiz indexes.
+        if (!adaptive && !via && settings.shuffleQuestions) {
+          attempt.questionOrder = assignmentQuestionOrder(assignment.quiz.questions);
+        }
 
         assignment.attempts[attempt.id] = attempt;
         assignment.updatedAt = now;
@@ -4666,6 +4673,11 @@ export class QuizRoom {
             newAnswers[String(newIdx)] = item;
           }
           attempt.answersByQ = newAnswers;
+          if (Array.isArray(attempt.questionOrder)) {
+            const mapped = attempt.questionOrder.map((oldIdx) => newIdToIndex.get(oldIndexToId.get(oldIdx)))
+              .filter((idx) => idx != null);
+            attempt.questionOrder = assignmentQuestionOrder(quiz.questions, mapped);
+          }
           attempt.updatedAt = now;
           remappedAttempts += 1;
 
@@ -9639,6 +9651,28 @@ function assignmentGradeOutOf100(assignment, attempt) {
   return maximum > 0 ? round(Math.max(0, Math.min(100, score / maximum * 100)), 1) : 0;
 }
 
+// Shuffle standalone questions and whole listening sections. When a quiz is
+// edited, retain the existing block order and append newly added blocks.
+function assignmentQuestionOrder(questions, previousOrder = null) {
+  const blocks = [];
+  questions.forEach((question, index) => {
+    const last = blocks[blocks.length - 1];
+    if (question.listeningSection && last && questions[last[0]].listeningSection === question.listeningSection) last.push(index);
+    else blocks.push([index]);
+  });
+  if (previousOrder) {
+    const ranks = new Map(previousOrder.map((index, rank) => [index, rank]));
+    const rank = block => Math.min(...block.map(index => ranks.get(index) ?? Infinity));
+    blocks.sort((a, b) => rank(a) - rank(b));
+  } else {
+    for (let i = blocks.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+    }
+  }
+  return blocks.flat();
+}
+
 function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers && !!attempt?.submitted } = {}) {
   if (attempt?.adaptive) {
     const st = attempt.adaptive;
@@ -9715,6 +9749,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     metrics,
     answeredQIndexes: Object.keys(attempt?.answersByQ || {}).map((x) => Number(x)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b),
     answersByQ: attempt?.answersByQ || {},
+    ...(Array.isArray(attempt?.questionOrder) ? { questionOrder: attempt.questionOrder } : {}),
     answersWithCorrectness,
     listeningPlays: attempt?.listeningPlays && typeof attempt.listeningPlays === 'object' ? attempt.listeningPlays : {},
     sectionsSubmitted: attempt?.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {},
@@ -10293,6 +10328,7 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     randomNames: !!assignment.randomNames,
     feedbackMode: assignment.feedbackMode || 'none',
     examMode: !!assignment.examMode,
+    shuffleQuestions: !!assignment.shuffleQuestions,
     active: !!assignment.active,
     archived: !!assignment.archived,
     origin: String(assignment.origin || ''),
@@ -10379,6 +10415,7 @@ function assignmentSettingsUpdate(assignment, body) {
   if (typeof body?.randomNames === 'boolean') next.randomNames = body.randomNames;
   if (ASSIGNMENT_FEEDBACK_MODES.includes(body?.feedbackMode)) next.feedbackMode = body.feedbackMode;
   if (typeof body?.examMode === 'boolean') next.examMode = body.examMode;
+  if (typeof body?.shuffleQuestions === 'boolean') next.shuffleQuestions = body.shuffleQuestions;
   if (assignment?.adaptive?.mode === 'buildup') {
     if ('feedbackMode' in next) next.feedbackMode = 'instant';
     if ('examMode' in next) next.examMode = false;

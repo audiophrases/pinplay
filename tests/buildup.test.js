@@ -193,7 +193,8 @@ describe('build up assignments (real worker, in-memory storage)', () => {
   let get;
   before(async () => {
     const tmp = path.join(os.tmpdir(), `pinplay-worker-buildup-${process.pid}-${Date.now()}.mjs`);
-    fs.writeFileSync(tmp, read('cloudflare/worker.js'));
+    const authModule = require('node:url').pathToFileURL(path.resolve('cloudflare/taskflow-auth.mjs')).href;
+    fs.writeFileSync(tmp, read('cloudflare/worker.js').replace("'./taskflow-auth.mjs'", JSON.stringify(authModule)));
     const mod = await import(`file://${tmp.replace(/\\/g, '/')}`);
     fs.unlinkSync(tmp);
     const storage = () => {
@@ -539,7 +540,8 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   let post;
   before(async () => {
     const tmp = path.join(os.tmpdir(), `pinplay-worker-buildup-plan-${process.pid}-${Date.now()}.mjs`);
-    fs.writeFileSync(tmp, read('cloudflare/worker.js'));
+    const authModule = require('node:url').pathToFileURL(path.resolve('cloudflare/taskflow-auth.mjs')).href;
+    fs.writeFileSync(tmp, read('cloudflare/worker.js').replace("'./taskflow-auth.mjs'", JSON.stringify(authModule)));
     const mod = await import(`file://${tmp.replace(/\\/g, '/')}`);
     fs.unlinkSync(tmp);
     const storage = () => {

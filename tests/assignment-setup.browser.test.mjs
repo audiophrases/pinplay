@@ -40,6 +40,7 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
     await page.locator('[data-field="examMode"]').check();
     await page.keyboard.press('Enter');
     await page.locator('[data-field="dueAt"]').fill('2026-12-20T17:00');
+    await page.locator('[data-field="shuffleQuestions"]').check();
     await page.keyboard.press('Enter');
     assert.equal(await page.getByRole('heading', { name: 'Everything look right?' }).count(), 1);
     assert.equal(await page.evaluate(() => window.calls.length), 0);
@@ -48,6 +49,7 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
     const [draft] = await page.evaluate(() => window.calls);
     assert.equal(draft.signIn, 'signin'); assert.equal(draft.feedbackMode, 'end');
     assert.equal(draft.attemptsLimit, 3); assert.equal(draft.examMode, true);
+    assert.equal(draft.shuffleQuestions, true);
     assert.equal(draft.dueAt, '2026-12-20T17:00');
     assert.equal(await page.locator('.assignment-setup-steps').isVisible(), false);
     assert.equal(await page.locator('[data-setup-action="next"]').isVisible(), false);

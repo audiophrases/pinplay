@@ -19,11 +19,11 @@ describe('assignmentSettingsUpdate', () => {
   it('takes every setting the dialog sends, cleaned', () => {
     const next = W.assignmentSettingsUpdate({}, {
       className: '  4B   maths ', dueAt: 1767225600000, attemptsLimit: '3',
-      randomNames: false, feedbackMode: 'end', examMode: true,
+      randomNames: false, feedbackMode: 'end', examMode: true, shuffleQuestions: true,
     });
     assert.deepEqual(plain(next), {
       className: '4B maths', dueAt: 1767225600000, attemptsLimit: 3,
-      randomNames: false, feedbackMode: 'end', examMode: true,
+      randomNames: false, feedbackMode: 'end', examMode: true, shuffleQuestions: true,
     });
   });
 
@@ -46,7 +46,7 @@ describe('assignmentSettingsUpdate', () => {
   });
 
   it('ignores unknown feedback modes and non-boolean switches', () => {
-    const next = W.assignmentSettingsUpdate({}, { feedbackMode: 'always', randomNames: 'yes', examMode: 1 });
+    const next = W.assignmentSettingsUpdate({}, { feedbackMode: 'always', randomNames: 'yes', examMode: 1, shuffleQuestions: 'yes' });
     assert.deepEqual(plain(next), {});
   });
 

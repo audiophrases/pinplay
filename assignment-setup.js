@@ -117,7 +117,7 @@
           ['all', '▤', 'All questions', 'Every student gets the full quiz.'],
           ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level.' : 'Needs questions tagged with at least two levels.', !adaptiveAvailable],
           ['climb', '🏔', 'Climb', climbAvailable ? 'Build a skill from the easiest level, step by step.' : 'Needs auto-graded questions at two or more levels.', !climbAvailable],
-        ]) + `<div class="assignment-setup-fields">` + (draft.format !== 'all' && (draft.format === 'climb' || singleCount > 0)
+        ]) + `<div class="assignment-setup-fields"><label class="assignment-setup-switch"><input type="checkbox" data-field="shuffleQuestions" ${draft.shuffleQuestions ? 'checked' : ''} ${draft.format !== 'all' ? 'disabled' : ''}><span><strong>${esc(t('Shuffle questions'))}</strong><small>${esc(t(draft.format === 'all' ? 'A separate question order for each new attempt. Listening sections stay together. Started attempts keep their order.' : 'Adaptive and Climb choose their own question order.'))}</small></span></label>` + (draft.format !== 'all' && (draft.format === 'climb' || singleCount > 0)
           ? field(draft.format === 'climb' ? 'Maximum questions per student' : 'Questions per student', `<input type="number" data-field="adaptiveCount" min="1" max="${draft.format === 'climb' ? 100 : Math.max(1, singleCount)}" value="${draft.adaptiveCount}" required>`)
           : '') + field('Due date (optional)', `<input type="datetime-local" data-field="dueAt" value="${esc(draft.dueAt)}">`) + '</div>'
           + (draft.format === 'adaptive' && hasSections ? `<p class="assignment-setup-note">${esc(t('Listening sections are added at each student’s level.'))}</p>` : '')
@@ -132,6 +132,7 @@
           ['Attempts', Number(draft.attemptsLimit) === 0 ? t('Unlimited') : draft.attemptsLimit],
           ['Questions', t(format[draft.format]) + (draft.format === 'all' ? ` · ${questionCount}` : (draft.format === 'climb' || singleCount > 0 ? ` · ${draft.adaptiveCount}` : ''))],
           ['Exam mode', t(draft.examMode ? 'On' : 'Off')],
+          ['Shuffle questions', t(draft.format === 'all' && draft.shuffleQuestions ? 'On' : 'Off')],
           ['Due date', draft.dueAt ? new Date(draft.dueAt).toLocaleString() : t('No due date')],
         ];
         content.innerHTML = heading('05 / READY TO SHARE', 'Everything look right?', 'Create the assignment to get a link for your students.') + `<dl class="assignment-setup-review">${summary.map(([key, value]) => `<div><dt>${esc(t(key))}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`;

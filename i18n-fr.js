@@ -1829,4 +1829,7 @@ window.PINPLAY_FR_DICT = {
   "Teacher password is required.": "Le mot de passe enseignant est obligatoire.",
   "Back": "Retour",
   "Exam mode": "Mode examen",
+  "Shuffle questions": "Mélanger les questions",
+  "A separate question order for each new attempt. Listening sections stay together. Started attempts keep their order.": "Un ordre différent pour chaque nouvel essai. Les sections d’écoute restent groupées. Les essais commencés conservent leur ordre.",
+  "Adaptive and Climb choose their own question order.": "Les modes Adaptatif et Ascension choisissent leur propre ordre de questions.",
 };

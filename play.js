@@ -5978,7 +5978,46 @@ async function api(path, opts = {}) {
     if (opts.body) return apiFetch(path, { ...opts, body: { ...opts.body, via: 'play', ...(game.count ? { count: game.count } : {}) } });
     return apiFetch(`${path}${path.includes('?') ? '&' : '?'}via=play`, opts);
   }
-  return apiFetch(path, opts);
+  // The page navigates in the attempt's display order; the API and teacher
+  // grading always address the authored quiz indexes. Translate at this boundary.
+  const attempt = live.player.assignment?.state?.attempt;
+  const isAssignment = String(path).startsWith('/api/assignment/');
+  const body = opts.body;
+  const order = attempt?.questionOrder;
+  const requestOpts = isAssignment && body?.qIndex != null && Array.isArray(order)
+    && body.attemptId === attempt.id && body.code === attempt.code
+    ? { ...opts, body: { ...body, qIndex: order[Number(body.qIndex)] ?? -1 } } : opts;
+  const data = await apiFetch(path, requestOpts);
+  if (!isAssignment) return data;
+  const out = data.attempt ? { ...data, attempt: assignmentAttemptDisplayView(data.attempt) } : data;
+  if (Array.isArray(order) && Number.isInteger(data.qIndex)) {
+    return { ...out, qIndex: order.indexOf(data.qIndex) };
+  }
+  return out;
+}
+
+// Keep every player feature (navigation, drafts, listening sheets, feedback and
+// review) on one consistent numbering, while leaving the server response intact.
+function assignmentAttemptDisplayView(attempt) {
+  const questions = attempt?.assignment?.quiz?.questions || [];
+  const order = attempt?.questionOrder;
+  if (attempt?.adaptive || !Array.isArray(order) || order.length !== questions.length
+    || new Set(order).size !== questions.length
+    || order.some(index => !Number.isInteger(index) || index < 0 || index >= questions.length)) return attempt;
+  const positions = new Map(order.map((index, position) => [index, position]));
+  return {
+    ...attempt,
+    assignment: { ...attempt.assignment, quiz: { ...attempt.assignment.quiz, questions: order.map(index => questions[index]) } },
+    answersByQ: Object.fromEntries(Object.entries(attempt.answersByQ || {})
+      .filter(([index]) => positions.has(Number(index)))
+      .map(([index, answer]) => [positions.get(Number(index)), answer])),
+    answeredQIndexes: (attempt.answeredQIndexes || []).map(index => positions.get(Number(index)))
+      .filter(index => index != null).sort((a, b) => a - b),
+    answersWithCorrectness: Array.isArray(attempt.answersWithCorrectness)
+      ? attempt.answersWithCorrectness.map(answer => ({ ...answer, qIndex: positions.get(Number(answer.qIndex)) }))
+        .filter(answer => answer.qIndex != null).sort((a, b) => a.qIndex - b.qIndex)
+      : attempt.answersWithCorrectness,
+  };
 }
 
 // Anonymous games keep a listening section's answers in the page (the server

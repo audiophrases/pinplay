@@ -182,6 +182,7 @@
     B('assignmentPreviewBtn', ASSIGN, 'preview try assignment as a student test'),
     B('assignmentSignIn', ASSIGN, 'assignment login random names sign in google who does it', { go: true, label: () => t('Who does the assignment') }),
     B('assignmentFeedback', ASSIGN, 'assignment feedback instant end none answers', { go: true, label: () => t('Assignment feedback') }),
+    B('assignmentShuffleQuestions', ASSIGN, 'assignment shuffle random question order exam', { go: true, label: () => t('Shuffle questions') }),
     B('assignmentExamMode', ASSIGN, 'assignment exam mode fullscreen tab', {
       label: () => ($('assignmentExamMode')?.checked ? t('🔒 Exam mode: turn off') : t('🔒 Exam mode: turn on')),
     }),

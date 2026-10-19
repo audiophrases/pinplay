@@ -259,7 +259,8 @@ describe('assignments with listening sections (real worker, in-memory storage)',
   before(async () => {
     const os = require('node:os');
     const tmp = path.join(os.tmpdir(), `pinplay-worker-listening-${process.pid}-${Date.now()}.mjs`);
-    fs.writeFileSync(tmp, read('cloudflare/worker.js'));
+    const authModule = require('node:url').pathToFileURL(path.resolve('cloudflare/taskflow-auth.mjs')).href;
+    fs.writeFileSync(tmp, read('cloudflare/worker.js').replace("'./taskflow-auth.mjs'", JSON.stringify(authModule)));
     const mod = await import(`file://${tmp.replace(/\\/g, '/')}`);
     fs.unlinkSync(tmp);
     const storage = () => {

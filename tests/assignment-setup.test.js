@@ -15,6 +15,7 @@ function app() {
     CustomEvent: class {},
     assignmentClassEl: el('4B'), assignmentDueAtEl: el(''), assignmentAttemptsEl: el('0'), assignmentSignInEl: el('random'),
     assignmentFeedbackMode: 'instant', assignmentExamMode: false, assignmentStatusEl: {}, hostStatusEl: {},
+    assignmentShuffleQuestionsEl: { checked: false },
     studentsCache: [{ className: '4B' }], assignmentsListCache: [{ className: '4A' }],
     syncQuizFromUI() {}, requireQuizTitle() {}, syncAssignmentAdaptiveControl() {},
     assignmentAdaptiveSettings: () => ({ adaptive: nodes.assignmentAdaptive.checked, buildup: nodes.assignmentAdaptiveMode.value === 'buildup', adaptiveCount: Number(nodes.assignmentAdaptiveCount.value) }),
@@ -45,7 +46,7 @@ it('confirmed dialog settings reach the existing creation API', async () => {
   const a = app();
   await a.openAssignmentCreationDialog();
   const result = await a.options.onCreate({ className: '4C', dueAt: '2026-12-20T17:00', attemptsLimit: 1,
-    signIn: 'signin', feedbackMode: 'none', examMode: true, format: 'all', adaptiveCount: 8 });
+    signIn: 'signin', feedbackMode: 'none', examMode: true, shuffleQuestions: true, format: 'all', adaptiveCount: 8 });
   assert.equal(result.code, 'NEW123');
   assert.equal(a.requests.length, 1);
   const request = a.requests[0];
@@ -55,6 +56,7 @@ it('confirmed dialog settings reach the existing creation API', async () => {
   assert.equal(request.body.randomNames, false);
   assert.equal(request.body.feedbackMode, 'none');
   assert.equal(request.body.examMode, true);
+  assert.equal(request.body.shuffleQuestions, true);
   assert.equal(request.body.adaptive, false);
   assert.equal(request.body.dueAt, new Date('2026-12-20T17:00').getTime());
 });
