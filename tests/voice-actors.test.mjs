@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -51,7 +51,7 @@ let bucket;
 before(async () => {
   const src = fs.readFileSync(path.join(REPO, 'cloudflare', 'worker.js'), 'utf8');
   const tmpFile = path.join(os.tmpdir(), `pinplay-worker-voices-${process.pid}-${Date.now()}.mjs`);
-  fs.writeFileSync(tmpFile, src);
+  fs.writeFileSync(tmpFile, src.replace("'./taskflow-auth.mjs'", JSON.stringify(pathToFileURL(path.join(REPO, 'cloudflare/taskflow-auth.mjs')).href)));
   process.on('exit', () => { try { fs.unlinkSync(tmpFile); } catch { /* already gone */ } });
   const mod = await import('file://' + tmpFile.replace(/\\/g, '/'));
   const worker = mod.default;

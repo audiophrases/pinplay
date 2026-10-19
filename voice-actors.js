@@ -114,7 +114,7 @@ function openVoiceActors(opts = {}) {
   vaBindWaveDrag(overlay);
   overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeVoiceActors(); } });
   overlay.querySelector('.va-panel').focus();
-  if (opts.sessionId) vaOpenSession(opts.sessionId);
+  if (opts.sessionId) vaOpenSession(opts.sessionId, opts.targetSectionId);
   else vaLoadList();
 }
 
@@ -233,11 +233,18 @@ async function vaDelete(id) {
 }
 
 // ---------------------------------------------------------------- session -
-async function vaOpenSession(id) {
+async function vaOpenSession(id, targetSectionId = '') {
   vaStatus(t('Loading…'));
   try {
     const data = await vaApi('get', { id });
+    if (typeof lrUseSession === 'function' && !lrUseSession(data.session, { confirmReplace: true })) return;
     vaShowSession(data.session);
+    if (targetSectionId) {
+      const target = vaEl('[data-va-target]');
+      if (target) target.value = targetSectionId;
+      vaEl('[data-va-build="section"]')?.scrollIntoView({ block: 'center' });
+      vaEl('[data-va-build="section"]')?.focus();
+    }
   } catch (err) {
     vaStatus(t('Could not load the session ({msg}).', { msg: err.message }), 'bad');
   }
@@ -246,6 +253,7 @@ async function vaOpenSession(id) {
 function vaShowSession(session) {
   va.view = 'session';
   va.session = session;
+  if (typeof lrUseSession === 'function') lrUseSession(session);
   va.edits.clear();
   vaStatus('');
   vaRenderSession();
@@ -821,6 +829,7 @@ async function vaChangeScript(action, lineId, speaker) {
     const data = await vaApi('script', body);
     if (va.session?.id !== sessionId) return;
     va.session = data.session;
+    if (typeof lrUseSession === 'function') lrUseSession(data.session);
     vaRenderSession();
     await vaLoadTakes();
     vaStatus(t('Saved.'), 'ok');
@@ -929,11 +938,7 @@ function vaOnInput(e) {
 window.addEventListener('resize', () => { if (va.view === 'session' && document.getElementById('voiceActorsOverlay')) vaDrawAll(); });
 
 // ------------------------------------------------- 🎧 Listening recordings --
-// The teacher page's card (owner only, no quiz needed): ① the script (an AI
-// prompt for the script only, or the script pasted), ② the voices (students,
-// or the Listening Studio), ③ the questions (the Quiz builder's AI prompt,
-// via openListeningPrompt in app.js). The script typed here is never saved on
-// its own: it lives on as a recording session or in a quiz.
+// Shared helpers for the listening workspace (listening-workspace.js).
 const LR_STUDIO_URL = 'http://127.0.0.1:8790/';
 
 const lrEl = (id) => document.getElementById(id);
@@ -978,49 +983,17 @@ async function lrCopy(text, okMsg, fileName) {
 // opens the card at the script prompt, keeping what is already typed.
 function openListeningScriptStep({ theme = '', level = '' } = {}) {
   if (listeningSectionToggleEl && listeningCardBodyEl) setSectionCollapsed(listeningSectionToggleEl, listeningCardBodyEl, false);
-  const stepToggle = lrEl('lrScriptToggle');
-  const stepBody = lrEl('lrScriptBody');
-  if (stepToggle && stepBody) setSectionCollapsed(stepToggle, stepBody, false);
+  if (lrEl('lrScript')?.readOnly) lrEl('lrDetachSession')?.click();
+  lrSelectTab('script');
+  lrEl('lrGenerator').open = true;
   const topic = lrEl('lrTopic');
   if (topic && theme && !topic.value.trim()) topic.value = theme;
   const lvl = lrEl('lrLevel');
   if (lvl && level && !lvl.value.trim()) lvl.value = level;
+  lrSaveDraft();
   listeningSectionToggleEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   topic?.focus({ preventScroll: true });
 }
-
-function lrBind() {
-  const language = lrEl('lrLanguage');
-  if (!language) return;
-  language.innerHTML = LISTENING_SCRIPT_LANGUAGES.map((l) => `<option>${escapeHtml(l)}</option>`).join('');
-  lrEl('lrScript')?.addEventListener('input', lrUpdateInfo);
-  lrEl('lrCopyPromptBtn')?.addEventListener('click', async () => {
-    const text = buildListeningScriptPrompt({
-      topic: lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage'), characters: lrValue('lrCharacters'),
-      length: lrValue('lrLength'), notes: lrValue('lrNotes'), recordedBy: lrValue('lrRecordedBy'),
-    });
-    if (await lrCopy(text, t('✅ Copied: paste it into your AI chat, then paste its answer in the box below.'), 'prompt-listening-script.md')) lrEl('lrScript')?.focus();
-  });
-  lrEl('lrWriteBtn')?.addEventListener('click', () => openListeningPrompt({ source: 'write', theme: lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage') }));
-  lrEl('voiceActorsNewBtn')?.addEventListener('click', () => {
-    const script = lrValue('lrScript');
-    openVoiceActors({ newSession: true, script, title: lrScriptTitle(script) || lrValue('lrTopic') });
-  });
-  lrEl('voiceActorsOpenBtn')?.addEventListener('click', () => openVoiceActors());
-  lrEl('lrStudioBtn')?.addEventListener('click', async () => {
-    const script = lrValue('lrScript');
-    // Copy first: once the Studio's tab has the focus, the browser may refuse.
-    if (script) await lrCopy(script, t('✅ Script copied: in the Listening Studio, start a new recording and paste it. (Is the Studio not open? Start it on this computer first.)'), 'listening-script.txt');
-    else lrStatus(t('The Listening Studio runs on this computer: if the page doesn\'t open, start it first.'));
-    window.open(LR_STUDIO_URL, '_blank', 'noopener');
-  });
-  lrEl('lrQuestionsBtn')?.addEventListener('click', () => {
-    const script = lrValue('lrScript');
-    openListeningPrompt({ source: 'paste', transcript: script, theme: lrScriptTitle(script) || lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage') });
-  });
-}
-
-if (typeof document !== 'undefined') lrBind();
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { vaLinesFromScript, vaAutoTrim, vaScriptText, vaApplyEdits, vaCharacters, vaLink };

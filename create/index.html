@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261019-recording-checkbox" />
+    <link rel="stylesheet" href="../styles.css?v=20261019-listening-workspace" />
   </head>
   <body>
     <header class="topbar">
@@ -27,21 +27,40 @@
         </div>
 
         <div id="createWorkspace" class="hidden">
-          <!-- Listening recordings (owner only): script → voices → questions; no quiz needed -->
+          <!-- Listening activity: choose a starting point, then move freely between tabs. -->
           <div class="card owner-only" id="listeningCard">
-            <h2 id="listeningSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
-              <span data-i18n>🎧 Listening recordings</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
-            </h2>
+            <div class="lr-heading">
+              <h2 id="listeningSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
+                <span data-i18n>🎧 Listening activity</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
+              </h2>
+              <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
+            </div>
             <div id="listeningCardBody" class="hidden">
-              <p class="small muted" data-i18n>A recording for a listening quiz, in three steps: the script, the voices, then the questions. Start at any step. No quiz needed until step 3.</p>
-
-              <div class="builder-section lr-step">
-                <button id="lrScriptToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span data-i18n>① Script</span>
-                  <span class="collapse-chevron" aria-hidden="true">▸</span>
-                </button>
-                <div id="lrScriptBody" class="section-collapsible-body hidden">
-                <p class="small muted" data-i18n>✨ The AI writes the script only, so it can be recorded before there are questions.</p>
+              <div class="lr-intro"><p class="small muted" data-i18n>Create a script, make a recording, and build questions. Start with what you already have.</p>
+                <button id="lrChangeStart" class="btn btn-sm hidden" type="button" data-i18n>Change starting point</button></div>
+              <div id="lrStartChoices" class="lr-start">
+                <p data-i18n>What do you already have?</p>
+                <div class="lr-start-grid">
+                  <button type="button" class="lr-choice" data-lr-start="generate"><strong data-i18n>I need a script</strong><span data-i18n>Generate a script with AI</span></button>
+                  <button type="button" class="lr-choice" data-lr-start="paste"><strong data-i18n>I have a script</strong><span data-i18n>Paste or write your own</span></button>
+                  <button type="button" class="lr-choice" data-lr-start="upload"><strong data-i18n>I have a recording</strong><span data-i18n>Upload audio and create questions</span></button>
+                  <button type="button" class="lr-choice" data-lr-start="sessions"><strong data-i18n>Continue a recording session</strong><span data-i18n>Review takes and finish a recording</span></button>
+                </div>
+              </div>
+              <div id="lrWorkspace" class="hidden">
+                <div class="lr-tabs" role="tablist" aria-label="Listening activity" data-i18n-aria>
+                  <button id="lrScriptToggle" type="button" role="tab" data-lr-tab="script" aria-controls="lrScriptBody" aria-selected="true"><strong data-i18n>Script</strong><span id="lrScriptState" class="small"></span></button>
+                  <button id="lrVoicesToggle" type="button" role="tab" data-lr-tab="recording" aria-controls="lrVoicesBody" aria-selected="false" tabindex="-1"><strong data-i18n>Recording</strong><span id="lrRecordingState" class="small"></span></button>
+                  <button id="lrQuestionsToggle" type="button" role="tab" data-lr-tab="questions" aria-controls="lrQuestionsBody" aria-selected="false" tabindex="-1"><strong data-i18n>Questions</strong><span id="lrQuestionsState" class="small"></span></button>
+                </div>
+                <div class="lr-draft-row"><span id="lrDraftStatus" class="small muted" role="status"></span><span id="lrSessionSource" class="small muted"></span></div>
+                <section id="lrScriptBody" class="lr-panel" role="tabpanel" aria-labelledby="lrScriptToggle">
+                  <label><span data-i18n>Activity title</span><input id="lrDraftTitle" type="text" maxlength="120" /></label>
+                  <label class="lr-script"><span data-i18n>Your script</span><textarea id="lrScript" rows="10" spellcheck="false" placeholder="Mia (surprised): Forty minutes? You're joking!&#10;Tom: I know, I know…" data-i18n-ignore></textarea></label>
+                  <span id="lrScriptInfo" class="small muted"></span>
+                  <div id="lrLinkedActions" class="va-entry-row hidden"><button id="lrEditSession" class="btn" type="button" data-i18n>Edit in recording session</button><button id="lrDetachSession" class="btn" type="button" data-i18n>Use a separate draft</button></div>
+                  <details id="lrGenerator" class="lr-generator"><summary data-i18n>Generate a script with AI</summary>
+                    <p class="small muted" data-i18n>Copy the prompt into your AI chat, then paste its answer into Your script.</p>
                 <div class="creation-prompt-grid">
                   <div class="prompt-field full-width">
                     <label><span data-i18n>What is it about?</span>
@@ -89,41 +108,48 @@
                 </div>
                 <div class="va-entry-row top-space">
                   <button id="lrCopyPromptBtn" class="btn primary" type="button" data-i18n>📋 Copy the script prompt</button>
-                  <button id="lrWriteBtn" class="btn" type="button" title="The Quiz builder's AI prompt, set to write a listening quiz: the script and its questions in one go" data-i18n-title data-i18n>✨ Script and questions together →</button>
                 </div>
-                <label class="lr-script"><span data-i18n>The script: paste the AI's answer, or your own</span>
-                  <textarea id="lrScript" rows="8" spellcheck="false" placeholder="Mia (surprised): Forty minutes? You're joking!&#10;Tom: I know, I know…" data-i18n-ignore></textarea>
-                </label>
-                <span id="lrScriptInfo" class="small muted"></span>
-                </div>
-              </div>
-
-              <div class="builder-section lr-step">
-                <button id="lrVoicesToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span data-i18n>② Voices</span>
-                  <span class="collapse-chevron" aria-hidden="true">▸</span>
-                </button>
-                <div id="lrVoicesBody" class="section-collapsible-body hidden">
-                <div class="va-entry-row">
-                  <button id="voiceActorsNewBtn" class="btn primary" type="button" data-i18n>🎙 Students record it</button>
-                  <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
-                  <button id="lrStudioBtn" class="btn" type="button" title="Copies the script and opens the Listening Studio on this computer (start it first)" data-i18n-title data-i18n>🔊 Listening Studio</button>
-                </div>
-                <p class="small muted" data-i18n>Students record their lines on their phones from one link; you check each take and build the MP3. The Listening Studio makes it with AI voices on this computer. A recording you already have goes straight into the quiz's listening section.</p>
-                </div>
-              </div>
-
-              <div class="builder-section lr-step">
-                <button id="lrQuestionsToggle" class="section-toggle-btn" type="button" aria-expanded="false">
-                  <span data-i18n>③ Questions</span>
-                  <span class="collapse-chevron" aria-hidden="true">▸</span>
-                </button>
-                <div id="lrQuestionsBody" class="section-collapsible-body hidden">
-                <div class="va-entry-row">
-                  <button id="lrQuestionsBtn" class="btn primary" type="button" data-i18n>✨ The questions, from this script →</button>
-                </div>
-                <p class="small muted" data-i18n>Opens the Quiz builder's AI prompt with the script in it. Import the AI's quiz, then put the recording into its listening section (🎧 Use in the listening section, in the recording session).</p>
-                </div>
+                  </details>
+                  <div class="lr-next"><button class="btn primary" type="button" data-lr-go="recording" data-i18n>Continue to recording →</button></div>
+                </section>
+                <section id="lrVoicesBody" class="lr-panel hidden" role="tabpanel" aria-labelledby="lrVoicesToggle">
+                  <p data-i18n>How will you make the recording?</p>
+                  <div class="lr-methods" role="group" aria-label="Recording method" data-i18n-aria>
+                    <button class="btn" type="button" data-lr-method="people" aria-pressed="true" data-i18n>Record with people</button>
+                    <button class="btn" type="button" data-lr-method="studio" aria-pressed="false" data-i18n>Generate AI voices</button>
+                    <button class="btn" type="button" data-lr-method="upload" aria-pressed="false" data-i18n>Upload audio</button>
+                  </div>
+                  <div data-lr-method-panel="people">
+                    <p class="small muted" data-i18n>Share a link so people can record their lines. Review, trim and approve their takes, then download or use the finished recording.</p>
+                    <button id="voiceActorsNewBtn" class="btn primary" type="button" data-i18n>Create a recording session</button>
+                    <button id="lrManageSession" class="btn hidden" type="button" data-i18n>Open selected recording session</button>
+                  </div>
+                  <div data-lr-method-panel="studio" class="hidden">
+                    <p class="small muted" data-i18n>Listening Studio uses AI voices and runs on this computer. Start the app first; your script will be copied when you open it.</p>
+                    <button id="lrStudioBtn" class="btn primary" type="button" data-i18n>Open Listening Studio</button>
+                    <p class="small muted" data-i18n>When the recording is ready, choose Upload audio to use the exported file.</p>
+                  </div>
+                  <div data-lr-method-panel="upload" class="hidden">
+                    <label><span data-i18n>Audio file</span><input id="lrAudioFile" type="file" accept="audio/*" /></label>
+                    <p id="lrAudioName" class="small muted"></p><audio id="lrAudioPreview" controls class="hidden"></audio>
+                    <p class="small muted" data-i18n>The audio file stays available in this tab. Upload it to a listening section to keep it in the quiz.</p>
+                  </div>
+                  <div class="lr-next"><button class="btn primary" type="button" data-lr-go="questions" data-i18n>Continue to questions →</button></div>
+                </section>
+                <section id="lrQuestionsBody" class="lr-panel hidden" role="tabpanel" aria-labelledby="lrQuestionsToggle">
+                  <p id="lrQuestionSource" class="small muted"></p>
+                  <button id="lrQuestionsBtn" class="btn primary" type="button" data-i18n>Generate questions from this script</button>
+                  <p class="small muted" data-i18n>Opens the Quiz builder with the latest script. Copy its prompt to your AI chat, then import the quiz it creates.</p>
+                  <details class="lr-generator"><summary data-i18n>Use with an existing listening section</summary>
+                    <p id="lrTargetContext" class="small muted"></p>
+                    <label><span data-i18n>Listening section</span><select id="lrTargetSection"></select></label>
+                    <button id="lrAttachAudio" class="btn" type="button" data-i18n>Use uploaded audio in this section</button>
+                    <button id="lrUseSessionAudio" class="btn hidden" type="button" data-i18n>Use session recording in this section</button>
+                    <button id="lrShowSection" class="btn" type="button" data-i18n>Open this listening section</button>
+                    <p class="small muted" data-i18n>No listening section yet? Generate and import a listening quiz, then return here to add the recording.</p>
+                  </details>
+                  <details class="lr-generator"><summary data-i18n>Other ways to create questions</summary><button id="lrWriteBtn" class="btn" type="button" data-i18n>Generate script and questions together</button></details>
+                </section>
               </div>
               <p id="lrStatus" class="small" role="status"></p>
             </div>
@@ -908,7 +934,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261019-recording-drafts"></script>
+    <script src="../i18n-fr.js?v=20261019-listening-workspace"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -920,10 +946,11 @@
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261015-rebuild"></script>
     <script src="../assignment-setup.js?v=20261019-assignment-shuffle"></script>
-    <script src="../app.js?v=20261019-assignment-shuffle"></script>
-    <script src="../voice-actors.js?v=20261019-edit-script"></script>
+    <script src="../app.js?v=20261019-listening-workspace"></script>
+    <script src="../voice-actors.js?v=20261019-listening-workspace"></script>
+    <script src="../listening-workspace.js?v=20261019-listening-workspace"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
-    <script src="../command-palette.js?v=20261019-assignment-shuffle"></script>
+    <script src="../command-palette.js?v=20261019-listening-workspace"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>
     <script src="../arena.js?v=20261008-livefix"></script>
   </body>

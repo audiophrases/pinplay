@@ -37,14 +37,14 @@
     ['studentsSectionToggle', 'studentsSectionBody'],
     ['workspacesSectionToggle', 'workspacesCardBody'],
   ];
-  const SECTION_BODIES = new Set(SECTIONS.map(([, body]) => body));
+  const SECTION_BODIES = new Set([...SECTIONS.map(([, body]) => body), 'lrWorkspace']);
 
   // Shown on the page, not counting sections that are merely collapsed (the
   // palette opens those) — so owner-only, hidden and display:none stay out.
   function available(el) {
     if (!el || el.disabled || el.hidden) return false;
     for (let n = el; n && n !== document.body; n = n.parentElement) {
-      if (SECTION_BODIES.has(n.id)) continue;
+      if (SECTION_BODIES.has(n.id) || n.dataset.lrMethodPanel) continue;
       if (getComputedStyle(n).display === 'none') return false;
     }
     return true;
@@ -54,12 +54,19 @@
   // that load on open (assignments, students) do; otherwise just expand.
   function reveal(el, { lazy = true } = {}) {
     if (!el) return;
+    const panel = el.closest('.lr-panel');
+    if (panel) lrSelectTab($(panel.getAttribute('aria-labelledby')).dataset.lrTab);
+    const method = el.closest('[data-lr-method-panel]');
+    if (method) lrSelectMethod(method.dataset.lrMethodPanel);
+    const generator = el.closest('details.lr-generator');
+    if (generator) generator.open = true;
     SECTIONS
       .map(([toggleId, bodyId]) => [$(toggleId), $(bodyId)])
       .filter(([toggle, body]) => toggle && body && body.contains(el) && body.classList.contains('hidden'))
       .sort(([, a], [, b]) => (a.contains(b) ? -1 : b.contains(a) ? 1 : 0))
       .forEach(([toggle, body]) => {
-        if (lazy) toggle.click();
+        if (toggle.dataset.lrTab) lrSelectTab(toggle.dataset.lrTab);
+        else if (lazy) toggle.click();
         else setSectionCollapsed(toggle, body, false);
       });
   }
