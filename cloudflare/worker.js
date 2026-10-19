@@ -1804,7 +1804,7 @@ export default {
       if (!ok) return json({ error: 'Wrong password.' }, 401);
 
       const stub = env.ROOMS.get(env.ROOMS.idFromName(ASSIGNMENTS_DO_NAME));
-      return withCors(await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}`, {
+      return withCors(await stub.fetch(`https://room/assignments/get-quiz?code=${encodeURIComponent(code)}${body?.includeSettings ? '&settings=1' : ''}`, {
         method: 'GET',
       }));
     }
@@ -1857,7 +1857,7 @@ export default {
       if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
 
       const forward = { code };
-      for (const key of ['className', 'dueAt', 'attemptsLimit', 'randomNames', 'feedbackMode', 'examMode', 'shuffleQuestions']) {
+      for (const key of ['className', 'dueAt', 'attemptsLimit', 'randomNames', 'feedbackMode', 'examMode', 'shuffleQuestions', 'format', 'questionCount']) {
         if (body && Object.prototype.hasOwnProperty.call(body, key)) forward[key] = body[key];
       }
       return withCors(await assignmentsStub(env).fetch('https://room/assignments/update-settings', {
@@ -4608,7 +4608,9 @@ export class QuizRoom {
         const meta = publicAssignment(assignment, { includeQuiz: false });
         // cloudQuizId stays out of publicAssignment: students get that, and the
         // id names a quiz JSON (answers included) that /api/media/ serves.
-        return json({ ok: true, assignment: meta, quiz: assignment.quiz || null, cloudQuizId: assignment.cloudQuizId || '' });
+        const settings = url.searchParams.get('settings') === '1'
+          ? await assignmentFormatOptions(this.state.storage, assignment) : undefined;
+        return json({ ok: true, assignment: meta, quiz: assignment.quiz || null, cloudQuizId: assignment.cloudQuizId || '', ...(settings ? { settings } : {}) });
       }
 
       if (url.pathname === '/assignments/update-settings' && request.method === 'POST') {
@@ -4617,6 +4619,13 @@ export class QuizRoom {
         if (!code) return json({ error: 'Assignment code required.' }, 400);
         const assignment = await loadAssignmentBase(this.state.storage, code);
         if (!assignment) return json({ error: 'Assignment not found.' }, 404);
+        const format = assignmentFormatUpdate(assignment, body);
+        if (format.error) return json({ error: format.error }, 400);
+        if (format.changed) {
+          const options = await assignmentFormatOptions(this.state.storage, assignment);
+          if (options.locked) return json({ error: 'Question format and count cannot change after an attempt has started. Create a new assignment to use a different format.', code: 'FORMAT_LOCKED' }, 409);
+        }
+        Object.assign(assignment, format.changes);
         Object.assign(assignment, assignmentSettingsUpdate(assignment, body));
         assignment.updatedAt = Date.now();
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -10329,6 +10338,8 @@ function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = 
     feedbackMode: assignment.feedbackMode || 'none',
     examMode: !!assignment.examMode,
     shuffleQuestions: !!assignment.shuffleQuestions,
+    format: assignment?.adaptive?.mode === 'buildup' ? 'climb' : assignment?.adaptive ? 'adaptive' : 'all',
+    adaptiveSingleCount: Math.max(0, Number(assignment.adaptive?.count || 0)),
     active: !!assignment.active,
     archived: !!assignment.archived,
     origin: String(assignment.origin || ''),
@@ -10397,11 +10408,50 @@ function sanitizeClassName(value) {
 
 const ASSIGNMENT_FEEDBACK_MODES = ['none', 'instant', 'end'];
 
+function assignmentQuestionFormat(assignment) {
+  return assignment?.adaptive?.mode === 'buildup' ? 'climb' : assignment?.adaptive ? 'adaptive' : 'all';
+}
+
+// Requested only by the settings dialog: use the stored assignment's quiz,
+// and check real attempt rows, including unfinished attempts and legacy counts.
+async function assignmentFormatOptions(storage, assignment) {
+  const attempts = await storage.list({ prefix: `a:${assignment.code}:t:`, limit: 1 });
+  const adaptive = assignmentAdaptivePool(assignment);
+  const climb = assignmentAdaptivePool(assignment, { autoOnly: true });
+  const hasSections = adaptiveSectionPlan(assignment.quiz).length > 0;
+  return {
+    format: assignmentQuestionFormat(assignment), count: Number(assignment.adaptive?.count || 0),
+    locked: attempts.size > 0 || assignment.origin === 'live',
+    adaptiveAvailable: adaptive.bands.length >= 2 && (adaptive.pool.length > 0 || hasSections),
+    climbAvailable: climb.bands.length >= 2 && climb.pool.length > 0,
+    adaptiveMax: adaptive.pool.length, climbMax: BUILDUP_MAX_COUNT, hasSections,
+  };
+}
+
+function assignmentFormatUpdate(assignment, body) {
+  if (body?.format === undefined) return { changed: false, changes: {} };
+  const mode = body.format;
+  if (!['all', 'adaptive', 'climb'].includes(mode)) return { error: 'Choose All questions, Adaptive or Climb.' };
+  const current = assignmentQuestionFormat(assignment);
+  const count = Number(body.questionCount ?? assignment.adaptive?.count ?? 20);
+  if (mode === current && (mode === 'all' || count === Number(assignment.adaptive?.count || 0))) return { changed: false, changes: {} };
+  if (mode === 'all') return { changed: true, changes: { adaptive: null } };
+  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: mode === 'climb' });
+  const hasSections = mode === 'adaptive' && adaptiveSectionPlan(assignment.quiz).length > 0;
+  if (bands.length < 2 || (!pool.length && !hasSections)) return { error: mode === 'climb'
+    ? 'Climb needs auto-graded questions tagged with at least two levels.' : 'Adaptive mode needs questions tagged with at least two levels.' };
+  const max = mode === 'climb' ? BUILDUP_MAX_COUNT : pool.length;
+  if (!Number.isInteger(count) || count < (hasSections ? 0 : 1) || count > max) return { error: `Questions per student must be between ${hasSections ? 0 : 1} and ${max}.` };
+  return { changed: true, changes: mode === 'climb'
+    ? { adaptive: { count, mode: 'buildup' }, feedbackMode: 'instant', examMode: false }
+    : { adaptive: { count } } };
+}
+
 // The settings a teacher may change on an assignment after creating it (⚙️ on
 // its row), cleaned from a request body: only the fields it carries. A Climb
 // keeps its instant feedback and no exam mode, as /assignments/create sets
 // them. The questions and title change through update-quiz; the adaptive size
-// is fixed once students start.
+// is handled separately and locked once any attempt has started.
 function assignmentSettingsUpdate(assignment, body) {
   const next = {};
   if (typeof body?.className === 'string') next.className = sanitizeClassName(body.className);

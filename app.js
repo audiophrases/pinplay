@@ -11764,10 +11764,22 @@ function toDatetimeLocalValue(ms) {
 // ⚙️ on an assignment's row: the Assignments form's settings, filled with this
 // assignment's and saved in one call. Question order is fixed at attempt start;
 // other settings apply to students' next requests.
-function openAssignmentSettingsDialog(a) {
+async function openAssignmentSettingsDialog(a) {
   const code = String(a?.code || '').trim();
   const source = document.getElementById('assignmentForm');
   if (!code || !source) return;
+  let formatOptions;
+  try {
+    const data = await api('/api/assignments/get-quiz', {
+      method: 'POST', body: { password: createSessionPassword, code, includeSettings: true },
+    });
+    a = { ...a, ...data.assignment };
+    formatOptions = data.settings;
+  } catch (err) {
+    setStatus(assignmentStatusEl, t('Could not load assignment settings: {msg}', { msg: err.message }), 'bad');
+    return;
+  }
+  const shuffleSupported = typeof a?.shuffleQuestions === 'boolean';
 
   const overlay = document.createElement('div');
   overlay.className = 'dialog-overlay';
@@ -11813,14 +11825,53 @@ function openAssignmentSettingsDialog(a) {
   field.assignmentExamMode.disabled = !!a?.buildup;
 
   const notes = document.createElement('div');
-  if (a?.buildup) {
-    field.assignmentFeedback.value = 'instant';
-    field.assignmentExamMode.checked = false;
-    const climbNote = document.createElement('p');
-    climbNote.className = 'small muted';
-    climbNote.textContent = t('🏔️ Climb: always feedback after each answer, no exam mode.');
-    notes.appendChild(climbNote);
+  const formatForm = document.createElement('fieldset');
+  formatForm.className = 'assignment-settings-format';
+  formatForm.innerHTML = `<legend>${escapeHtml(t('Questions'))}</legend>
+    <div class="assignment-form"><label><span>${escapeHtml(t('Question format'))}</span>
+      <select data-settings-format><option value="all">${escapeHtml(t('All questions'))}</option><option value="adaptive">${escapeHtml(t('Adaptive'))}</option><option value="climb">${escapeHtml(t('Climb'))}</option></select></label>
+      <label data-settings-count-wrap><span data-settings-count-label>${escapeHtml(t('Questions per student'))}</span><input data-settings-count type="number" step="1" required></label></div>
+    <p class="small muted" data-settings-format-note></p><p class="small muted" data-settings-mode-note></p>`;
+  const formatSelect = formatForm.querySelector('[data-settings-format]');
+  const formatCount = formatForm.querySelector('[data-settings-count]');
+  const originalFormat = formatOptions?.format || a?.format || (a?.buildup ? 'climb' : a?.adaptiveCount ? 'adaptive' : 'all');
+  formatSelect.value = originalFormat;
+  formatCount.value = String(formatOptions?.count ?? a?.adaptiveSingleCount ?? a?.adaptiveCount ?? 20);
+  formatSelect.disabled = !formatOptions || formatOptions.locked;
+  formatCount.disabled = !formatOptions || formatOptions.locked;
+  formatSelect.querySelector('[value="adaptive"]').disabled = !formatOptions?.adaptiveAvailable && originalFormat !== 'adaptive';
+  formatSelect.querySelector('[value="climb"]').disabled = !formatOptions?.climbAvailable && originalFormat !== 'climb';
+  formatForm.querySelector('[data-settings-format-note]').textContent = !formatOptions
+    ? t('Update the API to enable question format settings. Your existing format is shown here.')
+    : formatOptions.locked
+      ? t('Question format and count are locked because an attempt has already started. Create a new assignment to change them.')
+      : t('You can change the format until the first attempt starts. Adaptive and Climb need questions tagged with at least two levels.');
+  function syncFormatSettings(changed = false) {
+    const mode = formatSelect.value;
+    const climb = mode === 'climb';
+    formatForm.querySelector('[data-settings-count-label]').textContent = t(climb ? 'Maximum questions per student' : 'Questions per student');
+    formatForm.querySelector('[data-settings-count-wrap]').hidden = mode === 'all';
+    const max = climb ? (formatOptions?.climbMax || 100) : (formatOptions?.adaptiveMax ?? 0);
+    const min = !climb && formatOptions?.hasSections ? 0 : 1;
+    formatCount.min = String(min);
+    formatCount.max = String(max);
+    if (changed) formatCount.value = String(Math.max(min, Math.min(Number(formatCount.value) || Math.min(20, max), max)));
+    field.assignmentFeedback.disabled = climb;
+    field.assignmentExamMode.disabled = climb;
+    field.assignmentShuffleQuestions.disabled = mode !== 'all' || !shuffleSupported;
+    if (climb) { field.assignmentFeedback.value = 'instant'; field.assignmentExamMode.checked = false; }
+    formatForm.querySelector('[data-settings-mode-note]').textContent = climb
+      ? t('🏔️ Climb: always feedback after each answer, no exam mode.')
+      : mode === 'adaptive' ? t(formatOptions?.hasSections ? 'Listening sections are added at each student’s level.' : 'Questions match each student’s level.') : '';
   }
+  syncFormatSettings();
+  formatSelect.addEventListener('change', () => syncFormatSettings(true));
+  const shuffleNote = document.createElement('p');
+  shuffleNote.className = 'small muted';
+  shuffleNote.textContent = shuffleSupported
+    ? t('Shuffle questions applies to new attempts. Attempts already started keep their question order.')
+    : t('The API does not support Shuffle questions yet. Update the API before using this option.');
+  notes.appendChild(shuffleNote);
   // Switching who does it after students started gives them a new identity.
   const started = Number(a?.attemptsCount || 0);
   const signInWarn = document.createElement('p');
@@ -11848,11 +11899,12 @@ function openAssignmentSettingsDialog(a) {
   saveBtn.type = 'button';
   saveBtn.textContent = t('Save');
   saveBtn.addEventListener('click', async () => {
+    if (formatSelect.value !== 'all' && !formatCount.disabled && !formatCount.reportValidity()) return;
     saveBtn.disabled = true;
     status.textContent = t('Saving…');
     try {
       const dueMs = field.assignmentDueAt.value ? new Date(field.assignmentDueAt.value).getTime() : 0;
-      await api('/api/assignments/update-settings', {
+      const saved = await api('/api/assignments/update-settings', {
         method: 'POST',
         body: {
           password: createSessionPassword,
@@ -11863,9 +11915,17 @@ function openAssignmentSettingsDialog(a) {
           randomNames: field.assignmentSignIn.value !== 'signin',
           feedbackMode: field.assignmentFeedback.value,
           examMode: field.assignmentExamMode.checked,
-          shuffleQuestions: field.assignmentShuffleQuestions.checked,
+          ...(shuffleSupported ? { shuffleQuestions: field.assignmentShuffleQuestions.checked } : {}),
+          ...(formatOptions ? { format: formatSelect.value, questionCount: Number(formatCount.value) } : {}),
         },
       });
+      if (shuffleSupported && saved?.assignment?.shuffleQuestions !== field.assignmentShuffleQuestions.checked) {
+        throw new Error(t('The API did not confirm Shuffle questions was saved. Update the API and try again.'));
+      }
+      if (formatOptions && (saved?.assignment?.format !== formatSelect.value
+        || (formatSelect.value !== 'all' && saved?.assignment?.adaptiveSingleCount !== Number(formatCount.value)))) {
+        throw new Error(t('The API did not confirm the question format was saved. Reload the settings and try again.'));
+      }
       overlay.remove();
       if (assignmentStatusEl) assignmentStatusEl.textContent = t('Settings saved for {code}.', { code });
       await refreshAssignmentsList();
@@ -11875,7 +11935,7 @@ function openAssignmentSettingsDialog(a) {
     }
   });
 
-  dialog.append(head, form, notes, saveBtn, status);
+  dialog.append(head, form, formatForm, notes, saveBtn, status);
   overlay.appendChild(dialog);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);

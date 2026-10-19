@@ -6286,6 +6286,8 @@ body.listening-sheet-open { overflow: hidden; }
 /* ── ⚙️ on an assignment's row: the Assignments form's settings, in a dialog ── */
 .dialog-card.assignment-settings-dialog { width: min(640px, 96vw); }
 .assignment-settings-dialog .assignment-form { margin-top: .5rem; }
+.assignment-settings-format { border: 1px solid var(--line); border-radius: 10px; margin: 16px 0 10px; padding: 10px 12px; }
+.assignment-settings-format legend { font-weight: 600; padding: 0 5px; }
 
 /* ── Who may sign in, under each "👤 Students sign in" choice ── */
 .sign-in-rules { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .35rem 0 0; }

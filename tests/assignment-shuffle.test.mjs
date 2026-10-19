@@ -22,12 +22,13 @@ const quiz = {
   ],
   listeningSections: [{ id: 'section1', title: 'Audio', audio: { kind: 'file', url: 'https://example.com/audio.mp3' } }],
 };
-async function call(route, body) {
+async function call(route, body, expectedStatus) {
   const response = await worker.fetch(new Request(`https://api.test${route}`, body === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }), env);
   const data = await response.json();
-  assert.ok(response.ok, `${route}: ${response.status} ${JSON.stringify(data)}`);
+  if (expectedStatus) assert.equal(response.status, expectedStatus, `${route}: ${JSON.stringify(data)}`);
+  else assert.ok(response.ok, `${route}: ${response.status} ${JSON.stringify(data)}`);
   return data;
 }
 async function create(extra = {}) {
@@ -156,4 +157,63 @@ it('display conversion tolerates legacy attempts and rejects malformed permutati
     const attempt = { ...base, questionOrder: order };
     assert.equal(C.assignmentAttemptDisplayView(attempt), attempt);
   }
+});
+
+it('settings can select Adaptive or Climb before the first attempt and keep exact counts on reload', async () => {
+  const code = await create();
+  let settings = await call('/api/assignments/get-quiz', { password, code, includeSettings: true });
+  assert.equal(settings.settings.locked, false);
+  assert.equal(settings.settings.adaptiveAvailable, true);
+  assert.equal(settings.settings.climbAvailable, true);
+  const adaptive = await call('/api/assignments/update-settings', { password, code, format: 'adaptive', questionCount: 3 });
+  assert.equal(adaptive.assignment.format, 'adaptive');
+  assert.equal(adaptive.assignment.adaptiveSingleCount, 3);
+  settings = await call('/api/assignments/get-quiz', { password, code, includeSettings: true });
+  assert.equal(settings.settings.count, 3);
+  const climb = await call('/api/assignments/update-settings', { password, code, format: 'climb', questionCount: 25, feedbackMode: 'none', examMode: true });
+  assert.equal(climb.assignment.format, 'climb');
+  assert.equal(climb.assignment.adaptiveSingleCount, 25);
+  assert.equal(climb.assignment.feedbackMode, 'instant');
+  assert.equal(climb.assignment.examMode, false);
+  const normal = await call('/api/assignments/update-settings', { password, code, format: 'all', feedbackMode: 'end', examMode: true });
+  assert.equal(normal.assignment.format, 'all');
+  assert.equal(normal.assignment.feedbackMode, 'end');
+  assert.equal(normal.assignment.examMode, true);
+});
+
+it('started and submitted attempts lock format and count, while shuffle stays editable for future attempts', async () => {
+  for (const submitted of [false, true]) {
+    const code = await create({ adaptive: true, adaptiveCount: 3 });
+    const attempt = (await call('/api/assignment/start', { code, studentKey: `locked${submitted}` })).attempt;
+    if (submitted) {
+      await call('/api/assignment/answer', { code, attemptId: attempt.id, qIndex: 0, answer: 0 });
+      await call('/api/assignment/submit', { code, attemptId: attempt.id, force: true });
+    }
+    // A missing or stale cached count must never allow incompatible changes.
+    const base = await storage.get(`ab:${code}`);
+    base.attemptsCount = 0;
+    await storage.put(`ab:${code}`, base);
+    const info = await call('/api/assignments/get-quiz', { password, code, includeSettings: true });
+    assert.equal(info.settings.locked, true);
+    for (const change of [{ format: 'all' }, { format: 'climb', questionCount: 20 }, { format: 'adaptive', questionCount: 4 }]) {
+      const error = await call('/api/assignments/update-settings', { password, code, className: 'Must not save', ...change }, 409);
+      assert.equal(error.code, 'FORMAT_LOCKED');
+    }
+    assert.notEqual((await storage.get(`ab:${code}`)).className, 'Must not save');
+    const allowed = await call('/api/assignments/update-settings', { password, code, format: 'adaptive', questionCount: 3, shuffleQuestions: false });
+    assert.equal(allowed.assignment.shuffleQuestions, false);
+    assert.equal(allowed.assignment.adaptiveSingleCount, 3);
+  }
+});
+
+it('settings rejects unavailable formats and invalid counts without partially saving anything', async () => {
+  const code = await create();
+  for (const change of [{ format: 'adaptive', questionCount: 999 }, { format: 'climb', questionCount: 0 }, { format: 'climb', questionCount: 1.5 }, { format: 'bad' }]) {
+    await call('/api/assignments/update-settings', { password, code, className: 'Must not save', ...change }, 400);
+  }
+  const untagged = structuredClone(quiz);
+  untagged.questions.forEach(q => { delete q.cefr; });
+  const untaggedCode = await create({ quiz: untagged });
+  for (const format of ['adaptive', 'climb']) await call('/api/assignments/update-settings', { password, code: untaggedCode, format, questionCount: 2 }, 400);
+  assert.notEqual((await storage.get(`ab:${code}`)).className, 'Must not save');
 });

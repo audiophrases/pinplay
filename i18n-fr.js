@@ -1902,4 +1902,14 @@ window.PINPLAY_FR_DICT = {
   "Script copied. Paste it into a new recording in Listening Studio.": "Script copié. Collez-le dans un nouvel enregistrement de Listening Studio.",
   "Recording added to the selected listening section.": "Enregistrement ajouté à la section d’écoute sélectionnée.",
   "The recording was not added. Check the audio file and try again.": "L’enregistrement n’a pas été ajouté. Vérifiez le fichier audio et réessayez.",
+
+  "Could not load assignment settings: {msg}": "Impossible de charger les paramètres du devoir : {msg}",
+  "Question format": "Format des questions",
+  "Update the API to enable question format settings. Your existing format is shown here.": "Mettez à jour l’API pour modifier le format des questions. Votre format actuel est affiché ici.",
+  "Question format and count are locked because an attempt has already started. Create a new assignment to change them.": "Le format et le nombre de questions sont verrouillés car un essai a déjà commencé. Créez un nouveau devoir pour les modifier.",
+  "You can change the format until the first attempt starts. Adaptive and Climb need questions tagged with at least two levels.": "Vous pouvez modifier le format avant le début du premier essai. Les modes Adaptatif et Ascension nécessitent des questions marquées avec au moins deux niveaux.",
+  "Shuffle questions applies to new attempts. Attempts already started keep their question order.": "Le mélange des questions s’applique aux nouveaux essais. Les essais commencés conservent leur ordre.",
+  "The API does not support Shuffle questions yet. Update the API before using this option.": "L’API ne prend pas encore en charge le mélange des questions. Mettez-la à jour avant d’utiliser cette option.",
+  "The API did not confirm Shuffle questions was saved. Update the API and try again.": "L’API n’a pas confirmé l’enregistrement du mélange des questions. Mettez-la à jour et réessayez.",
+  "The API did not confirm the question format was saved. Reload the settings and try again.": "L’API n’a pas confirmé l’enregistrement du format. Rechargez les paramètres et réessayez.",
 };
