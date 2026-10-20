@@ -1310,12 +1310,14 @@ export default {
       const points = Number(body?.points);
       const correction = String(body?.correction || '').slice(0, 1500);
       const correctionAudioKey = String(body?.correctionAudioKey || '').slice(0, 255);
+      const servedIndex = body?.servedIndex != null ? Number(body.servedIndex) : undefined;
 
       if (!password) return json({ error: 'Password required.' }, 400);
       if (!code) return json({ error: 'Assignment code required.' }, 400);
       if (!attemptId) return json({ error: 'attemptId required.' }, 400);
       if (!Number.isFinite(qIndex)) return json({ error: 'qIndex required.' }, 400);
       if (!Number.isFinite(points)) return json({ error: 'points required.' }, 400);
+      if (servedIndex != null && (!Number.isInteger(servedIndex) || servedIndex < 0)) return json({ error: 'Invalid servedIndex.' }, 400);
 
       const ok = await verifyCreatePassword(env, password, request, { skipRateLimit: true });
       if (!ok) return json({ error: 'Wrong password.' }, 401);
@@ -1330,6 +1332,7 @@ export default {
           points,
           correction,
           correctionAudioKey,
+          ...(servedIndex != null ? { servedIndex } : {}),
         }),
       }));
     }
@@ -3485,8 +3488,23 @@ export class QuizRoom {
         // included (their teacher-graded questions are served once at most).
         const question = assignment.quiz?.questions?.[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
-        if (!isAssignmentTeacherGradedQuestion(question)) {
-          return json({ error: 'Question is not teacher-graded.' }, 409);
+        if (question.isPoll) return json({ error: 'Poll questions cannot be graded.' }, 409);
+        const teacherQuestion = isAssignmentTeacherGradedQuestion(question);
+        let servedItem = null;
+        if (attempt.adaptive && !teacherQuestion) {
+          const served = attempt.adaptive.items || [];
+          const matches = served.filter(item => item.qi === qIndex);
+          if (body?.servedIndex != null) {
+            const index = Number(body.servedIndex);
+            servedItem = Number.isInteger(index) && index >= 0 ? served[index] : null;
+            if (servedItem?.qi !== qIndex) return json({ error: 'This student was not given that question.' }, 404);
+          } else {
+            if (matches.length > 1) return json({ error: 'Select the specific answer to regrade.' }, 409);
+            servedItem = matches[0];
+            if (!servedItem) return json({ error: 'This student was not given that question.' }, 404);
+          }
+        } else if (!teacherQuestion && !attempt.answersByQ?.[String(qIndex)]) {
+          return json({ error: 'Answer not found.' }, 404);
         }
 
         const maxPoints = Math.max(0, Math.round(Number(question?.points || 1000)));
@@ -3504,21 +3522,28 @@ export class QuizRoom {
         };
         // Adaptive: the grade also moves the student's level (right from 70%
         // of the points, neutral from 40%, wrong below).
-        if (attempt.adaptive && !(await adaptiveAttemptGrade(this.state.storage, attempt, qIndex, teacherGrade, maxPoints))) {
+        if (attempt.adaptive && teacherQuestion && !(await adaptiveAttemptGrade(this.state.storage, attempt, qIndex, teacherGrade, maxPoints))) {
           return json({ error: 'This student was not given that question.' }, 404);
         }
+        // Auto-graded adaptive answers already moved the level when answered.
+        // Override the selected answer's marks without replaying that movement.
+        if (servedItem) servedItem.teacherGrade = teacherGrade;
         attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
-        attempt.answersByQ[String(qIndex)] = {
-          ...(attempt.answersByQ[String(qIndex)] || {}),
-          teacherGrade,
-          updatedAt: Date.now(),
-        };
+        if (!servedItem || attempt.adaptive.items.findLast(item => item.qi === qIndex) === servedItem) {
+          attempt.answersByQ[String(qIndex)] = {
+            ...(attempt.answersByQ[String(qIndex)] || {}),
+            teacherGrade,
+            updatedAt: Date.now(),
+          };
+        }
 
         // Reset notified state so teacher knows to re-notify the student
         // about this newly-graded answer.
         if (attempt.notifiedAt) attempt.notifiedAt = 0;
 
         attempt.updatedAt = Date.now();
+        attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+        if (attempt.submitted && attempt.gradeReleasedAt) attempt.releasedGrade = assignmentGradeOutOf100(assignment, attempt);
         applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
         assignment.updatedAt = Date.now();
         await saveAttempt(this.state.storage, code, attemptId, attempt);
@@ -3752,7 +3777,7 @@ export class QuizRoom {
           ...(attempt.answersByQ[String(qIndex)] || {}),
           answer: safeAnswer,
           bet: sanitizeBet(body?.bet), // <-- FIXED: Save the bet state
-          teacherGrade: isAssignmentTeacherGradedQuestion(question) ? null : (attempt.answersByQ[String(qIndex)]?.teacherGrade || null),
+          teacherGrade: null,
           updatedAt: now,
         };
 
@@ -3944,6 +3969,12 @@ export class QuizRoom {
         const attempts = Object.values(attemptsByKey);
         const submittedAttempts = attempts.filter((a) => a && a.submitted);
 
+        const answersByQuestion = new Map();
+        attempts.forEach(a => buildTeacherGradingItems(assignment, a).forEach(item => {
+          if (!answersByQuestion.has(item.qIndex)) answersByQuestion.set(item.qIndex, []);
+          answersByQuestion.get(item.qIndex).push(item);
+        }));
+
         const overview = questions.map((q, qIndex) => {
           const teacherGraded = isAssignmentTeacherGradedQuestion(q);
           let answeredCount = 0;
@@ -3953,12 +3984,10 @@ export class QuizRoom {
 
           // Use all attempts (not just submitted) so pending counts match the assignment
           // card's "X to grade" counter and the results view.
-          attempts.forEach((a) => {
-            const item = a?.answersByQ?.[String(qIndex)];
-            if (!item) return;
+          (answersByQuestion.get(qIndex) || []).forEach((item) => {
             answeredCount += 1;
-            if (!teacherGraded) return;
-            const grade = item.teacherGrade;
+            if (q?.isPoll) return;
+            const grade = item.grade;
             if (grade && grade.graded) {
               gradedCount += 1;
               if ((grade.correction && String(grade.correction).trim()) || (grade.correctionAudioKey && String(grade.correctionAudioKey).trim())) {
@@ -3975,6 +4004,7 @@ export class QuizRoom {
             prompt: String(q?.prompt || ''),
             maxPoints: Math.max(0, Math.round(Number(q?.points || 1000))),
             teacherGraded,
+            isPoll: !!q?.isPoll,
             answeredCount,
             gradedCount,
             pendingCount,
@@ -4007,47 +4037,26 @@ export class QuizRoom {
         const question = questions[qIndex];
         if (!question) return json({ error: 'Question not found.' }, 404);
 
-        const attempts = Object.values(attemptsByKey);
-        // Include unsubmitted attempts that have answered this question so the teacher
-        // can grade in-progress work (matching what the assignment card's "X to grade"
-        // counter and the results view show).
-        const gradable = attempts.filter((a) => a && a?.answersByQ?.[String(qIndex)] !== undefined);
-        gradable.sort((a, b) => {
+        const items = Object.values(attemptsByKey).flatMap(a => buildTeacherGradingItems(assignment, a)
+          .filter(item => item.qIndex === qIndex)
+          .map(item => ({
+            ...item,
+            attemptId: sanitizeAssignmentAttemptId(a?.id),
+            studentName: sanitizeName(a?.studentName || 'Student'),
+            studentKey: sanitizeAssignmentStudentKey(a?.studentKey),
+            submitted: !!a.submitted,
+            submittedAt: Number(a?.submittedAt || 0) || null,
+          })));
+        items.sort((a, b) => {
           // Ungraded first, then submitted before in-progress, then by submission time.
-          const aPending = !(a?.answersByQ?.[String(qIndex)]?.teacherGrade?.graded) ? 1 : 0;
-          const bPending = !(b?.answersByQ?.[String(qIndex)]?.teacherGrade?.graded) ? 1 : 0;
+          const aPending = !a.grade?.graded ? 1 : 0;
+          const bPending = !b.grade?.graded ? 1 : 0;
           if (aPending !== bPending) return bPending - aPending;
           const aSubmitted = a?.submitted ? 1 : 0;
           const bSubmitted = b?.submitted ? 1 : 0;
           if (aSubmitted !== bSubmitted) return bSubmitted - aSubmitted;
           return Number(a?.submittedAt || 0) - Number(b?.submittedAt || 0);
         });
-
-        const items = gradable
-          .map((a) => {
-            const item = a?.answersByQ?.[String(qIndex)];
-            if (!item) return null;
-            const grade = item.teacherGrade && typeof item.teacherGrade === 'object' ? item.teacherGrade : null;
-            return {
-              attemptId: sanitizeAssignmentAttemptId(a?.id),
-              studentName: sanitizeName(a?.studentName || 'Student'),
-              studentKey: sanitizeAssignmentStudentKey(a?.studentKey),
-              submitted: !!a.submitted,
-              submittedAt: Number(a?.submittedAt || 0) || null,
-              answer: item.answer ?? null,
-              answerText: summarizeHistoryAnswer(question, item.answer),
-              grade: grade
-                ? {
-                  graded: !!grade.graded,
-                  pointsAwarded: Number(grade.pointsAwarded || 0),
-                  correction: String(grade.correction || ''),
-                  correctionAudioKey: String(grade.correctionAudioKey || ''),
-                  gradedAt: Number(grade.gradedAt || 0) || null,
-                }
-                : null,
-            };
-          })
-          .filter(Boolean);
 
         return json({
           ok: true,
@@ -4058,6 +4067,8 @@ export class QuizRoom {
             prompt: String(question?.prompt || ''),
             maxPoints: Math.max(0, Math.round(Number(question?.points || 1000))),
             teacherGraded: isAssignmentTeacherGradedQuestion(question),
+            isPoll: !!question.isPoll,
+            correctAnswer: !question.isPoll && !isAssignmentTeacherGradedQuestion(question) ? hostCorrectSummary(question) : '',
             imageData: String(question?.imageData || ''),
             readingText: String(question?.readingText || ''),
             audioMode: String(question?.audioMode || ''),
@@ -9600,7 +9611,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
       return;
     }
 
-    if (isAssignmentTeacherGradedQuestion(question)) {
+    if (item?.teacherGrade?.graded || isAssignmentTeacherGradedQuestion(question)) {
       const grade = item?.teacherGrade;
       if (grade?.graded) {
         teacherGradedCount += 1;
@@ -9709,6 +9720,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
       // A listening section shows its marks only once it is submitted (locked).
       if (question.listeningSection && !attempt?.submitted && !attemptSectionSubmitted(attempt, question.listeningSection)) return null;
       const verdict = evaluate(question, item?.answer);
+      const override = !question.isPoll && item?.teacherGrade?.graded ? item.teacherGrade : null;
       const basePoints = Number(question?.points || 0);
       const scoreFraction = verdictScoreFraction(verdict);
       let points = verdict?.correct
@@ -9719,13 +9731,13 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
       }
       return {
         qIndex,
-        correct: verdict?.correct === true,
-        points,
+        correct: override ? Number(override.pointsAwarded || 0) > 0 : verdict?.correct === true,
+        points: override ? Number(override.pointsAwarded || 0) : points,
         answer: item?.answer ?? null,
         correctAnswer: hostCorrectSummary(question),
         correctZones: question.type === 'pin' ? (question.zones || []) : undefined,
-        partialScore: Number(verdict?.partialScore || 0) || undefined,
-        partialTotal: Number(verdict?.partialTotal || 0) || undefined,
+        partialScore: override ? undefined : Number(verdict?.partialScore || 0) || undefined,
+        partialTotal: override ? undefined : Number(verdict?.partialTotal || 0) || undefined,
         teacherGrade: item?.teacherGrade ? {
           pointsAwarded: Number(item.teacherGrade.pointsAwarded || 0),
           correction: String(item.teacherGrade.correction || ''),
@@ -9768,6 +9780,10 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
 }
 
 function summarizeTeacherActivity(assignment, attempt) {
+  if (attempt?.adaptive) {
+    const view = adaptiveAttemptView(assignment, attempt, { includeCurrent: false });
+    return summarizeTeacherActivity(view.assignment, view.attempt);
+  }
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
   const answersByQ = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
 
@@ -9779,7 +9795,7 @@ function summarizeTeacherActivity(assignment, attempt) {
     const qIndex = Number(idxRaw);
     const question = questions[qIndex];
     if (!question) return;
-    if (!isAssignmentTeacherGradedQuestion(question)) return;
+    if (question.isPoll) return;
 
     const grade = item?.teacherGrade;
     if (!grade || !grade.graded) return;
@@ -9901,6 +9917,26 @@ function sanitizeCupLevels(src) {
   };
 }
 
+// Present the current automatic score in the same shape as a saved teacher
+// grade, so opening a review never initializes an auto-graded answer to zero.
+function assignmentAnswerGrade(question, item) {
+  const grade = item?.teacherGrade;
+  if (grade && typeof grade === 'object' && (grade.graded || isAssignmentTeacherGradedQuestion(question))) return {
+    graded: !!grade.graded,
+    pointsAwarded: Number(grade.pointsAwarded || 0),
+    correction: String(grade.correction || ''),
+    correctionAudioKey: String(grade.correctionAudioKey || ''),
+    gradedAt: Number(grade.gradedAt || 0) || null,
+  };
+  if (question.isPoll || isAssignmentTeacherGradedQuestion(question)) return null;
+  const verdict = evaluate(question, item?.answer);
+  const maxPoints = Math.round(Number(question.points || 1000));
+  const fraction = verdictScoreFraction(verdict);
+  const points = verdict?.correct ? applyBetScore(maxPoints, Math.floor(maxPoints * fraction), true, item?.bet)
+    : Math.floor(maxPoints * fraction) + applyBetScore(maxPoints, 0, false, item?.bet);
+  return { graded: true, pointsAwarded: points, correction: '', correctionAudioKey: '', gradedAt: null };
+}
+
 function buildTeacherGradingItems(assignment, attempt) {
   if (attempt?.adaptive) {
     // Served order, but qIndex is the question's quiz position so a grade
@@ -9921,7 +9957,7 @@ function buildTeacherGradingItems(assignment, attempt) {
       if (!question) return null;
 
       const teacher = isAssignmentTeacherGradedQuestion(question);
-      const grade = item?.teacherGrade || null;
+      const grade = assignmentAnswerGrade(question, item);
       const maxPoints = Math.max(0, Math.round(Number(question?.points || 1000)));
 
       return {
@@ -9929,6 +9965,8 @@ function buildTeacherGradingItems(assignment, attempt) {
         qType: String(question?.type || ''),
         prompt: String(question?.prompt || ''),
         teacherGraded: teacher,
+        isPoll: !!question.isPoll,
+        correctAnswer: !teacher && !question.isPoll ? hostCorrectSummary(question) : '',
         answer: item?.answer ?? null,
         answerText: summarizeHistoryAnswer(question, item?.answer),
         maxPoints,
@@ -9941,15 +9979,7 @@ function buildTeacherGradingItems(assignment, attempt) {
         language: String(question?.language || ''),
         answerLanguage: String(question?.answerLanguage || ''),
         media: normalizeQuestionMediaForGrading(question?.media),
-        grade: grade && typeof grade === 'object'
-          ? {
-            graded: !!grade.graded,
-            pointsAwarded: Number(grade.pointsAwarded || 0),
-            correction: String(grade.correction || ''),
-            correctionAudioKey: String(grade.correctionAudioKey || ''),
-            gradedAt: Number(grade.gradedAt || 0) || null,
-          }
-          : null,
+        grade,
       };
     })
     .filter(Boolean)

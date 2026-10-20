@@ -6358,9 +6358,9 @@ async function copyTextSmart(text) {
   }
 }
 
-async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correction = '', correctionAudioKey = '') {
+async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correction = '', correctionAudioKey = '', servedIndex) {
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
-  await api('/api/assignments/grade', {
+  const result = await api('/api/assignments/grade', {
     method: 'POST',
     body: {
       password: createSessionPassword,
@@ -6370,8 +6370,17 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
       points,
       correction,
       correctionAudioKey,
+      ...(servedIndex != null ? { servedIndex } : {}),
     },
   });
+  const cache = assignmentResultsCache;
+  const cachedAttempt = cache?.code === code ? cache.data?.attempts?.find(a => a.id === attemptId) : null;
+  if (cachedAttempt && result?.attempt) {
+    const { metrics, releasedGrade, gradeReleasedAt, updatedAt } = result.attempt;
+    Object.assign(cachedAttempt, { metrics, releasedGrade, gradeReleasedAt, updatedAt, notifiedAt: 0 });
+    renderAssignmentResults(code, cache.data);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -8164,7 +8173,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         answer.textContent = t("Answer: {p1}", { p1: String(it?.answerText || '') || '(blank)' });
         li.append(head, prompt, answer);
       }
-      if (it?.teacherGraded) {
+      if (!it?.isPoll) {
         const row = document.createElement('div');
         row.className = 'row gap top-space';
 
@@ -8274,7 +8283,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         saveBtn.addEventListener('click', async () => {
           try {
             saveBtn.disabled = true;
-            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
+            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey, it.servedIndex);
             if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} for {p2}.", { p1: Number(it.qIndex || 0) + 1, p2: safeAttemptId });
             await fetchAssignmentResults(safeCode);
             await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
@@ -8341,7 +8350,7 @@ function focusQuestionGradingAnswer(attemptId) {
   }
 }
 
-function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, onSavedRefresh, studentText, qType }) {
+function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, initialGrade, onSavedRefresh, studentText, qType }) {
   const wrap = document.createDocumentFragment();
   const row = document.createElement('div');
   row.className = 'row gap top-space';
@@ -8354,7 +8363,6 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   pointsInput.style.width = '90px';
   pointsInput.dataset.gradePointsInput = '1';
   pointsInput.addEventListener('click', () => {
-    pointsInput.value = '1000';
     if (typeof pointsInput.select === 'function') pointsInput.select();
   });
 
@@ -8449,7 +8457,7 @@ function buildGradeControls({ code, attemptId, qIndex, maxPoints, initialGrade, 
   saveBtn.addEventListener('click', async () => {
     try {
       saveBtn.disabled = true;
-      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey);
+      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey, servedIndex);
       saveBtn.textContent = t('Update grade');
       if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} · {p2}.", { p1: Number(qIndex) + 1, p2: attemptId });
       if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
@@ -8678,10 +8686,7 @@ async function openGradingFocusModal(code, qIndex) {
   const question = data?.question || {};
   const items = Array.isArray(data?.items) ? data.items : [];
 
-  if (!question.teacherGraded) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Q{p1} is auto-graded — no teacher grading needed.", { p1: Number(qIndex) + 1 });
-    return;
-  }
+  if (question.isPoll) return;
 
   if (!items.length) {
     if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("Q{p1}: no answers yet.", { p1: Number(qIndex) + 1 });
@@ -8849,11 +8854,12 @@ function renderGradingFocusItem() {
         <div class="small muted">Student ${current + 1} of ${items.length} · ${gradedCount} graded · ${pendingCount} pending · max ${maxPoints} pts</div>
       </div>
       <div class="row gap">
-        <button class="btn" data-ai-grade-pack-question title="Build a ZIP + prompt to grade this question for all students with an AI">Grade with AI</button>
+        ${question.teacherGraded ? '<button class="btn" data-ai-grade-pack-question title="Build a ZIP + prompt to grade this question for all students with an AI">Grade with AI</button>' : ''}
         <button class="btn gf-close" data-close-focus title="Close (Esc)">✕</button>
       </div>
     </div>
     <div class="grading-focus-prompt">${escapeHtml(String(question?.prompt || '') || '(no prompt)')}</div>
+    ${question.correctAnswer ? `<div class="small muted">${escapeHtml(t('Correct answer: {answer}', { answer: question.correctAnswer }))}</div>` : ''}
     ${gradingMediaDetailsHtml(question)}
     <div class="grading-focus-body">
       <div class="grading-focus-student-name">${escapeHtml(String(it?.studentName || 'Student'))} ${pendingBadge}</div>
@@ -8861,7 +8867,7 @@ function renderGradingFocusItem() {
       <div>${answerHtml}</div>
     </div>
     <div class="grading-focus-quickactions">
-      <button class="btn gf-correct" data-mark-correct title="Mark Correct (C)">✓ Correct! · 1000 pts<span class="kbd-hint">C</span></button>
+      <button class="btn gf-correct" data-mark-correct title="Mark Correct (C)">✓ Correct! · ${maxPoints} pts<span class="kbd-hint">C</span></button>
       <button class="btn gf-wrong" data-mark-wrong title="Mark Wrong (W)">✗ Wrong · 0 pts<span class="kbd-hint">W</span></button>
       <button class="btn" data-skip title="Skip without saving (N / →)">⏭ Skip<span class="kbd-hint">N</span></button>
     </div>
@@ -9001,7 +9007,8 @@ function renderGradingFocusItem() {
         gradingFocusState.qIndex,
         Number(points || 0),
         String(correction || ''),
-        String(audioKey || '')
+        String(audioKey || ''),
+        it.servedIndex
       );
       it.grade = {
         ...(it.grade || {}),
@@ -9064,7 +9071,7 @@ function renderGradingFocusItem() {
       runAiGradePack({ scope: 'question', code: gradingFocusState.code, qIndex: gradingFocusState.qIndex });
     });
   }
-  content.querySelector('[data-mark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' }));
+  content.querySelector('[data-mark-correct]').addEventListener('click', () => markCurrentAndAdvance({ points: maxPoints, defaultCorrection: 'Correct!' }));
   content.querySelector('[data-mark-wrong]').addEventListener('click', () => markCurrentAndAdvance({ points: 0 }));
   content.querySelector('[data-skip]').addEventListener('click', () => moveGradingFocusTo(current + 1));
   content.querySelector('[data-prev-student]').addEventListener('click', () => moveGradingFocusTo(current - 1));
@@ -9122,7 +9129,7 @@ function gradingFocusKeydown(e) {
   if (k === 'c') {
     swallow();
     if (typeof gradingFocusState.markCurrentAndAdvance === 'function') {
-      gradingFocusState.markCurrentAndAdvance({ points: 1000, defaultCorrection: 'Correct!' });
+      gradingFocusState.markCurrentAndAdvance({ points: gradingFocusState.maxPoints, defaultCorrection: 'Correct!' });
     }
   } else if (k === 'w') {
     swallow();
@@ -9209,11 +9216,10 @@ async function enterGradeByStudentMode(code) {
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   const title = String(data?.assignment?.title || safeCode);
 
-  // Include submitted attempts AND unsubmitted ones that have any answered teacher-graded
-  // question (whether pending or already graded), so teachers can grade/review in-progress
-  // quizzes and notify students before they submit.
+  // Submitted and in-progress work can both be reviewed, including auto-grades.
   const gradable = attempts.filter(
     (a) => a?.submitted
+      || Number(a?.metrics?.answeredCount || 0) > 0
       || (Number(a?.metrics?.pendingTeacherGradeCount || 0) + Number(a?.metrics?.teacherGradedCount || 0)) > 0
   );
   gradable.sort((a, b) => {
@@ -9306,10 +9312,10 @@ async function openStudentGradingFocusModal(code, attemptId, studentName) {
   });
 
   const allItems = Array.isArray(data?.gradingItems) ? data.gradingItems : [];
-  const items = allItems.filter((it) => it?.teacherGraded);
+  const items = allItems.filter((it) => it && !it.isPoll);
 
   if (!items.length) {
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t("No teacher-graded questions found for {p1}.", { p1: studentName || safeAttemptId });
+    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('No answers to grade for {p1}.', { p1: studentName || safeAttemptId });
     return;
   }
 
@@ -9478,6 +9484,7 @@ function renderStudentGradingFocusItem() {
       <strong>Q${Number(it?.qIndex || 0) + 1} · ${icon} ${escapeHtml(qType)}</strong> · max ${maxPoints} pts
       <div class="small muted" style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(String(it?.prompt || '') || '(no prompt)')}</div>
     </div>
+    ${it.correctAnswer ? `<div class="small muted">${escapeHtml(t('Correct answer: {answer}', { answer: it.correctAnswer }))}</div>` : ''}
     ${gradingMediaDetailsHtml(it)}
     <div class="grading-focus-body">
       <div class="grading-focus-student-name">${pendingBadge}</div>
@@ -9624,7 +9631,8 @@ function renderStudentGradingFocusItem() {
         Number(it.qIndex || 0),
         Number(points || 0),
         String(correction || ''),
-        String(audioKey || '')
+        String(audioKey || ''),
+        it.servedIndex
       );
       it.grade = {
         ...(it.grade || {}),
@@ -9787,23 +9795,23 @@ async function enterGradeByQuestionMode(code) {
   });
 
   const questions = Array.isArray(data?.questions) ? data.questions : [];
-  const teacherGraded = questions.filter((q) => q?.teacherGraded);
-  teacherGraded.sort((a, b) => Number(b.pendingCount || 0) - Number(a.pendingCount || 0));
+  const gradableQuestions = questions.filter((q) => q && !q.isPoll);
+  gradableQuestions.sort((a, b) => Number(b.pendingCount || 0) - Number(a.pendingCount || 0));
   const submitted = Number(data?.submittedAttempts || 0);
   const title = String(data?.assignment?.title || safeCode);
 
   if (assignmentGradingSummaryEl) {
-    assignmentGradingSummaryEl.textContent = teacherGraded.length
-      ? `${title} · Per-question grading · ${submitted} submitted attempt${submitted === 1 ? '' : 's'} · Pick a question below.`
-      : `${title} · No teacher-graded questions in this quiz.`;
+    assignmentGradingSummaryEl.textContent = gradableQuestions.length
+      ? t('{title} · Per-question grading · {n} submitted · Pick a question below.', { title, n: submitted })
+      : t('{title} · No questions to grade in this quiz.', { title });
   }
 
   if (!assignmentGradingListEl) return;
   assignmentGradingListEl.innerHTML = '';
 
-  if (!teacherGraded.length) return;
+  if (!gradableQuestions.length) return;
 
-  teacherGraded.forEach((q) => {
+  gradableQuestions.forEach((q) => {
     const li = document.createElement('li');
     li.style.cursor = 'pointer';
 
@@ -9933,13 +9941,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   assignmentGradingListEl.innerHTML = '';
   assignmentGradingListEl.appendChild(headerLi);
 
-  if (!question.teacherGraded) {
-    const li = document.createElement('li');
-    li.className = 'small muted';
-    li.textContent = t('This question is auto-graded — no teacher grading needed.');
-    assignmentGradingListEl.appendChild(li);
-    return;
-  }
+  if (question.isPoll) return;
 
   if (!items.length) {
     const li = document.createElement('li');
@@ -10028,6 +10030,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
       code: safeCode,
       attemptId: it.attemptId,
       qIndex: Number(qIndex),
+      servedIndex: it.servedIndex,
       maxPoints,
       initialGrade: it.grade,
       studentText: it.answerText,

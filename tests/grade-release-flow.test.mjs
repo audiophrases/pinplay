@@ -238,3 +238,102 @@ it('reopening the assignment shows the released grade in the completed-attempt c
   assert.equal(scores[0].textContent, 'Grade: 50/100');
   assert.equal(scores[1].textContent, 'Grade not released');
 });
+
+let reviewNumber = 0;
+async function reviewFixture({ released = true, feedbackMode = 'none', submitted = true } = {}) {
+  const reviewCode = `REVIEW${++reviewNumber}`;
+  await storage.put(`ab:${reviewCode}`, { ...clone(assignment), code: reviewCode, feedbackMode,
+    quiz: { ...clone(assignment.quiz), questions: [...clone(assignment.quiz.questions),
+      { ...clone(assignment.quiz.questions[0]), id: 'poll', prompt: 'Poll', isPoll: true },
+    ] },
+  });
+  await storage.put(`a:${reviewCode}:t:reviewer`, { ...attempt('reviewer'), submitted,
+    submittedAt: submitted ? 100 : null, notifiedAt: 50,
+    answersByQ: { 0: { answer: 0 }, 1: { answer: 1 }, 2: { answer: 0 } },
+  });
+  if (released) assert.equal((await call('/api/assignments/release-grades', {
+    code: reviewCode, password: teacherPassword, attemptIds: ['reviewer'],
+  })).status, 200);
+  return { code: reviewCode, password: teacherPassword, attemptId: 'reviewer' };
+}
+it('auto-grades are reviewable and manual changes update a released exam across restart without revealing answers', async () => {
+  const input = await reviewFixture();
+  const overview = await call('/api/assignments/grading-overview', input);
+  assert.equal(overview.body.questions[0].teacherGraded, false);
+  assert.equal(overview.body.questions[0].gradedCount, 1);
+  assert.equal(overview.body.questions[1].pendingCount, 0);
+  assert.equal(overview.body.questions[2].isPoll, true);
+  const question = await call('/api/assignments/question-grading', { ...input, qIndex: 0 });
+  assert.equal(question.body.items[0].grade.pointsAwarded, 1000);
+  assert.equal(question.body.question.correctAnswer, '1. Yes');
+  const before = await call('/api/assignments/attempt', input);
+  assert.equal(before.body.gradingItems[1].grade.pointsAwarded, 0);
+  const releasedAt = before.body.attempt.gradeReleasedAt;
+  const denied = await call('/api/assignments/grade', { ...input, password: 'wrong', qIndex: 1, points: 500 });
+  assert.equal(denied.status, 401);
+  const changed = await call('/api/assignments/grade', { ...input, qIndex: 1, points: 500, correction: 'Accept this alternative.' });
+  assert.equal(changed.status, 200, JSON.stringify(changed.body));
+  assert.equal(changed.body.attempt.metrics.totalScore, 1500);
+  assert.equal(changed.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  assert.equal(changed.body.attempt.releasedGrade, 75);
+  assert.equal(changed.body.attempt.gradeReleasedAt, releasedAt);
+  newRoom();
+  const reviewed = await call('/api/assignments/question-grading', { ...input, qIndex: 1 });
+  assert.equal(reviewed.body.items[0].grade.pointsAwarded, 500);
+  assert.equal(reviewed.body.items[0].grade.correction, 'Accept this alternative.');
+  const state = await call(`/api/assignment/state?code=${input.code}&attemptId=reviewer`);
+  assert.equal(state.body.attempt.releasedGrade, 75);
+  assert.equal(state.body.attempt.answersWithCorrectness, null);
+  assert.ok(state.body.attempt.assignment.quiz.questions.every(q => !q.answers?.some(a => a.correct)));
+  const status = await call('/api/assignment/check-status', { code: input.code, studentKey: 'student_reviewer' });
+  assert.equal(status.body.previousAttempts[0].releasedGrade, 75);
+  assert.equal(status.body.previousAttempts[0].hasNewTeacherActivity, true);
+  const stored = await storage.get(`a:${input.code}:t:reviewer`);
+  assert.equal(stored.notifiedAt, 0);
+  assert.equal(stored.submittedAt, 100);
+  const updated = await call('/api/assignments/grade', { ...input, qIndex: 0, points: 0 });
+  assert.equal(updated.body.attempt.releasedGrade, 25);
+  const results = await call('/api/assignments/results', input);
+  assert.equal(results.body.attempts[0].releasedGrade, 25);
+  assert.equal((await call('/api/assignments/grade', { ...input, qIndex: 2, points: 1000 })).status, 409);
+});
+it('unreleased grades stay unreleased, and changing an answer clears its old override', async () => {
+  const input = await reviewFixture({ released: false, submitted: false, feedbackMode: 'end' });
+  const graded = await call('/api/assignments/grade', { ...input, qIndex: 1, points: 1000 });
+  assert.equal(graded.body.attempt.metrics.totalScore, 2000);
+  assert.equal(graded.body.attempt.releasedGrade, null);
+  const answered = await call('/api/assignment/answer', { code: input.code, attemptId: input.attemptId, qIndex: 1, answer: 1 });
+  assert.equal(answered.status, 200, JSON.stringify(answered.body));
+  assert.equal(answered.body.attempt.metrics.totalScore, 1000);
+  assert.equal((await storage.get(`a:${input.code}:t:reviewer`)).answersByQ[1].teacherGrade, null);
+  const released = await call('/api/assignments/release-grades', { ...input, attemptIds: ['reviewer'] });
+  assert.equal(released.body.grades[0].releasedGrade, 50);
+});
+it('student answer review uses the teacher override when feedback is visible', async () => {
+  const input = await reviewFixture({ feedbackMode: 'end' });
+  await call('/api/assignments/grade', { ...input, qIndex: 1, points: 500, correction: 'Partial credit.' });
+  const state = await call(`/api/assignment/state?code=${input.code}&attemptId=reviewer`);
+  const answer = state.body.attempt.answersWithCorrectness.find(a => a.qIndex === 1);
+  assert.equal(answer.points, 500);
+  assert.equal(answer.correct, true);
+  assert.equal(answer.teacherGrade.correction, 'Partial credit.');
+});
+it('an adaptive repeat can be regraded independently without moving the saved level again', async () => {
+  const input = await reviewFixture({ released: false });
+  const stored = await storage.get(`a:${input.code}:t:reviewer`);
+  stored.adaptive = { bands: ['A1', 'A2'], score: 1, answered: 2, count: 2, done: true, current: null, path: [],
+    items: [{ qi: 0, answer: 1, band: 0, qBand: 0 }, { qi: 0, answer: 0, band: 0, qBand: 0 }],
+  };
+  await storage.put(`a:${input.code}:t:reviewer`, stored);
+  const question = await call('/api/assignments/question-grading', { ...input, qIndex: 0 });
+  assert.equal(question.body.items.length, 2);
+  assert.deepEqual(question.body.items.map(item => item.servedIndex), [0, 1]);
+  assert.equal((await call('/api/assignments/grade', { ...input, qIndex: 0, points: 500 })).status, 409);
+  const graded = await call('/api/assignments/grade', { ...input, qIndex: 0, servedIndex: 0, points: 500 });
+  assert.equal(graded.status, 200, JSON.stringify(graded.body));
+  assert.equal(graded.body.attempt.metrics.totalScore, 1500);
+  const updated = await storage.get(`a:${input.code}:t:reviewer`);
+  assert.equal(updated.adaptive.score, 1);
+  assert.equal(updated.adaptive.answered, 2);
+  assert.equal(updated.adaptive.items[1].teacherGrade, undefined);
+});

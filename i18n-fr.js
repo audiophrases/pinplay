@@ -1913,4 +1913,7 @@ window.PINPLAY_FR_DICT = {
   "The API does not support Shuffle questions yet. Update the API before using this option.": "L’API ne prend pas encore en charge le mélange des questions. Mettez-la à jour avant d’utiliser cette option.",
   "The API did not confirm Shuffle questions was saved. Update the API and try again.": "L’API n’a pas confirmé l’enregistrement du mélange des questions. Mettez-la à jour et réessayez.",
   "The API did not confirm the question format was saved. Reload the settings and try again.": "L’API n’a pas confirmé l’enregistrement du format. Rechargez les paramètres et réessayez.",
+  'No answers to grade for {p1}.': 'Aucune réponse à corriger pour {p1}.',
+  '{title} · Per-question grading · {n} submitted · Pick a question below.': '{title} · Correction par question · {n} travaux rendus · Choisissez une question ci-dessous.',
+  '{title} · No questions to grade in this quiz.': '{title} · Aucune question à corriger dans ce quiz.',
 };
