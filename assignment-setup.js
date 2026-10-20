@@ -14,6 +14,7 @@
     let preset = 'custom';
     let busy = false;
     let created = false;
+    let classSelection = draft.className ? `label:${draft.className}` : 'none';
     const names = ['Start', 'Students', 'Feedback', 'Questions', 'Review'];
     const dialog = document.createElement('dialog');
     dialog.id = 'assignmentSetupDialog';
@@ -30,7 +31,7 @@
       <div class="assignment-setup-content"></div>
       <p class="assignment-setup-status" role="status" aria-live="polite"></p>
       <footer class="assignment-setup-footer">
-        <p id="assignmentSetupKeys"><kbd>←</kbd><kbd>→</kbd> ${esc(t('choose'))} <kbd>Enter</kbd> ${esc(t('continue'))} <span>· ${esc(t('Tab for more options'))}</span></p>
+        <p id="assignmentSetupKeys"><kbd>←</kbd><kbd>→</kbd> ${esc(t('choose'))} <kbd>↑</kbd><kbd>↓</kbd> ${esc(t('settings'))} <kbd>Enter</kbd> ${esc(t('continue'))}</p>
         <div><button type="button" class="btn" data-setup-action="back">${esc(t('Back'))}</button>
         <button type="button" class="btn primary" data-setup-action="next">${esc(t('Continue'))} →</button></div>
       </footer>`;
@@ -47,10 +48,12 @@
     closeButton.addEventListener('click', close);
     back.addEventListener('click', () => { if (!busy && step > 0) { step -= 1; render(); } });
 
-    function choices(key, selected, options) {
-      return `<div class="assignment-setup-choices" role="radiogroup" aria-labelledby="assignmentSetupStepTitle" data-choice-group="${key}">${options.map(([value, icon, label, description, disabled]) => `
-        <button type="button" class="assignment-setup-choice" role="radio" aria-checked="${value === selected}" tabindex="${value === selected ? 0 : -1}" data-choice="${value}" ${disabled ? 'disabled' : ''}>
-          <span class="assignment-setup-choice-icon" aria-hidden="true">${icon}</span><strong>${esc(t(label))}</strong><span>${esc(t(description))}</span><span class="assignment-setup-tick" aria-hidden="true">✓</span>
+    function choices(key, selected, options, label, compact = false, literal = false) {
+      const labelId = label ? `assignmentSetup-${key}` : 'assignmentSetupStepTitle';
+      return (label ? `<h4 id="${labelId}" class="assignment-setup-setting-title">${esc(t(label))}</h4>` : '')
+        + `<div class="assignment-setup-choices${compact ? ' assignment-setup-choices-compact' : ''}" role="radiogroup" aria-labelledby="${labelId}" data-choice-group="${key}">${options.map(([value, icon, label, description, disabled]) => `
+        <button type="button" class="assignment-setup-choice" role="radio" aria-checked="${value === selected}" tabindex="${value === selected ? 0 : -1}" data-choice="${esc(value)}" ${disabled ? 'disabled' : ''}>
+          ${icon ? `<span class="assignment-setup-choice-icon" aria-hidden="true">${icon}</span>` : ''}<strong>${esc(literal ? label : t(label))}</strong>${description ? `<span>${esc(t(description))}</span>` : ''}<span class="assignment-setup-tick" aria-hidden="true">✓</span>
         </button>`).join('')}</div>`;
     }
     function heading(eyebrow, text, description) {
@@ -58,8 +61,16 @@
     }
     function field(label, control) { return `<label class="assignment-setup-field"><span>${esc(t(label))}</span>${control}</label>`; }
     function classOptions() {
-      const list = content.querySelector('#assignmentSetupClasses');
-      if (list) list.innerHTML = classes.map(c => `<option value="${esc(c)}"></option>`).join('');
+      const list = content.querySelector('[data-class-options]');
+      if (!list) return;
+      const focused = list.contains(document.activeElement);
+      const labels = [...new Set([original.className, ...classes].filter(Boolean))];
+      list.innerHTML = choices('classLabel', classSelection, [
+        ['none', '', t('No label')],
+        ...labels.map(label => [`label:${label}`, '', label]),
+        ['custom', '', t('Custom label')],
+      ], 'Class label (optional)', true, true);
+      if (focused) list.querySelector('[aria-checked="true"]')?.focus();
     }
     function normalize() {
       if (draft.format === 'climb') { draft.feedbackMode = 'instant'; draft.examMode = false; }
@@ -69,18 +80,24 @@
     function choose(key, value) {
       if (key === 'preset') {
         preset = value;
-        if (value === 'custom') Object.assign(draft, original);
-        else Object.assign(draft, {
+        if (value === 'custom') {
+          Object.assign(draft, original);
+          classSelection = draft.className ? `label:${draft.className}` : 'none';
+        } else Object.assign(draft, {
           format: 'all', feedbackMode: value === 'practice' ? 'instant' : value === 'exam' ? 'none' : 'end',
           examMode: value === 'exam', attemptsLimit: value === 'practice' ? 0 : value === 'exam' ? 1 : 2,
           signIn: value === 'practice' ? 'random' : 'signin',
         });
+      } else if (key === 'classLabel') {
+        classSelection = value;
+        if (value !== 'custom') draft.className = value === 'none' ? '' : value.slice(6);
       } else if (key === 'format') {
         if (value === 'climb' && draft.format !== 'climb') draft.adaptiveCount = climbDefaultCount || 20;
         draft.format = value;
-      } else draft[key] = value;
+      } else draft[key] = ['examMode', 'shuffleQuestions'].includes(key) ? value === 'on'
+        : key === 'attemptsLimit' ? Number(value) : value;
       normalize();
-      render(value);
+      render({ key, value });
     }
 
     function render(focusChoice) {
@@ -100,7 +117,8 @@
         content.innerHTML = heading('02 / STUDENTS', 'Who is this for?', 'Choose how students enter, and give this assignment a class label.') + choices('signIn', draft.signIn, [
           ['signin', '👤', 'Students sign in', 'Keep results under each student’s school account.'],
           ['random', '🎲', 'Random names', 'Anyone with the link can play without signing in.'],
-        ]) + field('Class label (optional)', `<input data-field="className" value="${esc(draft.className)}" list="assignmentSetupClasses" placeholder="${esc(t('e.g. 4B'))}" autocomplete="off" maxlength="100"><datalist id="assignmentSetupClasses"></datalist>`)
+        ]) + '<div data-class-options></div>'
+          + (classSelection === 'custom' ? field('Class label (optional)', `<input data-field="className" value="${esc(draft.className)}" placeholder="${esc(t('e.g. 4B'))}" autocomplete="off" maxlength="100">`) : '')
           + `<p class="assignment-setup-note">${esc(t('The class label organises your list. It does not restrict who can open the link.'))}</p>`;
         classOptions();
       } else if (step === 2) {
@@ -109,15 +127,21 @@
           ['instant', '⚡', 'After each answer', 'Show right or wrong immediately. Saved answers are locked.'],
           ['end', '◷', 'At the end', 'Students can edit saved answers until they submit.', climb],
           ['none', '🔒', 'No feedback', 'Keep feedback hidden. Release grades yourself when ready.', climb],
-        ]) + `<div class="assignment-setup-fields">` + field('Attempts per student', `<select data-field="attemptsLimit">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0].map(n => `<option value="${n}" ${Number(draft.attemptsLimit) === n ? 'selected' : ''}>${n === 0 ? esc(t('Unlimited')) : n}</option>`).join('')}</select>`)
-          + `<label class="assignment-setup-switch"><input type="checkbox" data-field="examMode" ${draft.examMode ? 'checked' : ''} ${climb ? 'disabled' : ''}><span><strong>${esc(t('Exam mode'))}</strong><small>${esc(t('Pause when students leave the tab and log focus changes.'))}</small></span></label></div>`
+        ]) + choices('attemptsLimit', String(draft.attemptsLimit), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0].map(n => [String(n), '', n === 0 ? 'Unlimited' : String(n)]), 'Attempts per student', true)
+          + choices('examMode', draft.examMode ? 'on' : 'off', [
+            ['off', '', 'Off', '', climb], ['on', '', 'On', '', climb],
+          ], 'Exam mode', true)
+          + `<p class="assignment-setup-note">${esc(t('Pause when students leave the tab and log focus changes.'))}</p>`
           + (climb ? `<p class="assignment-setup-note">${esc(t('Climb uses instant feedback and keeps exam mode off.'))}</p>` : '');
       } else if (step === 3) {
         content.innerHTML = heading('04 / QUESTIONS & TIMING', 'How should the assignment run?', 'Use the full quiz, or let the questions adapt to each student.') + choices('format', draft.format, [
           ['all', '▤', 'All questions', 'Every student gets the full quiz.'],
           ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level.' : 'Needs questions tagged with at least two levels.', !adaptiveAvailable],
           ['climb', '🏔', 'Climb', climbAvailable ? 'Build a skill from the easiest level, step by step.' : 'Needs auto-graded questions at two or more levels.', !climbAvailable],
-        ]) + `<div class="assignment-setup-fields"><label class="assignment-setup-switch"><input type="checkbox" data-field="shuffleQuestions" ${draft.shuffleQuestions ? 'checked' : ''} ${draft.format !== 'all' ? 'disabled' : ''}><span><strong>${esc(t('Shuffle questions'))}</strong><small>${esc(t(draft.format === 'all' ? 'A separate question order for each new attempt. Listening sections stay together. Started attempts keep their order.' : 'Adaptive and Climb choose their own question order.'))}</small></span></label>` + (draft.format !== 'all' && (draft.format === 'climb' || singleCount > 0)
+        ]) + choices('shuffleQuestions', draft.format === 'all' && draft.shuffleQuestions ? 'on' : 'off', [
+          ['off', '', 'Off', '', draft.format !== 'all'], ['on', '', 'On', '', draft.format !== 'all'],
+        ], 'Shuffle questions', true)
+          + `<p class="assignment-setup-note">${esc(t(draft.format === 'all' ? 'A separate question order for each new attempt. Listening sections stay together. Started attempts keep their order.' : 'Adaptive and Climb choose their own question order.'))}</p><div class="assignment-setup-fields">` + (draft.format !== 'all' && (draft.format === 'climb' || singleCount > 0)
           ? field(draft.format === 'climb' ? 'Maximum questions per student' : 'Questions per student', `<input type="number" data-field="adaptiveCount" min="1" max="${draft.format === 'climb' ? 100 : Math.max(1, singleCount)}" value="${draft.adaptiveCount}" required>`)
           : '') + field('Due date (optional)', `<input type="datetime-local" data-field="dueAt" value="${esc(draft.dueAt)}">`) + '</div>'
           + (draft.format === 'adaptive' && hasSections ? `<p class="assignment-setup-note">${esc(t('Listening sections are added at each student’s level.'))}</p>` : '')
@@ -137,7 +161,8 @@
         ];
         content.innerHTML = heading('05 / READY TO SHARE', 'Everything look right?', 'Create the assignment to get a link for your students.') + `<dl class="assignment-setup-review">${summary.map(([key, value]) => `<div><dt>${esc(t(key))}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`;
       }
-      const focus = focusChoice ? content.querySelector(`[data-choice="${focusChoice}"]`) : content.querySelector('[role="radio"][aria-checked="true"]');
+      const focus = focusChoice ? [...content.querySelectorAll('[data-choice]')].find(card => card.closest('[data-choice-group]').dataset.choiceGroup === focusChoice.key && card.dataset.choice === focusChoice.value)
+        : content.querySelector('[role="radio"][aria-checked="true"]:not(:disabled)');
       (focus || next).focus();
       content.scrollTop = 0;
     }
@@ -148,8 +173,7 @@
     });
     function readField(event) {
       const field = event.target.dataset.field;
-      if (field) draft[field] = event.target.type === 'checkbox' ? event.target.checked
-        : ['adaptiveCount', 'attemptsLimit'].includes(field) ? Number(event.target.value) : event.target.value;
+      if (field) draft[field] = field === 'adaptiveCount' ? Number(event.target.value) : event.target.value;
     }
     content.addEventListener('input', readField);
     content.addEventListener('change', readField);
@@ -160,6 +184,21 @@
     function valid() {
       const invalid = [...content.querySelectorAll('input,select')].find(el => !el.checkValidity());
       if (invalid) { invalid.reportValidity(); return false; }
+      return true;
+    }
+    function settings() {
+      return [...content.querySelectorAll('[data-choice-group],input[data-field]')].map(el => el.matches('[data-choice-group]')
+        ? el.querySelector('[aria-checked="true"]:not(:disabled)') || el.querySelector('[data-choice]:not(:disabled)') : el)
+        .filter(el => el && !el.disabled && el.getClientRects().length);
+    }
+    function moveSetting(target, delta) {
+      const controls = settings();
+      const index = controls.findIndex(el => el === target || (target.closest('[data-choice-group]') && el.closest('[data-choice-group]') === target.closest('[data-choice-group]')));
+      if (index < 0) return false;
+      const control = controls[index + delta];
+      if (control) control.focus();
+      else if (delta > 0) { if (valid()) next.focus(); }
+      else nav.querySelector('[aria-current="step"]').focus();
       return true;
     }
     async function advance() {
@@ -215,18 +254,40 @@
         }
       }
       if (busy || created || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === 'Enter' && event.repeat) { event.preventDefault(); return; }
       const card = event.target.closest('[data-choice]');
-      if (card && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+      const action = event.target.closest('[data-setup-action]');
+      if (card && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
         const group = card.closest('[data-choice-group]');
         const cards = [...group.querySelectorAll('[data-choice]:not(:disabled)')];
         const i = cards.indexOf(card);
-        const delta = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1;
+        const delta = event.key === 'ArrowLeft' ? -1 : 1;
         const target = cards[event.key === 'Home' ? 0 : event.key === 'End' ? cards.length - 1 : (i + delta + cards.length) % cards.length];
         choose(group.dataset.choiceGroup, target.dataset.choice);
-      } else if (event.key === 'Enter' && !event.target.closest('[data-setup-action]') && event.target.tagName !== 'SELECT') {
+      } else if ((card || event.target.type === 'text') && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
         event.preventDefault();
-        advance();
+        moveSetting(event.target, event.key === 'ArrowUp' ? -1 : 1);
+      } else if (event.target.closest('[data-step]') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const steps = [...nav.querySelectorAll('button')];
+        const index = steps.indexOf(event.target.closest('[data-step]'));
+        steps[event.key === 'Home' ? 0 : event.key === 'End' ? steps.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + steps.length) % steps.length].focus();
+      } else if (action && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+        const controls = settings();
+        const currentStep = nav.querySelector('[aria-current="step"]');
+        if (action.dataset.setupAction === 'step') {
+          (event.key === 'ArrowUp' ? closeButton : controls[0] || next).focus();
+        } else if (action === closeButton || event.key === 'ArrowDown') currentStep.focus();
+        else if (event.key === 'ArrowUp') (controls[controls.length - 1] || currentStep).focus();
+        else (event.key === 'ArrowLeft' && !back.hidden ? back : next).focus();
+      } else if (event.key === 'Enter' && !event.target.closest('[data-setup-action]')) {
+        event.preventDefault();
+        const controls = settings();
+        const index = controls.findIndex(el => el === event.target || (card && el.closest('[data-choice-group]') === card.closest('[data-choice-group]')));
+        if (index >= 0 && controls[index + 1]) controls[index + 1].focus();
+        else advance();
       }
     });
     document.body.appendChild(dialog);
