@@ -83,7 +83,15 @@
         if (value === 'custom') {
           Object.assign(draft, original);
           classSelection = draft.className ? `label:${draft.className}` : 'none';
-        } else Object.assign(draft, {
+        } else if (value === 'adaptive') Object.assign(draft, {
+          format: 'adaptive', feedbackMode: 'end', examMode: false, attemptsLimit: 2, signIn: 'signin',
+          adaptiveCount: original.format === 'adaptive' ? original.adaptiveCount : 20,
+        });
+        else if (value === 'climb') Object.assign(draft, {
+          format: 'climb', feedbackMode: 'instant', examMode: false, attemptsLimit: 0, signIn: 'signin',
+          adaptiveCount: original.format === 'climb' ? original.adaptiveCount : climbDefaultCount || 20,
+        });
+        else Object.assign(draft, {
           format: 'all', feedbackMode: value === 'practice' ? 'instant' : value === 'exam' ? 'none' : 'end',
           examMode: value === 'exam', attemptsLimit: value === 'practice' ? 0 : value === 'exam' ? 1 : 2,
           signIn: value === 'practice' ? 'random' : 'signin',
@@ -111,6 +119,8 @@
           ['practice', '✦', 'Practice', 'Instant feedback · unlimited attempts · random names'],
           ['homework', '⌂', 'Homework', 'Feedback at the end · 2 attempts · student sign-in'],
           ['exam', '▣', 'Exam', 'No feedback · 1 attempt · student sign-in · exam mode'],
+          ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level · feedback at the end · 2 attempts · student sign-in' : 'Needs questions tagged with at least two levels.', !adaptiveAvailable],
+          ['climb', '🏔', 'Climb', climbAvailable ? 'Easiest level first, step by step · instant feedback · unlimited attempts · student sign-in' : 'Needs auto-graded questions at two or more levels.', !climbAvailable],
           ['custom', '⚙', 'Current settings', 'Keep the options you have already chosen'],
         ]);
       } else if (step === 1) {

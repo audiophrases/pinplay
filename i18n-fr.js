@@ -1782,6 +1782,8 @@ window.PINPLAY_FR_DICT = {
   "Instant feedback · unlimited attempts · random names": "Correction immédiate · essais illimités · noms aléatoires",
   "Feedback at the end · 2 attempts · student sign-in": "Correction à la fin · 2 essais · connexion des élèves",
   "No feedback · 1 attempt · student sign-in · exam mode": "Aucune correction · 1 essai · connexion des élèves · mode examen",
+  "Questions match each student’s level · feedback at the end · 2 attempts · student sign-in": "Questions adaptées au niveau de chaque élève · correction à la fin · 2 essais · connexion des élèves",
+  "Easiest level first, step by step · instant feedback · unlimited attempts · student sign-in": "Du niveau le plus facile, étape par étape · correction immédiate · essais illimités · connexion des élèves",
   "02 / STUDENTS": "02 / ÉLÈVES",
   "Who is this for?": "À qui s’adresse ce devoir ?",
   "Choose how students enter, and give this assignment a class label.": "Choisissez comment les élèves accèdent au devoir et ajoutez une étiquette de classe.",
