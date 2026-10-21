@@ -530,6 +530,10 @@ window.PINPLAY_FR_DICT = {
 
   /* unanswered-submit + final results */
   'Submit assignment with unanswered questions:': 'Soumettre le devoir avec des questions sans réponse :',
+  'Submit with unanswered questions?': 'Envoyer avec des questions sans réponse ?',
+  'You won’t be able to change your answers.': 'Vous ne pourrez plus modifier vos réponses.',
+  'Keep working': 'Continuer le quiz',
+  'Submit anyway': 'Envoyer quand même',
   'Final Results': 'Résultats finaux',
   'Hide question summary': 'Masquer le résumé des questions',
   'Show question summary': 'Afficher le résumé des questions',

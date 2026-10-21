@@ -2298,6 +2298,7 @@ function showUnansweredConfirmModal(blankIndexes) {
   if (existing) existing.remove();
 
   const questions = live.player.assignment.state?.attempt?.assignment?.quiz?.questions || [];
+  const previousFocus = document.activeElement;
 
   const backdrop = document.createElement('div');
   backdrop.id = 'unansweredConfirmModal';
@@ -2305,10 +2306,15 @@ function showUnansweredConfirmModal(blankIndexes) {
 
   const panel = document.createElement('div');
   panel.style.cssText = 'background:var(--card-bg, #fff);color:var(--text, #111);border-radius:12px;max-width:480px;width:100%;padding:1.25rem 1.25rem 1rem;box-shadow:0 18px 50px rgba(0,0,0,0.35);max-height:90vh;overflow:auto;';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-labelledby', 'unansweredConfirmTitle');
+  panel.setAttribute('aria-describedby', 'unansweredConfirmWarning');
 
   const title = document.createElement('div');
+  title.id = 'unansweredConfirmTitle';
   title.style.cssText = 'font-size:1.1rem;font-weight:700;margin-bottom:0.75rem;';
-  title.textContent = t('Submit assignment with unanswered questions:');
+  title.textContent = t('Submit with unanswered questions?');
   panel.appendChild(title);
 
   const chipsWrap = document.createElement('div');
@@ -2327,36 +2333,75 @@ function showUnansweredConfirmModal(blankIndexes) {
     numEl.textContent = `Q${qIndex + 1}`;
     chip.append(iconEl, numEl);
     chip.addEventListener('click', () => {
-      backdrop.remove();
+      closeModal();
       jumpToAssignmentQuestion(qIndex);
     });
     chipsWrap.appendChild(chip);
   });
   panel.appendChild(chipsWrap);
 
+  const warning = document.createElement('p');
+  warning.id = 'unansweredConfirmWarning';
+  warning.className = 'small muted';
+  warning.textContent = t('You won’t be able to change your answers.');
+  panel.appendChild(warning);
+
   const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;justify-content:flex-end;';
+  actions.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0.5rem;';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn';
+  cancelBtn.textContent = t('Keep working');
+  cancelBtn.addEventListener('click', closeModal);
+  actions.appendChild(cancelBtn);
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'button';
   submitBtn.className = 'btn primary';
-  submitBtn.textContent = t('OK');
+  submitBtn.textContent = t('Submit anyway');
   submitBtn.addEventListener('click', () => {
     submitBtn.disabled = true;
     finalizeAssignmentAttempt({ force: true })
       .catch(() => { })
-      .finally(() => { backdrop.remove(); });
+      .finally(closeModal);
   });
   actions.appendChild(submitBtn);
 
   panel.appendChild(actions);
   backdrop.appendChild(panel);
 
+  function closeModal() {
+    backdrop.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
+
+  backdrop.addEventListener('keydown', (e) => {
+    // Keep quiz navigation and answer shortcuts out of the confirmation dialog.
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+    } else if (e.key === 'Tab') {
+      const buttons = [...panel.querySelectorAll('button:not(:disabled)')];
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    }
+  });
+
   backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) backdrop.remove();
+    if (e.target === backdrop) closeModal();
   });
 
   document.body.appendChild(backdrop);
+  cancelBtn.focus({ preventScroll: true });
 }
 
 // leaveBlank=false (instant feedback): "Show answer?" — saves empty so the
