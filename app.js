@@ -6378,7 +6378,14 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
   if (cachedAttempt && result?.attempt) {
     const { metrics, releasedGrade, gradeReleasedAt, updatedAt } = result.attempt;
     Object.assign(cachedAttempt, { metrics, releasedGrade, gradeReleasedAt, updatedAt, notifiedAt: 0 });
+    // Result filters can remove a row above the editor after the last pending
+    // answer is graded. Keep the editor at the same viewport position.
+    const gradingTop = assignmentGradingListEl?.getBoundingClientRect().top;
     renderAssignmentResults(code, cache.data);
+    if (gradingTop != null && assignmentGradingListEl?.isConnected) {
+      const delta = assignmentGradingListEl.getBoundingClientRect().top - gradingTop;
+      if (delta) window.scrollBy({ top: delta, behavior: 'instant' });
+    }
   }
   return result;
 }
@@ -8174,130 +8181,17 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
         li.append(head, prompt, answer);
       }
       if (!it?.isPoll) {
-        const row = document.createElement('div');
-        row.className = 'row gap top-space';
-
-        const pointsInput = document.createElement('input');
-        pointsInput.type = 'number';
-        pointsInput.min = '0';
-        pointsInput.max = String(Number(it?.maxPoints || 1000));
-        pointsInput.value = String(Number(it?.grade?.pointsAwarded || 0));
-        pointsInput.style.width = '90px';
-
-        const correctionInput = document.createElement('input');
-        correctionInput.type = 'text';
-        correctionInput.placeholder = t('Correction (optional)');
-        correctionInput.value = String(it?.grade?.correction || '');
-        correctionInput.style.maxWidth = '320px';
-
-        const diffSetup = inlineCorrectionDiffSetup({
-          correctionInput,
-          studentText: it?.answerText,
-          qType: it?.qType,
-        });
-
-        let currentAudioKey = String(it?.grade?.correctionAudioKey || '');
-        const audioStatus = document.createElement('span');
-        audioStatus.className = 'small muted';
-        audioStatus.style.marginLeft = '8px';
-
-        const recordBtn = document.createElement('button');
-        recordBtn.className = 'btn';
-        recordBtn.style.padding = '4px 8px';
-        recordBtn.innerHTML = '🎙️';
-        recordBtn.title = t('Record voice comment');
-
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'btn';
-        saveBtn.textContent = it?.grade?.graded ? 'Update grade' : 'Save grade';
-
-        let mediaRecorder = null;
-        let audioChunks = [];
-
-        recordBtn.addEventListener('click', async () => {
-          if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            recordBtn.innerHTML = '🎙️';
-            recordBtn.classList.remove('bad');
-            return;
-          }
-
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-              ? 'audio/webm;codecs=opus'
-              : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
-            
-            mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-            audioChunks = [];
-            
-            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
-            mediaRecorder.onstop = async () => {
-              const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-              stream.getTracks().forEach(t => t.stop());
-              
-              // Upload
-              try {
-                audioStatus.textContent = t('Uploading...');
-                currentAudioKey = await uploadCorrectionAudioBlob(blob, safeCode);
-                audioStatus.textContent = t('🎙️ Recorded');
-                renderAudioPreview();
-              } catch (err) {
-                audioStatus.textContent = t('❌ Upload failed');
-              }
-            };
-
-            mediaRecorder.start();
-            recordBtn.innerHTML = '⏹️';
-            recordBtn.classList.add('bad');
-            audioStatus.textContent = t('Recording...');
-          } catch (err) {
-            alert(t('Mic access denied or error: ') + err.message);
-          }
-        });
-
-        const previewWrap = document.createElement('div');
-        previewWrap.className = 'top-space';
-        previewWrap.style.display = 'none';
-
-        function renderAudioPreview() {
-          if (!currentAudioKey) {
-            previewWrap.style.display = 'none';
-            return;
-          }
-          previewWrap.innerHTML = '';
-          previewWrap.style.display = 'block';
-          const audio = document.createElement('audio');
-          audio.controls = true;
-          audio.style.height = '30px';
-          let src = currentAudioKey;
-          if (!src.startsWith('http')) {
-            const base = loadBackendUrl() || DEFAULT_BACKEND_URL;
-            src = `${base}/api/media/${src}`;
-          }
-          audio.src = src;
-          previewWrap.appendChild(audio);
-        }
-        renderAudioPreview();
-
-        saveBtn.addEventListener('click', async () => {
-          try {
-            saveBtn.disabled = true;
-            await gradeAssignmentQuestion(safeCode, safeAttemptId, Number(it.qIndex || 0), Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey, it.servedIndex);
-            if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} for {p2}.", { p1: Number(it.qIndex || 0) + 1, p2: safeAttemptId });
-            await fetchAssignmentResults(safeCode);
-            await fetchAssignmentAttemptDetail(safeCode, safeAttemptId);
-          } catch (err) {
-            if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
-          } finally {
-            saveBtn.disabled = false;
-          }
-        });
-
-        row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
-        li.appendChild(row);
-        li.appendChild(diffSetup.diffPreview);
-        li.appendChild(previewWrap);
+        li.appendChild(buildGradeControls({
+          code: safeCode,
+          attemptId: safeAttemptId,
+          qIndex: Number(it.qIndex || 0),
+          servedIndex: it.servedIndex,
+          maxPoints: Number(it?.maxPoints || 1000),
+          initialGrade: it.grade,
+          studentText: it.answerText,
+          qType: it.qType,
+          onSaved: ({ grade }) => { it.grade = grade; },
+        }));
       }
 
       assignmentGradingListEl.appendChild(li);
@@ -8326,31 +8220,7 @@ async function uploadCorrectionAudioBlob(blob, code) {
   return res.path || res.key || '';
 }
 
-function focusQuestionGradingAnswer(attemptId) {
-  if (!assignmentGradingListEl) return;
-  const safeAttemptId = String(attemptId || '');
-  if (!safeAttemptId) return;
-
-  const row = [...assignmentGradingListEl.querySelectorAll('[data-grading-attempt-id]')]
-    .find((el) => String(el.dataset.gradingAttemptId || '') === safeAttemptId);
-  if (!row) return;
-
-  const target = row.querySelector('[data-grade-correction-input]')
-    || row.querySelector('[data-grade-points-input]')
-    || row.querySelector('input, textarea, button');
-  if (target && typeof target.focus === 'function') {
-    target.focus({ preventScroll: true });
-    if (typeof target.select === 'function') target.select();
-  }
-
-  const rect = row.getBoundingClientRect();
-  const viewportH = window.innerHeight || document.documentElement.clientHeight;
-  if (rect.bottom > viewportH || rect.top < 0) {
-    row.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-  }
-}
-
-function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, initialGrade, onSavedRefresh, studentText, qType }) {
+function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, initialGrade, onSaved, studentText, qType }) {
   const wrap = document.createDocumentFragment();
   const row = document.createElement('div');
   row.className = 'row gap top-space';
@@ -8381,14 +8251,35 @@ function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, i
   audioStatus.style.marginLeft = '8px';
 
   const recordBtn = document.createElement('button');
+  recordBtn.type = 'button';
   recordBtn.className = 'btn';
   recordBtn.style.padding = '4px 8px';
   recordBtn.innerHTML = '🎙️';
   recordBtn.title = t('Record voice comment');
 
   const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
   saveBtn.className = 'btn';
-  saveBtn.textContent = initialGrade?.graded ? 'Update grade' : 'Save grade';
+  saveBtn.textContent = t(initialGrade?.graded ? 'Update grade' : 'Save grade');
+
+  // Keep feedback local and reserve its line so saving does not move the rows.
+  const saveStatus = document.createElement('div');
+  saveStatus.className = 'small muted';
+  saveStatus.dataset.gradeSaveStatus = '1';
+  saveStatus.style.minHeight = '1.5em';
+  saveStatus.setAttribute('role', 'status');
+  saveStatus.setAttribute('aria-live', 'polite');
+  const editorValues = () => JSON.stringify([pointsInput.value, correctionInput.value, currentAudioKey]);
+  let savedValues = editorValues();
+  let savedMessage = '';
+  let saving = false;
+  function updateSaveStatus() {
+    saveStatus.className = 'small muted';
+    saveStatus.textContent = saving ? t('Saving grade…')
+      : editorValues() !== savedValues ? t('Unsaved changes') : savedMessage;
+  }
+  pointsInput.addEventListener('input', updateSaveStatus);
+  correctionInput.addEventListener('input', updateSaveStatus);
 
   const previewWrap = document.createElement('div');
   previewWrap.className = 'top-space';
@@ -8441,6 +8332,7 @@ function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, i
           currentAudioKey = await uploadCorrectionAudioBlob(blob, code);
           audioStatus.textContent = t('🎙️ Recorded');
           renderAudioPreview();
+          updateSaveStatus();
         } catch (err) {
           audioStatus.textContent = t('❌ Upload failed');
         }
@@ -8455,21 +8347,47 @@ function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, i
   });
 
   saveBtn.addEventListener('click', async () => {
+    if (saving) return;
+    const submittedValues = editorValues();
+    const grade = {
+      graded: true,
+      pointsAwarded: Math.max(0, Math.min(maxPoints, Math.round(Number(pointsInput.value || 0)))),
+      correction: diffSetup.finalize(),
+      correctionAudioKey: currentAudioKey,
+    };
     try {
+      saving = true;
       saveBtn.disabled = true;
-      await gradeAssignmentQuestion(code, attemptId, qIndex, Number(pointsInput.value || 0), diffSetup.finalize(), currentAudioKey, servedIndex);
+      updateSaveStatus();
+      const result = await gradeAssignmentQuestion(code, attemptId, qIndex, grade.pointsAwarded, grade.correction, grade.correctionAudioKey, servedIndex);
+      // Edits made during the request remain unsaved. Only acknowledge the
+      // values actually sent, without replacing the editor or its neighbours.
+      if (editorValues() === submittedValues) {
+        pointsInput.value = String(grade.pointsAwarded);
+        savedValues = editorValues();
+      } else {
+        savedValues = submittedValues;
+      }
       saveBtn.textContent = t('Update grade');
+      const total = result?.attempt?.metrics?.totalScore;
+      savedMessage = total != null ? t('Saved · Quiz total: {points} pts', { points: total }) : t('Saved.');
       if (assignmentStatusEl) assignmentStatusEl.textContent = t("Graded Q{p1} · {p2}.", { p1: Number(qIndex) + 1, p2: attemptId });
-      if (typeof onSavedRefresh === 'function') await onSavedRefresh({ attemptId });
+      if (typeof onSaved === 'function') onSaved({ attemptId, grade, result });
+      saving = false;
+      updateSaveStatus();
     } catch (err) {
+      saveStatus.className = 'small bad';
+      saveStatus.textContent = t('Grade error: {p1}', { p1: err.message });
       if (assignmentStatusEl) assignmentStatusEl.textContent = t("Grade error: {p1}", { p1: err.message });
     } finally {
+      saving = false;
       saveBtn.disabled = false;
     }
   });
 
   row.append(pointsInput, correctionInput, recordBtn, saveBtn, audioStatus);
   wrap.appendChild(row);
+  wrap.appendChild(saveStatus);
   wrap.appendChild(diffSetup.diffPreview);
   wrap.appendChild(previewWrap);
   return wrap;
@@ -9876,8 +9794,6 @@ async function enterQuestionGradingFocus(code, qIndex) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const maxPoints = Math.max(0, Math.round(Number(question?.maxPoints || 1000)));
   const icon = iconForType(question.qType) || '❓';
-  const gradedNow = items.filter((x) => x?.grade?.graded).length;
-  const pendingNow = items.length - gradedNow;
 
   // Header: back button + nav + summary
   const headerLi = document.createElement('li');
@@ -9933,9 +9849,12 @@ async function enterQuestionGradingFocus(code, qIndex) {
   promptWrap.appendChild(promptText);
   headerLi.appendChild(promptWrap);
 
-  if (assignmentGradingSummaryEl) {
-    assignmentGradingSummaryEl.textContent = t("Q{p1} · {p2} answer{p3} · {p4} graded · {p5} pending · max {p6} pts", { p1: Number(qIndex) + 1, p2: items.length, p3: items.length === 1 ? '' : 's', p4: gradedNow, p5: pendingNow, p6: maxPoints });
+  function updateSummary() {
+    if (!assignmentGradingSummaryEl) return;
+    const graded = items.filter((it) => it?.grade?.graded).length;
+    assignmentGradingSummaryEl.textContent = t("Q{p1} · {p2} answer{p3} · {p4} graded · {p5} pending · max {p6} pts", { p1: Number(qIndex) + 1, p2: items.length, p3: items.length === 1 ? '' : 's', p4: graded, p5: items.length - graded, p6: maxPoints });
   }
+  updateSummary();
 
   if (!assignmentGradingListEl) return;
   assignmentGradingListEl.innerHTML = '';
@@ -9951,7 +9870,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
     return;
   }
 
-  items.forEach((it, itemIndex) => {
+  items.forEach((it) => {
     const li = document.createElement('li');
     li.dataset.gradingAttemptId = String(it?.attemptId || '');
 
@@ -10035,17 +9954,15 @@ async function enterQuestionGradingFocus(code, qIndex) {
       initialGrade: it.grade,
       studentText: it.answerText,
       qType: question.qType,
-      onSavedRefresh: async () => {
-        const nextItem = items[itemIndex + 1] || null;
-        const focusAttemptId = String(nextItem?.attemptId || it?.attemptId || '');
-        const scroller = document.scrollingElement || document.documentElement;
-        const savedScrollTop = scroller ? scroller.scrollTop : 0;
-        await enterQuestionGradingFocus(safeCode, Number(qIndex));
-        if (scroller) scroller.scrollTop = savedScrollTop;
-        requestAnimationFrame(() => {
-          if (scroller) scroller.scrollTop = savedScrollTop;
-          focusQuestionGradingAnswer(focusAttemptId);
-        });
+      onSaved: ({ grade }) => {
+        it.grade = grade;
+        const badge = head.querySelector('span');
+        if (badge) {
+          badge.textContent = t('GRADED');
+          badge.style.background = '#dcfce7';
+          badge.style.color = '#166534';
+        }
+        updateSummary();
       },
     });
     li.appendChild(controls);
