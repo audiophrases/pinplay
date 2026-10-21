@@ -540,6 +540,10 @@ window.PINPLAY_FR_DICT = {
   'Waiting for teacher grading': "En attente de la correction de l'enseignant",
 
   /* self-correct */
+  '🎉 Great job — you’re done!': '🎉 Bravo — vous avez terminé !',
+  'You’ve corrected all your mistakes. Your self-correction is saved. You can close this tab now.':
+    'Vous avez corrigé toutes vos erreurs. Votre auto-correction est enregistrée. Vous pouvez maintenant fermer cet onglet.',
+  'Got it!': 'Compris !',
   '✓ Self-corrected': '✓ Auto-corrigé',
   'You retook and corrected every retakeable mistake from this attempt.':
     'Vous avez refait et corrigé toutes les erreurs corrigibles de cette tentative.',

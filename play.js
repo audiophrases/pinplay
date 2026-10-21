@@ -3385,6 +3385,37 @@ function advanceRetake(wasCorrect) {
   if (mapped) renderPlayerState(mapped);
 }
 
+function showSelfCorrectCompleteDialog() {
+  if (document.getElementById('selfCorrectCompleteDialog')) return;
+  const previousFocus = document.activeElement;
+  const dialog = document.createElement('dialog');
+  dialog.id = 'selfCorrectCompleteDialog';
+  dialog.className = 'self-correct-complete-dialog';
+  dialog.setAttribute('aria-labelledby', 'selfCorrectCompleteTitle');
+  dialog.setAttribute('aria-describedby', 'selfCorrectCompleteDescription');
+
+  const title = document.createElement('h2');
+  title.id = 'selfCorrectCompleteTitle';
+  title.textContent = t('🎉 Great job — you’re done!');
+  const description = document.createElement('p');
+  description.id = 'selfCorrectCompleteDescription';
+  description.textContent = t('You’ve corrected all your mistakes. Your self-correction is saved. You can close this tab now.');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn primary';
+  button.textContent = t('Got it!');
+  button.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('keydown', (event) => event.stopPropagation());
+  dialog.addEventListener('close', () => {
+    dialog.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }, { once: true });
+  dialog.append(title, description, button);
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  button.focus();
+}
+
 async function finishRetakeLoop({ code, attemptId }) {
   try {
     const data = await api('/api/assignment/mark-self-corrected', {
@@ -3395,6 +3426,7 @@ async function finishRetakeLoop({ code, attemptId }) {
     const ts = Number(data?.selfCorrectedAt || 0);
     if (attempt && ts > 0) attempt.selfCorrectedAt = ts;
     clearRetakeProgress(attemptId);
+    showSelfCorrectCompleteDialog();
   } catch (err) {
     // Keep localStorage so the next visit can retry the POST.
     console.warn('mark-self-corrected failed:', err);
