@@ -21,8 +21,9 @@ let watching = null; // the job we saw running
 let polls = 0;
 let voiceLibrary = []; // engine/library.py: samples any character can use
 let recordingList = []; // the sidebar's recordings (from: the phone conversation it was imported from)
-// A conversation from the phone (engine/conversation.py): the line being edited.
-const convo = { editing: null };
+// A conversation from the phone (engine/conversation.py): the line being
+// edited, or the transcript review (every line a box; drafts: unsaved words).
+const convo = { editing: null, review: false, drafts: {} };
 const isConvo = () => !!current?.recording?.conversation;
 
 function toast(msg, ms = 3500) {
@@ -82,7 +83,10 @@ async function loadLibrary() {
 }
 
 async function openRecording(id, { keepText = false } = {}) {
-  if (id !== currentId) convo.editing = null;
+  if (id !== currentId) {
+    Object.assign(convo, { editing: null, review: false, drafts: {} });
+    stopListening();
+  }
   currentId = id;
   [current] = await Promise.all([api(`/api/recordings/${id}`), loadLibrary()]);
   $('welcome').hidden = true;
@@ -287,11 +291,35 @@ function renderConversation() {
   const making = job && job.id === currentId;
   const changed = lines.filter((l) => l.mode !== 'original').length;
   const waiting = convoWaiting().length;
-  const bar = `<div class="stage todo"><b>Review the conversation.</b> Every line keeps its real audio. ✏️ fixes a misheard word (the audio stays as it is) or changes what is said: then record the line yourself (🎤), or let the studio say it in that person's voice (🤖). ➕ adds a line, 🗑 removes one.
-    <div class="row"><button class="btn primary" id="convoMakeBtn" type="button" ${making ? 'disabled' : ''}>${making ? '⏳ Being made…' : '🎙️ Make the recording'}</button>
-      <span class="muted small">${changed ? `${changed} line${changed > 1 ? 's' : ''} changed` : 'No line changed yet'}${waiting ? ` · 🎤 ${waiting} waiting for your recording` : ''}</span></div></div>`;
+  const unsaved = Object.keys(convo.drafts).length;
+  const listen = listening.id
+    ? '<button class="btn" type="button" data-listen-stop>⏹ Stop listening</button>'
+    : '<button class="btn" type="button" data-listen-from="0" title="The whole conversation, line after line (▶ on a line starts there)">▶ Listen from the start</button>';
+  const bar = convo.review
+    ? `<div class="stage todo"><b>📝 Reviewing the transcript.</b> Type in the lines to correct what Convo Recorder misheard (Enter goes to the next line). These are only corrections: the audio stays as it is. To <i>say</i> a line differently, change its words and press its 🎤 to record it.
+      <div class="row"><button class="btn primary" type="button" data-review-save ${unsaved ? '' : 'disabled'}>💾 Save ${unsaved || ''} correction${unsaved === 1 ? '' : 's'}</button>
+        <button class="btn" type="button" data-review-done>✔ Done</button>${listen}
+        <button class="btn quiet" type="button" data-copy-transcript>📋 Copy the transcript</button></div></div>`
+    : `<div class="stage todo"><b>Review the conversation.</b> Every line keeps its real audio. <b>📝 Review the transcript</b> to correct misheard words everywhere at once. ✏️ fixes a misheard word (the audio stays as it is) or changes what is said: then record the line yourself (🎤), or let the studio say it in that person's voice (🤖). ➕ adds a line, 🗑 removes one.
+      <div class="row"><button class="btn primary" id="convoMakeBtn" type="button" ${making ? 'disabled' : ''}>${making ? '⏳ Being made…' : '🎙️ Make the recording'}</button>
+        <button class="btn" type="button" data-review>📝 Review the transcript</button>${listen}
+        <span class="muted small">${changed ? `${changed} line${changed > 1 ? 's' : ''} changed` : 'No line changed yet'}${waiting ? ` · 🎤 ${waiting} waiting for your recording` : ''}</span></div></div>`;
   const rows = lines.map((l, i) => {
     const name = convoName(l.ch);
+    const src = convoLineSrc(l, tasks);
+    const play = src ? `<button type="button" class="btn small" data-listen-from="${i}" title="Listen from here, line after line">▶</button>` : '';
+    const playing = listening.id === l.id ? ' playing' : '';
+    if (convo.review) {
+      // Only a line that still has its own audio can be corrected here:
+      // the words of a recorded or studio line are changed with ✏️.
+      const box = l.mode === 'original'
+        ? `<textarea data-review-text rows="1">${esc(convo.drafts[l.id] ?? l.text)}</textarea>`
+        : `${esc(l.text)} <span class="muted small">(${l.mode === 'voice' ? '🤖 studio voice' : '🎤 your recording'}: change it with ✏️ after ✔ Done)</span>`;
+      return `<div class="line review${convo.drafts[l.id] !== undefined ? ' changed' : ''}${playing}" data-line="${esc(l.id)}">
+        <span class="muted">${i + 1}</span><span class="who" title="${esc(name)}">${esc(name)}</span>
+        <div class="say">${box}</div>
+        <div class="acts">${play}${l.mode === 'original' ? '<button type="button" class="btn small" data-c="review-record" title="Record this line yourself, with the words in its box">🎤</button>' : ''}</div></div>`;
+    }
     if (convo.editing === l.id) {
       const hasClip = l.start != null && l.mode === 'original';
       const who = l.isNew
@@ -311,9 +339,6 @@ function renderConversation() {
     if (t.src === 'take') chip = '<span class="chip ok" title="Your own recording of this line">🎤 your recording</span>';
     else if (l.mode === 'record') chip = '<span class="chip warn" title="Until you record it, the studio\'s voice says it">🎤 to record</span>';
     else if (l.mode === 'voice') chip = '<span class="chip" title="Said by the studio, in the voice copied from this person">🤖 studio voice</span>';
-    let src = '';
-    if (t.audio) src = audioUrl(t.audio[0], t.audio[1]);
-    else if (t.ready && t.key) src = audioUrl('lines', `${t.key}.wav`);
     const buttons = [
       '<button type="button" class="btn small" data-c="edit" title="Fix or change the words">✏️</button>',
       '<button type="button" class="btn small" data-c="record" title="Record this line yourself">🎤</button>',
@@ -322,19 +347,75 @@ function renderConversation() {
       '<button type="button" class="btn small" data-c="insert" title="Add a line after this one">➕</button>',
       '<button type="button" class="btn small" data-c="delete" title="Remove this line">🗑</button>',
     ].join('');
-    return `<div class="line ${l.mode !== 'original' ? 'changed' : ''}" data-line="${esc(l.id)}">
+    return `<div class="line ${l.mode !== 'original' ? 'changed' : ''}${playing}" data-line="${esc(l.id)}">
       <span class="muted">${i + 1}</span>
       <span class="who" title="${esc(name)}">${esc(name)}</span>
       <div class="say">${esc(l.text)}${l.mode !== 'original' && l.said && l.said !== l.text ? `<div class="how">Said in the conversation: “${esc(l.said)}”</div>` : ''}</div>
-      <div class="acts">${chip}${src ? `<audio controls preload="none" src="${src}"></audio>` : '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
+      <div class="acts">${chip}${play || '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
     </div>`;
   });
   $('lines').innerHTML = bar + (rows.join('') || '<p class="muted">No lines.</p>');
+  $('lines').querySelectorAll('[data-review-text]').forEach(fitBox);
   const box = $('lines').querySelector('[data-c-text]');
   if (box) {
     box.focus();
     box.setSelectionRange(box.value.length, box.value.length);
   }
+}
+
+// A transcript box as tall as its words.
+function fitBox(box) {
+  box.style.height = 'auto';
+  box.style.height = `${box.scrollHeight + 2}px`;
+}
+
+// The audio a line plays: its clip, the teacher's take, or the studio's line once made.
+function convoLineSrc(l, tasks) {
+  const t = tasks[l.id] || {};
+  if (t.audio) return audioUrl(t.audio[0], t.audio[1]);
+  if (t.ready && t.key) return audioUrl('lines', `${t.key}.wav`);
+  return '';
+}
+
+// ▶ Listen: the lines one after another from a line, the one playing lit
+// up (and kept in view), so the teacher reads along as it plays.
+const listening = { audio: new Audio(), index: -1, id: null };
+
+function stopListening() {
+  listening.audio.pause();
+  Object.assign(listening, { index: -1, id: null });
+  document.querySelectorAll('#lines .line.playing').forEach((el) => el.classList.remove('playing'));
+}
+
+function listenAt(i) {
+  const lines = isConvo() ? convoLines() : [];
+  const tasks = convoTasks();
+  while (i < lines.length && !convoLineSrc(lines[i], tasks)) i += 1; // a studio line not made yet
+  if (i >= lines.length) {
+    stopListening();
+    if (isConvo()) renderConversation();
+    return;
+  }
+  Object.assign(listening, { index: i, id: lines[i].id });
+  listening.audio.src = convoLineSrc(lines[i], tasks);
+  listening.audio.play().catch(() => {});
+  document.querySelectorAll('#lines .line').forEach((el) => el.classList.toggle('playing', el.dataset.line === listening.id));
+  const row = document.querySelector(`#lines .line[data-line="${CSS.escape(listening.id)}"]`);
+  if (row && !row.contains(document.activeElement)) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+listening.audio.addEventListener('ended', () => {
+  if (listening.id) setTimeout(() => { if (listening.id) listenAt(listening.index + 1); }, 300);
+});
+
+// Saves the review's corrections (the audio stays); with record, that line
+// becomes the teacher's to record with the words in its box.
+async function saveReview({ record = null, message } = {}) {
+  const drafts = { ...convo.drafts };
+  if (record && drafts[record] === undefined) drafts[record] = convoLines().find((l) => l.id === record)?.text;
+  const lines = convoLines().map((l) => (drafts[l.id] === undefined ? l
+    : { ...l, text: drafts[l.id].trim().replace(/\s+/g, ' ') || l.text, mode: l.id === record ? 'record' : l.mode }));
+  convo.drafts = {};
+  await saveConversation({ lines, message });
 }
 
 // Sends the lines (and new names) to the studio; it answers with the
@@ -364,6 +445,39 @@ $('lines').addEventListener('click', guarded(async (e) => {
     await makeConversation();
     return;
   }
+  const from = e.target.closest('[data-listen-from]');
+  if (from) {
+    listenAt(Number(from.dataset.listenFrom));
+    renderConversation(); // the bar's ⏹ Stop
+    return;
+  }
+  if (e.target.closest('[data-listen-stop]')) {
+    stopListening();
+    renderConversation();
+    return;
+  }
+  if (e.target.closest('[data-review]')) {
+    Object.assign(convo, { review: true, editing: null, drafts: {} });
+    renderConversation();
+    $('lines').querySelector('[data-review-text]')?.focus();
+    return;
+  }
+  if (e.target.closest('[data-review-save]')) {
+    const n = Object.keys(convo.drafts).length;
+    await saveReview({ message: `💾 ${n} correction${n > 1 ? 's' : ''} saved: the audio stays as it is.` });
+    return;
+  }
+  if (e.target.closest('[data-review-done]')) {
+    const n = Object.keys(convo.drafts).length;
+    convo.review = false;
+    if (n) await saveReview({ message: `💾 ${n} correction${n > 1 ? 's' : ''} saved: the audio stays as it is.` });
+    else renderConversation();
+    return;
+  }
+  if (e.target.closest('[data-copy-transcript]')) {
+    await copy(cleanListeningTranscript(current.recording.text || ''), 'Transcript (as saved)');
+    return;
+  }
   const btn = e.target.closest('[data-c]');
   const row = e.target.closest('[data-line]');
   if (!btn || !row || !isConvo()) return;
@@ -372,7 +486,14 @@ $('lines').addEventListener('click', guarded(async (e) => {
   const line = lines[i];
   if (!line) return;
   const action = btn.dataset.c;
-  if (action === 'edit') {
+  if (action === 'review-record') {
+    // 🎤 in the review: this line's words (as typed) are now to be said.
+    stopListening();
+    await saveReview({ record: line.id });
+    convo.review = true;
+    renderConversation();
+    openLineMic(i);
+  } else if (action === 'edit') {
     convo.editing = line.id;
     renderConversation();
   } else if (action === 'cancel') {
@@ -422,8 +543,35 @@ $('lines').addEventListener('click', guarded(async (e) => {
   }
 }));
 $('lines').addEventListener('keydown', (e) => {
+  if (e.target.matches('[data-review-text]') && e.key === 'Enter') {
+    // A line is one paragraph: Enter goes on to the next line's box.
+    e.preventDefault();
+    const boxes = [...$('lines').querySelectorAll('[data-review-text]')];
+    const next = boxes[boxes.indexOf(e.target) + 1];
+    if (next) {
+      next.focus();
+      next.setSelectionRange(next.value.length, next.value.length);
+    }
+    return;
+  }
   if (!e.target.matches('[data-c-text]')) return;
   if (e.key === 'Escape') e.target.closest('.line').querySelector('[data-c="cancel"]').click();
+});
+$('lines').addEventListener('input', (e) => {
+  if (!e.target.matches('[data-review-text]')) return;
+  fitBox(e.target);
+  const row = e.target.closest('.line');
+  const line = convoLines().find((l) => l.id === row.dataset.line);
+  if (e.target.value.trim().replace(/\s+/g, ' ') === line.text) delete convo.drafts[line.id];
+  else convo.drafts[line.id] = e.target.value;
+  row.classList.toggle('changed', convo.drafts[line.id] !== undefined);
+  const n = Object.keys(convo.drafts).length;
+  const save = $('lines').querySelector('[data-review-save]');
+  save.disabled = !n;
+  save.textContent = `💾 Save ${n || ''} correction${n === 1 ? '' : 's'}`;
+});
+window.addEventListener('beforeunload', (e) => {
+  if (Object.keys(convo.drafts).length) e.preventDefault(); // unsaved corrections
 });
 
 // make: 'voices' (back to step 1), 'all' (approved: make the recording) or false.
@@ -529,7 +677,7 @@ async function poll() {
 }
 
 async function refreshQuietly() {
-  if (convo.editing) return; // never under the teacher's typing
+  if (convo.editing || convo.review) return; // never under the teacher's typing
   const id = currentId;
   const data = await api(`/api/recordings/${id}`).catch(() => null);
   if (!data || id !== currentId) return;
@@ -549,7 +697,10 @@ async function refreshQuietly() {
 $('newBtn').addEventListener('click', showWelcome);
 $('list').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-id]');
-  if (li) openRecording(li.dataset.id).catch((err) => toast(err.message));
+  if (!li || li.dataset.id === currentId) return;
+  const unsaved = Object.keys(convo.drafts).length;
+  if (unsaved && !confirm(`You have ${unsaved} unsaved correction${unsaved > 1 ? 's' : ''} in this transcript. Leave without saving them?`)) return;
+  openRecording(li.dataset.id).catch((err) => toast(err.message));
 });
 $('newText').addEventListener('input', () => { $('newNotes').innerHTML = notesHtml($('newText').value); });
 $('text').addEventListener('input', () => { $('notes').innerHTML = notesHtml($('text').value); });

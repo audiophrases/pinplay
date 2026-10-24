@@ -185,6 +185,19 @@ def _worker():
 threading.Thread(target=_worker, daemon=True).start()
 
 
+def _warm_up():
+    """Loads the audio decoding libraries (not Whisper's model) once the
+    studio is up, so the first line the teacher records saves at once."""
+    try:
+        import librosa  # noqa: F401
+        from faster_whisper import decode_audio  # noqa: F401
+    except Exception:
+        pass
+
+
+threading.Thread(target=_warm_up, daemon=True).start()
+
+
 def _queue_job(rid, kind='all'):
     """kind 'voices' (samples to approve) or 'all'. A recording waits in
     the queue at most once per kind."""
