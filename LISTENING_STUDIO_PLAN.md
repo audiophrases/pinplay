@@ -446,3 +446,13 @@ The studio's folder was fixed to `D:\Admin\pinplay listening tts audio productio
 - Python 3.11 is found through `py -0p` (which lists Pythons installed by uv, unlike `py -3.11`), then `python` if it is 3.11. No fallback to another version (the pinned packages are for 3.11).
 - Before the 2 GB download, a computer with less than 12 GB of memory is told the voice model needs ~7 GB on its own and asked whether to continue. The laptop (i3-1115G4, 7.8 GB, no usable GPU) is below that: expect it to be very slow or run out of memory.
 - `.gitattributes` keeps `.bat`/`.cmd` files in CRLF (cmd can mis-find `call :label` targets in LF files).
+
+## Conversations from the phone (2026-10-24)
+
+The owner records live ChatGPT voice conversations on the phone with Convo Recorder (Phone-Mirror repo: a 48 kHz stereo WAV, left = the owner's microphone, right = ChatGPT, transcribed on the phone). The studio imports one, the owner reviews and edits its lines, and only changed lines need new audio.
+
+- **Getting it in:** 📱 From the phone lists Convo Recorder's conversations over adb (the Wi-Fi link "Phone Mirror.bat" sets up; `engine/phone.py` reconnects to the address in `D:\Admin\Phone-Mirror\phone_ip.txt`, config key `phoneAddressFile`) and copies one. Without adb: drop the `.wav` and `.json` the phone's Share button sends.
+- **The phone side:** Convo Recorder 2.1 also writes `convo_….json`, every utterance with exact start/end (seconds of the WAV) and its channel. Older conversations need "Redo" in the app first.
+- **Lines** (`engine/conversation.py`): each utterance becomes a line with its own clip, cut from its speaker's channel. A line's mode is `original` (its clip; ✏️ "Only fix the words" corrects a misheard word and keeps the audio), `record` (the owner's own take, recorded in the studio with 🎤; a take belongs to its words, so editing again needs a new one) or `voice` (🤖 the studio says it). A changed line of the owner's defaults to `record`, a changed ChatGPT line to `voice` (owner: "mostly my lines, but leave the options open"). Until a `record` line has its take, the copied voice stands in (the owner is asked before making).
+- **Voices:** each speaker's voice sample is made from their own clips (one clip of 8–15 s, else consecutive clips joined), and the copy model says changed lines in that voice. A library voice can replace it on the voice card. Speakers are "Me" and "ChatGPT" until renamed there.
+- **Making:** only `voice` lines go through Qwen3 and the word check. A conversation with no such line is just mixed (seconds, no model). The script and transcript are made from the lines (the 📝 Script box is read-only for a conversation).

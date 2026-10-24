@@ -15,7 +15,11 @@ The teacher's settings (all optional):
   batch        True (default): several lines per call
   spacing      'tight' | 'natural' | 'relaxed'
   ambience     a background overriding the script's AMBIENCE
-  check        True (default): the word check and automatic retry"""
+  check        True (default): the word check and automatic retry
+A recording imported from a phone conversation (engine/conversation.py)
+also has its conversation: a line keeps its real audio (its clip, or the
+teacher's take) and only the others are made, in the voice copied from
+that speaker's own clips."""
 import hashlib
 import json
 import os
@@ -25,7 +29,7 @@ import time
 import numpy as np
 import soundfile as sf
 
-from . import audio, library
+from . import audio, conversation, library
 from .checks import WordChecker, age_warning, compare, median_pitch
 from .voices import NEUTRAL, Stopped, Voices  # noqa: F401 (Stopped is used by the server)
 
@@ -73,8 +77,10 @@ def _safe(name):
 
 
 class Project:
-    def __init__(self, folder, script, settings=None, progress=None, should_stop=None):
+    def __init__(self, folder, script, settings=None, progress=None, should_stop=None, convo=None):
         self.folder = folder
+        self.convo = convo
+        self.convo_lines = {line['id']: line for line in (convo or {}).get('lines', [])}
         self.should_stop = should_stop or (lambda: False)
         self.script = script
         self.settings = {**DEFAULTS, **(settings or {})}
@@ -116,8 +122,15 @@ class Project:
         vid = (self.settings['ownVoices'] or {}).get(name)
         return library.get(self.library, vid) if vid else None
 
+    def convo_voice(self, name):
+        """{ch, file, text}: the voice copied from this speaker's own clips
+        in the conversation, unless a library voice was chosen; or None."""
+        if not self.convo or self.own(name):
+            return None
+        return conversation.voice_of(self.folder, self.convo, name)
+
     def mode(self, name):
-        if self.own(name):
+        if self.own(name) or self.convo_voice(name):
             return 'fixed'  # a sample can only be copied
         return (self.settings['modes'] or {}).get(name) or self.settings['mode']
 
@@ -130,16 +143,31 @@ class Project:
                     continue
                 for s in it['speakers']:
                     tid = f'{p}:{k}:{s}'
-                    out.append({'id': tid, 'part': p, 'item': k, 'speaker': s, 'text': it['text'],
-                                'direction': it.get('direction') or '', 'mode': self.mode(s),
-                                'take': int((self.settings['lineTakes'] or {}).get(tid, 0))})
+                    task = {'id': tid, 'part': p, 'item': k, 'speaker': s, 'text': it['text'],
+                            'direction': it.get('direction') or '', 'mode': self.mode(s),
+                            'take': int((self.settings['lineTakes'] or {}).get(tid, 0)), 'src': 'voice', 'real': None}
+                    line = self.convo_lines.get(it.get('convo'))
+                    if line:
+                        task['src'], task['real'] = conversation.source(self.folder, line)
+                        task['convo'], task['convoMode'] = line['id'], line.get('mode', 'original')
+                    out.append(task)
         return out
+
+    def to_make(self, tasks):
+        """The lines the studio says (not real audio from the conversation)."""
+        return [t for t in tasks if not t['real']]
+
+    def voiced_speakers(self, tasks):
+        """Who needs a voice sample: everyone, except in a conversation,
+        where only the speakers of lines the studio says do."""
+        made = {t['speaker'] for t in self.to_make(tasks)}
+        return [s for s in self.speakers() if s in made]
 
     def sample_text(self, name):
         """The voice sample says the character's own first lines (right
         language, right vocabulary), about 15–40 words. A library voice
         says its own words."""
-        own = self.own(name)
+        own = self.own(name) or self.convo_voice(name)
         if own:
             return own['text']
         words = []
@@ -154,6 +182,9 @@ class Project:
         own = self.own(name)
         if own:
             return _key('own', own['id'], own['text'])
+        convo = self.convo_voice(name)
+        if convo:
+            return _key('convo', convo['ch'], convo['text'])
         take = int((self.settings['sampleTakes'] or {}).get(name, 0))
         return _key('sample', self.description(name), self.language, self.sample_text(name), take)
 
@@ -170,6 +201,9 @@ class Project:
         own = self.own(name)
         if own:
             return library.wav_path(self.library, own['id'])
+        convo = self.convo_voice(name)
+        if convo:
+            return convo['file']
         return os.path.join(self.folder, 'voices', f'{self.sample_key(name)}.wav')
 
     # ------------------------------------------------------------ making
@@ -177,13 +211,13 @@ class Project:
         if self.should_stop():
             raise Stopped()
 
-    def make_samples(self):
-        """A voice sample for every character, with the age check: fixed
-        voices are copied from it, and for acted ones it previews the voice.
-        The report is saved at once, so the page can show it while the
-        teacher approves the voices."""
+    def make_samples(self, need=None):
+        """A voice sample for every character (or those in need), with the
+        age check: fixed voices are copied from it, and for acted ones it
+        previews the voice. The report is saved at once, so the page can
+        show it while the teacher approves the voices."""
         report = {}
-        need = self.speakers()
+        need = self.speakers() if need is None else need
         for i, name in enumerate(need):
             path = self.sample_file(name)
             if not os.path.exists(path):
@@ -196,7 +230,7 @@ class Project:
             clip, _ = sf.read(path, dtype='float32')
             pitch = median_pitch(clip, audio.SR)
             report[name] = {'sample': path, 'pitch': round(pitch) if pitch else None,
-                            'warning': '' if self.own(name) else age_warning(self.description(name), pitch)}
+                            'warning': '' if self.own(name) or self.convo_voice(name) else age_warning(self.description(name), pitch)}
             self._save_report(report)
         self.say({'stage': 'voices', 'done': len(need), 'total': len(need)})
         return report
@@ -301,12 +335,16 @@ class Project:
             self.say({'stage': 'done', 'done': 1, 'total': 1})
             return {'voices': voices, 'seconds': round(time.time() - started)}
         tasks = self.tasks()
-        voices = self.make_samples()
-        self.make_lines(tasks)
-        chosen = self.check_all(tasks) if self.settings['check'] else {}
+        made = self.to_make(tasks)
+        voices = self.make_samples(self.voiced_speakers(tasks))
+        self.make_lines(made)
+        chosen = self.check_all(made) if self.settings['check'] else {}
         self.voices.unload()
         lines = []
         for t in tasks:
+            if t['real']:  # the conversation's own audio: nothing to check
+                lines.append({**t, 'file': t['real'], 'ok': None, 'level': None, 'diffs': [], 'heard': ''})
+                continue
             key = self.line_key(t, chosen.get(t['id']))
             check = self.verdict(t, key) or {}
             lines.append({**t, 'take': chosen.get(t['id'], t['take']), 'file': self.line_file(key),

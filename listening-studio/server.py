@@ -58,7 +58,7 @@ import uvicorn  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
-from engine import catalog, library  # noqa: E402
+from engine import catalog, conversation, library, phone  # noqa: E402
 from engine.project import Project  # noqa: E402
 import subprocess  # noqa: E402
 
@@ -113,6 +113,10 @@ LOCK = threading.Lock()
 def _script_for(rec):
     """The parsed script, named with the recording's (editable) title."""
     return {**(rec.get('script') or {}), 'title': rec.get('title') or 'recording'}
+
+
+def _project(rec):
+    return Project(_folder(rec['id']), _script_for(rec), rec.get('settings') or {}, convo=rec.get('conversation'))
 
 
 def _job_error(code, tail):
@@ -220,7 +224,7 @@ def list_recordings():
             continue
         result = _result(rid)
         out.append({'id': rid, 'title': rec.get('title') or 'Untitled', 'updated': rec.get('updated'),
-                    'parts': len((result or {}).get('parts') or [])})
+                    'parts': len((result or {}).get('parts') or []), 'from': rec.get('from')})
     return {'recordings': sorted(out, key=lambda r: -(r['updated'] or 0))}
 
 
@@ -243,8 +247,12 @@ def get_recording(rid: str):
     rec = _load(rid)
     lines = []
     if rec.get('script') and rec['script'].get('parts'):
-        project = Project(_folder(rid), _script_for(rec), rec.get('settings') or {})
+        project = _project(rec)
         for t in project.tasks():
+            if t['real']:  # a conversation line with its own audio
+                kind = 'original' if t['src'] == 'original' else 'takes'
+                lines.append({**t, 'real': None, 'key': None, 'ready': True, 'audio': [kind, os.path.basename(t['real'])]})
+                continue
             key = project.line_key(t)
             check = project.verdict(t, key) or {}
             lines.append({**t, 'key': key, 'ready': os.path.exists(project.line_file(key)),
@@ -255,6 +263,9 @@ def get_recording(rid: str):
             voices[name] = {'description': project.description(name), 'mode': project.mode(name),
                             'sample': os.path.exists(project.sample_file(name)),
                             'sampleKey': project.sample_key(name), 'own': project.own(name),
+                            'convo': os.path.basename(project.sample_file(name)) if project.convo_voice(name) else '',
+                            'convoCh': next((ch for ch in ('1', '2') if rec.get('conversation')
+                                             and conversation.speaker_name(rec['conversation'], ch) == name), ''),
                             'effect': (rec['script']['voices'].get(name) or {}).get('effect', '')}
     else:
         voices = {}
@@ -322,13 +333,145 @@ def delete_recording(rid: str):
 @app.get('/api/recordings/{rid}/audio/{kind}/{name}')
 def audio_file(rid: str, kind: str, name: str):
     folder = _folder(rid)
-    if kind not in ('lines', 'voices', 'out') or not re.fullmatch(r'[\w.-]+\.(wav|mp3)', name):
+    if kind not in ('lines', 'voices', 'out', 'original', 'takes') or not re.fullmatch(r'[\w.-]+\.(wav|mp3)', name):
         raise HTTPException(404, 'Not found.')
     path = os.path.join(folder, kind, name)
     if not os.path.exists(path):
         raise HTTPException(404, 'Not made yet.')
     return FileResponse(path, media_type='audio/mpeg' if name.endswith('.mp3') else 'audio/wav',
                         headers={'Cache-Control': 'no-store'})
+
+
+# ---------------------------------------------------------------- 📱 conversations (engine/conversation.py, engine/phone.py)
+IMPORTS = os.path.join(CONFIG['data'], 'imports')
+# Where "Phone Mirror.bat" (Phone-Mirror repo) keeps the phone's Wi-Fi address.
+PHONE_ADDRESS = CONFIG.get('phoneAddressFile') or r'D:\Admin\Phone-Mirror\phone_ip.txt'
+
+
+def _conversation_title(name):
+    m = re.search(r'(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)', name or '')
+    return f'Conversation {m[3]}/{m[2]} {m[4]}:{m[5]}' if m else 'Conversation'
+
+
+@app.get('/api/phone')
+async def phone_conversations():
+    """The conversations on the phone, or why the phone can't be reached."""
+    import asyncio
+    try:
+        serial = await asyncio.to_thread(phone.connect, PHONE_ADDRESS)
+        return {'ok': True, 'device': serial, 'conversations': await asyncio.to_thread(phone.conversations, serial)}
+    except phone.PhoneError as err:
+        return {'ok': False, 'error': str(err)}
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'error': 'The phone did not answer. Check it is on and on the same Wi-Fi, then try again.'}
+
+
+@app.post('/api/conversations/upload')
+async def conversation_upload(request: Request):
+    """One file of a conversation shared from the phone (?kind=wav or json),
+    written to disk as it arrives. Returns the upload id for the import."""
+    kind = request.query_params.get('kind')
+    token = request.query_params.get('upload') or uuid.uuid4().hex[:12]
+    if kind not in ('wav', 'json') or not re.fullmatch(r'[a-z0-9]{12}', token):
+        raise HTTPException(400, 'Unknown file.')
+    folder = os.path.join(IMPORTS, token)
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f'conversation.{kind}')
+    size = 0
+    with open(path + '.part', 'wb') as fh:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 2 * 1024 ** 3:
+                raise HTTPException(400, 'This recording is too big (more than 2 GB).')
+            fh.write(chunk)
+    os.replace(path + '.part', path)
+    return {'upload': token}
+
+
+@app.post('/api/conversations')
+async def conversation_import(request: Request):
+    """A new recording from a conversation: { phone: name } copies it from
+    the phone, { upload: id } uses the shared files sent before."""
+    import asyncio
+    import shutil
+    body = await request.json()
+    name = str(body.get('phone') or body.get('name') or '')
+    if body.get('phone'):
+        token = uuid.uuid4().hex[:12]
+        try:
+            wav, segs_file = await asyncio.to_thread(
+                lambda: phone.pull(phone.connect(PHONE_ADDRESS), body['phone'], os.path.join(IMPORTS, token)))
+        except phone.PhoneError as err:
+            shutil.rmtree(os.path.join(IMPORTS, token), ignore_errors=True)
+            raise HTTPException(400, str(err))
+    else:
+        token = str(body.get('upload') or '')
+        if not re.fullmatch(r'[a-z0-9]{12}', token):
+            raise HTTPException(400, 'Add the conversation\'s files first.')
+        wav, segs_file = (os.path.join(IMPORTS, token, f'conversation.{ext}') for ext in ('wav', 'json'))
+        if not (os.path.exists(wav) and os.path.exists(segs_file)):
+            shutil.rmtree(os.path.join(IMPORTS, token), ignore_errors=True)
+            raise HTTPException(400, 'Both files are needed: the recording (.wav) and its transcript (.json).')
+    rid = uuid.uuid4().hex[:12]
+    folder = os.path.join(RECORDINGS, rid)
+    os.makedirs(folder)
+    try:
+        conv = await asyncio.to_thread(lambda: conversation.build(folder, wav, conversation.read_segments(segs_file)))
+    except Exception as err:
+        shutil.rmtree(folder, ignore_errors=True)
+        if isinstance(err, (ValueError, RuntimeError)):  # soundfile: RuntimeError for a file it can't read
+            raise HTTPException(400, str(err))
+        raise
+    finally:
+        shutil.rmtree(os.path.join(IMPORTS, token), ignore_errors=True)
+    title = str(body.get('title') or '').strip()[:120] or _conversation_title(name)
+    script = conversation.script_of(conv, title)
+    _save({'id': rid, 'created': time.time(), 'title': title, 'text': conversation.text_of(script), 'script': script,
+           'settings': {}, 'stage': 'approved', 'conversation': conv, 'from': name})
+    return {'id': rid}
+
+
+@app.put('/api/recordings/{rid}/conversation')
+async def conversation_update(rid: str, request: Request):
+    """The teacher's reviewed lines (and speaker names); make: true makes
+    the recording again (only changed lines need the voice model)."""
+    body = await request.json()
+    rec = _load(rid)
+    if not rec.get('conversation'):
+        raise HTTPException(400, 'This recording is not a conversation.')
+    rec['conversation'] = conversation.clean(rec['conversation'], body.get('lines'), body.get('speakers'))
+    rec['script'] = conversation.script_of(rec['conversation'], rec.get('title') or 'Conversation')
+    rec['text'] = conversation.text_of(rec['script'])
+    _save(rec)
+    _make(rec, 'all' if body.get('make') else None)
+    return {'ok': True}
+
+
+@app.post('/api/recordings/{rid}/takes/{lid}')
+async def conversation_take(rid: str, lid: str, request: Request):
+    """The teacher's own recording of one line (the browser's recording is
+    the request body); the line then uses it."""
+    import asyncio
+    rec = _load(rid)
+    line = next((x for x in (rec.get('conversation') or {}).get('lines', []) if x['id'] == lid), None)
+    if not line:
+        raise HTTPException(404, 'This line is no longer in the conversation.')
+    data = await request.body()
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, 'No recording, or a recording that is far too long.')
+    ext = re.sub(r'[^a-z0-9]', '', (request.query_params.get('ext') or 'webm').lower())[:5] or 'webm'
+    upload = os.path.join(_folder(rid), f'take-upload-{uuid.uuid4().hex[:8]}.{ext}')
+    with open(upload, 'wb') as fh:
+        fh.write(data)
+    try:
+        await asyncio.to_thread(conversation.save_take, _folder(rid), line, upload)
+    except ValueError as err:
+        raise HTTPException(400, str(err))
+    finally:
+        os.remove(upload)
+    line['mode'] = 'record'
+    _save(rec)
+    return {'ok': True}
 
 
 # ---------------------------------------------------------------- the voice library
@@ -428,7 +571,7 @@ async def library_from_recording(request: Request):
     """A character's designed voice, kept in the library for other recordings."""
     body = await request.json()
     rec = _load(body.get('id') or '')
-    project = Project(_folder(rec['id']), _script_for(rec), rec.get('settings') or {})
+    project = _project(rec)
     character = body.get('character') or ''
     if character not in project.speakers() or not os.path.exists(project.sample_file(character)):
         raise HTTPException(400, 'Make this voice first.')

@@ -20,7 +20,7 @@ def main():
     def say(event):
         print('@@' + json.dumps(event, ensure_ascii=False), flush=True)
 
-    Project(folder, script, rec.get('settings') or {}, say).run(kind)
+    Project(folder, script, rec.get('settings') or {}, say, convo=rec.get('conversation')).run(kind)
 
 
 if __name__ == '__main__':

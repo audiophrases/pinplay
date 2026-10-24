@@ -25,6 +25,7 @@
   <div class="layout">
     <nav class="side">
       <button class="btn primary wide" id="newBtn" type="button">＋ New recording</button>
+      <button class="btn wide" id="phoneBtn" type="button" title="A conversation recorded with Convo Recorder on the phone: review it, edit lines, re-record them">📱 From the phone</button>
       <ul class="list" id="list"></ul>
     </nav>
 
@@ -111,6 +112,7 @@
           <h2>📝 Script</h2>
           <textarea id="text" rows="18" spellcheck="false"></textarea>
           <div class="notes" id="notes"></div>
+          <p class="muted small" id="convoScriptNote" hidden>This is the conversation's script, for copying. Change the lines in 💬 Lines above.</p>
           <div class="row">
             <button class="btn primary" id="saveBtn" type="button">🎙️ Save and make again</button>
             <button class="btn" id="copyScriptBtn" type="button">📋 Copy script</button>
@@ -146,8 +148,9 @@
   <dialog id="micDialog">
     <form method="dialog" class="dialog">
       <h2 id="micTitle">🎤 Record a voice</h2>
-      <p class="muted small" style="margin:0">Read this aloud calmly, the way this character normally talks (about 10–15 seconds). A quiet room, the microphone about a hand's width away. Any words work: these are the character's own.</p>
+      <p class="muted small" style="margin:0" id="micHelp">Read this aloud calmly, the way this character normally talks (about 10–15 seconds). A quiet room, the microphone about a hand's width away. Any words work: these are the character's own.</p>
       <div id="micText" class="mic-text"></div>
+      <label class="muted small" id="micOriginalWrap" hidden>How it sounded in the conversation<audio id="micOriginal" controls preload="none"></audio></label>
       <div class="row">
         <button class="btn primary" type="button" id="micRecord">● Record</button>
         <span id="micTime" class="muted">0 s</span>
@@ -162,6 +165,19 @@
     </form>
   </dialog>
   <input type="file" id="sampleFile" accept="audio/*,.mp3,.wav,.m4a,.ogg,.oga,.opus,.webm,.flac,.aac" hidden />
+
+  <dialog id="phoneDialog" class="wide">
+    <form method="dialog" class="dialog">
+      <h2>📱 A conversation from the phone</h2>
+      <p class="muted small" style="margin:0">Recorded with Convo Recorder. Every line keeps its real audio. You can fix misheard words, change or add lines and record them again, or let the studio say them in the same voice.</p>
+      <div id="phoneList" class="find-list"></div>
+      <div class="drop" id="phoneDrop">Or drop the files the phone shared here: the recording (<b>.wav</b>) and its transcript (<b>.json</b>).
+        <button type="button" class="btn small" id="phonePick">Choose files…</button></div>
+      <div id="phoneStatus" class="muted small"></div>
+      <div class="row end"><button class="btn" type="button" id="phoneRefresh">↻ Look again</button><button class="btn" value="close">Close</button></div>
+    </form>
+  </dialog>
+  <input type="file" id="phoneFiles" accept=".wav,.json,audio/wav,application/json" multiple hidden />
 
   <dialog id="promptDialog">
     <form method="dialog" class="dialog">

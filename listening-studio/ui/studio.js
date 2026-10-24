@@ -20,6 +20,10 @@ let voicesDirty = false;
 let watching = null; // the job we saw running
 let polls = 0;
 let voiceLibrary = []; // engine/library.py: samples any character can use
+let recordingList = []; // the sidebar's recordings (from: the phone conversation it was imported from)
+// A conversation from the phone (engine/conversation.py): the line being edited.
+const convo = { editing: null };
+const isConvo = () => !!current?.recording?.conversation;
 
 function toast(msg, ms = 3500) {
   const el = $('toast');
@@ -56,6 +60,7 @@ function notesHtml(text) {
 // ---------------------------------------------------------------- the list
 async function loadList() {
   const { recordings } = await api('/api/recordings');
+  recordingList = recordings;
   $('list').innerHTML = recordings.map((r) => `<li data-id="${r.id}" class="${r.id === currentId ? 'active' : ''}">${esc(r.title)}
     <span class="sub">${new Date((r.updated || 0) * 1000).toLocaleString()}${r.parts ? ' · ✅ made' : ''}</span></li>`).join('')
     || '<li class="muted small" style="cursor:default">No recordings yet.</li>';
@@ -77,6 +82,7 @@ async function loadLibrary() {
 }
 
 async function openRecording(id, { keepText = false } = {}) {
+  if (id !== currentId) convo.editing = null;
   currentId = id;
   [current] = await Promise.all([api(`/api/recordings/${id}`), loadLibrary()]);
   $('welcome').hidden = true;
@@ -97,10 +103,14 @@ function renderAll(keepText) {
   if (document.activeElement !== $('titleInput')) $('titleInput').value = rec.title || 'Untitled';
   const nLines = current.lines.length;
   $('summary').textContent = `${Object.keys(current.voices).length} voices · ${nLines} lines`;
-  if (!keepText) {
+  if (!keepText || isConvo()) {
     $('text').value = rec.text || '';
-    $('notes').innerHTML = notesHtml(rec.text || '');
+    $('notes').innerHTML = isConvo() ? '' : notesHtml(rec.text || '');
   }
+  // A conversation's script is made from its lines: edited in 💬 Lines.
+  $('text').readOnly = isConvo();
+  $('saveBtn').hidden = isConvo();
+  $('convoScriptNote').hidden = !isConvo();
   const s = settings();
   $('setAmbience').value = s.ambience || '';
   $('setSpacing').value = s.spacing || 'natural';
@@ -126,6 +136,11 @@ function renderStage() {
   const makingVoices = job && job.id === currentId && job.kind === 'voices';
   const names = Object.keys(current.voices);
   const ready = names.length > 0 && names.every((n) => current.voices[n].sample);
+  if (isConvo()) {
+    el.className = 'stage';
+    el.innerHTML = '🎧 Each voice is copied from that person\'s own lines in the conversation. It is only used for the lines the studio says (🤖): every other line keeps its real audio. Rename a person here.';
+    return;
+  }
   if (approved()) {
     el.className = 'stage';
     el.innerHTML = '✅ Voices approved. To change one, edit its description and press <b>↻ Remake voice</b>: you will listen and approve again, and only that character\'s lines are made again.';
@@ -166,9 +181,10 @@ function renderVoices() {
   $('voices').innerHTML = Object.entries(current.voices).map(([name, v]) => {
     const r = result[name];
     const own = v.own;
+    const copied = !own && v.convo; // copied from the conversation's own clips
     const warning = !own && r && base(r.sample) === `${v.sampleKey}.wav` ? r.warning : '';
     const source = `<select data-source title="Where this voice comes from">
-        <option value="">✨ Designed from a description</option>
+        <option value="">${v.convo ? '🎧 Copied from the conversation' : '✨ Designed from a description'}</option>
         ${voiceLibrary.map((lv) => `<option value="${esc(lv.id)}" ${own?.id === lv.id ? 'selected' : ''}>📚 ${esc(lv.name)}</option>`).join('')}
       </select>`;
     const body = own
@@ -178,20 +194,24 @@ function renderVoices() {
             <textarea data-own-text data-id="${esc(own.id)}">${esc(own.text)}</textarea></label>
           <span class="muted small">Every line is copied from this sample: its accent, pitch, pace and manner.</span>
         </div>`
+      : copied ? `<div class="own">
+          <audio controls preload="none" src="${audioUrl('voices', v.convo)}"></audio>
+          <span class="muted small">${esc(name)}'s own lines from the conversation: lines the studio says (🤖) copy this voice, accent and manner.</span>
+        </div>`
       : `<textarea data-desc>${esc(s.descriptions[name] || v.description)}</textarea>
       ${v.sample ? `<audio controls preload="none" src="${audioUrl('voices', `${v.sampleKey}.wav`)}"></audio>` : '<span class="muted small">Voice not made yet.</span>'}
       ${v.mode === 'acted' ? '<span class="muted small">Acted: each line is performed from its direction, in a voice like this one.</span>' : ''}
       ${warning ? `<div class="warning">⚠ ${esc(warning)} Describe an adult voice (e.g. "a young woman of about twenty with a calm, mid-range voice") and press ↻ Remake voice, or use a sample of a real voice (🎙 below).</div>` : ''}`;
     const buttons = [
-      own ? '' : '<button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button>',
+      own || copied ? '' : '<button class="btn small" data-remake title="Make this voice again (with the description above)">↻ Remake voice</button>',
       '<button class="btn small" data-find title="Choose a real voice from open recordings (American and other native readers, English with an accent)">🌍 Find a voice</button>',
       '<button class="btn small" data-mic title="Record someone reading this character\'s lines, here and now">🎤 Record</button>',
       '<button class="btn small" data-upload title="A recording of one person talking calmly, 5–15 seconds (MP3, WAV, a phone recording…)">🎙 Use my own sample…</button>',
       !own && v.sample ? '<button class="btn small" data-keep-voice title="Keep this voice to use it in other recordings">📚 Save to library</button>' : '',
     ].join('');
     return `<div class="voice" data-name="${esc(name)}">
-      <div class="voice-head"><b>${esc(name)}</b>${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
-        ${own ? '<span class="chip" style="margin-left:auto">Fixed voice</span>' : `<select data-mode style="margin-left:auto">
+      <div class="voice-head">${v.convoCh ? `<input data-rename data-ch="${esc(v.convoCh)}" value="${esc(name)}" title="Rename this person (letters only)" />` : `<b>${esc(name)}</b>`}${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
+        ${own || copied ? '<span class="chip" style="margin-left:auto">Fixed voice</span>' : `<select data-mode style="margin-left:auto">
           <option value="fixed" ${v.mode === 'fixed' ? 'selected' : ''}>Fixed voice</option>
           <option value="acted" ${v.mode === 'acted' ? 'selected' : ''}>Acted</option>
         </select>`}</div>
@@ -203,6 +223,10 @@ function renderVoices() {
 }
 
 function renderLines() {
+  if (isConvo()) {
+    renderConversation();
+    return;
+  }
   const byId = Object.fromEntries(current.lines.map((l) => [l.id, l]));
   const script = current.recording.script || { parts: [] };
   const rows = [];
@@ -237,6 +261,170 @@ function renderLines() {
   const wait = approved() ? '' : '<p class="muted small">The lines are made after you approve the voices.</p>';
   $('lines').innerHTML = wait + (rows.join('') || '<p class="muted">No lines yet.</p>');
 }
+
+// ---------------------------------------------------------------- 📱 a conversation's lines
+// Each line keeps its real audio (its clip from the phone) until its words
+// change; then the teacher records it (🎤) or the studio says it (🤖) in the
+// voice copied from that person. A misheard word is only fixed (the audio stays).
+const convoLines = () => current.recording.conversation.lines;
+const convoName = (ch) => current.recording.conversation.speakers[String(ch)] || `Speaker ${ch}`;
+// Mostly the teacher re-records their own lines; ChatGPT's are said by its copied voice.
+const convoDefaultMode = (ch) => (String(ch) === '1' ? 'record' : 'voice');
+
+function convoTasks() {
+  return Object.fromEntries(current.lines.map((t) => [t.convo, t]));
+}
+
+function convoWaiting() {
+  const tasks = convoTasks();
+  return convoLines().filter((l) => l.mode === 'record' && tasks[l.id]?.src !== 'take');
+}
+
+function renderConversation() {
+  const tasks = convoTasks();
+  const lines = convoLines();
+  const job = renderParts.job;
+  const making = job && job.id === currentId;
+  const changed = lines.filter((l) => l.mode !== 'original').length;
+  const waiting = convoWaiting().length;
+  const bar = `<div class="stage todo"><b>Review the conversation.</b> Every line keeps its real audio. ✏️ fixes a misheard word (the audio stays as it is) or changes what is said: then record the line yourself (🎤), or let the studio say it in that person's voice (🤖). ➕ adds a line, 🗑 removes one.
+    <div class="row"><button class="btn primary" id="convoMakeBtn" type="button" ${making ? 'disabled' : ''}>${making ? '⏳ Being made…' : '🎙️ Make the recording'}</button>
+      <span class="muted small">${changed ? `${changed} line${changed > 1 ? 's' : ''} changed` : 'No line changed yet'}${waiting ? ` · 🎤 ${waiting} waiting for your recording` : ''}</span></div></div>`;
+  const rows = lines.map((l, i) => {
+    const name = convoName(l.ch);
+    if (convo.editing === l.id) {
+      const hasClip = l.start != null && l.mode === 'original';
+      const who = l.isNew
+        ? `<select data-c-ch>${['1', '2'].map((ch) => `<option value="${ch}" ${String(l.ch) === ch ? 'selected' : ''}>${esc(convoName(ch))}</option>`).join('')}</select>`
+        : `<span class="who">${esc(name)}</span>`;
+      return `<div class="line editing" data-line="${esc(l.id)}">
+        <span class="muted">${i + 1}</span>${who}
+        <div class="say"><textarea data-c-text rows="2">${esc(l.text)}</textarea>
+          <div class="row">${hasClip
+            ? `<button type="button" class="btn small" data-c="fix" title="The audio already says this: Convo Recorder misheard a word">✔ Only fix the words (keep the audio)</button>
+               <button type="button" class="btn small primary" data-c="change" title="The new words need new audio: you record it, or the studio says it">✔ Change what's said</button>`
+            : '<button type="button" class="btn small primary" data-c="change">✔ Save</button>'}
+            <button type="button" class="btn small quiet" data-c="cancel">Cancel</button></div></div><div></div></div>`;
+    }
+    const t = tasks[l.id] || {};
+    let chip = '<span class="chip ok" title="The real audio from the conversation">🎧 original</span>';
+    if (t.src === 'take') chip = '<span class="chip ok" title="Your own recording of this line">🎤 your recording</span>';
+    else if (l.mode === 'record') chip = '<span class="chip warn" title="Until you record it, the studio\'s voice says it">🎤 to record</span>';
+    else if (l.mode === 'voice') chip = '<span class="chip" title="Said by the studio, in the voice copied from this person">🤖 studio voice</span>';
+    let src = '';
+    if (t.audio) src = audioUrl(t.audio[0], t.audio[1]);
+    else if (t.ready && t.key) src = audioUrl('lines', `${t.key}.wav`);
+    const buttons = [
+      '<button type="button" class="btn small" data-c="edit" title="Fix or change the words">✏️</button>',
+      '<button type="button" class="btn small" data-c="record" title="Record this line yourself">🎤</button>',
+      l.mode !== 'voice' ? '<button type="button" class="btn small" data-c="voice" title="The studio says this line, in the voice copied from this person">🤖</button>' : '',
+      l.start != null && l.mode !== 'original' ? '<button type="button" class="btn small" data-c="original" title="Back to the conversation\'s own audio and words">↩</button>' : '',
+      '<button type="button" class="btn small" data-c="insert" title="Add a line after this one">➕</button>',
+      '<button type="button" class="btn small" data-c="delete" title="Remove this line">🗑</button>',
+    ].join('');
+    return `<div class="line ${l.mode !== 'original' ? 'changed' : ''}" data-line="${esc(l.id)}">
+      <span class="muted">${i + 1}</span>
+      <span class="who" title="${esc(name)}">${esc(name)}</span>
+      <div class="say">${esc(l.text)}${l.mode !== 'original' && l.said && l.said !== l.text ? `<div class="how">Said in the conversation: “${esc(l.said)}”</div>` : ''}</div>
+      <div class="acts">${chip}${src ? `<audio controls preload="none" src="${src}"></audio>` : '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
+    </div>`;
+  });
+  $('lines').innerHTML = bar + (rows.join('') || '<p class="muted">No lines.</p>');
+  const box = $('lines').querySelector('[data-c-text]');
+  if (box) {
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }
+}
+
+// Sends the lines (and new names) to the studio; it answers with the
+// recording as saved (new lines get their ids there).
+async function saveConversation({ lines = convoLines(), speakers, make = false, message } = {}) {
+  await api(`/api/recordings/${currentId}/conversation`, {
+    method: 'PUT',
+    body: { lines: lines.map(({ id, ch, text, mode }) => ({ id, ch, text, mode })), speakers, make },
+  });
+  convo.editing = null;
+  await openRecording(currentId);
+  if (message) toast(message, 6000);
+}
+
+async function makeConversation() {
+  const waiting = convoWaiting().length;
+  if (waiting && !confirm(`${waiting} line${waiting > 1 ? 's are' : ' is'} waiting for your recording: the studio's voice says ${waiting > 1 ? 'them' : 'it'} for now (you can record later and make it again). Make the recording now?`)) return;
+  const voiced = current.lines.some((t) => t.src === 'voice');
+  await api(`/api/recordings/${currentId}/make`, { method: 'POST', body: { kind: 'all' } });
+  askToNotify();
+  toast(voiced ? 'Making the recording: first the lines the studio says (the voice model takes a few minutes to load)…' : 'Making the recording… (no voice to make: it only takes a moment)', 8000);
+  await poll();
+}
+
+$('lines').addEventListener('click', guarded(async (e) => {
+  if (e.target.closest('#convoMakeBtn')) {
+    await makeConversation();
+    return;
+  }
+  const btn = e.target.closest('[data-c]');
+  const row = e.target.closest('[data-line]');
+  if (!btn || !row || !isConvo()) return;
+  const lines = convoLines();
+  const i = lines.findIndex((l) => l.id === row.dataset.line);
+  const line = lines[i];
+  if (!line) return;
+  const action = btn.dataset.c;
+  if (action === 'edit') {
+    convo.editing = line.id;
+    renderConversation();
+  } else if (action === 'cancel') {
+    if (line.isNew) lines.splice(i, 1);
+    convo.editing = null;
+    renderConversation();
+  } else if (action === 'fix' || action === 'change') {
+    const text = row.querySelector('[data-c-text]').value.trim().replace(/\s+/g, ' ');
+    if (!text) {
+      toast('Write the line, or press Cancel (🗑 removes a line).');
+      return;
+    }
+    const ch = row.querySelector('[data-c-ch]')?.value || line.ch;
+    const same = text === line.text && String(ch) === String(line.ch) && !line.isNew;
+    if (same) {
+      convo.editing = null;
+      renderConversation();
+      return;
+    }
+    const edited = { ...line, text, ch: Number(ch) };
+    if (action === 'change' && line.mode === 'original') edited.mode = convoDefaultMode(ch);
+    if (line.isNew) edited.mode = convoDefaultMode(ch);
+    const next = lines.map((l, k) => (k === i ? edited : l));
+    if (action === 'fix') {
+      await saveConversation({ lines: next, message: 'Words fixed: the line keeps its audio.' });
+      return;
+    }
+    await saveConversation({ lines: next, message: edited.mode === 'voice' ? `Saved: the studio will say it in ${convoName(ch)}'s voice when you press 🎙️ Make. To record it yourself instead, press 🎤.` : '' });
+    if (edited.mode === 'record') openLineMic(i); // the same place: a new line has its id now
+  } else if (action === 'record') {
+    openLineMic(i);
+  } else if (action === 'voice') {
+    await saveConversation({ lines: lines.map((l, k) => (k === i ? { ...l, mode: 'voice' } : l)),
+      message: `The studio will say line ${i + 1} in ${convoName(line.ch)}'s voice when you press 🎙️ Make.` });
+  } else if (action === 'original') {
+    await saveConversation({ lines: lines.map((l, k) => (k === i ? { ...l, mode: 'original', text: l.said || l.text } : l)),
+      message: `Line ${i + 1} is back to the conversation's own audio.` });
+  } else if (action === 'insert') {
+    const other = String(line.ch) === '1' ? 2 : 1;
+    const added = { id: `new${Date.now()}`, ch: other, text: '', mode: convoDefaultMode(other), isNew: true };
+    lines.splice(i + 1, 0, added);
+    convo.editing = added.id;
+    renderConversation();
+  } else if (action === 'delete') {
+    if (!confirm(`Remove line ${i + 1} (${convoName(line.ch)}: “${line.text.slice(0, 60)}”)?`)) return;
+    await saveConversation({ lines: lines.filter((_, k) => k !== i), message: `Line ${i + 1} removed. Press 🎙️ Make to hear the recording without it.` });
+  }
+}));
+$('lines').addEventListener('keydown', (e) => {
+  if (!e.target.matches('[data-c-text]')) return;
+  if (e.key === 'Escape') e.target.closest('.line').querySelector('[data-c="cancel"]').click();
+});
 
 // make: 'voices' (back to step 1), 'all' (approved: make the recording) or false.
 async function saveSettings(make, message) {
@@ -341,6 +529,7 @@ async function poll() {
 }
 
 async function refreshQuietly() {
+  if (convo.editing) return; // never under the teacher's typing
   const id = currentId;
   const data = await api(`/api/recordings/${id}`).catch(() => null);
   if (!data || id !== currentId) return;
@@ -420,13 +609,30 @@ $('applyBtn').addEventListener('click', guarded(async () => {
 }));
 
 $('voices').addEventListener('input', (e) => {
-  if (e.target.matches('[data-own-text]')) return; // saved on its own (change)
+  if (e.target.matches('[data-own-text], [data-rename]')) return; // saved on their own (change)
   voicesDirty = true;
   $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)';
 });
 $('voices').addEventListener('change', guarded(async (e) => {
   if (e.target.matches('[data-mode]')) { voicesDirty = true; $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)'; }
   const name = e.target.closest('.voice')?.dataset.name;
+  if (e.target.matches('[data-rename]')) {
+    const renamed = e.target.value.trim().replace(/\s+/g, ' ');
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'.-]*( [A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'.-]*){0,2}$/.test(renamed)) {
+      toast('A name is letters only, up to three words (e.g. "Laura" or "Mr Brown").');
+      e.target.value = name;
+      return;
+    }
+    // A library voice chosen for this person follows the new name.
+    const s = settings();
+    if (s.ownVoices[name]) {
+      s.ownVoices[renamed] = s.ownVoices[name];
+      delete s.ownVoices[name];
+      await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { settings: s } });
+    }
+    await saveConversation({ speakers: { [e.target.dataset.ch]: renamed }, message: `Renamed to ${renamed}. Press 🎙️ Make to update the recording's transcript.` });
+    return;
+  }
   if (e.target.matches('[data-source]')) {
     readVoiceCards();
     const s = settings();
@@ -466,7 +672,9 @@ $('sampleFile').addEventListener('change', guarded(async (e) => {
 
 // 🎤 Record: the teacher (or a colleague) reads the character's own lines;
 // the recording then goes the same way as a sample file.
-const mic = { name: '', stream: null, recorder: null, chunks: [], blob: null, timer: null, meter: null, ctx: null };
+// The same dialog records one line of a conversation (mic.line: its id).
+const mic = { name: '', line: null, stream: null, recorder: null, chunks: [], blob: null, timer: null, meter: null, ctx: null };
+const MIC_HELP = $('micHelp').textContent;
 
 function micReadingText(name) {
   const words = [];
@@ -487,9 +695,30 @@ function micStopAll() {
 }
 
 function openMic(name) {
-  Object.assign(mic, { name, blob: null, chunks: [] });
+  Object.assign(mic, { name, line: null });
   $('micTitle').textContent = `🎤 Record a voice for ${name}`;
+  $('micHelp').textContent = MIC_HELP;
   $('micText').textContent = micReadingText(name);
+  $('micOriginalWrap').hidden = true;
+  showMic();
+}
+
+// 🎤 on a conversation line: the teacher says it again (n: its place).
+function openLineMic(n) {
+  const line = convoLines()[n];
+  if (!line) return;
+  Object.assign(mic, { name: '', line: line.id });
+  $('micTitle').textContent = `🎤 Record line ${n + 1} (${convoName(line.ch)})`;
+  $('micHelp').textContent = 'Say this line the way it fits the conversation: press Record, say it, press Stop. Silence before and after is cut.';
+  $('micText').textContent = line.text;
+  const original = line.start != null;
+  $('micOriginalWrap').hidden = !original;
+  if (original) $('micOriginal').src = audioUrl('original', `${line.id}.wav`);
+  showMic();
+}
+
+function showMic() {
+  Object.assign(mic, { blob: null, chunks: [] });
   $('micTime').textContent = '0 s';
   $('micPreview').hidden = true;
   $('micPreview').removeAttribute('src');
@@ -516,7 +745,7 @@ async function micStart() {
     $('micPreview').hidden = false;
     $('micUse').disabled = false;
     $('micRecord').textContent = '● Record again';
-    $('micStatus').textContent = 'Listen to it: calm and clear, no noise? Then use it, or record again.';
+    $('micStatus').textContent = mic.line ? 'Listen to it: does it fit? Then use it, or record again.' : 'Listen to it: calm and clear, no noise? Then use it, or record again.';
   };
   mic.recorder.start();
   // A level meter, so a silent or too-quiet microphone shows at once.
@@ -541,10 +770,11 @@ async function micStart() {
   $('micUse').disabled = true;
   $('micPreview').hidden = true;
   $('micStatus').textContent = 'Recording… read the text above, then press Stop.';
+  $('micOriginal').pause();
   mic.timer = setInterval(() => {
     const s = Math.floor((Date.now() - started) / 1000);
     $('micTime').textContent = `${s} s`;
-    if (s >= 25) micStopAll(); // more is cut anyway
+    if (s >= (mic.line ? 90 : 25)) micStopAll(); // a sample: more is cut anyway
   }, 250);
 }
 
@@ -557,9 +787,22 @@ $('micUse').addEventListener('click', guarded(async () => {
   if (!mic.blob) return;
   const blob = mic.blob;
   const ext = /ogg/.test(blob.type) ? 'ogg' : /mp4/.test(blob.type) ? 'm4a' : 'webm';
+  const line = mic.line;
   $('micDialog').close();
-  await uploadSample(blob, mic.name, ext);
+  if (line) await uploadTake(line, blob, ext);
+  else await uploadSample(blob, mic.name, ext);
 }));
+
+async function uploadTake(lineId, blob, ext) {
+  toast('⏳ Saving your recording…', 60000);
+  const res = await fetch(`/api/recordings/${currentId}/takes/${encodeURIComponent(lineId)}?ext=${encodeURIComponent(ext)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  await openRecording(currentId);
+  const left = convoWaiting().length;
+  toast(left ? `✅ Your recording is in. ${left} more line${left > 1 ? 's' : ''} to record.` : '✅ Your recording is in. Press 🎙️ Make the recording to hear it in the conversation.', 6000);
+}
 
 $('voices').addEventListener('click', guarded(async (e) => {
   if (e.target.closest('[data-find]')) {
@@ -699,6 +942,107 @@ $('libraryList').addEventListener('click', guarded(async (e) => {
   if (!confirm(`Delete “${name}” from the library? Characters using it go back to a voice designed from their description.`)) return;
   await api(`/api/library/${item.dataset.id}`, { method: 'DELETE' });
   await renderLibrary();
+}));
+
+// ---------------------------------------------------------------- 📱 from the phone
+// Convo Recorder's conversations, copied over the phone's Wi-Fi link
+// (engine/phone.py), or the .wav and .json its Share button sends.
+const phoneDrop = { wav: null, json: null };
+
+function conversationWhen(name) {
+  const m = /(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)/.exec(name || '');
+  return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : name;
+}
+
+async function loadPhone() {
+  $('phoneList').innerHTML = '<p class="muted">⏳ Looking for the phone…</p>';
+  const data = await api('/api/phone');
+  if (!data.ok) {
+    $('phoneList').innerHTML = `<p class="muted">${esc(data.error)}</p>`;
+    return;
+  }
+  $('phoneList').innerHTML = data.conversations.map((c) => {
+    const done = recordingList.find((r) => r.from === c.name);
+    return `<div class="find-item" data-name="${esc(c.name)}"><div><b>${esc(conversationWhen(c.name))}</b>
+        <br><span class="muted small">${Math.floor(c.seconds / 60)}:${String(c.seconds % 60).padStart(2, '0')}${c.transcript ? '' : ' · not transcribed with timings yet: press “Redo” on it in Convo Recorder'}${done ? ` · ✅ imported as “${esc(done.title)}”` : ''}</span></div>
+      <div class="acts"><button type="button" class="btn small ${done ? '' : 'primary'}" data-import ${c.transcript ? '' : 'disabled'}>${done ? '⬇ Import again' : '⬇ Import'}</button></div></div>`;
+  }).join('') || '<p class="muted">No conversations on the phone yet: record one with Convo Recorder.</p>';
+}
+
+async function importConversation(body, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = body.phone ? '⏳ Copying from the phone…' : '⏳ Importing…';
+  let id;
+  try {
+    ({ id } = await api('/api/conversations', { method: 'POST', body }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+  $('phoneDialog').close();
+  await loadList();
+  await openRecording(id);
+  toast('📱 Imported. Listen to the lines, fix or change them, then press 🎙️ Make the recording.', 9000);
+}
+
+async function addPhoneFiles(files) {
+  [...files].forEach((f) => {
+    if (/\.wav$/i.test(f.name)) phoneDrop.wav = f;
+    else if (/\.json$/i.test(f.name)) phoneDrop.json = f;
+  });
+  const { wav, json } = phoneDrop;
+  if (!wav || !json) {
+    $('phoneStatus').textContent = wav ? `Got ${wav.name}: now add its transcript (.json).` : json ? `Got ${json.name}: now add the recording (.wav).` : 'Add the recording (.wav) and its transcript (.json).';
+    return;
+  }
+  if (wav.name.replace(/\.wav$/i, '') !== json.name.replace(/\.json$/i, '') && !confirm(`${wav.name} and ${json.name} have different names. Are they the same conversation?`)) {
+    Object.assign(phoneDrop, { wav: null, json: null });
+    $('phoneStatus').textContent = '';
+    return;
+  }
+  Object.assign(phoneDrop, { wav: null, json: null });
+  $('phoneStatus').textContent = `⏳ Sending ${wav.name} (${Math.round(wav.size / 1e6)} MB)…`;
+  const send = async (file, kind, upload) => {
+    const res = await fetch(`/api/conversations/upload?kind=${kind}${upload ? `&upload=${upload}` : ''}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+    return data.upload;
+  };
+  try {
+    const upload = await send(wav, 'wav');
+    await send(json, 'json', upload);
+    $('phoneStatus').textContent = '⏳ Cutting the lines…';
+    await importConversation({ upload, name: wav.name.replace(/\.wav$/i, '') }, $('phonePick'));
+  } finally {
+    $('phoneStatus').textContent = '';
+  }
+}
+
+$('phoneBtn').addEventListener('click', guarded(async () => {
+  Object.assign(phoneDrop, { wav: null, json: null });
+  $('phoneStatus').textContent = '';
+  $('phoneDialog').showModal();
+  await loadPhone();
+}));
+$('phoneRefresh').addEventListener('click', guarded(loadPhone));
+$('phoneList').addEventListener('click', guarded(async (e) => {
+  const btn = e.target.closest('[data-import]');
+  if (btn) await importConversation({ phone: btn.closest('[data-name]').dataset.name }, btn);
+}));
+$('phonePick').addEventListener('click', () => $('phoneFiles').click());
+$('phoneFiles').addEventListener('change', guarded(async (e) => {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  await addPhoneFiles(files);
+}));
+$('phoneDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('phoneDrop').classList.add('over'); });
+$('phoneDrop').addEventListener('dragleave', () => $('phoneDrop').classList.remove('over'));
+$('phoneDrop').addEventListener('drop', guarded(async (e) => {
+  e.preventDefault();
+  $('phoneDrop').classList.remove('over');
+  await addPhoneFiles(e.dataTransfer?.files || []);
 }));
 
 // ---------------------------------------------------------------- 🌍 find a voice
