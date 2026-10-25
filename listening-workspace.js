@@ -3,7 +3,7 @@
    linked Listening Studio recording is too (when no session is linked). */
 const lrWorkspace = {
   started: false, tab: 'script', method: 'people', sessionId: '', sessionTitle: '',
-  studioId: '', studioTitle: '', studio: null, studioOffline: false, studioTimer: null, studioFetching: false,
+  studioId: '', studioTitle: '', studioSession: '', studio: null, studioOffline: false, studioTimer: null, studioFetching: false,
   file: null, audioUrl: '', saveTimer: null, loading: false,
 };
 const LR_STUDIO_TAB = 'pinplay-listening-studio';
@@ -20,7 +20,7 @@ function lrSaveDraft() {
     const fields = Object.fromEntries(LR_DRAFT_FIELDS.map(id => [id, lrEl(id)?.value || '']));
     localStorage.setItem(lrDraftKey(), JSON.stringify({ fields, started: lrWorkspace.started,
       tab: lrWorkspace.tab, method: lrWorkspace.method, sessionId: lrWorkspace.sessionId, sessionTitle: lrWorkspace.sessionTitle,
-      studioId: lrWorkspace.studioId, studioTitle: lrWorkspace.studioTitle }));
+      studioId: lrWorkspace.studioId, studioTitle: lrWorkspace.studioTitle, studioSession: lrWorkspace.studioSession }));
     if (status) status.textContent = t('Draft saved on this device');
   } catch {
     if (status) status.textContent = t('Draft could not be saved on this device. Copy your script to keep it.');
@@ -142,10 +142,12 @@ function lrStudioDescribe(id, data, status) {
   const job = status?.job?.id === id ? status.job : null;
   const queued = (status?.queue || []).some(([rid]) => rid === id);
   const parts = data.result?.parts || [];
-  const ready = rec.stage === 'approved' && parts.length > 0 && !job && !queued;
+  // stale: changed in the studio since the MP3 was made (server.py _changed).
+  const ready = rec.stage === 'approved' && parts.length > 0 && !job && !queued && !data.stale;
   let text;
   if (job) text = lrStudioProgress(job, status.now);
   else if (queued) text = t('Waiting for Listening Studio to finish another recording…');
+  else if (data.stale && parts.length) text = t('Changed since it was made: press Make the recording in Listening Studio again.');
   else if (rec.conversation && !ready) text = t('Next: check the lines and voices in Listening Studio, then press Make the recording there.');
   else if (rec.stage === 'setup') text = t('Next: describe the voices in Listening Studio, then press Make the recording there.');
   else if (rec.stage === 'voices') text = t('Next: listen to the voices in Listening Studio and approve them. Then the recording is made.');
@@ -255,7 +257,7 @@ async function lrSendToStudio() {
     const title = lrValue('lrDraftTitle') || script.title || lrValue('lrTopic');
     // A script without its language or voices opens on the studio's set-up form.
     const { id } = await lrStudioApi('recordings', { method: 'POST', body: { text, script, title, setup: listeningScriptNeedsSetup(script) } });
-    Object.assign(lrWorkspace, { studioId: id, studioTitle: title || t('Untitled'), studio: null, studioOffline: false });
+    Object.assign(lrWorkspace, { studioId: id, studioTitle: title || t('Untitled'), studioSession: '', studio: null, studioOffline: false });
     lrSaveDraft();
     lrRefreshWorkspace();
     if (lrOpenStudio()) lrStatus(t('Sent to Listening Studio. Continue there; this card shows how it is going.'), 'ok');
@@ -285,14 +287,38 @@ async function lrSendSessionToStudio(session, button) {
     const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     const lines = session.lines.map(line => ({ id: line.id, speaker: line.speaker, text: line.text, status: line.status || '',
       take: line.take ? `${base}/api/media/${line.take.key}` : '', trim: line.trim || null, gap: vaLineGap(line) }));
-    const { id, takes, failed } = await lrStudioApi('sessions', { method: 'POST',
-      body: { title: session.title, language: lrValue('lrLanguage') || 'English', session: { id: session.id, lines } } });
-    Object.assign(lrWorkspace, { studioId: id, studioTitle: session.title || t('Untitled'), studio: null, studioOffline: false });
+    const body = { title: session.title, language: lrValue('lrLanguage') || 'English', session: { id: session.id, lines } };
+    let answer = null;
+    if (lrWorkspace.studioId && lrWorkspace.studioSession === session.id) {
+      // Made from this session before: the new takes go into that recording
+      // (what the teacher changed in the studio stays).
+      try {
+        answer = await lrStudioApi('sessions', { method: 'POST', body: { ...body, into: lrWorkspace.studioId } });
+      } catch (err) {
+        if (err.status !== 404 && err.status !== 409) throw err; // deleted there, or not from this session: a new one
+      }
+    }
+    answer = answer || await lrStudioApi('sessions', { method: 'POST', body });
+    const { id, takes, failed } = answer;
+    Object.assign(lrWorkspace, { studioId: id, studioTitle: session.title || t('Untitled'), studioSession: session.id, studio: null, studioOffline: false });
     lrSelectMethod('studio', { keepWho: true });
     lrOpenStudio();
-    vaStatus(failed
-      ? t('Sent to Listening Studio with {takes} takes; {failed} could not be downloaded, so the studio says those lines.', { takes, failed })
-      : t('Sent to Listening Studio with {takes} takes. Finish it there: the 🎧 Listening activity shows how it is going.', { takes }), failed ? 'bad' : 'ok');
+    if (button) button.textContent = t('🔊 Update in Listening Studio');
+    if (answer.updated) {
+      vaStatus([
+        answer.changed + answer.added + answer.removed
+          ? t('Updated in Listening Studio: {changed} changed, {added} added, {removed} removed. Press Make the recording there.', answer)
+          : t('Listening Studio already had everything from this session.'),
+        answer.kept === 1 ? t('1 line you changed in the studio was left as it is.')
+          : answer.kept ? t('{kept} lines you changed in the studio were left as they are.', answer) : '',
+        failed ? t('{failed} takes could not be downloaded: try again later.', { failed }) : '',
+      ].filter(Boolean).join(' '), failed ? 'bad' : 'ok');
+    } else {
+      vaStatus(failed
+        ? t('Sent to Listening Studio with {takes} takes; {failed} could not be downloaded, so the studio says those lines.', { takes, failed })
+        : takes === 1 ? t('Sent to Listening Studio with 1 take. Finish it there: the 🎧 Listening activity shows how it is going.')
+        : t('Sent to Listening Studio with {takes} takes. Finish it there: the 🎧 Listening activity shows how it is going.', { takes }), failed ? 'bad' : 'ok');
+    }
     lrStudioTick();
   } catch (err) {
     vaStatus(err.offline
@@ -422,6 +448,7 @@ function lrBindWorkspace() {
       lrWorkspace.sessionTitle = String(draft.sessionTitle || '');
       lrWorkspace.studioId = /^[a-z0-9]{8,32}$/.test(draft.studioId || '') ? draft.studioId : '';
       lrWorkspace.studioTitle = String(draft.studioTitle || '');
+      lrWorkspace.studioSession = lrWorkspace.studioId && /^[a-z0-9]{8,16}$/.test(draft.studioSession || '') ? draft.studioSession : '';
       if (draft.started) lrSelectTab(draft.tab || 'script');
       lrSelectMethod(draft.method || 'people');
       lrEl('lrDraftStatus').textContent = t('Draft restored from this device');
@@ -457,7 +484,7 @@ function lrBindWorkspace() {
   lrEl('lrChangeStart').addEventListener('click', () => lrEl('lrStartChoices').classList.toggle('hidden'));
   lrEl('lrDetachSession').addEventListener('click', () => {
     clearTimeout(lrWorkspace.studioTimer);
-    Object.assign(lrWorkspace, { sessionId: '', sessionTitle: '', studioId: '', studioTitle: '', studio: null });
+    Object.assign(lrWorkspace, { sessionId: '', sessionTitle: '', studioId: '', studioTitle: '', studioSession: '', studio: null });
     lrRefreshWorkspace();
     lrSaveDraft();
   });

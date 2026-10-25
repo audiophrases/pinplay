@@ -21,6 +21,16 @@ def main():
         print('@@' + json.dumps(event, ensure_ascii=False), flush=True)
 
     Project(folder, script, rec.get('settings') or {}, say, convo=rec.get('conversation')).run(kind)
+    if kind == 'all':
+        # Which version of the recording this MP3 is: the server compares it
+        # with the recording's latest change ("changed since it was made").
+        path = os.path.join(folder, 'result.json')
+        with open(path, encoding='utf-8') as fh:
+            result = json.load(fh)
+        result['madeFrom'] = rec.get('changed')
+        with open(path + '.part', 'w', encoding='utf-8') as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=1)
+        os.replace(path + '.part', path)
 
 
 if __name__ == '__main__':

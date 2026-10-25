@@ -136,6 +136,13 @@ def _result(rid):
     return json.load(open(path, encoding='utf-8')) if os.path.exists(path) else None
 
 
+def _changed(rec):
+    """Marks what the MP3 is made from as changed: engine/job.py writes the
+    mark it was made from into result.json, so a different one means the
+    MP3 is older than the recording ("changed since it was made")."""
+    rec['changed'] = time.time()
+
+
 # ---------------------------------------------------------------- the job runner
 JOBS = queue.Queue()
 STATE = {'job': None, 'queue': [], 'last': None, 'stop': False, 'proc': None}
@@ -287,6 +294,7 @@ async def create_recording(request: Request):
            'stage': 'setup' if setup else 'voices'}
     if request.headers.get('origin') in PINPLAY_ORIGINS:
         rec['source'] = 'pinplay'
+    _changed(rec)
     _save(rec)
     if not setup and body.get('make', True) and rec['script'] and rec['script'].get('parts'):
         _make(rec, 'voices')  # the teacher approves the voices before the long part
@@ -318,6 +326,8 @@ def get_recording(rid: str):
                             'convoCh': next((ch for ch in (rec.get('conversation') or {}).get('speakers', {})
                                              if conversation.speaker_name(rec['conversation'], ch) == name), ''),
                             'effect': (rec['script']['voices'].get(name) or {}).get('effect', '')}
+            if rec.get('conversation') and voices[name]['convoCh']:
+                voices[name]['effect'] = (rec['conversation'].get('effects') or {}).get(voices[name]['convoCh'], '')
     else:
         voices = {}
     report_path = os.path.join(_folder(rid), 'voices.json')
@@ -325,8 +335,10 @@ def get_recording(rid: str):
         report = json.load(open(report_path, encoding='utf-8')) if os.path.exists(report_path) else {}
     except ValueError:
         report = {}
-    rec.setdefault('stage', 'approved' if _result(rid) else 'voices')
-    return {'recording': rec, 'lines': lines, 'voices': voices, 'voiceReport': report, 'result': _result(rid)}
+    result = _result(rid)
+    rec.setdefault('stage', 'approved' if result else 'voices')
+    stale = bool(result and rec.get('changed') and result.get('madeFrom') != rec['changed'])
+    return {'recording': rec, 'lines': lines, 'voices': voices, 'voiceReport': report, 'result': result, 'stale': stale}
 
 
 @app.put('/api/recordings/{rid}')
@@ -336,6 +348,8 @@ async def update_recording(rid: str, request: Request):
     for key in ('text', 'script', 'settings'):
         if key in body:
             rec[key] = body[key]
+    if {'text', 'script', 'settings'} & set(body):
+        _changed(rec)
     if 'title' in body:
         rec['title'] = str(body['title'] or '').strip()[:120] or 'Untitled'
     elif 'script' in body and (body['script'] or {}).get('title') and rec.get('title') in (None, '', 'Untitled'):
@@ -478,7 +492,7 @@ async def conversation_import(request: Request):
     title = str(body.get('title') or '').strip()[:120] or _conversation_title(name)
     script = conversation.script_of(conv, title)
     _save({'id': rid, 'created': time.time(), 'title': title, 'text': conversation.text_of(script), 'script': script,
-           'settings': {}, 'stage': 'approved', 'conversation': conv, 'from': name})
+           'settings': {}, 'stage': 'approved', 'conversation': conv, 'from': name, 'changed': time.time()})
     return {'id': rid}
 
 
@@ -490,9 +504,11 @@ async def conversation_update(rid: str, request: Request):
     rec = _load(rid)
     if not rec.get('conversation'):
         raise HTTPException(400, 'This recording is not a conversation.')
-    rec['conversation'] = conversation.clean(rec['conversation'], body.get('lines'), body.get('speakers'), body.get('language'))
+    rec['conversation'] = conversation.clean(rec['conversation'], body.get('lines'), body.get('speakers'),
+                                             body.get('language'), body.get('effects'))
     rec['script'] = conversation.script_of(rec['conversation'], rec.get('title') or 'Conversation')
     rec['text'] = conversation.text_of(rec['script'])
+    _changed(rec)
     _save(rec)
     _make(rec, 'all' if body.get('make') else None)
     return {'ok': True}
@@ -508,11 +524,14 @@ async def session_import(request: Request):
     """A new recording from a PinPlay recording session: { title, language,
     session: { id, lines: [{ id, speaker, text, status, take (its address),
     trim, gap }] } }. Recorded lines keep their takes; the others are said
-    by the studio once the teacher presses Make."""
+    by the studio once the teacher presses Make. With into: <recording id>,
+    that recording (made from the same session) is updated instead."""
     import asyncio
     import shutil
     body = await request.json()
     session = body.get('session') if isinstance(body.get('session'), dict) else {}
+    if body.get('into'):
+        return await _session_update(str(body['into']), session)
     rid = uuid.uuid4().hex[:12]
     folder = os.path.join(RECORDINGS, rid)
     os.makedirs(folder)
@@ -530,9 +549,34 @@ async def session_import(request: Request):
            'settings': {}, 'stage': 'approved', 'conversation': conv}
     if request.headers.get('origin') in PINPLAY_ORIGINS:
         rec['source'] = 'pinplay'
+    _changed(rec)
     _save(rec)
     takes = sum(1 for line in conv['lines'] if line['mode'] == 'original')
     return {'id': rid, 'lines': len(conv['lines']), 'takes': takes, 'failed': conv['failed']}
+
+
+async def _session_update(rid, session):
+    """New takes, words and lines from the session into the recording made
+    from it (engine/conversation.py update_from_session: the teacher's own
+    changes here stay). The teacher then makes it again in the studio."""
+    import asyncio
+    rec = _load(rid)
+    conv = rec.get('conversation') or {}
+    if conv.get('kind') != 'session' or (conv.get('session') or {}).get('id') != str(session.get('id') or '')[:32]:
+        raise HTTPException(409, 'That studio recording was not made from this recording session.')
+    with LOCK:
+        busy = (STATE['job'] or {}).get('id') == rid or any(q[0] == rid for q in STATE['queue'])
+    if busy:
+        raise HTTPException(423, 'This recording is being made right now: try again when it is finished.')
+    conv, counts = await asyncio.to_thread(conversation.update_from_session, _folder(rid), conv, session.get('lines'), MEDIA_HOSTS)
+    rec['conversation'] = conv
+    rec['script'] = conversation.script_of(conv, rec.get('title') or 'Recording session')
+    rec['text'] = conversation.text_of(rec['script'])
+    if counts['changed'] or counts['added'] or counts['removed']:
+        _changed(rec)
+    _save(rec)
+    takes = sum(1 for line in conv['lines'] if line['mode'] == 'original')
+    return {'id': rid, 'updated': True, 'lines': len(conv['lines']), 'takes': takes, **counts}
 
 
 @app.post('/api/recordings/{rid}/copy-voice')
@@ -550,6 +594,7 @@ async def session_copy_voice(rid: str, request: Request):
         rec['conversation'] = await asyncio.to_thread(conversation.copy_voice, _folder(rid), conv, ch, bool(body.get('copy')))
     except ValueError as err:
         raise HTTPException(400, str(err))
+    _changed(rec)
     _save(rec)
     return {'ok': True}
 
@@ -577,6 +622,7 @@ async def conversation_take(rid: str, lid: str, request: Request):
     finally:
         os.remove(upload)
     line['mode'] = 'record'
+    _changed(rec)
     _save(rec)
     return {'ok': True}
 

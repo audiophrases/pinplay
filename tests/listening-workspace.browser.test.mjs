@@ -156,7 +156,11 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
       studio.calls.push({ method: request.method(), path: url.pathname, body: request.method() === 'POST' ? request.postDataJSON() : null });
       if (url.pathname === '/api/status') return route.fulfill({ headers, json: studio.status });
       if (request.method() === 'POST' && url.pathname === '/api/recordings') return route.fulfill({ headers, json: { id: 'a1b2c3d4e5f6' } });
-      if (request.method() === 'POST' && url.pathname === '/api/sessions') return route.fulfill({ headers, json: { id: 'a1b2c3d4e5f6', lines: 2, takes: 1, failed: 0 } });
+      if (request.method() === 'POST' && url.pathname === '/api/sessions') {
+        return route.fulfill({ headers, json: request.postDataJSON().into
+          ? { id: 'a1b2c3d4e5f6', updated: true, lines: 2, takes: 2, changed: 1, added: 0, removed: 0, kept: 1, failed: 0 }
+          : { id: 'a1b2c3d4e5f6', lines: 2, takes: 1, failed: 0 } });
+      }
       if (url.pathname === '/api/recordings/a1b2c3d4e5f6') return route.fulfill({ headers, json: studio.recording });
       if (url.pathname.startsWith('/api/recordings/a1b2c3d4e5f6/audio/out/')) return route.fulfill({ headers: { ...headers, 'Content-Type': 'audio/mpeg' }, body: Buffer.from('ID3 fake mp3') });
       return route.fulfill({ status: 404, headers, json: { detail: 'Recording not found.' } });
@@ -231,8 +235,11 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
         { id: 'l2', speaker: 'Tom', text: 'Hi!', status: 'todo', gap: 1.5 },
       ] };
     });
+    // The review's waveforms can't load here: let that message come first.
+    await page.route('https://api.test/api/media/**', route => route.fulfill({ status: 404, body: '' }));
     await page.locator('[data-lr-start="sessions"]').click();
     await page.locator('[data-va-open="abcdefgh23"]').click();
+    await page.waitForFunction(() => /could not be loaded/.test(document.querySelector('#voiceActorsOverlay [data-va-status]')?.textContent || ''));
     await page.locator('[data-va-studio]').click();
     await page.waitForFunction(() => window.calls.some(call => call.open));
     const sent = studio.calls.find(call => call.path === '/api/sessions').body;
@@ -242,7 +249,15 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
       { id: 'l2', speaker: 'Tom', text: 'Hi!', status: 'todo', take: '', trim: null, gap: 1.5 },
     ] });
     assert.deepEqual(await page.evaluate(() => window.calls.find(call => call.open)), { open: 'http://127.0.0.1:8790/#r=a1b2c3d4e5f6', name: 'pinplay-listening-studio' });
-    assert.match(await page.locator('#voiceActorsOverlay [data-va-status]').innerText(), /Sent to Listening Studio with 1 takes/);
+    assert.match(await page.locator('#voiceActorsOverlay [data-va-status]').innerText(), /Sent to Listening Studio with 1 take\. Finish it there/);
+    // Again, later: the new takes go into the same studio recording.
+    assert.equal(await page.locator('[data-va-studio]').innerText(), '🔊 Update in Listening Studio');
+    await page.locator('[data-va-studio]').click();
+    await page.waitForFunction(() => /Updated in Listening Studio/.test(document.querySelector('#voiceActorsOverlay [data-va-status]').textContent));
+    const update = studio.calls.filter(call => call.path === '/api/sessions')[1].body;
+    assert.equal(update.into, 'a1b2c3d4e5f6');
+    assert.equal(await page.locator('#voiceActorsOverlay [data-va-status]').innerText(),
+      'Updated in Listening Studio: 1 changed, 0 added, 0 removed. Press Make the recording there. 1 line you changed in the studio was left as it is.');
     await page.locator('[data-va-close]').click();
     // Both linked: the session's words stay the script; the studio's state shows.
     studio.recording = { recording: { id: 'a1b2c3d4e5f6', title: 'Weekend', stage: 'approved', text: 'TITLE: Weekend\nLANGUAGE: English\n\nMia: Hello.\nTom: Hi!', conversation: { kind: 'session' } }, result: null };
@@ -252,6 +267,15 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     assert.equal(await page.locator('#lrVoicesToggle').innerText(), 'Recording\nIn Listening Studio');
     assert.match(await page.locator('#lrStudioState').innerText(), /check the lines and voices/);
     assert.equal(await page.locator('#lrRecordedBy').inputValue(), 'students');
+    // Made, then changed in the studio: the old MP3 is not offered.
+    studio.recording.result = { parts: [{ label: '', mp3: 'D:\\data\\out\\weekend.mp3', seconds: 9 }] };
+    studio.recording.stale = true;
+    await page.evaluate(() => { window.quiz.listeningSections = [{ id: 's1', title: 'Part 1' }]; return lrStudioRefresh(); });
+    assert.match(await page.locator('#lrStudioState').innerText(), /Changed since it was made/);
+    assert.equal(await page.locator('#lrUseStudioAudio').isDisabled(), true);
+    studio.recording.stale = false;
+    await page.evaluate(() => lrStudioRefresh());
+    assert.equal(await page.locator('#lrUseStudioAudio').isDisabled(), false);
     assert.deepEqual(errors, []);
     await page.close();
   });

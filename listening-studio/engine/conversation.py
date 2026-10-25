@@ -13,13 +13,16 @@ line can be said in the same voice by the copy model.
 
 A line is { id, ch (1 or 2; 1..n in a session), text, said (what its clip
 says), start, end (where its clip is in the source), gap (a session's pause
-before it, seconds), mode }, mode being
+before it, seconds), effect ('' as its person, 'none', or one of EFFECTS),
+mode }, mode being
   'original'  its clip from the conversation (the default; fixing a
               misheard word keeps it),
   'record'    the teacher's own take, recorded in the studio (until one is
               recorded, the copied voice stands in),
   'voice'     the speaker's voice copied by the studio.
-A take belongs to the words it says: editing the line again needs a new one."""
+A take belongs to the words it says: editing the line again needs a new one.
+A person can have an effect too (conv['effects'] = { ch: effect }): a line
+that says nothing of its own takes its person's. Effects are added in the mix."""
 import hashlib
 import io
 import json
@@ -41,6 +44,7 @@ SAMPLE_MIN, SAMPLE_GOOD, SAMPLE_MAX = 5.0, 8.0, 15.0  # seconds of a speaker's v
 DEFAULT_SPEAKERS = {'1': 'Me', '2': 'ChatGPT'}
 LANGUAGES = ('English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian', 'Chinese', 'Japanese', 'Korean')
 MAX_TAKE_BYTES = 10 * 1024 * 1024  # PinPlay keeps takes under 3 MB
+EFFECTS = ('phone', 'pa', 'far', 'radio')  # engine/audio.py EFFECTS
 
 
 def _key(*parts):
@@ -240,29 +244,156 @@ def from_session(folder, raw_lines, hosts, language=None, fetch=_download):
         ch = speakers.setdefault(name, len(speakers) + 1)
         line = {'id': uuid.uuid4().hex[:8], 'ch': ch, 'text': text, 'mode': 'voice',
                 'sessionLine': str(raw.get('id') or '')[:40]}
-        gap = raw.get('gap')
-        if isinstance(gap, (int, float)) and not isinstance(gap, bool) and 0 <= gap <= 10:
-            line['gap'] = round(float(gap), 2)
+        gap = _session_gap(raw)
+        if gap is not None:
+            line['gap'] = gap
         lines.append(line)
-        if raw.get('take') and raw.get('status') != 'redo':
-            jobs.append((line, raw['take'], raw.get('trim')))
+        take, trim = _session_take(raw)
+        if take:
+            jobs.append((line, take, trim))
+        line['sessionWas'] = {'text': text, 'take': take, 'trim': trim}
     if not lines:
         raise ValueError('This recording session has no lines.')
+    failed = _fetch_clips(folder, jobs, hosts, fetch)
+    for line in lines:
+        if line['id'] in failed:
+            line['sessionWas']['take'] = ''  # tried again at the next update
+        line['sessionWas']['mode'] = line['mode']
+    return {'kind': 'session', 'speakers': {str(ch): name for name, ch in speakers.items()}, 'lines': lines,
+            'voices': {}, 'language': language if language in LANGUAGES else 'English', 'failed': len(failed),
+            'sessionNames': {name: str(ch) for name, ch in speakers.items()}}
 
+
+def _session_gap(raw):
+    gap = raw.get('gap')
+    if isinstance(gap, (int, float)) and not isinstance(gap, bool) and 0 <= gap <= 10:
+        return round(float(gap), 2)
+    return None
+
+
+def _session_take(raw):
+    """(take address, trim) of a session line, or ('', None) when it has no
+    take the teacher kept (none yet, or sent back with Redo)."""
+    if not raw.get('take') or raw.get('status') == 'redo':
+        return '', None
+    trim = raw.get('trim')
+    trim = {'s': trim['s'], 'e': trim['e']} if isinstance(trim, dict) and {'s', 'e'} <= set(trim) else None
+    return str(raw['take']), trim
+
+
+def _fetch_clips(folder, jobs, hosts, fetch):
+    """Downloads and cuts the takes [(line, take, trim)]; a line whose take
+    came in becomes 'original'. Returns the ids of the lines that failed."""
     def one(job):
         line, url, trim = job
         try:
             clip, (a, b) = session_clip(url, trim, hosts, fetch)
         except ValueError:
-            return False
+            return line['id']
         _write(original_file(folder, line['id']), clip)
         line.update({'mode': 'original', 'said': line['text'], 'start': a, 'end': b})
-        return True
+        return None
 
     with ThreadPoolExecutor(4) as pool:
-        failed = sum(1 for ok in pool.map(one, jobs) if not ok)
-    return {'kind': 'session', 'speakers': {str(ch): name for name, ch in speakers.items()}, 'lines': lines,
-            'voices': {}, 'language': language if language in LANGUAGES else 'English', 'failed': failed}
+        return {lid for lid in pool.map(one, jobs) if lid}
+
+
+def _edited_here(line):
+    """The teacher changed this line in the studio (its words, or how it is
+    said): an update from the session leaves it as it is."""
+    was = line.get('sessionWas')
+    if not was:
+        return line.get('mode') == 'record'
+    return line.get('mode') == 'record' or line['text'] != was.get('text') or line.get('mode') != was.get('mode')
+
+
+def update_from_session(folder, conv, raw_lines, hosts, fetch=_download):
+    """The session again, into a recording made from it: new takes, trims,
+    words, pauses and lines come in; a line the session no longer has goes.
+    A line the teacher changed in the studio keeps the teacher's version,
+    and lines added in the studio stay after the line they followed.
+    Returns (conversation, counts)."""
+    names = dict(conv.get('speakers') or {})
+    session_names = dict(conv.get('sessionNames') or {v: k for k, v in names.items()})
+    by_sid = {line['sessionLine']: line for line in conv['lines'] if line.get('sessionLine')}
+    counts = {'changed': 0, 'added': 0, 'removed': 0, 'kept': 0, 'failed': 0}
+    ordered, jobs, before = [], [], {}
+    for raw in list(raw_lines or [])[:400]:
+        sid = str(raw.get('id') or '')[:40]
+        text = ' '.join(str(raw.get('text') or '').split())[:600]
+        if not sid or not text or any(line.get('sessionLine') == sid for line in ordered):
+            continue
+        name = ' '.join(str(raw.get('speaker') or '').split())[:40] or 'Speaker'
+        ch = session_names.get(name)
+        if ch is None:  # a person new to the session
+            ch = str(max([int(k) for k in names] or [0]) + 1)
+            names[ch] = name if name not in names.values() else f'{name} {ch}'
+            session_names[name] = ch
+        take, trim = _session_take(raw)
+        gap = _session_gap(raw)
+        old = by_sid.get(sid)
+        if old and _edited_here(old):
+            was = old.get('sessionWas') or {}
+            if (text, take, trim) != (was.get('text'), was.get('take'), was.get('trim')):
+                counts['kept'] += 1
+            ordered.append(old)
+            continue
+        line = dict(old) if old else {'id': uuid.uuid4().hex[:8], 'mode': 'voice', 'sessionLine': sid}
+        line.update({'ch': int(ch), 'text': text})
+        line.pop('gap', None)
+        if gap is not None:
+            line['gap'] = gap
+        was = (old or {}).get('sessionWas') or {}
+        has_clip = os.path.exists(original_file(folder, line['id']))
+        if take and (take != was.get('take') or trim != was.get('trim') or not has_clip):
+            jobs.append((line, take, trim))
+            before[line['id']] = old
+        elif take:
+            line.update({'mode': 'original', 'said': text})
+        else:
+            line['mode'] = 'voice'
+        line['sessionWas'] = {'text': text, 'take': take, 'trim': trim}
+        ordered.append(line)
+        if not old:
+            counts['added'] += 1
+    failed = _fetch_clips(folder, jobs, hosts, fetch)
+    counts['failed'] = len(failed)
+    for i, line in enumerate(ordered):
+        if line['id'] in failed:
+            old = before.get(line['id'])
+            if old:  # keeps what it had; the take is tried again next time
+                ordered[i] = line = old
+            else:
+                line['sessionWas']['take'] = ''
+        line.setdefault('sessionWas', {})
+        if line is not by_sid.get(line.get('sessionLine')):
+            line['sessionWas']['mode'] = line['mode']
+            old = by_sid.get(line['sessionLine'])
+            old_was = (old or {}).get('sessionWas') or {}
+            if old and (any(old.get(k) != line.get(k) for k in ('text', 'ch', 'gap', 'mode', 'start', 'end'))
+                        or any(old_was.get(k) != line['sessionWas'].get(k) for k in ('take', 'trim'))):
+                counts['changed'] += 1  # a new take counts even when it is cut at the same times
+    # Lines added in the studio follow the line they followed; a line the
+    # session dropped goes, unless the teacher changed it here.
+    seen = {line['sessionLine'] for line in ordered}
+    followers, anchor = {}, None
+    for line in conv['lines']:
+        sid = line.get('sessionLine')
+        if sid in seen:
+            anchor = sid
+            continue
+        if sid and not _edited_here(line):
+            counts['removed'] += 1
+            continue
+        if sid:
+            counts['kept'] += 1
+            line = {k: v for k, v in line.items() if k not in ('sessionLine', 'sessionWas')}
+        followers.setdefault(anchor, []).append(line)
+    lines = list(followers.get(None, []))
+    for line in ordered:
+        lines.append(line)
+        lines += followers.get(line['sessionLine'], [])
+    return {**conv, 'lines': lines, 'speakers': names, 'sessionNames': session_names, 'failed': counts['failed']}, counts
 
 
 def copy_voice(folder, conv, ch, copy):
@@ -306,7 +437,7 @@ def voice_of(folder, conv, name):
     return None
 
 
-def clean(conv, lines, speakers=None, language=None):
+def clean(conv, lines, speakers=None, language=None, effects=None):
     """The teacher's edited lines and names, checked: ids are kept, a new
     line gets one, only known modes and speakers."""
     known = {line['id']: line for line in conv['lines']}
@@ -320,9 +451,12 @@ def clean(conv, lines, speakers=None, language=None):
         ch = int(raw.get('ch') or (old or {}).get('ch') or 1)
         line = {'id': old['id'] if old else uuid.uuid4().hex[:8], 'ch': ch if str(ch) in names else 1, 'text': text,
                 'mode': raw.get('mode') if raw.get('mode') in ('original', 'record', 'voice') else 'record'}
-        for key in ('gap', 'sessionLine'):  # from a recording session
+        for key in ('gap', 'sessionLine', 'sessionWas'):  # from a recording session
             if old and key in old:
                 line[key] = old[key]
+        effect = raw.get('effect') if 'effect' in raw else (old or {}).get('effect')
+        if effect in EFFECTS or effect == 'none':
+            line['effect'] = effect
         if old and old.get('start') is not None:
             line['start'], line['end'] = old['start'], old['end']
             # What the clip says: corrected while the line uses its clip.
@@ -345,13 +479,30 @@ def clean(conv, lines, speakers=None, language=None):
     cleaned = {**conv, 'lines': out, 'speakers': names}
     if language in LANGUAGES:
         cleaned['language'] = language
+    if effects is not None:
+        merged = dict(conv.get('effects') or {})
+        for ch, effect in effects.items():
+            if str(ch) in names:
+                if effect in EFFECTS:
+                    merged[str(ch)] = effect
+                else:
+                    merged.pop(str(ch), None)
+        cleaned['effects'] = merged
     return cleaned
+
+
+def line_effect(conv, line):
+    """The effect a line is mixed with: its own, else its person's ('none': no effect)."""
+    own = line.get('effect')
+    if own == 'none':
+        return ''
+    return own if own in EFFECTS else (conv.get('effects') or {}).get(str(line['ch']), '')
 
 
 def script_of(conv, title):
     """The parsed-script shape the engine makes recordings from; each line
     knows its conversation line ('convo')."""
-    items = [{'type': 'line', 'speakers': [speaker_name(conv, line['ch'])], 'direction': '', 'effect': '',
+    items = [{'type': 'line', 'speakers': [speaker_name(conv, line['ch'])], 'direction': '', 'effect': line_effect(conv, line),
               'text': line['text'], 'overlap': False, 'convo': line['id'],
               **({'gap': line['gap']} if line.get('gap') is not None else {})} for line in conv['lines']]
     return {'title': title, 'language': conv.get('language') or 'English', 'ambience': 'none', 'voices': {},

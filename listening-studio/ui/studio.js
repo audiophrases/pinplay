@@ -215,7 +215,8 @@ function renderParts() {
     ? parts.map((p) => `<div class="part"><b>${esc(p.label || current.recording.title)}</b> <span class="muted small">${Math.round(p.seconds)} s</span>
         <audio controls preload="none" src="${audioUrl('out', base(p.mp3))}"></audio>
         <a class="btn primary" href="${audioUrl('out', base(p.mp3))}" download="${esc(base(p.mp3))}">💾 Save MP3</a></div>`).join('')
-      + (making ? '<p class="muted small">Being made again: this is the previous version.</p>' : '')
+      + (making ? '<p class="muted small">Being made again: this is the previous version.</p>'
+        : current.stale ? `<div class="warning">⚠ Changed since this was made: press <b>${isConvo() ? '🎙️ Make the recording' : '🎙️ Apply and make again'}</b> to update it.</div>` : '')
     : `<p class="muted">${!approved() ? 'Step 2: the recording is made after you approve the voices.' : making ? 'Being made… you can listen to each line below as soon as it is ready.' : 'Not made yet.'}</p>`;
 }
 
@@ -264,7 +265,9 @@ function renderVoices() {
     const unneeded = isSession() && !convoLines().some((l) => l.mode !== 'original' && convoName(l.ch) === name);
     return `<div class="voice" data-name="${esc(name)}">
       ${unneeded ? '<span class="muted small">Every line of theirs has a take: no voice needed.</span>' : ''}
-      <div class="voice-head">${v.convoCh ? `<input data-rename data-ch="${esc(v.convoCh)}" value="${esc(name)}" title="Rename this person (letters only)" />` : `<b>${esc(name)}</b>`}${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
+      <div class="voice-head">${v.convoCh ? `<input data-rename data-ch="${esc(v.convoCh)}" value="${esc(name)}" title="Rename this person (letters only)" />` : `<b>${esc(name)}</b>`}${v.convoCh
+        ? `<select data-effect data-ch="${esc(v.convoCh)}" title="An effect on all their lines (a line can have its own: ✏️)">${effectOptions(v.effect, 'No effect')}</select>`
+        : v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
         ${own || copied ? '<span class="chip" style="margin-left:auto">Fixed voice</span>' : `<select data-mode style="margin-left:auto">
           <option value="fixed" ${v.mode === 'fixed' ? 'selected' : ''}>Fixed voice</option>
           <option value="acted" ${v.mode === 'acted' ? 'selected' : ''}>Acted</option>
@@ -325,6 +328,17 @@ const convoName = (ch) => current.recording.conversation.speakers[String(ch)] ||
 // Mostly the teacher re-records their own lines; ChatGPT's are said by its copied voice.
 const convoDefaultMode = (ch) => (!isSession() && String(ch) === '1' ? 'record' : 'voice');
 const convoChannels = () => Object.keys(current.recording.conversation.speakers);
+// Effects (engine/audio.py EFFECTS), for a person or one line; added in the mix.
+const EFFECT_LABELS = { phone: '📞 On the phone', pa: '📢 PA announcement', far: '🔊 From far away', radio: '📻 Radio' };
+function effectOptions(selected, first, extra = '') {
+  return `<option value="">${esc(first)}</option>${extra}${Object.entries(EFFECT_LABELS)
+    .map(([v, label]) => `<option value="${v}" ${selected === v ? 'selected' : ''}>${label}</option>`).join('')}`;
+}
+// The effect a line is mixed with (engine/conversation.py line_effect).
+function convoLineEffect(l) {
+  if (l.effect === 'none') return '';
+  return EFFECT_LABELS[l.effect] ? l.effect : (current.recording.conversation.effects || {})[String(l.ch)] || '';
+}
 
 function convoTasks() {
   return Object.fromEntries(current.lines.map((t) => [t.convo, t]));
@@ -382,6 +396,8 @@ function renderConversation() {
       return `<div class="line editing" data-line="${esc(l.id)}">
         <span class="muted">${i + 1}</span>${who}
         <div class="say"><textarea data-c-text rows="2">${esc(l.text)}</textarea>
+          <label class="small muted">Effect <select data-c-effect>${effectOptions(l.effect || '', `As ${name}${(current.recording.conversation.effects || {})[String(l.ch)] ? ` (${EFFECT_LABELS[current.recording.conversation.effects[String(l.ch)]]})` : ''}`,
+            `<option value="none" ${l.effect === 'none' ? 'selected' : ''}>No effect</option>`)}</select></label>
           <div class="row">${hasClip
             ? `<button type="button" class="btn small" data-c="fix" title="The audio already says this: Convo Recorder misheard a word">✔ Only fix the words (keep the audio)</button>
                <button type="button" class="btn small primary" data-c="change" title="The new words need new audio: you record it, or the studio says it">✔ Change what's said</button>`
@@ -406,7 +422,7 @@ function renderConversation() {
       <span class="muted">${i + 1}</span>
       <span class="who" title="${esc(name)}">${esc(name)}</span>
       <div class="say">${esc(l.text)}${l.mode !== 'original' && l.said && l.said !== l.text ? `<div class="how">Said in the ${isSession() ? 'take' : 'conversation'}: “${esc(l.said)}”</div>` : ''}</div>
-      <div class="acts">${chip}${play || '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
+      <div class="acts">${convoLineEffect(l) ? `<span class="chip" title="Effect">${EFFECT_LABELS[convoLineEffect(l)]}</span>` : ''}${chip}${play || '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
     </div>`;
   });
   $('lines').innerHTML = bar + (rows.join('') || '<p class="muted">No lines.</p>');
@@ -475,10 +491,10 @@ async function saveReview({ record = null, message } = {}) {
 
 // Sends the lines (and new names) to the studio; it answers with the
 // recording as saved (new lines get their ids there).
-async function saveConversation({ lines = convoLines(), speakers, language, make = false, message } = {}) {
+async function saveConversation({ lines = convoLines(), speakers, language, effects, make = false, message } = {}) {
   await api(`/api/recordings/${currentId}/conversation`, {
     method: 'PUT',
-    body: { lines: lines.map(({ id, ch, text, mode }) => ({ id, ch, text, mode })), speakers, language, make },
+    body: { lines: lines.map(({ id, ch, text, mode, effect }) => ({ id, ch, text, mode, effect: effect || '' })), speakers, language, effects, make },
   });
   convo.editing = null;
   await openRecording(currentId);
@@ -562,13 +578,19 @@ $('lines').addEventListener('click', guarded(async (e) => {
       return;
     }
     const ch = row.querySelector('[data-c-ch]')?.value || line.ch;
-    const same = text === line.text && String(ch) === String(line.ch) && !line.isNew;
-    if (same) {
+    const effect = row.querySelector('[data-c-effect]')?.value ?? (line.effect || '');
+    const sameWords = text === line.text && String(ch) === String(line.ch) && !line.isNew;
+    if (sameWords && effect === (line.effect || '')) {
       convo.editing = null;
       renderConversation();
       return;
     }
-    const edited = { ...line, text, ch: Number(ch) };
+    const edited = { ...line, text, ch: Number(ch), effect };
+    if (sameWords) {
+      // Only the effect: the line keeps its audio, the mix adds the effect.
+      await saveConversation({ lines: lines.map((l, k) => (k === i ? edited : l)), message: 'Effect saved: press 🎙️ Make to hear it (only mixed again).' });
+      return;
+    }
     if (action === 'change' && line.mode === 'original') edited.mode = convoDefaultMode(ch);
     if (line.isNew) edited.mode = convoDefaultMode(ch);
     const next = lines.map((l, k) => (k === i ? edited : l));
@@ -832,7 +854,7 @@ $('applyBtn').addEventListener('click', guarded(async () => {
 }));
 
 $('voices').addEventListener('input', (e) => {
-  if (e.target.matches('[data-own-text], [data-rename]')) return; // saved on their own (change)
+  if (e.target.matches('[data-own-text], [data-rename], [data-effect]')) return; // saved on their own (change)
   voicesDirty = true;
   $('applyBtn').textContent = '🎙️ Apply and make again (voices changed)';
 });
@@ -854,6 +876,11 @@ $('voices').addEventListener('change', guarded(async (e) => {
       await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { settings: s } });
     }
     await saveConversation({ speakers: { [e.target.dataset.ch]: renamed }, message: `Renamed to ${renamed}. Press 🎙️ Make to update the recording's transcript.` });
+    return;
+  }
+  if (e.target.matches('[data-effect]')) {
+    await saveConversation({ effects: { [e.target.dataset.ch]: e.target.value },
+      message: e.target.value ? `${name}: ${EFFECT_LABELS[e.target.value]}. Press 🎙️ Make to hear it (only mixed again).` : `${name}: no effect. Press 🎙️ Make to hear it.` });
     return;
   }
   if (e.target.matches('[data-source]') && ['__copy', '__design'].includes(e.target.value)) {
