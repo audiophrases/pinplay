@@ -73,6 +73,7 @@ PINPLAY_ORIGINS = {'https://audiophrases.github.io', 'https://pinplay.eugenime.w
                    *CONFIG.get('pinplayOrigins', [])}
 PINPLAY_ROUTES = [('GET', re.compile(r'/api/status')),
                   ('POST', re.compile(r'/api/recordings')),
+                  ('POST', re.compile(r'/api/sessions')),
                   ('GET', re.compile(r'/api/recordings/[a-z0-9]{8,32}')),
                   ('GET', re.compile(r'/api/recordings/[a-z0-9]{8,32}/audio/out/[\w.-]+\.mp3'))]
 
@@ -314,8 +315,8 @@ def get_recording(rid: str):
                             'sample': os.path.exists(project.sample_file(name)),
                             'sampleKey': project.sample_key(name), 'own': project.own(name),
                             'convo': os.path.basename(project.sample_file(name)) if project.convo_voice(name) else '',
-                            'convoCh': next((ch for ch in ('1', '2') if rec.get('conversation')
-                                             and conversation.speaker_name(rec['conversation'], ch) == name), ''),
+                            'convoCh': next((ch for ch in (rec.get('conversation') or {}).get('speakers', {})
+                                             if conversation.speaker_name(rec['conversation'], ch) == name), ''),
                             'effect': (rec['script']['voices'].get(name) or {}).get('effect', '')}
     else:
         voices = {}
@@ -489,11 +490,67 @@ async def conversation_update(rid: str, request: Request):
     rec = _load(rid)
     if not rec.get('conversation'):
         raise HTTPException(400, 'This recording is not a conversation.')
-    rec['conversation'] = conversation.clean(rec['conversation'], body.get('lines'), body.get('speakers'))
+    rec['conversation'] = conversation.clean(rec['conversation'], body.get('lines'), body.get('speakers'), body.get('language'))
     rec['script'] = conversation.script_of(rec['conversation'], rec.get('title') or 'Conversation')
     rec['text'] = conversation.text_of(rec['script'])
     _save(rec)
     _make(rec, 'all' if body.get('make') else None)
+    return {'ok': True}
+
+
+# ---------------------------------------------------------------- 🎙 recording sessions (PinPlay's voice actors)
+# Takes are fetched from PinPlay's media only (engine/conversation.py session_clip).
+MEDIA_HOSTS = {'api.pinplay.win', 'pinplay-api.eugenime.workers.dev', *CONFIG.get('mediaHosts', [])}
+
+
+@app.post('/api/sessions')
+async def session_import(request: Request):
+    """A new recording from a PinPlay recording session: { title, language,
+    session: { id, lines: [{ id, speaker, text, status, take (its address),
+    trim, gap }] } }. Recorded lines keep their takes; the others are said
+    by the studio once the teacher presses Make."""
+    import asyncio
+    import shutil
+    body = await request.json()
+    session = body.get('session') if isinstance(body.get('session'), dict) else {}
+    rid = uuid.uuid4().hex[:12]
+    folder = os.path.join(RECORDINGS, rid)
+    os.makedirs(folder)
+    try:
+        conv = await asyncio.to_thread(conversation.from_session, folder, session.get('lines'), MEDIA_HOSTS, body.get('language'))
+    except Exception as err:
+        shutil.rmtree(folder, ignore_errors=True)
+        if isinstance(err, ValueError):
+            raise HTTPException(400, str(err))
+        raise
+    conv['session'] = {'id': str(session.get('id') or '')[:32]}
+    title = str(body.get('title') or '').strip()[:120] or 'Recording session'
+    script = conversation.script_of(conv, title)
+    rec = {'id': rid, 'created': time.time(), 'title': title, 'text': conversation.text_of(script), 'script': script,
+           'settings': {}, 'stage': 'approved', 'conversation': conv}
+    if request.headers.get('origin') in PINPLAY_ORIGINS:
+        rec['source'] = 'pinplay'
+    _save(rec)
+    takes = sum(1 for line in conv['lines'] if line['mode'] == 'original')
+    return {'id': rid, 'lines': len(conv['lines']), 'takes': takes, 'failed': conv['failed']}
+
+
+@app.post('/api/recordings/{rid}/copy-voice')
+async def session_copy_voice(rid: str, request: Request):
+    """{ name, copy }: that person's voice copied from their own takes (the
+    teacher confirmed the student agreed), or designed again."""
+    import asyncio
+    body = await request.json()
+    rec = _load(rid)
+    conv = rec.get('conversation') or {}
+    ch = next((c for c in conv.get('speakers', {}) if conversation.speaker_name(conv, c) == body.get('name')), None)
+    if ch is None:
+        raise HTTPException(404, 'This person is not in the recording.')
+    try:
+        rec['conversation'] = await asyncio.to_thread(conversation.copy_voice, _folder(rid), conv, ch, bool(body.get('copy')))
+    except ValueError as err:
+        raise HTTPException(400, str(err))
+    _save(rec)
     return {'ok': True}
 
 

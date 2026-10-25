@@ -473,11 +473,20 @@ The split stays: **PinPlay is the hub** (script, questions, sections, anything s
 - **Into the quiz:** Questions → Use with an existing listening section → **Use Studio recording in this section**. It fetches the MP3 from the studio and attaches it with its timings, exactly like an upload. A script with several parts makes one MP3 per part: the part with the section's position is chosen, and it can be changed. Nothing goes in before the teacher presses the button, and only a finished recording whose voices were approved can be used (not a previous version while it is being made again).
 - If the studio can't be reached, the old way is one button away: **Open the studio and copy the script**.
 
-### Part 2: finishing a recording session in the studio (planned)
+### Part 2: finishing a recording session in the studio (built 2026-10-25)
 
-The two already treat a line the same way: a studio conversation line is `original` audio, a 🎤 take or 🤖 a voice; a recording-session line is a volunteer's take.
+The two already treated a line the same way: a studio conversation line is `original` audio, a 🎤 take or 🤖 a voice; a recording-session line is a volunteer's take. So a session comes into the studio as a conversation of kind `session` (`engine/conversation.py` `from_session`), with any number of people instead of the phone's two.
 
-- **Import a session.** Approved takes become `original` lines, with the teacher's trims. PinPlay hands the studio the session (lines, trims, take URLs), so the studio needs no teacher password.
-- **Fill the gaps.** A missing line, or a character nobody recorded, becomes a 🤖 line. Its voice can be copied from that student's own takes (as for phone conversations), so the gap sounds like them. **Ask the student first (and their parents for a minor):** the copy says words they never recorded. It stays on this computer.
-- **Production.** The studio's effects and backgrounds (`[phone]`, PA, station) on student recordings, which the browser build can't do.
-- **Later, maybe:** the studio's version of each line uploaded so the record page has ▶ "hear it" before recording (one R2 write per line, so a switch the teacher turns on).
+- **🔊 Finish in Listening Studio** in a recording session's view (next to 🎧 Use in the listening section). It saves pending review edits first, then sends the studio the session: each line's speaker, words, status, take address, trim and pause. The studio fetches the takes itself, from PinPlay's media only (`api.pinplay.win` or `pinplay-api.eugenime.workers.dev`, paths under `/api/media/voice-actors/`; config `mediaHosts`), so it needs no teacher password. The 🎧 Listening activity is then linked to the studio recording, as in part 1 (the session's words stay the script).
+- **Takes.** Every line with a take keeps it (`original`), except one the teacher sent back with ↻ Redo. It is cut at the teacher's trim, or at the same automatic trim PinPlay's review uses (ported from `vaAutoTrim`). The browsers' WebM, MP4 and Ogg recordings are read with faster-whisper's decoder (PyAV), so still no ffmpeg. Each take is brought to the same level by the mix, as before.
+- **Pauses.** Each line keeps the pause set in PinPlay's review (a line's own, else the session's default): the mixer now honours a line's `gap`. The studio's "Spacing between lines" is greyed out for a session.
+- **The gaps.** A line nobody recorded (or whose take failed to download, or was sent back) is 🤖, said by the studio. Its person's voice is **designed from a description or a library voice** by default. **🎙 Copy from their takes (only with their OK)** on the voice card copies the student's own voice from their clips, after a question that says the copy will say words they never recorded and needs their (and their parents', for a minor) agreement. It can be undone (✨ Designed from a description). A card says when the person needs no voice (all their lines have takes).
+- **The rest is the conversation editor:** ✏️ fix a word (the take stays) or change what is said (then 🤖, or 🎤 the teacher records it), ➕ a line for any of the people, 🗑, rename, ▶ listen from any line, the language of the studio's lines, and the background in Settings. A session where every line has a take is only mixed: seconds, no voice model.
+- **Checked:** the engine with synthetic WAV and WebM/Opus takes (trims, the host check, redo/missing/failed lines, gaps, copying a voice, the mix's pauses); the real server and page in Chrome (import from PinPlay's origin, consent question, language, a three-person new line, a takes-only mix whose MP3 timings keep the session's pauses); PinPlay's button in the browser tests.
+- Fixed on the way: the background track could be one sample shorter than the mix (`int()` of a float), which crashed the mix for some lengths.
+
+Not done (later, if wanted):
+
+- **Updating from the session** after volunteers record more takes: today, Finish in Listening Studio again makes a new studio recording.
+- **Effects per line** (`[phone]`, PA) for session lines: actor scripts have none, and the conversation editor has no effect control yet. The background works.
+- The studio's version of each line uploaded so the record page has ▶ "hear it" before recording (one R2 write per line, so a switch the teacher turns on).

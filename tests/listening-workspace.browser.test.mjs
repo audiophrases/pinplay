@@ -156,6 +156,7 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
       studio.calls.push({ method: request.method(), path: url.pathname, body: request.method() === 'POST' ? request.postDataJSON() : null });
       if (url.pathname === '/api/status') return route.fulfill({ headers, json: studio.status });
       if (request.method() === 'POST' && url.pathname === '/api/recordings') return route.fulfill({ headers, json: { id: 'a1b2c3d4e5f6' } });
+      if (request.method() === 'POST' && url.pathname === '/api/sessions') return route.fulfill({ headers, json: { id: 'a1b2c3d4e5f6', lines: 2, takes: 1, failed: 0 } });
       if (url.pathname === '/api/recordings/a1b2c3d4e5f6') return route.fulfill({ headers, json: studio.recording });
       if (url.pathname.startsWith('/api/recordings/a1b2c3d4e5f6/audio/out/')) return route.fulfill({ headers: { ...headers, 'Content-Type': 'audio/mpeg' }, body: Buffer.from('ID3 fake mp3') });
       return route.fulfill({ status: 404, headers, json: { detail: 'Recording not found.' } });
@@ -218,6 +219,39 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     await page.locator('#lrScriptToggle').click();
     await page.locator('#lrDetachSession').click();
     assert.equal(await page.locator('#lrScript').isEditable(), true);
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+  it('finishes a recording session in Listening Studio with its takes, trims and pauses', async () => {
+    const { page, errors } = await open();
+    const studio = await fakeStudio(page);
+    await page.evaluate(() => {
+      window.latest = { id: 'abcdefgh23', title: 'Weekend', allowEdits: true, defaultGap: 0.8, lines: [
+        { id: 'l1', speaker: 'Mia', text: 'Hello.', status: 'ok', take: { key: 'voice-actors/abcdefgh23/l1-x.webm' }, trim: { s: 120, e: 900 } },
+        { id: 'l2', speaker: 'Tom', text: 'Hi!', status: 'todo', gap: 1.5 },
+      ] };
+    });
+    await page.locator('[data-lr-start="sessions"]').click();
+    await page.locator('[data-va-open="abcdefgh23"]').click();
+    await page.locator('[data-va-studio]').click();
+    await page.waitForFunction(() => window.calls.some(call => call.open));
+    const sent = studio.calls.find(call => call.path === '/api/sessions').body;
+    assert.equal(sent.title, 'Weekend');
+    assert.deepEqual(sent.session, { id: 'abcdefgh23', lines: [
+      { id: 'l1', speaker: 'Mia', text: 'Hello.', status: 'ok', take: 'https://api.test/api/media/voice-actors/abcdefgh23/l1-x.webm', trim: { s: 120, e: 900 }, gap: 0.8 },
+      { id: 'l2', speaker: 'Tom', text: 'Hi!', status: 'todo', take: '', trim: null, gap: 1.5 },
+    ] });
+    assert.deepEqual(await page.evaluate(() => window.calls.find(call => call.open)), { open: 'http://127.0.0.1:8790/#r=a1b2c3d4e5f6', name: 'pinplay-listening-studio' });
+    assert.match(await page.locator('#voiceActorsOverlay [data-va-status]').innerText(), /Sent to Listening Studio with 1 takes/);
+    await page.locator('[data-va-close]').click();
+    // Both linked: the session's words stay the script; the studio's state shows.
+    studio.recording = { recording: { id: 'a1b2c3d4e5f6', title: 'Weekend', stage: 'approved', text: 'TITLE: Weekend\nLANGUAGE: English\n\nMia: Hello.\nTom: Hi!', conversation: { kind: 'session' } }, result: null };
+    await page.evaluate(() => lrStudioRefresh());
+    assert.equal(await page.locator('#lrSessionSource').innerText(), 'Recording session: Weekend · Listening Studio: Weekend');
+    assert.equal(await page.locator('#lrScript').inputValue(), 'Mia: Hello.\nTom: Hi!');
+    assert.equal(await page.locator('#lrVoicesToggle').innerText(), 'Recording\nIn Listening Studio');
+    assert.match(await page.locator('#lrStudioState').innerText(), /check the lines and voices/);
+    assert.equal(await page.locator('#lrRecordedBy').inputValue(), 'students');
     assert.deepEqual(errors, []);
     await page.close();
   });

@@ -52,12 +52,12 @@ function lrSelectTab(tab, { focus = false } = {}) {
   if (lrWorkspace.studioId) lrStudioTick();
 }
 
-function lrSelectMethod(method) {
+function lrSelectMethod(method, { keepWho = false } = {}) {
   if (!['people', 'studio', 'upload'].includes(method)) return;
   lrWorkspace.method = method;
   document.querySelectorAll('[data-lr-method]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.lrMethod === method)));
   document.querySelectorAll('[data-lr-method-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.lrMethodPanel !== method));
-  if (method !== 'upload') lrEl('lrRecordedBy').value = method === 'studio' ? 'studio' : 'students';
+  if (method !== 'upload' && !keepWho) lrEl('lrRecordedBy').value = method === 'studio' ? 'studio' : 'students';
   lrRefreshWorkspace();
   lrSaveDraft();
 }
@@ -80,7 +80,7 @@ function lrRefreshWorkspace() {
     studio && t('Listening Studio: {title}', { title: lrWorkspace.studioTitle }),
   ].filter(Boolean).join(' · ');
   lrEl('lrScriptState').textContent = script ? t('Script ready') : t('Start here');
-  lrEl('lrRecordingState').textContent = linked ? t('Session selected') : studio ? t('In Listening Studio') : lrWorkspace.file ? t('Audio selected') : t('Choose a method');
+  lrEl('lrRecordingState').textContent = studio ? t('In Listening Studio') : linked ? t('Session selected') : lrWorkspace.file ? t('Audio selected') : t('Choose a method');
   lrEl('lrQuestionsState').textContent = t('Create or connect');
   lrEl('lrQuestionSource').textContent = linked
     ? t('Questions will use the latest words from the selected recording session, including edits.')
@@ -146,6 +146,7 @@ function lrStudioDescribe(id, data, status) {
   let text;
   if (job) text = lrStudioProgress(job, status.now);
   else if (queued) text = t('Waiting for Listening Studio to finish another recording…');
+  else if (rec.conversation && !ready) text = t('Next: check the lines and voices in Listening Studio, then press Make the recording there.');
   else if (rec.stage === 'setup') text = t('Next: describe the voices in Listening Studio, then press Make the recording there.');
   else if (rec.stage === 'voices') text = t('Next: listen to the voices in Listening Studio and approve them. Then the recording is made.');
   else if (ready) text = parts.length > 1
@@ -205,7 +206,7 @@ function lrRenderStudio() {
   lrEl('lrStudioOpen').classList.toggle('hidden', !studio);
   lrEl('lrStudioCopy').classList.toggle('hidden', studio || !lrWorkspace.studioOffline);
   lrEl('lrStudioState').textContent = studio ? state?.text || t('Checking Listening Studio…') : '';
-  if (studio && !lrWorkspace.sessionId) lrEl('lrRecordingState').textContent = state?.ready ? t('Studio recording ready') : t('In Listening Studio');
+  if (studio) lrEl('lrRecordingState').textContent = state?.ready ? t('Studio recording ready') : t('In Listening Studio');
   const parts = state?.ready ? state.parts : [];
   const select = lrEl('lrStudioPart');
   const labels = parts.map((p, i) => `${p.label || t('Part {n}', { n: i + 1 })} · ${Math.round(p.seconds)} s`);
@@ -266,6 +267,40 @@ async function lrSendToStudio() {
       : t('Listening Studio could not take the script ({msg}).', { msg: err.message }), 'bad');
   } finally {
     lrWorkspace.loading = false;
+    lrRenderStudio();
+  }
+}
+
+// A recording session finished in the studio: recorded lines keep their
+// takes, with the trims and pauses set in the review (the studio fetches the
+// takes from PinPlay's media itself); lines nobody recorded are said there.
+async function lrSendSessionToStudio(session, button) {
+  if (!session || lrWorkspace.loading) return;
+  lrWorkspace.loading = true;
+  if (button) button.disabled = true;
+  vaStatus(t('Sending the takes to Listening Studio…'));
+  try {
+    await vaFlushSave(); // trims, pauses and statuses not saved yet
+    if (va.edits.size) throw new Error(t('Some changes are not saved yet. Try again in a moment.'));
+    const base = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
+    const lines = session.lines.map(line => ({ id: line.id, speaker: line.speaker, text: line.text, status: line.status || '',
+      take: line.take ? `${base}/api/media/${line.take.key}` : '', trim: line.trim || null, gap: vaLineGap(line) }));
+    const { id, takes, failed } = await lrStudioApi('sessions', { method: 'POST',
+      body: { title: session.title, language: lrValue('lrLanguage') || 'English', session: { id: session.id, lines } } });
+    Object.assign(lrWorkspace, { studioId: id, studioTitle: session.title || t('Untitled'), studio: null, studioOffline: false });
+    lrSelectMethod('studio', { keepWho: true });
+    lrOpenStudio();
+    vaStatus(failed
+      ? t('Sent to Listening Studio with {takes} takes; {failed} could not be downloaded, so the studio says those lines.', { takes, failed })
+      : t('Sent to Listening Studio with {takes} takes. Finish it there: the 🎧 Listening activity shows how it is going.', { takes }), failed ? 'bad' : 'ok');
+    lrStudioTick();
+  } catch (err) {
+    vaStatus(err.offline
+      ? t('Could not reach Listening Studio. Start it from its desktop icon, then press Send again. If Chrome asks whether this site may reach apps on this computer, choose Allow; if you blocked it, allow it again from the icon at the left of the address bar.')
+      : t('Listening Studio could not take the session ({msg}).', { msg: err.message }), 'bad');
+  } finally {
+    lrWorkspace.loading = false;
+    if (button) button.disabled = false;
     lrRenderStudio();
   }
 }

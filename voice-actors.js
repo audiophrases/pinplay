@@ -333,6 +333,7 @@ function vaRenderSession() {
           ${sections.map((x, i) => `<option value="${escapeHtml(x.id)}" ${x.id === target ? 'selected' : ''}>${escapeHtml(vaSectionLabel(x, i))}</option>`).join('')}
         </select>
         <button type="button" class="btn primary" data-va-build="section">${escapeHtml(t('🎧 Use in the listening section'))}</button>` : ''}
+      <button type="button" class="btn" data-va-studio title="${escapeHtml(t('Recorded lines keep their takes; lines nobody recorded get an AI voice; add a background. Runs on this computer.'))}">${escapeHtml(t('🔊 Finish in Listening Studio'))}</button>
       <button type="button" class="btn" data-va-questions title="${escapeHtml(t('Opens the Quiz builder\'s AI prompt with this script, the volunteers\' changes included'))}">${escapeHtml(t('✨ Questions from this script'))}</button>
       <button type="button" class="btn" data-va-copy-script title="${escapeHtml(t('The script with the volunteers\' changes, for a listening section or the AI prompt'))}">${escapeHtml(t('📋 Copy the script'))}</button>
       <span class="small muted">${escapeHtml(t('Joins the takes in script order, trimmed, with their pauses. Lines not recorded are left out.'))}</span>
@@ -891,6 +892,7 @@ function vaOnClick(e) {
     vaQueueEdit(id, { status: line.status });
     vaRerenderLine(line);
   } else if (d.vaBuild) vaBuild(d.vaBuild);
+  else if (d.vaStudio !== undefined && typeof lrSendSessionToStudio === 'function') lrSendSessionToStudio(va.session, btn);
 }
 
 function vaRerenderLine(line) {

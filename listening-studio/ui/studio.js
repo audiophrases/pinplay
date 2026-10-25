@@ -25,6 +25,9 @@ let recordingList = []; // the sidebar's recordings (from: the phone conversatio
 // edited, or the transcript review (every line a box; drafts: unsaved words).
 const convo = { editing: null, review: false, drafts: {} };
 const isConvo = () => !!current?.recording?.conversation;
+// A PinPlay recording session (engine/conversation.py from_session): the
+// volunteers' takes, any number of people, the lines nobody recorded said by the studio.
+const isSession = () => current?.recording?.conversation?.kind === 'session';
 // A script PinPlay sent without its settings (stage 'setup'): the welcome
 // form, filled in, makes that recording instead of a new one.
 let setupFor = null;
@@ -145,6 +148,9 @@ function renderAll(keepText) {
   const s = settings();
   $('setAmbience').value = s.ambience || '';
   $('setSpacing').value = s.spacing || 'natural';
+  // A recording session's lines bring the pauses set in PinPlay's review.
+  $('setSpacing').disabled = isSession();
+  $('setSpacing').title = isSession() ? 'The pauses come from the recording session (set them in PinPlay\'s review)' : '';
   $('setMode').value = s.mode || 'fixed';
   $('setBatch').checked = s.batch !== false;
   $('setCheck').checked = s.check !== false;
@@ -167,6 +173,17 @@ function renderStage() {
   const makingVoices = job && job.id === currentId && job.kind === 'voices';
   const names = Object.keys(current.voices);
   const ready = names.length > 0 && names.every((n) => current.voices[n].sample);
+  if (isSession()) {
+    const conv = current.recording.conversation;
+    const said = convoLines().filter((l) => l.mode === 'voice').length;
+    el.className = said ? 'stage todo' : 'stage';
+    el.innerHTML = `🎙 From a PinPlay recording session: every recorded line keeps the volunteer's take. ${said
+      ? `<b>${said} line${said > 1 ? 's' : ''} nobody recorded ${said > 1 ? 'are' : 'is'} said by the studio (🤖)</b>: describe that person's voice below, or choose a library voice. A voice can also be copied from the student's own takes, but only if they (and their parents, for a minor) agree.`
+      : 'Every line has a take: <b>🎙️ Make the recording</b> puts them together (no voice model needed).'}
+      ${conv.failed ? `<div class="warning">⚠ ${conv.failed} take${conv.failed > 1 ? 's' : ''} could not be downloaded: the studio says ${conv.failed > 1 ? 'those lines' : 'that line'}.</div>` : ''}
+      <div class="row"><label class="small">Language of the lines the studio says <select id="convoLanguage">${LISTENING_SCRIPT_LANGUAGES.map((l) => `<option ${l === conv.language ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
+    return;
+  }
   if (isConvo()) {
     el.className = 'stage';
     el.innerHTML = '🎧 Each voice is copied from that person\'s own lines in the conversation. It is only used for the lines the studio says (🤖): every other line keeps its real audio. Rename a person here.';
@@ -214,8 +231,11 @@ function renderVoices() {
     const own = v.own;
     const copied = !own && v.convo; // copied from the conversation's own clips
     const warning = !own && r && base(r.sample) === `${v.sampleKey}.wav` ? r.warning : '';
+    const copyChoice = !isSession() || !v.convoCh ? ''
+      : v.convo ? '<option value="__design">✨ Designed from a description</option>'
+      : '<option value="__copy">🎙 Copy from their takes (only with their OK)</option>';
     const source = `<select data-source title="Where this voice comes from">
-        <option value="">${v.convo ? '🎧 Copied from the conversation' : '✨ Designed from a description'}</option>
+        <option value="">${v.convo ? (isSession() ? '🎙 Copied from their takes' : '🎧 Copied from the conversation') : '✨ Designed from a description'}</option>${copyChoice}
         ${voiceLibrary.map((lv) => `<option value="${esc(lv.id)}" ${own?.id === lv.id ? 'selected' : ''}>📚 ${esc(lv.name)}</option>`).join('')}
       </select>`;
     const body = own
@@ -227,7 +247,7 @@ function renderVoices() {
         </div>`
       : copied ? `<div class="own">
           <audio controls preload="none" src="${audioUrl('voices', v.convo)}"></audio>
-          <span class="muted small">${esc(name)}'s own lines from the conversation: lines the studio says (🤖) copy this voice, accent and manner.</span>
+          <span class="muted small">${esc(name)}'s own ${isSession() ? 'takes' : 'lines from the conversation'}: lines the studio says (🤖) copy this voice, accent and manner.</span>
         </div>`
       : `<textarea data-desc>${esc(s.descriptions[name] || v.description)}</textarea>
       ${v.sample ? `<audio controls preload="none" src="${audioUrl('voices', `${v.sampleKey}.wav`)}"></audio>` : '<span class="muted small">Voice not made yet.</span>'}
@@ -240,7 +260,10 @@ function renderVoices() {
       '<button class="btn small" data-upload title="A recording of one person talking calmly, 5–15 seconds (MP3, WAV, a phone recording…)">🎙 Use my own sample…</button>',
       !own && v.sample ? '<button class="btn small" data-keep-voice title="Keep this voice to use it in other recordings">📚 Save to library</button>' : '',
     ].join('');
+    // In a session, only the people with lines the studio says need a voice.
+    const unneeded = isSession() && !convoLines().some((l) => l.mode !== 'original' && convoName(l.ch) === name);
     return `<div class="voice" data-name="${esc(name)}">
+      ${unneeded ? '<span class="muted small">Every line of theirs has a take: no voice needed.</span>' : ''}
       <div class="voice-head">${v.convoCh ? `<input data-rename data-ch="${esc(v.convoCh)}" value="${esc(name)}" title="Rename this person (letters only)" />` : `<b>${esc(name)}</b>`}${v.effect ? `<span class="chip">${esc(v.effect === 'pa' ? 'PA' : v.effect)}</span>` : ''}
         ${own || copied ? '<span class="chip" style="margin-left:auto">Fixed voice</span>' : `<select data-mode style="margin-left:auto">
           <option value="fixed" ${v.mode === 'fixed' ? 'selected' : ''}>Fixed voice</option>
@@ -300,7 +323,8 @@ function renderLines() {
 const convoLines = () => current.recording.conversation.lines;
 const convoName = (ch) => current.recording.conversation.speakers[String(ch)] || `Speaker ${ch}`;
 // Mostly the teacher re-records their own lines; ChatGPT's are said by its copied voice.
-const convoDefaultMode = (ch) => (String(ch) === '1' ? 'record' : 'voice');
+const convoDefaultMode = (ch) => (!isSession() && String(ch) === '1' ? 'record' : 'voice');
+const convoChannels = () => Object.keys(current.recording.conversation.speakers);
 
 function convoTasks() {
   return Object.fromEntries(current.lines.map((t) => [t.convo, t]));
@@ -327,6 +351,9 @@ function renderConversation() {
       <div class="row"><button class="btn primary" type="button" data-review-save ${unsaved ? '' : 'disabled'}>💾 Save ${unsaved || ''} correction${unsaved === 1 ? '' : 's'}</button>
         <button class="btn" type="button" data-review-done>✔ Done</button>${listen}
         <button class="btn quiet" type="button" data-copy-transcript>📋 Copy the transcript</button></div></div>`
+    : isSession() ? `<div class="stage todo"><b>Review the recording session.</b> Every recorded line keeps the volunteer's take; ✏️ fixes a word written wrong (the audio stays) or changes what is said: then the studio says it (🤖), or you record it (🎤). ➕ adds a line, 🗑 removes one.
+      <div class="row"><button class="btn primary" id="convoMakeBtn" type="button" ${making ? 'disabled' : ''}>${making ? '⏳ Being made…' : '🎙️ Make the recording'}</button>${listen}
+        <span class="muted small">${lines.filter((l) => l.mode === 'voice').length} said by the studio · ${lines.filter((l) => l.mode === 'original').length} takes${waiting ? ` · 🎤 ${waiting} waiting for your recording` : ''}</span></div></div>`
     : `<div class="stage todo"><b>Review the conversation.</b> Every line keeps its real audio. <b>📝 Review the transcript</b> to correct misheard words everywhere at once. ✏️ fixes a misheard word (the audio stays as it is) or changes what is said: then record the line yourself (🎤), or let the studio say it in that person's voice (🤖). ➕ adds a line, 🗑 removes one.
       <div class="row"><button class="btn primary" id="convoMakeBtn" type="button" ${making ? 'disabled' : ''}>${making ? '⏳ Being made…' : '🎙️ Make the recording'}</button>
         <button class="btn" type="button" data-review>📝 Review the transcript</button>${listen}
@@ -350,7 +377,7 @@ function renderConversation() {
     if (convo.editing === l.id) {
       const hasClip = l.start != null && l.mode === 'original';
       const who = l.isNew
-        ? `<select data-c-ch>${['1', '2'].map((ch) => `<option value="${ch}" ${String(l.ch) === ch ? 'selected' : ''}>${esc(convoName(ch))}</option>`).join('')}</select>`
+        ? `<select data-c-ch>${convoChannels().map((ch) => `<option value="${ch}" ${String(l.ch) === ch ? 'selected' : ''}>${esc(convoName(ch))}</option>`).join('')}</select>`
         : `<span class="who">${esc(name)}</span>`;
       return `<div class="line editing" data-line="${esc(l.id)}">
         <span class="muted">${i + 1}</span>${who}
@@ -362,14 +389,15 @@ function renderConversation() {
             <button type="button" class="btn small quiet" data-c="cancel">Cancel</button></div></div><div></div></div>`;
     }
     const t = tasks[l.id] || {};
-    let chip = '<span class="chip ok" title="The real audio from the conversation">🎧 original</span>';
+    let chip = isSession() ? '<span class="chip ok" title="The volunteer\'s take">🎙 take</span>'
+      : '<span class="chip ok" title="The real audio from the conversation">🎧 original</span>';
     if (t.src === 'take') chip = '<span class="chip ok" title="Your own recording of this line">🎤 your recording</span>';
     else if (l.mode === 'record') chip = '<span class="chip warn" title="Until you record it, the studio\'s voice says it">🎤 to record</span>';
-    else if (l.mode === 'voice') chip = '<span class="chip" title="Said by the studio, in the voice copied from this person">🤖 studio voice</span>';
+    else if (l.mode === 'voice') chip = `<span class="chip" title="Said by the studio, in this person's voice (see 🎭 Voices)">🤖 studio voice</span>`;
     const buttons = [
       '<button type="button" class="btn small" data-c="edit" title="Fix or change the words">✏️</button>',
       '<button type="button" class="btn small" data-c="record" title="Record this line yourself">🎤</button>',
-      l.mode !== 'voice' ? '<button type="button" class="btn small" data-c="voice" title="The studio says this line, in the voice copied from this person">🤖</button>' : '',
+      l.mode !== 'voice' ? '<button type="button" class="btn small" data-c="voice" title="The studio says this line, in this person\'s voice (see 🎭 Voices)">🤖</button>' : '',
       l.start != null && l.mode !== 'original' ? '<button type="button" class="btn small" data-c="original" title="Back to the conversation\'s own audio and words">↩</button>' : '',
       '<button type="button" class="btn small" data-c="insert" title="Add a line after this one">➕</button>',
       '<button type="button" class="btn small" data-c="delete" title="Remove this line">🗑</button>',
@@ -377,7 +405,7 @@ function renderConversation() {
     return `<div class="line ${l.mode !== 'original' ? 'changed' : ''}${playing}" data-line="${esc(l.id)}">
       <span class="muted">${i + 1}</span>
       <span class="who" title="${esc(name)}">${esc(name)}</span>
-      <div class="say">${esc(l.text)}${l.mode !== 'original' && l.said && l.said !== l.text ? `<div class="how">Said in the conversation: “${esc(l.said)}”</div>` : ''}</div>
+      <div class="say">${esc(l.text)}${l.mode !== 'original' && l.said && l.said !== l.text ? `<div class="how">Said in the ${isSession() ? 'take' : 'conversation'}: “${esc(l.said)}”</div>` : ''}</div>
       <div class="acts">${chip}${play || '<span class="muted small">made when you press 🎙️ Make</span>'}${buttons}</div>
     </div>`;
   });
@@ -447,10 +475,10 @@ async function saveReview({ record = null, message } = {}) {
 
 // Sends the lines (and new names) to the studio; it answers with the
 // recording as saved (new lines get their ids there).
-async function saveConversation({ lines = convoLines(), speakers, make = false, message } = {}) {
+async function saveConversation({ lines = convoLines(), speakers, language, make = false, message } = {}) {
   await api(`/api/recordings/${currentId}/conversation`, {
     method: 'PUT',
-    body: { lines: lines.map(({ id, ch, text, mode }) => ({ id, ch, text, mode })), speakers, make },
+    body: { lines: lines.map(({ id, ch, text, mode }) => ({ id, ch, text, mode })), speakers, language, make },
   });
   convo.editing = null;
   await openRecording(currentId);
@@ -559,7 +587,8 @@ $('lines').addEventListener('click', guarded(async (e) => {
     await saveConversation({ lines: lines.map((l, k) => (k === i ? { ...l, mode: 'original', text: l.said || l.text } : l)),
       message: `Line ${i + 1} is back to the conversation's own audio.` });
   } else if (action === 'insert') {
-    const other = String(line.ch) === '1' ? 2 : 1;
+    const chs = convoChannels();
+    const other = Number(chs[(chs.indexOf(String(line.ch)) + 1) % chs.length]);
     const added = { id: `new${Date.now()}`, ch: other, text: '', mode: convoDefaultMode(other), isNew: true };
     lines.splice(i + 1, 0, added);
     convo.editing = added.id;
@@ -827,6 +856,25 @@ $('voices').addEventListener('change', guarded(async (e) => {
     await saveConversation({ speakers: { [e.target.dataset.ch]: renamed }, message: `Renamed to ${renamed}. Press 🎙️ Make to update the recording's transcript.` });
     return;
   }
+  if (e.target.matches('[data-source]') && ['__copy', '__design'].includes(e.target.value)) {
+    // A session: copying a student's voice makes it say words they never
+    // recorded, so the teacher confirms they agreed. It stays on this computer.
+    const copy = e.target.value === '__copy';
+    if (copy && !confirm(`Copy ${name}'s voice from their takes?\n\nOnly if ${name} (and their parents, for a minor) agreed: the copy will say words they never recorded. It stays on this computer.`)) {
+      e.target.value = '';
+      return;
+    }
+    readVoiceCards();
+    const s = settings();
+    if (s.ownVoices[name]) {
+      delete s.ownVoices[name];
+      await api(`/api/recordings/${currentId}`, { method: 'PUT', body: { settings: s } });
+    }
+    await api(`/api/recordings/${currentId}/copy-voice`, { method: 'POST', body: { name, copy } });
+    await openRecording(currentId, { keepText: true });
+    toast(copy ? `${name}'s lines said by the studio will copy their voice. Press 🎙️ Make.` : `${name}'s voice is designed from its description again. Press 🎙️ Make.`, 6000);
+    return;
+  }
   if (e.target.matches('[data-source]')) {
     readVoiceCards();
     const s = settings();
@@ -1033,6 +1081,9 @@ $('voices').addEventListener('click', guarded(async (e) => {
   // Same description: a different voice from it. New description: a voice from that.
   if (after.trim() === String(before).trim()) s.sampleTakes[name] = (Number(s.sampleTakes[name]) || 0) + 1;
   await saveSettings('voices', `Remaking ${name}'s voice (about 2 minutes). Listen, then approve.`);
+}));
+$('voiceStage').addEventListener('change', guarded(async (e) => {
+  if (e.target.id === 'convoLanguage') await saveConversation({ language: e.target.value, message: `The studio will say its lines in ${e.target.value}.` });
 }));
 $('voiceStage').addEventListener('click', guarded(async (e) => {
   if (e.target.closest('#approveBtn')) {

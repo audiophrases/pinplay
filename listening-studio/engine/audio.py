@@ -109,7 +109,7 @@ SOUNDS = {'chime': chime, 'ring': ring, 'beep': beep}
 
 # ---------------------------------------------------------------- backgrounds
 def ambience(seconds, kind, rng=None):
-    n = int(seconds * SR)
+    n = int(round(seconds * SR))  # not int(): 122400 / SR * SR is 122399.99…, one sample short of the mix
     rng = rng or np.random.default_rng(11)
     if kind in ('', 'none') or n <= 0:
         return np.zeros(n, dtype=np.float32)
@@ -158,7 +158,9 @@ def build_part(items, voices, clips, spacing='natural', ambience_kind='none', cu
             if effect in EFFECTS:
                 seg = EFFECTS[effect](seg)
             segs.append(seg)
-        start = max(0.4, cursor - OVERLAP) if it.get('overlap') else cursor + gap
+        # A recording session's line brings its own pause (the teacher set it there).
+        before = it['gap'] if it.get('gap') is not None else gap
+        start = max(0.4, cursor - OVERLAP) if it.get('overlap') else cursor + before
         end = start
         for j, seg in enumerate(segs):
             placed.append((start + j * TOGETHER, seg))
