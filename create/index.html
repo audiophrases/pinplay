@@ -58,7 +58,7 @@
                   <label><span data-i18n>Activity title</span><input id="lrDraftTitle" type="text" maxlength="120" /></label>
                   <label class="lr-script"><span data-i18n>Your script</span><textarea id="lrScript" rows="10" spellcheck="false" placeholder="Mia (surprised): Forty minutes? You're joking!&#10;Tom: I know, I know…" data-i18n-ignore></textarea></label>
                   <span id="lrScriptInfo" class="small muted"></span>
-                  <div id="lrLinkedActions" class="va-entry-row hidden"><button id="lrEditSession" class="btn" type="button" data-i18n>Edit in recording session</button><button id="lrDetachSession" class="btn" type="button" data-i18n>Use a separate draft</button></div>
+                  <div id="lrLinkedActions" class="va-entry-row hidden"><button id="lrEditSession" class="btn" type="button" data-i18n>Edit in recording session</button><button id="lrEditStudio" class="btn hidden" type="button" data-i18n>Edit in Listening Studio</button><button id="lrDetachSession" class="btn" type="button" data-i18n>Use a separate draft</button></div>
                   <details id="lrGenerator" class="lr-generator"><summary data-i18n>Generate a script with AI</summary>
                     <p class="small muted" data-i18n>Copy the prompt into your AI chat, then paste its answer into Your script.</p>
                 <div class="creation-prompt-grid">
@@ -125,9 +125,11 @@
                     <button id="lrManageSession" class="btn hidden" type="button" data-i18n>Open selected recording session</button>
                   </div>
                   <div data-lr-method-panel="studio" class="hidden">
-                    <p class="small muted" data-i18n>Listening Studio uses AI voices and runs on this computer. Start the app first; your script will be copied when you open it.</p>
-                    <button id="lrStudioBtn" class="btn primary" type="button" data-i18n>Open Listening Studio</button>
-                    <p class="small muted" data-i18n>When the recording is ready, choose Upload audio to use the exported file.</p>
+                    <p class="small muted" data-i18n>Listening Studio makes AI voices on this computer. Start it from its desktop icon, then send your script. The recording is made there, and you can use it here when it is ready.</p>
+                    <p id="lrStudioState" class="small" role="status"></p>
+                    <button id="lrStudioBtn" class="btn primary" type="button" data-i18n>Send the script to Listening Studio</button>
+                    <button id="lrStudioOpen" class="btn primary hidden" type="button" data-i18n>Open in Listening Studio</button>
+                    <button id="lrStudioCopy" class="btn hidden" type="button" data-i18n>Open the studio and copy the script</button>
                   </div>
                   <div data-lr-method-panel="upload" class="hidden">
                     <label><span data-i18n>Audio file</span><input id="lrAudioFile" type="file" accept="audio/*" /></label>
@@ -145,6 +147,8 @@
                     <label><span data-i18n>Listening section</span><select id="lrTargetSection"></select></label>
                     <button id="lrAttachAudio" class="btn" type="button" data-i18n>Use uploaded audio in this section</button>
                     <button id="lrUseSessionAudio" class="btn hidden" type="button" data-i18n>Use session recording in this section</button>
+                    <label id="lrStudioPartWrap" class="hidden"><span data-i18n>Studio recording part</span><select id="lrStudioPart"></select></label>
+                    <button id="lrUseStudioAudio" class="btn hidden" type="button" data-i18n>Use Studio recording in this section</button>
                     <button id="lrShowSection" class="btn" type="button" data-i18n>Open this listening section</button>
                     <p class="small muted" data-i18n>No listening section yet? Generate and import a listening quiz, then return here to add the recording.</p>
                   </details>
@@ -934,7 +938,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261020-assignment-review"></script>
+    <script src="../i18n-fr.js?v=20261025-studio-link"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -944,11 +948,11 @@
     <script src="../wordle-lexicon-es.js"></script>
     <script src="../wordle.js"></script>
     <script src="../live-socket.js?v=20261001-emojis"></script>
-    <script src="../listening-script.js?v=20261015-rebuild"></script>
+    <script src="../listening-script.js?v=20261025-studio-link"></script>
     <script src="../assignment-setup.js?v=20261020-assignment-keyboard"></script>
     <script src="../app.js?v=20261020-assignment-review"></script>
     <script src="../voice-actors.js?v=20261019-listening-workspace"></script>
-    <script src="../listening-workspace.js?v=20261019-listening-workspace"></script>
+    <script src="../listening-workspace.js?v=20261025-studio-link"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261019-listening-workspace"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

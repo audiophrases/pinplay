@@ -1,7 +1,9 @@
 """PinPlay Listening Studio: the local server behind the studio page
 (LISTENING_STUDIO_PLAN.md section 6). Started by "PinPlay Listening
 Studio.bat"; listens on 127.0.0.1 only and refuses requests from other
-websites. Recordings live in the data folder; one job runs at a time."""
+websites, except PinPlay's teacher pages for a few routes (sending a script,
+its progress, the finished MP3). Recordings live in the data folder; one job
+runs at a time."""
 import json
 import os
 import queue
@@ -21,7 +23,7 @@ try:
 except Exception:  # pythonw has no console
     pass
 
-PORT = 8790
+PORT = int(os.environ.get('PINPLAY_STUDIO_PORT') or 8790)  # tests use their own
 
 
 def _studio_home():
@@ -64,16 +66,45 @@ import subprocess  # noqa: E402
 
 app = FastAPI()
 ALLOWED_ORIGINS = {f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}'}
+# PinPlay's 🎧 Listening activity may send a script, follow its recording and
+# fetch the finished MP3, nothing else (LISTENING_STUDIO_PLAN.md, "The studio
+# and the 🎧 Listening activity together").
+PINPLAY_ORIGINS = {'https://audiophrases.github.io', 'https://pinplay.eugenime.workers.dev',
+                   *CONFIG.get('pinplayOrigins', [])}
+PINPLAY_ROUTES = [('GET', re.compile(r'/api/status')),
+                  ('POST', re.compile(r'/api/recordings')),
+                  ('GET', re.compile(r'/api/recordings/[a-z0-9]{8,32}')),
+                  ('GET', re.compile(r'/api/recordings/[a-z0-9]{8,32}/audio/out/[\w.-]+\.mp3'))]
+
+
+def _pinplay_may(method, path):
+    return any(m == method and route.fullmatch(path) for m, route in PINPLAY_ROUTES)
 
 
 @app.middleware('http')
 async def only_this_page(request: Request, call_next):
     # Browsers send Origin on requests from other pages: only the studio
-    # page itself may use this server.
+    # page itself may use this server, and PinPlay's pages the routes above.
     origin = request.headers.get('origin')
-    if origin and origin not in ALLOWED_ORIGINS:
+    if not origin or origin in ALLOWED_ORIGINS:
+        return await call_next(request)
+    if origin not in PINPLAY_ORIGINS:
         return JSONResponse({'error': 'Not allowed.'}, status_code=403)
-    return await call_next(request)
+    cors = {'Access-Control-Allow-Origin': origin, 'Vary': 'Origin'}
+    path = request.url.path
+    if request.method == 'OPTIONS':  # the browser asks first, with Chrome's local-network check
+        wanted = request.headers.get('access-control-request-method', '')
+        if not _pinplay_may(wanted, path):
+            return JSONResponse({'error': 'Not allowed.'}, status_code=403, headers=cors)
+        return Response(status_code=204, headers={**cors, 'Access-Control-Allow-Methods': wanted,
+                                                  'Access-Control-Allow-Headers': 'Content-Type',
+                                                  'Access-Control-Allow-Private-Network': 'true',
+                                                  'Access-Control-Max-Age': '600'})
+    if not _pinplay_may(request.method, path):
+        return JSONResponse({'error': 'Not allowed.'}, status_code=403, headers=cors)
+    response = await call_next(request)
+    response.headers.update(cors)
+    return response
 
 
 # ---------------------------------------------------------------- recordings
@@ -237,7 +268,8 @@ def list_recordings():
             continue
         result = _result(rid)
         out.append({'id': rid, 'title': rec.get('title') or 'Untitled', 'updated': rec.get('updated'),
-                    'parts': len((result or {}).get('parts') or []), 'from': rec.get('from')})
+                    'parts': len((result or {}).get('parts') or []), 'from': rec.get('from'),
+                    'stage': rec.get('stage'), 'source': rec.get('source')})
     return {'recordings': sorted(out, key=lambda r: -(r['updated'] or 0))}
 
 
@@ -246,11 +278,16 @@ async def create_recording(request: Request):
     body = await request.json()
     rid = uuid.uuid4().hex[:12]
     os.makedirs(os.path.join(RECORDINGS, rid))
+    # setup: the script has no language or voices yet (sent from PinPlay):
+    # the studio page opens it on its 🎛️ Set up the recording form first.
+    setup = bool(body.get('setup'))
     rec = {'id': rid, 'created': time.time(), 'title': (body.get('script') or {}).get('title') or body.get('title') or 'Untitled',
            'text': body.get('text') or '', 'script': body.get('script'), 'settings': body.get('settings') or {},
-           'stage': 'voices'}
+           'stage': 'setup' if setup else 'voices'}
+    if request.headers.get('origin') in PINPLAY_ORIGINS:
+        rec['source'] = 'pinplay'
     _save(rec)
-    if body.get('make', True) and rec['script'] and rec['script'].get('parts'):
+    if not setup and body.get('make', True) and rec['script'] and rec['script'].get('parts'):
         _make(rec, 'voices')  # the teacher approves the voices before the long part
     return {'id': rid}
 

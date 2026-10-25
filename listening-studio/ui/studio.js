@@ -25,6 +25,9 @@ let recordingList = []; // the sidebar's recordings (from: the phone conversatio
 // edited, or the transcript review (every line a box; drafts: unsaved words).
 const convo = { editing: null, review: false, drafts: {} };
 const isConvo = () => !!current?.recording?.conversation;
+// A script PinPlay sent without its settings (stage 'setup'): the welcome
+// form, filled in, makes that recording instead of a new one.
+let setupFor = null;
 
 function toast(msg, ms = 3500) {
   const el = $('toast');
@@ -63,18 +66,37 @@ async function loadList() {
   const { recordings } = await api('/api/recordings');
   recordingList = recordings;
   $('list').innerHTML = recordings.map((r) => `<li data-id="${r.id}" class="${r.id === currentId ? 'active' : ''}">${esc(r.title)}
-    <span class="sub">${new Date((r.updated || 0) * 1000).toLocaleString()}${r.parts ? ' · ✅ made' : ''}</span></li>`).join('')
+    <span class="sub">${new Date((r.updated || 0) * 1000).toLocaleString()}${r.parts ? ' · ✅ made' : ''}${r.stage === 'setup' ? ' · 🎛️ to set up' : ''}${r.source === 'pinplay' ? ' · 🔗 PinPlay' : ''}</span></li>`).join('')
     || '<li class="muted small" style="cursor:default">No recordings yet.</li>';
   return recordings;
 }
 
+const WELCOME = { title: $('welcomeTitle').textContent, intro: $('welcomeIntro').innerHTML };
+
 function showWelcome() {
   currentId = null;
   current = null;
+  setupFor = null;
+  $('welcomeTitle').textContent = WELCOME.title;
+  $('welcomeIntro').innerHTML = WELCOME.intro;
+  $('setupDeleteBtn').hidden = true;
   $('editor').hidden = true;
   $('welcome').hidden = false;
   document.querySelectorAll('#list li').forEach((li) => li.classList.remove('active'));
   $('newText').focus();
+}
+
+function showSetupFor(rec) {
+  showWelcome();
+  setupFor = rec.id;
+  document.querySelectorAll('#list li').forEach((li) => li.classList.toggle('active', li.dataset.id === rec.id));
+  $('welcomeTitle').textContent = `Set up “${rec.title || 'Untitled'}”`;
+  $('welcomeIntro').innerHTML = 'Sent from PinPlay. Describe each voice and check the language, then press <b>🎙️ Make the recording</b>. You can still change the script here.';
+  $('setupDeleteBtn').hidden = false;
+  Object.assign(setup, { desc: {}, keep: {}, touched: {} });
+  $('newText').value = rec.text || '';
+  $('newNotes').innerHTML = notesHtml(rec.text || '');
+  renderSetup();
 }
 
 async function loadLibrary() {
@@ -89,6 +111,11 @@ async function openRecording(id, { keepText = false } = {}) {
   }
   currentId = id;
   [current] = await Promise.all([api(`/api/recordings/${id}`), loadLibrary()]);
+  if (current.recording.stage === 'setup') {
+    showSetupFor(current.recording);
+    return;
+  }
+  setupFor = null;
   $('welcome').hidden = true;
   $('editor').hidden = false;
   document.querySelectorAll('#list li').forEach((li) => li.classList.toggle('active', li.dataset.id === id));
@@ -695,12 +722,23 @@ async function refreshQuietly() {
 
 // ---------------------------------------------------------------- events
 $('newBtn').addEventListener('click', showWelcome);
+function mayLeave() {
+  const unsaved = Object.keys(convo.drafts).length;
+  return !unsaved || confirm(`You have ${unsaved} unsaved correction${unsaved > 1 ? 's' : ''} in this transcript. Leave without saving them?`);
+}
 $('list').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-id]');
-  if (!li || li.dataset.id === currentId) return;
-  const unsaved = Object.keys(convo.drafts).length;
-  if (unsaved && !confirm(`You have ${unsaved} unsaved correction${unsaved > 1 ? 's' : ''} in this transcript. Leave without saving them?`)) return;
+  if (!li || li.dataset.id === currentId || li.dataset.id === setupFor || !mayLeave()) return;
   openRecording(li.dataset.id).catch((err) => toast(err.message));
+});
+// PinPlay opens the studio on the recording it sent: #r=<id>.
+function hashRecording() {
+  return (/^#r=([a-z0-9]{8,32})$/.exec(location.hash) || [])[1] || null;
+}
+window.addEventListener('hashchange', () => {
+  const id = hashRecording();
+  if (!id || id === currentId || id === setupFor || !mayLeave()) return;
+  loadList().then(() => openRecording(id)).catch((err) => toast(err.message));
 });
 $('newText').addEventListener('input', () => { $('newNotes').innerHTML = notesHtml($('newText').value); });
 $('text').addEventListener('input', () => { $('notes').innerHTML = notesHtml($('text').value); });
@@ -708,7 +746,7 @@ $('text').addEventListener('input', () => { $('notes').innerHTML = notesHtml($('
 $('createBtn').addEventListener('click', guarded(async () => {
   let text = $('newText').value;
   if (!$('setup').hidden) {
-    const missing = scriptSpeakers(parseListeningScript(text))
+    const missing = listeningScriptSpeakers(parseListeningScript(text))
       .filter((n) => setup.keep[n] !== false && !(setup.desc[n] || '').trim() && !parseListeningScript(text).voices[n]);
     if (missing.length && !confirm(`No voice described for ${missing.join(', ')}: the studio will choose one. Continue?`)) return;
     text = textWithSetup(text);
@@ -724,7 +762,12 @@ $('createBtn').addEventListener('click', guarded(async () => {
   btn.textContent = '⏳ Starting…';
   let id;
   try {
-    ({ id } = await api('/api/recordings', { method: 'POST', body: { text, script, make: true } }));
+    if (setupFor) {
+      id = setupFor;
+      await api(`/api/recordings/${id}`, { method: 'PUT', body: { text, script, make: 'voices', ...(script.title ? { title: script.title } : {}) } });
+    } else {
+      ({ id } = await api('/api/recordings', { method: 'POST', body: { text, script, make: true } }));
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = '🎙️ Make the recording';
@@ -1042,17 +1085,19 @@ async function copy(text, what) {
 $('copyScriptBtn').addEventListener('click', () => copy($('text').value, 'Script'));
 $('copyCleanBtn').addEventListener('click', () => copy(cleanListeningTranscript($('text').value), 'Clean transcript'));
 
-$('deleteBtn').addEventListener('click', guarded(async () => {
-  if (!confirm('Delete this recording and everything made for it?')) return;
+$('deleteBtn').addEventListener('click', guarded(() => deleteRecording(currentId)));
+$('setupDeleteBtn').addEventListener('click', guarded(() => deleteRecording(setupFor)));
+async function deleteRecording(id) {
+  if (!id || !confirm('Delete this recording and everything made for it?')) return;
   try {
-    await api(`/api/recordings/${currentId}`, { method: 'DELETE' });
+    await api(`/api/recordings/${id}`, { method: 'DELETE' });
   } catch (err) {
     toast(err.message);
     return;
   }
   await loadList();
   showWelcome();
-}));
+}
 
 $('quitBtn').addEventListener('click', guarded(async () => {
   const busy = !$('progress').hidden;
@@ -1433,30 +1478,17 @@ function guessLanguage(text) {
   return best;
 }
 
-function scriptSpeakers(script) {
-  const names = [];
-  script.parts.forEach((p) => p.items.forEach((it) => {
-    if (it.type === 'line') it.speakers.forEach((s) => { if (!names.includes(s)) names.push(s); });
-  }));
-  return names;
-}
-
-function needsSetup(script) {
-  const names = scriptSpeakers(script);
-  return names.length > 0 && (!script.language || names.some((n) => !script.voices[n]));
-}
-
 function renderSetup() {
   const text = $('newText').value;
   const script = parseListeningScript(text);
-  const show = needsSetup(script);
+  const show = listeningScriptNeedsSetup(script);
   $('setup').hidden = !show;
   if (!show) return;
   const lang = $('suLanguage');
   if (!lang.options.length) lang.innerHTML = LISTENING_SCRIPT_LANGUAGES.map((l) => `<option>${l}</option>`).join('');
   if (!setup.touched.language) lang.value = script.language && LISTENING_SCRIPT_LANGUAGES.includes(script.language) ? script.language : guessLanguage(text);
   if (!setup.touched.ambience) $('suAmbience').value = LISTENING_SCRIPT_AMBIENCES.includes(script.ambience) ? script.ambience : 'room';
-  const names = scriptSpeakers(script);
+  const names = listeningScriptSpeakers(script);
   if (!setup.touched.title) {
     // "Dialogue : Chloé et Paul au café" → the text of that one line.
     const heading = text.split(/[\r\n]+/).map((l) => /^\s*([^:]{1,30}?)\s*:\s*(.+)$/.exec(l)).find((m) => m && HEADING_NAMES.test(m[1].trim()));
@@ -1502,7 +1534,7 @@ function textWithSetup(raw) {
   const title = $('suTitle').value.trim();
   if (title) header.push(`TITLE: ${title}`);
   header.push(`LANGUAGE: ${$('suLanguage').value}`, `AMBIENCE: ${$('suAmbience').value}`);
-  scriptSpeakers(script).filter((n) => setup.keep[n] !== false).forEach((n) => {
+  listeningScriptSpeakers(script).filter((n) => setup.keep[n] !== false).forEach((n) => {
     const desc = (setup.desc[n] ?? script.voices[n]?.description ?? '').trim();
     const effect = script.voices[n]?.effect;
     if (desc) header.push(`VOICE ${n}${effect ? ` [${effect === 'pa' ? 'PA' : effect}]` : ''}: ${desc}`);
@@ -1575,7 +1607,9 @@ $('pMode').addEventListener('change', syncPromptMode);
 // ---------------------------------------------------------------- start
 (async () => {
   const recordings = await loadList().catch(() => []);
-  if (recordings.length) await openRecording(recordings[0].id).catch(() => showWelcome());
+  const wanted = hashRecording();
+  const first = recordings.some((r) => r.id === wanted) ? wanted : recordings[0]?.id;
+  if (first) await openRecording(first).catch(() => showWelcome());
   else showWelcome();
   await poll();
   setInterval(poll, 2000);

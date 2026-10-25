@@ -457,3 +457,27 @@ The owner records live ChatGPT voice conversations on the phone with Convo Recor
 - **Only the transcript, or both** (owner, 2026-10-24: "I might just review/edit the transcription, or both"): 📝 Review the transcript turns every line that still has its clip into a box (Enter: next line); saving keeps the audio (word fixes only). A line's 🎤 there makes it the owner's to record with the words in its box. ▶ on any line plays the conversation from there, line after line, highlighting the line playing; 📋 copies the saved transcript.
 - **Voices:** each speaker's voice sample is made from their own clips (one clip of 8–15 s, else consecutive clips joined), and the copy model says changed lines in that voice. A library voice can replace it on the voice card. Speakers are "Me" and "ChatGPT" until renamed there.
 - **Making:** only `voice` lines go through Qwen3 and the word check. A conversation with no such line is just mixed (seconds, no model). The script and transcript are made from the lines (the 📝 Script box is read-only for a conversation).
+
+## The studio and the 🎧 Listening activity together (2026-10-25)
+
+Until now the two only met through the clipboard and the MP3 file: copy the script, open the studio, paste, approve the voices, wait, 💾 Save MP3, back in PinPlay choose Upload audio, pick the file, attach it. Worse, an edit made in the studio never came back, so questions could be made from the old script (a recording session's words are fetched before questions; the studio's were not).
+
+The split stays: **PinPlay is the hub** (script, questions, sections, anything students touch); **the studio is the local engine** (Qwen3 voices, the word check, effects, the mix). The browser build of recording sessions stays too: the studio needs the desktop PC.
+
+### Part 1: a direct link (built 2026-10-25)
+
+- **The studio lets PinPlay's pages in, for four things only:** is it running (`GET /api/status`), create a recording (`POST /api/recordings`), read one (`GET /api/recordings/<id>`) and its finished MP3 (`GET /api/recordings/<id>/audio/out/<file>`). Allowed pages: `https://audiophrases.github.io` and `https://pinplay.eugenime.workers.dev` (plus `pinplayOrigins` in `config.json`). Everything else (deleting, the library, quitting) stays for the studio's own page. It answers Chrome's local-network check, and Chrome asks once whether PinPlay may reach apps on this computer: choose Allow.
+- **🎧 Listening activity → Recording → Generate AI voices → 🔊 Send to Listening Studio** creates the recording in the studio and opens it in the studio's tab. A script with a language and a VOICE line per character starts at once (voices first, as in the studio). One without (a teacher's own dialogue, a recording session's script) opens on the studio's **🎛️ Set up the recording** form, filled in; **Make the recording** there starts it. The check (`listeningScriptNeedsSetup`) lives in `listening-script.js`, shared by both pages.
+- **Linked, like a recording session.** The draft remembers the studio recording. The script box is read-only, with **Edit in Listening Studio** and **Use a separate draft** (unlinks). The Recording tab shows where the studio is: set up the voices, approve the voices, "Making lines 12/26 · about 9 min left", ready. It asks the studio every few seconds only while the card is open and the tab is visible (this computer only: no server cost).
+- **The studio's script is the latest.** "Generate questions" fetches it first, as for a recording session. If the studio is closed, the teacher is asked before the script saved in PinPlay is used. When a recording session is linked as well, the session's words win (the studio only voices them).
+- **Into the quiz:** Questions → Use with an existing listening section → **Use Studio recording in this section**. It fetches the MP3 from the studio and attaches it with its timings, exactly like an upload. A script with several parts makes one MP3 per part: the part with the section's position is chosen, and it can be changed. Nothing goes in before the teacher presses the button, and only a finished recording whose voices were approved can be used (not a previous version while it is being made again).
+- If the studio can't be reached, the old way is one button away: **Open the studio and copy the script**.
+
+### Part 2: finishing a recording session in the studio (planned)
+
+The two already treat a line the same way: a studio conversation line is `original` audio, a 🎤 take or 🤖 a voice; a recording-session line is a volunteer's take.
+
+- **Import a session.** Approved takes become `original` lines, with the teacher's trims. PinPlay hands the studio the session (lines, trims, take URLs), so the studio needs no teacher password.
+- **Fill the gaps.** A missing line, or a character nobody recorded, becomes a 🤖 line. Its voice can be copied from that student's own takes (as for phone conversations), so the gap sounds like them. **Ask the student first (and their parents for a minor):** the copy says words they never recorded. It stays on this computer.
+- **Production.** The studio's effects and backgrounds (`[phone]`, PA, station) on student recordings, which the browser build can't do.
+- **Later, maybe:** the studio's version of each line uploaded so the record page has ▶ "hear it" before recording (one R2 write per line, so a switch the teacher turns on).

@@ -31,8 +31,8 @@
 
     <main class="main" id="main">
       <section class="card welcome" id="welcome">
-        <h1>Make a listening recording</h1>
-        <p class="muted">Paste a recording script (from PinPlay's <b>📋 Copy script</b>, or from the <b>✨ Script prompt</b>), or any text: plain text is read by one voice. The studio starts at once.</p>
+        <h1 id="welcomeTitle">Make a listening recording</h1>
+        <p class="muted" id="welcomeIntro">Paste a recording script (from PinPlay's <b>📋 Copy script</b>, or from the <b>✨ Script prompt</b>), or any text: plain text is read by one voice. The studio starts at once. PinPlay's <b>🎧 Listening activity</b> can also send its script here directly.</p>
         <textarea id="newText" rows="16" spellcheck="false" placeholder="LANGUAGE: English&#10;AMBIENCE: station&#10;VOICE Mia: A young British woman of about nineteen…&#10;&#10;Mia (surprised): Forty minutes? You're joking!"></textarea>
         <div class="notes" id="newNotes"></div>
         <div class="setup" id="setup" hidden>
@@ -48,6 +48,7 @@
         </div>
         <div class="row">
           <button class="btn primary" id="createBtn" type="button">🎙️ Make the recording</button>
+          <button class="btn quiet danger" id="setupDeleteBtn" type="button" hidden>🗑 Delete</button>
         </div>
       </section>
 

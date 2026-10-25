@@ -96,6 +96,22 @@ function isListeningScript(text) {
   return /^\s*VOICE\s+\S/im.test(String(text || ''));
 }
 
+// Everyone who speaks, in order of their first line.
+function listeningScriptSpeakers(script) {
+  const names = [];
+  script.parts.forEach((p) => p.items.forEach((it) => {
+    if (it.type === 'line') it.speakers.forEach((s) => { if (!names.includes(s)) names.push(s); });
+  }));
+  return names;
+}
+
+// The studio asks for a language and a voice per character before making
+// (its 🎛️ Set up the recording form); a script that has them starts at once.
+function listeningScriptNeedsSetup(script) {
+  const names = listeningScriptSpeakers(script);
+  return names.length > 0 && (!script.language || names.some((n) => !script.voices[n]));
+}
+
 // What is said, without directions, effects, sounds or settings:
 // "Mia: Forty minutes? You're joking!" (parts keep their "--- Part 2" line).
 function cleanListeningTranscript(text) {
@@ -205,7 +221,8 @@ function buildListeningScriptPrompt(o = {}) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LISTENING_SCRIPT_SOUNDS, LISTENING_SCRIPT_EFFECTS, LISTENING_SCRIPT_AMBIENCES, LISTENING_SCRIPT_LANGUAGES,
-    parseListeningScript, isListeningScript, cleanListeningTranscript, LISTENING_SCRIPT_RULES,
+    parseListeningScript, isListeningScript, listeningScriptSpeakers, listeningScriptNeedsSetup,
+    cleanListeningTranscript, LISTENING_SCRIPT_RULES,
     LISTENING_ACTOR_SCRIPT_RULES, buildListeningScriptPrompt,
   };
 }

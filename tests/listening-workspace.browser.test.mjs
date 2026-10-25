@@ -36,6 +36,7 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
         return route.endsWith('/list') ? { sessions: [{ ...window.latest, total: 1, recorded: 0, approved: 0 }] } : { session: structuredClone(window.latest) };
       };
       window.openListeningPrompt = opts => window.calls.push({ prompt: opts });
+      window.open = (url, name) => { window.calls.push({ open: url, name }); return {}; };
       window.setSectionCollapsed = (button, body, collapsed) => body.classList.toggle('hidden', collapsed);
       window.listeningSectionToggleEl = document.getElementById('listeningSectionToggle');
       window.listeningCardBodyEl = document.getElementById('listeningCardBody');
@@ -136,6 +137,107 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     assert.equal(await page.evaluate(() => window.calls.find(call => call.attached).attached), 's2');
     assert.equal(await page.locator('#lrTargetSection').inputValue(), 's2');
     assert.match(await page.locator('#lrStatus').innerText(), /Recording added/);
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+  // A stand-in for listening-studio/server.py on 127.0.0.1:8790.
+  async function fakeStudio(page) {
+    const studio = {
+      offline: false, calls: [],
+      status: { ok: true, job: null, queue: [], now: 1000 },
+      recording: { recording: { id: 'a1b2c3d4e5f6', title: 'Weekend plans', stage: 'setup', text: 'Mia: Hello.\nTom: Hi!' }, result: null },
+    };
+    await page.route('http://127.0.0.1:8790/**', route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const headers = { 'Access-Control-Allow-Origin': 'https://listening.test', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET, POST' };
+      if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+      if (studio.offline) return route.abort('connectionrefused');
+      studio.calls.push({ method: request.method(), path: url.pathname, body: request.method() === 'POST' ? request.postDataJSON() : null });
+      if (url.pathname === '/api/status') return route.fulfill({ headers, json: studio.status });
+      if (request.method() === 'POST' && url.pathname === '/api/recordings') return route.fulfill({ headers, json: { id: 'a1b2c3d4e5f6' } });
+      if (url.pathname === '/api/recordings/a1b2c3d4e5f6') return route.fulfill({ headers, json: studio.recording });
+      if (url.pathname.startsWith('/api/recordings/a1b2c3d4e5f6/audio/out/')) return route.fulfill({ headers: { ...headers, 'Content-Type': 'audio/mpeg' }, body: Buffer.from('ID3 fake mp3') });
+      return route.fulfill({ status: 404, headers, json: { detail: 'Recording not found.' } });
+    });
+    return studio;
+  }
+  it('sends the script to Listening Studio, follows it, and puts its MP3 into the chosen section', async () => {
+    const { page, errors } = await open();
+    const studio = await fakeStudio(page);
+    await page.locator('[data-lr-start="paste"]').click();
+    await page.locator('#lrDraftTitle').fill('Weekend plans');
+    await page.locator('#lrScript').fill('Mia: Hello.\nTom: Hi!');
+    await page.locator('#lrVoicesToggle').click();
+    await page.locator('[data-lr-method="studio"]').click();
+    await page.locator('#lrStudioBtn').click();
+    await page.locator('#lrStudioOpen').waitFor({ state: 'visible' });
+    // No language or voices yet: the studio opens it on its set-up form.
+    const sent = studio.calls.find(call => call.method === 'POST');
+    assert.deepEqual([sent.body.text, sent.body.title, sent.body.setup], ['Mia: Hello.\nTom: Hi!', 'Weekend plans', true]);
+    assert.deepEqual(await page.evaluate(() => window.calls.find(call => call.open)), { open: 'http://127.0.0.1:8790/#r=a1b2c3d4e5f6', name: 'pinplay-listening-studio' });
+    await page.waitForFunction(() => /describe the voices/.test(document.getElementById('lrStudioState').textContent));
+    assert.equal(await page.locator('#lrStudioBtn').isVisible(), false);
+    assert.equal(await page.locator('#lrSessionSource').innerText(), 'Listening Studio: Weekend plans');
+    // Edited and being made in the studio: the card follows, the script box too.
+    const edited = 'LANGUAGE: English\nVOICE Mia: A young woman.\nVOICE Tom: A young man.\nMia (happy): Hello there.\nTom: Hi!';
+    studio.recording.recording = { ...studio.recording.recording, stage: 'approved', text: edited };
+    studio.status = { ok: true, job: { id: 'a1b2c3d4e5f6', stage: 'lines', done: 3, total: 10, stages: { lines: 900 }, at: 960 }, queue: [], now: 970 };
+    await page.evaluate(() => lrStudioRefresh());
+    assert.equal(await page.locator('#lrStudioState').innerText(), 'Making lines 3/10 · about 2 min left');
+    assert.equal(await page.locator('#lrScript').inputValue(), edited);
+    assert.equal(await page.locator('#lrScript').isEditable(), false);
+    await page.locator('#lrScriptToggle').click();
+    assert.equal(await page.locator('#lrEditStudio').isVisible(), true);
+    assert.equal(await page.locator('#lrEditSession').isVisible(), false);
+    // Two parts, two sections: the second section takes the second part.
+    studio.status = { ok: true, job: null, queue: [], now: 1100 };
+    studio.recording.result = { parts: [{ label: 'Part 1', mp3: 'D:\\data\\out\\Weekend-plans-Part-1.mp3', seconds: 41.2 }, { label: 'Part 2', mp3: 'D:\\data\\out\\Weekend-plans-Part-2.mp3', seconds: 38 }] };
+    await page.evaluate(() => { window.quiz.listeningSections = [{ id: 's1', title: 'Part 1' }, { id: 's2', title: 'Part 2' }]; return lrStudioRefresh(); });
+    assert.equal(await page.locator('#lrVoicesToggle').innerText(), 'Recording\nStudio recording ready');
+    await page.locator('#lrQuestionsToggle').click();
+    await page.getByText('Use with an existing listening section', { exact: true }).click();
+    await page.locator('#lrTargetSection').selectOption('s2');
+    assert.equal(await page.locator('#lrStudioPart').inputValue(), '1');
+    await page.locator('#lrUseStudioAudio').click();
+    await page.waitForFunction(() => window.calls.some(call => call.attached));
+    assert.deepEqual(await page.evaluate(() => window.calls.find(call => call.attached)), { attached: 's2', name: 'Weekend-plans-Part-2.mp3' });
+    assert.ok(studio.calls.some(call => call.path === '/api/recordings/a1b2c3d4e5f6/audio/out/Weekend-plans-Part-2.mp3'));
+    assert.match(await page.locator('#lrStatus').innerText(), /Studio recording added/);
+    // Questions use the studio's latest script; with the studio closed, only after asking.
+    studio.recording.recording.text = `${edited}\nMia: One more line.`;
+    await page.locator('#lrQuestionsBtn').click();
+    await page.waitForFunction(() => window.calls.some(call => call.prompt));
+    assert.equal(await page.evaluate(() => window.calls.find(call => call.prompt).prompt.transcript), `${edited}\nMia: One more line.`);
+    studio.offline = true;
+    await page.evaluate(() => { window.calls.length = 0; });
+    page.once('dialog', dialog => { assert.match(dialog.message(), /not running/); dialog.accept(); });
+    await page.locator('#lrQuestionsBtn').click();
+    await page.waitForFunction(() => window.calls.some(call => call.prompt));
+    assert.equal(await page.evaluate(() => window.calls.find(call => call.prompt).prompt.transcript), `${edited}\nMia: One more line.`);
+    await page.locator('#lrScriptToggle').click();
+    await page.locator('#lrDetachSession').click();
+    assert.equal(await page.locator('#lrScript').isEditable(), true);
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+  it('offers the copy-and-paste way when Listening Studio is not running, and starts a complete script at once', async () => {
+    const { page, errors } = await open();
+    const studio = await fakeStudio(page);
+    studio.offline = true;
+    await page.locator('[data-lr-start="paste"]').click();
+    await page.locator('#lrScript').fill('LANGUAGE: English\nVOICE Mia: A young woman.\nMia: Hello.');
+    await page.locator('#lrVoicesToggle').click();
+    await page.locator('[data-lr-method="studio"]').click();
+    await page.locator('#lrStudioBtn').click();
+    await page.waitForFunction(() => /Could not reach Listening Studio/.test(document.getElementById('lrStatus').textContent));
+    assert.equal(await page.locator('#lrStudioCopy').isVisible(), true);
+    assert.equal(await page.locator('#lrScript').isEditable(), true);
+    studio.offline = false;
+    await page.locator('#lrStudioBtn').click();
+    await page.locator('#lrStudioOpen').waitFor({ state: 'visible' });
+    assert.equal(studio.calls.find(call => call.method === 'POST').body.setup, false);
+    assert.equal(await page.locator('#lrStudioCopy').isVisible(), false);
     assert.deepEqual(errors, []);
     await page.close();
   });

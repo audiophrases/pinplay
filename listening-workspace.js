@@ -1,9 +1,12 @@
 /* Listening activity navigation and local drafts. Recording sessions remain
-   authoritative: fetch their latest words before preparing questions. */
+   authoritative: fetch their latest words before preparing questions. A
+   linked Listening Studio recording is too (when no session is linked). */
 const lrWorkspace = {
   started: false, tab: 'script', method: 'people', sessionId: '', sessionTitle: '',
+  studioId: '', studioTitle: '', studio: null, studioOffline: false, studioTimer: null, studioFetching: false,
   file: null, audioUrl: '', saveTimer: null, loading: false,
 };
+const LR_STUDIO_TAB = 'pinplay-listening-studio';
 const LR_DRAFT_FIELDS = ['lrDraftTitle', 'lrScript', 'lrTopic', 'lrLevel', 'lrLanguage', 'lrCharacters', 'lrLength', 'lrRecordedBy', 'lrNotes'];
 
 function lrDraftKey() {
@@ -16,7 +19,8 @@ function lrSaveDraft() {
   try {
     const fields = Object.fromEntries(LR_DRAFT_FIELDS.map(id => [id, lrEl(id)?.value || '']));
     localStorage.setItem(lrDraftKey(), JSON.stringify({ fields, started: lrWorkspace.started,
-      tab: lrWorkspace.tab, method: lrWorkspace.method, sessionId: lrWorkspace.sessionId, sessionTitle: lrWorkspace.sessionTitle }));
+      tab: lrWorkspace.tab, method: lrWorkspace.method, sessionId: lrWorkspace.sessionId, sessionTitle: lrWorkspace.sessionTitle,
+      studioId: lrWorkspace.studioId, studioTitle: lrWorkspace.studioTitle }));
     if (status) status.textContent = t('Draft saved on this device');
   } catch {
     if (status) status.textContent = t('Draft could not be saved on this device. Copy your script to keep it.');
@@ -45,6 +49,7 @@ function lrSelectTab(tab, { focus = false } = {}) {
   });
   lrRefreshWorkspace();
   lrSaveDraft();
+  if (lrWorkspace.studioId) lrStudioTick();
 }
 
 function lrSelectMethod(method) {
@@ -60,19 +65,26 @@ function lrSelectMethod(method) {
 function lrRefreshWorkspace() {
   lrUpdateInfo();
   const linked = !!lrWorkspace.sessionId;
+  const studio = !!lrWorkspace.studioId;
   const script = lrValue('lrScript');
-  lrEl('lrScript').readOnly = linked;
-  lrEl('lrDraftTitle').readOnly = linked;
-  lrEl('lrGenerator').classList.toggle('hidden', linked);
-  lrEl('lrLinkedActions').classList.toggle('hidden', !linked);
+  lrEl('lrScript').readOnly = linked || studio;
+  lrEl('lrDraftTitle').readOnly = linked || studio;
+  lrEl('lrGenerator').classList.toggle('hidden', linked || studio);
+  lrEl('lrLinkedActions').classList.toggle('hidden', !linked && !studio);
+  lrEl('lrEditSession').classList.toggle('hidden', !linked);
+  lrEl('lrEditStudio').classList.toggle('hidden', !studio);
   lrEl('lrManageSession').classList.toggle('hidden', !linked);
   lrEl('lrUseSessionAudio').classList.toggle('hidden', !linked);
-  lrEl('lrSessionSource').textContent = linked ? t('Recording session: {title}', { title: lrWorkspace.sessionTitle }) : '';
+  lrEl('lrSessionSource').textContent = [
+    linked && t('Recording session: {title}', { title: lrWorkspace.sessionTitle }),
+    studio && t('Listening Studio: {title}', { title: lrWorkspace.studioTitle }),
+  ].filter(Boolean).join(' · ');
   lrEl('lrScriptState').textContent = script ? t('Script ready') : t('Start here');
-  lrEl('lrRecordingState').textContent = linked ? t('Session selected') : lrWorkspace.file ? t('Audio selected') : t('Choose a method');
+  lrEl('lrRecordingState').textContent = linked ? t('Session selected') : studio ? t('In Listening Studio') : lrWorkspace.file ? t('Audio selected') : t('Choose a method');
   lrEl('lrQuestionsState').textContent = t('Create or connect');
   lrEl('lrQuestionSource').textContent = linked
     ? t('Questions will use the latest words from the selected recording session, including edits.')
+    : studio ? t('Questions will use the latest script from Listening Studio, including edits made there.')
     : script ? t('Questions will use Your script.') : t('Have audio only? Attach the recording to your AI chat when using the question prompt.');
   lrEl('lrQuestionsBtn').textContent = script ? t('Generate questions from this script') : t('Generate questions from a recording');
   const target = lrEl('lrTargetSection');
@@ -87,6 +99,203 @@ function lrRefreshWorkspace() {
   lrEl('lrAttachAudio').disabled = !sections.length || !lrWorkspace.file || lrWorkspace.loading;
   lrEl('lrUseSessionAudio').disabled = !sections.length || lrWorkspace.loading;
   lrEl('lrShowSection').disabled = !sections.length;
+  lrRenderStudio();
+}
+
+// ------------------------------------------------------ Listening Studio --
+// The studio (listening-studio/server.py) on this computer lets this page
+// send a script, follow its recording and fetch the MP3, nothing else
+// (LISTENING_STUDIO_PLAN.md, "The studio and the 🎧 Listening activity
+// together"). Chrome asks once whether the site may reach this computer.
+async function lrStudioApi(path, { method = 'GET', body } = {}) {
+  let res;
+  try {
+    res = await fetch(`${LR_STUDIO_URL}api/${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  } catch {
+    throw Object.assign(new Error(t('Listening Studio is not running on this computer.')), { offline: true });
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(data.detail || data.error || res.statusText), { status: res.status }); // i18n-ignore (studio error)
+  }
+  return path.includes('/audio/') ? res.blob() : res.json();
+}
+
+function lrStudioProgress(job, now) {
+  const counts = { done: job.done, total: job.total };
+  if (job.stage === 'lines') {
+    const started = job.stages?.lines;
+    const min = started && job.done ? Math.round((((job.at || now) - started) / job.done) * (job.total - job.done) / 60) : 0;
+    return min >= 1 ? t('Making lines {done}/{total} · about {min} min left', { ...counts, min }) : t('Making lines {done}/{total}', counts);
+  }
+  if (job.stage === 'voices') return t('Making the voices…');
+  if (job.stage === 'checks') return t('Checking the words {done}/{total}', counts);
+  if (job.stage === 'mix') return t('Mixing the recording…');
+  return t('Working…');
+}
+
+// What the linked recording is waiting for. Only a finished recording whose
+// voices were approved can go into a section (not the previous version
+// while it is being made again).
+function lrStudioDescribe(id, data, status) {
+  const rec = data.recording || {};
+  const job = status?.job?.id === id ? status.job : null;
+  const queued = (status?.queue || []).some(([rid]) => rid === id);
+  const parts = data.result?.parts || [];
+  const ready = rec.stage === 'approved' && parts.length > 0 && !job && !queued;
+  let text;
+  if (job) text = lrStudioProgress(job, status.now);
+  else if (queued) text = t('Waiting for Listening Studio to finish another recording…');
+  else if (rec.stage === 'setup') text = t('Next: describe the voices in Listening Studio, then press Make the recording there.');
+  else if (rec.stage === 'voices') text = t('Next: listen to the voices in Listening Studio and approve them. Then the recording is made.');
+  else if (ready) text = parts.length > 1
+    ? t('Ready: {n} parts. Listen to them in Listening Studio, then add them to listening sections in Questions.', { n: parts.length })
+    : t('Ready. Listen to it in Listening Studio, then add it to a listening section in Questions.');
+  else text = t('Not made yet. Open it in Listening Studio.');
+  return { busy: !!job || queued, ready, parts, text };
+}
+
+function lrStudioVisible() {
+  return !document.hidden && !lrEl('listeningCardBody').classList.contains('hidden') && !lrEl('lrWorkspace').classList.contains('hidden');
+}
+
+async function lrStudioRefresh() {
+  const id = lrWorkspace.studioId;
+  try {
+    const [data, status] = await Promise.all([lrStudioApi(`recordings/${id}`), lrStudioApi('status')]);
+    if (lrWorkspace.studioId !== id) return;
+    lrWorkspace.studio = lrStudioDescribe(id, data, status);
+    const rec = data.recording || {};
+    if (rec.title && rec.title !== 'Untitled') lrWorkspace.studioTitle = rec.title;
+    // The script box follows the studio, where the script is edited now.
+    if (!lrWorkspace.sessionId && typeof rec.text === 'string' && rec.text !== lrEl('lrScript').value) {
+      lrEl('lrScript').value = rec.text;
+      lrSaveDraft();
+      lrRefreshWorkspace();
+      return;
+    }
+  } catch (err) {
+    if (lrWorkspace.studioId !== id) return;
+    lrWorkspace.studio = { text: err.offline ? t('Listening Studio is not running. Start it from its desktop icon to follow this recording.')
+      : err.status === 404 ? t('This recording is no longer in Listening Studio. Use a separate draft to unlink it.') : err.message };
+  }
+  lrRenderStudio();
+}
+
+// Asks the studio every few seconds while the card is open and the tab is
+// visible (this computer only: no server cost).
+async function lrStudioTick() {
+  clearTimeout(lrWorkspace.studioTimer);
+  if (!lrWorkspace.studioId) return;
+  if (lrStudioVisible() && !lrWorkspace.studioFetching) {
+    lrWorkspace.studioFetching = true;
+    try { await lrStudioRefresh(); } finally { lrWorkspace.studioFetching = false; }
+  }
+  clearTimeout(lrWorkspace.studioTimer);
+  if (lrWorkspace.studioId) lrWorkspace.studioTimer = setTimeout(lrStudioTick, lrWorkspace.studio?.busy ? 3000 : 10000);
+}
+
+// Only the studio's own parts of the card: it runs on every poll, so it
+// never rebuilds the section list (an open dropdown would close).
+function lrRenderStudio() {
+  const studio = !!lrWorkspace.studioId;
+  const state = lrWorkspace.studio;
+  lrEl('lrStudioBtn').classList.toggle('hidden', studio);
+  lrEl('lrStudioBtn').disabled = lrWorkspace.loading;
+  lrEl('lrStudioOpen').classList.toggle('hidden', !studio);
+  lrEl('lrStudioCopy').classList.toggle('hidden', studio || !lrWorkspace.studioOffline);
+  lrEl('lrStudioState').textContent = studio ? state?.text || t('Checking Listening Studio…') : '';
+  if (studio && !lrWorkspace.sessionId) lrEl('lrRecordingState').textContent = state?.ready ? t('Studio recording ready') : t('In Listening Studio');
+  const parts = state?.ready ? state.parts : [];
+  const select = lrEl('lrStudioPart');
+  const labels = parts.map((p, i) => `${p.label || t('Part {n}', { n: i + 1 })} · ${Math.round(p.seconds)} s`);
+  if ([...select.options].map(o => o.text).join('\n') !== labels.join('\n')) {
+    select.replaceChildren(...labels.map((label, i) => new Option(label, String(i))));
+    lrPickStudioPart();
+  }
+  lrEl('lrStudioPartWrap').classList.toggle('hidden', parts.length < 2);
+  lrEl('lrUseStudioAudio').classList.toggle('hidden', !studio);
+  lrEl('lrUseStudioAudio').disabled = !vaListeningSections().length || !state?.ready || lrWorkspace.loading;
+}
+
+// One MP3 per part, one part per section: the part at the section's position.
+function lrPickStudioPart() {
+  const select = lrEl('lrStudioPart');
+  if (!select.options.length) return;
+  const index = vaListeningSections().findIndex(section => section.id === lrEl('lrTargetSection').value);
+  select.value = String(Math.min(Math.max(index, 0), select.options.length - 1));
+}
+
+function lrOpenStudio() {
+  const opened = window.open(`${LR_STUDIO_URL}${lrWorkspace.studioId ? `#r=${lrWorkspace.studioId}` : ''}`, LR_STUDIO_TAB);
+  if (!opened) lrStatus(t('The browser blocked the new tab. Press Open in Listening Studio.'), 'bad');
+  return !!opened;
+}
+
+async function lrSendToStudio() {
+  if (lrWorkspace.loading) return;
+  lrWorkspace.loading = true;
+  lrRenderStudio();
+  let text;
+  try {
+    text = await lrLatestScript(); // a linked recording session's latest words
+  } catch (err) {
+    lrStatus(t('Could not load the latest script ({msg}). Try again.', { msg: err.message }), 'bad');
+    lrWorkspace.loading = false;
+    lrRenderStudio();
+    return;
+  }
+  try {
+    const script = parseListeningScript(text);
+    if (!script.parts.some(part => part.items.some(item => item.type === 'line'))) {
+      lrStatus(t('Write or paste a script first.'), 'bad');
+      return;
+    }
+    const title = lrValue('lrDraftTitle') || script.title || lrValue('lrTopic');
+    // A script without its language or voices opens on the studio's set-up form.
+    const { id } = await lrStudioApi('recordings', { method: 'POST', body: { text, script, title, setup: listeningScriptNeedsSetup(script) } });
+    Object.assign(lrWorkspace, { studioId: id, studioTitle: title || t('Untitled'), studio: null, studioOffline: false });
+    lrSaveDraft();
+    lrRefreshWorkspace();
+    if (lrOpenStudio()) lrStatus(t('Sent to Listening Studio. Continue there; this card shows how it is going.'), 'ok');
+    lrStudioTick();
+  } catch (err) {
+    lrWorkspace.studioOffline = !!err.offline;
+    lrStatus(err.offline
+      ? t('Could not reach Listening Studio. Start it from its desktop icon, then press Send again. If Chrome asks whether this site may reach apps on this computer, choose Allow; if you blocked it, allow it again from the icon at the left of the address bar.')
+      : t('Listening Studio could not take the script ({msg}).', { msg: err.message }), 'bad');
+  } finally {
+    lrWorkspace.loading = false;
+    lrRenderStudio();
+  }
+}
+
+async function lrUseStudioRecording() {
+  const id = lrEl('lrTargetSection').value;
+  const studioId = lrWorkspace.studioId;
+  if (!id || !studioId || lrWorkspace.loading) return;
+  lrWorkspace.loading = true;
+  lrRefreshWorkspace();
+  try {
+    // Fresh, not the last poll: it may be being made again since.
+    const [data, status] = await Promise.all([lrStudioApi(`recordings/${studioId}`), lrStudioApi('status')]);
+    lrWorkspace.studio = lrStudioDescribe(studioId, data, status);
+    if (!lrWorkspace.studio.ready) { lrStatus(lrWorkspace.studio.text, 'bad'); return; }
+    const part = lrWorkspace.studio.parts[Number(lrEl('lrStudioPart').value) || 0] || lrWorkspace.studio.parts[0];
+    const name = String(part.mp3).split(/[\\/]/).pop();
+    const blob = await lrStudioApi(`recordings/${studioId}/audio/out/${encodeURIComponent(name)}`);
+    const previousAudio = findListeningSection(id)?.audio;
+    // An upload like any other: attachListeningRecording keeps the MP3's timings.
+    await attachListeningRecording(id, new File([blob], name, { type: 'audio/mpeg' }));
+    const audio = findListeningSection(id)?.audio;
+    if (audio && audio !== previousAudio) { lrStatus(t('Studio recording added to the selected listening section.'), 'ok'); lrShowTargetSection(); }
+    else lrStatus(t('The recording was not added. Check the audio file and try again.'), 'bad');
+  } catch (err) {
+    lrStatus(err.offline ? t('Listening Studio is not running. Start it from its desktop icon, then try again.') : err.message, 'bad'); // i18n-ignore (studio error)
+  } finally {
+    lrWorkspace.loading = false;
+    lrRefreshWorkspace();
+  }
 }
 
 // Called when a session is opened, created or edited by the existing review UI.
@@ -119,6 +328,17 @@ async function lrLatestScript() {
     lrEl('lrDraftTitle').value = session.title || '';
     lrRefreshWorkspace();
     lrSaveDraft();
+  } else if (lrWorkspace.studioId) {
+    const studioId = lrWorkspace.studioId;
+    try {
+      const { recording } = await lrStudioApi(`recordings/${studioId}`);
+      if (lrWorkspace.studioId !== studioId) throw new Error(t('The linked Studio recording changed. Try again.'));
+      if (typeof recording?.text === 'string') lrEl('lrScript').value = recording.text;
+      lrRefreshWorkspace();
+      lrSaveDraft();
+    } catch (err) {
+      if (!err.offline || !confirm(t('Listening Studio is not running, so changes made there can’t be fetched. Use the script saved here?'))) throw err;
+    }
   }
   return lrValue('lrScript');
 }
@@ -165,6 +385,8 @@ function lrBindWorkspace() {
       LR_DRAFT_FIELDS.forEach(id => { if (typeof draft.fields[id] === 'string') lrEl(id).value = draft.fields[id]; });
       lrWorkspace.sessionId = /^[a-z0-9]{8,16}$/.test(draft.sessionId || '') ? draft.sessionId : '';
       lrWorkspace.sessionTitle = String(draft.sessionTitle || '');
+      lrWorkspace.studioId = /^[a-z0-9]{8,32}$/.test(draft.studioId || '') ? draft.studioId : '';
+      lrWorkspace.studioTitle = String(draft.studioTitle || '');
       if (draft.started) lrSelectTab(draft.tab || 'script');
       lrSelectMethod(draft.method || 'people');
       lrEl('lrDraftStatus').textContent = t('Draft restored from this device');
@@ -198,7 +420,12 @@ function lrBindWorkspace() {
     else { lrEl('lrGenerator').open = start === 'generate'; lrEl(start === 'generate' ? 'lrTopic' : 'lrScript').focus(); }
   }));
   lrEl('lrChangeStart').addEventListener('click', () => lrEl('lrStartChoices').classList.toggle('hidden'));
-  lrEl('lrDetachSession').addEventListener('click', () => { lrWorkspace.sessionId = ''; lrWorkspace.sessionTitle = ''; lrRefreshWorkspace(); lrSaveDraft(); });
+  lrEl('lrDetachSession').addEventListener('click', () => {
+    clearTimeout(lrWorkspace.studioTimer);
+    Object.assign(lrWorkspace, { sessionId: '', sessionTitle: '', studioId: '', studioTitle: '', studio: null });
+    lrRefreshWorkspace();
+    lrSaveDraft();
+  });
   ['lrEditSession', 'lrManageSession'].forEach(id => lrEl(id).addEventListener('click', () => lrOpenSelectedSession()));
   lrEl('lrUseSessionAudio').addEventListener('click', () => lrOpenSelectedSession({ section: true }));
   lrEl('lrShowSection').addEventListener('click', lrShowTargetSection);
@@ -211,7 +438,13 @@ function lrBindWorkspace() {
   lrEl('lrWriteBtn').addEventListener('click', () => openListeningPrompt({ source: 'write', theme: lrValue('lrDraftTitle') || lrValue('lrTopic'), level: lrValue('lrLevel'), language: lrValue('lrLanguage') }));
   lrEl('voiceActorsOpenBtn').addEventListener('click', () => openVoiceActors());
   lrEl('voiceActorsNewBtn').addEventListener('click', () => openVoiceActors({ newSession: true, script: lrValue('lrScript'), title: lrValue('lrDraftTitle') || lrScriptTitle(lrValue('lrScript')) || lrValue('lrTopic') }));
-  lrEl('lrStudioBtn').addEventListener('click', async () => {
+  lrEl('lrStudioBtn').addEventListener('click', lrSendToStudio);
+  ['lrStudioOpen', 'lrEditStudio'].forEach(id => lrEl(id).addEventListener('click', lrOpenStudio));
+  lrEl('lrUseStudioAudio').addEventListener('click', lrUseStudioRecording);
+  lrEl('lrTargetSection').addEventListener('change', lrPickStudioPart);
+  document.addEventListener('visibilitychange', () => { if (lrWorkspace.studioId && lrStudioVisible()) lrStudioTick(); });
+  // The old way, when the studio can't be reached: copy the script and paste it there.
+  lrEl('lrStudioCopy').addEventListener('click', async () => {
     // Open during the user gesture so clipboard permission cannot turn it into a blocked popup.
     window.open(LR_STUDIO_URL, '_blank', 'noopener');
     try {
