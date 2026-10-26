@@ -15,10 +15,10 @@ let A;
 let W;
 before(() => {
   A = loadDeclarations(read('app.js'), [
-    'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersPromptEntry',
+    'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersRecordingText', 'moreAnswersPromptEntry',
     'buildMoreAnswersPrompt', 'parseMoreAnswersReply', 'planMoreAnswers', 'applyMoreAnswers',
     'contextGapList', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'tokenizeWords', 'normalizeTextAnswer', 'toSafeFilename',
-  ], { t: interpolate });
+  ], { t: interpolate, ...(({ isListeningScript, cleanListeningTranscript }) => ({ isListeningScript, cleanListeningTranscript }))(require('../listening-script.js')) });
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'stripDiacritics', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
@@ -100,6 +100,41 @@ describe('the prompt', () => {
     const [entry] = block(A.buildMoreAnswersPrompt({ items: [{ q, n: 1 }] }).text, 'Questions');
     assert.equal(entry.readingText, 'Tom lives in a big house.');
     assert.equal(entry.heard, 'a really big house');
+    assert.doesNotMatch(A.buildMoreAnswersPrompt({ items: [{ q, n: 1 }] }).text, /## Recordings/);
+  });
+
+  it('sends a listening section\'s recording once, and the lines the teacher linked', () => {
+    const sections = [{ id: 'ls1', title: 'Part 1', transcript: 'Anna: Can we do Sunday at half past ten?\nTom: Sure. At the library.', cues: [
+      { s: 0, e: 2, who: 'Anna', text: 'Can we do Sunday at half past ten?' },
+      { s: 2, e: 4, who: 'Tom', text: 'Sure. At the library.' },
+    ] }];
+    const when = { ...typed(), prompt: 'What time will they meet?', accepted: ['10:30'], listeningSection: 'ls1', heard: { from: 0, to: 0, by: 'teacher' } };
+    const where = { ...typed(), prompt: 'Where will they meet?', accepted: ['the library'], listeningSection: 'ls1', heard: { quote: 'At the library.' } };
+    const { text } = A.buildMoreAnswersPrompt({ items: [{ q: when, n: 3 }, { q: where, n: 4 }], sections });
+    assert.equal(text.split('### R1: Part 1').length, 2);
+    assert.match(text, /```text\nAnna: Can we do Sunday at half past ten\?\nTom: Sure\. At the library\.\n```/);
+    assert.ok(text.indexOf('## Recordings') < text.indexOf('## Questions'));
+    assert.deepEqual(plain(block(text, 'Questions').map((e) => [e.recording, e.heard])), [
+      ['R1', 'Anna: Can we do Sunday at half past ten?'], ['R1', 'At the library.'],
+    ]);
+    assert.match(text, /agrees with what is said in the recording/);
+  });
+
+  it('sends only the spoken lines of a studio script, else the subtitles', () => {
+    const script = 'TITLE: Change of plan\nVOICE Anna: A calm woman in her twenties.\nVOICE Tom [phone]: A relaxed man.\n\n[ring]\nAnna (pleased): Hi Tom!\nTom: Not Saturday, sorry.';
+    const sections = [
+      { id: 'studio', title: 'Phone call', transcript: script },
+      { id: 'subs', cues: [{ s: 0, e: 1, who: '', text: 'The train to Leeds leaves from platform two.' }] },
+      { id: 'silent', title: 'Nothing yet' },
+      { id: 'fenced', transcript: '```\nMia: See you at nine.\n```' },
+    ];
+    const items = ['studio', 'subs', 'silent', 'fenced'].map((id, i) => ({ q: { ...typed(), listeningSection: id }, n: i + 1 }));
+    const { text } = A.buildMoreAnswersPrompt({ items, sections });
+    assert.match(text, /### R1: Phone call\n```text\nAnna: Hi Tom!\nTom: Not Saturday, sorry\.\n```/);
+    assert.doesNotMatch(text, /VOICE|calm woman|\[ring\]/);
+    assert.match(text, /### R2\n```text\nThe train to Leeds leaves from platform two\.\n```/);
+    assert.match(text, /### R3\n```text\nMia: See you at nine\.\n```/);
+    assert.deepEqual(plain(block(text, 'Questions').map((e) => e.recording || '')), ['R1', 'R2', '', 'R3']);
   });
 });
 

@@ -5956,9 +5956,23 @@ function moreAnswersCurrent(q) {
   return (Array.isArray(q?.accepted) ? q.accepted : []).map((s) => String(s ?? '').trim()).filter(Boolean);
 }
 
+// What is said in a listening section's recording: its transcript (only the
+// spoken lines of a studio script), or else the lines of its subtitles. A
+// pasted ``` line would end the prompt's text block early, so it goes.
+function moreAnswersRecordingText(sec) {
+  const transcript = String(sec?.transcript || '').trim();
+  if (transcript) {
+    return typeof isListeningScript === 'function' && isListeningScript(transcript)
+      ? cleanListeningTranscript(transcript)
+      : transcript.replace(/^\s*```.*$/gm, '').trim();
+  }
+  return (Array.isArray(sec?.cues) ? sec.cues : []).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join('\n');
+}
+
 // One question as the AI sees it: its number, what is already accepted and
-// what the answer has to agree with.
-function moreAnswersPromptEntry(q, n) {
+// what the answer has to agree with. sec: its listening section; recording:
+// how the prompt names that section's recording.
+function moreAnswersPromptEntry(q, n, { sec = null, recording = '' } = {}) {
   const current = moreAnswersCurrent(q);
   const entry = { n, type: q.type, prompt: String(q.prompt || '').trim() };
   if (q.type === 'context_gap') entry.gaps = current;
@@ -5968,24 +5982,45 @@ function moreAnswersPromptEntry(q, n) {
   if (q.type === 'voice_text' && q.answerLanguage) entry.answerLanguage = q.answerLanguage;
   const reading = String(q.readingText || '').trim();
   if (reading) entry.readingText = reading;
-  const heard = String((typeof q.heard === 'string' ? q.heard : q.heard?.quote) || '').trim();
+  if (recording) entry.recording = recording;
+  // The lines the teacher linked, word for word; else the first AI's quote.
+  const cues = Array.isArray(sec?.cues) ? sec.cues : [];
+  const linked = Number.isInteger(q.heard?.from)
+    ? cues.slice(q.heard.from, q.heard.to + 1).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join(' / ')
+    : '';
+  const heard = String(linked || (typeof q.heard === 'string' ? q.heard : q.heard?.quote) || '').trim();
   if (heard) entry.heard = heard;
   return entry;
 }
 
-// items: [{ q, n }] in quiz order; note: the teacher's own words.
-// Returns { text, filename }.
-function buildMoreAnswersPrompt({ items, note = '', title = '' }) {
+// items: [{ q, n }] in quiz order; note: the teacher's own words; sections:
+// the quiz's listening sections. Returns { text, filename }.
+function buildMoreAnswersPrompt({ items, note = '', title = '', sections = [] }) {
   const has = (type) => items.some(({ q }) => q.type === type);
   const mixed = MORE_ANSWERS_TYPES.filter(has).length > 1;
   // With several types, each angle says which of them it is for.
   const angles = MORE_ANSWERS_ANGLES.filter((a) => a.types.some(has))
     .map((a) => `${mixed ? `(${a.types.filter(has).join(', ')}) ` : ''}${a.text}`);
-  const entries = items.map(({ q, n }) => moreAnswersPromptEntry(q, n));
+  // A listening question is answered from its section's recording: each
+  // recording goes in once (R1, R2…) and its questions name it.
+  const recordings = [];
+  const entries = items.map(({ q, n }) => {
+    const sec = q.listeningSection ? sections.find((s) => s?.id === q.listeningSection) || null : null;
+    let rec = recordings.find((r) => r.sec === sec);
+    if (sec && !rec) {
+      const said = moreAnswersRecordingText(sec);
+      if (said) {
+        rec = { sec, id: `R${recordings.length + 1}`, title: String(sec.title || '').trim(), said };
+        recordings.push(rec);
+      }
+    }
+    return moreAnswersPromptEntry(q, n, { sec, recording: rec?.id || '' });
+  });
   const rules = ['a fair teacher would mark it fully right for this question as it is written: it follows the instructions and the word in brackets, and fits the rest of the sentence;'];
   if (has('error_hunt')) rules.push('error_hunt: it makes exactly the number of edits given ("edits") and gives a correct, natural sentence, even if its meaning changes. An edit changes, adds or removes one word; a word replaced by its full form (doesn\'t → does not) is one edit;');
   if (has('context_gap')) rules.push('context_gap: it fits its gap with every accepted answer of the other gaps, and has no comma in it;');
-  if (entries.some((e) => e.readingText || e.heard)) rules.push('it agrees with the question\'s "readingText", or with what is "heard" in its recording;');
+  if (entries.some((e) => e.readingText)) rules.push('it agrees with the question\'s "readingText";');
+  if (entries.some((e) => e.recording || e.heard)) rules.push('it agrees with what is said in the recording (its "recording", and "heard": the line where the answer is said). The words said and the same thing in other words both count ("half past ten" said → 10:30, ten thirty), as long as a student who heard the recording could fairly write it;');
 
   // The reply's shape, on the real question numbers: one entry of each shape
   // (answers, or answers by gap) and the last other question, with nothing missing.
@@ -6022,7 +6057,14 @@ function buildMoreAnswersPrompt({ items, note = '', title = '' }) {
     '```json',
     `{"answers": [\n${sample.map((e) => `  ${JSON.stringify(e)}`).join(',\n')}\n]}`,
     '```',
-    '',
+    '');
+  if (recordings.length) {
+    out.push('## Recordings',
+      'What is said in each recording. A question with "recording" is answered from it.',
+      ...recordings.flatMap((r) => ['', `### ${r.id}${r.title ? `: ${r.title}` : ''}`, '```text', r.said, '```']),
+      '');
+  }
+  out.push(
     '## Questions',
     `Each one with what is already accepted${has('context_gap') ? ' ("gaps": the accepted answers of each ____, in order)' : ''}.`,
     '```json',
@@ -6313,7 +6355,9 @@ async function copyMoreAnswersPrompt() {
     return;
   }
   state.snapshot = Object.fromEntries(quiz.questions.map((q, idx) => [String(idx + 1), q.id]));
-  const { text, filename } = buildMoreAnswersPrompt({ items, note: state.note.trim(), title: quiz.title || '' });
+  const { text, filename } = buildMoreAnswersPrompt({
+    items, note: state.note.trim(), title: quiz.title || '', sections: quiz.listeningSections || [],
+  });
   try {
     await navigator.clipboard.writeText(text);
     setMoreAnswersNotice(t('Prompt for {n} question(s) copied 📋 Paste it into your AI, then paste the reply below.', { n: items.length }));
