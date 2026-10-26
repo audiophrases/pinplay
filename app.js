@@ -5545,6 +5545,7 @@ function buildListeningPrompt(req) {
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     transcriptRule,
     'Every answer is said in the recording: a student who heard it can answer, one who didn\'t can\'t guess it from the question or from general knowledge.',
+    `Students hear the recording without seeing the script, so they only know a speaker\'s name if it is said aloud ("Hi, I\'m Saskia", "Thanks, Tom"). Name a speaker in a question or an option only when the recording has made clear which voice is theirs; otherwise "How did Saskia get there?" or "Who came by bus?" can't be answered. Instead, describe the speaker by what students can hear (the man, the caller, the shop assistant) or ask about the information itself.${source === 'write' ? ' In your scripts, have the speakers use each other\'s names early on.' : ''}`,
     'Keep every prompt and option short: while the recording plays, students listen, read the current question and glance at the others to keep their place. A question can be hard without being long.',
     levelled
       ? 'Within each level, questions follow the order in which their answers are heard, spread over the whole recording; never two questions of one level on the same piece of information.'
