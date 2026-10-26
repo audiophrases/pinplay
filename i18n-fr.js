@@ -1587,6 +1587,7 @@ window.PINPLAY_FR_DICT = {
   "⏳ Saving…": "⏳ Enregistrement…",
   "Your teacher has already approved this line.": "Ton professeur a déjà validé cette réplique.",
   "✅ Saved.": "✅ Enregistrée.",
+  "Could not confirm the saved recording.": "Impossible de confirmer l’enregistrement de la prise.",
   "Not saved ({msg}). Check the connection and press ✓ Save & next again.": "Non enregistrée ({msg}). Vérifie la connexion et appuie de nouveau sur ✓ Enregistrer et suivante.",
   "Could not load the lines ({msg}).": "Impossible de charger les répliques ({msg}).",
   "Lines to record again: {n}.": "Répliques à enregistrer de nouveau : {n}.",

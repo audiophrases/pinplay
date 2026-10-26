@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const { loadDeclarations } = createRequire(import.meta.url)('./helpers/extract-declaration');
 const { chromium } = await import('playwright').catch(() => ({}));
 let browser;
-describe('recording script draft protection', { skip: !chromium && 'Install playwright to run browser checks' }, () => {
+describe('recording saves and script draft protection', { skip: !chromium && 'Install playwright to run browser checks' }, () => {
   before(async () => {
     const executablePath = [process.env.PINPLAY_TEST_BROWSER, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p => p && fs.existsSync(p));
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
@@ -17,7 +17,8 @@ describe('recording script draft protection', { skip: !chromium && 'Install play
       { id: 'l1', speaker: 'Mia', text: 'First line.', status: 'todo' },
       { id: 'l2', speaker: 'Tom', text: 'Second line.', status: 'todo' },
     ] };
-    let reads = 0, writes = 0, fail = false, release;
+    let reads = 0, writes = 0, fail = false, invalidConfirmation = false, release;
+    const takeBodies = [];
     await page.route('https://pinplay.test/**', route => {
       if (new URL(route.request().url()).pathname.endsWith('styles.css')) return route.fulfill({ contentType: 'text/css', body: fs.readFileSync('styles.css', 'utf8') });
       return route.fulfill({ contentType: 'text/html', body: fs.readFileSync('record/index.html', 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '') });
@@ -28,6 +29,14 @@ describe('recording script draft protection', { skip: !chromium && 'Install play
       if (route.request().method() === 'GET') reads++;
       else {
         writes++;
+        if (new URL(route.request().url()).pathname === '/api/rec/take') {
+          takeBodies.push(route.request().postDataBuffer());
+          if (fail) return route.fulfill({ status: 503, headers, json: { error: 'Offline' } });
+          const line = session.lines.find(line => line.id === new URL(route.request().url()).searchParams.get('line'));
+          line.status = 'recorded';
+          line.take = { key: `voice-actors/${session.id}/${line.id}.webm`, at: Date.now() };
+          return route.fulfill({ headers, json: invalidConfirmation ? { ok: true } : { ok: true, line, previousKey: '' } });
+        }
         const data = route.request().postDataJSON();
         if (release === 'hold') await new Promise(resolve => { release = resolve; });
         if (fail) return route.fulfill({ status: 503, headers, json: { error: 'Offline' } });
@@ -36,9 +45,76 @@ describe('recording script draft protection', { skip: !chromium && 'Install play
       return route.fulfill({ headers, json: { session } });
     });
     await page.goto('https://pinplay.test/record/?s=abcdefgh23');
+    await page.evaluate(() => {
+      // Deterministic audio without requesting a real microphone in browser tests.
+      navigator.mediaDevices.getUserMedia = async () => new MediaStream();
+      window.MediaRecorder = class {
+        static isTypeSupported() { return true; }
+        constructor(stream, { mimeType }) { this.mimeType = mimeType; }
+        start() {}
+        stop() {
+          this.ondataavailable({ data: new Blob(['recorded take'], { type: this.mimeType }) });
+          this.onstop();
+        }
+      };
+    });
     await page.addScriptTag({ path: 'record.js' });
     await page.locator('#recChoose').waitFor({ state: 'visible' });
-    return { page, get reads() { return reads; }, get writes() { return writes; }, failSave() { fail = true; }, holdSave() { release = 'hold'; }, releaseSave() { release(); } };
+    return { page, takeBodies, get reads() { return reads; }, get writes() { return writes; }, failSave() { fail = true; }, invalidateConfirmation() { invalidConfirmation = true; }, retrySave() { fail = invalidConfirmation = false; }, holdSave() { release = 'hold'; }, releaseSave() { release(); } };
+  }
+  async function recordTake(page) {
+    await page.locator('#recRecord').click();
+    await page.waitForFunction(() => document.getElementById('recRecord').textContent.includes('Stop'));
+    await page.locator('#recRecord').click();
+    assert.equal(await page.locator('#recSave').isEnabled(), true);
+  }
+  async function saveTake(page) {
+    await page.locator('#recSave').click();
+    await page.waitForFunction(() => !document.getElementById('recStatus').textContent.includes('Saving'));
+  }
+  it('accepts the saved line response, updates progress and finishes after the final take', async () => {
+    const fixture = await open();
+    const { page } = fixture;
+    try {
+      await page.locator('[data-rec-mode="all"]').click();
+      await recordTake(page);
+      await saveTake(page);
+      assert.match(await page.locator('#recStatus').innerText(), /✅ Saved/);
+      assert.match(await page.locator('#recProgress').innerText(), /Line 2 of 2 · 1 recorded/);
+      assert.equal(await page.locator('#recSave').isDisabled(), true);
+      await page.locator('#recPrevBtn').click();
+      assert.equal(await page.locator('#recListen').isEnabled(), true);
+      assert.equal(await page.locator('#recSave').isDisabled(), true);
+      await page.locator('#recNextBtn').click();
+      await recordTake(page);
+      await saveTake(page);
+      assert.match(await page.locator('#recStatus').innerText(), /✅ Saved/);
+      assert.equal(await page.locator('#recDone').isVisible(), true);
+      assert.equal(fixture.writes, 2);
+    } finally { await page.close(); }
+  });
+  for (const failure of ['server error', 'missing confirmation']) {
+    it(`keeps the take available for an identical retry after a ${failure}`, async () => {
+      const fixture = await open();
+      const { page } = fixture;
+      try {
+        await page.locator('[data-rec-mode="all"]').click();
+        await recordTake(page);
+        if (failure === 'server error') fixture.failSave();
+        else fixture.invalidateConfirmation();
+        await saveTake(page);
+        assert.match(await page.locator('#recStatus').innerText(), /Not saved/);
+        assert.match(await page.locator('#recProgress').innerText(), /Line 1 of 2 · 0 recorded/);
+        assert.equal(await page.locator('#recListen').isEnabled(), true);
+        assert.equal(await page.locator('#recSave').isEnabled(), true);
+        fixture.retrySave();
+        await saveTake(page);
+        assert.match(await page.locator('#recStatus').innerText(), /✅ Saved/);
+        assert.match(await page.locator('#recProgress').innerText(), /Line 2 of 2 · 1 recorded/);
+        assert.equal(fixture.takeBodies.length, 2);
+        assert.deepEqual(fixture.takeBodies[0], fixture.takeBodies[1]);
+      } finally { await page.close(); }
+    });
   }
   async function choose(fixture) {
     await fixture.page.locator('[data-rec-mode="all"]').click();

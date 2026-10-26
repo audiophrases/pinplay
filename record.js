@@ -473,7 +473,12 @@
       } else if (!res.ok) {
         throw new Error(data.error || `${res.status}`);
       } else {
-        Object.assign(line, data.session.lines.find((l) => l.id === line.id));
+        // /api/rec/take confirms the saved line, not the whole session.
+        const saved = data.line;
+        if (saved?.id !== line.id || !saved.take?.key) {
+          throw new Error(t('Could not confirm the saved recording.'));
+        }
+        Object.assign(line, saved);
         dropPending();
         setStatus(t('✅ Saved.'), 'ok'); // i18n-ignore (already in t())
         const next = nextIndex(idx);
