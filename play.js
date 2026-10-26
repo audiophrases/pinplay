@@ -10093,7 +10093,7 @@ function formatListeningTime(sec) {
 // Unlimited plays: the browser's own player (pause, seek). Limited: our own
 // player with a bar you can't drag, "Play 1 of 2", and pause only if allowed.
 // A play counts on the server when it starts, so reloading never resets it.
-// Playback speed, 75%–125% in 1% steps, when the teacher allows it.
+// Playback speed, 85%–100% in 1% steps, when the teacher allows it.
 // Remembered per section while the sheet is open.
 function addListeningSpeed(wrap, section, audio) {
   const rates = (listeningSheet.rates ||= {});
@@ -10105,7 +10105,7 @@ function addListeningSpeed(wrap, section, audio) {
   };
   let current = rate;
   const set = (v) => {
-    current = Math.max(75, Math.min(125, Math.round(v)));
+    current = Math.max(85, Math.min(100, Math.round(v)));
     rates[section.id] = current;
     audio.playbackRate = current / 100;
     audio.defaultPlaybackRate = current / 100;
@@ -10125,8 +10125,8 @@ function addListeningSpeed(wrap, section, audio) {
   minus.setAttribute('aria-label', t('Slower'));
   const slider = document.createElement('input');
   slider.type = 'range';
-  slider.min = '75';
-  slider.max = '125';
+  slider.min = '85';
+  slider.max = '100';
   slider.step = '1';
   slider.setAttribute('aria-label', t('Playback speed'));
   const plus = document.createElement('button');

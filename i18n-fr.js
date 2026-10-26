@@ -151,7 +151,7 @@ window.PINPLAY_FR_DICT = {
   'Unlimited': 'Illimitées',
   'Pausing allowed': 'Pause permise',
   'Playback speed': 'Vitesse de lecture',
-  'Students can slow the recording down or speed it up, from 75% to 125%.': "Les élèves peuvent ralentir ou accélérer l'enregistrement, de 75 % à 125 %.",
+  'Students can slow the recording down, from 100% to 85%.': "Les élèves peuvent ralentir l'enregistrement, de 100 % à 85 %.",
   'Speed': 'Vitesse',
   'Slower': 'Plus lent',
   'Faster': 'Plus rapide',

@@ -2397,7 +2397,7 @@ function buildListeningSectionPanel(sec) {
         <input type="checkbox" data-ls-id="${sec.id}" data-ls-field="pauseAllowed" ${sec.pauseAllowed !== false ? 'checked' : ''} />
         ${escapeHtml(t('Pausing allowed'))}
       </label>
-      <label class="listening-section-check" title="${escapeHtml(t('Students can slow the recording down or speed it up, from 75% to 125%.'))}">
+      <label class="listening-section-check" title="${escapeHtml(t('Students can slow the recording down, from 100% to 85%.'))}">
         <input type="checkbox" data-ls-id="${sec.id}" data-ls-field="speedAllowed" ${sec.speedAllowed !== false ? 'checked' : ''} />
         ${escapeHtml(t('Playback speed'))}
       </label>
@@ -13573,7 +13573,7 @@ function renderHostState(state) {
 // → and ← move through the section (LISTENING_MODE_PLAN.md, phase 4).
 const hostListening = { el: null, audio: null, sectionKey: '', rates: {}, moment: null, autoPlayed: new Set(), reviewKey: '' };
 
-// The students' speed control (75%–125% in 1% steps) for the projector's
+// The students' speed control (85%–100% in 1% steps) for the projector's
 // player: always there for the teacher, whatever the section allows students.
 // Remembered per section while the page is open.
 function addHostListeningSpeed(box, audio, sectionId) {
@@ -13595,8 +13595,8 @@ function addHostListeningSpeed(box, audio, sectionId) {
   const reset = button('ls-speed-reset', t('Normal'));
   const slider = document.createElement('input');
   slider.type = 'range';
-  slider.min = '75';
-  slider.max = '125';
+  slider.min = '85';
+  slider.max = '100';
   slider.step = '1';
   slider.setAttribute('aria-label', t('Playback speed'));
   const label = document.createElement('span');
@@ -13606,7 +13606,7 @@ function addHostListeningSpeed(box, audio, sectionId) {
     label.textContent = `${current}%`;
   };
   const set = (v) => {
-    current = Math.max(75, Math.min(125, Math.round(v)));
+    current = Math.max(85, Math.min(100, Math.round(v)));
     hostListening.rates[sectionId] = current;
     audio.preservesPitch = true;
     audio.playbackRate = current / 100;
@@ -13620,7 +13620,7 @@ function addHostListeningSpeed(box, audio, sectionId) {
   // The browser player's own speed menu moves the slider too.
   audio.addEventListener('ratechange', () => {
     const v = Math.round(audio.playbackRate * 100);
-    if (v !== current) { current = v; hostListening.rates[sectionId] = v; show(); }
+    if (v !== current) set(v);
   });
   row.append(name, minus, slider, plus, label, reset);
   box.appendChild(row);
