@@ -735,6 +735,109 @@ textarea {
   border-radius: .3rem;
 }
 
+/* More answers (second AI pass on accepted answers): pick questions, copy,
+   paste, then tick the answers to add. The two lists scroll on their own. */
+.dialog-card.more-answers {
+  width: min(900px, 98vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.more-answers:focus {
+  outline: none;
+}
+
+.more-answers h3,
+.more-answers h4,
+.more-answers p {
+  margin: 0;
+}
+
+.more-answers h4 {
+  margin-top: .4rem;
+}
+
+.ma-list {
+  flex-shrink: 0;
+  max-height: 32vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+}
+
+.ma-q {
+  display: flex;
+  gap: .5rem;
+  align-items: flex-start;
+  margin: 0;
+  padding: .35rem .6rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.ma-q:last-child {
+  border-bottom: 0;
+}
+
+.ma-q > input,
+.ma-chip > input {
+  display: inline-block;
+  width: auto;
+  margin: .2rem 0 0;
+}
+
+.ma-n {
+  font-weight: 600;
+  min-width: 2.4rem;
+}
+
+.ma-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ma-review {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.ma-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .25rem;
+}
+
+/* Inline text, so a long correction wraps as one sentence on a phone. */
+.ma-chip {
+  display: inline-block;
+  margin: 0;
+  padding: .25rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .8rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.ma-chip > input {
+  vertical-align: -.1rem;
+  margin: 0 .2rem 0 0;
+}
+
+.ma-chip:has(> input:not(:checked)) {
+  opacity: .55;
+  text-decoration: line-through;
+}
+
 .mm-status.working {
   color: var(--primary);
 }

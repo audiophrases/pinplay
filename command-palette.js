@@ -117,6 +117,7 @@
     S('builderMaintenanceToggle', ADMIN, 'maintenance purge cleanup storage'),
     B('collapseAllBtn', QUIZ, 'collapse expand all questions'),
     B('addMediaBatchBtn', QUIZ, 'add media batch images audio files'),
+    B('moreAnswersBtn', QUIZ, 'more accepted answers alternatives synonyms ai prompt marked wrong'),
     B('bankSearchBtn', QUIZ, 'search question bank import'),
     B('levelAiCopyBtn', QUIZ, 'levels cefr adaptive ai tagging prompt copy'),
     B('purgePreviewsBtn', ADMIN, 'purge preview backlog cleanup', { go: true }),

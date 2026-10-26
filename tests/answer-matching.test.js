@@ -15,8 +15,9 @@ let PLAY;
 let W;
 before(() => {
   APP = loadDeclarations(read('app.js'), [
-    'TEMPLATE_ALL_13_TYPES', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance',
+    'TEMPLATE_ALL_13_TYPES', 'normalizeTextAnswer', 'tokenizeWords',
     'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'normalizeImportedQuestion', 'pickPromptExamples',
+    'isErrorHuntRewriteCorrect',
   ]);
   PLAY = loadDeclarations(read('play.js'), ['normalizeTextAnswer']);
   W = loadDeclarations(read('cloudflare/worker.js'), [
@@ -85,6 +86,18 @@ describe('error-hunt corrections', () => {
     assert.equal(W.evaluate(question, { rewrite: 'Ellos hablan mucho.', selectedTokens: [1] }).correct, true);
     assert.equal(W.evaluate(question, { rewrite: 'Él habla mucho.', selectedTokens: [0] }).correct, true);
     assert.equal(W.evaluate(question, { rewrite: 'Ellos habla mucho.', selectedTokens: [1] }).correct, false);
+  });
+
+  it('grades the same in the editor Preview as in a real game', () => {
+    const q = { type: 'error_hunt', prompt: "He don't usually walk to school.", corrected: "He doesn't usually walk to school.", correctedVariants: ["We don't usually walk to school."] };
+    const rewrites = [
+      "He doesn't usually walk to school.", "we don't usually walk to school", "He don't usually walk to school.",
+      "They don't usually walk to school.", "He does not usually walk to school.", '',
+    ];
+    rewrites.forEach((rewrite) => {
+      assert.equal(APP.isErrorHuntRewriteCorrect(rewrite, q), W.evaluate(q, { rewrite, selectedTokens: [1] }).correct, rewrite);
+    });
+    assert.equal(APP.isErrorHuntRewriteCorrect("He don't usually walk to school.", q), false);
   });
 });
 

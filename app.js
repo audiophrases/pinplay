@@ -1550,6 +1550,7 @@ function bindBuilderEvents() {
   initLevelTools();
 
   document.getElementById('mediaManagerBtn')?.addEventListener('click', openMediaManager);
+  document.getElementById('moreAnswersBtn')?.addEventListener('click', openMoreAnswersDialog);
 
   if (addMediaBatchBtn && addMediaBatchInput) {
     addMediaBatchBtn.addEventListener('click', () => addMediaBatchInput.click());
@@ -5916,6 +5917,451 @@ function renderBuildupPromptTypes() {
   listEl.innerHTML = BUILDUP_PROMPT_TYPES
     .map((type) => `<label class="type-pill"><input type="checkbox" value="${type}" ${type === 'error_hunt' ? '' : 'checked'}> <span>${escapeHtml(t(labels[type] || type))}</span></label>`) // i18n-ignore (type names are t()-wrapped)
     .join('');
+}
+
+// ---------------------------------------------------------------- More accepted answers
+// A second AI pass on the auto-graded written answers the teacher picks: the
+// AI looks for correct answers the accepted lists miss (the other word fixed,
+// full forms, regional words…), the teacher ticks the ones to keep and they
+// are added. Nothing is removed. Answers the grader already treats as the
+// same (capitals, punctuation) are not added twice.
+
+const MORE_ANSWERS_TYPES = ['text', 'voice_text', 'context_gap', 'error_hunt'];
+
+// What worker.js normalizeQuiz keeps: more would be cut on the next save.
+const MORE_ANSWERS_LIMITS = { accepted: 20, acceptedLength: 120, gapLength: 120, corrections: 12, correctionLength: 160 };
+
+// The students a first pass forgets: each one is right but not on the list.
+// Only the angles of the types asked about go in the prompt.
+const MORE_ANSWERS_ANGLES = [
+  { types: ['error_hunt'], text: 'The one who fixes the other word. A mistake is often a clash between two words, and changing either one fixes it. "He don\'t usually walk to school." (1 edit): "He doesn\'t usually walk to school." is listed, and these are right too: "He does not usually walk to school.", "We don\'t usually walk to school.", "You don\'t usually walk to school.", "They don\'t usually walk to school.", "I don\'t usually walk to school." The same with a time word: "Yesterday I go to the park." → "Yesterday I went to the park." and also "Today I go to the park."' },
+  { types: ['error_hunt'], text: 'The one who removes a word instead of changing one: "Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho." and also "Habla mucho." (Spanish can leave out the subject).' },
+  { types: ['error_hunt'], text: 'The one who picks another small word: "She has a umbrella." → "She has an umbrella." and also "She has the umbrella.", "She has one umbrella."' },
+  { types: ['text', 'voice_text', 'context_gap'], text: 'The one who writes the full form or the short form: it\'s / it is, I\'m / I am, won\'t / will not. PinPlay grades them as different answers, so list both.' },
+  { types: ['text', 'voice_text'], text: 'The one who uses another word that fits this exact question: big → large, huge.' },
+  { types: ['text', 'voice_text', 'context_gap'], text: 'The one with another spelling or form: colour / color, travelled / traveled, dreamed / dreamt, learned / learnt.' },
+  { types: ['text', 'voice_text', 'context_gap'], text: 'The one from another country or region: autumn / fall, flat / apartment, coche / carro / auto, ordenador / computadora.' },
+  { types: ['text', 'voice_text'], text: 'The one who adds or leaves out a small word: London / in London, the Thames / Thames, to swim / swim.' },
+  { types: ['text', 'voice_text', 'context_gap'], text: 'The one who writes a number another way: 12 / twelve, 1st / first, 10:30 / half past ten / ten thirty.' },
+  { types: ['text', 'voice_text'], text: 'The one who reads the question another way that is also right: "What do you say when you leave?" → goodbye, and also bye, see you, see you later.' },
+  { types: ['voice_text'], text: 'The one who said it right, but speech recognition wrote it its own way (a voice_text student speaks the answer): digits (21 for twenty-one), words that sound the same (there / their / they\'re, to / two / too, four / for), OK / okay.' },
+  { types: ['context_gap'], text: 'The one who uses another tense or form that fits the whole sentence: "I ____ (live) here since 2010." → have lived, and also have been living.' },
+  { types: ['context_gap'], text: 'The one who finds another word that fits the gap just as well, when the brackets don\'t name the word: "It\'s very ____ today: take a coat." → cold, and also chilly.' },
+];
+
+// The accepted answers as the grader reads them: a list, or one list per gap.
+function moreAnswersCurrent(q) {
+  if (q?.type === 'context_gap') return contextGapList(q).map((g) => g.split(',').map((s) => s.trim()).filter(Boolean));
+  if (q?.type === 'error_hunt') return getCorrectedVariantsList(q.corrected, q.correctedVariants);
+  return (Array.isArray(q?.accepted) ? q.accepted : []).map((s) => String(s ?? '').trim()).filter(Boolean);
+}
+
+// One question as the AI sees it: its number, what is already accepted and
+// what the answer has to agree with.
+function moreAnswersPromptEntry(q, n) {
+  const current = moreAnswersCurrent(q);
+  const entry = { n, type: q.type, prompt: String(q.prompt || '').trim() };
+  if (q.type === 'context_gap') entry.gaps = current;
+  else entry.accepted = current;
+  // The count students are told, from the main fix as the server works it out.
+  if (q.type === 'error_hunt') entry.edits = countErrorHuntRequiredTokens(q.prompt, current[0] || '');
+  if (q.type === 'voice_text' && q.answerLanguage) entry.answerLanguage = q.answerLanguage;
+  const reading = String(q.readingText || '').trim();
+  if (reading) entry.readingText = reading;
+  const heard = String((typeof q.heard === 'string' ? q.heard : q.heard?.quote) || '').trim();
+  if (heard) entry.heard = heard;
+  return entry;
+}
+
+// items: [{ q, n }] in quiz order; note: the teacher's own words.
+// Returns { text, filename }.
+function buildMoreAnswersPrompt({ items, note = '', title = '' }) {
+  const has = (type) => items.some(({ q }) => q.type === type);
+  const mixed = MORE_ANSWERS_TYPES.filter(has).length > 1;
+  // With several types, each angle says which of them it is for.
+  const angles = MORE_ANSWERS_ANGLES.filter((a) => a.types.some(has))
+    .map((a) => `${mixed ? `(${a.types.filter(has).join(', ')}) ` : ''}${a.text}`);
+  const entries = items.map(({ q, n }) => moreAnswersPromptEntry(q, n));
+  const rules = ['a fair teacher would mark it fully right for this question as it is written: it follows the instructions and the word in brackets, and fits the rest of the sentence;'];
+  if (has('error_hunt')) rules.push('error_hunt: it makes exactly the number of edits given ("edits") and gives a correct, natural sentence, even if its meaning changes. An edit changes, adds or removes one word; a word replaced by its full form (doesn\'t → does not) is one edit;');
+  if (has('context_gap')) rules.push('context_gap: it fits its gap with every accepted answer of the other gaps, and has no comma in it;');
+  if (entries.some((e) => e.readingText || e.heard)) rules.push('it agrees with the question\'s "readingText", or with what is "heard" in its recording;');
+
+  // The reply's shape, on the real question numbers: one entry of each shape
+  // (answers, or answers by gap) and the last other question, with nothing missing.
+  const slot = [{ answer: '…', why: '…' }];
+  const shapes = [items.find(({ q }) => q.type !== 'context_gap'), items.find(({ q }) => q.type === 'context_gap')].filter(Boolean);
+  const rest = items.filter((item) => !shapes.includes(item));
+  const sample = [...shapes, ...rest.slice(-1)].sort((a, b) => a.n - b.n).map(({ q, n }) => {
+    if (!shapes.some((item) => item.n === n)) return { n, add: [] };
+    return q.type === 'context_gap' ? { n, gaps: [{ gap: 1, add: slot }] } : { n, add: slot };
+  });
+
+  const out = [
+    '# PinPlay: missing correct answers',
+    '',
+    `PinPlay grades the questions below automatically${title ? ` (quiz "${title}")` : ''}: an answer is right only if it is on the question's accepted list. The obvious answers are already listed. Students still write other answers that are fully correct, and get marked wrong. Find those missing answers, and only those. Many questions are already complete: an empty list is a good answer. Don't pad.`,
+  ];
+  if (note) {
+    out.push('',
+      '## The teacher\'s note',
+      'Typed by the teacher, word for word. Where it contradicts the rest of these instructions, follow the teacher; only the reply format stays fixed.',
+      `"${note}"`);
+  }
+  out.push('',
+    '## Think like the students who get marked wrong unfairly',
+    `Go through each question from every angle that fits ${mixed ? 'its type' : 'it'}:`,
+    ...angles.map((a) => `- ${a}`),
+    '',
+    '## Add an answer only if',
+    ...rules.map((r) => `- ${r}`),
+    'Don\'t add capital-letter or punctuation variants, the same word without its accents, or misspellings (PinPlay already handles those), and don\'t repeat an answer that is already accepted.',
+    '',
+    '## Reply',
+    `Reply with ONE JSON object in a \`\`\`json code block and nothing else. One entry for every question below, by its number "n"; "add" is empty when nothing is missing. "why" says in a few words which student the answer is for.${has('context_gap') ? ' For context_gap, answers go under "gaps", by gap number (1 = the first ____).' : ''}`,
+    '```json',
+    `{"answers": [\n${sample.map((e) => `  ${JSON.stringify(e)}`).join(',\n')}\n]}`,
+    '```',
+    '',
+    '## Questions',
+    `Each one with what is already accepted${has('context_gap') ? ' ("gaps": the accepted answers of each ____, in order)' : ''}.`,
+    '```json',
+    `[\n${entries.map((e) => `  ${JSON.stringify(e)}`).join(',\n')}\n]`,
+    '```',
+    '',
+    // Said last as well: bots weigh the end of a prompt heavily.
+    'Before you reply: go through the students above for every question, keep only what a fair teacher would accept, and leave "add" empty where nothing is missing.',
+    '');
+  return { text: out.join('\n'), filename: `prompt-more-answers-${toSafeFilename(title || 'quiz')}.md` };
+}
+
+// The AI's reply: {"answers": [...]} or a bare list, with a code block or text
+// around it or not. Returns [{ key, add: [{ answer, why }], gaps: [{ gap, add }] }].
+function parseMoreAnswersReply(text) {
+  const raw = String(text || '');
+  const start = raw.search(/[[{]/);
+  const end = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
+  if (start < 0 || end <= start) throw new Error(t('No JSON found in the reply.'));
+  const parsed = JSON.parse(raw.slice(start, end + 1));
+  const list = Array.isArray(parsed) ? parsed : parsed?.answers;
+  if (!Array.isArray(list)) throw new Error(t('No JSON found in the reply.'));
+  const answers = (value) => (Array.isArray(value) ? value : [])
+    .map((a) => (a && typeof a === 'object' ? { answer: a.answer ?? a.text, why: a.why } : { answer: a }))
+    .map((a) => ({ answer: String(a.answer ?? '').trim(), why: String(a.why ?? '').trim() }))
+    .filter((a) => a.answer);
+  return list.filter((e) => e && typeof e === 'object').map((e) => ({
+    key: String(e.n ?? e.id ?? '').trim(),
+    add: answers(e.add),
+    gaps: (Array.isArray(e.gaps) ? e.gaps : []).map((g) => ({ gap: Math.round(Number(g?.gap)), add: answers(g?.add) })),
+  }));
+}
+
+// What a reply would add: one row per new answer, in quiz order. Answers the
+// grader already accepts are left out and counted in `known`; `unknown` lists
+// the entries that match no question it can add to. snapshot: question number
+// → id when the prompt was copied, so a reply still finds questions moved since.
+function planMoreAnswers(questions, snapshot, entries) {
+  const rows = [];
+  const unknown = [];
+  let known = 0;
+  const taken = new Map();
+  const find = (key) => {
+    const snapId = snapshot?.[key];
+    let idx = snapId ? questions.findIndex((q) => q.id === snapId) : -1;
+    if (idx < 0) idx = questions.findIndex((q) => q.id && q.id === key);
+    if (idx < 0 && !snapId && /^\d+$/.test(key)) idx = Number(key) - 1;
+    return idx;
+  };
+  entries.forEach((entry) => {
+    const idx = find(entry.key);
+    const q = questions[idx];
+    if (!q || !MORE_ANSWERS_TYPES.includes(q.type)) {
+      if (entry.add.length || entry.gaps.some((g) => g.add.length)) unknown.push(entry.key || '?');
+      return;
+    }
+    const current = moreAnswersCurrent(q);
+    let groups = [{ gap: null, add: entry.add, accepted: current }];
+    if (q.type === 'context_gap') {
+      // A one-gap question may come back without "gaps".
+      groups = entry.gaps.length || current.length !== 1
+        ? entry.gaps.map((g) => ({ gap: g.gap - 1, add: g.add }))
+        : [{ gap: 0, add: entry.add }];
+      groups = groups.filter((g) => g.gap >= 0 && g.gap < current.length).map((g) => ({ ...g, accepted: current[g.gap] }));
+    }
+    groups.forEach(({ gap, add, accepted }) => {
+      const slot = `${idx}:${gap}`;
+      if (!taken.has(slot)) taken.set(slot, new Set(accepted.map(normalizeTextAnswer)));
+      const seen = taken.get(slot);
+      // A gap's alternatives are comma-separated, so "a, b" is two answers.
+      const list = gap === null ? add : add.flatMap((a) => a.answer.split(',').map((s) => ({ answer: s.trim(), why: a.why })));
+      list.forEach(({ answer, why }) => {
+        const norm = normalizeTextAnswer(answer);
+        if (!norm) return;
+        if (seen.has(norm)) { known += 1; return; }
+        seen.add(norm);
+        rows.push({ q, n: idx + 1, gap, answer, why });
+      });
+    });
+  });
+  rows.sort((a, b) => a.n - b.n || (a.gap ?? 0) - (b.gap ?? 0));
+  return { rows, unknown, known };
+}
+
+// Adds the rows to their questions; nothing is removed. Rows too long to keep,
+// or for a question that is already full, come back in `full`.
+function applyMoreAnswers(rows) {
+  const L = MORE_ANSWERS_LIMITS;
+  const changed = new Set();
+  const full = [];
+  rows.forEach((row) => {
+    const { q, answer } = row;
+    if (q.type === 'context_gap') {
+      const gaps = contextGapList(q);
+      const next = gaps[row.gap] ? `${gaps[row.gap]}, ${answer}` : answer;
+      if (next.length > L.gapLength) { full.push(row); return; }
+      gaps[row.gap] = next;
+      q.gaps = gaps;
+    } else if (q.type === 'error_hunt') {
+      const variants = getCorrectedVariantsList(q.corrected, q.correctedVariants);
+      if (variants.length >= L.corrections || answer.length > L.correctionLength) { full.push(row); return; }
+      variants.push(answer);
+      q.correctedVariants = variants;
+      q.corrected = variants[0];
+      q.requiredErrors = countErrorHuntRequiredTokens(q.prompt, variants);
+    } else {
+      const accepted = moreAnswersCurrent(q);
+      if (accepted.length >= L.accepted || answer.length > L.acceptedLength) { full.push(row); return; }
+      q.accepted = [...accepted, answer];
+    }
+    changed.add(q);
+  });
+  return { added: rows.length - full.length, questions: changed.size, full };
+}
+
+// The dialog keeps its state while the page is open: closing it to go to the
+// AI and coming back loses nothing.
+const moreAnswersState = { picked: new Set(), note: '', reply: '', snapshot: null, plan: null, ticked: new Set(), notice: '' };
+
+function moreAnswersCandidates() {
+  return quiz.questions.map((q, idx) => ({ q, n: idx + 1 })).filter(({ q }) => MORE_ANSWERS_TYPES.includes(q.type));
+}
+
+function moreAnswersCurrentText(q) {
+  const current = moreAnswersCurrent(q);
+  return q.type === 'context_gap'
+    ? current.map((g, i) => `${i + 1}: ${g.join(', ')}`).join(' · ')
+    : current.join(' · ');
+}
+
+function openMoreAnswersDialog() {
+  syncQuizFromUI();
+  document.getElementById('moreAnswersOverlay')?.remove();
+  const state = moreAnswersState;
+  const overlay = document.createElement('div');
+  overlay.id = 'moreAnswersOverlay';
+  overlay.className = 'dialog-overlay';
+  overlay.innerHTML = '<div class="dialog-card more-answers" role="dialog" aria-modal="true" aria-labelledby="maTitle" tabindex="-1"></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('pointerdown', (e) => { overlay.dataset.pressedOnBackdrop = e.target === overlay ? '1' : ''; });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  overlay.addEventListener('input', (e) => {
+    if (e.target.matches('[data-ma-note]')) state.note = e.target.value;
+    if (e.target.matches('[data-ma-reply]')) state.reply = e.target.value;
+  });
+  overlay.addEventListener('change', (e) => {
+    const pick = e.target.closest('[data-ma-pick]');
+    if (pick) {
+      const q = quiz.questions[Number(pick.dataset.maPick)];
+      if (pick.checked) state.picked.add(q);
+      else state.picked.delete(q);
+      refreshMoreAnswersCounts();
+      return;
+    }
+    const row = e.target.closest('[data-ma-row]');
+    if (row) {
+      if (row.checked) state.ticked.add(Number(row.dataset.maRow));
+      else state.ticked.delete(Number(row.dataset.maRow));
+      refreshMoreAnswersCounts();
+    }
+  });
+  overlay.addEventListener('click', (e) => {
+    if ((e.target === overlay && overlay.dataset.pressedOnBackdrop === '1') || e.target.closest('[data-ma-close]')) { close(); return; }
+    if (e.target.closest('[data-ma-all]')) {
+      const items = moreAnswersCandidates();
+      const all = items.length && items.every(({ q }) => state.picked.has(q));
+      state.picked = all ? new Set() : new Set(items.map(({ q }) => q));
+      renderMoreAnswersDialog();
+      return;
+    }
+    if (e.target.closest('[data-ma-copy]')) { copyMoreAnswersPrompt(); return; }
+    if (e.target.closest('[data-ma-check]')) { checkMoreAnswersReply(); return; }
+    if (e.target.closest('[data-ma-apply]')) applyMoreAnswersReview();
+  });
+  renderMoreAnswersDialog();
+  overlay.querySelector('.more-answers')?.focus();
+}
+
+function renderMoreAnswersDialog() {
+  const card = document.querySelector('#moreAnswersOverlay .more-answers');
+  if (!card) return;
+  const state = moreAnswersState;
+  const items = moreAnswersCandidates();
+  state.picked = new Set([...state.picked].filter((q) => items.some((it) => it.q === q)));
+  const promptOf = (q) => String(q.prompt || '').replace(/\s+/g, ' ').trim();
+  const list = items.length
+    ? `<div class="ma-list">${items.map(({ q, n }) => `
+        <label class="ma-q">
+          <input type="checkbox" data-ma-pick="${n - 1}" ${state.picked.has(q) ? 'checked' : ''} />
+          <span class="ma-n">Q${n}</span>
+          <span class="ma-text">
+            <span>${iconForType(q.type)} ${escapeHtml(promptOf(q))}</span>
+            <span class="small muted">✓ ${escapeHtml(moreAnswersCurrentText(q) || t('nothing accepted yet'))}</span>
+          </span>
+        </label>`).join('')}</div>`
+    : `<p class="muted">${escapeHtml(t('This quiz has no automatically graded written answers (type answer, voice answer, context gap fill, error hunt).'))}</p>`;
+
+  let review = '';
+  const plan = state.plan;
+  if (plan) {
+    const summary = [
+      plan.rows.length
+        ? t('{n} new answer(s) for {m} question(s).', { n: plan.rows.length, m: new Set(plan.rows.map((r) => r.q)).size })
+        : t('Nothing new to add.'),
+      plan.known ? t('{n} already accepted, left out.', { n: plan.known }) : '',
+      plan.unknown.length ? t('Not found in this quiz: {list}.', { list: plan.unknown.join(', ') }) : '',
+    ].filter(Boolean).join(' ');
+    const groups = [];
+    plan.rows.forEach((r, i) => {
+      if (groups[groups.length - 1]?.q !== r.q) groups.push({ q: r.q, n: r.n, rows: [] });
+      groups[groups.length - 1].rows.push({ r, i });
+    });
+    review = `
+      <p class="small">${escapeHtml(summary)}</p>
+      ${groups.length ? `<div class="ma-review">${groups.map((g) => `
+        <div>
+          <div class="small"><strong>Q${g.n}</strong> ${escapeHtml(promptOf(g.q))}</div>
+          <div class="ma-chips">${g.rows.map(({ r, i }) => `
+            <label class="ma-chip">
+              <input type="checkbox" data-ma-row="${i}" ${state.ticked.has(i) ? 'checked' : ''} />
+              ${r.gap === null ? '' : `<span class="muted">${escapeHtml(t('Gap {n}:', { n: r.gap + 1 }))}</span>`}
+              <span>${escapeHtml(r.answer)}</span>
+              ${r.why ? `<span class="small muted">— ${escapeHtml(r.why)}</span>` : ''}
+            </label>`).join('')}</div>
+        </div>`).join('')}</div>
+      <div class="row gap"><button type="button" class="btn primary" data-ma-apply></button></div>` : ''}`;
+  }
+
+  card.innerHTML = `
+    <div class="row spread gap">
+      <h3 id="maTitle">${escapeHtml(t('✅ More answers'))}</h3>
+      <button type="button" class="btn" data-ma-close>${escapeHtml(t('Close'))}</button>
+    </div>
+    <p class="small muted">${escapeHtml(t('Students sometimes write a correct answer that is not on the list, and get marked wrong. Ask an AI to look for those on the questions you pick: you choose which answers to add, and nothing is removed.'))}</p>
+    <h4>${escapeHtml(t('1. Pick the questions'))}</h4>
+    ${list}
+    ${items.length ? `<div class="row gap">
+      <button type="button" class="btn btn-sm" data-ma-all></button>
+      <span class="small muted" data-ma-count></span>
+    </div>` : ''}
+    <label>${escapeHtml(t('Note for the AI (optional)'))}
+      <textarea data-ma-note rows="2" maxlength="600" placeholder="${escapeHtml(t('e.g. Accept British and American spellings. No full-sentence answers.'))}">${escapeHtml(state.note)}</textarea>
+    </label>
+    <h4>${escapeHtml(t('2. Copy the prompt'))}</h4>
+    <div class="row gap">
+      <button type="button" class="btn primary" data-ma-copy>${escapeHtml(t('📋 Copy prompt'))}</button>
+      <span class="small muted">${escapeHtml(t('Paste it into ChatGPT, Claude or Gemini.'))}</span>
+    </div>
+    <h4>${escapeHtml(t('3. Paste the reply'))}</h4>
+    <textarea data-ma-reply rows="4" placeholder="${escapeHtml(t('Paste the AI reply here'))}">${escapeHtml(state.reply)}</textarea>
+    <div class="row gap"><button type="button" class="btn" data-ma-check>${escapeHtml(t('Check the reply'))}</button></div>
+    ${review}
+    <div class="mm-notice small" data-ma-notice role="status" ${state.notice ? '' : 'hidden'}>${escapeHtml(state.notice)}</div>`;
+  refreshMoreAnswersCounts();
+}
+
+// The labels that follow the ticks, without redrawing (which would lose focus).
+function refreshMoreAnswersCounts() {
+  const card = document.querySelector('#moreAnswersOverlay .more-answers');
+  if (!card) return;
+  const state = moreAnswersState;
+  const items = moreAnswersCandidates();
+  const allBtn = card.querySelector('[data-ma-all]');
+  if (allBtn) allBtn.textContent = items.every(({ q }) => state.picked.has(q)) ? t('Untick all') : t('Tick all');
+  const countEl = card.querySelector('[data-ma-count]');
+  if (countEl) countEl.textContent = t('{n} of {total} picked', { n: state.picked.size, total: items.length });
+  const applyBtn = card.querySelector('[data-ma-apply]');
+  if (applyBtn) {
+    applyBtn.textContent = t('Add {n} answer(s)', { n: state.ticked.size });
+    applyBtn.disabled = !state.ticked.size;
+  }
+}
+
+function setMoreAnswersNotice(message) {
+  moreAnswersState.notice = message;
+  const el = document.querySelector('#moreAnswersOverlay [data-ma-notice]');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+async function copyMoreAnswersPrompt() {
+  const state = moreAnswersState;
+  const items = moreAnswersCandidates().filter(({ q }) => state.picked.has(q));
+  if (!items.length) {
+    setMoreAnswersNotice(t('Tick at least one question first.'));
+    return;
+  }
+  state.snapshot = Object.fromEntries(quiz.questions.map((q, idx) => [String(idx + 1), q.id]));
+  const { text, filename } = buildMoreAnswersPrompt({ items, note: state.note.trim(), title: quiz.title || '' });
+  try {
+    await navigator.clipboard.writeText(text);
+    setMoreAnswersNotice(t('Prompt for {n} question(s) copied 📋 Paste it into your AI, then paste the reply below.', { n: items.length }));
+  } catch {
+    downloadTextFile(text, filename);
+    setMoreAnswersNotice(t('Clipboard unavailable: the prompt was downloaded as a file instead.'));
+  }
+}
+
+function checkMoreAnswersReply() {
+  const state = moreAnswersState;
+  let entries;
+  try {
+    entries = parseMoreAnswersReply(state.reply);
+  } catch (err) {
+    state.plan = null;
+    renderMoreAnswersDialog();
+    setMoreAnswersNotice(t('Could not read the reply: {msg}', { msg: err.message }));
+    return;
+  }
+  state.plan = planMoreAnswers(quiz.questions, state.snapshot, entries);
+  state.ticked = new Set(state.plan.rows.map((_, i) => i));
+  state.notice = '';
+  renderMoreAnswersDialog();
+}
+
+function applyMoreAnswersReview() {
+  const state = moreAnswersState;
+  if (!state.plan) return;
+  const rows = state.plan.rows.filter((r, i) => state.ticked.has(i) && quiz.questions.includes(r.q));
+  if (!rows.length) return;
+  const { added, questions, full } = applyMoreAnswers(rows);
+  state.plan = null;
+  state.ticked = new Set();
+  state.reply = '';
+  renderBuilder();
+  try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  renderMoreAnswersDialog();
+  // An assignment or live game open in the builder only gets them on Apply.
+  const applyShown = ['applyAssignmentRow', 'applyLiveRow'].some((id) => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+  setMoreAnswersNotice([
+    t('Added {n} answer(s) to {m} question(s).', { n: added, m: questions }),
+    full.length ? t("{n} didn't fit: a question keeps up to 20 answers of 120 characters, a gap 120 characters, an error hunt 12 corrections.", { n: full.length }) : '',
+    applyShown ? t('Use Apply at the top of the builder to send them to the assignment or the live game.') : '',
+  ].filter(Boolean).join(' '));
 }
 
 // The file is short enough to paste as well: download it and copy the same text.
@@ -21681,25 +22127,6 @@ function tokenizeWords(text) {
   return String(text || '').trim().split(/\s+/).filter(Boolean);
 }
 
-function tokenEditDistance(aTokens, bTokens) {
-  const a = aTokens || [];
-  const b = bTokens || [];
-  const rows = a.length + 1;
-  const cols = b.length + 1;
-  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
-  for (let i = 0; i < rows; i++) dp[i][0] = i;
-  for (let j = 0; j < cols; j++) dp[0][j] = j;
-  for (let i = 1; i < rows; i++) {
-    for (let j = 1; j < cols; j++) {
-      const same = normalizeTextAnswer(a[i - 1]) === normalizeTextAnswer(b[j - 1]);
-      dp[i][j] = same
-        ? dp[i - 1][j - 1]
-        : Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + 1);
-    }
-  }
-  return dp[a.length][b.length];
-}
-
 // corrected and correctedVariants together are the accepted set. Returning only
 // the variants when present meant a quiz written as corrected + "the other fix"
 // in correctedVariants graded the main fix as wrong; play.js always unioned them.
@@ -21867,18 +22294,13 @@ function getErrorHuntRequired(q) {
   return Math.max(1, Number(q.requiredErrors || countErrorHuntRequiredTokens(q.prompt, getCorrectedVariantsList(q.corrected, q.correctedVariants))));
 }
 
+// Exactly one of the accepted corrections, as the server grades it (worker.js
+// evaluate). Allowing one word off here passed the unchanged sentence in
+// Preview ("He don't…" is one word from "He doesn't…").
 function isErrorHuntRewriteCorrect(rewrite, q) {
-  const variants = getCorrectedVariantsList(q?.corrected, q?.correctedVariants);
-  if (!variants.length) return false;
   const rewriteNorm = normalizeTextAnswer(rewrite);
-  const rewriteTokens = tokenizeWords(rewriteNorm);
-  for (const v of variants) {
-    const vNorm = normalizeTextAnswer(v);
-    if (rewriteNorm === vNorm) return true;
-    const dist = tokenEditDistance(rewriteTokens, tokenizeWords(vNorm));
-    if (dist <= 1) return true;
-  }
-  return false;
+  return !!rewriteNorm && getCorrectedVariantsList(q?.corrected, q?.correctedVariants)
+    .some((v) => normalizeTextAnswer(v) === rewriteNorm);
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {
