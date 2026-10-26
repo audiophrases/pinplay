@@ -7,12 +7,13 @@ const { extractDeclaration } = createRequire(import.meta.url)('./helpers/extract
 const { chromium } = await import('playwright').catch(() => ({}));
 const app = fs.readFileSync('app.js', 'utf8');
 const names = [
-  'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersPromptEntry',
+  'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersRecordingText',
+  'moreAnswersEdits', 'moreAnswersHeard', 'moreAnswersPromptEntry',
   'buildMoreAnswersPrompt', 'parseMoreAnswersReply', 'planMoreAnswers', 'applyMoreAnswers', 'moreAnswersState',
   'moreAnswersCandidates', 'moreAnswersCurrentText', 'openMoreAnswersDialog', 'renderMoreAnswersDialog',
   'refreshMoreAnswersCounts', 'setMoreAnswersNotice', 'copyMoreAnswersPrompt', 'checkMoreAnswersReply', 'applyMoreAnswersReview',
   'contextGapList', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'tokenizeWords', 'normalizeTextAnswer',
-  'toSafeFilename', 'iconForType', 'escapeHtml', 'downloadTextFile',
+  'toSafeFilename', 'iconForType', 'labelForType', 'escapeHtml', 'downloadTextFile',
 ];
 let browser;
 describe('More answers dialog', { skip: !chromium && 'Install playwright to run browser checks' }, () => {
@@ -33,7 +34,7 @@ describe('More answers dialog', { skip: !chromium && 'Install playwright to run 
       var quiz = { title: 'Habits', questions: [
         { id: 'q1', type: 'error_hunt', prompt: "He don't usually walk to school.", corrected: "He doesn't usually walk to school.", correctedVariants: ["He doesn't usually walk to school."] },
         { id: 'q2', type: 'mcq', prompt: 'Pick one', answers: [{ text: 'a', correct: true }] },
-        { id: 'q3', type: 'text', prompt: 'Another word for big?', accepted: ['large'] },
+        { id: 'q3', type: 'text', prompt: 'Another word for big?', accepted: ['large'], heard: { quote: 'Tom: The house was really big.' } },
         { id: 'q4', type: 'context_gap', prompt: 'I ____ (live) here since 2010.', gaps: ['have lived'] },
       ] };
       var calls = { sync: 0, render: 0, save: 0 };
@@ -74,6 +75,14 @@ describe('More answers dialog', { skip: !chromium && 'Install playwright to run 
     await dialog.getByRole('button', { name: 'Check the reply' }).click();
     assert.match(await dialog.innerText(), /3 new answer\(s\) for 2 question\(s\)\. 1 already accepted, left out\./);
     assert.match(await dialog.innerText(), /fixes the subject/);
+    // Each question as students see it, with what it accepts now.
+    const [huntBlock, typedBlock] = await dialog.locator('.ma-review-q').allInnerTexts();
+    assert.match(huntBlock, /Q1 · .*Error hunt · 1 edit/);
+    assert.match(huntBlock, /He don't usually walk to school\./);
+    assert.match(huntBlock, /Already accepted:\s*He doesn't usually walk to school\.\s*Suggested:/);
+    assert.match(typedBlock, /Q3 · .*Type answer/);
+    assert.match(typedBlock, /🎧 Tom: The house was really big\./);
+    assert.match(typedBlock, /Already accepted:\s*large\s*Suggested:\s*huge/);
     await dialog.locator('.ma-chip', { hasText: 'Him walks.' }).locator('input').uncheck();
     await dialog.getByRole('button', { name: 'Add 2 answer(s)' }).click();
 

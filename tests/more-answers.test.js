@@ -15,7 +15,7 @@ let A;
 let W;
 before(() => {
   A = loadDeclarations(read('app.js'), [
-    'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersRecordingText', 'moreAnswersPromptEntry',
+    'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'MORE_ANSWERS_ANGLES', 'moreAnswersCurrent', 'moreAnswersRecordingText', 'moreAnswersEdits', 'moreAnswersHeard', 'moreAnswersPromptEntry',
     'buildMoreAnswersPrompt', 'parseMoreAnswersReply', 'planMoreAnswers', 'applyMoreAnswers',
     'contextGapList', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'tokenizeWords', 'normalizeTextAnswer', 'toSafeFilename',
   ], { t: interpolate, ...(({ isListeningScript, cleanListeningTranscript }) => ({ isListeningScript, cleanListeningTranscript }))(require('../listening-script.js')) });
@@ -66,14 +66,36 @@ describe('the prompt', () => {
     assert.doesNotMatch(spoken, /fixes the other word/);
     assert.doesNotMatch(spoken, /"edits"/);
     assert.match(only(gaps()), /under "gaps", by gap number/);
-    assert.doesNotMatch(hunt, /- \(error_hunt\)/);
+    assert.match(only(gaps()), /fills the gaps in the other order/);
+    assert.match(only(gaps()), /gaps whose answers can swap places .* each take the other's answers/);
+    assert.doesNotMatch(hunt, /- \(error_hunt/);
     const both = A.buildMoreAnswersPrompt({ items: [{ q: errorHunt(), n: 1 }, { q: typed(), n: 2 }] }).text;
-    assert.match(both, /- \(error_hunt\) The one who fixes the other word/);
+    assert.match(both, /- \(error_hunt, language mistake\) The one who fixes the other word/);
+    assert.match(both, /- \(error_hunt, wrong fact\) The one who makes it true with "not"/);
     assert.match(both, /- \(text\) The one who writes the full form/);
   });
 
   it('has angles for every type it works on', () => {
     A.MORE_ANSWERS_TYPES.forEach((type) => assert.ok(A.MORE_ANSWERS_ANGLES.some((a) => a.types.includes(type)), type));
+  });
+
+  it('gives a listening error hunt the wrong-fact angles only', () => {
+    const sections = [{ id: 'ls1', transcript: 'Riyo: I was talking to my grandma.' }];
+    const q = { ...errorHunt(), prompt: 'Riyo was talking to her dad on the phone earlier.', corrected: 'Riyo was talking to her grandma on the phone earlier.', correctedVariants: [], listeningSection: 'ls1' };
+    const text = A.buildMoreAnswersPrompt({ items: [{ q, n: 6 }], sections }).text;
+    ['says the right fact in other words', 'makes it true with "not"', 'corrects another part'].forEach((angle) => assert.ok(text.includes(angle), angle));
+    ['fixes the other word', 'removes a word', 'picks another small word', 'language mistake', '(wrong fact)'].forEach((angle) => assert.ok(!text.includes(angle), angle));
+    assert.match(text, /- error_hunt: the result is true, by its recording/);
+    assert.match(text, /and so is an added "not"/);
+  });
+
+  it('lets the AI tell a language mistake from a wrong fact when there is no recording', () => {
+    const text = A.buildMoreAnswersPrompt({ items: [{ q: errorHunt(), n: 1 }] }).text;
+    assert.match(text, /An error_hunt sentence has a language mistake .* or a wrong fact/);
+    assert.match(text, /- \(language mistake\) The one who fixes the other word/);
+    assert.match(text, /- \(wrong fact\) The one who says the right fact in other words/);
+    assert.match(text, /- error_hunt with a language mistake: the result is a correct, natural sentence/);
+    assert.match(text, /- error_hunt with a wrong fact: the result is true/);
   });
 
   it('shows the reply on the real question numbers, with both shapes', () => {
@@ -251,5 +273,15 @@ describe('the added answers in a real game', () => {
     assert.equal(right(1, 'Huge'), true);
     assert.equal(right(2, ['have been living', 'since']), true);
     assert.equal(right(3, '7'), true);
+  });
+
+  it('accept gaps in either order when the AI swaps them', () => {
+    const q = { id: 'q11', type: 'context_gap', prompt: 'Saskia teaches the others that the Dutch word "leuk" translates to ____ or ____.', gaps: ['nice', 'fun'] };
+    const reply = { answers: [{ n: 1, gaps: [{ gap: 1, add: [{ answer: 'fun', why: 'either order' }] }, { gap: 2, add: [{ answer: 'nice', why: 'either order' }] }] }] };
+    A.applyMoreAnswers(A.planMoreAnswers([q], null, A.parseMoreAnswersReply(JSON.stringify(reply))).rows);
+    assert.deepEqual(plain(q.gaps), ['nice, fun', 'fun, nice']);
+    const [saved] = W.normalizeQuiz({ title: 'Q', questions: plain([q]) }).questions;
+    assert.equal(W.evaluate(saved, ['fun', 'nice']).correct, true);
+    assert.equal(W.evaluate(saved, ['nice', 'fun']).correct, true);
   });
 });

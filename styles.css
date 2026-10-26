@@ -806,8 +806,28 @@ textarea {
   flex-direction: column;
   gap: .55rem;
   flex-shrink: 0;
-  max-height: 40vh;
-  overflow: auto;
+}
+
+/* One question to judge: as students see it, what it accepts now, then the
+   suggestions. */
+.ma-review-q {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  padding: .5rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  overflow-wrap: anywhere;
+}
+
+.ma-review-prompt {
+  font-weight: 600;
+}
+
+.ma-accepted {
+  margin: 0 0 .25rem;
+  padding-left: 1.2rem;
+  list-style-type: "✓  ";
 }
 
 .ma-chips {

@@ -5932,11 +5932,16 @@ const MORE_ANSWERS_TYPES = ['text', 'voice_text', 'context_gap', 'error_hunt'];
 const MORE_ANSWERS_LIMITS = { accepted: 20, acceptedLength: 120, gapLength: 120, corrections: 12, correctionLength: 160 };
 
 // The students a first pass forgets: each one is right but not on the list.
-// Only the angles of the types asked about go in the prompt.
+// Only the angles of the types asked about go in the prompt. An error hunt
+// has a language mistake (kind 'grammar') or says something false ('fact'):
+// listening ones always the latter, where grammar angles only mislead.
 const MORE_ANSWERS_ANGLES = [
-  { types: ['error_hunt'], text: 'The one who fixes the other word. A mistake is often a clash between two words, and changing either one fixes it. "He don\'t usually walk to school." (1 edit): "He doesn\'t usually walk to school." is listed, and these are right too: "He does not usually walk to school.", "We don\'t usually walk to school.", "You don\'t usually walk to school.", "They don\'t usually walk to school.", "I don\'t usually walk to school." The same with a time word: "Yesterday I go to the park." → "Yesterday I went to the park." and also "Today I go to the park."' },
-  { types: ['error_hunt'], text: 'The one who removes a word instead of changing one: "Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho." and also "Habla mucho." (Spanish can leave out the subject).' },
-  { types: ['error_hunt'], text: 'The one who picks another small word: "She has a umbrella." → "She has an umbrella." and also "She has the umbrella.", "She has one umbrella."' },
+  { types: ['error_hunt'], kind: 'grammar', text: 'The one who fixes the other word. A mistake is often a clash between two words, and changing either one fixes it. "He don\'t usually walk to school." (1 edit): "He doesn\'t usually walk to school." is listed, and these are right too: "He does not usually walk to school.", "We don\'t usually walk to school.", "You don\'t usually walk to school.", "They don\'t usually walk to school.", "I don\'t usually walk to school." The same with a time word: "Yesterday I go to the park." → "Yesterday I went to the park." and also "Today I go to the park."' },
+  { types: ['error_hunt'], kind: 'grammar', text: 'The one who removes a word instead of changing one: "Ellos habla mucho." → "Ellos hablan mucho.", "Él habla mucho." and also "Habla mucho." (Spanish can leave out the subject).' },
+  { types: ['error_hunt'], kind: 'grammar', text: 'The one who picks another small word: "She has a umbrella." → "She has an umbrella." and also "She has the umbrella.", "She has one umbrella."' },
+  { types: ['error_hunt'], kind: 'fact', text: 'The one who says the right fact in other words, or spells it another way: "Anna\'s brother phoned her this morning." (1 edit; her mum phoned) → "Anna\'s mum phoned her this morning." is listed, and also "Anna\'s mom phoned her this morning.", "Anna\'s mother phoned her this morning."' },
+  { types: ['error_hunt'], kind: 'fact', text: 'The one who makes it true with "not": "The café was open on Sunday." (1 edit; it was closed) → "The café was closed on Sunday." is listed, and also "The café wasn\'t open on Sunday.", "The café was not open on Sunday."' },
+  { types: ['error_hunt'], kind: 'fact', text: 'The one who corrects another part, so the sentence becomes true: "Tom came by train." (1 edit; Tom came by bus, Sara by train) → "Tom came by bus." is listed, and also "Sara came by train." It must be true: someone or something that is only mentioned is not enough.' },
   { types: ['text', 'voice_text', 'context_gap'], text: 'The one who writes the full form or the short form: it\'s / it is, I\'m / I am, won\'t / will not. PinPlay grades them as different answers, so list both.' },
   { types: ['text', 'voice_text'], text: 'The one who uses another word that fits this exact question: big → large, huge.' },
   { types: ['text', 'voice_text', 'context_gap'], text: 'The one with another spelling or form: colour / color, travelled / traveled, dreamed / dreamt, learned / learnt.' },
@@ -5947,6 +5952,7 @@ const MORE_ANSWERS_ANGLES = [
   { types: ['voice_text'], text: 'The one who said it right, but speech recognition wrote it its own way (a voice_text student speaks the answer): digits (21 for twenty-one), words that sound the same (there / their / they\'re, to / two / too, four / for), OK / okay.' },
   { types: ['context_gap'], text: 'The one who uses another tense or form that fits the whole sentence: "I ____ (live) here since 2010." → have lived, and also have been living.' },
   { types: ['context_gap'], text: 'The one who finds another word that fits the gap just as well, when the brackets don\'t name the word: "It\'s very ____ today: take a coat." → cold, and also chilly.' },
+  { types: ['context_gap'], text: 'The one who fills the gaps in the other order, where the order doesn\'t matter: "My favourite colours are ____ and ____." (red, then blue) → gap 1 also takes blue, and gap 2 also takes red.' },
 ];
 
 // The accepted answers as the grader reads them: a list, or one list per gap.
@@ -5969,6 +5975,22 @@ function moreAnswersRecordingText(sec) {
   return (Array.isArray(sec?.cues) ? sec.cues : []).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join('\n');
 }
 
+// The edits an error hunt asks for, as students are told: from the main fix,
+// the way the server works it out.
+function moreAnswersEdits(q) {
+  return countErrorHuntRequiredTokens(q.prompt, moreAnswersCurrent(q)[0] || '');
+}
+
+// Where a listening question's answer is said: the lines the teacher linked,
+// word for word, else the first AI's quote. sec: its listening section.
+function moreAnswersHeard(q, sec) {
+  const cues = Array.isArray(sec?.cues) ? sec.cues : [];
+  const linked = Number.isInteger(q.heard?.from)
+    ? cues.slice(q.heard.from, q.heard.to + 1).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join(' / ')
+    : '';
+  return String(linked || (typeof q.heard === 'string' ? q.heard : q.heard?.quote) || '').trim();
+}
+
 // One question as the AI sees it: its number, what is already accepted and
 // what the answer has to agree with. sec: its listening section; recording:
 // how the prompt names that section's recording.
@@ -5977,18 +5999,12 @@ function moreAnswersPromptEntry(q, n, { sec = null, recording = '' } = {}) {
   const entry = { n, type: q.type, prompt: String(q.prompt || '').trim() };
   if (q.type === 'context_gap') entry.gaps = current;
   else entry.accepted = current;
-  // The count students are told, from the main fix as the server works it out.
-  if (q.type === 'error_hunt') entry.edits = countErrorHuntRequiredTokens(q.prompt, current[0] || '');
+  if (q.type === 'error_hunt') entry.edits = moreAnswersEdits(q);
   if (q.type === 'voice_text' && q.answerLanguage) entry.answerLanguage = q.answerLanguage;
   const reading = String(q.readingText || '').trim();
   if (reading) entry.readingText = reading;
   if (recording) entry.recording = recording;
-  // The lines the teacher linked, word for word; else the first AI's quote.
-  const cues = Array.isArray(sec?.cues) ? sec.cues : [];
-  const linked = Number.isInteger(q.heard?.from)
-    ? cues.slice(q.heard.from, q.heard.to + 1).map((c) => `${c.who ? `${c.who}: ` : ''}${c.text}`).join(' / ')
-    : '';
-  const heard = String(linked || (typeof q.heard === 'string' ? q.heard : q.heard?.quote) || '').trim();
+  const heard = moreAnswersHeard(q, sec);
   if (heard) entry.heard = heard;
   return entry;
 }
@@ -5998,9 +6014,6 @@ function moreAnswersPromptEntry(q, n, { sec = null, recording = '' } = {}) {
 function buildMoreAnswersPrompt({ items, note = '', title = '', sections = [] }) {
   const has = (type) => items.some(({ q }) => q.type === type);
   const mixed = MORE_ANSWERS_TYPES.filter(has).length > 1;
-  // With several types, each angle says which of them it is for.
-  const angles = MORE_ANSWERS_ANGLES.filter((a) => a.types.some(has))
-    .map((a) => `${mixed ? `(${a.types.filter(has).join(', ')}) ` : ''}${a.text}`);
   // A listening question is answered from its section's recording: each
   // recording goes in once (R1, R2…) and its questions name it.
   const recordings = [];
@@ -6016,9 +6029,22 @@ function buildMoreAnswersPrompt({ items, note = '', title = '', sections = [] })
     }
     return moreAnswersPromptEntry(q, n, { sec, recording: rec?.id || '' });
   });
+  // Error hunts with a recording are wrong facts; any other one may be either.
+  const hunts = entries.filter((e) => e.type === 'error_hunt');
+  const kinds = new Set(hunts.length ? ['fact'] : []);
+  if (hunts.some((e) => !e.recording)) kinds.add('grammar');
+  const bothKinds = kinds.size > 1;
+  const kindName = { grammar: 'language mistake', fact: 'wrong fact' };
+  // With several types (or both kinds of error hunt), each angle says which it is for.
+  const angles = MORE_ANSWERS_ANGLES.filter((a) => a.types.some(has) && (!a.kind || kinds.has(a.kind))).map((a) => {
+    const tags = [...(mixed ? a.types.filter(has) : []), ...(a.kind && bothKinds ? [kindName[a.kind]] : [])];
+    return `${tags.length ? `(${tags.join(', ')}) ` : ''}${a.text}`;
+  });
   const rules = ['a fair teacher would mark it fully right for this question as it is written: it follows the instructions and the word in brackets, and fits the rest of the sentence;'];
-  if (has('error_hunt')) rules.push('error_hunt: it makes exactly the number of edits given ("edits") and gives a correct, natural sentence, even if its meaning changes. An edit changes, adds or removes one word; a word replaced by its full form (doesn\'t → does not) is one edit;');
-  if (has('context_gap')) rules.push('context_gap: it fits its gap with every accepted answer of the other gaps, and has no comma in it;');
+  if (hunts.length) rules.push('error_hunt: it makes exactly the number of edits given ("edits"). An edit changes, adds or removes one word: a word replaced by its full form (doesn\'t → does not) is one edit, and so is an added "not";');
+  if (kinds.has('grammar')) rules.push('error_hunt with a language mistake: the result is a correct, natural sentence, even if its meaning changes;');
+  if (hunts.length) rules.push(`${bothKinds ? 'error_hunt with a wrong fact' : 'error_hunt'}: the result is true, by its recording, its reading text or the facts. A sentence that is still false, or false in another way, is not a fix;`);
+  if (has('context_gap')) rules.push('context_gap: it fits its gap with every accepted answer of the other gaps, and has no comma in it. The exception: gaps whose answers can swap places ("____ and ____", "____ or ____") each take the other\'s answers;');
   if (entries.some((e) => e.readingText)) rules.push('it agrees with the question\'s "readingText";');
   if (entries.some((e) => e.recording || e.heard)) rules.push('it agrees with what is said in the recording (its "recording", and "heard": the line where the answer is said). The words said and the same thing in other words both count ("half past ten" said → 10:30, ten thirty), as long as a student who heard the recording could fairly write it;');
 
@@ -6046,6 +6072,7 @@ function buildMoreAnswersPrompt({ items, note = '', title = '', sections = [] })
   out.push('',
     '## Think like the students who get marked wrong unfairly',
     `Go through each question from every angle that fits ${mixed ? 'its type' : 'it'}:`,
+    ...(bothKinds ? ['An error_hunt sentence has a language mistake ("He don\'t…") or a wrong fact: good English that says something false. With a "recording", it is always a wrong fact.'] : []),
     ...angles.map((a) => `- ${a}`),
     '',
     '## Add an answer only if',
@@ -6278,11 +6305,31 @@ function renderMoreAnswersDialog() {
       if (groups[groups.length - 1]?.q !== r.q) groups.push({ q: r.q, n: r.n, rows: [] });
       groups[groups.length - 1].rows.push({ r, i });
     });
+    // Each question as students see it, with what it accepts now, so each
+    // suggestion can be judged against them.
+    const about = (q) => {
+      const edits = q.type === 'error_hunt' ? moreAnswersEdits(q) : 0;
+      return [`${iconForType(q.type)} ${labelForType(q.type)}`, edits ? `${edits} ${edits === 1 ? t('edit') : t('edits')}` : '']
+        .filter(Boolean).join(' · ');
+    };
+    const acceptedLines = (q) => {
+      const current = moreAnswersCurrent(q);
+      if (q.type === 'context_gap') return current.map((g, k) => `${t('Gap {n}:', { n: k + 1 })} ${g.join(', ')}`);
+      if (q.type === 'error_hunt') return current;
+      return current.length ? [current.join(' · ')] : [];
+    };
+    const sections = quiz.listeningSections || [];
+    const heardOf = (q) => moreAnswersHeard(q, sections.find((sec) => sec?.id === q.listeningSection));
     review = `
       <p class="small">${escapeHtml(summary)}</p>
       ${groups.length ? `<div class="ma-review">${groups.map((g) => `
-        <div>
-          <div class="small"><strong>Q${g.n}</strong> ${escapeHtml(promptOf(g.q))}</div>
+        <div class="ma-review-q">
+          <div class="small"><strong>Q${g.n}</strong> · ${escapeHtml(about(g.q))}</div>
+          <div class="ma-review-prompt">${escapeHtml(promptOf(g.q))}</div>
+          ${heardOf(g.q) ? `<div class="small muted">🎧 ${escapeHtml(heardOf(g.q))}</div>` : ''}
+          <div class="small muted">${escapeHtml(t('Already accepted:'))}</div>
+          <ul class="ma-accepted small">${acceptedLines(g.q).map((line) => `<li>${escapeHtml(line)}</li>`).join('') || `<li>${escapeHtml(t('nothing accepted yet'))}</li>`}</ul>
+          <div class="small muted">${escapeHtml(t('Suggested:'))}</div>
           <div class="ma-chips">${g.rows.map(({ r, i }) => `
             <label class="ma-chip">
               <input type="checkbox" data-ma-row="${i}" ${state.ticked.has(i) ? 'checked' : ''} />

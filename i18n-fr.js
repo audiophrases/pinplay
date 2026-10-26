@@ -2007,6 +2007,8 @@ window.PINPLAY_FR_DICT = {
   "{n} already accepted, left out.": "{n} déjà acceptée(s), laissée(s) de côté.",
   "Not found in this quiz: {list}.": "Introuvable dans ce quiz : {list}.",
   "Gap {n}:": "Trou {n} :",
+  "Already accepted:": "Déjà acceptées :",
+  "Suggested:": "Suggestions :",
   "Add {n} answer(s)": "Ajouter {n} réponse(s)",
   "Added {n} answer(s) to {m} question(s).": "{n} réponse(s) ajoutée(s) à {m} question(s).",
   "Use Apply at the top of the builder to send them to the assignment or the live game.": "Utilisez Appliquer en haut de l’éditeur pour les envoyer au devoir ou à la partie en direct.",
