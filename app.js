@@ -4860,7 +4860,7 @@ async function openGifSearchDialog(questionIdx) {
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = t('Search GIFs');
-  input.value = String(q.gifKeyword || q.prompt || '').slice(0, 140);
+  input.value = String(q.gifKeyword || answerMediaKeyword(q) || q.prompt || '').slice(0, 140);
   const searchBtn = document.createElement('button');
   searchBtn.className = 'btn primary';
   searchBtn.textContent = t('Search');
@@ -21261,7 +21261,7 @@ function refreshMediaSelection() {
     const firstKind = questionMediaStatus(first, quiz).visual.kind;
     kindEl.value = ['gif', 'image', 'video'].includes(firstKind) ? firstKind : 'gif';
     const keyOf = { gif: 'gifKeyword', image: 'imageKeyword', video: 'videoKeyword' };
-    bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || '');
+    bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || answerMediaKeyword(first) || '');
     setTimeout(() => bar.querySelector('[data-mm-replace-keyword]')?.focus(), 0);
   } else if (n && state.form === 'move') {
     const questions = quiz.questions;
