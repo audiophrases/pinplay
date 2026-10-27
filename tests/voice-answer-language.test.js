@@ -21,6 +21,7 @@ function load() {
     normalizeListeningHeard: () => null,
     sanitizeListeningSectionId: () => '',
     normalizeStepsPlan: () => [],
+    normalizeClimbStep: () => 0,
     normalizePinZones: () => [],
     contextGapList: () => [],
     getCorrectedVariantsList: () => [],

@@ -27,7 +27,7 @@ describe('the build up engine (pure functions)', () => {
   before(() => {
     E = loadDeclarations(read('cloudflare/worker.js'), [
       'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
-      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'BUILDUP_MAX_COUNT',
+      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'BUILDUP_MAX_COUNT', 'climbPlanEntry',
       'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupNext', 'buildupRebase', 'buildupView', 'buildupSummary',
     ]);
   });
@@ -339,6 +339,76 @@ describe('build up assignments (real worker, in-memory storage)', () => {
     const s = await start(created.body.assignment.code, 'anon-plain');
     assert.equal(s.attempt.climb, undefined);
   });
+
+  // Climb steps (BUILDUP_MODE_PLAN.md section 10): 2 questions on each of `n` steps, no levels.
+  const stepped = (n = 12, per = 2, extra = []) => ({
+    title: 'Steps',
+    questions: [...Array.from({ length: n }, (_, s) => Array.from({ length: per }, (__, i) => mcq(`S${s + 1}-${i + 1}`, { step: s + 1 }))).flat(), ...extra],
+  });
+
+  it('a quiz with 12 steps and no levels climbs by its steps, 13 camps', async () => {
+    const a = await create(stepped(), { adaptiveCount: 48 });
+    let s = await start(a.code, 'anon-steps');
+    assert.equal(s.attempt.climb.n, 13);
+    assert.match(servedId(s), /^S1-/);
+    s = await send(a.code, s.attempt.id, s, true);
+    assert.match(servedId(s), /^S2-/);
+    assert.ok(s.attempt.assignment.quiz.questions.every((x) => x.step === undefined), 'students never see step numbers');
+    let n = 1;
+    while (!s.attempt.climb.done && n < 40) { s = await send(a.code, s.attempt.id, s, true); n += 1; }
+    assert.equal(n, 23, '1 + 2 × 11 answers to the Summit');
+    assert.equal(s.attempt.climb.summit, true);
+  });
+
+  it('in a quiz with steps, questions without one stay out, levels or not', async () => {
+    const extra = ['A1', 'C2'].map((l) => mcq(`L${l}`, { cefr: l }));
+    const a = await create(stepped(2, 2, extra), { adaptiveCount: 10 });
+    let s = await start(a.code, 'anon-mixed');
+    const seen = [servedId(s)];
+    for (let i = 0; i < 6 && !s.attempt.climb.done; i += 1) {
+      s = await send(a.code, s.attempt.id, s, i % 2 === 0);
+      if (!s.attempt.climb.done) seen.push(servedId(s));
+    }
+    assert.ok(seen.every((id) => /^S\d-/.test(id)), seen.join(' '));
+    assert.equal(s.attempt.climb.n, 3);
+  });
+
+  it('refuses a quiz with one step, even one with levels besides', async () => {
+    const r = await post('/api/assignments/create', { password: PW, quiz: stepped(1, 3, LEVELS.map((l) => mcq(`L${l}`, { cefr: l }))), buildup: true, adaptive: true, adaptiveCount: 10, randomNames: true });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /two steps/);
+  });
+
+  it('shows the teacher step numbers with the plan\'s titles', async () => {
+    const q = { ...stepped(3), stepsPlan: [{ step: 1, title: 'First' }, { step: 2, title: 'Second' }, { step: 3, title: 'Third' }] };
+    const a = await create(q);
+    let s = await start(a.code, 'anon-steps-report');
+    s = await send(a.code, s.attempt.id, s, true);
+    const res = await post('/api/assignments/results', { password: PW, code: a.code });
+    const row = res.body.attempts.find((x) => x.adaptive?.buildup && x.studentName === 'Kid' && x.adaptive.buildup.n === 4);
+    assert.ok(row, JSON.stringify(res.body).slice(0, 400));
+    assert.deepEqual(plain(row.adaptive.buildup.bands), [1, 2, 3]);
+    assert.deepEqual(plain(row.adaptive.buildup.titles), ['First', 'Second', 'Third']);
+    assert.equal(row.adaptive.buildup.rung, 1);
+  });
+
+  it('a new step 1 added later (the others renumbered) keeps each climber on their own questions', async () => {
+    const a = await create(stepped(3));
+    let s = await start(a.code, 'anon-renumber');
+    const id = s.attempt.id;
+    s = await send(a.code, id, s, true); // up to step 2
+    assert.equal(s.attempt.climb.rung, 1);
+    const renumbered = stepped(3);
+    renumbered.questions.forEach((x) => { x.step += 1; });
+    renumbered.questions.unshift(mcq('S0-1', { step: 1 }), mcq('S0-2', { step: 1 }));
+    const upd = await post('/api/assignments/update-quiz', { password: PW, code: a.code, quiz: renumbered });
+    assert.equal(upd.status, 200, JSON.stringify(upd.body));
+    const again = await post('/api/assignment/start', { code: a.code, studentKey: 'anon-renumber', studentName: 'Kid' });
+    assert.equal(again.body.attempt.climb.n, 5);
+    assert.equal(again.body.attempt.climb.rung, 2, 'still on the questions of old step 2, now step 3');
+    assert.equal(again.body.attempt.climb.best, 2);
+    assert.match(servedId(again.body), /^S2-/);
+  });
 });
 
 describe('Climb never touches the saved level', () => {
@@ -399,8 +469,8 @@ describe('the Climb AI prompt and the steps plan', () => {
   let A;
   before(() => {
     A = loadDeclarations(read('app.js'), [
-      'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename',
-      'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS',
+      'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
+      'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'buildupPromptBatches', 'buildupPromptSize',
       'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     ]);
   });
@@ -416,8 +486,10 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.match(words, /first language: "Catalan"/);
     assert.match(words, /Mistakes I see in my class: "they forget the -s"/);
     const task = section(text, 'Task');
-    assert.match(task, /Steps: 5, tagged "A1", "A2", "B1", "B2", "C1" in this order/);
-    assert.match(task, /5 per step, 25 in all/);
+    assert.match(task, /Steps: 5, numbered 1 to 5 \(step 1 is the easiest\)/);
+    assert.match(task, /5 per step, 25 in all, in one JSON object/);
+    assert.doesNotMatch(text, /tagged "A1"/);
+    assert.match(section(text, 'Rules'), /Every question has "step": its step's number, and no "cefr"/);
   });
 
   it('asks for the plan first, one new thing per step, equivalent questions and one defensible answer', () => {
@@ -432,9 +504,10 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.match(rules, /Step 1 is so easy/);
   });
 
-  it('keeps the steps between 2 and 6 and the questions per step between 3 and 10', () => {
+  it('keeps the steps between 2 and 12 and the questions per step between 3 and 10', () => {
     assert.match(section(build({ steps: 1 }), 'Task'), /Steps: 2,/);
-    assert.match(section(build({ steps: 9 }), 'Task'), /Steps: 6, tagged "A1", "A2", "B1", "B2", "C1", "C2"/);
+    assert.match(section(build({ steps: 9 }), 'Task'), /Steps: 9, numbered 1 to 9/);
+    assert.match(section(build({ steps: 20 }), 'Task'), /Steps: 12, numbered 1 to 12/);
     assert.match(section(build({ itemsPerStep: 1 }), 'Task'), /3 per step, 15 in all/);
     assert.match(section(build({ itemsPerStep: 50 }), 'Task'), /10 per step, 50 in all/);
     assert.match(section(build({ steps: undefined, itemsPerStep: undefined }), 'Task'), /5 per step, 25 in all/);
@@ -465,14 +538,14 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.equal(ex.version, 3);
     const plan = A.normalizeStepsPlan(ex.stepsPlan);
     assert.equal(plan.length, ex.stepsPlan.length, 'nothing dropped');
-    assert.deepEqual(plain(plan.map((p) => p.cefr)), ['A1', 'A2', 'B1']);
+    assert.deepEqual(plain(plan.map((p) => p.step)), [1, 2, 3]);
     assert.ok(plan.every((p) => p.title && p.change && p.rule));
-    assert.ok(ex.questions.every((q) => plan.some((p) => p.cefr === q.cefr)));
+    assert.ok(ex.questions.every((q) => plan.some((p) => p.step === q.step) && q.cefr === undefined));
     assert.ok(ex.questions.filter((q) => q.type === 'text').every((q) => q.accepted.length));
   });
 
   it('uses one identical copy of the plan cleaner in app.js and worker.js', () => {
-    ['STEPS_PLAN_LEVELS', 'normalizeStepsPlan'].forEach((name) => assert.equal(extractDeclaration(read('app.js'), name), extractDeclaration(read('cloudflare/worker.js'), name), name));
+    ['BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan'].forEach((name) => assert.equal(extractDeclaration(read('app.js'), name), extractDeclaration(read('cloudflare/worker.js'), name), name));
   });
 
   it('cleans a plan: known tags only, no repeats, in order, texts trimmed and capped', () => {
@@ -488,6 +561,182 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.equal(plan[1].rule.length, 240);
     assert.deepEqual(plain(A.normalizeStepsPlan('nope')), []);
   });
+
+  it('cleans a plan by step numbers: 1 to 12, no repeats, in order, step entries before level ones', () => {
+    const plan = A.normalizeStepsPlan([
+      { step: '3', title: 'Three' },
+      { step: 1, cefr: 'B2', title: 'One' },
+      { step: 1, title: 'Again' },
+      { step: 13, title: 'Too high' },
+      { step: 2.5, title: 'Not whole' },
+      { cefr: 'A1', title: 'Old' },
+    ]);
+    assert.deepEqual(plain(plan.map((p) => [p.step || p.cefr, p.title])), [[1, 'One'], [3, 'Three'], ['A1', 'Old']]);
+    assert.equal(plan[0].cefr, undefined, 'a step entry keeps only its step');
+  });
+
+  it('a step is a whole number from 1 to 12, or none', () => {
+    [[1, 1], ['12', 12], [' 4 ', 4], [3.0, 3]].forEach(([v, n]) => assert.equal(A.normalizeClimbStep(v), n, String(v)));
+    [0, 13, 2.5, -1, '', null, undefined, true, 'two', {}].forEach((v) => assert.equal(A.normalizeClimbStep(v), 0, String(v)));
+  });
+
+  it('takes up to 12 steps', () => {
+    assert.match(section(build({ steps: 12 }), 'Task'), /Steps: 12, numbered 1 to 12/);
+    assert.match(section(build({ steps: 40 }), 'Task'), /Steps: 12, numbered 1 to 12/);
+    assert.match(section(build({ steps: 1 }), 'Task'), /Steps: 2, numbered 1 to 2/);
+  });
+
+  it('up to 60 questions come in one JSON object, more in batches of whole steps', () => {
+    const one = build({ steps: 12, itemsPerStep: 5 });
+    assert.match(section(one, 'Task'), /60 in all, in one JSON object/);
+    assert.doesNotMatch(one, /batch/);
+    const two = build({ steps: 12, itemsPerStep: 10 });
+    assert.match(section(two, 'Task'), /120 in all, in 2 batches of whole steps \(steps 1–6, then steps 7–12\), one JSON object per batch/);
+    assert.match(section(two, 'Rules'), /batch 1 = steps 1–6; batch 2 = steps 7–12\. Batch 1 starts with the whole "stepsPlan" \(all 12 steps\)/);
+    assert.match(section(two, 'Rules'), /Send batch 1 now and stop/);
+    assert.match(two, /-part1\.json" \(part2, part3/);
+    assert.match(section(build({ steps: 7, itemsPerStep: 9 }), 'Task'), /in 2 batches of whole steps \(steps 1–4, then steps 5–7\)/);
+  });
+
+  it('every batch holds whole steps, at most 60 questions, from step 1 to the last with no gap', () => {
+    for (let steps = 2; steps <= 12; steps += 1) {
+      for (let items = 3; items <= 10; items += 1) {
+        const batches = A.buildupPromptBatches(steps, items);
+        assert.equal(batches[0][0], 1);
+        assert.equal(batches.at(-1)[1], steps);
+        batches.forEach(([from, to], i) => {
+          assert.ok((to - from + 1) * items <= 60, `${steps}×${items}: batch ${i + 1} too big`);
+          if (i) assert.equal(from, batches[i - 1][1] + 1);
+        });
+        if (steps * items <= 60) assert.equal(batches.length, 1);
+      }
+    }
+  });
+});
+
+describe('Climb steps: the pure rules (BUILDUP_MODE_PLAN.md section 10)', () => {
+  let E;
+  before(() => {
+    E = loadDeclarations(read('cloudflare/worker.js'), [
+      'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
+      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'climbPlanEntry', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
+      'normalizeCefrLevel', 'quizUsesClimbSteps', 'buildupKeyMap',
+      'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupRebase', 'buildupView', 'buildupSummary',
+    ]);
+  });
+  // A student on step `rung` (an index), having reached `best` and cleared the steps below.
+  const on = (bands, rung, best = rung) => {
+    const st = E.buildupInit(bands);
+    st.items = [];
+    Object.assign(st.bu, { rung, best, cleared: Array.from({ length: rung }, (_, i) => i), pips: 1 });
+    st.score = rung;
+    return st;
+  };
+
+  it('a new step under the others moves the student, the highest camp and the cleared steps up one', () => {
+    const st = on([2, 3, 4, 5], 1, 2);
+    E.buildupRebase(st, [1, 2, 3, 4, 5]);
+    assert.equal(st.bu.rung, 2, 'still on step 3');
+    assert.equal(st.bu.best, 3, 'still step 4');
+    assert.deepEqual(plain(st.bu.cleared), [1]);
+    assert.equal(st.bu.pips, 0);
+  });
+
+  it('steps renumbered by the edit (a new step 1, the rest one up) are followed by their questions', () => {
+    const q = (id, step) => ({ id, type: 'mcq', step });
+    const before = [q('a', 1), q('b', 2), q('c', 3), q('d', 4)];
+    const after = [q('new', 1), q('a', 2), q('b', 3), q('c', 4), q('d', 5)];
+    const map = E.buildupKeyMap(before, after);
+    assert.deepEqual(plain([...map]), [[1, 2], [2, 3], [3, 4], [4, 5]]);
+    const st = on([1, 2, 3, 4], 2, 3);
+    E.buildupRebase(st, [1, 2, 3, 4, 5], map);
+    assert.deepEqual(plain(st.bands), [1, 2, 3, 4, 5]);
+    assert.equal(st.bu.rung, 3, 'on the questions of old step 3, now step 4');
+    assert.equal(st.bu.best, 4);
+    assert.deepEqual(plain(st.bu.cleared), [1, 2]);
+    // Two steps swapped: the band list is the same, the students still follow.
+    const swapped = on([1, 2, 3], 1);
+    E.buildupRebase(swapped, [1, 2, 3], E.buildupKeyMap([q('a', 1), q('b', 2), q('c', 3)], [q('a', 1), q('b', 3), q('c', 2)]));
+    assert.equal(swapped.bu.rung, 2);
+  });
+
+  it('levels turned into steps: the map follows each level to its step', () => {
+    const map = E.buildupKeyMap([{ id: 'a', cefr: 'A1' }, { id: 'b', cefr: 'B1' }], [{ id: 'a', step: 1 }, { id: 'b', step: 2 }]);
+    assert.deepEqual(plain([...map]), [['A1', 1], ['B1', 2]]);
+    const st = on(['A1', 'B1'], 1);
+    E.buildupRebase(st, [1, 2], map);
+    assert.equal(st.bu.rung, 1);
+  });
+
+  it('a deleted step: the student goes to the next one up, the highest camp to the one below', () => {
+    const st = on([1, 2, 3, 4], 1, 2);
+    E.buildupRebase(st, [1, 4]);
+    assert.equal(st.bu.rung, 1, 'step 2 is gone: on to step 4');
+    assert.equal(st.bu.best, 1, 'never above where the student stands, never raised by a gap');
+    const top = on([1, 2, 3], 2);
+    E.buildupRebase(top, [1, 2]);
+    assert.equal(top.bu.rung, 1, 'past the top: the top step');
+  });
+
+  it('switching from levels to step numbers keeps the position', () => {
+    const st = on(['A1', 'A2', 'B1'], 1, 2);
+    E.buildupRebase(st, [1, 2, 3, 4]);
+    assert.equal(st.bu.rung, 1);
+    assert.equal(st.bu.best, 2);
+  });
+
+  it('the guide\'s tip and the teacher\'s camp titles come from the plan, by step number', () => {
+    const plan = [{ step: 1, title: 'First', rule: 'Rule one.' }, { step: 3, title: 'Third', rule: 'Rule three.' }];
+    const st = on([1, 3], 0);
+    assert.equal(E.buildupView(st, plan).rule, 'Rule one.');
+    st.bu.rung = 1;
+    st.bu.flag = 1;
+    assert.equal(E.buildupView(st, plan).rule, 'Rule three.');
+    assert.equal(E.buildupView(st, [{ cefr: 'A1', rule: 'Level rule.' }]).rule, undefined, 'a level entry is not a step');
+    assert.deepEqual(plain(E.buildupSummary(st, plan).titles), ['First', 'Third']);
+    assert.equal(E.buildupSummary(st, []).titles, undefined);
+  });
+});
+
+describe('Climb steps: appending a file to a quiz with steps (app.js)', () => {
+  let A;
+  before(() => {
+    A = loadDeclarations(read('app.js'), ['BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan', 'climbStepsOf', 'placeAppendedClimbSteps'], {
+      t: (s, vars) => String(s).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m)),
+    });
+  });
+  const q = (id, step) => ({ id, type: 'mcq', prompt: id, ...(step ? { step } : {}) });
+  const own = () => ({
+    questions: [q('a', 1), q('b', 2), q('c', 3), q('poll')],
+    stepsPlan: [{ step: 1, title: 'Own 1' }, { step: 2, title: 'Own 2' }, { step: 3, title: 'Own 3' }],
+  });
+  const steps = (qs) => plain(qs.map((x) => x.step ?? null));
+
+  it('the next batch keeps its numbers and adds its plan entries', () => {
+    const r = A.placeAppendedClimbSteps(own(), { questions: [q('d', 4), q('e', 5)], stepsPlan: [{ step: 3, title: 'Theirs' }, { step: 4, title: 'New 4' }] });
+    assert.deepEqual(steps(r.own), [1, 2, 3, null]);
+    assert.deepEqual(steps(r.incoming), [4, 5]);
+    assert.deepEqual(plain(r.plan.map((p) => [p.step, p.title])), [[1, 'Own 1'], [2, 'Own 2'], [3, 'Own 3'], [4, 'New 4']], 'the quiz\'s own entry wins');
+  });
+
+  it('before: the new steps start at 1 and the quiz\'s own move up, plan included', () => {
+    const r = A.placeAppendedClimbSteps(own(), { questions: [q('x', 1), q('y', 2), q('z', 2)], stepsPlan: [{ step: 1, title: 'Easier 1' }] }, 'before');
+    assert.deepEqual(steps(r.incoming), [1, 2, 2]);
+    assert.deepEqual(steps(r.own), [3, 4, 5, null]);
+    assert.deepEqual(plain(r.plan.map((p) => [p.step, p.title])), [[1, 'Easier 1'], [3, 'Own 1'], [4, 'Own 2'], [5, 'Own 3']]);
+  });
+
+  it('after: the new steps go on from the quiz\'s top step', () => {
+    const r = A.placeAppendedClimbSteps(own(), { questions: [q('x', 1), q('y', 2)] }, 'after');
+    assert.deepEqual(steps(r.incoming), [4, 5]);
+    assert.deepEqual(steps(r.own), [1, 2, 3, null]);
+  });
+
+  it('refuses to go past step 12', () => {
+    const many = { questions: Array.from({ length: 10 }, (_, i) => q(`m${i}`, i + 1)) };
+    assert.match(A.placeAppendedClimbSteps(own(), many, 'after').error, /up to step 13: a climb has at most 12 steps/);
+    assert.equal(A.placeAppendedClimbSteps(own(), many, 'merge').error, undefined);
+  });
 });
 
 describe('the guide\'s tip carries the step\'s rule', () => {
@@ -495,7 +744,7 @@ describe('the guide\'s tip carries the step\'s rule', () => {
   before(() => {
     E = loadDeclarations(read('cloudflare/worker.js'), [
       'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
-      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupView',
+      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupView', 'climbPlanEntry',
     ]);
   });
   const plan = [{ cefr: 'A1', rule: 'Rule one.' }, { cefr: 'A2', rule: 'Rule two.' }, { cefr: 'B1', rule: 'Rule three.' }];
@@ -592,7 +841,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   });
 
   it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
-    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt']);
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
     const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
     const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
     const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });

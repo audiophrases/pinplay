@@ -20,7 +20,7 @@ function app() {
     syncQuizFromUI() {}, requireQuizTitle() {}, syncAssignmentAdaptiveControl() {},
     assignmentAdaptiveSettings: () => ({ adaptive: nodes.assignmentAdaptive.checked, buildup: nodes.assignmentAdaptiveMode.value === 'buildup', adaptiveCount: Number(nodes.assignmentAdaptiveCount.value) }),
     assignmentRandomNames: () => sandbox.assignmentSignInEl.value !== 'signin',
-    buildupAvailableLevels: () => ['A1', 'B1'], adaptiveSingleQuestionCount: () => 20, quizHasListeningSections: () => false,
+    buildupAvailableSteps: () => ['A1', 'B1'], quizLevelsPresent: () => ['A1', 'B1'], adaptiveSingleQuestionCount: () => 20, quizHasListeningSections: () => false,
     buildupDefaultCount: () => 20, loadAssignmentClassSuggestions: async () => {},
     setAssignmentFeedbackMode: value => { sandbox.assignmentFeedbackMode = value; },
     setAssignmentExamMode: value => { sandbox.assignmentExamMode = value; }, syncSignInRulesLine() {},

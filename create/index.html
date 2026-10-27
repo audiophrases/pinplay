@@ -267,8 +267,9 @@
                     </div>
                     <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Create in batches of</span>
-                        <input id="promptBatchSize" type="number" value="0" min="0" max="100" />
+                        <input id="promptBatchSize" type="number" value="0" min="0" max="60" />
                       </label>
+                      <p id="promptBatchNote" class="small bad hidden" role="status"></p>
                     </div>
                     <div class="prompt-field prompt-standard-only">
                       <label><span data-i18n>Images</span>
@@ -316,17 +317,18 @@
                   </div>
                   <div id="promptBuildupWrap" class="creation-prompt-grid top-space hidden">
                     <div class="prompt-field full-width">
-                      <p class="small muted" data-i18n>Climb: one skill taught in small steps, for students who need to build it gradually. Put the skill in Theme (e.g. present simple third person -s). Assign the quiz with "🏔️ Climb" (or as Adaptive: it works in both).</p>
+                      <p class="small muted" data-i18n>Climb: one skill taught in small steps (2 to 12), for students who need to build it gradually. Put the skill in Theme (e.g. present simple third person -s). Assign the quiz with "🏔️ Climb".</p>
                     </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Steps</span>
-                        <input id="promptBuildupSteps" type="number" value="5" min="2" max="6" />
+                        <input id="promptBuildupSteps" type="number" value="5" min="2" max="12" />
                       </label>
                     </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Questions per step</span>
                         <input id="promptBuildupItems" type="number" value="5" min="3" max="10" />
                       </label>
+                      <p id="promptBuildupBatchNote" class="small bad hidden" role="status"></p>
                     </div>
                     <div class="prompt-field">
                       <label><span data-i18n>Students' first language (optional)</span>
@@ -573,7 +575,12 @@
                           <select id="levelRangeLevel"></select>
                         </label>
                         <button id="levelRangeApplyBtn" class="btn" type="button" data-i18n>Set level</button>
+                        <label><span data-i18n>Climb step</span>
+                          <select id="levelRangeStep"></select>
+                        </label>
+                        <button id="levelRangeStepBtn" class="btn" type="button" data-i18n>Set step</button>
                       </div>
+                      <p class="small muted" data-i18n>🏔️ Climb steps (1 to 12) order a Climb more finely than levels. A quiz with steps climbs by them, and its questions without a step stay out of the climb. Students never see steps or levels.</p>
                       <div class="level-tools-ai">
                         <strong class="small" data-i18n>Tag with AI</strong>
                         <div class="level-tools-row">

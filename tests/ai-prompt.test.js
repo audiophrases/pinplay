@@ -16,7 +16,7 @@ before(() => {
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
-    'shapePromptExample', 'promptMediaRules', 'buildCreationPrompt', 'toSafeFilename',
+    'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
     'normalizeCefr', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
@@ -24,7 +24,7 @@ before(() => {
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
-    'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'normalizeListeningHeard', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan', 'detectQuestionMediaProvider', 'contextGapList',
+    'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'normalizeListeningHeard', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan', 'detectQuestionMediaProvider', 'contextGapList',
   ], { crypto: require('node:crypto').webcrypto });
 });
 
@@ -176,6 +176,15 @@ describe('rules follow the request', () => {
     assert.match(text, /otherwise put it in one ```json code block/);
     assert.doesNotMatch(text, /no code fences/);
     assert.match(build({ questionCount: 40, batchSize: 10 }), /-part1\.json" \(part2, part3/);
+  });
+
+  it('more than 60 questions come in batches of 60 at most, one reply each', () => {
+    const big = section(build({ questionCount: 100 }), 'Task');
+    assert.match(big, /in batches of 60, one JSON object per batch: give batch 1 now and each next batch when the teacher asks for it/);
+    assert.match(section(build({ questionCount: 100, batchSize: 25 }), 'Task'), /in batches of 25,/);
+    assert.match(section(build({ questionCount: 40, batchSize: 100 }), 'Task'), /in batches of 60,/);
+    assert.match(section(build({ questionCount: 60 }), 'Task'), /all in one JSON object$/m);
+    assert.match(section(build({ questionCount: 'every irregular verb' }), 'Task'), /if that is more than 60 questions, in batches of at most 60/);
   });
 
   it('batches and brief counts', () => {

@@ -132,9 +132,13 @@
 
     const nodeVars = (p, prefix) => `--${prefix}vx:${p.vx.toFixed(4)};--${prefix}vy:${p.vy.toFixed(4)};--${prefix}hx:${p.hx.toFixed(4)};--${prefix}hy:${p.hy.toFixed(4)}`;
 
+    // Past seven camps (a climb of more than six steps) the camps get smaller
+    // and only the student's camp keeps its label, so up to 13 still fit.
+    const CROWDED_AFTER = 7;
     function build(n) {
       state.n = n;
       el.style.setProperty('--n', String(n));
+      el.classList.toggle('is-crowded', n > CROWDED_AFTER);
       $('line').setAttribute('points', pointsV(0, n - 1, n));
       $('lineH').setAttribute('points', pointsH(0, n - 1, n));
       $('nodes').innerHTML = Array.from({ length: n }, (_, i) => `

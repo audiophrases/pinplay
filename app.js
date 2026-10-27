@@ -1183,6 +1183,10 @@ function bindBuilderEvents() {
   renderListeningPromptTypes();
   renderBuildupPromptTypes();
   document.getElementById('promptKind')?.addEventListener('change', syncPromptKind);
+  ['promptQuestionCount', 'promptBatchSize', 'promptBuildupSteps', 'promptBuildupItems'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', syncPromptBatchNotes);
+  });
+  syncPromptBatchNotes();
   // "Only the script" is made in the 🎧 Listening recordings card: the option
   // takes you there and the choice goes back to what it was.
   document.getElementById('promptListeningSource')?.addEventListener('change', (e) => {
@@ -3087,6 +3091,8 @@ function renderBuilder() {
     return;
   }
 
+  // The Step field shows once the quiz numbers its Climb steps.
+  const usesSteps = climbStepsOf(quiz.questions).length > 0;
   quiz.questions.forEach((q, idx) => {
     // A listening section's settings sit just above its first question.
     const sectionId = q.listeningSection || '';
@@ -3116,6 +3122,7 @@ function renderBuilder() {
           <span class="q-type-icon">${iconForType(q.type)}</span>
           <strong>Q${idx + 1}</strong>
           <span class="q-cefr-chip" data-cefr-chip="${idx}">${normalizeCefr(q.cefr)}</span>
+          <span class="q-cefr-chip q-step-chip" data-step-chip="${idx}" title="${escapeHtml(t('Climb step'))}">${normalizeClimbStep(q.step) ? `🏔️${normalizeClimbStep(q.step)}` : ''}</span>
           ${listeningSec ? `<span class="q-listening-chip" title="${escapeHtml(t('In a listening section'))}">🎧</span>` : ''}
           ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
@@ -3149,6 +3156,13 @@ function renderBuilder() {
             ${CEFR_LEVELS.map((l) => `<option value="${l}" ${normalizeCefr(q.cefr) === l ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
         </div>
+        ${usesSteps ? `<div style="min-width:90px;">
+          <label title="${escapeHtml(t('The step of this question in a 🏔️ Climb (1 is the easiest)'))}">${escapeHtml(t('Step'))}</label>
+          <select data-q="${idx}" data-field="step">
+            <option value="">—</option>
+            ${Array.from({ length: BUILDUP_MAX_STEPS }, (_, i) => `<option value="${i + 1}" ${normalizeClimbStep(q.step) === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}
+          </select>
+        </div>` : ''}
         <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600; white-space:nowrap;">
           <input data-q="${idx}" data-field="isPoll" type="checkbox" ${q.isPoll ? 'checked' : ''} /> Poll mode
         </label>
@@ -4256,6 +4270,14 @@ function syncQuizFromUI() {
       if (chip) chip.textContent = cefr;
       if (q.listeningSection) refreshListeningSectionLevels();
     }
+    const stepEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="step"]`);
+    if (stepEl) {
+      const step = normalizeClimbStep(stepEl.value);
+      if (step) q.step = step;
+      else delete q.step;
+      const chip = questionListEl.querySelector(`[data-step-chip="${idx}"]`);
+      if (chip) chip.textContent = step ? `🏔️${step}` : '';
+    }
     const mediaUrlEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
     const mediaProviderEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
     const mediaStartEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaStartAt"]`);
@@ -5280,6 +5302,10 @@ function promptMediaRules(req, allowed, agent) {
   return rules;
 }
 
+// The most questions one AI reply is asked to hold: a bigger quiz comes in
+// batches of whole parts, one reply each, joined with Import → Append.
+const PROMPT_BATCH_MAX = 60;
+
 // req: { theme, language, level, adaptive, levelNotes, goal, timeLimit,
 // questionCount (number or brief text), batchSize, images, audio, video,
 // readingText, typesMode, selectedTypes, aiMode }. Returns { text, filename }.
@@ -5305,6 +5331,8 @@ function buildCreationPrompt(request) {
   const list = allowed.join(', ');
   const count = req.questionCount;
   const numeric = typeof count === 'number' ? count : null;
+  // More than one reply can hold comes in batches, the teacher's size if smaller.
+  req.batchSize = Math.min(PROMPT_BATCH_MAX, Number(req.batchSize) || (numeric > PROMPT_BATCH_MAX ? PROMPT_BATCH_MAX : 0));
 
   let typesLine = `use only ${list}`;
   if (req.typesMode === 'ai_choice') typesLine = `choose the ones that best fit the goal, from ${list}`;
@@ -5315,9 +5343,10 @@ function buildCreationPrompt(request) {
     if (numeric && numeric < allowed.length) typesLine += ' (fewer questions than types: cover as many as you can)';
   }
   const howMany = typeof count === 'string' ? 'decide how many from the teacher\'s brief (above)' : String(numeric || 10);
-  const delivery = req.batchSize
-    ? `in batches of ${req.batchSize}, one JSON object per batch (the teacher joins them with Import → Append)`
-    : 'all in one JSON object';
+  const nextBatches = 'give batch 1 now and each next batch when the teacher asks for it (the teacher joins them with Import → Append)';
+  let delivery = 'all in one JSON object';
+  if (req.batchSize) delivery = `in batches of ${req.batchSize}, one JSON object per batch: ${nextBatches}`;
+  else if (typeof count === 'string') delivery = `all in one JSON object, or, if that is more than ${PROMPT_BATCH_MAX} questions, in batches of at most ${PROMPT_BATCH_MAX}, one JSON object per batch: ${nextBatches}`;
 
   // Only what the teacher typed by hand, word for word, so the AI can tell it
   // apart from PinPlay's own wording (dropdown choices stay in Task).
@@ -5707,7 +5736,7 @@ async function exportCreationPrompt() {
     goalIsCustom: goalEl?.value === 'custom',
     timeLimit: Number(valueOf('promptTimeLimit')) || 0,
     questionCount: /^\d+$/.test(countRaw) && Number(countRaw) > 0 ? Number(countRaw) : (countRaw || 10),
-    batchSize: batchSize >= 3 ? Math.min(100, batchSize) : 0,
+    batchSize: batchSize >= 3 ? Math.min(PROMPT_BATCH_MAX, batchSize) : 0,
     images: valueOf('promptImages') || 'no',
     audio: valueOf('promptAudio') || 'no',
     video: valueOf('promptVideo') || 'no',
@@ -5766,10 +5795,12 @@ async function exportListeningPrompt() {
 }
 
 // ---------------------------------------------------------------- AI build up prompt
-// BUILDUP_MODE_PLAN.md section 8: one skill taught in small steps, for an
-// assignment played in Climb mode (a wrong answer sends the student one
-// step back). The steps are the quiz's level tags in order; the AI writes the
-// plan first ("stepsPlan"), then equivalent questions for each step.
+// BUILDUP_MODE_PLAN.md sections 8 and 10: one skill taught in small steps,
+// for an assignment played in Climb mode (a wrong answer sends the student one
+// step back). The steps are numbered ("step" on each question, 1 to
+// BUILDUP_MAX_STEPS); the AI writes the plan first ("stepsPlan"), then
+// equivalent questions for each step, in batches of whole steps past
+// PROMPT_BATCH_MAX questions.
 
 const BUILDUP_PROMPT_TYPES = ['mcq', 'tf', 'text', 'context_gap', 'error_hunt'];
 const BUILDUP_PROMPT_DEFAULT_STEPS = 5;
@@ -5786,19 +5817,28 @@ const BUILDUP_PROMPT_TYPE_FIELDS = {
 // answer, with its plan. Different from any real request.
 const BUILDUP_PROMPT_EXAMPLE = {
   stepsPlan: [
-    { cefr: 'A1', title: 'He / she / it + -s, easy verbs', change: 'The simplest case: regular verbs, the subject is he or she, two options.', rule: 'With he, she and it, the verb ends in -s: he plays, she likes.' },
-    { cefr: 'A2', title: 'Is it -s or not?', change: 'New: they and we sit beside he and she, so the student must decide; still regular verbs.', rule: 'Only he, she and it take -s. With I, you, we and they: no -s.' },
-    { cefr: 'B1', title: 'Verbs ending in -ch, -sh', change: 'New: verbs that take -es (watches, brushes); the subject is always he, she or it.', rule: 'Verbs ending in -ch or -sh take -es: she watches, he brushes.' },
+    { step: 1, title: 'He / she / it + -s, easy verbs', change: 'The simplest case: regular verbs, the subject is he or she, two options.', rule: 'With he, she and it, the verb ends in -s: he plays, she likes.' },
+    { step: 2, title: 'Is it -s or not?', change: 'New: they and we sit beside he and she, so the student must decide; still regular verbs.', rule: 'Only he, she and it take -s. With I, you, we and they: no -s.' },
+    { step: 3, title: 'Verbs ending in -ch, -sh', change: 'New: verbs that take -es (watches, brushes); the subject is always he, she or it.', rule: 'Verbs ending in -ch or -sh take -es: she watches, he brushes.' },
   ],
   questions: [
-    { id: 'q1', type: 'mcq', prompt: 'He ___ tennis.', points: 1000, timeLimit: 0, cefr: 'A1', answers: [{ text: 'plays', correct: true }, { text: 'play', correct: false }] },
-    { id: 'q2', type: 'mcq', prompt: 'She ___ music.', points: 1000, timeLimit: 0, cefr: 'A1', answers: [{ text: 'likes', correct: true }, { text: 'like', correct: false }] },
-    { id: 'q3', type: 'mcq', prompt: 'My friends ___ pizza.', points: 1000, timeLimit: 0, cefr: 'A2', answers: [{ text: 'like', correct: true }, { text: 'likes', correct: false }] },
-    { id: 'q4', type: 'mcq', prompt: 'My brother ___ to school.', points: 1000, timeLimit: 0, cefr: 'A2', answers: [{ text: 'goes', correct: true }, { text: 'go', correct: false }] },
-    { id: 'q5', type: 'text', prompt: 'She ____ TV every day. (watch)', points: 1000, timeLimit: 0, cefr: 'B1', accepted: ['watches'] },
-    { id: 'q6', type: 'text', prompt: 'He ____ his teeth. (brush)', points: 1000, timeLimit: 0, cefr: 'B1', accepted: ['brushes'] },
+    { id: 'q1', type: 'mcq', prompt: 'He ___ tennis.', points: 1000, timeLimit: 0, step: 1, answers: [{ text: 'plays', correct: true }, { text: 'play', correct: false }] },
+    { id: 'q2', type: 'mcq', prompt: 'She ___ music.', points: 1000, timeLimit: 0, step: 1, answers: [{ text: 'likes', correct: true }, { text: 'like', correct: false }] },
+    { id: 'q3', type: 'mcq', prompt: 'My friends ___ pizza.', points: 1000, timeLimit: 0, step: 2, answers: [{ text: 'like', correct: true }, { text: 'likes', correct: false }] },
+    { id: 'q4', type: 'mcq', prompt: 'My brother ___ to school.', points: 1000, timeLimit: 0, step: 2, answers: [{ text: 'goes', correct: true }, { text: 'go', correct: false }] },
+    { id: 'q5', type: 'text', prompt: 'She ____ TV every day. (watch)', points: 1000, timeLimit: 0, step: 3, accepted: ['watches'] },
+    { id: 'q6', type: 'text', prompt: 'He ____ his teeth. (brush)', points: 1000, timeLimit: 0, step: 3, accepted: ['brushes'] },
   ],
 };
+
+// Past PROMPT_BATCH_MAX questions a climb comes in batches of whole steps,
+// as even as they can be: each batch is [first step, last step].
+function buildupPromptBatches(steps, items) {
+  const most = Math.max(1, Math.floor(PROMPT_BATCH_MAX / Math.max(1, items)));
+  const count = Math.ceil(steps / most);
+  const size = Math.ceil(steps / count);
+  return Array.from({ length: count }, (_, b) => [b * size + 1, Math.min(steps, (b + 1) * size)]).filter(([from, to]) => from <= to);
+}
 
 // A number the teacher typed: empty or not a number takes the default, but a
 // typed 0 is a number (and is then held to the minimum).
@@ -5807,11 +5847,44 @@ function buildupPromptNumber(value, fallback) {
   return value === '' || value == null || !Number.isFinite(n) ? fallback : n;
 }
 
+// The steps and questions per step a Climb prompt asks for, held to the form's limits.
+function buildupPromptSize(steps, items) {
+  return {
+    steps: Math.max(2, Math.min(BUILDUP_MAX_STEPS, Math.round(buildupPromptNumber(steps, BUILDUP_PROMPT_DEFAULT_STEPS)))),
+    items: Math.max(3, Math.min(BUILDUP_PROMPT_MAX_ITEMS, Math.round(buildupPromptNumber(items, BUILDUP_PROMPT_DEFAULT_ITEMS)))),
+  };
+}
+
+// The AI Creation Prompt says before it is made when the quiz will come in
+// batches: past PROMPT_BATCH_MAX questions (Standard: a number of questions;
+// a brief in words is left to the AI) or steps × questions per step (Climb).
+function syncPromptBatchNotes() {
+  const note = (id, text) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
+  };
+  const countRaw = String(document.getElementById('promptQuestionCount')?.value || '').trim();
+  const count = /^\d+$/.test(countRaw) ? Number(countRaw) : 0;
+  const typed = Number(document.getElementById('promptBatchSize')?.value || 0);
+  const size = Math.min(PROMPT_BATCH_MAX, typed >= 3 ? typed : PROMPT_BATCH_MAX);
+  let standard = '';
+  if (count > PROMPT_BATCH_MAX) standard = t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in batches of {size}. Import the first, then add each next one with Import → Append.', { n: count, size });
+  else if (typed > PROMPT_BATCH_MAX) standard = t('Batches hold at most {max} questions.', { max: PROMPT_BATCH_MAX });
+  note('promptBatchNote', standard);
+  const { steps, items } = buildupPromptSize(document.getElementById('promptBuildupSteps')?.value, document.getElementById('promptBuildupItems')?.value);
+  const batches = steps * items > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
+  note('promptBuildupBatchNote', batches.length
+    ? t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in {count} batches of whole steps (steps {parts}). Import the first, then add each next one with Import → Append.', {
+      n: steps * items, count: batches.length, parts: batches.map(([from, to]) => (from === to ? String(from) : `${from}–${to}`)).join(', '),
+    })
+    : '');
+}
+
 function buildBuildupPrompt(req) {
   const agent = req.aiMode === 'agent';
-  const steps = Math.max(2, Math.min(CEFR_LEVELS.length, Math.round(buildupPromptNumber(req.steps, BUILDUP_PROMPT_DEFAULT_STEPS))));
-  const items = Math.max(3, Math.min(BUILDUP_PROMPT_MAX_ITEMS, Math.round(buildupPromptNumber(req.itemsPerStep, BUILDUP_PROMPT_DEFAULT_ITEMS))));
-  const tags = CEFR_LEVELS.slice(0, steps);
+  const { steps, items } = buildupPromptSize(req.steps, req.itemsPerStep);
   const selected = (req.selectedTypes || []).filter((type) => BUILDUP_PROMPT_TYPES.includes(type));
   const allowed = BUILDUP_PROMPT_TYPES.filter((type) => !selected.length || selected.includes(type));
   const skill = String(req.skill || req.theme || '').trim();
@@ -5826,18 +5899,22 @@ function buildBuildupPrompt(req) {
   ].filter(Boolean);
   const name = toSafeFilename(skill) || 'build-up';
   const total = steps * items;
+  const batches = total > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
+  const span = ([from, to]) => (from === to ? `step ${from}` : `steps ${from}–${to}`);
 
   const task = [
     `One skill: the one in "Skill" above, and nothing else.`,
-    `Steps: ${steps}, tagged ${tags.map((t) => `"${t}"`).join(', ')} in this order (step 1 is the easiest). The tag is only the step's number: PinPlay uses it to order the steps, it does not say what level of language a step is.`,
-    `Questions: ${items} per step, ${total} in all, in one JSON object`,
+    `Steps: ${steps}, numbered 1 to ${steps} (step 1 is the easiest).`,
+    batches.length
+      ? `Questions: ${items} per step, ${total} in all, in ${batches.length} batches of whole steps (${batches.map(span).join(', then ')}), one JSON object per batch`
+      : `Questions: ${items} per step, ${total} in all, in one JSON object`,
     `Question types: use only ${allowed.join(', ')}.`,
   ];
   const rules = [
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     'How it is played: every student starts at step 1 and climbs. A right answer helps them up a step (two in a row on most steps); a wrong answer sends them one step back, where they get a different question of that step. So each step must be climbable by a student who has just got the step before right, and a student sent back must meet a question like the ones they already know.',
     agent ? 'Check the grammar or rule you teach against a reliable source (a grammar reference or a dictionary) before you write the plan; do not invent rules or exceptions.' : undefined,
-    'First write "stepsPlan", before any question: one entry per step, in order, with "cefr" (the step\'s tag), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
+    'First write "stepsPlan", before any question: one entry per step, in order, with "step" (the step\'s number), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
     'One new thing per step, and only one: the form, OR the kind of subject or word, OR the kind of answer. Increase the demand slowly: choose between two options first, then three close ones, then fill a gap, and type the answer last. The last step mixes what the earlier steps taught.',
     `Every question practises the skill and nothing else. Use only very common, short words (the first words a beginner learns) and keep reusing the same small set of about 15 to 20 words and names across all the steps, so grammar is the only difficulty. Sentences are about everyday life in the students' world.`,
     `Exactly ${items} questions per step. The questions of a step are equivalent: the same pattern, the same difficulty, different words, and none is a copy of another. A student sent back to a step must not meet the same question again straight away.`,
@@ -5845,14 +5922,21 @@ function buildBuildupPrompt(req) {
     'Exactly ONE defensible answer per question. Check each question against its step\'s rule: if another option could also be right in some context, change the question.' + (allowed.includes('text') || allowed.includes('context_gap') ? ' For typed answers and gaps list every correct form in "accepted" / "gaps" (see the field list), because a right answer marked wrong costs the student a step.' : ''),
     'Wrong options are the real mistakes students make with this skill (use the teacher\'s list of mistakes if there is one, and the usual mistakes of speakers of their first language), one mistake per question. Never silly or impossible options; no trick questions.',
     'Prompts and options are short. Never a hint inside a question that gives the answer away.',
-    'Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "cefr": its step\'s tag. No pictures, audio, video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
-    `Before you reply, walk through the steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`,
+    'Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "step": its step\'s number, and no "cefr". No pictures, audio, video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
+    batches.length
+      ? `The quiz has more questions than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
+      : undefined,
+    batches.length
+      ? `Before you send a batch, walk through its steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`
+      : `Before you reply, walk through the steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`,
   ].filter(Boolean);
 
   const out = [
     '# PinPlay climb quiz instructions',
     '',
-    `Create a "climb" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it gradually. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
+    batches.length
+      ? `Create a "climb" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it gradually. It comes in ${batches.length} batches (see the rules): reply with ONE JSON object per batch and nothing else (no commentary). If you can create files, give each batch as a downloadable file named "${name}-part1.json" (part2, part3… for the next batches); otherwise put each in one \`\`\`json code block.`
+      : `Create a "climb" quiz for PinPlay: ONE skill taught in small steps, for students who need to build it gradually. Reply with the quiz as ONE JSON object and nothing else (no commentary). If you can create files, give it as a downloadable file named "${name}.json"; otherwise put it in one \`\`\`json code block.`,
     '',
     '## The teacher\'s own words',
     'Typed by the teacher, word for word, in quotes. Everything after this section is PinPlay\'s general instructions. Where they contradict the teacher\'s words, the teacher\'s words win.',
@@ -5866,8 +5950,8 @@ function buildBuildupPrompt(req) {
     '',
     '## Quiz fields',
     'Quiz: {"version": 3, "title": "…", "stepsPlan": [ … ], "questions": [ … ]}',
-    'stepsPlan entry: {"cefr": "A1", "title": "…", "change": "…", "rule": "…"}',
-    'Every question has "id", "type", "prompt", "points", "timeLimit", "cefr", plus the fields of its type:',
+    'stepsPlan entry: {"step": 1, "title": "…", "change": "…", "rule": "…"}',
+    'Every question has "id", "type", "prompt", "points", "timeLimit", "step", plus the fields of its type:',
     ...allowed.map((type) => `- ${type}: ${BUILDUP_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
     '## Example',
@@ -10783,7 +10867,14 @@ function renderAssignmentResults(safeCode, data) {
     nameWrap.style.cssText = 'flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
     const lv = a?.adaptive;
     const bu = lv?.buildup;
-    const buCamp = (i) => (window.PinBuildup ? `${window.PinBuildup.campName(i, bu.n)}${bu.bands?.[i] ? ` (${bu.bands[i]})` : ''} · ${window.PinBuildup.fmtAlt(window.PinBuildup.altitude(i, bu.n))}` : '');
+    // A camp's step (or level) and its title in the plan, for the teacher.
+    const buStep = (i) => {
+      const band = bu.bands?.[i];
+      if (band == null || band === '') return '';
+      const name = typeof band === 'number' ? t('step {n}', { n: band }) : band;
+      return bu.titles?.[i] ? `${name}: ${bu.titles[i]}` : name;
+    };
+    const buCamp = (i) => (window.PinBuildup ? `${window.PinBuildup.campName(i, bu.n)}${buStep(i) ? ` (${buStep(i)})` : ''} · ${window.PinBuildup.fmtAlt(window.PinBuildup.altitude(i, bu.n))}` : '');
     const levelBadge = bu
       ? `<span class="badge-buildup" title="${escapeHtml(t('Climb: highest {best} · now {now}', { best: buCamp(bu.best), now: buCamp(bu.rung) }))}${lv.path ? `
 ${escapeHtml(lv.path)}` : ''}">🏔️ ${escapeHtml(bu.summit ? t('Summit') : window.PinBuildup ? window.PinBuildup.campName(bu.best, bu.n) : '')}${bu.stuck ? ' ⚠️' : ''}</span>`
@@ -11242,6 +11333,10 @@ async function importQuizSources(files) {
         delete next.cefrLevel;
         if (cefr) next.cefr = cefr;
         else delete next.cefr;
+        // Climb step: a whole number (AIs sometimes write "3").
+        const step = normalizeClimbStep(next.step);
+        if (step) next.step = step;
+        else delete next.step;
         return next;
       });
 
@@ -11280,9 +11375,23 @@ async function importQuizSources(files) {
           });
           parsed.questions.forEach((q) => { if (renamed[q.listeningSection]) q.listeningSection = renamed[q.listeningSection]; });
         }
-        quiz.questions.push(...parsed.questions);
+        // Climb steps that share numbers with the quiz's: the teacher says
+        // where they go. Steps that don't (the next batch) stay as they are.
+        const ownSteps = climbStepsOf(quiz.questions);
+        const newSteps = climbStepsOf(parsed.questions);
+        let placement = 'merge';
+        if (ownSteps.length && newSteps.some((s) => ownSteps.includes(s))) {
+          const range = (steps) => (steps.length > 1 ? `${steps[0]}–${steps[steps.length - 1]}` : String(steps[0]));
+          const asNew = confirm(t('{file} has Climb steps {incoming}, and the quiz already has steps {own}.\n\nOK = add them as new steps (next you choose: before or after the quiz\'s steps)\nCancel = put their questions into the quiz\'s steps with the same numbers', { file: file.name, incoming: range(newSteps), own: range(ownSteps) }));
+          if (asNew) placement = confirm(t('OK = before the quiz\'s steps (easier)\nCancel = after them (harder)')) ? 'before' : 'after';
+        }
+        const placed = placeAppendedClimbSteps(quiz, parsed, placement);
+        if (placed.error) throw new Error(placed.error);
+        quiz.questions = placed.own;
+        quiz.questions.push(...placed.incoming);
         if (parsed.title && !quiz.title) quiz.title = parsed.title;
-        if (!quiz.stepsPlan && parsed.stepsPlan) quiz.stepsPlan = normalizeStepsPlan(parsed.stepsPlan);
+        if (placed.plan.length) quiz.stepsPlan = placed.plan;
+        else delete quiz.stepsPlan;
         if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
           quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
         }
@@ -12304,7 +12413,7 @@ async function openAssignmentSettingsDialog(a) {
     ? t('Update the API to enable question format settings. Your existing format is shown here.')
     : formatOptions.locked
       ? t('Question format and count are locked because an attempt has already started. Create a new assignment to change them.')
-      : t('You can change the format until the first attempt starts. Adaptive and Climb need questions tagged with at least two levels.');
+      : t('You can change the format until the first attempt starts. Adaptive needs questions tagged with at least two levels; Climb, two steps or two levels.');
   function syncFormatSettings(changed = false) {
     const mode = formatSelect.value;
     const climb = mode === 'climb';
@@ -12468,16 +12577,16 @@ async function loadAssignmentClassSuggestions() {
 
 
 // The Assignments form's 🎯 Adaptive / 🏔️ Climb, as a new assignment or its
-// preview sends them. Throws when Climb has too few levels.
+// preview sends them. Throws when Climb has too few steps.
 function assignmentAdaptiveSettings() {
   const adaptive = !!document.getElementById('assignmentAdaptive')?.checked
     && !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden');
   const buildup = adaptive && assignmentBuildupSelected();
-  if (buildup && buildupAvailableLevels().length < 2) {
-    throw new Error(t('Climb needs auto-graded questions tagged with at least two levels.'));
+  if (buildup && buildupAvailableSteps().length < 2) {
+    throw new Error(t('Climb needs auto-graded questions in at least two steps (or tagged with two levels).'));
   }
   const adaptiveCount = buildup
-    ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableLevels().length))))
+    ? Math.max(1, Math.min(BUILDUP_MAX_COUNT, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || buildupDefaultCount(buildupAvailableSteps().length))))
     : (adaptive && adaptiveSingleQuestionCount() > 0
       ? Math.max(1, Math.round(Number(document.getElementById('assignmentAdaptiveCount')?.value) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT))
       : 0);
@@ -12513,10 +12622,10 @@ async function openAssignmentCreationDialog() {
         format: adaptive.buildup ? 'climb' : adaptive.adaptive ? 'adaptive' : 'all',
         adaptiveCount: Number(document.getElementById('assignmentAdaptiveCount')?.value || 20),
       },
-      adaptiveAvailable: !document.getElementById('assignmentAdaptiveWrap')?.classList.contains('hidden'),
-      climbAvailable: buildupAvailableLevels().length >= 2,
+      adaptiveAvailable: quizLevelsPresent().length >= 2,
+      climbAvailable: buildupAvailableSteps().length >= 2,
       singleCount: adaptiveSingleQuestionCount(), hasSections: quizHasListeningSections(),
-      climbDefaultCount: buildupDefaultCount(buildupAvailableLevels().length),
+      climbDefaultCount: buildupDefaultCount(buildupAvailableSteps().length),
       classes: classNames(),
       loadClasses: async () => { await loadAssignmentClassSuggestions(); return classNames(); },
       onCreate: async options => {
@@ -18590,9 +18699,64 @@ function isBuildupQuestion(q) {
     && !(q.type === 'text' && !(Array.isArray(q.accepted) && q.accepted.some((a) => String(a || '').trim())));
 }
 
-function buildupAvailableLevels() {
-  const found = new Set((quiz?.questions || []).filter(isBuildupQuestion).map((q) => normalizeCefr(q.cefr)).filter(Boolean));
+// The step numbers questions use, from the bottom.
+function climbStepsOf(questions) {
+  return [...new Set((questions || []).map((q) => normalizeClimbStep(q?.step)).filter(Boolean))].sort((a, b) => a - b);
+}
+
+// The steps of a Climb of this quiz (buildupPool in the worker): its step
+// numbers when any question has one, else its levels. Only questions Climb
+// can serve count.
+function buildupAvailableSteps() {
+  const questions = quiz?.questions || [];
+  if (climbStepsOf(questions).length) return climbStepsOf(questions.filter(isBuildupQuestion));
+  const found = new Set(questions.filter(isBuildupQuestion).map((q) => normalizeCefr(q.cefr)).filter(Boolean));
   return CEFR_LEVELS.filter((l) => found.has(l));
+}
+
+// "steps 1–8" for a climb by step numbers, "A1–B2" for one by levels.
+function climbRangeText(steps) {
+  if (!steps.length) return '';
+  const [from, to] = [steps[0], steps[steps.length - 1]];
+  return typeof from === 'number' ? t('steps {from}–{to}', { from, to }) : `${from}–${to}`;
+}
+
+// Appending a quiz to one with Climb steps (importQuizSources). placement:
+// 'merge' keeps every step number (the next batch of the same climb, or more
+// questions for its steps); 'before' numbers the new steps from 1 and moves
+// the quiz's own up; 'after' numbers them on from the quiz's top step. The
+// steps of both plans count. Returns the quiz's questions and the new ones
+// renumbered, with the plans merged (the quiz's own entries win), or an error
+// past BUILDUP_MAX_STEPS.
+function placeAppendedClimbSteps(own, incoming, placement = 'merge') {
+  const keys = (q) => [...new Set([
+    ...climbStepsOf(q?.questions),
+    ...normalizeStepsPlan(q?.stepsPlan).map((p) => p.step).filter(Boolean),
+  ])].sort((a, b) => a - b);
+  const ownKeys = keys(own);
+  const newKeys = keys(incoming);
+  const top = ownKeys.length ? ownKeys[ownKeys.length - 1] : 0;
+  const shift = placement === 'before' ? newKeys.length : 0;
+  const toOwn = (s) => s + shift;
+  const toNew = (s) => {
+    if (placement === 'before') return newKeys.indexOf(s) + 1;
+    if (placement === 'after') return top + newKeys.indexOf(s) + 1;
+    return s;
+  };
+  const highest = Math.max(0, ...ownKeys.map(toOwn), ...newKeys.map(toNew));
+  if (highest > BUILDUP_MAX_STEPS) {
+    return { error: t('That would take the climb up to step {n}: a climb has at most {max} steps.', { n: highest, max: BUILDUP_MAX_STEPS }) };
+  }
+  const renumber = (q, to) => {
+    const s = normalizeClimbStep(q?.step);
+    return s && to(s) !== s ? { ...q, step: to(s) } : q;
+  };
+  const replan = (plan, to) => normalizeStepsPlan(plan).map((p) => (p.step ? { ...p, step: to(p.step) } : p));
+  return {
+    own: shift ? (own?.questions || []).map((q) => renumber(q, toOwn)) : (own?.questions || []),
+    incoming: (incoming?.questions || []).map((q) => renumber(q, toNew)),
+    plan: normalizeStepsPlan([...replan(own?.stepsPlan, toOwn), ...replan(incoming?.stepsPlan, toNew)]),
+  };
 }
 
 // The Adaptive box plus the mode picker set to Climb.
@@ -18602,15 +18766,20 @@ function assignmentBuildupSelected() {
     && document.getElementById('assignmentAdaptiveMode')?.value === 'buildup';
 }
 
-// Assignments: "🎯 Adaptive · N questions per student" is offered only when the quiz has
-// questions tagged with at least two levels (the server checks too).
-// Ticked by default. (PinPlay Cup has its own switch: cupAdaptiveOn.)
+// Assignments: "🎯 Adaptive · N questions per student" is offered when the quiz has
+// questions tagged with at least two levels, "🏔️ Climb" when it has two
+// Climb steps (or two levels of auto-graded questions); the server checks
+// too. Ticked by default; a quiz made to climb (with steps or a steps plan)
+// starts on Climb. (PinPlay Cup has its own switch: cupAdaptiveOn.)
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
   if (!wrap) return;
   const { counts } = cefrCoverage(quiz?.questions);
   const levels = CEFR_LEVELS.filter((l) => counts[l] > 0);
-  const available = levels.length >= 2;
+  const adaptiveOk = levels.length >= 2;
+  const climbSteps = buildupAvailableSteps();
+  const climbOk = climbSteps.length >= 2;
+  const available = adaptiveOk || climbOk;
   wrap.classList.toggle('hidden', !available);
   // Listening sections come on top of the N single questions, each at the
   // student's level (LISTENING_MODE_PLAN.md section 10); a quiz of sections
@@ -18622,21 +18791,25 @@ function syncAssignmentAdaptiveControl() {
   const box = document.getElementById('assignmentAdaptive');
   const countEl = document.getElementById('assignmentAdaptiveCount');
   const rangeEl = document.getElementById('assignmentAdaptiveRange');
+  const modeEl = document.getElementById('assignmentAdaptiveMode');
   if (box && !available) {
     box.checked = false;
     adaptiveDefaultedFor = null;
   } else if (box && adaptiveDefaultedFor !== quiz) {
     adaptiveDefaultedFor = quiz;
     box.checked = true;
+    const madeToClimb = climbStepsOf(quiz?.questions).length > 0 || normalizeStepsPlan(quiz?.stepsPlan).length > 0;
+    if (modeEl) modeEl.value = climbOk && (madeToClimb || !adaptiveOk) ? 'buildup' : 'adaptive';
   }
-  if (rangeEl) rangeEl.textContent = available ? `${levels[0]}–${levels[levels.length - 1]}` : '';
-  // Adaptive or Climb: Climb needs two levels of auto-graded questions.
-  const modeEl = document.getElementById('assignmentAdaptiveMode');
-  const buildupLevels = buildupAvailableLevels();
+  if (rangeEl) rangeEl.textContent = adaptiveOk ? `${levels[0]}–${levels[levels.length - 1]}` : '';
+  // Adaptive needs two levels; Climb two steps (or two levels of auto-graded questions).
   if (modeEl) {
+    const adaptiveOpt = modeEl.querySelector('option[value="adaptive"]');
     const opt = modeEl.querySelector('option[value="buildup"]');
-    if (opt) opt.disabled = buildupLevels.length < 2;
-    if (buildupLevels.length < 2 && modeEl.value === 'buildup') modeEl.value = 'adaptive';
+    if (adaptiveOpt) adaptiveOpt.disabled = !adaptiveOk;
+    if (opt) opt.disabled = !climbOk;
+    if (!climbOk && modeEl.value === 'buildup') modeEl.value = 'adaptive';
+    if (!adaptiveOk && climbOk) modeEl.value = 'buildup';
     modeEl.disabled = !box?.checked;
   }
   const buildup = assignmentBuildupSelected();
@@ -18645,7 +18818,7 @@ function syncAssignmentAdaptiveControl() {
     // No sections in a build up; the number is a cap, not a list of questions.
     document.getElementById('assignmentAdaptiveCountWrap')?.classList.remove('hidden');
     document.getElementById('assignmentAdaptiveSections')?.classList.add('hidden');
-    if (rangeEl) rangeEl.textContent = `${buildupLevels[0]}–${buildupLevels[buildupLevels.length - 1]}`;
+    if (rangeEl) rangeEl.textContent = climbRangeText(climbSteps);
   }
   // Climb runs with instant feedback and no exam mode (the server sets them too).
   if (assignmentFeedbackEl) assignmentFeedbackEl.disabled = buildup;
@@ -18655,7 +18828,7 @@ function syncAssignmentAdaptiveControl() {
   if (buildup && assignmentExamMode) setAssignmentExamMode(false);
   syncPreviewTitle();
   if (countEl && buildup) {
-    const wanted = Number(countEl.dataset.wantedBuildup) || buildupDefaultCount(buildupLevels.length);
+    const wanted = Number(countEl.dataset.wantedBuildup) || buildupDefaultCount(climbSteps.length);
     countEl.max = String(BUILDUP_MAX_COUNT);
     countEl.value = String(Math.max(1, Math.min(wanted, BUILDUP_MAX_COUNT)));
     countEl.disabled = !box?.checked;
@@ -18667,7 +18840,7 @@ function syncAssignmentAdaptiveControl() {
     // The teacher's number (or the default), capped at what this quiz can
     // serve. Only while the control is offered: with no levelled quiz loaded
     // yet there is nothing to cap against, and the default must survive.
-    if (available) {
+    if (adaptiveOk) {
       const wanted = Number(countEl.dataset.wanted) || ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT;
       countEl.max = String(Math.max(1, singles));
       countEl.value = String(Math.max(1, Math.min(wanted, singles)));
@@ -18773,25 +18946,61 @@ function initAssignmentAdaptiveControl() {
   syncAssignmentAdaptiveControl();
 }
 
-// Climb: the AI's plan of the steps (quiz.stepsPlan), with how many
-// questions each step has. A step with fewer than three gets a warning: a
-// student sent back to it would meet the same questions again.
+// Climb: the steps of the quiz with the AI's plan for each (quiz.stepsPlan)
+// and how many questions each step has. A step with fewer than three gets a
+// warning: a student sent back to it would meet the same questions again. A
+// quiz with step numbers lists every step and the questions left out (no
+// step); one climbed by its levels lists its plan, and can turn its levels
+// into steps.
 const STEPS_PLAN_MIN_ITEMS = 3;
 function renderStepsPlan(counts) {
   const el = document.getElementById('levelStepsPlan');
   if (!el) return;
+  const questions = quiz?.questions || [];
+  const steps = climbStepsOf(questions);
   const plan = normalizeStepsPlan(quiz?.stepsPlan);
-  el.classList.toggle('hidden', !plan.length);
-  if (!plan.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<strong>${escapeHtml(t('🏔️ Steps plan'))}</strong>`
-    + `<ol class="steps-plan-list">${plan.map((p, i) => {
-      const n = counts[p.cefr] || 0;
+  const byStep = steps.length > 0;
+  const rows = byStep
+    ? [...new Set([...steps, ...plan.map((p) => p.step).filter(Boolean)])].sort((a, b) => a - b)
+      .map((s) => ({ key: s, label: t('Step {n}', { n: s }), entry: plan.find((p) => p.step === s) || {}, n: questions.filter((q) => isAdaptiveEligibleQuestion(q) && normalizeClimbStep(q.step) === s).length }))
+    : plan.filter((p) => p.cefr).map((p) => ({ key: p.cefr, label: p.cefr, entry: p, n: counts[p.cefr] || 0 }));
+  const levelled = !byStep && buildupAvailableSteps().length >= 2;
+  el.classList.toggle('hidden', !rows.length);
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const left = byStep ? questions.filter((q) => isAdaptiveEligibleQuestion(q) && !normalizeClimbStep(q.step)).length : 0;
+  el.innerHTML = `<strong>${escapeHtml(plan.length ? t('🏔️ Steps plan') : t('🏔️ Climb steps'))}</strong>`
+    + `<ol class="steps-plan-list">${rows.map(({ label, entry, n }) => {
       const thin = n < STEPS_PLAN_MIN_ITEMS ? ` <span class="bad">${escapeHtml(t('⚠ only {n} questions', { n }))}</span>` : '';
-      return `<li><b>${escapeHtml(p.cefr)}</b> · ${escapeHtml(p.title)} <span class="muted">(${n})</span>${thin}`
-        + (p.change ? `<div class="small muted">${escapeHtml(p.change)}</div>` : '')
-        + (p.rule ? `<div class="small">${escapeHtml(t('Rule shown to students: {rule}', { rule: p.rule }))}</div>` : '')
+      return `<li><b>${escapeHtml(label)}</b>${entry.title ? ` · ${escapeHtml(entry.title)}` : ''} <span class="muted">(${n})</span>${thin}`
+        + (entry.change ? `<div class="small muted">${escapeHtml(entry.change)}</div>` : '')
+        + (entry.rule ? `<div class="small">${escapeHtml(t('Rule shown to students: {rule}', { rule: entry.rule }))}</div>` : '')
         + '</li>'; // i18n-ignore (text is t()-wrapped)
-    }).join('')}</ol>`;
+    }).join('')}</ol>`
+    + (left ? `<p class="small bad">${escapeHtml(t('⚠ {n} question(s) have no step: Climb leaves them out.', { n: left }))}</p>` : '')
+    + (levelled ? `<button type="button" class="btn small" data-steps-from-levels>${escapeHtml(t('🏔️ Turn the levels into steps'))}</button>` : '');
+}
+
+// An older Climb quiz numbered its steps with levels (A1 = step 1): its
+// levels become steps 1, 2, 3… in order, plan included. The teacher says
+// whether the levels go (they only numbered the steps) or stay (real levels,
+// for 🎯 Adaptive).
+function turnLevelsIntoSteps() {
+  syncQuizFromUI();
+  const levels = buildupAvailableSteps();
+  if (climbStepsOf(quiz.questions).length || levels.length < 2) return;
+  if (!confirm(t('Turn the levels into Climb steps: {from} becomes step 1, and so on up to {to}, step {n}?', { from: levels[0], to: levels[levels.length - 1], n: levels.length }))) return;
+  const drop = confirm(t('Remove the levels from these questions too?\n\nOK = remove them (they only numbered the steps)\nCancel = keep them (real levels, for 🎯 Adaptive)'));
+  const stepOf = (level) => levels.indexOf(normalizeCefr(level)) + 1;
+  quiz.questions.forEach((q) => {
+    const s = stepOf(q.cefr);
+    if (!s) return;
+    q.step = s;
+    if (drop) delete q.cefr;
+  });
+  const plan = normalizeStepsPlan(quiz.stepsPlan).map((p) => (p.cefr && stepOf(p.cefr) ? { step: stepOf(p.cefr), title: p.title, change: p.change, rule: p.rule } : p));
+  if (plan.length) quiz.stepsPlan = normalizeStepsPlan(plan);
+  renderBuilder();
+  setLevelToolsStatus(t('Levels turned into steps 1–{n}.', { n: levels.length }), 'ok');
 }
 
 // 🎯 Levels panel: where this quiz's levels are used. Those settings live in
@@ -18906,10 +19115,29 @@ function applyLevelToRange() {
     : t('Level cleared on Q{from}–Q{to}.', { from: lo, to: hi }), 'ok');
 }
 
+// The same range, given a Climb step (or none).
+function applyStepToRange() {
+  syncQuizFromUI();
+  const total = quiz.questions.length;
+  if (!total) return;
+  const from = clamp(Math.round(Number(document.getElementById('levelRangeFrom')?.value)), 1, total);
+  const to = clamp(Math.round(Number(document.getElementById('levelRangeTo')?.value)), 1, total);
+  const step = normalizeClimbStep(document.getElementById('levelRangeStep')?.value);
+  const [lo, hi] = from <= to ? [from, to] : [to, from];
+  for (let i = lo - 1; i <= hi - 1; i++) {
+    if (step) quiz.questions[i].step = step;
+    else delete quiz.questions[i].step;
+  }
+  renderBuilder();
+  setLevelToolsStatus(step
+    ? t('Q{from}–Q{to} set to step {step}.', { from: lo, to: hi, step })
+    : t('Step cleared on Q{from}–Q{to}.', { from: lo, to: hi }), 'ok');
+}
+
 // Compact, media-free copy of a question for the tagging prompt: drops ids,
 // timing, audio/image/video data and editor state; clips long strings.
 function compactQuestionForLevelTagging(q) {
-  const DROP = new Set(['id', 'points', 'timeLimit', 'isPoll', 'cefr', 'collapsed', 'mediaExpand', 'media',
+  const DROP = new Set(['id', 'points', 'timeLimit', 'isPoll', 'cefr', 'step', 'collapsed', 'mediaExpand', 'media',
     'imageData', 'imageKeyword', 'gifKeyword', 'videoKeyword', 'videoProviderPreference', 'audioEnabled',
     'audioMode', 'audioText', 'audioData', 'ttsAudioKey', 'ttsLanguage', 'language', 'zones', 'zone']);
   const clip = (value, depth) => {
@@ -19022,6 +19250,14 @@ function initLevelTools() {
   if (levelSelect && !levelSelect.options.length) {
     levelSelect.innerHTML = `<option value="">— ${escapeHtml(t('clear'))}</option>${CEFR_LEVELS.map((l) => `<option value="${l}">${l}</option>`).join('')}`; // i18n-ignore (text is t()-wrapped)
   }
+  const stepSelect = document.getElementById('levelRangeStep');
+  if (stepSelect && !stepSelect.options.length) {
+    stepSelect.innerHTML = `<option value="">— ${escapeHtml(t('clear'))}</option>${Array.from({ length: BUILDUP_MAX_STEPS }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}`; // i18n-ignore (text is t()-wrapped)
+  }
+  document.getElementById('levelRangeStepBtn')?.addEventListener('click', applyStepToRange);
+  document.getElementById('levelStepsPlan')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-steps-from-levels]')) turnLevelsIntoSteps();
+  });
   details.addEventListener('toggle', () => {
     if (!details.open) return;
     const fromEl = document.getElementById('levelRangeFrom');
@@ -19602,6 +19838,7 @@ function normalizeQuizForLive(raw) {
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q.media),
       ...(normalizeCefr(q.cefr) ? { cefr: normalizeCefr(q.cefr) } : {}),
+      ...(normalizeClimbStep(q.step) ? { step: normalizeClimbStep(q.step) } : {}),
       ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
       ...(normalizeListeningHeard(q.heard) ? { heard: normalizeListeningHeard(q.heard) } : {}),
     };
@@ -19807,21 +20044,35 @@ function normalizeQuizForLive(raw) {
   return normalized;
 }
 
-// Climb: the AI's plan of the steps, one entry per level (step) of the
-// quiz: a title, what is new compared with the step before (teacher only) and
-// the rule students see as the guide's tip. Identical in app.js and worker.js.
+// Climb steps (BUILDUP_MODE_PLAN.md section 10): a question's `step`, a whole
+// number from 1 to BUILDUP_MAX_STEPS, orders a climb more finely than the six
+// levels. 0 means no step. Identical in app.js and worker.js.
+const BUILDUP_MAX_STEPS = 12;
+function normalizeClimbStep(value) {
+  if (value == null || value === '' || typeof value === 'boolean') return 0;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= BUILDUP_MAX_STEPS ? n : 0;
+}
+
+// Climb: the AI's plan of the steps, one entry per step (or per level, in a
+// quiz climbed by its levels): a title, what is new compared with the step
+// before (teacher only) and the rule students see as the guide's tip.
+// Identical in app.js and worker.js.
 const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 function normalizeStepsPlan(raw) {
   const out = [];
   (Array.isArray(raw) ? raw : []).forEach((item) => {
-    const cefr = String(item?.cefr || '').trim().toUpperCase();
-    if (!STEPS_PLAN_LEVELS.includes(cefr) || out.some((p) => p.cefr === cefr)) return;
+    const n = normalizeClimbStep(item?.step);
+    const cefr = n ? '' : String(item?.cefr || '').trim().toUpperCase();
+    if (!n && !STEPS_PLAN_LEVELS.includes(cefr)) return;
+    if (out.some((p) => (n ? p.step === n : p.cefr === cefr))) return;
     const text = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
-    const step = { cefr, title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
-    if (!step.title && !step.change && !step.rule) return;
-    out.push(step);
+    const entry = { ...(n ? { step: n } : { cefr }), title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
+    if (!entry.title && !entry.change && !entry.rule) return;
+    out.push(entry);
   });
-  return out.sort((a, b) => STEPS_PLAN_LEVELS.indexOf(a.cefr) - STEPS_PLAN_LEVELS.indexOf(b.cefr));
+  const order = (p) => (p.step || 100 + STEPS_PLAN_LEVELS.indexOf(p.cefr));
+  return out.sort((a, b) => order(a) - order(b));
 }
 
 function collectMissingOtherTtsVoiceIssues(targetQuiz) {

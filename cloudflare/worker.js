@@ -2989,9 +2989,9 @@ export class QuizRoom {
         if (body?.buildup === true && adaptiveCount > 0) {
           // Climb: single auto-graded questions only, from the bottom, with
           // instant feedback (the student learns from every miss).
-          const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: true });
+          const { bands, pool } = buildupPool(assignment);
           if (bands.length < 2 || !pool.length) {
-            return json({ error: 'Climb needs auto-graded questions tagged with at least two levels.' }, 400);
+            return json({ error: 'Climb needs auto-graded questions in at least two steps (or tagged with two levels).' }, 400);
           }
           assignment.adaptive = { count: clamp(adaptiveCount, 1, BUILDUP_MAX_COUNT), mode: 'buildup' };
           assignment.feedbackMode = 'instant';
@@ -3721,7 +3721,7 @@ export class QuizRoom {
           if (!served) return json({ error: 'Question not found.' }, 404);
           const safeAnswer = sanitizeAssignmentAnswer(served, body?.answer);
           const bet = sanitizeBet(body?.bet);
-          const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
+          const band = st.bu ? buildupBandOf(st, served) : st.bands.indexOf(normalizeCefrLevel(served.cefr));
           const qBand = band >= 0 ? band : adaptiveBand(st);
           // A teacher-graded answer waits for its grade; keep the bands it was
           // served at, so the grade moves the level from where it stood then.
@@ -4673,6 +4673,9 @@ export class QuizRoom {
           if (qid) newIdToIndex.set(qid, i);
         });
 
+        // Climb: where each step went, by its questions (a renumbered step keeps its climbers).
+        const climbKeyMap = buildupKeyMap(oldQuestions, quiz.questions);
+
         const now = Date.now();
         assignment.attempts = assignment.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
         let remappedAttempts = 0;
@@ -4706,7 +4709,7 @@ export class QuizRoom {
               const qid = oldIndexToId.get(Number(oldIdx));
               const newIdx = qid ? newIdToIndex.get(qid) : undefined;
               return newIdx == null ? null : newIdx;
-            });
+            }, { climbKeyMap });
           }
 
           const metrics = evaluateAssignmentAttempt({ ...assignment, quiz }, attempt);
@@ -7718,6 +7721,7 @@ function normalizeQuiz(quiz) {
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
       ...(normalizeCefrLevel(q.cefr) ? { cefr: normalizeCefrLevel(q.cefr) } : {}),
+      ...(normalizeClimbStep(q.step) ? { step: normalizeClimbStep(q.step) } : {}),
       ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
       ...(normalizeListeningHeard(q.heard) ? { heard: normalizeListeningHeard(q.heard) } : {}),
     };
@@ -7933,21 +7937,35 @@ function normalizeQuiz(quiz) {
   return normalized;
 }
 
-// Climb: the AI's plan of the steps, one entry per level (step) of the
-// quiz: a title, what is new compared with the step before (teacher only) and
-// the rule students see as the guide's tip. Identical in app.js and worker.js.
+// Climb steps (BUILDUP_MODE_PLAN.md section 10): a question's `step`, a whole
+// number from 1 to BUILDUP_MAX_STEPS, orders a climb more finely than the six
+// levels. 0 means no step. Identical in app.js and worker.js.
+const BUILDUP_MAX_STEPS = 12;
+function normalizeClimbStep(value) {
+  if (value == null || value === '' || typeof value === 'boolean') return 0;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= BUILDUP_MAX_STEPS ? n : 0;
+}
+
+// Climb: the AI's plan of the steps, one entry per step (or per level, in a
+// quiz climbed by its levels): a title, what is new compared with the step
+// before (teacher only) and the rule students see as the guide's tip.
+// Identical in app.js and worker.js.
 const STEPS_PLAN_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 function normalizeStepsPlan(raw) {
   const out = [];
   (Array.isArray(raw) ? raw : []).forEach((item) => {
-    const cefr = String(item?.cefr || '').trim().toUpperCase();
-    if (!STEPS_PLAN_LEVELS.includes(cefr) || out.some((p) => p.cefr === cefr)) return;
+    const n = normalizeClimbStep(item?.step);
+    const cefr = n ? '' : String(item?.cefr || '').trim().toUpperCase();
+    if (!n && !STEPS_PLAN_LEVELS.includes(cefr)) return;
+    if (out.some((p) => (n ? p.step === n : p.cefr === cefr))) return;
     const text = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
-    const step = { cefr, title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
-    if (!step.title && !step.change && !step.rule) return;
-    out.push(step);
+    const entry = { ...(n ? { step: n } : { cefr }), title: text(item?.title, 80), change: text(item?.change, 200), rule: text(item?.rule, 240) };
+    if (!entry.title && !entry.change && !entry.rule) return;
+    out.push(entry);
   });
-  return out.sort((a, b) => STEPS_PLAN_LEVELS.indexOf(a.cefr) - STEPS_PLAN_LEVELS.indexOf(b.cefr));
+  const order = (p) => (p.step || 100 + STEPS_PLAN_LEVELS.indexOf(p.cefr));
+  return out.sort((a, b) => order(a) - order(b));
 }
 
 function stableShuffle(arr, seedInput) {
@@ -9219,15 +9237,16 @@ function adaptiveAttemptCloseBlock(assignment, attempt, now = Date.now()) {
 }
 
 function adaptiveAttemptAdvance(assignment, st) {
-  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
+  const { bands, pool } = st.bu ? buildupPool(assignment) : assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
   if (st.bu) buildupRebase(st, bands);
   else adaptiveRebase(st, bands);
   adaptiveAttemptServe(assignment, st, pool);
 }
 
 // After a quiz edit: follow each question to its new index (by id); drop what
-// was deleted, and serve a new question if the current one is gone.
-function adaptiveAttemptRemap(assignment, st, mapQi) {
+// was deleted, and serve a new question if the current one is gone. A climb
+// follows its steps there and then (climbKeyMap: buildupKeyMap).
+function adaptiveAttemptRemap(assignment, st, mapQi, { climbKeyMap = null } = {}) {
   const keep = (list) => list.map((x) => ({ ...x, qi: mapQi(x.qi) })).filter((x) => x.qi != null);
   st.items = keep(st.items || []);
   st.path = keep(st.path || []);
@@ -9249,6 +9268,7 @@ function adaptiveAttemptRemap(assignment, st, mapQi) {
   }
   if (!st.done && !st.block) {
     st.current = st.current == null ? null : mapQi(st.current);
+    if (st.bu) buildupRebase(st, buildupPool(assignment).bands, climbKeyMap);
     if (st.current == null) adaptiveAttemptAdvance(assignment, st);
   }
 }
@@ -9888,7 +9908,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     focusEventsCount: full.focusEventsCount,
     focusEventsTotalMs: full.focusEventsTotalMs,
     adaptive: attempt?.adaptive
-      ? { ...full.adaptive, ...adaptiveSummary(attempt.adaptive) }
+      ? { ...full.adaptive, ...adaptiveSummary(attempt.adaptive, { stepsPlan: assignment?.quiz?.stepsPlan }) }
       : (attempt?.cupLevels || undefined),
     timed: assignment?.liveMode === 'arena' || undefined,
   };
@@ -10447,7 +10467,7 @@ function assignmentQuestionFormat(assignment) {
 async function assignmentFormatOptions(storage, assignment) {
   const attempts = await storage.list({ prefix: `a:${assignment.code}:t:`, limit: 1 });
   const adaptive = assignmentAdaptivePool(assignment);
-  const climb = assignmentAdaptivePool(assignment, { autoOnly: true });
+  const climb = buildupPool(assignment);
   const hasSections = adaptiveSectionPlan(assignment.quiz).length > 0;
   return {
     format: assignmentQuestionFormat(assignment), count: Number(assignment.adaptive?.count || 0),
@@ -10466,10 +10486,10 @@ function assignmentFormatUpdate(assignment, body) {
   const count = Number(body.questionCount ?? assignment.adaptive?.count ?? 20);
   if (mode === current && (mode === 'all' || count === Number(assignment.adaptive?.count || 0))) return { changed: false, changes: {} };
   if (mode === 'all') return { changed: true, changes: { adaptive: null } };
-  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: mode === 'climb' });
+  const { bands, pool } = mode === 'climb' ? buildupPool(assignment) : assignmentAdaptivePool(assignment);
   const hasSections = mode === 'adaptive' && adaptiveSectionPlan(assignment.quiz).length > 0;
   if (bands.length < 2 || (!pool.length && !hasSections)) return { error: mode === 'climb'
-    ? 'Climb needs auto-graded questions tagged with at least two levels.' : 'Adaptive mode needs questions tagged with at least two levels.' };
+    ? 'Climb needs auto-graded questions in at least two steps (or tagged with two levels).' : 'Adaptive mode needs questions tagged with at least two levels.' };
   const max = mode === 'climb' ? BUILDUP_MAX_COUNT : pool.length;
   if (!Number.isInteger(count) || count < (hasSections ? 0 : 1) || count > max) return { error: `Questions per student must be between ${hasSections ? 0 : 1} and ${max}.` };
   return { changed: true, changes: mode === 'climb'
@@ -10952,8 +10972,8 @@ function adaptiveRebase(st, bands) {
 }
 
 // Teacher-only summary of one student's adaptive path (Cup report and
-// assignment results). Never sent to students.
-function adaptiveSummary(st) {
+// assignment results). Never sent to students. stepsPlan names a climb's camps.
+function adaptiveSummary(st, { stepsPlan = null } = {}) {
   if (!st) return null;
   const path = st.path || [];
   const bands = st.bands || [];
@@ -10968,7 +10988,7 @@ function adaptiveSummary(st) {
     // ~ neutral · … waiting for the teacher's grade
     path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? (p.held ? '(✗)' : '✗') : '~'))}`).join(' '),
     perLevel: st.perLevel || {},
-    ...(st.bu ? { buildup: buildupSummary(st) } : {}),
+    ...(st.bu ? { buildup: buildupSummary(st, stepsPlan) } : {}),
     ...(Array.isArray(st.sectionResults) && st.sectionResults.length ? { sections: st.sectionResults } : {}),
   };
 }
@@ -11016,10 +11036,11 @@ function adaptiveNext(st, pool, rng = Math.random) {
 
 // ---------------------------------------------------------------- build up mode
 // Climb (BUILDUP_MODE_PLAN.md): an adaptive quiz assigned as a climb for
-// students who need to build a skill step by step. The levels the quiz holds
-// are the steps, always from the bottom (no saved level is read or written).
-// A right answer fills a pip, enough pips climb a step; a wrong answer drops
-// one step. Students see an Everest trail (camps and altitude), never CEFR.
+// students who need to build a skill step by step. The quiz's step numbers
+// are the steps (or, in a quiz without steps, its levels), always from the
+// bottom (no saved level is read or written). A right answer fills a pip,
+// enough pips climb a step; a wrong answer drops one step. Students see an
+// Everest trail (camps and altitude), never steps or CEFR.
 const BUILDUP_NEED = 2;           // right answers in a row to leave a step
 const BUILDUP_NEED_EASY = 1;      // the first step, and any step already cleared
 const BUILDUP_TIP_AFTER = 3;      // wrong answers in a row that open the guide's tip
@@ -11027,6 +11048,37 @@ const BUILDUP_MAX_COUNT = 100;    // most answers a student can be given
 
 function assignmentBuildupOn(assignment) {
   return !!assignment?.adaptive && assignment.adaptive.mode === 'buildup';
+}
+
+// A quiz with any `step` climbs by its step numbers; its questions without a
+// step stay out of the climb.
+function quizUsesClimbSteps(questions) {
+  return (questions || []).some((q) => q && normalizeClimbStep(q.step));
+}
+
+// The climb's bands (step numbers from the bottom, or levels in a quiz
+// without steps) and the questions it can serve: single auto-graded ones,
+// outside listening sections.
+function buildupPool(assignment) {
+  const questions = assignment?.quiz?.questions || [];
+  if (!quizUsesClimbSteps(questions)) return assignmentAdaptivePool(assignment, { autoOnly: true });
+  const eligible = autoGradedQuestionIndexes(questions).filter((qi) => !questions[qi].listeningSection);
+  const bands = [...new Set(eligible.map((qi) => normalizeClimbStep(questions[qi].step)).filter(Boolean))].sort((a, b) => a - b);
+  const pool = eligible
+    .map((qi) => ({ qi, band: bands.indexOf(normalizeClimbStep(questions[qi].step)) }))
+    .filter((p) => p.band >= 0);
+  return { bands, pool };
+}
+
+// A question's band in a climb: by step when its bands are step numbers,
+// else by level. -1 when it has none.
+function buildupBandOf(st, q) {
+  return st.bands.indexOf(typeof st.bands[0] === 'number' ? normalizeClimbStep(q?.step) : normalizeCefrLevel(q?.cefr));
+}
+
+// The plan's entry for a band: by step number, or by level.
+function climbPlanEntry(plan, band) {
+  return (Array.isArray(plan) ? plan : []).find((p) => (typeof band === 'number' ? p.step === band : p.cefr === band)) || null;
 }
 
 function buildupInit(bands) {
@@ -11113,20 +11165,66 @@ function buildupNext(st, pool, rng = Math.random) {
   return null;
 }
 
-// The quiz was edited and now holds different levels: stay on the same level
-// (or the nearest one above it), with the pips cleared.
-function buildupRebase(st, bands) {
-  if (!bands.length || bands.join() === st.bands.join()) return;
-  const cur = st.bands[st.bu.rung];
-  let idx = bands.indexOf(cur);
-  if (idx < 0) idx = bands.findIndex((b) => CEFR_LEVELS.indexOf(b) > CEFR_LEVELS.indexOf(cur));
-  if (idx < 0) idx = bands.length - 1;
+// After a quiz edit: where each old step (or level) went, by its questions'
+// ids: the step most of its questions are in now. A renumbered step keeps
+// its key in the map; one whose questions are all gone has none.
+function buildupKeyMap(oldQuestions, newQuestions) {
+  const keyOf = (questions) => (quizUsesClimbSteps(questions)
+    ? (q) => normalizeClimbStep(q?.step)
+    : (q) => normalizeCefrLevel(q?.cefr));
+  const oldKey = keyOf(oldQuestions);
+  const newKey = keyOf(newQuestions);
+  const now = new Map((newQuestions || []).filter((q) => q?.id).map((q) => [String(q.id), newKey(q)]));
+  const votes = new Map();
+  (oldQuestions || []).forEach((q) => {
+    const from = q?.id ? oldKey(q) : 0;
+    const to = from ? now.get(String(q.id)) : 0;
+    if (!from || !to) return;
+    const tally = votes.get(from) || new Map();
+    tally.set(to, (tally.get(to) || 0) + 1);
+    votes.set(from, tally);
+  });
+  return new Map([...votes].map(([from, tally]) => [from, [...tally].sort((a, b) => b[1] - a[1])[0][0]]));
+}
+
+// The quiz was edited and now holds different steps: stay on the same step
+// (or the nearest one above it), with the pips cleared. keyMap
+// (buildupKeyMap) follows steps that were renumbered; without it a step is
+// found by its number (or level). The highest camp and the cleared steps
+// follow their own steps, so a step added below moves them up one.
+function buildupRebase(st, bands, keyMap = null) {
+  const moved = !!keyMap && [...keyMap].some(([from, to]) => from !== to);
+  if (!bands.length || (bands.join() === st.bands.join() && !moved)) return;
+  const bu = st.bu;
+  const sameKind = typeof bands[0] === typeof st.bands[0];
+  const order = (b) => (typeof b === 'number' ? b : CEFR_LEVELS.indexOf(b));
+  // An old band's new key: where its questions went, else the same key.
+  const keyAt = (i) => {
+    const mapped = keyMap?.get(st.bands[i]);
+    if (mapped != null && bands.includes(mapped)) return mapped;
+    return sameKind ? st.bands[i] : undefined;
+  };
+  // Where an old band is now: its key, else the nearest one above (or below,
+  // for the highest camp: a deleted step never raises it).
+  const follow = (i, below = false) => {
+    const key = keyAt(i);
+    if (key === undefined) return Math.min(i, bands.length - 1);
+    const at = bands.indexOf(key);
+    if (at >= 0) return at;
+    if (below) return Math.max(0, bands.filter((b) => order(b) < order(key)).length - 1);
+    const up = bands.findIndex((b) => order(b) > order(key));
+    return up >= 0 ? up : bands.length - 1;
+  };
+  const rung = follow(bu.rung);
+  const best = Math.max(rung, follow(bu.best, true));
+  const cleared = bu.cleared.map((r) => (keyAt(r) === undefined ? r : bands.indexOf(keyAt(r))))
+    .filter((r) => r >= 0 && r < bands.length - 1);
   st.bands = bands.slice();
-  st.bu.rung = idx;
-  st.bu.pips = 0;
-  st.bu.best = Math.min(st.bu.best, bands.length - 1);
-  st.bu.cleared = st.bu.cleared.filter((r) => r < bands.length - 1);
-  st.score = idx;
+  bu.rung = rung;
+  bu.pips = 0;
+  bu.best = best;
+  bu.cleared = cleared;
+  st.score = rung;
   st.retry = [];
 }
 
@@ -11139,7 +11237,7 @@ function buildupView(st, plan = null) {
   // The AI's rule for the step the student is on (quiz.stepsPlan), shown as
   // the guide's tip on arriving at a camp for the first time, at the very
   // start, and after three wrong answers in a row.
-  const rule = bu.summit ? '' : String((Array.isArray(plan) ? plan : []).find((p) => p.cefr === st.bands[bu.rung])?.rule || '');
+  const rule = bu.summit ? '' : String(climbPlanEntry(plan, st.bands[bu.rung])?.rule || '');
   const showRule = !!rule && (bu.wrongRun >= BUILDUP_TIP_AFTER || bu.flag != null || !(st.items || []).length);
   return {
     n,
@@ -11157,15 +11255,20 @@ function buildupView(st, plan = null) {
 }
 
 // Teacher-only: where the student ended and how far they got (camps as in
-// buildupView; `bands` names the level of each camp below the Summit).
-function buildupSummary(st) {
+// buildupView; `bands` names the step or level of each camp below the
+// Summit, `titles` its title in the plan when the quiz has one).
+function buildupSummary(st, plan = null) {
   const bu = st.bu;
   const n = st.bands.length + 1;
-  return { n, bands: st.bands.slice(), rung: bu.summit ? n - 1 : bu.rung, best: bu.summit ? n - 1 : bu.best, summit: !!bu.summit, stuck: bu.wrongRun >= BUILDUP_TIP_AFTER };
+  const titles = st.bands.map((b) => climbPlanEntry(plan, b)?.title || '');
+  return {
+    n, bands: st.bands.slice(), ...(titles.some(Boolean) ? { titles } : {}),
+    rung: bu.summit ? n - 1 : bu.rung, best: bu.summit ? n - 1 : bu.best, summit: !!bu.summit, stuck: bu.wrongRun >= BUILDUP_TIP_AFTER,
+  };
 }
 
 function buildupAttemptInit(assignment) {
-  const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly: true });
+  const { bands, pool } = buildupPool(assignment);
   if (bands.length < 2 || !pool.length) return null;
   const st = buildupInit(bands);
   st.count = clamp(Math.round(Number(assignment?.adaptive?.count) || 0), 1, BUILDUP_MAX_COUNT);

@@ -444,6 +444,11 @@ textarea {
   display: none;
 }
 
+.q-step-chip {
+  background: #fff3cf;
+  color: #7a5200;
+}
+
 /* Students list row: name and email on the left take the free space; level,
    class, Rename and Remove stay on one line on the right (on phones they
    wrap under the name). Fixed control widths, because the global
@@ -6713,6 +6718,19 @@ body.question-active .climb:not(.hidden) { display: flex; }
 .climb-msg[data-kind="summit"] { color: #8a5a00; background: #fff3cf; }
 .climb-msg[data-kind="down"] { color: #1f4d8a; }
 .climb-tip { margin: 0; font-size: .75rem; line-height: 1.3; color: #3a4a5d; background: rgba(255, 255, 255, .92); border-left: 4px solid #6b7f95; border-radius: 8px; padding: 6px 8px; }
+
+/* More than seven camps (BUILDUP_MODE_PLAN.md section 10): smaller camps, and
+   only the student's camp keeps its label (the head names it too). */
+.climb.is-crowded .climb-spot { width: 24px; height: 24px; border-width: 2px; }
+.climb.is-crowded .climb-icon { font-size: 12px; }
+.climb.is-crowded .climb-flag { font-size: 11px; right: -6px; top: -10px; }
+.climb.is-crowded .climb-node:not(.is-here) .climb-label { display: none; }
+.climb.is-crowded .climb-token { width: 40px; height: 40px; }
+.climb.is-crowded .climb-av-fallback { font-size: 22px; line-height: 34px; }
+@media (max-width: 899px) {
+  .climb.is-crowded .climb-spot { width: 20px; height: 20px; }
+  .climb.is-crowded .climb-token { width: 34px; height: 34px; }
+}
 
 .climb.is-storm { filter: saturate(.7) brightness(.95); }
 .climb.is-summit .climb-node:last-child .climb-spot { border-color: var(--gold); background: #fff3cf; animation: climb-glow 1.6s ease-in-out infinite; }
