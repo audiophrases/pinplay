@@ -492,13 +492,13 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.match(section(text, 'Rules'), /Every question has "step": its step's number, and no "cefr"/);
   });
 
-  it('asks for the plan first, one new thing per step, equivalent questions and one defensible answer', () => {
+  it('asks for the plan first, one new thing per step, equivalent questions and one defensible solution', () => {
     const rules = section(build(), 'Rules');
     assert.match(rules, /First write "stepsPlan", before any question/);
     assert.match(rules, /ONE thing that is new compared with the step before/);
     assert.match(rules, /Exactly 5 questions per step/);
     assert.match(rules, /equivalent/);
-    assert.match(rules, /Exactly ONE defensible answer/);
+    assert.match(rules, /Exactly ONE defensible solution/);
     assert.match(rules, /real mistakes students make/);
     assert.match(rules, /a wrong answer sends them one step back/);
     assert.match(rules, /Step 1 is so easy/);
@@ -522,7 +522,7 @@ describe('the Climb AI prompt and the steps plan', () => {
   it('names the fields of the chosen types only, with the typed-answer warning', () => {
     const fields = (text) => section(text, 'Quiz fields').split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
     assert.deepEqual(fields(build({ selectedTypes: ['mcq', 'text'] })), ['mcq', 'text']);
-    assert.deepEqual(fields(build()), ['mcq', 'tf', 'text', 'context_gap', 'error_hunt']);
+    assert.deepEqual(fields(build()), ['mcq', 'tf', 'multi', 'match_pairs', 'puzzle', 'context_gap', 'text', 'error_hunt']);
     assert.match(section(build({ selectedTypes: ['text'] }), 'Quiz fields'), /A typed answer that is right but missing here sends the student back/);
     assert.doesNotMatch(build({ selectedTypes: ['mcq'] }), /list every correct form in "accepted"/);
   });
