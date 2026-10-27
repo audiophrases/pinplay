@@ -4,12 +4,35 @@
   'use strict';
   const t = (text, args) => window.t ? window.t(text, args) : text.replace(/\{(\w+)\}/g, (_, key) => String(args?.[key] ?? ''));
   const esc = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const PREFERENCES_KEY = 'pinplay.assignment-setup.v1';
+  let lastCreated = null;
+
+  function rememberedSettings(initial) {
+    let saved = lastCreated;
+    if (!saved) try {
+      const stored = JSON.parse(localStorage.getItem(PREFERENCES_KEY));
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) saved = stored;
+    } catch {}
+    saved = saved || {};
+    const settings = { ...initial };
+    Object.keys(initial).forEach(key => {
+      if (typeof saved[key] === typeof initial[key]) settings[key] = saved[key];
+    });
+    if (!['signin', 'random'].includes(settings.signIn)) settings.signIn = initial.signIn;
+    if (!['instant', 'end', 'none'].includes(settings.feedbackMode)) settings.feedbackMode = initial.feedbackMode;
+    if (!['all', 'adaptive', 'climb'].includes(settings.format)) settings.format = initial.format;
+    settings.attemptsLimit = Math.max(0, Math.min(10, Math.round(Number(settings.attemptsLimit) || 0)));
+    // A past deadline should not carry over into a new assignment.
+    if (saved.dueAt && !(new Date(saved.dueAt).getTime() > Date.now())) settings.dueAt = '';
+    return settings;
+  }
 
   function open({ title, questionCount, initial, adaptiveAvailable, climbAvailable, singleCount, hasSections, climbDefaultCount, classes = [], loadClasses, onCreate }) {
     if (document.getElementById('assignmentSetupDialog')) return;
     const previousFocus = document.activeElement;
-    const original = { ...initial };
-    const draft = { ...initial };
+    const draft = rememberedSettings(initial);
+    if ((draft.format === 'adaptive' && !adaptiveAvailable) || (draft.format === 'climb' && !climbAvailable)) draft.format = 'all';
+    const original = { ...draft };
     let step = 0;
     let preset = 'custom';
     let busy = false;
@@ -223,6 +246,8 @@
       try {
         const result = await onCreate({ ...draft, className: draft.className.trim() });
         if (!result?.code || !result?.link) throw new Error(t('Assignment creation was not completed. Please try again.'));
+        lastCreated = { ...draft, className: draft.className.trim() };
+        try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(lastCreated)); } catch {}
         created = true;
         nav.hidden = true;
         back.hidden = true;

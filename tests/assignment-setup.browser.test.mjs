@@ -83,7 +83,9 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
   });
   it('Exam preset provides no feedback, one attempt, school sign-in and exam mode', async () => {
     const page = await open();
-    await page.keyboard.press('ArrowLeft'); // current -> exam
+    await page.keyboard.press('Home'); // practice
+    await page.keyboard.press('ArrowRight'); // homework
+    await page.keyboard.press('ArrowRight'); // exam
     await enterToReview(page);
     assert.equal(await page.evaluate(() => window.calls.length), 0);
     await page.keyboard.press('Enter');
