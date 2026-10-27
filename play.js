@@ -9799,20 +9799,55 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       body.appendChild(row);
     });
   } else if (q.type === 'text' || q.type === 'error_hunt') {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'ls-input';
+    const isErrorHunt = q.type === 'error_hunt';
+    const required = isErrorHunt
+      ? Number(q.requiredErrors) || countErrorHuntRequiredTokens(q.prompt, [q.corrected, ...(q.correctedVariants || [])].filter(Boolean))
+      : 0;
+    const input = document.createElement(isErrorHunt ? 'textarea' : 'input');
+    if (!isErrorHunt) input.type = 'text';
+    input.className = isErrorHunt ? 'ls-input ls-textarea' : 'ls-input';
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.value = q.type === 'error_hunt' ? String(saved?.rewrite || '') : String(saved ?? '');
-    if (q.type === 'error_hunt') input.placeholder = t('Write the sentence correctly');
+    input.value = isErrorHunt ? String(saved?.rewrite ?? (locked ? '' : q.prompt || '')) : String(saved ?? '');
+    if (isErrorHunt) {
+      input.id = `ls-error-hunt-${qIndex}`;
+      input.rows = 2;
+      input.placeholder = t('Write the sentence correctly');
+      const label = document.createElement('label');
+      label.htmlFor = input.id;
+      label.textContent = required === 1
+        ? t('Make {n} edit to fix the sentence:', { n: required })
+        : t('Make {n} edits to fix the sentence:', { n: required });
+      body.appendChild(label);
+    }
     input.disabled = locked;
     input.addEventListener('input', () => {
       const v = input.value;
-      save(q.type === 'error_hunt' ? listeningErrorHuntAnswer(q, v) : v, 700);
+      save(isErrorHunt ? listeningErrorHuntAnswer(q, v) : v, 700);
     });
     input.addEventListener('blur', () => flushListeningSaves());
     body.appendChild(input);
+    if (isErrorHunt && !locked) {
+      const status = document.createElement('div');
+      status.className = 'error-hunt-status';
+      const counter = document.createElement('span');
+      counter.id = `ls-error-hunt-count-${qIndex}`;
+      counter.className = 'error-hunt-counter';
+      counter.setAttribute('aria-live', 'polite');
+      input.setAttribute('aria-describedby', counter.id);
+      const updateEdits = () => {
+        const { editedCount } = renderErrorHuntDiff(q.prompt || '', input.value);
+        counter.innerHTML = t('<strong>{count}</strong> / {required} {label} made', {
+          count: editedCount, required, label: required === 1 ? t('edit') : t('edits'),
+        });
+        counter.classList.toggle('error-hunt-counter-match', editedCount === required);
+        counter.classList.toggle('error-hunt-counter-over', editedCount > required);
+      };
+      input.addEventListener('input', updateEdits);
+      updateEdits();
+      status.appendChild(counter);
+      body.appendChild(status);
+    }
   } else if (q.type === 'open') {
     const ta = document.createElement('textarea');
     ta.className = 'ls-input ls-textarea';

@@ -611,6 +611,8 @@ window.PINPLAY_FR_DICT = {
   '<strong>{count}</strong> / {required} {label} made': '<strong>{count}</strong> / {required} {label} effectuées',
   'edit': 'modification',
   'edits': 'modifications',
+  'Make {n} edit to fix the sentence:': 'Fais {n} modification pour corriger la phrase :',
+  'Make {n} edits to fix the sentence:': 'Fais {n} modifications pour corriger la phrase :',
   'Type your answer': 'Saisissez votre réponse',
   'No image set for this question.': 'Aucune image définie pour cette question.',
   'Replay question audio': "Réécouter l'audio de la question",
