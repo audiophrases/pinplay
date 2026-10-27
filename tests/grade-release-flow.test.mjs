@@ -239,6 +239,62 @@ it('reopening the assignment shows the released grade in the completed-attempt c
   assert.equal(scores[1].textContent, 'Grade not released');
 });
 
+it('reopening preserves answers, unlocks listening sections and instant answers until resubmission', async () => {
+  const reopenCode = 'REOPEN12';
+  const original = { ...attempt('reopened'), gradeReleasedAt: 100, releasedGrade: 50, selfCorrectedAt: 100,
+    sectionsSubmitted: { s1: 100 }, listeningPlays: { s1: 1 } };
+  await storage.put(`ab:${reopenCode}`, { ...clone(assignment), code: reopenCode, feedbackMode: 'instant',
+    quiz: { ...clone(assignment.quiz), listeningSections: [{ id: 's1', title: 'Listen', playsAllowed: 2 }],
+      questions: clone(assignment.quiz.questions).map(q => ({ ...q, listeningSection: 's1' })) } });
+  await storage.put(`a:${reopenCode}:t:reopened`, original);
+  const reopened = await call('/api/assignments/reopen-attempt', { code: reopenCode, attemptId: 'reopened', password: teacherPassword });
+  assert.equal(reopened.status, 200, JSON.stringify(reopened.body));
+  newRoom();
+  const state = await call(`/api/assignment/state?code=${reopenCode}&attemptId=reopened`);
+  assert.equal(state.body.attempt.submitted, false);
+  assert.ok(state.body.attempt.reopenedAt);
+  assert.deepEqual(state.body.attempt.answersByQ, original.answersByQ);
+  assert.deepEqual(state.body.attempt.sectionsSubmitted, {});
+  assert.deepEqual(state.body.attempt.listeningPlays, { s1: 1 });
+  assert.equal(state.body.attempt.gradeReleasedAt, null);
+  assert.equal(state.body.attempt.assignment.feedbackMode, 'end');
+  assert.equal((await storage.get(`ab:${reopenCode}`)).feedbackMode, 'instant');
+  const edited = await call('/api/assignment/answer', { code: reopenCode, attemptId: 'reopened', qIndex: 1, answer: 0 });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.attempt.answersByQ['1'].answer, 0);
+  assert.equal((await call('/api/assignment/submit', { code: reopenCode, attemptId: 'reopened' })).status, 200);
+  const submitted = await call(`/api/assignment/state?code=${reopenCode}&attemptId=reopened`);
+  assert.equal(submitted.body.attempt.submitted, true);
+  assert.equal(submitted.body.attempt.assignment.feedbackMode, 'instant');
+  assert.equal((await call('/api/assignment/answer', { code: reopenCode, attemptId: 'reopened', qIndex: 1, answer: 1 })).status, 409);
+});
+
+it('refreshing a reopened attempt exits stale review mode and restores saved answers for editing', async () => {
+  const data = { attempt: { id: 'reopened', reopenedAt: 200, submitted: false,
+    answeredQIndexes: [0], answersByQ: { 0: { answer: 1 } },
+    assignment: { feedbackMode: 'end', quiz: { questions: [clone(assignment.quiz.questions[0])] } } } };
+  const live = { player: { assignment: { code: 'REOPEN123', attemptId: 'reopened', currentIndex: 0,
+    reviewMode: true, pendingComplete: true, state: { attempt: { id: 'reopened', submitted: true } } } } };
+  const button = { disabled: true, classList: { remove() {} } };
+  let rendered;
+  const { loadAssignmentState } = loadDeclarations(fs.readFileSync('play.js', 'utf8'), ['loadAssignmentState', 'mapAssignmentStateToPlayerState'], {
+    live, api: async () => data, joinSubmitBtn: button, _spellingBeeProgress: new Map(), _wordleProgress: new Map(),
+    document: { getElementById: () => null, body: { classList: { remove() {} } } },
+    clampAssignmentIndex: n => n, deriveAssignmentCurrentIndex: () => 0, assignmentLockedIndexes: () => [],
+    maybeShowExamModeNoticeBeforeRender: async () => {}, renderPlayerState: state => { rendered = state; },
+    renderInstantFeedbackFromState() {}, maybeActivateExamModeFocusTracking() {},
+  });
+  await loadAssignmentState();
+  assert.equal(live.player.assignment.reviewMode, false);
+  assert.equal(live.player.assignment.pendingComplete, false);
+  assert.equal(live.player.assignment.bypassAllAnsweredScreen, true);
+  assert.equal(button.disabled, false);
+  assert.equal(rendered.questionClosed, false);
+  assert.equal(rendered.assignmentSubmitted, false);
+  assert.equal(rendered.answeredCurrent, true);
+  assert.equal(live.player.assignment.state.attempt.answersByQ['0'].answer, 1);
+});
+
 let reviewNumber = 0;
 async function reviewFixture({ released = true, feedbackMode = 'none', submitted = true } = {}) {
   const reviewCode = `REVIEW${++reviewNumber}`;
@@ -336,4 +392,29 @@ it('an adaptive repeat can be regraded independently without moving the saved le
   assert.equal(updated.adaptive.score, 1);
   assert.equal(updated.adaptive.answered, 2);
   assert.equal(updated.adaptive.items[1].teacherGrade, undefined);
+});
+
+it('reopened adaptive attempts edit each served repeat without rerunning the engine or changing its level', async () => {
+  const input = await reviewFixture({ released: false, feedbackMode: 'instant' });
+  const stored = await storage.get(`a:${input.code}:t:reviewer`);
+  stored.adaptive = { bands: ['A1', 'A2'], score: 1, answered: 2, count: 2, done: true, current: null, path: [],
+    items: [{ qi: 0, answer: 1, at: 50 }, { qi: 0, answer: 0, at: 75 }],
+  };
+  await storage.put(`a:${input.code}:t:reviewer`, stored);
+  assert.equal((await call('/api/assignments/reopen-attempt', input)).status, 200);
+  const state = await call(`/api/assignment/state?code=${input.code}&attemptId=reviewer`);
+  assert.equal(state.body.attempt.adaptive, undefined);
+  assert.equal(state.body.attempt.assignment.feedbackMode, 'end');
+  assert.equal(state.body.attempt.assignment.totalQuestions, 2);
+  assert.equal(state.body.attempt.answersByQ['0'].answer, 1);
+  const edited = await call('/api/assignment/answer', { code: input.code, attemptId: 'reviewer', qIndex: 0, answer: 0 });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.attempt.answersByQ['0'].answer, 0);
+  assert.equal(edited.body.attempt.answersByQ['1'].answer, 0);
+  const updated = await storage.get(`a:${input.code}:t:reviewer`);
+  assert.equal(updated.adaptive.score, 1);
+  assert.equal(updated.adaptive.answered, 2);
+  assert.equal(updated.adaptive.items.length, 2);
+  assert.equal(updated.adaptive.items[1].at, 75);
+  assert.equal((await call('/api/assignment/submit', { code: input.code, attemptId: 'reviewer' })).status, 200);
 });

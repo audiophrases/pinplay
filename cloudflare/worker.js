@@ -3692,6 +3692,31 @@ export class QuizRoom {
 
         if (attempt.submitted) return json({ error: 'Attempt already submitted.' }, 409);
 
+        // A reopened adaptive/Climb attempt edits its served questions. Keep
+        // the trail and saved level intact rather than running the engine again.
+        if (attempt.reopenedAt && attempt.adaptive) {
+          const item = attempt.adaptive.items?.[qIndex];
+          const question = assignment.quiz?.questions?.[item?.qi];
+          if (!question) return json({ error: 'Question not found.' }, 404);
+          if (attemptSectionSubmitted(attempt, question.listeningSection)) {
+            return json({ error: 'This listening section is already submitted.', code: 'SECTION_SUBMITTED' }, 409);
+          }
+          await ensurePendingCounts(this.state.storage, code, assignment);
+          const prevPending = computeAttemptPending(assignment, attempt);
+          item.answer = sanitizeAssignmentAnswer(question, body?.answer);
+          item.bet = sanitizeBet(body?.bet);
+          item.teacherGrade = null;
+          item.at = now;
+          attempt.answersByQ[String(item.qi)] = { answer: item.answer, bet: item.bet, teacherGrade: null, updatedAt: now };
+          attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
+          attempt.updatedAt = now;
+          applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
+          assignment.updatedAt = now;
+          await saveAttempt(this.state.storage, code, attemptId, attempt);
+          await saveAssignmentBase(this.state.storage, code, assignment);
+          return json({ ok: true, saved: true, qIndex, attempt: publicAssignmentAttempt(settings, attempt) });
+        }
+
         // Adaptive: the student answers the served question (virtual index =
         // answers so far), the engine records the result and serves the next.
         if (attempt.adaptive?.block) {
@@ -3831,7 +3856,7 @@ export class QuizRoom {
           await saveAttempt(this.state.storage, code, attemptId, attempt);
           return json({ ok: true, plays: plays + 1, playsAllowed: allowed });
         }
-        if (attempt.adaptive?.block?.id === sectionId) {
+        if (!attempt.reopenedAt && attempt.adaptive?.block?.id === sectionId) {
           await ensurePendingCounts(this.state.storage, code, assignment);
           const prevPending = computeAttemptPending(assignment, attempt);
           adaptiveAttemptCloseBlock(assignment, attempt, now);
@@ -3841,7 +3866,7 @@ export class QuizRoom {
           applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
           assignment.updatedAt = now;
           await saveAssignmentBase(this.state.storage, code, assignment);
-        } else if (attempt.adaptive && !attemptSectionSubmitted(attempt, sectionId)) {
+        } else if (!attempt.reopenedAt && attempt.adaptive && !attemptSectionSubmitted(attempt, sectionId)) {
           return json({ error: 'That section is not open.', code: 'NOT_CURRENT' }, 409);
         }
         attempt.sectionsSubmitted = attempt.sectionsSubmitted && typeof attempt.sectionsSubmitted === 'object' ? attempt.sectionsSubmitted : {};
@@ -3874,7 +3899,7 @@ export class QuizRoom {
 
         // An open listening block is submitted with whatever was autosaved.
         let prevBlockPending = null;
-        if (attempt.adaptive?.block && Object.keys(attempt.adaptive.block.answers || {}).length) {
+        if (!attempt.reopenedAt && attempt.adaptive?.block && Object.keys(attempt.adaptive.block.answers || {}).length) {
           await ensurePendingCounts(this.state.storage, code, assignment);
           prevBlockPending = computeAttemptPending(assignment, attempt);
           adaptiveAttemptCloseBlock(assignment, attempt);
@@ -3887,7 +3912,7 @@ export class QuizRoom {
         // answered before the student finalizes — UNLESS the client passes
         // `force: true`, signalling the student knowingly confirmed they're leaving
         // some blank. Instant mode keeps the legacy ≥1 rule.
-        if (attempt.adaptive) {
+        if (attempt.adaptive && !attempt.reopenedAt) {
           const st = attempt.adaptive;
           const remaining = Math.max(0, adaptiveAttemptTotal(st) - (st.items || []).length);
           if (!st.done && remaining > 0 && !body?.force) {
@@ -3898,7 +3923,7 @@ export class QuizRoom {
               totalQuestions: adaptiveAttemptTotal(st),
             }, 409);
           }
-        } else if (String(settings.feedbackMode || 'none') !== 'instant' && !body?.force) {
+        } else if (!attempt.adaptive && String(settings.feedbackMode || 'none') !== 'instant' && !body?.force) {
           const totalQuestions = Math.max(0, Math.round(Number(assignment.totalQuestions
             || (Array.isArray(assignment.quiz?.questions) ? assignment.quiz.questions.length : 0))));
           if (totalQuestions > 0 && Number(metrics.answeredCount || 0) < totalQuestions) {
@@ -3917,7 +3942,7 @@ export class QuizRoom {
         attempt.updatedAt = attempt.submittedAt;
         assignment.updatedAt = attempt.submittedAt;
         // Stopped early: the answers so far still count toward the saved level.
-        if (attempt.adaptive) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
+        if (attempt.adaptive && !attempt.reopenedAt) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
         if (prevBlockPending) {
           attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
           applyPendingDelta(assignment, prevBlockPending, computeAttemptPending(assignment, attempt));
@@ -3947,12 +3972,17 @@ export class QuizRoom {
         attempt.submitted = false;
         attempt.submittedAt = null;
         attempt.updatedAt = Date.now();
+        attempt.reopenedAt = attempt.updatedAt;
+        attempt.sectionsSubmitted = {};
+        attempt.gradeReleasedAt = null;
+        attempt.releasedGrade = null;
+        attempt.selfCorrectedAt = null;
         assignment.updatedAt = attempt.updatedAt;
 
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
-        return json({ ok: true, attempt: publicAssignmentAttempt(assignment, attempt) });
+        return json({ ok: true, attempt: publicAssignmentAttempt(attemptAssignment(assignment, attempt), attempt) });
       }
 
       if (url.pathname === '/assignments/grading-overview' && request.method === 'GET') {
@@ -9482,7 +9512,13 @@ function publicPlayAttempt(claim) {
 // marked via: 'play'. It keeps the public-play settings even if the game is
 // later unpublished, so it can finish.
 function attemptAssignment(assignment, attempt) {
-  return attempt?.via === 'play' ? publicGameAssignment(assignment) : assignment;
+  const settings = attempt?.via === 'play' ? publicGameAssignment(assignment) : assignment;
+  // Reopening grants an editing window until resubmission, including answers
+  // whose instant feedback was already shown. Keep the assignment's settings.
+  if (attempt?.reopenedAt && !attempt.submitted && settings.feedbackMode === 'instant') {
+    return { ...settings, feedbackMode: 'end' };
+  }
+  return settings;
 }
 
 // The whole answer key goes out only with a submitted attempt, for homework and
@@ -9716,13 +9752,15 @@ function assignmentQuestionOrder(questions, previousOrder = null) {
 function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers && !!attempt?.submitted } = {}) {
   if (attempt?.adaptive) {
     const st = attempt.adaptive;
-    const v = adaptiveAttemptView(assignment, attempt);
+    const v = adaptiveAttemptView(assignment, attempt, { includeCurrent: !attempt.reopenedAt });
     const out = publicAssignmentAttempt(v.assignment, v.attempt, { includeAnswers, includeAnswerKey });
     out.metrics = evaluateAssignmentAttempt(assignment, attempt);
-    out.assignment.totalQuestions = adaptiveAttemptTotal(st);
+    out.assignment.totalQuestions = attempt.reopenedAt ? v.assignment.quiz.questions.length : adaptiveAttemptTotal(st);
     // Progress only: levels stay teacher-side.
-    out.adaptive = { step: (st.items || []).length, total: adaptiveAttemptTotal(st), done: !!st.done };
-    if (st.bu) out.climb = buildupView(st, assignment?.quiz?.stepsPlan);
+    if (!attempt.reopenedAt) {
+      out.adaptive = { step: (st.items || []).length, total: adaptiveAttemptTotal(st), done: !!st.done };
+      if (st.bu) out.climb = buildupView(st, assignment?.quiz?.stepsPlan);
+    }
     return out;
   }
   const metrics = evaluateAssignmentAttempt(assignment, attempt);
@@ -9783,6 +9821,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     gradeReleasedAt: Number(attempt?.gradeReleasedAt || 0) || null,
     submitted: !!attempt?.submitted,
     submittedAt: Number(attempt?.submittedAt || 0) || null,
+    reopenedAt: Number(attempt?.reopenedAt || 0) || null,
     reviewedAt: Number(attempt?.reviewedAt || 0) || null,
     selfCorrectedAt: Number(attempt?.selfCorrectedAt || 0) || null,
     via: attempt?.via === 'play' ? 'play' : undefined,

@@ -1360,6 +1360,22 @@ async function loadAssignmentState() {
   if (!code || !attemptId) return;
 
   const data = await api(`/api/assignment/state?code=${encodeURIComponent(code)}&attemptId=${encodeURIComponent(attemptId)}`, { method: 'GET' });
+  const previous = live.player.assignment.state?.attempt;
+  const reopened = data?.attempt?.reopenedAt && !data.attempt.submitted;
+  if (reopened && (previous?.id !== data.attempt.id || previous?.reopenedAt !== data.attempt.reopenedAt || live.player.assignment.reviewMode)) {
+    live.player.assignment.reviewMode = false;
+    live.player.assignment.reviewExitContext = null;
+    live.player.assignment.pendingComplete = false;
+    live.player.assignment.forceAutoAdvance = false;
+    live.player.assignment.bypassAllAnsweredScreen = !data.attempt.adaptive;
+    live.player.assignment.hasReachedEnd = false;
+    live.player.renderKey = null;
+    _spellingBeeProgress.clear();
+    _wordleProgress.clear();
+    document.getElementById('reviewNavigator')?.remove();
+    document.body.classList.remove('review-mode-active');
+    if (joinSubmitBtn) { joinSubmitBtn.disabled = false; joinSubmitBtn.classList.remove('hidden'); }
+  }
   live.player.assignment.state = data;
 
   const total = Number(data?.attempt?.assignment?.totalQuestions || data?.attempt?.assignment?.quiz?.questions?.length || 0);
@@ -1823,6 +1839,7 @@ async function proceedWithAssignmentStart(code, studentKey, username) {
   });
 
   live.player.assignment.attemptId = data?.attempt?.id || null;
+  live.player.assignment.state = null;
   live.player.displayName = data?.attempt?.studentName || username;
   setJoinTitle(`${live.player.displayName} · ${code}`);
   setJoinAvatar(null);
@@ -2161,6 +2178,8 @@ async function enterAssignmentReviewMode(code, attemptId, username, checkData) {
 
     // Load the attempt state
     await loadAssignmentState();
+    // The teacher may have reopened it since the attempt chooser was loaded.
+    if (!live.player.assignment.state?.attempt?.submitted) return;
 
     // Notify backend that attempt was reviewed (fire and forget)
     api('/api/assignment/mark-reviewed', {
