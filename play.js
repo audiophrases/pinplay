@@ -267,6 +267,7 @@ function init() {
 
   // Keyboard nav for assignment mode (arrow keys + space)
   document.addEventListener('keydown', (e) => {
+    if (listeningSheet.el) return; // The sheet owns its controls and submission.
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -291,6 +292,7 @@ function init() {
   // whatever submitLiveAnswer would do when the submit button is clicked.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
+    if (listeningSheet.el) return;
     if (live.player.mode !== 'assignment') return;
     if (!joinQuestionWrap || joinQuestionWrap.classList.contains('hidden')) return;
     // Let Enter insert newlines in textareas.
@@ -318,6 +320,7 @@ function init() {
 
   // Press 'p' to play question audio
   document.addEventListener('keydown', (e) => {
+    if (listeningSheet.el) return;
     if (e.key === 'p' || e.key === 'P') {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       // 'p' is an answer letter while a game round is typing — never a hotkey.
@@ -338,6 +341,7 @@ function init() {
 
   // Press 'r' / 'R' to start or stop voice recording
   document.addEventListener('keydown', (e) => {
+    if (listeningSheet.el) return;
     if (e.key !== 'r' && e.key !== 'R') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -351,6 +355,7 @@ function init() {
   // Press 't' / 'T' to jump the cursor into the first blank answer field.
   // (Autofocus is intentionally off, so this is the keyboard way in.)
   document.addEventListener('keydown', (e) => {
+    if (listeningSheet.el) return;
     if (e.key !== 't' && e.key !== 'T') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (live.player.mode !== 'assignment') return;
@@ -5245,6 +5250,8 @@ async function sendReaction(emoji) {
 }
 
 async function submitLiveAnswer(opts = {}) {
+  // Never submit the hidden single-question UI behind a listening sheet.
+  if (listeningSheet.el) return;
   // Arena rounds grade over their own socket (arena.js).
   if (window.PinArena && window.PinArena.active) {
     window.PinArena.submit();
@@ -9478,7 +9485,7 @@ function round(n, d = 0) {
 // Live games use the same sheet: answers save as drafts on the room, the
 // recording plays on the projector, and the teacher's reveal starts the class
 // correction: each question's mark comes as the projector shows its answer.
-const listeningSheet = { el: null, sectionId: '', mode: 'assignment', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false, live: null, liveAnswers: {}, liveKey: '', reviewCurrent: null };
+const listeningSheet = { el: null, sectionId: '', mode: 'assignment', audio: null, playing: false, saveTimers: new Map(), pendingSaves: new Set(), busy: false, confirmDialog: null, live: null, liveAnswers: {}, liveKey: '', reviewCurrent: null };
 
 function liveListeningLocked(L) {
   return !!(L?.submitted || L?.closed);
@@ -9545,6 +9552,7 @@ function assignmentLockedIndexes(attempt) {
 }
 
 function closeListeningSheet() {
+  listeningSheet.confirmDialog?.close();
   if (!listeningSheet.el) return;
   flushListeningSaves();
   if (listeningSheet.audio) {
@@ -9575,10 +9583,12 @@ function maybeRenderListeningSheet(state) {
     closeListeningSheet();
     return false;
   }
-  // The end-of-quiz screen wins once everything is saved.
+  // Autosaved drafts can fill every answer while the student is still typing.
+  // Only a submitted section may give way to the end-of-quiz screen.
+  const locked = listeningSectionLocked(attempt, info.section.id);
   const total = Number(state.totalQuestions || 0);
   const done = new Set((state.answeredQIndexes || []).map(Number));
-  if (total > 0 && done.size >= total && !attempt.submitted && !as.pendingComplete && !as.bypassAllAnsweredScreen) {
+  if (locked && total > 0 && done.size >= total && !attempt.submitted && !as.pendingComplete && !as.bypassAllAnsweredScreen) {
     closeListeningSheet();
     return false;
   }
@@ -9591,7 +9601,6 @@ function maybeRenderListeningSheet(state) {
   stopJoinTimer();
   // The 5-second state refresh must not rebuild the sheet under the student's
   // fingers: keep it, re-apply edits not saved yet, refresh the count.
-  const locked = listeningSectionLocked(attempt, info.section.id);
   if (listeningSheet.el && listeningSheet.sectionId === info.section.id && listeningSheet.el.dataset.locked === String(locked)) {
     attempt.answersByQ = attempt.answersByQ || {};
     listeningSheet.saveTimers.forEach((entry, i) => {
@@ -9611,6 +9620,8 @@ function listeningSavedAnswer(qIndex) {
 }
 
 function renderListeningSheet(info) {
+  // A teacher closing the section or navigation invalidates an open confirmation.
+  listeningSheet.confirmDialog?.close();
   const isLive = listeningSheet.mode === 'live';
   const L = listeningSheet.live;
   const attempt = isLive ? null : live.player.assignment.state.attempt;
@@ -10084,35 +10095,89 @@ function leaveListeningSheet(target, fromIndex = null) {
   if (mapped) renderPlayerState(mapped);
 }
 
+function confirmListeningSubmission(message) {
+  return new Promise((resolve) => {
+    const previousFocus = document.activeElement;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'ls-submit-dialog';
+    dialog.setAttribute('aria-labelledby', 'ls-submit-title');
+    dialog.setAttribute('aria-describedby', 'ls-submit-warning');
+    const title = document.createElement('h2');
+    title.id = 'ls-submit-title';
+    title.textContent = t('Submit section');
+    const warning = document.createElement('p');
+    warning.id = 'ls-submit-warning';
+    warning.textContent = message;
+    const actions = document.createElement('div');
+    actions.className = 'ls-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'ls-btn ls-btn-quiet';
+    cancel.textContent = t('Keep working');
+    cancel.autofocus = true;
+    cancel.addEventListener('click', () => dialog.close());
+    const submit = document.createElement('button');
+    submit.type = 'button';
+    submit.className = 'ls-btn ls-btn-main';
+    submit.textContent = t('Submit section');
+    submit.addEventListener('click', () => dialog.close('submit'));
+    actions.append(cancel, submit);
+    dialog.append(title, warning, actions);
+    dialog.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
+      if (e.key === 'Tab') {
+        if (e.shiftKey && document.activeElement === cancel) {
+          e.preventDefault();
+          submit.focus();
+        } else if (!e.shiftKey && document.activeElement === submit) {
+          e.preventDefault();
+          cancel.focus();
+        }
+      }
+    });
+    dialog.addEventListener('close', () => {
+      if (listeningSheet.confirmDialog === dialog) listeningSheet.confirmDialog = null;
+      dialog.remove();
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+      resolve(dialog.returnValue === 'submit');
+    }, { once: true });
+    listeningSheet.confirmDialog = dialog;
+    document.body.appendChild(dialog);
+    dialog.showModal(); // The rest of the quiz is inert while confirming.
+    cancel.focus({ preventScroll: true });
+  });
+}
+
 async function submitListeningSection(info) {
-  if (listeningSheet.busy) return;
+  if (listeningSheet.busy || !listeningSheet.el || listeningSheet.sectionId !== info.section.id) return;
+  const locked = listeningSheet.mode === 'live'
+    ? liveListeningLocked(listeningSheet.live)
+    : listeningSectionLocked(live.player.assignment.state?.attempt, info.section.id);
+  if (locked) return;
+  const sheet = listeningSheet.el;
   const count = info.last - info.first + 1;
   let blank = 0;
   for (let i = info.first; i <= info.last; i += 1) if (!listeningAnswered(listeningSavedAnswer(i))) blank += 1;
   const ask = blank > 0
     ? (blank === 1 ? t('1 question unanswered. Submit the section anyway? You can\'t change it afterwards.') : t('{n} questions unanswered. Submit the section anyway? You can\'t change it afterwards.', { n: blank }))
     : t('Submit this section? You can\'t change it afterwards.');
-  if (!window.confirm(ask)) return;
   listeningSheet.busy = true;
-  listeningStatus(t('Submitting…'));
-  if (listeningSheet.mode === 'live') {
-    try {
-      await flushListeningSaves();
+  try {
+    if (!await confirmListeningSubmission(ask) || listeningSheet.el !== sheet) return;
+    listeningStatus(t('Submitting…'));
+    await flushListeningSaves();
+    // The teacher may have moved on while the last drafts were saving.
+    if (listeningSheet.el !== sheet) return;
+    if (listeningSheet.mode === 'live') {
       const data = await api('/api/section/submit', {
         method: 'POST',
         headers: { 'X-Player-Token': live.player.token },
         body: { pin: live.player.pin, playerId: live.player.id, sectionId: info.section.id },
       });
       if (data?.state) applyLivePlayerState(data.state);
-    } catch (err) {
-      listeningStatus(String(err?.message || t('Could not submit the section.')), 'bad');
-    } finally {
-      listeningSheet.busy = false;
+      return;
     }
-    return;
-  }
-  try {
-    await flushListeningSaves();
     const code = String(live.player.assignment.code || '').trim();
     const attemptId = String(live.player.assignment.attemptId || '').trim();
     const data = await api('/api/assignment/submit-section', { method: 'POST', body: { code, attemptId, sectionId: info.section.id } });
