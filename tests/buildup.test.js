@@ -346,6 +346,55 @@ describe('build up assignments (real worker, in-memory storage)', () => {
     questions: [...Array.from({ length: n }, (_, s) => Array.from({ length: per }, (__, i) => mcq(`S${s + 1}-${i + 1}`, { step: s + 1 }))).flat(), ...extra],
   });
 
+  it('Adaptive plays all 12 numbered steps, independently of CEFR tags', async () => {
+    const q = stepped(12, 5, [mcq('CEFR-only', { cefr: 'C2' })]);
+    q.questions.forEach((x) => { if (x.step) x.cefr = 'A2'; });
+    const a = await create(q, { buildup: false, adaptiveCount: 48 });
+    let s = await start(a.code, 'anon-adaptive-steps');
+    assert.equal(s.attempt.climb, undefined);
+    const seen = [];
+    for (let i = 0; i < 48; i += 1) {
+      const id = servedId(s);
+      assert.match(id, /^S\d+-/);
+      seen.push(Number(id.match(/^S(\d+)-/)[1]));
+      s = await send(a.code, s.attempt.id, s, true);
+    }
+    assert.equal(seen[0], 1);
+    assert.ok(seen.includes(12), seen.join(','));
+    const res = await post('/api/assignments/results', { password: PW, code: a.code });
+    const summary = res.body.attempts[0].adaptive;
+    assert.deepEqual(plain(summary.bands), Array.from({ length: 12 }, (_, i) => i + 1));
+    assert.equal(summary.finalLevel, 12);
+    assert.equal(Object.values(summary.perLevel).reduce((n, p) => n + p.answered, 0), 48);
+    assert.match(summary.path, /Step 12✓/);
+  });
+
+  it('Adaptive drops to easier numbered questions after misses', async () => {
+    const a = await create(stepped(12, 4), { buildup: false, adaptiveCount: 30 });
+    let s = await start(a.code, 'anon-adaptive-down');
+    for (let i = 0; i < 12; i += 1) s = await send(a.code, s.attempt.id, s, true);
+    const before = Number(servedId(s).match(/^S(\d+)-/)[1]);
+    for (let i = 0; i < 8; i += 1) s = await send(a.code, s.attempt.id, s, false);
+    const after = Number(servedId(s).match(/^S(\d+)-/)[1]);
+    assert.ok(after < before, `${before} → ${after}`);
+  });
+
+  it('an adaptive attempt follows its questions when a new step is inserted below', async () => {
+    const q = stepped(3, 5);
+    const a = await create(q, { buildup: false, adaptiveCount: 12 });
+    let s = await start(a.code, 'anon-adaptive-renumber');
+    s = await send(a.code, s.attempt.id, s, true);
+    const before = servedId(s);
+    const edited = structuredClone(q);
+    edited.questions.forEach((x) => { x.step += 1; });
+    edited.questions.unshift(mcq('New-1', { step: 1 }));
+    const result = await post('/api/assignments/update-quiz', { password: PW, code: a.code, quiz: edited });
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    s = await send(a.code, s.attempt.id, s, true);
+    assert.match(before, /^S2-/);
+    assert.ok(!/^New-/.test(servedId(s)));
+  });
+
   it('a quiz with 12 steps and no levels climbs by its steps, 13 camps', async () => {
     const a = await create(stepped(), { adaptiveCount: 48 });
     let s = await start(a.code, 'anon-steps');

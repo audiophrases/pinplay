@@ -8,7 +8,7 @@ const { loadDeclarations } = require('./helpers/extract-declaration');
 // the server with nothing stored. These run the real worker functions.
 // See PUBLIC_GAMES_PLAN.md.
 const NAMES = [
-  'publicGameCard', 'signPublicPlay', 'verifyPublicPlay', 'publicPlayAttempt', 'newPublicPlayAttempt', 'applyPublicPlayAnswer',
+  'quizUsesClimbSteps', 'hash', 'adaptiveScaleKey', 'publicGameCard', 'signPublicPlay', 'verifyPublicPlay', 'publicPlayAttempt', 'newPublicPlayAttempt', 'applyPublicPlayAnswer',
   'publicPlayResponse', 'publicGameAssignment', 'isPublicGame', 'publicQuizVersion', 'publicPlaySecret', 'PUBLIC_PLAY_TTL_MS',
   'PUBLIC_PLAY_TOKEN_MAX', 'assignmentAdaptiveCount', 'listeningSectionMoments', 'listeningSectionBlock', 'adaptiveSectionPlan', 'adaptiveAttemptTotal', 'assignmentAdaptiveTotal', 'assignmentAdaptiveOn', 'adaptiveAttemptServe', 'adaptiveAttemptOpenBlock', 'adaptiveCefr', 'assignmentAdaptivePool', 'adaptivePool', 'CEFR_LEVELS', 'normalizeCefrLevel',
   'isAssignmentTeacherGradedQuestion', 'isTeacherGradedTextQuestion', 'sanitizeAssignmentCode', 'randomId', 'pickRandomName',
@@ -97,6 +97,19 @@ describe('play token', () => {
 });
 
 describe('anonymous play', () => {
+  it('adapts anonymous public play through all 12 numbered steps', () => {
+    const game = adaptiveGame();
+    game.quiz.questions = Array.from({ length: 60 }, (_, i) => ({ ...tf(`s${i}`), step: Math.floor(i / 5) + 1 }));
+    const attempt = W.newPublicPlayAttempt(game, 48);
+    assert.deepEqual(Array.from(attempt.adaptive.bands), Array.from({ length: 12 }, (_, i) => i + 1));
+    for (let i = 0; i < 48; i += 1) {
+      assert.equal(W.applyPublicPlayAnswer(game, attempt, i, 0, 0), null);
+    }
+    assert.equal(attempt.adaptive.done, true);
+    assert.equal(attempt.adaptive.answered, 48);
+    assert.ok(attempt.adaptive.path.some((p) => p.level === 12));
+  });
+
   it('ignores the assignment\'s own strict settings', () => {
     const view = W.publicGameAssignment(plainGame());
     assert.deepEqual(

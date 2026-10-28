@@ -133,7 +133,7 @@ describe('adaptive listening: blocks and ladders', () => {
   before(() => {
     const src = read('cloudflare/worker.js');
     const consts = [...src.matchAll(/^const (ADAPTIVE_[A-Z_]+) =/gm)].map((m) => m[1]);
-    E = loadDeclarations(src, ['CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', ...consts, 'adaptiveInit', 'adaptiveBand', 'adaptiveStepScale',
+    E = loadDeclarations(src, ['CEFR_LEVELS', 'normalizeCefrLevel', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'quizUsesClimbSteps', 'clamp', ...consts, 'adaptiveInit', 'adaptiveBand', 'adaptiveStepScale',
       'adaptiveTally', 'adaptivePathOk', 'adaptiveRecord', 'listeningSectionMoments', 'listeningSectionBlock', 'adaptiveSectionPlan']);
   });
   const q = (id, cefr, s = 'p1') => ({ id, type: 'mcq', listeningSection: s, ...(cefr ? { cefr } : {}) });
@@ -201,7 +201,7 @@ describe('adaptive listening: blocks and ladders', () => {
 describe('live levels: a classic game at the ticked levels', () => {
   let E;
   before(() => {
-    E = loadDeclarations(read('cloudflare/worker.js'), ['CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'listeningSectionMoments',
+    E = loadDeclarations(read('cloudflare/worker.js'), ['CEFR_LEVELS', 'normalizeCefrLevel', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'quizUsesClimbSteps', 'clamp', 'listeningSectionMoments',
       'liveLevelList', 'liveLevelSectionPick', 'liveLevelQuiz']);
   });
   const single = (id, cefr) => ({ id, type: 'mcq', ...(cefr ? { cefr } : {}) });

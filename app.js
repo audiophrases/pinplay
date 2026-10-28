@@ -348,13 +348,10 @@ const CANONICAL_QUESTION_TYPES = QUESTION_TYPE_CATALOG.map((item) => item.type);
 const TEMPLATE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.inTemplate).map((item) => item.type);
 const AUDIO_CAPABLE_QUESTION_TYPES = QUESTION_TYPE_CATALOG.filter((item) => item.supportsAudio).map((item) => item.type);
 
-// Adaptive mode: each question can carry a CEFR difficulty tag (q.cefr). The
-// engine moves every student up or down the ladder of levels a quiz contains.
+// Adaptive and Climb share numbered difficulty steps (q.step, 1–12), with
+// CEFR tags as the fallback for existing quizzes without numbered steps.
 // See ADAPTIVE_MODE_PLAN.md.
 const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-// Default AI level mix for adaptive quizzes (percent). Leans easy: harder
-// questions often need written production and take longer to answer.
-const ADAPTIVE_DEFAULT_LEVEL_SHARES = { A1: 22, A2: 22, B1: 18, B2: 15, C1: 12, C2: 11 };
 // Adaptive assignments: questions each student answers unless the teacher sets another number.
 const ADAPTIVE_ASSIGNMENT_DEFAULT_COUNT = 20;
 // Climb (BUILDUP_MODE_PLAN.md): the cap is a safety net, 4 answers per step.
@@ -1051,7 +1048,7 @@ function syncCustomMediaFields() {
   });
 }
 
-// Adaptive quizzes span A1–C2, so the single-level field is cleared and locked
+// Adaptive quizzes use a local progression, so the single-level field is cleared and locked
 // (its text is kept aside and restored if the box is unticked).
 function syncAdaptivePromptFields() {
   const adaptiveEl = document.getElementById('promptAdaptive');
@@ -2310,10 +2307,11 @@ function tidyListeningSections() {
 // level in adaptive play; LISTENING_MODE_PLAN.md section 10).
 function listeningSectionLevelCounts(questions, id) {
   const counts = {};
+  const byStep = climbStepsOf(questions).length > 0;
   let shared = 0;
   (questions || []).forEach((q) => {
     if (q?.listeningSection !== id) return;
-    const level = normalizeCefr(q.cefr);
+    const level = byStep ? normalizeClimbStep(q.step) : normalizeCefr(q.cefr);
     if (level) counts[level] = (counts[level] || 0) + 1;
     else shared += 1;
   });
@@ -2324,9 +2322,9 @@ function listeningSectionLevelCounts(questions, id) {
 // (adaptive play gives each level one question per moment of the recording).
 function listeningSectionLevelsHtml(id) {
   const { counts, shared } = listeningSectionLevelCounts(quiz.questions, id);
-  const levels = CEFR_LEVELS.filter((l) => counts[l]);
+  const levels = climbStepsOf(quiz.questions).length ? Object.keys(counts).map(Number).sort((a, b) => a - b) : CEFR_LEVELS.filter((l) => counts[l]);
   if (!levels.length) return '';
-  const parts = levels.map((l) => `${l} ${counts[l]}`);
+  const parts = levels.map((l) => `${typeof l === 'number' ? t('Step {n}', { n: l }) : l} ${counts[l]}`);
   if (shared) parts.push(t('shared {n}', { n: shared }));
   const notes = [];
   if (levels.length > 1 && new Set(levels.map((l) => counts[l])).size > 1) {
@@ -3043,7 +3041,7 @@ function renderQuizStrip() {
   const parts = [title || t('Untitled quiz')];
   parts.push(count === 1 ? t('1 question') : t('{n} questions', { n: count }));
   const levels = quizLevelsPresent();
-  if (levels.length) parts.push(levels.length > 1 ? `🎯 ${levels[0]}–${levels[levels.length - 1]}` : `🎯 ${levels[0]}`); // i18n-ignore (level codes)
+  if (levels.length) parts.push(`🎯 ${climbRangeText(levels)}`); // i18n-ignore (level codes)
   const sections = quizHasListeningSections() ? quizListeningSections().length : 0;
   if (sections) parts.push(sections === 1 ? t('🎧 1 listening section') : t('🎧 {n} listening sections', { n: sections }));
   if (applyTargetAssignmentCode) parts.push(t('✏️ editing assignment {code}', { code: applyTargetAssignmentCode }));
@@ -3091,8 +3089,6 @@ function renderBuilder() {
     return;
   }
 
-  // The Step field shows once the quiz numbers its Climb steps.
-  const usesSteps = climbStepsOf(quiz.questions).length > 0;
   quiz.questions.forEach((q, idx) => {
     // A listening section's settings sit just above its first question.
     const sectionId = q.listeningSection || '';
@@ -3122,7 +3118,7 @@ function renderBuilder() {
           <span class="q-type-icon">${iconForType(q.type)}</span>
           <strong>Q${idx + 1}</strong>
           <span class="q-cefr-chip" data-cefr-chip="${idx}">${normalizeCefr(q.cefr)}</span>
-          <span class="q-cefr-chip q-step-chip" data-step-chip="${idx}" title="${escapeHtml(t('Climb step'))}">${normalizeClimbStep(q.step) ? `🏔️${normalizeClimbStep(q.step)}` : ''}</span>
+          <span class="q-cefr-chip q-step-chip" data-step-chip="${idx}" title="${escapeHtml(t('Difficulty step'))}">${normalizeClimbStep(q.step) ? `🏔️${normalizeClimbStep(q.step)}` : ''}</span>
           ${listeningSec ? `<span class="q-listening-chip" title="${escapeHtml(t('In a listening section'))}">🎧</span>` : ''}
           ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
@@ -3150,19 +3146,19 @@ function renderBuilder() {
           <input data-q="${idx}" data-field="timeLimit" type="number" min="0" max="240" value="${Number.isFinite(Number(q.timeLimit)) ? Number(q.timeLimit) : 20}" />
         </div>
         <div style="min-width:110px;">
-          <label title="${escapeHtml(t('Difficulty level used by adaptive mode'))}">${escapeHtml(t('Level'))}</label>
+          <label title="${escapeHtml(t('CEFR level (optional when using difficulty steps)'))}">${escapeHtml(t('Level'))}</label>
           <select data-q="${idx}" data-field="cefr">
             <option value="">—</option>
             ${CEFR_LEVELS.map((l) => `<option value="${l}" ${normalizeCefr(q.cefr) === l ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
         </div>
-        ${usesSteps ? `<div style="min-width:90px;">
-          <label title="${escapeHtml(t('The step of this question in a 🏔️ Climb (1 is the easiest)'))}">${escapeHtml(t('Step'))}</label>
+        <div style="min-width:90px;">
+          <label title="${escapeHtml(t('Difficulty step for Adaptive and Climb (1 is the easiest)'))}">${escapeHtml(t('Step'))}</label>
           <select data-q="${idx}" data-field="step">
             <option value="">—</option>
             ${Array.from({ length: BUILDUP_MAX_STEPS }, (_, i) => `<option value="${i + 1}" ${normalizeClimbStep(q.step) === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}
           </select>
-        </div>` : ''}
+        </div>
         <label style="display:flex; align-items:center; gap:.4rem; margin-top:1.4rem; font-weight:600; white-space:nowrap;">
           <input data-q="${idx}" data-field="isPoll" type="checkbox" ${q.isPoll ? 'checked' : ''} /> Poll mode
         </label>
@@ -5251,7 +5247,10 @@ const PROMPT_EXAMPLE_CEFR = {
 
 function shapePromptExample(q, req, index) {
   const ex = { id: q.id, type: q.type, prompt: q.prompt };
-  if (req.adaptive) ex.cefr = PROMPT_EXAMPLE_CEFR[q.id] || 'A2';
+  if (req.adaptive) {
+    ex.step = 1;
+    ex.cefr = PROMPT_EXAMPLE_CEFR[q.id] || 'A2';
+  }
   ex.points = 1000;
   ex.timeLimit = req.timeLimit;
   PROMPT_EXAMPLE_FIELDS.forEach((k) => { if (q[k] !== undefined) ex[k] = JSON.parse(JSON.stringify(q[k])); });
@@ -5317,6 +5316,7 @@ function buildCreationPrompt(request) {
     .filter(([key, text]) => request[key] === 'custom' && String(text || '').trim()));
   const widest = { images: 'mix', audio: 'some', video: 'some', readingText: 'some' };
   const req = { ...request };
+  if (req.adaptive) req.steps = Math.max(2, Math.min(BUILDUP_MAX_STEPS, Math.round(Number(req.steps) || BUILDUP_MAX_STEPS)));
   Object.keys(widest).forEach((key) => {
     if (req[key] === 'custom') req[key] = custom[key] ? widest[key] : 'no';
   });
@@ -5368,7 +5368,7 @@ function buildCreationPrompt(request) {
 
   const task = [
     req.goalIsCustom && req.goal ? null : `Goal: ${req.goal || 'balanced practice: scaffolding plus retrieval'}`,
-    req.adaptive ? 'Levels: adaptive, A1 to C2 (see Levels)' : null,
+    req.adaptive ? `Levels: adaptive, ${req.steps} steps numbered 1 to ${req.steps}, easiest to hardest (see Levels)` : null,
     `Questions: ${howMany}, ${delivery}`,
     `Question types: ${typesLine}`,
   ].filter(Boolean);
@@ -5389,7 +5389,7 @@ function buildCreationPrompt(request) {
 
   const templateQuestions = TEMPLATE_ALL_13_TYPES.questions.filter((q) => allowed.includes(q.type));
   const examples = pickPromptExamples(templateQuestions).map((q, i) => shapePromptExample(q, req, i));
-  const common = `"id", "type", "prompt", "points", "timeLimit"${req.adaptive ? ', "cefr"' : ''}`;
+  const common = `"id", "type", "prompt", "points", "timeLimit"${req.adaptive ? ', "step"' : ''}`;
 
   const out = [
     '# PinPlay quiz instructions',
@@ -5411,7 +5411,8 @@ function buildCreationPrompt(request) {
   }
   out.push('',
     '## Question fields',
-    'Quiz: {"version": 3, "title": "…", "questions": [ … ]}',
+    req.adaptive ? 'Quiz: {"version": 3, "title": "…", "stepsPlan": [ … ], "questions": [ … ]}' : 'Quiz: {"version": 3, "title": "…", "questions": [ … ]}',
+    ...(req.adaptive ? ['stepsPlan entry: {"step": 1, "title": "…", "change": "…", "rule": "…"}. Include the whole plan in batch 1 only; keep step numbers consistent across batches. "cefr" on a question is optional context, never the step number.'] : []),
     `Every question has ${common}, plus the fields of its type:`,
     ...allowed.map((type) => `- ${type}: ${PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
@@ -5731,6 +5732,7 @@ async function exportCreationPrompt() {
     language: valueOf('promptLanguage'),
     level: adaptive ? '' : valueOf('promptLevel'),
     adaptive,
+    steps: adaptive ? Number(valueOf('promptAdaptiveSteps')) : undefined,
     levelNotes: adaptive ? valueOf('promptLevelNotes') : '',
     goal,
     goalIsCustom: goalEl?.value === 'custom',
@@ -5916,6 +5918,7 @@ function buildBuildupPrompt(req) {
   const rules = [
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     'How it is played: every student starts at step 1 and climbs. A right answer helps them up a step (two in a row on most steps); a wrong answer sends them one step back, where they get a different question of that step. So each step must be climbable by a student who has just got the step before right, and a student sent back must meet a question like the ones they already know.',
+    'Use the teacher\'s comments to set the endpoint and pace, including any CEFR target. Spread the increase gradually over the requested steps: more steps mean smaller increases, not a higher final target. A request to reach B2 at the final step does not require reaching C1 or C2.',
     agent ? 'Check the grammar or rule you teach against a reliable source (a grammar reference or a dictionary) before you write the plan; do not invent rules or exceptions.' : undefined,
     'First write "stepsPlan", before any question: one entry per step, in order, with "step" (the step\'s number), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
     'One new thing per step, and only one: the form, OR the kind of subject or word, OR the kind of answer. Increase the demand slowly: T/F (tf) or two-option MCQ (mcq) → MCQ with three close options → Multi (multi) → Match (match_pairs) → Puzzle (puzzle) → Gap fill (context_gap) → Typed answer (text) → Error Hunt (error_hunt). Use only the allowed types and skip the others. Fit this progression to the number of steps: a short climb need not use every type; a longer climb can keep a type across several steps, changing only one thing at a time. The last step mixes what the earlier steps taught, introducing no new form or answer type.',
@@ -10883,7 +10886,7 @@ function renderAssignmentResults(safeCode, data) {
 ${escapeHtml(lv.path)}` : ''}">🏔️ ${escapeHtml(bu.summit ? t('Summit') : window.PinBuildup ? window.PinBuildup.campName(bu.best, bu.n) : '')}${bu.stuck ? ' ⚠️' : ''}</span>`
       : lv?.usualLevel
       ? `<span class="badge-adaptive" title="${escapeHtml(t('Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' }))}${lv.path ? `
-${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
+${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(typeof lv.usualLevel === 'number' ? t('Step {n}', { n: lv.usualLevel }) : lv.usualLevel)}</span>`
       : '';
     const viaGamesBadge = a?.via === 'play'
       ? `<span class="badge-public" title="${escapeHtml(t('Played from the Games page (signed in)'))}">${escapeHtml(t('🌐 via Games'))}</span>`
@@ -10921,9 +10924,9 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(lv.usualLevel)}</span>`
     } else if (lv?.usualLevel) {
       levelsLine = document.createElement('div');
       levelsLine.className = 'small muted';
-      const perLevel = CEFR_LEVELS
+      const perLevel = (lv.bands || CEFR_LEVELS)
         .filter((l) => lv.perLevel?.[l])
-        .map((l) => `${l} ${lv.perLevel[l].right}/${lv.perLevel[l].answered}`)
+        .map((l) => `${typeof l === 'number' ? t('Step {n}', { n: l }) : l} ${lv.perLevel[l].right}/${lv.perLevel[l].answered}`)
         .join(' · ');
       levelsLine.textContent = `${t('🎯 Usual level {usual} · final {final} · highest {peak}', { usual: lv.usualLevel, final: lv.finalLevel || '—', peak: lv.peakLevel || '—' })}${perLevel ? ` · ${perLevel}` : ''}`;  // i18n-ignore (text is t()-wrapped)
       // Listening sections: the level each was done at (or the ladder) and the score.
@@ -11176,6 +11179,8 @@ function renderStudentRow(student) {
   if (student.lastLoginAt) bits.push(t('last sign-in {d}', { d: new Date(Number(student.lastLoginAt)).toLocaleDateString() }));
   else bits.push(t('never signed in'));
   if (savedLevel) bits.push(student.level.setByTeacher ? t('level set by you') : t('level from {n} answers', { n: savedAnswers }));
+  const savedQuizzes = Object.keys(student.level?.stepLevels || {}).length;
+  if (savedQuizzes) bits.push(t('step progress saved for {n} quiz(zes)', { n: savedQuizzes }));
   meta.textContent = bits.join(' · ');
   info.appendChild(meta);
 
@@ -11184,7 +11189,7 @@ function renderStudentRow(student) {
 
   // The teacher can place a student at a level, change it, or reset it.
   const levelSelect = document.createElement('select');
-  levelSelect.title = t('Adaptive level: where their next adaptive game or assignment starts. Pick a level to change it, or "No level" to start them at the easiest level.');
+  levelSelect.title = t('CEFR level for quizzes without numbered steps. Numbered quizzes save their own progress. "No level" resets saved progress.');
   [['', t('🎯 No level')], ...CEFR_LEVELS.map((l) => [l, `🎯 ${l}`])].forEach(([value, label]) => {
     const opt = document.createElement('option');
     opt.value = value;
@@ -12416,7 +12421,7 @@ async function openAssignmentSettingsDialog(a) {
     ? t('Update the API to enable question format settings. Your existing format is shown here.')
     : formatOptions.locked
       ? t('Question format and count are locked because an attempt has already started. Create a new assignment to change them.')
-      : t('You can change the format until the first attempt starts. Adaptive needs questions tagged with at least two levels; Climb, two steps or two levels.');
+      : t('You can change the format until the first attempt starts. Adaptive and Climb need at least two difficulty steps or two CEFR levels.');
   function syncFormatSettings(changed = false) {
     const mode = formatSelect.value;
     const climb = mode === 'climb';
@@ -18633,18 +18638,6 @@ function cefrCoverage(questions) {
   return { counts, untagged, tagged };
 }
 
-// Largest-remainder split of `total` questions across the default level shares.
-function adaptiveDefaultLevelCounts(total) {
-  const n = Math.max(0, Math.round(Number(total) || 0));
-  const exact = CEFR_LEVELS.map((l) => ({ l, v: (n * ADAPTIVE_DEFAULT_LEVEL_SHARES[l]) / 100 }));
-  const counts = Object.fromEntries(exact.map(({ l, v }) => [l, Math.floor(v)]));
-  let left = n - exact.reduce((s, { l }) => s + counts[l], 0);
-  [...exact].sort((a, b) => (b.v % 1) - (a.v % 1)).forEach(({ l }) => {
-    if (left > 0) { counts[l] += 1; left -= 1; }
-  });
-  return counts;
-}
-
 // Prompt rules shared by the chatbot and agent creation prompts when the
 // teacher ticks "Adaptive quiz".
 // Question types from most to least scaffolded: recognising an answer, then
@@ -18658,28 +18651,25 @@ const SCAFFOLD_ORDER = [
 
 function buildAdaptiveLevelRules(cleanRequest, allowedTypes = []) {
   const scaffold = SCAFFOLD_ORDER.filter((type) => allowedTypes.includes(type));
-  const qc = cleanRequest.questionCount;
-  const counts = typeof qc === 'number' ? adaptiveDefaultLevelCounts(qc) : null;
-  const defaultMix = counts
-    ? CEFR_LEVELS.map((l) => `${l} ${counts[l]}`).join(', ')
-    : CEFR_LEVELS.map((l) => `${l} ≈${ADAPTIVE_DEFAULT_LEVEL_SHARES[l]}%`).join(', ');
+  const steps = Math.max(2, Math.min(BUILDUP_MAX_STEPS, Math.round(Number(cleanRequest.steps) || BUILDUP_MAX_STEPS)));
   return [
-    'Every question has "cefr": "A1", "A2", "B1", "B2", "C1" or "C2". PinPlay moves each student up and down the levels, so every tag must be accurate.',
-    'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the tag. Recognising an answer (multiple choice, true/false, matching) suits lower levels; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher levels.',
+    `Use exactly ${steps} difficulty steps, numbered 1 to ${steps}. Every question has "step": a whole number in that range. Adaptive and Climb use the same step numbers; Adaptive selects questions around the student's current step, while Climb starts at the bottom.`,
+    'Read the teacher\'s own words, including their goal and notes on levels, to decide the starting difficulty and the final target. A request such as "reach CEFR level B2 by level 12" means reach B2 at step 12, with small progressive increases across the requested steps. It does not mean cover A1–C2. Never force C1 or C2 beyond the requested target. If no target or range is given, choose an appropriate progression for the theme and students.',
+    `Before the questions, write "stepsPlan": ${steps} entries in order, each with "step", a short "title", "change" (the one small increase from the previous step) and "rule" (a short useful tip in the quiz language). More steps mean smaller changes, not a higher final target. Keep adjacent steps close in difficulty; questions within a step have equivalent difficulty and vary the content.`,
+    'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the step. Recognising an answer (multiple choice, true/false, matching) suits lower steps; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher steps.',
+    'CEFR is optional descriptive context: "cefr" may be "A1", "A2", "B1", "B2", "C1" or "C2" when accurate. Several steps can share the same CEFR level. Never use CEFR tags as a substitute for "step", or invent CEFR labels to make twelve levels.',
     'For language questions the level comes from how the language is used, not from which grammar point it is: any tense or structure the quiz works on can appear at every level (e.g. the past simple at A1 with very common verbs in short sentences, and at C1 in a complex sentence with less common words). The levels mean: A1 = very common words, short simple sentences, familiar situations. A2 = everyday topics, short connected sentences. B1 = familiar topics with some detail, sentences joined with linking words. B2 = abstract topics, longer sentences, less obvious distractors. C1 = less common words, idioms, nuance. C2 = rare words, fine shades of meaning and register: hard even for a very advanced learner. Never tag an easy question C1 or C2.',
     scaffold.length >= 2
       ? `This quiz's question types, from most to least scaffolded: ${scaffold.join(', ')}. Lean towards the first ones at lower levels and the last ones at higher levels. This is a tendency, not a rule: any type can appear at any level when it fits.`
       : undefined,
-    'The examples at the end are easy questions tagged at their real level (mostly A1–A2); your quiz covers every level.',
-    `Level mix: all six levels, more easy questions than hard ones (hard ones often need writing and take longer). Default target: ${defaultMix}.`,
-    // Teachers mostly describe what each level should look like (task types,
-    // vocabulary); the default target only yields when they ask for another balance.
+    'The examples at the end show the field shapes at step 1, with honest optional CEFR tags; build the actual step progression from your own plan, not the order of the examples.',
+    `Cover every requested step. Spread the questions as evenly as possible across all ${steps} steps unless the teacher asks for another balance; aim for at least three different questions per step when the total allows it. If the requested total is smaller than ${steps}, explain that every step needs at least one question and request a larger total instead of silently omitting steps.`,
     cleanRequest.levelNotes
-      ? 'Follow the teacher\'s notes on levels (above); if they ask for a different balance, that replaces the default target; otherwise keep the default target.'
+      ? 'Follow the teacher\'s notes on levels (above), including their endpoint, pace and question balance. Keep their instructions verbatim in mind when planning all steps.'
       : undefined,
     'Where you can, practise the same skill at several levels.',
-    'For questions about another subject (history, science…), use the levels as difficulty steps: A1 = almost everyone knows it, A2 = most students, B1 = typical school knowledge, B2 = needs solid study, C1 = only the best-read, C2 = specialist.',
-    cleanRequest.batchSize ? 'The level mix applies to the whole quiz; each batch can mix levels.' : undefined,
+    'For other subjects (history, science…), use the numbered steps directly as subject difficulty; do not assign language proficiency labels to subject knowledge.',
+    cleanRequest.batchSize ? 'The step coverage applies to the whole quiz; each batch can mix steps. Use unique ids across all batches and keep the original step numbers when appending.' : undefined,
   ].filter(Boolean);
 }
 
@@ -18769,16 +18759,13 @@ function assignmentBuildupSelected() {
     && document.getElementById('assignmentAdaptiveMode')?.value === 'buildup';
 }
 
-// Assignments: "🎯 Adaptive · N questions per student" is offered when the quiz has
-// questions tagged with at least two levels, "🏔️ Climb" when it has two
-// Climb steps (or two levels of auto-graded questions); the server checks
-// too. Ticked by default; a quiz made to climb (with steps or a steps plan)
-// starts on Climb. (PinPlay Cup has its own switch: cupAdaptiveOn.)
+// Both modes use numbered steps, falling back to CEFR on older quizzes.
+// Adaptive is the default; Climb also requires auto-graded single questions.
+// PinPlay Cup has its own switch: cupAdaptiveOn.
 function syncAssignmentAdaptiveControl() {
   const wrap = document.getElementById('assignmentAdaptiveWrap');
   if (!wrap) return;
-  const { counts } = cefrCoverage(quiz?.questions);
-  const levels = CEFR_LEVELS.filter((l) => counts[l] > 0);
+  const levels = quizLevelsPresent();
   const adaptiveOk = levels.length >= 2;
   const climbSteps = buildupAvailableSteps();
   const climbOk = climbSteps.length >= 2;
@@ -18801,11 +18788,10 @@ function syncAssignmentAdaptiveControl() {
   } else if (box && adaptiveDefaultedFor !== quiz) {
     adaptiveDefaultedFor = quiz;
     box.checked = true;
-    const madeToClimb = climbStepsOf(quiz?.questions).length > 0 || normalizeStepsPlan(quiz?.stepsPlan).length > 0;
-    if (modeEl) modeEl.value = climbOk && (madeToClimb || !adaptiveOk) ? 'buildup' : 'adaptive';
+    if (modeEl) modeEl.value = adaptiveOk ? 'adaptive' : 'buildup';
   }
-  if (rangeEl) rangeEl.textContent = adaptiveOk ? `${levels[0]}–${levels[levels.length - 1]}` : '';
-  // Adaptive needs two levels; Climb two steps (or two levels of auto-graded questions).
+  if (rangeEl) rangeEl.textContent = adaptiveOk ? climbRangeText(levels) : '';
+  // Both modes need at least two bands on the quiz's chosen scale.
   if (modeEl) {
     const adaptiveOpt = modeEl.querySelector('option[value="adaptive"]');
     const opt = modeEl.querySelector('option[value="buildup"]');
@@ -18861,6 +18847,8 @@ let liveLevelsFor = null;
 let liveLevelsOff = new Set();
 
 function quizLevelsPresent() {
+  const steps = climbStepsOf(quiz?.questions);
+  if (steps.length) return climbStepsOf((quiz?.questions || []).filter(isAdaptiveEligibleQuestion));
   const { counts } = cefrCoverage(quiz?.questions);
   return CEFR_LEVELS.filter((l) => counts[l] > 0);
 }
@@ -18887,7 +18875,7 @@ function syncLiveLevelsControl() {
     return;
   }
   if (levels.every((l) => liveLevelsOff.has(l))) liveLevelsOff.delete(levels[0]);
-  list.innerHTML = levels.map((l) => `<label class="live-level"><input type="checkbox" value="${l}" ${liveLevelsOff.has(l) ? '' : 'checked'} /> ${l}</label>`).join(''); // i18n-ignore (level codes)
+  list.innerHTML = levels.map((l) => `<label class="live-level"><input type="checkbox" value="${l}" ${liveLevelsOff.has(l) ? '' : 'checked'} /> ${typeof l === 'number' ? escapeHtml(t('Step {n}', { n: l })) : l}</label>`).join(''); // i18n-ignore (level codes)
 }
 
 // A new PinPlay Cup game is adaptive: its switch is offered and ticked.
@@ -18907,11 +18895,12 @@ function initLiveLevelsControl() {
   list?.addEventListener('change', (e) => {
     const box = e.target.closest('input[type="checkbox"]');
     if (!box) return;
-    if (box.checked) liveLevelsOff.delete(box.value);
-    else liveLevelsOff.add(box.value);
+    const value = typeof quizLevelsPresent()[0] === 'number' ? Number(box.value) : box.value;
+    if (box.checked) liveLevelsOff.delete(value);
+    else liveLevelsOff.add(value);
     // At least one level stays ticked.
     if (!liveLevelsForGame().length) {
-      liveLevelsOff.delete(box.value);
+      liveLevelsOff.delete(value);
       box.checked = true;
     }
   });
@@ -18920,7 +18909,8 @@ function initLiveLevelsControl() {
 
 // Tagged questions the engine can serve one at a time (outside listening sections).
 function adaptiveSingleQuestionCount() {
-  return (quiz?.questions || []).filter((q) => isAdaptiveEligibleQuestion(q) && !q.listeningSection && normalizeCefr(q.cefr)).length;
+  const byStep = climbStepsOf(quiz?.questions).length > 0;
+  return (quiz?.questions || []).filter((q) => isAdaptiveEligibleQuestion(q) && !q.listeningSection && (byStep ? normalizeClimbStep(q.step) : normalizeCefr(q.cefr))).length;
 }
 
 function buildupDefaultCount(steps) {
@@ -18971,7 +18961,7 @@ function renderStepsPlan(counts) {
   el.classList.toggle('hidden', !rows.length);
   if (!rows.length) { el.innerHTML = ''; return; }
   const left = byStep ? questions.filter((q) => isAdaptiveEligibleQuestion(q) && !normalizeClimbStep(q.step)).length : 0;
-  el.innerHTML = `<strong>${escapeHtml(plan.length ? t('🏔️ Steps plan') : t('🏔️ Climb steps'))}</strong>`
+  el.innerHTML = `<strong>${escapeHtml(plan.length ? t('🏔️ Steps plan') : t('Difficulty steps'))}</strong>`
     + `<ol class="steps-plan-list">${rows.map(({ label, entry, n }) => {
       const thin = n < STEPS_PLAN_MIN_ITEMS ? ` <span class="bad">${escapeHtml(t('⚠ only {n} questions', { n }))}</span>` : '';
       return `<li><b>${escapeHtml(label)}</b>${entry.title ? ` · ${escapeHtml(entry.title)}` : ''} <span class="muted">(${n})</span>${thin}`
@@ -18979,7 +18969,7 @@ function renderStepsPlan(counts) {
         + (entry.rule ? `<div class="small">${escapeHtml(t('Rule shown to students: {rule}', { rule: entry.rule }))}</div>` : '')
         + '</li>'; // i18n-ignore (text is t()-wrapped)
     }).join('')}</ol>`
-    + (left ? `<p class="small bad">${escapeHtml(t('⚠ {n} question(s) have no step: Climb leaves them out.', { n: left }))}</p>` : '')
+    + (left ? `<p class="small bad">${escapeHtml(t('⚠ {n} question(s) have no step: Adaptive and Climb leave them out of individual question selection.', { n: left }))}</p>` : '')
     + (levelled ? `<button type="button" class="btn small" data-steps-from-levels>${escapeHtml(t('🏔️ Turn the levels into steps'))}</button>` : '');
 }
 
@@ -19027,13 +19017,14 @@ function renderLevelUsage() {
   if (adaptive && assignmentBuildupSelected()) assignmentText = t('🏔️ Climb · up to {n} questions per student', { n: count });
   else if (adaptive) assignmentText = count ? t('🎯 Adaptive · {n} questions per student', { n: count }) : t('🎯 Adaptive');
   const saved = studentsCache.filter((s) => Number.isFinite(Number(s?.level?.cefr))).length;
+  const numbered = typeof levels[0] === 'number';
   const rows = [
     ['live', t('🎮 Live Pin: {levels}, and the questions without a level', {
       levels: ticked.length === levels.length ? t('every level') : t('only {levels}', { levels: ticked.join(', ') }),
     })],
     ['cup', t('🏆 PinPlay Cup: {how}', { how: cupAdaptiveOn() ? t('🎯 adaptive') : t('every question') })],
     ['assign', t('📋 New assignments: {how}', { how: assignmentText })],
-    ['students', studentsCache.length
+    ['students', numbered ? t('👥 Numbered quizzes save each student’s progress for that quiz.') : studentsCache.length
       ? t('👥 {n} student(s) have a saved level: adaptive play starts there', { n: saved })
       : t('👥 Saved levels, where adaptive play starts for signed-in students: in 👥 Students')],
   ];
@@ -19084,6 +19075,20 @@ function renderLevelCoverage() {
   if (!el) return;
   const { counts, untagged, tagged } = cefrCoverage(quiz?.questions);
   renderStepsPlan(counts);
+  const steps = climbStepsOf(quiz?.questions);
+  if (steps.length) {
+    const counts = Object.fromEntries(steps.map((s) => [s, 0]));
+    let unstepped = 0;
+    (quiz?.questions || []).filter(isAdaptiveEligibleQuestion).forEach((q) => {
+      const step = normalizeClimbStep(q.step);
+      if (step) counts[step] += 1;
+      else unstepped += 1;
+    });
+    const parts = steps.map((s) => `<span class="level-count">${escapeHtml(t('Step {n}', { n: s }))} <strong>${counts[s]}</strong></span>`);
+    if (unstepped) parts.push(`<span class="level-count untagged">${escapeHtml(t('untagged'))} <strong>${unstepped}</strong></span>`);
+    el.innerHTML = parts.join(' ');
+    return;
+  }
   if (!tagged) {
     el.textContent = untagged ? t('none tagged yet') : '';
     return;
@@ -20047,7 +20052,7 @@ function normalizeQuizForLive(raw) {
   return normalized;
 }
 
-// Climb steps (BUILDUP_MODE_PLAN.md section 10): a question's `step`, a whole
+// Shared Adaptive and Climb steps: a question's `step`, a whole
 // number from 1 to BUILDUP_MAX_STEPS, orders a climb more finely than the six
 // levels. 0 means no step. Identical in app.js and worker.js.
 const BUILDUP_MAX_STEPS = 12;

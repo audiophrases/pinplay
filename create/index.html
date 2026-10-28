@@ -247,12 +247,15 @@
                       </label>
                       <label class="prompt-adaptive-toggle prompt-standard-only">
                         <input id="promptAdaptive" type="checkbox" />
-                        <span data-i18n>🎯 Adaptive quiz (all levels A1–C2)</span>
+                        <span data-i18n>🎯 Adaptive quiz (2–12 difficulty steps)</span>
                       </label>
                     </div>
                     <div class="prompt-field full-width hidden" id="promptLevelNotesWrap">
+                      <label><span data-i18n>Difficulty steps</span>
+                        <input id="promptAdaptiveSteps" type="number" value="12" min="2" max="12" />
+                      </label>
                       <label><span data-i18n>Notes on levels (optional)</span>
-                        <input id="promptLevelNotes" type="text" placeholder="e.g. more typing and Word Guess at higher levels, rarer verbs at C1–C2. Default: more easy questions than hard ones, unless you ask otherwise." data-i18n-ph />
+                        <input id="promptLevelNotes" type="text" placeholder="e.g. reach CEFR B2 by step 12, with small increases in difficulty" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field prompt-standard-only">
@@ -562,7 +565,7 @@
                     <summary><span data-i18n>🎯 Levels</span> <span id="levelCoverage" class="level-coverage"></span></summary>
                     <div class="level-tools-body">
                       <div id="levelStepsPlan" class="steps-plan hidden"></div>
-                      <p class="small muted" data-i18n>Tag each question A1–C2 so adaptive mode can move every student up or down. Untagged questions and polls are skipped. Teacher-graded questions move the level once you grade them (assignments only; PinPlay Cup skips them).</p>
+                      <p class="small muted" data-i18n>Tag questions with difficulty steps 1–12 for Adaptive and Climb, or keep CEFR levels on an existing quiz. Polls are skipped. Teacher-graded questions move the level once you grade them (Adaptive assignments only; PinPlay Cup and Climb skip them).</p>
                       <div id="levelUsage" class="level-usage owner-only"></div>
                       <div class="level-tools-row">
                         <label><span data-i18n>From question</span>
@@ -575,12 +578,12 @@
                           <select id="levelRangeLevel"></select>
                         </label>
                         <button id="levelRangeApplyBtn" class="btn" type="button" data-i18n>Set level</button>
-                        <label><span data-i18n>Climb step</span>
+                        <label><span data-i18n>Difficulty step</span>
                           <select id="levelRangeStep"></select>
                         </label>
                         <button id="levelRangeStepBtn" class="btn" type="button" data-i18n>Set step</button>
                       </div>
-                      <p class="small muted" data-i18n>🏔️ Climb steps (1 to 12) order a Climb more finely than levels. A quiz with steps climbs by them, and its questions without a step stay out of the climb. Students never see steps or levels.</p>
+                      <p class="small muted" data-i18n>Difficulty steps (1 to 12) work in Adaptive and Climb. When a quiz has steps, both modes use them; questions without a step stay out of individual question selection. Without steps, existing CEFR levels still work. Students never see steps or levels.</p>
                       <div class="level-tools-ai">
                         <strong class="small" data-i18n>Tag with AI</strong>
                         <div class="level-tools-row">

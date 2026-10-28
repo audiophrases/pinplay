@@ -14,12 +14,12 @@ let W;
 before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
-    'CEFR_LEVELS', 'ADAPTIVE_DEFAULT_LEVEL_SHARES', 'adaptiveDefaultLevelCounts', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
+    'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
-    'normalizeCefr', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
+    'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
   ], { LISTENING_SCRIPT_RULES: require('../listening-script.js').LISTENING_SCRIPT_RULES });
   W = loadDeclarations(read('cloudflare/worker.js'), [
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
@@ -47,6 +47,31 @@ const examplesOf = (text) => {
 };
 const fieldTypes = (text) => section(text, 'Question fields').split('\n')
   .filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
+
+describe('adaptive numbered-step creation', () => {
+  it('preserves a teacher endpoint comment without adding a target field', () => {
+    const notes = 'Reach CEFR level B2 by level 12; increase difficulty very slowly.';
+    const text = build({ adaptive: true, steps: 12, questionCount: 60, levelNotes: notes });
+    assert.ok(section(text, "The teacher's own words").includes(`Notes on levels: "${notes}"`));
+    assert.match(section(text, 'Task'), /12 steps numbered 1 to 12/);
+    assert.match(section(text, 'Levels'), /Never force C1 or C2 beyond the requested target/);
+    assert.doesNotMatch(text, /Level mix: all six|Default target: A1/);
+    assert.match(section(text, 'Question fields'), /"stepsPlan"/);
+    examplesOf(text).forEach((q) => assert.equal(q.step, 1));
+    const html = read('create/index.html');
+    assert.match(html, /id="promptAdaptiveSteps"[^>]*min="2" max="12"/);
+    assert.doesNotMatch(html, /id="prompt(?:Adaptive)?(?:Cefr)?Target/i);
+  });
+
+  it('supports every requested step count from 2 to 12 and bounds invalid counts', () => {
+    for (let n = 2; n <= 12; n += 1) {
+      assert.match(section(build({ adaptive: true, steps: n }), 'Levels'), new RegExp(`Use exactly ${n} difficulty steps`));
+    }
+    assert.match(section(build({ adaptive: true, steps: 99 }), 'Levels'), /Use exactly 12/);
+    assert.match(section(build({ adaptive: true, steps: 1 }), 'Levels'), /Use exactly 2/);
+    assert.match(section(build({ adaptive: true, steps: 8, questionCount: 96 }), 'Levels'), /keep the original step numbers when appending/);
+  });
+});
 
 describe('question types', () => {
   const allTypes = () => [...A.CANONICAL_QUESTION_TYPES];
@@ -132,7 +157,7 @@ describe('rules follow the request', () => {
     assert.match(section(text, 'Levels'), /"cefr"/);
     assert.match(section(text, 'Levels'), /Follow the teacher's notes on levels \(above\)/);
     assert.match(section(text, "The teacher's own words"), /- Notes on levels: "more typing at higher levels"/);
-    assert.match(section(text, 'Question fields'), /"timeLimit", "cefr"/);
+    assert.match(section(text, 'Question fields'), /"timeLimit", "step"/);
     examplesOf(text).forEach((ex) => assert.ok(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(ex.cefr)));
     assert.equal(section(build(), 'Levels'), '');
   });
@@ -140,7 +165,7 @@ describe('rules follow the request', () => {
   it('adaptive: says what each language level means and forbids easy C1/C2', () => {
     const levels = section(build({ adaptive: true }), 'Levels');
     assert.match(levels, /Make the difficulty real, not just the label/);
-    assert.match(levels, /producing language \(typing an answer, correcting errors, filling gaps from memory\) suits higher levels/);
+    assert.match(levels, /producing language \(typing an answer, correcting errors, filling gaps from memory\) suits higher steps/);
     assert.match(levels, /A1 = very common words/);
     // A grammar point can be taught at any level: no tense is tied to one.
     assert.match(levels, /any tense or structure the quiz works on can appear at every level/);

@@ -142,7 +142,7 @@
           ['practice', '✦', 'Practice', 'Instant feedback · unlimited attempts · random names'],
           ['homework', '⌂', 'Homework', 'Feedback at the end · 2 attempts · student sign-in'],
           ['exam', '▣', 'Exam', 'No feedback · 1 attempt · student sign-in · exam mode'],
-          ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level · feedback at the end · 2 attempts · student sign-in' : 'Needs questions tagged with at least two levels.', !adaptiveAvailable],
+          ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level · feedback at the end · 2 attempts · student sign-in' : 'Needs questions tagged with at least two difficulty steps or CEFR levels.', !adaptiveAvailable],
           ['climb', '🏔', 'Climb', climbAvailable ? 'Easiest step first, one step at a time · instant feedback · unlimited attempts · student sign-in' : 'Needs auto-graded questions in two or more steps or levels.', !climbAvailable],
           ['custom', '⚙', 'Current settings', 'Keep the options you have already chosen'],
         ]);
@@ -169,7 +169,7 @@
       } else if (step === 3) {
         content.innerHTML = heading('04 / QUESTIONS & TIMING', 'How should the assignment run?', 'Use the full quiz, or let the questions adapt to each student.') + choices('format', draft.format, [
           ['all', '▤', 'All questions', 'Every student gets the full quiz.'],
-          ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level.' : 'Needs questions tagged with at least two levels.', !adaptiveAvailable],
+          ['adaptive', '🎯', 'Adaptive', adaptiveAvailable ? 'Questions match each student’s level.' : 'Needs questions tagged with at least two difficulty steps or CEFR levels.', !adaptiveAvailable],
           ['climb', '🏔', 'Climb', climbAvailable ? 'Build a skill from the easiest step, one step at a time.' : 'Needs auto-graded questions in two or more steps or levels.', !climbAvailable],
         ]) + choices('shuffleQuestions', draft.format === 'all' && draft.shuffleQuestions ? 'on' : 'off', [
           ['off', '', 'Off', '', draft.format !== 'all'], ['on', '', 'On', '', draft.format !== 'all'],

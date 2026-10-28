@@ -11,7 +11,7 @@ const WORKER_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'cloudflare'
 
 function loadEngine() {
   return loadDeclarations(WORKER_SRC, [
-    'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'isTeacherGradedTextQuestion', 'isAssignmentTeacherGradedQuestion',
+    'CEFR_LEVELS', 'normalizeCefrLevel', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'quizUsesClimbSteps', 'hash', 'adaptiveScaleKey', 'clamp', 'isTeacherGradedTextQuestion', 'isAssignmentTeacherGradedQuestion',
     'autoGradedQuestionIndexes', 'arenaEligibleIndexes',
     'ADAPTIVE_START', 'ADAPTIVE_UP', 'ADAPTIVE_UP_AFTER_DROP', 'ADAPTIVE_DOWN',
     'ADAPTIVE_STREAK_DOWN', 'ADAPTIVE_STEP_NEW', 'ADAPTIVE_STEP_SETTLED', 'ADAPTIVE_SETTLE_HALF',

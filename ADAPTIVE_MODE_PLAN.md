@@ -1,5 +1,30 @@
 # Adaptive mode: one multilevel quiz, a different path per student
 
+**Shared difficulty steps, 2026-10-28:** Adaptive and Climb now both use
+`question.step` numbers 1–12, ordered from easiest to hardest. When any question
+has a step, both modes select by steps; otherwise existing CEFR-tagged quizzes
+continue using their CEFR bands. Adaptive keeps its performance-based movement,
+retries and stopping rule; Climb keeps its trail and summit rule.
+
+The Adaptive creation prompt has a 2–12 step count (default 12), a `stepsPlan`,
+and the existing teacher comments. There is no separate CEFR target field.
+Comments such as “reach B2 by step 12” set the endpoint; the prompt asks for
+smaller increases across more steps, without forcing the quiz through C1/C2.
+Optional `cefr` tags describe language difficulty and do not replace steps.
+The former fixed six-level mix below describes the earlier implementation.
+
+Numbered quiz progress is saved in `roster.level.stepLevels[scaleKey]`, separate
+from the student's global CEFR estimate. The key fingerprints question ids,
+prompts and step tags in an order-independent way, so the same quiz resumes
+across assignments, public play and Cup. Changed content/step tags start a new
+saved scale; open attempts follow renumbered steps by their question ids.
+Each roster row retains its 32 most recently played numbered quizzes. Late
+teacher grades and regrades update the corresponding quiz's progress. Listening
+blocks, live step filters and teacher reports support numbered bands too.
+
+Validation: the adaptive engine, real Worker assignments, public play, prompt,
+listening and authoring browser tests cover the shared scale and CEFR fallback.
+
 Status: **phases 1–3 implemented 2026-09-25**: data + authoring, the engine +
 PinPlay Cup, and adaptive assignments. Phase 4 (class-level reports) is still a
 plan. Design decisions settled with the owner on 2026-09-25 (section 8).

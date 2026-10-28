@@ -17,12 +17,10 @@ let W;
 before(() => {
   A = loadDeclarations(APP_SRC, [
     'CEFR_LEVELS',
-    'ADAPTIVE_DEFAULT_LEVEL_SHARES',
     'normalizeCefr',
     'isAdaptiveEligibleQuestion',
     'cefrCoverage',
-    'adaptiveDefaultLevelCounts',
-    'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
+    'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'compactQuestionForLevelTagging',
     'parseLevelTagReply',
   ], { t: (s) => s });
@@ -67,32 +65,28 @@ describe('level coverage', () => {
   });
 });
 
-describe('default AI level mix', () => {
-  it('leans toward easy questions and always adds up to the total', () => {
-    const c50 = A.adaptiveDefaultLevelCounts(50);
-    assert.deepEqual({ ...c50 }, { A1: 11, A2: 11, B1: 9, B2: 8, C1: 6, C2: 5 });
-    [1, 7, 15, 24, 37, 100].forEach((n) => {
-      const c = A.adaptiveDefaultLevelCounts(n);
-      assert.equal(Object.values(c).reduce((s, v) => s + v, 0), n, `total ${n}`);
-      assert.ok(c.A1 >= c.C2, `easy >= hard for ${n}`);
-    });
+describe('AI step progression', () => {
+  it('covers the chosen steps without imposing a CEFR range', () => {
+    const rules = A.buildAdaptiveLevelRules({ steps: 8, questionCount: 40 }).join('\n');
+    assert.match(rules, /Use exactly 8 difficulty steps/);
+    assert.match(rules, /Spread the questions as evenly as possible across all 8 steps/);
+    assert.doesNotMatch(rules, /Level mix: all six|A1 22|C2 11/);
   });
 
-  it('keeps the default mix alongside the teacher notes', () => {
+  it('uses a gradual numbered progression and follows the existing teacher notes', () => {
     const def = A.buildAdaptiveLevelRules({ questionCount: 50 }).join('\n');
     assert.match(def, /"cefr"/);
-    assert.match(def, /A1 11, A2 11, B1 9, B2 8, C1 6, C2 5/);
-    assert.doesNotMatch(def, /teacher's notes/);
+    assert.match(def, /exactly 12 difficulty steps/);
+    assert.match(def, /More steps mean smaller changes, not a higher final target/);
+    assert.doesNotMatch(def, /Default target:|Level mix: all six/);
 
-    // Notes usually describe what each level looks like, not how many: the
-    // default target stays, and the AI is told the notes win only on balance.
+    // Teacher notes can set the endpoint and pace, as well as the question mix.
     const notes = A.buildAdaptiveLevelRules({ questionCount: 50, levelNotes: 'more typing at higher levels' }).join('\n');
     assert.match(notes, /Follow the teacher's notes on levels \(above\)/);
-    assert.match(notes, /A1 11, A2 11, B1 9, B2 8, C1 6, C2 5/);
-    assert.match(notes, /replaces the default target; otherwise keep the default target/);
+    assert.match(notes, /including their endpoint, pace and question balance/);
 
     const brief = A.buildAdaptiveLevelRules({ questionCount: 'about 50 minutes' }).join('\n');
-    assert.match(brief, /A1 ≈22%/);
+    assert.match(brief, /Spread the questions as evenly as possible/);
   });
 });
 
@@ -127,7 +121,7 @@ describe('AI level tagging round trip', () => {
 
 describe('Cup level summary on saved live attempts', () => {
   let S;
-  before(() => { S = loadDeclarations(WORKER_SRC, ['CEFR_LEVELS', 'sanitizeCupLevels']); });
+  before(() => { S = loadDeclarations(WORKER_SRC, ['CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'sanitizeCupLevels']); });
 
   it('keeps a valid summary and drops bad levels and counts', () => {
     const out = plain(S.sanitizeCupLevels({
@@ -143,5 +137,14 @@ describe('Cup level summary on saved live attempts', () => {
   it('returns null without a usual level', () => {
     assert.equal(S.sanitizeCupLevels(null), null);
     assert.equal(S.sanitizeCupLevels({ usualLevel: '' }), null);
+  });
+
+  it('keeps all 12 numbered bands in saved Cup summaries', () => {
+    const out = S.sanitizeCupLevels({ bands: Array.from({ length: 12 }, (_, i) => i + 1), usualLevel: 10, finalLevel: 11, peakLevel: 12, answered: 8, perLevel: { 10: { right: 3, answered: 4 }, 12: { right: 1, answered: 4 } } });
+    assert.equal(out.usualLevel, 10);
+    assert.equal(out.finalLevel, 11);
+    assert.equal(out.peakLevel, 12);
+    assert.equal(out.perLevel[12].answered, 4);
+    assert.equal(out.bands.length, 12);
   });
 });

@@ -2999,7 +2999,7 @@ export class QuizRoom {
         } else if (adaptiveCount > 0 || (body?.adaptive === true && sectionPlan.length)) {
           const { bands, pool } = assignmentAdaptivePool(assignment);
           if (bands.length < 2) {
-            return json({ error: 'Adaptive mode needs questions tagged with at least two levels.' }, 400);
+            return json({ error: 'Adaptive mode needs questions tagged with at least two difficulty steps or CEFR levels.' }, 400);
           }
           assignment.adaptive = { count: sectionPlan.length ? clamp(adaptiveCount, 0, pool.length) : clamp(adaptiveCount, 1, pool.length) };
         }
@@ -3746,7 +3746,7 @@ export class QuizRoom {
           if (!served) return json({ error: 'Question not found.' }, 404);
           const safeAnswer = sanitizeAssignmentAnswer(served, body?.answer);
           const bet = sanitizeBet(body?.bet);
-          const band = st.bu ? buildupBandOf(st, served) : st.bands.indexOf(normalizeCefrLevel(served.cefr));
+          const band = buildupBandOf(st, served);
           const qBand = band >= 0 ? band : adaptiveBand(st);
           // A teacher-graded answer waits for its grade; keep the bands it was
           // served at, so the grade moves the level from where it stood then.
@@ -4265,7 +4265,9 @@ export class QuizRoom {
       if (url.pathname === '/roster/levels' && request.method === 'POST') {
         const body = await safeJson(request);
         const entries = Array.isArray(body?.entries) ? body.entries.slice(0, 500) : [];
-        await saveRosterLevels(this.state.storage, entries.filter((e) => e?.result && Number.isFinite(Number(e.result.cefr))));
+        await saveRosterLevels(this.state.storage, entries.filter((e) => e?.result && (
+          Number.isFinite(Number(e.result.cefr)) || (/^steps-\d+$/.test(e.result.scaleKey) && Number.isFinite(Number(e.result.score)))
+        )));
         return json({ ok: true });
       }
 
@@ -7176,13 +7178,16 @@ function hostListeningReview(room, range) {
 // (easier on a tie), so every section stays in the game; a moment none of
 // those levels has borrows the nearest level's question.
 function liveLevelList(levels) {
+  if ((Array.isArray(levels) ? levels : []).some((l) => typeof l === 'number')) {
+    return [...new Set(levels.filter((l) => typeof l === 'number').map(normalizeClimbStep).filter(Boolean))].sort((a, b) => a - b);
+  }
   const wanted = (Array.isArray(levels) ? levels : []).map(normalizeCefrLevel);
   return CEFR_LEVELS.filter((l) => wanted.includes(l));
 }
 
 function liveLevelSectionPick(questions, sectionId, chosen) {
   const m = listeningSectionMoments(questions, sectionId);
-  const rank = (l) => CEFR_LEVELS.indexOf(l);
+  const rank = (l) => typeof l === 'number' ? l - 1 : CEFR_LEVELS.indexOf(l);
   // The level of the section nearest to a level on the A1..C2 scale (easier on a tie).
   const nearest = (target, has = () => true) => m.levels.filter(has)
     .reduce((best, l) => (best == null || Math.abs(rank(l) - target) < Math.abs(rank(best) - target) ? l : best), null);
@@ -7206,13 +7211,14 @@ function liveLevelSectionPick(questions, sectionId, chosen) {
 function liveLevelQuiz(quiz, levels) {
   const chosen = liveLevelList(levels);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  const byStep = quizUsesClimbSteps(questions);
   if (!chosen.length) return quiz;
   const out = [];
   const seen = new Set();
   questions.forEach((q) => {
     const id = q?.listeningSection;
     if (!id) {
-      const level = normalizeCefrLevel(q?.cefr);
+      const level = byStep ? normalizeClimbStep(q?.step) : normalizeCefrLevel(q?.cefr);
       if (!level || chosen.includes(level)) out.push(q);
       return;
     }
@@ -7967,7 +7973,7 @@ function normalizeQuiz(quiz) {
   return normalized;
 }
 
-// Climb steps (BUILDUP_MODE_PLAN.md section 10): a question's `step`, a whole
+// Shared Adaptive and Climb steps: a question's `step`, a whole
 // number from 1 to BUILDUP_MAX_STEPS, orders a climb more finely than the six
 // levels. 0 means no step. Identical in app.js and worker.js.
 const BUILDUP_MAX_STEPS = 12;
@@ -9082,6 +9088,8 @@ function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
 // questions are shared by every level and never move the level.
 // autoOnly: anonymous /play leaves out teacher-graded questions (nobody grades them).
 function listeningSectionMoments(questions, sectionId, { autoOnly = false } = {}) {
+  const byStep = quizUsesClimbSteps(questions);
+  const tag = (q) => byStep ? normalizeClimbStep(q?.step) : normalizeCefrLevel(q?.cefr);
   const order = [];
   (questions || []).forEach((q, i) => {
     if (q && !q.isPoll && q.listeningSection === sectionId && !(autoOnly && isAssignmentTeacherGradedQuestion(q))) order.push(i);
@@ -9089,17 +9097,17 @@ function listeningSectionMoments(questions, sectionId, { autoOnly = false } = {}
   const byLevel = {};
   const momentOf = {};
   order.forEach((qi) => {
-    const level = normalizeCefrLevel(questions[qi].cefr);
+    const level = tag(questions[qi]);
     if (!level) return;
     byLevel[level] = byLevel[level] || [];
     momentOf[qi] = byLevel[level].length;
     byLevel[level].push(qi);
   });
-  const levels = CEFR_LEVELS.filter((l) => byLevel[l]);
+  const levels = byStep ? Object.keys(byLevel).map(Number).sort((a, b) => a - b) : CEFR_LEVELS.filter((l) => byLevel[l]);
   // A shared question goes before the moment of the next tagged question.
   const shared = [];
   order.forEach((qi, i) => {
-    if (normalizeCefrLevel(questions[qi].cefr)) return;
+    if (tag(questions[qi])) return;
     const next = order.slice(i + 1).find((x) => momentOf[x] != null);
     shared.push({ qi, before: next == null ? Infinity : momentOf[next] });
   });
@@ -9112,13 +9120,15 @@ function listeningSectionMoments(questions, sectionId, { autoOnly = false } = {}
 function listeningSectionBlock(questions, sectionId, cefr = null, { autoOnly = false } = {}) {
   const m = listeningSectionMoments(questions, sectionId, { autoOnly });
   const L = m.levels.length;
+  const byStep = typeof m.levels[0] === 'number';
+  const rank = (l) => byStep ? l - 1 : CEFR_LEVELS.indexOf(l);
   const ladder = cefr == null && L > 1;
   let fixed = 0;
   if (cefr != null && L) {
-    const target = clamp(Math.floor(Number(cefr) || 0), 0, CEFR_LEVELS.length - 1);
+    const target = clamp(Math.floor(Number(cefr) || 0), 0, byStep ? BUILDUP_MAX_STEPS - 1 : CEFR_LEVELS.length - 1);
     m.levels.forEach((l, i) => {
       // Ties keep the easier level (found first).
-      if (Math.abs(CEFR_LEVELS.indexOf(l) - target) < Math.abs(CEFR_LEVELS.indexOf(m.levels[fixed]) - target)) fixed = i;
+      if (Math.abs(rank(l) - target) < Math.abs(rank(m.levels[fixed]) - target)) fixed = i;
     });
   }
   const qis = [];
@@ -9180,9 +9190,11 @@ function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdapt
   const { bands, pool } = assignmentAdaptivePool(assignment, { autoOnly });
   const plan = adaptiveSectionPlan(assignment?.quiz, { autoOnly });
   if (bands.length < 2 || (!count && !plan.length)) return null;
-  const st = adaptiveInit(bands, saved);
+  const st = adaptiveInit(bands, saved, adaptiveScaleKey(assignment?.quiz));
   // A saved level (or one set by the teacher) means no ladder.
-  st.known = !!saved && Number.isFinite(Number(saved.cefr));
+  st.known = typeof bands[0] === 'number'
+    ? !!saved?.stepLevels?.[st.scaleKey]
+    : !!saved && Number.isFinite(Number(saved.cefr));
   st.count = plan.length
     ? clamp(Math.round(Number(count) || 0), 0, pool.length)
     : clamp(Math.round(count), 1, Math.max(1, pool.length));
@@ -9285,6 +9297,12 @@ function adaptiveAttemptRemap(assignment, st, mapQi, { climbKeyMap = null } = {}
     .map(([k, v]) => [mapQi(Number(k)), v])
     .filter(([k]) => k != null));
   st.last = st.last == null ? null : mapQi(st.last);
+  if (!st.bu) {
+    const { bands } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
+    adaptiveRebase(st, bands, climbKeyMap);
+    if (typeof bands[0] === 'number') st.scaleKey = adaptiveScaleKey(assignment.quiz);
+    else delete st.scaleKey;
+  }
   if (st.block) {
     const kept = st.block.qis.map((qi, k) => [mapQi(qi), k]).filter(([qi]) => qi != null);
     const answers = {};
@@ -9571,7 +9589,7 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
     const served = assignment.quiz?.questions?.[qi];
     if (!served) return { status: 404, error: 'Question not found.' };
     const answer = sanitizeAssignmentAnswer(served, rawAnswer);
-    const band = st.bands.indexOf(normalizeCefrLevel(served.cefr));
+    const band = st.bands.indexOf(typeof st.bands[0] === 'number' ? normalizeClimbStep(served.step) : normalizeCefrLevel(served.cefr));
     const qBand = band >= 0 ? band : adaptiveBand(st);
     const teacher = isAssignmentTeacherGradedQuestion(served);
     st.items.push({ qi, answer, bet, at: now, ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
@@ -9956,11 +9974,12 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
 // Level summary a finished adaptive Cup hands over with each attempt.
 function sanitizeCupLevels(src) {
   if (!src || typeof src !== 'object') return null;
-  const level = (v) => (CEFR_LEVELS.includes(v) ? v : '');
+  const bands = Array.isArray(src.bands) ? [...new Set(src.bands.filter((n) => typeof n === 'number' && normalizeClimbStep(n)))].sort((a, b) => a - b) : [];
+  const level = (v) => (bands.length ? bands.includes(v) : CEFR_LEVELS.includes(v)) ? v : '';
   const usualLevel = level(src.usualLevel);
   if (!usualLevel) return null;
   const perLevel = {};
-  CEFR_LEVELS.forEach((l) => {
+  (bands.length ? bands : CEFR_LEVELS).forEach((l) => {
     const r = src.perLevel?.[l];
     if (!r) return;
     const answered = Math.max(0, Math.round(Number(r.answered) || 0));
@@ -9973,6 +9992,7 @@ function sanitizeCupLevels(src) {
     peakLevel: level(src.peakLevel),
     path: String(src.path || '').slice(0, 4000),
     perLevel,
+    ...(bands.length ? { bands } : {}),
   };
 }
 
@@ -10129,6 +10149,12 @@ async function saveRosterLevels(storage, entries) {
     const key = rosterKey(clean);
     const row = await storage.get(key);
     if (!row || typeof row !== 'object') continue;
+    if (result.scaleKey) {
+      if (teacherLevelOverrides(row, result.startedAt, now)) continue;
+      row.level = adaptiveMergeSaved(row.level, result, now);
+      await storage.put(key, row);
+      continue;
+    }
     if (teacherLevelOverrides(row, result.startedAt, now)) {
       // The teacher's level stays (a reset stays reset); the answers still count.
       if (!row.level) continue;
@@ -10147,6 +10173,15 @@ async function saveRosterGradeChange(storage, email, change) {
   if (!clean || !change) return;
   const key = rosterKey(clean);
   const row = await storage.get(key);
+  if (change.scaleKey) {
+    if (!row || teacherLevelOverrides(row, change.startedAt)) return;
+    const prior = row.level?.stepLevels?.[change.scaleKey];
+    row.level = adaptiveMergeSaved(row.level, {
+      ...change, score: prior ? Number(prior.score) + Number(change.delta || 0) : Number(change.score) || 0,
+    });
+    await storage.put(key, row);
+    return;
+  }
   if (!row?.level || typeof row.level !== 'object') return;
   const { setByTeacher, ...level } = row.level;
   const keep = teacherLevelOverrides(row, change.startedAt);
@@ -10528,7 +10563,7 @@ function assignmentFormatUpdate(assignment, body) {
   const { bands, pool } = mode === 'climb' ? buildupPool(assignment) : assignmentAdaptivePool(assignment);
   const hasSections = mode === 'adaptive' && adaptiveSectionPlan(assignment.quiz).length > 0;
   if (bands.length < 2 || (!pool.length && !hasSections)) return { error: mode === 'climb'
-    ? 'Climb needs auto-graded questions in at least two steps (or tagged with two levels).' : 'Adaptive mode needs questions tagged with at least two levels.' };
+    ? 'Climb needs auto-graded questions in at least two steps (or tagged with two levels).' : 'Adaptive mode needs questions tagged with at least two difficulty steps or CEFR levels.' };
   const max = mode === 'climb' ? BUILDUP_MAX_COUNT : pool.length;
   if (!Number.isInteger(count) || count < (hasSections ? 0 : 1) || count > max) return { error: `Questions per student must be between ${hasSections ? 0 : 1} and ${max}.` };
   return { changed: true, changes: mode === 'climb'
@@ -10721,8 +10756,8 @@ function arenaBuildDeck(ps, eligible) {
 
 // ---------------------------------------------------------------- adaptive
 // Adaptive mode (ADAPTIVE_MODE_PLAN.md §4): each student has a hidden,
-// continuous level score over the CEFR bands the quiz actually contains
-// (bands = distinct tagged levels, in order; gaps are skipped). Right answers
+// continuous score over the numbered steps (or legacy CEFR bands) in a quiz.
+// Bands are distinct difficulty tags, in order; gaps are skipped. Right answers
 // push it up, misses pull it down, and missed questions come back after a few
 // others. Pure functions over plain state so Cup and assignments can share them.
 // A signed-in student's level is saved on their roster row between sessions
@@ -10754,21 +10789,35 @@ const ADAPTIVE_RETRY_GAPS = [6, 7, 8, 9, 10];
 const ADAPTIVE_REPEAT_DISCOUNT = 0.4;
 const ADAPTIVE_PATH_MAX = 200;        // answers kept for the report (room state stays small)
 
-// Eligible question indexes that carry a CEFR tag, with their band index.
+// Eligible question indexes with a numbered step, or a legacy CEFR tag when
+// the quiz has no numbered steps, with their band index.
 // Teacher-graded questions (assignments only) are flagged: their result waits
 // for the teacher's grade, and they are never served twice.
 function adaptivePool(questions, eligible) {
-  const levels = CEFR_LEVELS.filter((l) => eligible.some((qi) => normalizeCefrLevel(questions[qi]?.cefr) === l));
+  const byStep = quizUsesClimbSteps(questions);
+  const tag = (q) => byStep ? normalizeClimbStep(q?.step) : normalizeCefrLevel(q?.cefr);
+  const levels = byStep
+    ? [...new Set(eligible.map((qi) => tag(questions[qi])).filter(Boolean))].sort((a, b) => a - b)
+    : CEFR_LEVELS.filter((l) => eligible.some((qi) => tag(questions[qi]) === l));
   const pool = eligible
-    .map((qi) => ({ qi, band: levels.indexOf(normalizeCefrLevel(questions[qi]?.cefr)), ...(isAssignmentTeacherGradedQuestion(questions[qi]) ? { teacher: true } : {}) }))
+    .map((qi) => ({ qi, band: levels.indexOf(tag(questions[qi])), ...(isAssignmentTeacherGradedQuestion(questions[qi]) ? { teacher: true } : {}) }))
     .filter((p) => p.band >= 0);
   return { bands: levels, pool };
 }
 
 // `saved` is the student's saved level ({ cefr, answered }) or null for a new
 // or anonymous student, who starts at the bottom.
-function adaptiveInit(bands, saved = null) {
+function adaptiveInit(bands, saved = null, scaleKey = '') {
   const st = { bands: bands.slice(), score: ADAPTIVE_START, answered: 0, streak: 0, retry: [], seen: {}, last: null, path: [], perLevel: {}, prior: 0 };
+  if (typeof bands[0] === 'number') {
+    if (scaleKey) st.scaleKey = scaleKey;
+    const prior = scaleKey && saved?.stepLevels?.[scaleKey];
+    if (prior && Number.isFinite(Number(prior.score))) {
+      st.score = clamp(Number(prior.score), 0, bands.length - 0.01);
+      st.prior = Math.max(0, Math.round(Number(prior.answered) || 0));
+    }
+    return st;
+  }
   const cefr = Number(saved?.cefr);
   if (saved && Number.isFinite(cefr) && bands.length) {
     st.score = adaptiveScoreFromCefr(st.bands, cefr);
@@ -10800,16 +10849,22 @@ function adaptiveScoreFromCefr(bands, cefr) {
   return idxs[best] < lvl ? best + 0.99 : best;
 }
 
-// The student's current level on the A1..C2 scale, for saving.
+// The student's zero-based difficulty position, for selecting listening blocks.
+// Only legacy CEFR sessions use this value as a global saved CEFR estimate.
 function adaptiveCefr(st) {
   const band = adaptiveBand(st);
-  return CEFR_LEVELS.indexOf(st.bands[band]) + clamp(st.score - band, 0, 0.99);
+  const base = typeof st.bands[0] === 'number' ? st.bands[band] - 1 : CEFR_LEVELS.indexOf(st.bands[band]);
+  return base + clamp(st.score - band, 0, 0.99);
 }
 
 // What a finished session contributes to the saved level; null if nothing
 // was answered. bottom/top are the quiz's level range, for adaptiveMergeSaved.
 function adaptiveSessionResult(st) {
   if (!st?.answered || !st.bands?.length) return null;
+  // Numbered steps describe this quiz's progression, not a global CEFR level.
+  if (typeof st.bands[0] === 'number') return st.scaleKey
+    ? { scaleKey: st.scaleKey, score: st.score, top: st.bands.length - 0.01, answered: st.answered }
+    : null;
   return {
     cefr: adaptiveCefr(st),
     answered: st.answered,
@@ -10822,6 +10877,18 @@ function adaptiveSessionResult(st) {
 // measure past its own range: a saved level above its top (or below its
 // bottom) stays unless the student ended the session off that edge band.
 function adaptiveMergeSaved(prev, result, now = Date.now()) {
+  if (result.scaleKey) {
+    const steps = { ...(prev?.stepLevels || {}) };
+    const prior = steps[result.scaleKey];
+    steps[result.scaleKey] = {
+      score: Math.round(clamp(Number(result.score) || 0, 0, Number(result.top) || 11.99) * 100) / 100,
+      answered: Math.max(0, Math.round(Number(prior?.answered) || 0)) + Math.max(0, Math.round(Number(result.answered) || 0)),
+      updatedAt: now,
+    };
+    // Bound each roster row while keeping the most recently played quizzes.
+    const stepLevels = Object.fromEntries(Object.entries(steps).sort((a, b) => b[1].updatedAt - a[1].updatedAt).slice(0, 32));
+    return { ...(prev || {}), stepLevels };
+  }
   let cefr = Number(result.cefr);
   const was = Number(prev?.cefr);
   if (prev && Number.isFinite(was)) {
@@ -10829,6 +10896,7 @@ function adaptiveMergeSaved(prev, result, now = Date.now()) {
     else if (was < result.bottom && cefr < result.bottom + 1) cefr = was;
   }
   return {
+    ...(prev?.stepLevels ? { stepLevels: prev.stepLevels } : {}),
     cefr: Math.round(clamp(cefr, 0, CEFR_LEVELS.length - 0.01) * 100) / 100,
     answered: Math.max(0, Math.round(Number(prev?.answered) || 0)) + Math.max(0, Math.round(Number(result.answered) || 0)),
     updatedAt: now,
@@ -10955,7 +11023,7 @@ function adaptiveApplyGrade(st, idx, outcome, { saved = false } = {}) {
   const top = st.bands.length - 0.01;
   const level = st.bands[it.qBand] || '';
   const prev = it.levelEffect || null;
-  const roster = { delta: 0, answered: 0 };
+  const roster = { delta: 0, answered: 0, ...(st.scaleKey ? { scaleKey: st.scaleKey, top } : {}) };
   const n = (st.prior || 0) + st.answered;
   if (prev) {
     st.score = clamp(st.score - prev.delta, 0, top);
@@ -10983,7 +11051,7 @@ function adaptiveApplyGrade(st, idx, outcome, { saved = false } = {}) {
     entry.pending = false;
     entry.ok = adaptivePathOk(outcome);
   }
-  return roster.delta || roster.answered ? roster : null;
+  return roster.delta || roster.answered ? { ...roster, ...(st.scaleKey ? { score: st.score } : {}) } : null;
 }
 
 // The band a student spent most answers at in the second half of the game
@@ -10998,12 +11066,15 @@ function adaptiveUsualLevel(st) {
 
 // The quiz was edited and now covers different levels: keep the student at
 // the same level (or the nearest one above it), drop pending retries.
-function adaptiveRebase(st, bands) {
-  if (!bands.length || bands.join() === st.bands.join()) return;
-  const cur = st.bands[adaptiveBand(st)];
+function adaptiveRebase(st, bands, keyMap = null) {
+  const moved = !!keyMap && [...keyMap].some(([from, to]) => from !== to);
+  if (!bands.length || (bands.join() === st.bands.join() && !moved)) return;
+  const old = st.bands[adaptiveBand(st)];
+  const cur = keyMap?.get(old) ?? old;
   const frac = st.score - Math.floor(st.score);
   let idx = bands.indexOf(cur);
-  if (idx < 0) idx = bands.findIndex((b) => CEFR_LEVELS.indexOf(b) > CEFR_LEVELS.indexOf(cur));
+  const rank = (b) => typeof b === 'number' ? b : CEFR_LEVELS.indexOf(b);
+  if (idx < 0) idx = bands.findIndex((b) => rank(b) > rank(cur));
   if (idx < 0) idx = bands.length - 1;
   st.bands = bands.slice();
   st.score = clamp(idx + frac, 0, bands.length - 0.01);
@@ -11025,8 +11096,9 @@ function adaptiveSummary(st, { stepsPlan = null } = {}) {
     peakLevel: bands[peakIdx] || '',
     // ✓ right · ✗ wrong · (✗) a ladder miss that didn't move the level ·
     // ~ neutral · … waiting for the teacher's grade
-    path: path.map((p) => `${p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? (p.held ? '(✗)' : '✗') : '~'))}`).join(' '),
+    path: path.map((p) => `${typeof p.level === 'number' ? `Step ${p.level}` : p.level}${p.pending ? '…' : (p.ok === true ? '✓' : (p.ok === false ? (p.held ? '(✗)' : '✗') : '~'))}`).join(' '),
     perLevel: st.perLevel || {},
+    ...(typeof bands[0] === 'number' ? { bands: bands.slice() } : {}),
     ...(st.bu ? { buildup: buildupSummary(st, stepsPlan) } : {}),
     ...(Array.isArray(st.sectionResults) && st.sectionResults.length ? { sections: st.sectionResults } : {}),
   };
@@ -11102,11 +11174,15 @@ function buildupPool(assignment) {
   const questions = assignment?.quiz?.questions || [];
   if (!quizUsesClimbSteps(questions)) return assignmentAdaptivePool(assignment, { autoOnly: true });
   const eligible = autoGradedQuestionIndexes(questions).filter((qi) => !questions[qi].listeningSection);
-  const bands = [...new Set(eligible.map((qi) => normalizeClimbStep(questions[qi].step)).filter(Boolean))].sort((a, b) => a - b);
-  const pool = eligible
-    .map((qi) => ({ qi, band: bands.indexOf(normalizeClimbStep(questions[qi].step)) }))
-    .filter((p) => p.band >= 0);
-  return { bands, pool };
+  return adaptivePool(questions, eligible);
+}
+
+// The same quiz can be assigned, played publicly or used in Cup. Its local
+// scale follows its question content and step tags, independent of ordering.
+function adaptiveScaleKey(quiz) {
+  const rows = (quiz?.questions || []).map((q) => [q.id || '', normalizeClimbStep(q.step), q.prompt || '']);
+  rows.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return `steps-${hash(JSON.stringify(rows))}`;
 }
 
 // A question's band in a climb: by step when its bands are step numbers,
@@ -11445,7 +11521,7 @@ function arenaDeal(room, pid) {
   let qi;
   if (room.arena.adaptive) {
     const { bands, pool } = arenaAdaptivePool(room);
-    if (!ps.adaptive) ps.adaptive = adaptiveInit(bands, room.players[pid]?.savedLevel);
+    if (!ps.adaptive) ps.adaptive = adaptiveInit(bands, room.players[pid]?.savedLevel, adaptiveScaleKey(room.quiz));
     adaptiveRebase(ps.adaptive, bands);
     qi = adaptiveNext(ps.adaptive, pool);
   } else {
@@ -11662,7 +11738,7 @@ function arenaHandleAnswer(room, pid, data, out) {
   // Level movement uses the adaptive rule (partial rounds: right from 70%,
   // neutral from 40%); points and chests keep Cup's own "correct".
   if (room.arena.adaptive && ps.adaptive) {
-    const band = ps.adaptive.bands.indexOf(normalizeCefrLevel(q.cefr));
+    const band = buildupBandOf(ps.adaptive, q);
     if (band >= 0) adaptiveRecord(ps.adaptive, qi, band, adaptiveOutcome(res));
   }
   let points = 0;

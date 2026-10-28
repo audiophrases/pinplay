@@ -12,6 +12,59 @@ const q = (cefr, type = 'mcq') => ({ type, cefr });
 const levelOf = (st) => st.bands[E.adaptiveBand(st)];
 const ALL = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+describe('numbered adaptive steps', () => {
+  const quiz = () => ({ questions: Array.from({ length: 36 }, (_, i) => ({ id: `q${i}`, type: 'mcq', prompt: `Question ${i}`, step: Math.floor(i / 3) + 1, cefr: 'A2' })) });
+
+  it('uses the same 12 step bands for Cup and assignments, leaving unstepped questions out', () => {
+    const a = quiz();
+    a.questions.push({ id: 'legacy', type: 'mcq', cefr: 'C2' });
+    const cup = E.adaptivePool(a.questions, E.arenaEligibleIndexes({ quiz: a }));
+    const assigned = E.assignmentAdaptivePool({ quiz: a });
+    assert.deepEqual(plain(cup.bands), Array.from({ length: 12 }, (_, i) => i + 1));
+    assert.deepEqual(plain(cup), plain(assigned));
+    assert.equal(cup.pool.length, 36);
+  });
+
+  it('stores local progress without changing CEFR, and resumes only the same quiz', () => {
+    const a = quiz();
+    const key = E.adaptiveScaleKey(a);
+    const { bands } = E.adaptivePool(a.questions, a.questions.map((_, i) => i));
+    const st = E.adaptiveInit(bands, { cefr: 5.5, answered: 200 }, key);
+    assert.equal(st.score, E.ADAPTIVE_START, 'a CEFR C2 level is not step 12 on an arbitrary quiz');
+    st.score = 7.4;
+    st.answered = 14;
+    const prev = { cefr: 2.5, answered: 40 };
+    const saved = E.adaptiveMergeSaved(prev, E.adaptiveSessionResult(st), 100);
+    assert.equal(saved.cefr, 2.5);
+    assert.equal(saved.answered, 40);
+    assert.equal(saved.stepLevels[key].score, 7.4);
+    assert.equal(E.adaptiveInit(bands, saved, key).score, 7.4);
+    assert.equal(E.adaptiveInit(bands, saved, 'another').score, E.ADAPTIVE_START);
+    assert.equal(E.adaptiveScaleKey({ questions: a.questions.slice().reverse() }), key);
+    const legacy = E.adaptiveMergeSaved(saved, { cefr: 3.2, answered: 2, bottom: 0, top: 5 });
+    assert.equal(legacy.stepLevels[key].score, 7.4, 'a later CEFR session keeps numbered quiz progress');
+  });
+
+  it('rebases a deleted or renumbered step numerically, keeping the fractional position', () => {
+    const st = E.adaptiveInit([1, 2, 3, 4, 5]);
+    st.score = 2.4;
+    E.adaptiveRebase(st, [1, 4, 5]);
+    assert.equal(st.bands[E.adaptiveBand(st)], 4);
+    assert.ok(Math.abs(st.score - 1.4) < 1e-9);
+    E.adaptiveRebase(st, [1, 4, 5, 6], new Map([[4, 5]]));
+    assert.equal(st.bands[E.adaptiveBand(st)], 5);
+  });
+
+  it('listening blocks can select any of 12 steps, or use an easy-to-hard ladder', () => {
+    const qs = Array.from({ length: 12 }, (_, s) => Array.from({ length: 12 }, (_, m) => ({ type: 'mcq', id: `s${s + 1}m${m}`, step: s + 1, listeningSection: 'p1' }))).flat();
+    const fixed = E.listeningSectionBlock(qs, 'p1', 10.4);
+    assert.equal(fixed.level, 11);
+    assert.ok(fixed.qis.every((qi) => qs[qi].step === 11));
+    const ladder = E.listeningSectionBlock(qs, 'p1');
+    assert.deepEqual(plain(ladder.qLevels), Array.from({ length: 12 }, (_, i) => i + 1));
+  });
+});
+
 describe('bands come from the levels the quiz contains', () => {
   it('uses all six levels of a full quiz', () => {
     const eligible = E.arenaEligibleIndexes({ quiz: { questions: VERBS } });
@@ -278,6 +331,42 @@ describe('saved level storage (roster rows in the assignments DO)', () => {
     return { m, get: async (k) => m.get(k), put: async (k, v) => { m.set(k, v); } };
   };
   const session = (score, answered) => ({ bands: ALL.slice(), score, answered });
+
+  it('saves numbered quiz progress once per answer while preserving global CEFR', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 2.5, answered: 40 } } });
+    const st = E.adaptiveInit(Array.from({ length: 12 }, (_, i) => i + 1), null, 'steps-123');
+    Object.assign(st, { score: 7.4, answered: 14, items: [] });
+    const attempt = { adaptive: st, studentEmail: 'a@s.cat', startedAt: 1 };
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    let level = storage.m.get('rs:a@s.cat').level;
+    assert.equal(level.cefr, 2.5);
+    assert.equal(level.answered, 40);
+    assert.equal(level.stepLevels['steps-123'].answered, 14);
+    assert.equal(level.stepLevels['steps-123'].score, 7.4);
+    st.answered = 16;
+    st.score = 8.1;
+    await S.adaptiveAttemptSaveLevel(storage, attempt);
+    level = storage.m.get('rs:a@s.cat').level;
+    assert.equal(level.stepLevels['steps-123'].answered, 16);
+    assert.equal(E.adaptiveInit(st.bands, level, 'steps-123').score, 8.1);
+  });
+
+  it('late grades create local saved progress and regrades adjust only that quiz', async () => {
+    const storage = fakeStorage({ 'rs:a@s.cat': { email: 'a@s.cat', level: { cefr: 1.5, answered: 20 } } });
+    const st = E.adaptiveInit([1, 2, 3], null, 'steps-456');
+    Object.assign(st, { done: true, items: [{ qi: 0, band: 0, qBand: 0 }] });
+    E.adaptiveRecordPending(st, 0, 0);
+    const attempt = { adaptive: st, studentEmail: 'a@s.cat', startedAt: 1 };
+    await S.adaptiveAttemptGrade(storage, attempt, 0, { pointsAwarded: 1000 }, 1000);
+    const first = storage.m.get('rs:a@s.cat').level.stepLevels['steps-456'].score;
+    await S.adaptiveAttemptGrade(storage, attempt, 0, { pointsAwarded: 0 }, 1000);
+    const level = storage.m.get('rs:a@s.cat').level;
+    assert.ok(level.stepLevels['steps-456'].score < first);
+    assert.equal(level.stepLevels['steps-456'].answered, 1);
+    assert.equal(level.cefr, 1.5);
+    assert.equal(level.answered, 20);
+  });
 
   it('keeps the level when the teacher renames or re-classes a student', () => {
     const prior = { email: 'a@s.cat', displayName: 'Ana', className: '4B', level: { cefr: 2.4, answered: 30 } };

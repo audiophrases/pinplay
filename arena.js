@@ -913,10 +913,13 @@
   function downloadLevelReport() {
     const rows = H.levels || [];
     if (!rows.length) return;
-    const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].filter((l) => rows.some((r) => r.perLevel?.[l]));
+    const levels = [...new Set(rows.flatMap((r) => Object.keys(r.perLevel || {})))].sort((a, b) => {
+      const rank = (l) => /^\d+$/.test(l) ? Number(l) : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].indexOf(l);
+      return rank(a) - rank(b);
+    });
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const header = [tr('Student'), tr('Questions answered'), tr('Usual level'), tr('Final level'), tr('Highest level'),
-      ...levels.map((l) => `${l} ${tr('right/answered')}`), tr('Path')];
+      ...levels.map((l) => `${/^\d+$/.test(l) ? tr('Step {n}', { n: l }) : l} ${tr('right/answered')}`), tr('Path')];
     const lines = [header.map(cell).join(',')].concat(rows.map((r) => [
       r.name, r.answered, r.usualLevel, r.finalLevel, r.peakLevel,
       ...levels.map((l) => (r.perLevel?.[l] ? `${r.perLevel[l].right}/${r.perLevel[l].answered}` : '')),

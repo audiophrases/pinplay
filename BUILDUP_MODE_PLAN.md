@@ -6,6 +6,13 @@ results, FR strings, tests); **the AI prompt built 2026-10-11** (section 8);
 question instead of levels, prompt batches of 60). Decisions settled with the
 owner on 2026-10-10/11 and 2026-10-27.
 
+**Shared with Adaptive since 2026-10-28:** numbered steps 1–12 now drive both
+modes, using the same question pool logic. The builder offers either mode on
+a step-only quiz and defaults to Adaptive; choose Climb for the trail and
+summit behavior. Both AI prompts follow the teacher's existing comments about
+the final difficulty and pace. See the current notes at the top of
+ADAPTIVE_MODE_PLAN.md for local saved progress and compatibility details.
+
 ## 1. Why
 
 Adaptive mode (ADAPTIVE_MODE_PLAN.md) fits one quiz to every level: breadth, and
