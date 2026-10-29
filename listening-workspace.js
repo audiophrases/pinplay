@@ -13,6 +13,27 @@ function lrDraftKey() {
   return `pinplay.listening-draft.v1:${loadBackendUrl() || 'https://api.pinplay.win'}`;
 }
 
+function lrReadDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(lrDraftKey()) || 'null');
+    return draft?.fields && typeof draft.fields === 'object' ? draft : null;
+  } catch { return null; }
+}
+
+function lrRestoreDraft() {
+  const draft = lrReadDraft();
+  if (!draft) return;
+  LR_DRAFT_FIELDS.forEach(id => { if (typeof draft.fields[id] === 'string') lrEl(id).value = draft.fields[id]; });
+  lrWorkspace.sessionId = /^[a-z0-9]{8,16}$/.test(draft.sessionId || '') ? draft.sessionId : '';
+  lrWorkspace.sessionTitle = String(draft.sessionTitle || '');
+  lrWorkspace.studioId = /^[a-z0-9]{8,32}$/.test(draft.studioId || '') ? draft.studioId : '';
+  lrWorkspace.studioTitle = String(draft.studioTitle || '');
+  lrWorkspace.studioSession = lrWorkspace.studioId && /^[a-z0-9]{8,16}$/.test(draft.studioSession || '') ? draft.studioSession : '';
+  lrSelectMethod(['people', 'studio', 'upload'].includes(draft.method) ? draft.method : 'people', { keepWho: true });
+  lrSelectTab(['script', 'recording', 'questions'].includes(draft.tab) ? draft.tab : 'script');
+  lrEl('lrDraftStatus').textContent = t('Draft restored from this device');
+}
+
 function lrSaveDraft() {
   clearTimeout(lrWorkspace.saveTimer);
   const status = lrEl('lrDraftStatus');
@@ -21,6 +42,7 @@ function lrSaveDraft() {
     localStorage.setItem(lrDraftKey(), JSON.stringify({ fields, started: lrWorkspace.started,
       tab: lrWorkspace.tab, method: lrWorkspace.method, sessionId: lrWorkspace.sessionId, sessionTitle: lrWorkspace.sessionTitle,
       studioId: lrWorkspace.studioId, studioTitle: lrWorkspace.studioTitle, studioSession: lrWorkspace.studioSession }));
+    lrEl('lrRestoreDraft').classList.add('hidden');
     if (status) status.textContent = t('Draft saved on this device');
   } catch {
     if (status) status.textContent = t('Draft could not be saved on this device. Copy your script to keep it.');
@@ -440,20 +462,10 @@ function lrShowTargetSection() {
 function lrBindWorkspace() {
   if (!lrEl('lrLanguage')) return;
   lrEl('lrLanguage').innerHTML = LISTENING_SCRIPT_LANGUAGES.map(language => `<option>${escapeHtml(language)}</option>`).join('');
-  try {
-    const draft = JSON.parse(localStorage.getItem(lrDraftKey()) || 'null');
-    if (draft?.fields) {
-      LR_DRAFT_FIELDS.forEach(id => { if (typeof draft.fields[id] === 'string') lrEl(id).value = draft.fields[id]; });
-      lrWorkspace.sessionId = /^[a-z0-9]{8,16}$/.test(draft.sessionId || '') ? draft.sessionId : '';
-      lrWorkspace.sessionTitle = String(draft.sessionTitle || '');
-      lrWorkspace.studioId = /^[a-z0-9]{8,32}$/.test(draft.studioId || '') ? draft.studioId : '';
-      lrWorkspace.studioTitle = String(draft.studioTitle || '');
-      lrWorkspace.studioSession = lrWorkspace.studioId && /^[a-z0-9]{8,16}$/.test(draft.studioSession || '') ? draft.studioSession : '';
-      if (draft.started) lrSelectTab(draft.tab || 'script');
-      lrSelectMethod(draft.method || 'people');
-      lrEl('lrDraftStatus').textContent = t('Draft restored from this device');
-    }
-  } catch { /* An unavailable or invalid local draft must not block the tools. */ }
+  // Every visit starts blank. Previous work is loaded only on request.
+  lrEl('lrRestoreDraft').classList.toggle('hidden', !lrReadDraft());
+  lrEl('lrRestoreDraft').addEventListener('click', lrRestoreDraft);
+  lrEl('lrScriptPromptBtn').addEventListener('click', () => openListeningScriptStep());
   lrRefreshWorkspace();
   lrEl('listeningCard').addEventListener('input', event => {
     if (!LR_DRAFT_FIELDS.includes(event.target.id)) return;
@@ -477,9 +489,10 @@ function lrBindWorkspace() {
   document.querySelectorAll('[data-lr-start]').forEach(button => button.addEventListener('click', () => {
     const start = button.dataset.lrStart;
     if (start === 'sessions') { openVoiceActors(); return; }
+    if (start === 'generate') { openListeningScriptStep(); return; }
     lrSelectTab(start === 'upload' ? 'recording' : 'script');
     if (start === 'upload') { lrSelectMethod('upload'); lrEl('lrAudioFile').focus(); }
-    else { lrEl('lrGenerator').open = start === 'generate'; lrEl(start === 'generate' ? 'lrTopic' : 'lrScript').focus(); }
+    else { lrEl('lrGenerator').open = false; lrEl('lrScript').focus(); }
   }));
   lrEl('lrChangeStart').addEventListener('click', () => lrEl('lrStartChoices').classList.toggle('hidden'));
   lrEl('lrDetachSession').addEventListener('click', () => {

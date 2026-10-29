@@ -33,15 +33,19 @@
               <h2 id="listeningSectionToggle" class="section-toggle-title" role="button" tabindex="0" aria-expanded="false">
                 <span data-i18n>🎧 Listening activity</span> <span class="collapse-chevron" aria-hidden="true">▸</span>
               </h2>
-              <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
+              <div class="va-entry-row">
+                <button id="lrScriptPromptBtn" class="btn" type="button" data-i18n>Create script prompt</button>
+                <button id="voiceActorsOpenBtn" class="btn" type="button" data-i18n>Recording sessions</button>
+              </div>
             </div>
             <div id="listeningCardBody" class="hidden">
               <div class="lr-intro"><p class="small muted" data-i18n>Create a script, make a recording, and build questions. Start with what you already have.</p>
+                <button id="lrRestoreDraft" class="btn btn-sm hidden" type="button" data-i18n>Restore saved draft</button>
                 <button id="lrChangeStart" class="btn btn-sm hidden" type="button" data-i18n>Change starting point</button></div>
               <div id="lrStartChoices" class="lr-start">
                 <p data-i18n>What do you already have?</p>
                 <div class="lr-start-grid">
-                  <button type="button" class="lr-choice" data-lr-start="generate"><strong data-i18n>I need a script</strong><span data-i18n>Generate a script with AI</span></button>
+                  <button type="button" class="lr-choice" data-lr-start="generate"><strong data-i18n>I need a script</strong><span data-i18n>Create a prompt for an external AI</span></button>
                   <button type="button" class="lr-choice" data-lr-start="paste"><strong data-i18n>I have a script</strong><span data-i18n>Paste or write your own</span></button>
                   <button type="button" class="lr-choice" data-lr-start="upload"><strong data-i18n>I have a recording</strong><span data-i18n>Upload audio and create questions</span></button>
                   <button type="button" class="lr-choice" data-lr-start="sessions"><strong data-i18n>Continue a recording session</strong><span data-i18n>Review takes and finish a recording</span></button>
@@ -59,7 +63,7 @@
                   <label class="lr-script"><span data-i18n>Your script</span><textarea id="lrScript" rows="10" spellcheck="false" placeholder="Mia (surprised): Forty minutes? You're joking!&#10;Tom: I know, I know…" data-i18n-ignore></textarea></label>
                   <span id="lrScriptInfo" class="small muted"></span>
                   <div id="lrLinkedActions" class="va-entry-row hidden"><button id="lrEditSession" class="btn" type="button" data-i18n>Edit in recording session</button><button id="lrEditStudio" class="btn hidden" type="button" data-i18n>Edit in Listening Studio</button><button id="lrDetachSession" class="btn" type="button" data-i18n>Use a separate draft</button></div>
-                  <details id="lrGenerator" class="lr-generator"><summary data-i18n>Generate a script with AI</summary>
+                  <details id="lrGenerator" class="lr-generator"><summary data-i18n>Create a prompt for an external AI</summary>
                     <p class="small muted" data-i18n>Copy the prompt into your AI chat, then paste its answer into Your script.</p>
                 <div class="creation-prompt-grid">
                   <div class="prompt-field full-width">
@@ -949,7 +953,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261025-studio-update"></script>
+    <script src="../i18n-fr.js?v=20261029-listening-start"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -963,7 +967,7 @@
     <script src="../assignment-setup.js?v=20261020-assignment-keyboard"></script>
     <script src="../app.js?v=20261020-assignment-review"></script>
     <script src="../voice-actors.js?v=20261025-studio-update"></script>
-    <script src="../listening-workspace.js?v=20261025-studio-update"></script>
+    <script src="../listening-workspace.js?v=20261029-listening-start"></script>
     <script src="../question-bank-ui.js?v=20260925-levels"></script>
     <script src="../command-palette.js?v=20261019-listening-workspace"></script>
     <script src="../cup/avatar-parts.js"></script><script src="../scripts/avatar-runtime.js"></script>

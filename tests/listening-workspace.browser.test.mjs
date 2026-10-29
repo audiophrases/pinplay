@@ -12,7 +12,7 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
   });
   after(async () => { await browser?.close(); });
-  async function open({ width = 1100, storage = false, page: existing } = {}) {
+  async function open({ width = 1100, storage = false, draft, page: existing } = {}) {
     const page = existing || await browser.newPage({ viewport: { width, height: 940 } });
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
@@ -50,6 +50,7 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
       document.getElementById('listeningCardBody').classList.remove('hidden');
       if (storage) Object.defineProperty(window, 'localStorage', { value: { getItem() { throw new Error('Disabled'); }, setItem() { throw new Error('Disabled'); } } });
     }, storage);
+    if (draft) await page.evaluate(draft => localStorage.setItem('pinplay.listening-draft.v1:https://api.test', JSON.stringify(draft)), draft);
     await page.addScriptTag({ path: 'listening-script.js' });
     await page.addScriptTag({ path: 'voice-actors.js' });
     await page.addScriptTag({ path: 'listening-workspace.js' });
@@ -77,13 +78,20 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     assert.deepEqual(errors, []);
     await page.close();
   });
-  it('saves script drafts and settings across reload and handles unavailable storage', async () => {
+  it('starts blank after reload and restores a saved draft only on request', async () => {
     const { page, errors } = await open();
     await page.locator('[data-lr-start="paste"]').click();
     await page.locator('#lrDraftTitle').fill('Our draft');
     await page.locator('#lrScript').fill('Mia: Hello.\nTom: Hi!');
     await page.waitForFunction(() => document.getElementById('lrDraftStatus').textContent === 'Draft saved on this device');
     await open({ page });
+    assert.equal(await page.locator('#lrScript').inputValue(), '');
+    assert.equal(await page.locator('#lrDraftTitle').inputValue(), '');
+    assert.equal(await page.locator('#lrWorkspace').isVisible(), false);
+    assert.equal(await page.locator('#lrStartChoices').isVisible(), true);
+    assert.equal(await page.locator('#lrDraftStatus').innerText(), '');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('pinplay.listening-draft.v1:https://api.test')).fields.lrScript), 'Mia: Hello.\nTom: Hi!');
+    await page.locator('#lrRestoreDraft').click();
     assert.equal(await page.locator('#lrScript').inputValue(), 'Mia: Hello.\nTom: Hi!');
     assert.equal(await page.locator('#lrDraftTitle').inputValue(), 'Our draft');
     assert.equal(await page.locator('#lrWorkspace').isVisible(), true);
@@ -91,12 +99,67 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('pinplay.listening-draft.v1:https://api.test')).fields.lrScript), 'Mia: Hello.\nTom: Hi!');
     assert.deepEqual(errors, []);
     await page.close();
+  });
+  for (const source of ['session', 'studio']) {
+    it(`ignores the previous ${source} link and prompt settings until explicitly restored`, async () => {
+      const { page, errors } = await open({ draft: {
+        fields: { lrDraftTitle: 'Last activity', lrScript: 'Mia: Old words.', lrTopic: 'Old topic', lrLanguage: 'French', lrRecordedBy: 'studio' },
+        started: true, tab: 'recording', method: 'studio',
+        ...(source === 'session' ? { sessionId: 'abcdefgh23', sessionTitle: 'Last activity' }
+          : { studioId: 'a1b2c3d4e5f6', studioTitle: 'Last activity' }),
+      } });
+      const studio = await fakeStudio(page);
+      assert.equal(await page.locator('#lrScript').inputValue(), '');
+      assert.equal(await page.locator('#lrDraftTitle').inputValue(), '');
+      assert.equal(await page.locator('#lrTopic').inputValue(), '');
+      assert.equal(await page.locator('#lrLanguage').inputValue(), 'English');
+      assert.equal(await page.locator('#lrRecordedBy').inputValue(), 'students');
+      assert.equal(await page.locator('#lrSessionSource').innerText(), '');
+      assert.equal(await page.locator('#lrScript').isEditable(), true);
+      assert.equal(await page.locator('#lrStartChoices').isVisible(), true);
+      assert.equal(await page.locator('#lrGenerator').evaluate(element => element.classList.contains('hidden')), false);
+      assert.deepEqual(await page.evaluate(() => window.calls), []);
+      assert.deepEqual(studio.calls, []);
+      // Starting a new prompt leaves the saved session/Studio recording alone.
+      await page.locator('[data-lr-start="generate"]').click();
+      assert.equal(await page.locator('#lrCopyPromptBtn').isVisible(), true);
+      assert.equal(await page.locator('#lrRestoreDraft').isVisible(), false);
+      assert.equal(await page.locator('#lrScript').inputValue(), '');
+      assert.deepEqual(await page.evaluate(() => window.calls), []);
+      assert.deepEqual(studio.calls, []);
+      assert.deepEqual(errors, []);
+      await page.close();
+    });
+  }
+  it('handles unavailable draft storage', async () => {
     const unavailable = await open({ storage: true });
     await unavailable.page.locator('[data-lr-start="paste"]').click();
     assert.match(await unavailable.page.locator('#lrDraftStatus').innerText(), /could not be saved/);
     assert.equal(await unavailable.page.locator('#lrScript').isEditable(), true);
     assert.deepEqual(unavailable.errors, []);
     await unavailable.page.close();
+  });
+  it('exposes the external AI prompt from the card heading and copies the chosen script requirements', async () => {
+    const { page, errors } = await open();
+    await page.evaluate(() => {
+      document.getElementById('listeningCardBody').classList.add('hidden');
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.copied = text; } } });
+    });
+    await page.getByRole('button', { name: 'Create script prompt', exact: true }).click();
+    assert.equal(await page.locator('#lrCopyPromptBtn').isVisible(), true);
+    assert.equal(await page.locator('#lrTopic').evaluate(element => document.activeElement === element), true);
+    await page.locator('#lrTopic').fill('A weekend in London');
+    await page.locator('#lrLevel').fill('B1');
+    await page.locator('#lrLanguage').selectOption('French');
+    await page.locator('#lrCharacters').fill('Two friends');
+    await page.locator('#lrLength').selectOption('3');
+    await page.locator('#lrNotes').fill('Use the past tense');
+    await page.locator('#lrCopyPromptBtn').click();
+    const prompt = await page.evaluate(() => window.copied);
+    for (const pattern of [/level B1, in French/, /A weekend in London/, /Two friends/, /about 3 minutes/, /Use the past tense/, /script only/, /one student per character/]) assert.match(prompt, pattern);
+    assert.equal(await page.locator('#lrScript').evaluate(element => document.activeElement === element), true);
+    assert.deepEqual(errors, []);
+    await page.close();
   });
   it('selects a recording session and fetches its latest edits before questions, blocking stale results on failure', async () => {
     const { page, errors } = await open();
@@ -118,6 +181,21 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     await page.locator('#lrScriptToggle').click();
     await page.locator('#lrDetachSession').click();
     assert.equal(await page.locator('#lrScript').isEditable(), true);
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+  it('opens the script prompt while a recording session is selected', async () => {
+    const { page, errors } = await open();
+    await page.locator('[data-lr-start="sessions"]').click();
+    await page.locator('[data-va-open="abcdefgh23"]').click();
+    await page.locator('[data-va-close]').click();
+    assert.equal(await page.locator('#lrScript').isEditable(), false);
+    await page.locator('#lrChangeStart').click();
+    await page.locator('[data-lr-start="generate"]').click();
+    assert.equal(await page.locator('#lrCopyPromptBtn').isVisible(), true);
+    assert.equal(await page.locator('#lrScript').isEditable(), true);
+    assert.equal(await page.locator('#lrScript').inputValue(), 'Mia: Latest edited words.');
+    assert.equal(await page.locator('#lrSessionSource').innerText(), '');
     assert.deepEqual(errors, []);
     await page.close();
   });
