@@ -139,13 +139,12 @@ describe('listening activity workspace', { skip: !chromium && 'Install playwrigh
     assert.deepEqual(unavailable.errors, []);
     await unavailable.page.close();
   });
-  it('exposes the external AI prompt from the card heading and copies the chosen script requirements', async () => {
+  it('opens the external AI prompt through I need a script and copies the chosen script requirements', async () => {
     const { page, errors } = await open();
     await page.evaluate(() => {
-      document.getElementById('listeningCardBody').classList.add('hidden');
       Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.copied = text; } } });
     });
-    await page.getByRole('button', { name: 'Create script prompt', exact: true }).click();
+    await page.getByRole('button', { name: 'I need a script' }).click();
     assert.equal(await page.locator('#lrCopyPromptBtn').isVisible(), true);
     assert.equal(await page.locator('#lrTopic').evaluate(element => document.activeElement === element), true);
     await page.locator('#lrTopic').fill('A weekend in London');

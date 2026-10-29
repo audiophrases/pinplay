@@ -1881,7 +1881,6 @@ window.PINPLAY_FR_DICT = {
   "Change starting point": "Changer de point de départ",
   "What do you already have?": "De quoi disposez-vous déjà ?",
   "I need a script": "J’ai besoin d’un script",
-  "Create script prompt": "Créer un prompt de script",
   "Create a prompt for an external AI": "Créer un prompt pour une IA externe",
   "Restore saved draft": "Restaurer le brouillon enregistré",
   "Generate a script with AI": "Générer un script avec l’IA",

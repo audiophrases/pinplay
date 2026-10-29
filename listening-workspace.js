@@ -465,7 +465,6 @@ function lrBindWorkspace() {
   // Every visit starts blank. Previous work is loaded only on request.
   lrEl('lrRestoreDraft').classList.toggle('hidden', !lrReadDraft());
   lrEl('lrRestoreDraft').addEventListener('click', lrRestoreDraft);
-  lrEl('lrScriptPromptBtn').addEventListener('click', () => openListeningScriptStep());
   lrRefreshWorkspace();
   lrEl('listeningCard').addEventListener('input', event => {
     if (!LR_DRAFT_FIELDS.includes(event.target.id)) return;
