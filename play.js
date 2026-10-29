@@ -10217,17 +10217,23 @@ function formatListeningTime(sec) {
 function addListeningSpeed(wrap, section, audio) {
   const rates = (listeningSheet.rates ||= {});
   const rate = section.speedAllowed === false ? 100 : (rates[section.id] || 100);
+  let current = rate;
   const apply = () => {
-    audio.playbackRate = rate / 100;
-    audio.defaultPlaybackRate = rate / 100;
+    const speed = current / 100;
+    if (audio.defaultPlaybackRate !== speed) audio.defaultPlaybackRate = speed;
+    if (audio.playbackRate !== speed) audio.playbackRate = speed;
     audio.preservesPitch = true;
   };
-  let current = rate;
+  // Media loading and native controls can reset the actual rate while the
+  // dial still shows a slowdown. Keep the selected rate in charge, including
+  // when playback starts. Replacing these handlers also handles sheet redraws.
+  audio.controlsList?.add('noplaybackrate');
+  audio.onratechange = apply;
+  audio.onplaying = apply;
   const set = (v) => {
     current = Math.max(85, Math.min(100, Math.round(v)));
     rates[section.id] = current;
-    audio.playbackRate = current / 100;
-    audio.defaultPlaybackRate = current / 100;
+    apply();
     slider.value = String(current);
     label.textContent = `${current}%`;
   };
@@ -10260,6 +10266,7 @@ function addListeningSpeed(wrap, section, audio) {
   reset.className = 'ls-speed-reset';
   reset.textContent = t('Normal');
   slider.addEventListener('input', () => set(Number(slider.value)));
+  slider.addEventListener('change', () => set(Number(slider.value)));
   minus.addEventListener('click', () => set(current - 1));
   plus.addEventListener('click', () => set(current + 1));
   reset.addEventListener('click', () => set(100));
