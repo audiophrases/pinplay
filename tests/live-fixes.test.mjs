@@ -72,7 +72,9 @@ let post;
 let bucket;
 
 before(async () => {
-  const src = fs.readFileSync(path.join(REPO, 'cloudflare', 'worker.js'), 'utf8');
+  // The copy lives in the temp folder: point its one local import back here.
+  const authModule = 'file://' + path.join(REPO, 'cloudflare', 'taskflow-auth.mjs').replace(/\\/g, '/');
+  const src = fs.readFileSync(path.join(REPO, 'cloudflare', 'worker.js'), 'utf8').replace("'./taskflow-auth.mjs'", JSON.stringify(authModule));
   const tmpFile = path.join(os.tmpdir(), `pinplay-worker-livefix-${process.pid}-${Date.now()}.mjs`);
   fs.writeFileSync(tmpFile, src);
   process.on('exit', () => { try { fs.unlinkSync(tmpFile); } catch { /* already gone */ } });
@@ -170,7 +172,7 @@ describe('listening options are shuffled', () => {
   let A;
   before(() => {
     P = loadDeclarations(fs.readFileSync(path.join(REPO, 'play.js'), 'utf8'),
-      ['questionShuffleSeed', 'seededShuffleIndices', 'listeningOptionOrder', 'listeningAnswerLabel'], { live: { player: { mode: 'live' } } });
+      ['questionShuffleSeed', 'seededShuffleIndices', 'listeningOptionOrder'], { live: { player: { mode: 'live' } } });
     A = loadDeclarations(fs.readFileSync(path.join(REPO, 'app.js'), 'utf8'), ['questionShuffleSeed', 'seededShuffleIndices', 'listeningOptionOrder']);
   });
 
@@ -195,13 +197,5 @@ describe('listening options are shuffled', () => {
   it('true / false stays in order', () => {
     const tf = { type: 'tf', prompt: 'x', answers: [{ text: 'True' }, { text: 'False' }] };
     assert.deepEqual([...P.listeningOptionOrder(tf)], [0, 1]);
-  });
-
-  it('the sheet\'s "Answer:" uses the letter the student saw', () => {
-    const q = section[3];
-    const letter = String.fromCharCode(65 + P.listeningOptionOrder(q).indexOf(0));
-    assert.equal(P.listeningAnswerLabel(q, '1. right 3'), `${letter}. right 3`);
-    assert.equal(P.listeningAnswerLabel({ type: 'tf', answers: [{ text: 'True' }, { text: 'False' }] }, '1. True'), 'True');
-    assert.equal(P.listeningAnswerLabel({ type: 'text' }, '1. not a choice'), '1. not a choice');
   });
 });

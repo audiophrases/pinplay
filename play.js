@@ -108,18 +108,6 @@ function listeningOptionOrder(question) {
   return seededShuffleIndices(answers.length, questionShuffleSeed(seed, attemptId));
 }
 
-// The server writes a choice answer as "2. Paris" (its place as written);
-// the sheet shows the letter the student saw instead: "C. Paris".
-function listeningAnswerLabel(question, text) {
-  if (!['mcq', 'multi', 'tf'].includes(question?.type)) return text;
-  const order = listeningOptionOrder(question);
-  return String(text || '').split(' | ').map((piece) => piece.replace(/^(\d+)\.\s*/, (m, n) => {
-    if (question.type === 'tf') return '';
-    const pos = order.indexOf(Number(n) - 1);
-    return pos >= 0 ? `${String.fromCharCode(65 + pos)}. ` : m;
-  })).join(' | ');
-}
-
 const joinStepPinEl = document.getElementById('joinStepPin');
 const joinStepIdentityEl = document.getElementById('joinStepIdentity');
 const joinModeHintEl = document.getElementById('joinModeHint');
@@ -3761,95 +3749,8 @@ function renderPlayerState(state) {
     const audioKey = String(rrNow?.correctionAudioKey || '').trim();
     if (!corr && !audioKey) return;
 
-    const studentText = getStudentAnswerTextFromUI();
-    const p = document.createElement('div');
+    const p = teacherFeedbackBox(rrNow, Number(state?.question?.points || 0), getStudentAnswerTextFromUI());
     p.dataset.joinCorrectionInline = '1';
-
-    // Reuse the modern block, but color it for a teacher correction (red)
-    p.className = 'student-answer-reveal';
-    p.style.background = '#fef2f2';
-    p.style.borderColor = '#fca5a5';
-    p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
-
-    const title = document.createElement('div');
-    title.className = 'student-answer-reveal-title';
-    title.style.color = '#dc2626';
-    title.style.display = 'flex';
-    title.style.alignItems = 'center';
-    title.style.justifyContent = 'space-between';
-    title.style.gap = '0.5rem';
-
-    const titleText = document.createElement('span');
-    titleText.textContent = t('Teacher Feedback');
-    title.appendChild(titleText);
-
-    const earnedPts = Number(rrNow?.pointsAwarded || 0);
-    const possiblePts = Number(state?.question?.points || 0);
-    if (Number.isFinite(earnedPts) && (possiblePts > 0 || earnedPts !== 0)) {
-      const scoreBadge = document.createElement('span');
-      const positive = earnedPts > 0;
-      scoreBadge.style.background = positive ? '#3fb950' : '#dc2626';
-      scoreBadge.style.color = 'white';
-      scoreBadge.style.borderRadius = '999px';
-      scoreBadge.style.padding = '2px 10px';
-      scoreBadge.style.fontSize = '0.78rem';
-      scoreBadge.style.fontWeight = '700';
-      scoreBadge.style.letterSpacing = '0.02em';
-      scoreBadge.textContent = possiblePts > 0
-        ? `${earnedPts} / ${possiblePts} pts`
-        : `${earnedPts} pts`;
-      title.appendChild(scoreBadge);
-    }
-
-    const content = document.createElement('div');
-    content.className = 'student-answer-reveal-content';
-    content.style.color = '#7f1d1d';
-
-    if (corr) {
-      content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
-    } else {
-      content.textContent = t('(Voice comment only)');
-    }
-
-    p.append(title, content);
-
-    // Audio feedback
-    if (rrNow?.correctionAudioKey) {
-      const audioKey = rrNow.correctionAudioKey;
-      const audioWrap = document.createElement('div');
-      audioWrap.style.marginTop = '0.75rem';
-      audioWrap.style.display = 'flex';
-      audioWrap.style.alignItems = 'center';
-      audioWrap.style.gap = '0.5rem';
-
-      const audioBtn = document.createElement('button');
-      audioBtn.className = 'btn';
-      audioBtn.type = 'button';
-      audioBtn.style.padding = '0.4rem 0.8rem';
-      audioBtn.style.fontSize = '0.9rem';
-      audioBtn.innerHTML = t('🔊 Play Voice Comment');
-
-      const audioEl = new Audio();
-      const base = loadBackendUrl() || 'https://api.pinplay.win';
-      audioEl.src = `${base}/api/media/${audioKey}`;
-
-      audioBtn.onclick = () => {
-        if (audioEl.paused) {
-          audioEl.play().catch(err => console.warn('Audio playback failed:', err));
-          audioBtn.innerHTML = t('⏸️ Pause');
-        } else {
-          audioEl.pause();
-          audioBtn.innerHTML = t('🔊 Play Voice Comment');
-        }
-      };
-
-      audioEl.onended = () => {
-        audioBtn.innerHTML = t('🔊 Play Voice Comment');
-      };
-
-      audioWrap.appendChild(audioBtn);
-      p.appendChild(audioWrap);
-    }
 
     const submissionWrap = document.getElementById('joinSubmission');
     if (wrap.id === 'joinQuestionInteractive' && submissionWrap) {
@@ -5233,6 +5134,101 @@ function buildCorrectionDiffHtml(correction, original) {
     }).join('');
   }
   return html + renderCorrectionNoteHtml(note);
+}
+
+// The teacher's feedback under an answer: red-tinted, the points as a badge,
+// the correction and the voice comment. Used by the one-question screen and
+// the listening sheet.
+function teacherFeedbackBox(grade, possiblePts, studentText) {
+  const corr = String(grade?.correction || '').trim();
+  const audioKey = String(grade?.correctionAudioKey || '').trim();
+  const p = document.createElement('div');
+
+  // Reuse the modern block, but color it for a teacher correction (red)
+  p.className = 'student-answer-reveal';
+  p.style.background = '#fef2f2';
+  p.style.borderColor = '#fca5a5';
+  p.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.06)';
+
+  const title = document.createElement('div');
+  title.className = 'student-answer-reveal-title';
+  title.style.color = '#dc2626';
+  title.style.display = 'flex';
+  title.style.alignItems = 'center';
+  title.style.justifyContent = 'space-between';
+  title.style.gap = '0.5rem';
+
+  const titleText = document.createElement('span');
+  titleText.textContent = t('Teacher Feedback');
+  title.appendChild(titleText);
+
+  const earnedPts = Number(grade?.pointsAwarded || 0);
+  if (Number.isFinite(earnedPts) && (possiblePts > 0 || earnedPts !== 0)) {
+    const scoreBadge = document.createElement('span');
+    const positive = earnedPts > 0;
+    scoreBadge.style.background = positive ? '#3fb950' : '#dc2626';
+    scoreBadge.style.color = 'white';
+    scoreBadge.style.borderRadius = '999px';
+    scoreBadge.style.padding = '2px 10px';
+    scoreBadge.style.fontSize = '0.78rem';
+    scoreBadge.style.fontWeight = '700';
+    scoreBadge.style.letterSpacing = '0.02em';
+    scoreBadge.textContent = possiblePts > 0
+      ? `${earnedPts} / ${possiblePts} pts`
+      : `${earnedPts} pts`;
+    title.appendChild(scoreBadge);
+  }
+  p.appendChild(title);
+
+  if (corr || audioKey) {
+    const content = document.createElement('div');
+    content.className = 'student-answer-reveal-content';
+    content.style.color = '#7f1d1d';
+    if (corr) {
+      content.innerHTML = `${buildCorrectionDiffHtml(corr, studentText)}`;
+    } else {
+      content.textContent = t('(Voice comment only)');
+    }
+    p.appendChild(content);
+  }
+
+  // Audio feedback
+  if (audioKey) {
+    const audioWrap = document.createElement('div');
+    audioWrap.style.marginTop = '0.75rem';
+    audioWrap.style.display = 'flex';
+    audioWrap.style.alignItems = 'center';
+    audioWrap.style.gap = '0.5rem';
+
+    const audioBtn = document.createElement('button');
+    audioBtn.className = 'btn';
+    audioBtn.type = 'button';
+    audioBtn.style.padding = '0.4rem 0.8rem';
+    audioBtn.style.fontSize = '0.9rem';
+    audioBtn.innerHTML = t('🔊 Play Voice Comment');
+
+    const audioEl = new Audio();
+    const base = loadBackendUrl() || 'https://api.pinplay.win';
+    audioEl.src = `${base}/api/media/${audioKey}`;
+
+    audioBtn.onclick = () => {
+      if (audioEl.paused) {
+        audioEl.play().catch(err => console.warn('Audio playback failed:', err));
+        audioBtn.innerHTML = t('⏸️ Pause');
+      } else {
+        audioEl.pause();
+        audioBtn.innerHTML = t('🔊 Play Voice Comment');
+      }
+    };
+
+    audioEl.onended = () => {
+      audioBtn.innerHTML = t('🔊 Play Voice Comment');
+    };
+
+    audioWrap.appendChild(audioBtn);
+    p.appendChild(audioWrap);
+  }
+  return p;
 }
 
 function appendReactionBar() {
@@ -9995,20 +9991,20 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
     const fb = document.createElement('div');
     fb.className = 'ls-q-mark';
     const answered = listeningAnswered(saved);
-    if (mark?.teacherGrade || mark?.liveTeacher || q.type === 'open') {
-      const g = mark?.liveTeacher || live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
-      if (g?.graded) {
-        fb.textContent = t('Teacher: {points} points', { points: Number(g.pointsAwarded || 0) }) + (g.correction ? ` · ${g.correction}` : '');
-      } else if (answered) {
-        fb.textContent = t('Your teacher will mark this one.');
-      }
-    } else if (mark) {
-      const partial = !mark.correct && Number(mark.partialScore || 0) > 0;
-      fb.dataset.verdict = mark.correct ? 'correct' : (partial ? 'partial' : 'wrong');
-      const verdict = mark.correct ? `✓ ${t('Correct')}` : (partial ? `◐ ${mark.partialScore}/${mark.partialTotal}` : `✗ ${t('Wrong')}`);
-      fb.textContent = mark.correct || !mark.correctAnswer ? verdict : `${verdict} · ${t('Answer: {answer}', { answer: listeningAnswerLabel(q, mark.correctAnswer) })}`;
-    } else if (!answered && !(listeningSheet.mode === 'live' && !listeningSheet.live?.closed)) {
-      fb.dataset.verdict = 'wrong';
+    const isLive = listeningSheet.mode === 'live';
+    const teacherOnly = !!mark?.liveTeacher || q.type === 'open';
+    const grade = isLive ? mark?.liveTeacher : live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
+    if (mark && !teacherOnly) markListeningAnswer(card, q, mark);
+    // As on the one-question screen: an open answer always shows its grade,
+    // an auto-marked one only when the teacher wrote or recorded something.
+    if (grade?.graded && (teacherOnly || grade.correction || grade.correctionAudioKey)) {
+      const studentText = typeof saved === 'object' && saved ? String(saved.rewrite || '') : String(saved ?? '');
+      const box = teacherFeedbackBox(grade, Number(q.points || 0), studentText);
+      box.classList.add('ls-reveal');
+      card.appendChild(box);
+    } else if (teacherOnly && answered) {
+      fb.textContent = t('Your teacher will mark this one.');
+    } else if (!mark && !answered && !(isLive && !listeningSheet.live?.closed)) {
       fb.textContent = t('Not answered');
     }
     if (fb.textContent) card.appendChild(fb);
@@ -10017,6 +10013,81 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
     if (Array.isArray(heard) && heard.length) card.appendChild(listeningHeardBox(heard));
   }
   return card;
+}
+
+// A submitted section's marks, drawn like the one-question screen's: the
+// answer itself turns green or red, a missed choice gets a dashed green
+// outline, a wrong gap gets its answers beside it, and a wrong typed answer
+// gets a "Correct Answer" box. mark.correctAnswer is the server's summary
+// ("2. Paris", "left→right | …", "dreamed, dreamt | apples").
+function markListeningAnswer(card, q, mark) {
+  const right = mark.correct === true;
+  const correctText = String(mark.correctAnswer || '').trim();
+  const paint = (el, ok) => el?.classList.add(ok ? 'correct-highlight' : 'incorrect-highlight');
+
+  if (['mcq', 'tf', 'multi'].includes(q.type)) {
+    const correctIndexes = new Set();
+    (q.type === 'multi' ? correctText.split(' | ') : [correctText]).forEach((part) => {
+      const m = part.trim().match(/^(\d+)\./);
+      if (m) correctIndexes.add(Number(m[1]) - 1);
+    });
+    if (!correctIndexes.size) (q.answers || []).forEach((a, i) => { if (a?.correct) correctIndexes.add(i); });
+    card.querySelectorAll('.ls-option').forEach((row) => {
+      const input = row.querySelector('input');
+      const isCorrect = correctIndexes.has(Number(input?.value));
+      if (!correctIndexes.size) {
+        if (input?.checked) paint(row, right);
+        return;
+      }
+      if (input?.checked) paint(row, isCorrect);
+      else row.classList.add(isCorrect ? 'correct-missed' : 'ignored-option');
+    });
+    return;
+  }
+
+  if (q.type === 'context_gap') {
+    const accepted = right ? [] : contextGapAcceptedFromReveal(correctText, q);
+    card.querySelectorAll('[data-ls-gap]').forEach((field) => {
+      if (right) { paint(field, true); return; }
+      const options = accepted[Number(field.dataset.lsGap)] || [];
+      const guess = normalizeTextAnswer(field.value);
+      const ok = !!guess && options.some((o) => normalizeTextAnswer(o) === guess);
+      paint(field, ok);
+      if (ok || !options.length) return;
+      const hint = document.createElement('span');
+      hint.className = 'context-gap-accepted';
+      hint.textContent = `✓ ${options.join(' / ')}`;
+      field.insertAdjacentElement('afterend', hint);
+    });
+  } else if (q.type === 'match_pairs') {
+    const rightFor = new Map();
+    (Array.isArray(q.pairs) ? q.pairs : []).forEach((p) => rightFor.set(String(p?.left || '').trim(), String(p?.right || '').trim()));
+    correctText.split(' | ').forEach((part) => {
+      const at = part.indexOf('→');
+      if (at > 0) rightFor.set(part.slice(0, at).trim(), part.slice(at + 1).trim());
+    });
+    const lefts = Array.isArray(q.leftItems) ? q.leftItems : [];
+    card.querySelectorAll('.ls-select').forEach((sel, i) => {
+      const correct = rightFor.get(String(lefts[i] || '').trim());
+      if (!sel.value) return;
+      if (right || !correct) paint(sel, right);
+      else paint(sel, normalizeTextAnswer(sel.value) === normalizeTextAnswer(correct));
+    });
+  } else {
+    paint(card.querySelector('.ls-input'), right);
+  }
+
+  if (right || !correctText) return;
+  const box = document.createElement('div');
+  box.className = 'student-answer-reveal student-answer-reveal--bad ls-reveal';
+  const title = document.createElement('div');
+  title.className = 'student-answer-reveal-title';
+  title.textContent = t('Correct Answer');
+  const content = document.createElement('div');
+  content.className = 'student-answer-reveal-content';
+  content.textContent = correctText;
+  box.append(title, content);
+  card.appendChild(box);
 }
 
 function listeningHeardBox(lines) {

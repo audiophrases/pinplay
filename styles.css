@@ -4891,12 +4891,16 @@ body.review-mode-active #joinSubmission {
 
 /* Color the answer surface itself so the verdict lives where the student interacted —
    matches the green/red treatment already used for MCQ option rows. */
-.join-answer-input.correct-highlight {
+.join-answer-input.correct-highlight,
+.ls-input.correct-highlight,
+.ls-select.correct-highlight {
   border-color: var(--ok) !important;
   background: #d1fae5 !important;
   color: #065f46 !important;
 }
-.join-answer-input.incorrect-highlight {
+.join-answer-input.incorrect-highlight,
+.ls-input.incorrect-highlight,
+.ls-select.incorrect-highlight {
   border-color: var(--bad) !important;
   background: #fee2e2 !important;
   color: #991b1b !important;
@@ -6309,9 +6313,19 @@ body.listening-sheet-open { overflow: hidden; }
 .ls-pair { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 300px); gap: 10px; align-items: center; padding: 3px 0; }
 .ls-pair-left { line-height: 1.35; }
 .ls-q-mark { margin-top: 8px; font-size: 0.9rem; font-weight: 600; color: var(--muted); }
-.ls-q-mark[data-verdict="correct"] { color: var(--ok); }
-.ls-q-mark[data-verdict="wrong"] { color: var(--bad); }
-.ls-q-mark[data-verdict="partial"] { color: #9a6700; }
+/* A submitted section's marks: the same colours as the one-question screen's
+   answer rows (#joinAnswers .answer-row.*-highlight). Inputs share
+   .join-answer-input's rules. */
+.ls-option { border: 1px solid transparent; }
+.ls-option.correct-highlight { border-color: var(--ok); background: #60ff6587; color: #087b00; box-shadow: 0 0 0 3px #605dff; }
+.ls-option.incorrect-highlight { border-color: var(--bad); background: #ff8b8bb7; color: #cb0000dd; box-shadow: 0 0 0 3px #605dff; }
+.ls-option.correct-missed { border-color: var(--ok); border-style: dashed; background: #beffac; color: #238015db; }
+.ls-option.ignored-option { opacity: 0.66; filter: grayscale(33%); }
+.ls-option.correct-highlight .ls-option-letter, .ls-option.incorrect-highlight .ls-option-letter, .ls-option.correct-missed .ls-option-letter { color: inherit; }
+.ls-option.correct-highlight input { accent-color: var(--ok); }
+.ls-option.incorrect-highlight input { accent-color: var(--bad); }
+.ls-gap-text .context-gap-accepted { margin: 0 0.25em; }
+.ls-q .ls-reveal { margin: 10px 0 0; max-width: 100%; padding: 0.6rem 0.85rem; font-size: 0.95rem; }
 .listening-sheet.is-locked .ls-input:disabled, .listening-sheet.is-locked .ls-select:disabled { opacity: 1; background: transparent; }
 .ls-status { min-height: 1.4em; margin: 14px 0 6px; font-size: 0.9rem; color: var(--muted); }
 .ls-status[data-mode="ok"] { color: var(--ok); }
