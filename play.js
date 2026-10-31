@@ -3884,7 +3884,7 @@ function renderPlayerState(state) {
     box.setAttribute('role', 'status');
     const title = document.createElement('div');
     title.className = 'student-answer-reveal-title';
-    title.textContent = t('🤖 AI check');
+    title.textContent = t('AI check');
     const content = document.createElement('div');
     content.className = 'student-answer-reveal-content';
     lines.forEach((line) => {
@@ -5374,7 +5374,7 @@ async function submitLiveAnswer(opts = {}) {
       // 🤖 AI check can take a moment on a wrong typed answer or an open one.
       const aiTimer = !live.player.game && live.player.assignment.state?.attempt?.assignment?.aiCheck
         && ['text', 'context_gap', 'error_hunt', 'open'].includes(live.player.currentQuestion?.type)
-        ? setTimeout(() => setJoinStatusHud(t('🤖 Checking your answer…'), 'ok'), 700) : null;
+        ? setTimeout(() => setJoinStatusHud(t('Checking your answer…'), 'ok'), 700) : null;
       const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
