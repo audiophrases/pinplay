@@ -292,10 +292,29 @@ export default {
           }
         }
 
+        // 🤖 The answers the AI check accepted for it (owner quizzes only).
+        if (auth.role === 'owner' && sanitizeCloudQuizId(quizId)) {
+          await assignmentsStub(env).fetch('https://room/assignments/ai-answers-forget', {
+            method: 'POST', body: JSON.stringify({ quizId }),
+          }).catch(() => {});
+        }
+
         return json({ ok: true, deletedMedia, deletedKey: key, quizId });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
+    }
+
+    // 🤖 The answers the AI check accepted in assignments made from one cloud
+    // quiz, for the editor to add to it. Owner only: guests have no AI check.
+    if (url.pathname === '/api/quizzes/ai-answers' && request.method === 'POST') {
+      const body = await safeJson(request);
+      const password = String(body?.password || '');
+      const quizId = sanitizeCloudQuizId(body?.quizId);
+      if (!password) return json({ error: 'Password required.' }, 400);
+      if (!quizId) return json({ error: 'quizId required.' }, 400);
+      if (!(await verifyCreatePassword(env, password, request))) return json({ error: 'Wrong password.' }, 401);
+      return withCors(await assignmentsStub(env).fetch(`https://room/assignments/ai-answers?quizId=${encodeURIComponent(quizId)}`));
     }
 
     // Upload quiz JSON to R2
@@ -4663,6 +4682,19 @@ export class QuizRoom {
         return json({ ok: true, deletedPreviews: deletedCodes, deletedRows });
       }
 
+      // 🤖 Per cloud quiz: what the AI check accepted (aiQuizRemember).
+      if (url.pathname === '/assignments/ai-answers' && request.method === 'GET') {
+        const quizId = sanitizeCloudQuizId(url.searchParams.get('quizId'));
+        if (!quizId) return json({ error: 'quizId required.' }, 400);
+        const saved = await this.state.storage.get(aiQuizKey(quizId));
+        return json({ ok: true, questions: saved?.q && typeof saved.q === 'object' ? saved.q : {} });
+      }
+      if (url.pathname === '/assignments/ai-answers-forget' && request.method === 'POST') {
+        const quizId = sanitizeCloudQuizId((await safeJson(request))?.quizId);
+        if (quizId) await this.state.storage.delete(aiQuizKey(quizId));
+        return json({ ok: true });
+      }
+
       if (url.pathname === '/assignments/get-quiz' && request.method === 'GET') {
         const code = sanitizeAssignmentCode(url.searchParams.get('code'));
         if (!code) return json({ error: 'Assignment code required.' }, 400);
@@ -5822,6 +5854,7 @@ export class QuizRoom {
     const raw = await this.state.storage.get(aiStateKey(code));
     const state = raw?.v === AI_CHECK_VERSION && raw.q && typeof raw.q === 'object' ? raw : { v: AI_CHECK_VERSION, q: {} };
     const entry = aiStateEntry(state, question, { create: true });
+    const added = [];
     look.ask.forEach((it, i) => {
       if (!look.verdict.ok[i]) {
         delete entry.refused[it.key];
@@ -5830,9 +5863,14 @@ export class QuizRoom {
         keys.slice(0, Math.max(0, keys.length - AI_REFUSED_MAX)).forEach((k) => delete entry.refused[k]);
       } else if (entry.added.length < AI_ACCEPTED_MAX && aiAddAnswer(question, it.add)) {
         entry.added.push(it.add);
+        added.push(it.add);
       }
     });
     await this.state.storage.put(aiStateKey(code), state);
+    // ☁️ The quiz it was made from gets them too, when the editor opens it.
+    if (added.length && sanitizeCloudQuizId(assignment.cloudQuizId)) {
+      await aiQuizRemember(this.state.storage, sanitizeCloudQuizId(assignment.cloudQuizId), question, added);
+    }
     return { ok: look.verdict.ok.some(Boolean), why: look.verdict.why };
   }
 
@@ -9692,6 +9730,30 @@ function aiMergeAdded(quiz, state) {
     const entry = state.q[String(q?.id || '')];
     if (entry?.sig === aiQuestionSig(q)) (entry.added || []).forEach((add) => aiAddAnswer(q, add));
   });
+}
+
+// ☁️ What the AI accepted, kept per cloud quiz under aiq:<quizId>, so the
+// editor can add it to that quiz (pullAiAcceptedAnswers in app.js). `at` lets
+// the editor skip what it has already added once, so a deleted one stays deleted.
+const AI_QUIZ_ADDED_MAX = 40; // per question
+const aiQuizKey = (quizId) => `aiq:${quizId}`;
+
+async function aiQuizRemember(storage, quizId, question, adds, now = Date.now()) {
+  const saved = await storage.get(aiQuizKey(quizId));
+  const state = saved?.q && typeof saved.q === 'object' ? saved : { q: {} };
+  const qid = String(question?.id || '');
+  const sig = aiQuestionSig(question);
+  if (state.q[qid]?.sig !== sig || !Array.isArray(state.q[qid]?.added)) state.q[qid] = { sig, added: [] };
+  const entry = state.q[qid];
+  adds.forEach((add) => {
+    const gap = question.type === 'context_gap' ? Number(add.gap) : null;
+    const value = (gap === null ? String(add.value || '') : String(add.value || '').replace(/,/g, ' ')).replace(/\s+/g, ' ').trim();
+    const norm = normalizeTextAnswer(value);
+    if (!norm || entry.added.some((a) => (a.gap ?? null) === gap && normalizeTextAnswer(a.value) === norm)) return;
+    entry.added.push({ value, ...(gap === null ? {} : { gap }), at: now });
+  });
+  entry.added = entry.added.slice(-AI_QUIZ_ADDED_MAX);
+  await storage.put(aiQuizKey(quizId), state);
 }
 
 // ---------------------------------------------------------------- public games (/play)

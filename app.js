@@ -5069,6 +5069,10 @@ async function openCloudQuizByKey(quizKey, label) {
   renderBuilder();
   saveQuiz(quiz);
   setStatus(hostStatusEl, t('✅ Loaded: {label}', { label }), 'ok');
+  const aiAdded = await pullAiAcceptedAnswers();
+  if (aiAdded) {
+    setStatus(hostStatusEl, t('✅ Loaded: {label}. Added {n} answer(s) that the AI check accepted in assignments: ☁️ Save to keep them in this quiz.', { label, n: aiAdded }), 'ok');
+  }
 }
 
 // Open quiz from Cloud (R2)
@@ -6298,6 +6302,54 @@ function applyMoreAnswers(rows) {
   return { added: rows.length - full.length, questions: changed.size, full };
 }
 
+// 🤖 Same question for the AI check: type and prompt. Mirrors aiQuestionSig in
+// cloudflare/worker.js.
+function aiQuestionSig(question) {
+  return `${question?.type || ''}|${normalizeTextAnswer(question?.prompt).slice(0, 160)}`;
+}
+
+// ☁️ The answers the AI check accepted in assignments made from this cloud
+// quiz, added to its questions (same id, type and prompt). quiz.aiAnswersSeenAt
+// remembers how far the list was read, so one the teacher deletes stays deleted.
+// Owner only; any trouble adds nothing. Returns how many were added.
+async function pullAiAcceptedAnswers() {
+  const quizId = String(quiz?._r2QuizId || '').trim();
+  if (!quizId || !createSessionPassword || !Array.isArray(quiz?.questions)) return 0;
+  let data;
+  try {
+    data = await api('/api/quizzes/ai-answers', { method: 'POST', body: { password: createSessionPassword, quizId } });
+  } catch {
+    return 0;
+  }
+  const seen = Number(quiz.aiAnswersSeenAt || 0);
+  let latest = seen;
+  const rows = [];
+  quiz.questions.forEach((q, idx) => {
+    const entry = data?.questions?.[String(q?.id || '')];
+    if (!entry || !MORE_ANSWERS_TYPES.includes(q.type) || entry.sig !== aiQuestionSig(q)) return;
+    (Array.isArray(entry.added) ? entry.added : []).forEach((add) => {
+      const at = Number(add?.at || 0);
+      latest = Math.max(latest, at);
+      if (!(at > seen)) return;
+      const answer = String(add?.value || '').trim();
+      const gap = q.type === 'context_gap' ? Number(add?.gap) : null;
+      const current = moreAnswersCurrent(q);
+      const list = gap === null ? current : current[gap];
+      const norm = normalizeTextAnswer(answer);
+      if (!norm || !Array.isArray(list) || list.some((a) => normalizeTextAnswer(a) === norm)
+        || rows.some((r) => r.q === q && r.gap === gap && normalizeTextAnswer(r.answer) === norm)) return;
+      rows.push({ q, n: idx + 1, gap, answer });
+    });
+  });
+  if (latest > seen) quiz.aiAnswersSeenAt = latest;
+  const { added } = rows.length ? applyMoreAnswers(rows) : { added: 0 };
+  if (added) renderBuilder();
+  if (latest > seen) {
+    try { saveQuiz(quiz); } catch { /* local save is best-effort */ }
+  }
+  return added;
+}
+
 // The dialog keeps its state while the page is open: closing it to go to the
 // AI and coming back loses nothing.
 const moreAnswersState = { picked: new Set(), note: '', reply: '', snapshot: null, plan: null, ticked: new Set(), notice: '' };
@@ -6893,6 +6945,8 @@ async function createLiveGame(opts = {}) {
       createSessionPassword = String(typed || '');
     }
     if (!createSessionPassword) throw new Error('Teacher password is required.');
+    // 🤖 Answers the AI check accepted in assignments of this quiz count here too.
+    await pullAiAcceptedAnswers();
 
     const payload = normalizeQuizForLive(quiz);
     // PinPlay Cup: its own "🎯 Adaptive" switch beside its button, offered for
@@ -12711,6 +12765,8 @@ async function createAssignmentFromCurrentQuiz({ dialog = false } = {}) {
       createSessionPassword = String(typed || '');
     }
     if (!createSessionPassword) throw new Error('Teacher password is required.');
+    // 🤖 Answers the AI check accepted in earlier assignments of this quiz.
+    await pullAiAcceptedAnswers();
 
     // 0 = unlimited (assignment stays open until teacher closes)
     const attemptsLimitRaw = Number(assignmentAttemptsEl?.value || 1);

@@ -3871,10 +3871,9 @@ function renderPlayerState(state) {
       if (task) lines.push({ text: task, strong: true });
       lines.push({ text: String(note.feedback) });
       lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
-    } else if (note.ok && rrNow?.correct) {
-      lines.push({ text: t('✅ Your answer is also correct.'), strong: true });
-      if (note.why) lines.push({ text: String(note.why) });
-    } else if (note.why) {
+    } else if (!note.ok && note.why) {
+      // An answer the AI accepted is graded right like any other: no note.
+      // A refused one gets its reason.
       lines.push({ text: String(note.why) });
     }
     if (!lines.length) return;

@@ -24,7 +24,7 @@ function app() {
     buildupDefaultCount: () => 20, loadAssignmentClassSuggestions: async () => {},
     setAssignmentFeedbackMode: value => { sandbox.assignmentFeedbackMode = value; },
     setAssignmentExamMode: value => { sandbox.assignmentExamMode = value; }, syncSignInRulesLine() {},
-    ensureQuizMediaReady: async () => {}, normalizeQuizForLive: value => value,
+    ensureQuizMediaReady: async () => {}, normalizeQuizForLive: value => value, pullAiAcceptedAnswers: async () => 0,
     api: async (route, opts) => { requests.push({ route, ...opts }); return { assignment: { code: 'NEW123' } }; },
     buildAssignmentJoinLink: code => `https://example.com/?assignment=${code}`, refreshAssignmentsList: async () => {},
     setStatus: (el, text) => { el.textContent = text; }, t: (text, args = {}) => text.replace(/\{(\w+)\}/g, (_, k) => String(args[k] ?? '')),

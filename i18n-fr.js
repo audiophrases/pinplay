@@ -2070,9 +2070,9 @@ window.PINPLAY_FR_DICT = {
   "🤖 AI check: {why}": "🤖 Vérification IA : {why}",
   "Checking your answer…": "Vérification de votre réponse…",
   "AI check": "Vérification IA",
+  "✅ Loaded: {label}. Added {n} answer(s) that the AI check accepted in assignments: ☁️ Save to keep them in this quiz.": "✅ Chargé : {label}. {n} réponse(s) acceptée(s) par la vérification IA dans des devoirs ont été ajoutée(s) : ☁️ Enregistrez pour les garder dans ce quiz.",
   "✅ Task done": "✅ Tâche réalisée",
   "⚠️ Part of the task is missing": "⚠️ Une partie de la tâche manque",
   "❌ This does not answer the task": "❌ Cela ne répond pas à la tâche",
   "Your teacher still grades this answer.": "Votre enseignant notera quand même cette réponse.",
-  "✅ Your answer is also correct.": "✅ Votre réponse est correcte, elle aussi.",
 };

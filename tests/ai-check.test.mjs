@@ -315,3 +315,85 @@ it('a per-attempt ceiling stops the calls', async () => {
   await answer('s1', 0, 'little');
   assert.equal(calls.length, 0);
 });
+
+// ☁️ The quiz an assignment was made from: what the AI accepts is kept per
+// cloud quiz, and the editor adds it there (pullAiAcceptedAnswers in app.js).
+it('accepted answers are kept for the cloud quiz, readable by the teacher only, and forgotten with the quiz', async () => {
+  await storage.put(`ab:${code}`, assignment({ cloudQuizId: 'quiz-grammar' }));
+  reply = (input) => ({ ok: input.check.map(c => ['Little', 'walked'].includes(c.student)), why: 'Fine.' });
+  await answer('s1', 0, 'Little');
+  await answer('s2', 0, 'large'); // refused: not kept
+  await answer('s3', 2, ['walked', 'ate']);
+  const saved = await storage.get('aiq:quiz-grammar');
+  assert.equal(saved.q.q1.sig, 'text|opposite of big');
+  assert.deepEqual(saved.q.q1.added.map(({ value }) => value), ['Little']);
+  assert.deepEqual(saved.q.q3.added.map(({ value, gap }) => ({ value, gap })), [{ value: 'walked', gap: 0 }]);
+  assert.ok(saved.q.q1.added[0].at > 0);
+  const wrong = await call('/api/quizzes/ai-answers', { password: 'nope', quizId: 'quiz-grammar' });
+  assert.equal(wrong.status, 401);
+  const read = await call('/api/quizzes/ai-answers', { password: teacherPassword, quizId: 'quiz-grammar' });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.deepEqual(read.body.questions, saved.q);
+  const r2 = { delete: async () => {}, list: async () => ({ objects: [] }) };
+  const deleted = await worker.fetch(new Request('https://api.test/api/quizzes/quizzes/quiz-grammar.json', {
+    method: 'DELETE', headers: { Authorization: `Bearer ${teacherPassword}` },
+  }), { ...env, QUIZ_MEDIA: r2 });
+  assert.equal(deleted.status, 200);
+  assert.equal(await storage.get('aiq:quiz-grammar'), undefined);
+});
+
+it('an assignment with no cloud quiz keeps nothing per quiz', async () => {
+  reply = () => ({ ok: [true], why: 'Fine.' });
+  await answer('s1', 0, 'Little');
+  assert.deepEqual([...rows.keys()].filter(k => k.startsWith('aiq:')), []);
+});
+
+it('the editor adds them once: skipped when already there or on a changed question, and a deleted one stays deleted', async () => {
+  const { createRequire } = await import('node:module');
+  const { loadDeclarations } = createRequire(import.meta.url)('./helpers/extract-declaration');
+  let served = {};
+  let rendered = 0;
+  const sandbox = {
+    quiz: null, createSessionPassword: 'teacher',
+    api: async (route, opts) => { assert.equal(route, '/api/quizzes/ai-answers'); assert.equal(opts.body.quizId, 'quiz-grammar'); return { ok: true, questions: served }; },
+    renderBuilder: () => { rendered += 1; }, saveQuiz() {},
+  };
+  const app = loadDeclarations(fs.readFileSync('app.js', 'utf8'), [
+    'pullAiAcceptedAnswers', 'aiQuestionSig', 'MORE_ANSWERS_TYPES', 'MORE_ANSWERS_LIMITS', 'moreAnswersCurrent', 'applyMoreAnswers',
+    'normalizeTextAnswer', 'contextGapList', 'getCorrectedVariantsList', 'countErrorHuntRequiredTokens', 'tokenizeWords',
+  ], sandbox);
+  const editor = quiz();
+  editor._r2QuizId = 'quiz-grammar';
+  sandbox.quiz = editor;
+  served = {
+    q1: { sig: 'text|opposite of big', added: [{ value: 'Little', at: 10 }, { value: 'SMALL', at: 11 }] },
+    q2: { sig: "error_hunt|she don t speak english", added: [{ value: "You don't speak English.", at: 12 }] },
+    q3: { sig: 'context_gap|i go home and eat', added: [{ value: 'walked', gap: 0, at: 13 }] },
+    q4: { sig: 'open|something else', added: [{ value: 'x', at: 14 }] },
+  };
+  // The sigs above are what the server stores: check they match the editor's.
+  assert.equal(app.aiQuestionSig(editor.questions[1]), served.q2.sig);
+  assert.equal(app.aiQuestionSig(editor.questions[2]), served.q3.sig);
+  assert.equal(await app.pullAiAcceptedAnswers(), 3);
+  assert.deepEqual(Array.from(editor.questions[0].accepted), ['small', 'Little']);
+  assert.ok(editor.questions[1].correctedVariants.includes("You don't speak English."));
+  assert.deepEqual(Array.from(editor.questions[2].gaps), ['went, walked', 'ate']);
+  assert.equal(editor.aiAnswersSeenAt, 13, 'only questions it could add to count as read');
+  assert.equal(rendered, 1);
+  // The teacher deletes one; a later pull does not bring it back, but a new one comes.
+  editor.questions[0].accepted = ['small'];
+  served.q1.added.push({ value: 'tiny', at: 20 });
+  assert.equal(await app.pullAiAcceptedAnswers(), 1);
+  assert.deepEqual(Array.from(editor.questions[0].accepted), ['small', 'tiny']);
+  // A question whose prompt changed in the editor gets nothing.
+  editor.questions[0].prompt = 'Opposite of "tall"';
+  served.q1.added.push({ value: 'short', at: 30 });
+  assert.equal(await app.pullAiAcceptedAnswers(), 0);
+  assert.deepEqual(Array.from(editor.questions[0].accepted), ['small', 'tiny']);
+  // Not a cloud quiz, or the API is down: nothing, no error.
+  delete editor._r2QuizId;
+  assert.equal(await app.pullAiAcceptedAnswers(), 0);
+  editor._r2QuizId = 'quiz-grammar';
+  sandbox.api = async () => { throw new Error('offline'); };
+  assert.equal(await app.pullAiAcceptedAnswers(), 0);
+});
