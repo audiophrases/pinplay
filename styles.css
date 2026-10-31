@@ -4874,6 +4874,21 @@ body.review-mode-active #joinSubmission {
   color: #b91c1c;
 }
 
+/* 🤖 AI check note (assignment setting): sky blue, apart from the teacher's red feedback. */
+.ai-note-reveal {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  color: #0c4a6e;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.08);
+}
+.ai-note-reveal .student-answer-reveal-title {
+  color: #0369a1;
+}
+.ai-note-reveal .student-answer-reveal-content {
+  display: grid;
+  gap: 0.3rem;
+}
+
 /* Color the answer surface itself so the verdict lives where the student interacted —
    matches the green/red treatment already used for MCQ option rows. */
 .join-answer-input.correct-highlight {

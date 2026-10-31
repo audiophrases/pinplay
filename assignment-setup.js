@@ -16,7 +16,8 @@
     saved = saved || {};
     const settings = { ...initial };
     Object.keys(initial).forEach(key => {
-      if (typeof saved[key] === typeof initial[key]) settings[key] = saved[key];
+      // 🤖 AI check is still being tested: each assignment opts in on its own.
+      if (key !== 'aiCheck' && typeof saved[key] === typeof initial[key]) settings[key] = saved[key];
     });
     if (!['signin', 'random'].includes(settings.signIn)) settings.signIn = initial.signIn;
     if (!['instant', 'end', 'none'].includes(settings.feedbackMode)) settings.feedbackMode = initial.feedbackMode;
@@ -125,7 +126,7 @@
       } else if (key === 'format') {
         if (value === 'climb' && draft.format !== 'climb') draft.adaptiveCount = climbDefaultCount || 20;
         draft.format = value;
-      } else draft[key] = ['examMode', 'shuffleQuestions'].includes(key) ? value === 'on'
+      } else draft[key] = ['examMode', 'shuffleQuestions', 'aiCheck'].includes(key) ? value === 'on'
         : key === 'attemptsLimit' ? Number(value) : value;
       normalize();
       render({ key, value });
@@ -165,6 +166,8 @@
             ['off', '', 'Off', '', climb], ['on', '', 'On', '', climb],
           ], 'Exam mode', true)
           + `<p class="assignment-setup-note">${esc(t('Pause when students leave the tab and log focus changes.'))}</p>`
+          + choices('aiCheck', draft.aiCheck ? 'on' : 'off', [['off', '', 'Off'], ['on', '', 'On']], '🤖 AI check (testing)', true)
+          + `<p class="assignment-setup-note">${esc(t('When a typed answer is marked wrong, the AI checks whether you would accept it too. With feedback after each answer, open answers get a short AI comment; you still grade them.'))}</p>`
           + (climb ? `<p class="assignment-setup-note">${esc(t('Climb uses instant feedback and keeps exam mode off.'))}</p>` : '');
       } else if (step === 3) {
         content.innerHTML = heading('04 / QUESTIONS & TIMING', 'How should the assignment run?', 'Use the full quiz, or let the questions adapt to each student.') + choices('format', draft.format, [
@@ -190,6 +193,7 @@
           ['Questions', t(format[draft.format]) + (draft.format === 'all' ? ` · ${questionCount}` : (draft.format === 'climb' || singleCount > 0 ? ` · ${draft.adaptiveCount}` : ''))],
           ['Exam mode', t(draft.examMode ? 'On' : 'Off')],
           ['Shuffle questions', t(draft.format === 'all' && draft.shuffleQuestions ? 'On' : 'Off')],
+          ['🤖 AI check (testing)', t(draft.aiCheck ? 'On' : 'Off')],
           ['Due date', draft.dueAt ? new Date(draft.dueAt).toLocaleString() : t('No due date')],
         ];
         content.innerHTML = heading('05 / READY TO SHARE', 'Everything look right?', 'Create the assignment to get a link for your students.') + `<dl class="assignment-setup-review">${summary.map(([key, value]) => `<div><dt>${esc(t(key))}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`;

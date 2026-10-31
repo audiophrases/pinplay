@@ -46,6 +46,14 @@ Checked against `cloudflare/worker.js` and the live worker on 2026-09-25.
 | `YOUTUBE_API_KEY` | YouTube results in video search | YouTube is skipped |
 | `VIMEO_ACCESS_TOKEN` | Vimeo results in video search | Vimeo is skipped (not set on the live worker) |
 | `BUILDER_BASE_URL` | Teacher-page URL used in guest workspace links | Defaults to `https://audiophrases.github.io/pinplay/create/` (not set on the live worker) |
+| `OPENAI_API_KEY` | 🤖 AI check on assignments that turn it on (off by default): a second look at typed answers marked wrong, and feedback on open answers. The same key as Pixel Plaza's. | The setting does nothing; answers are graded as usual |
+
+🤖 AI check can also be tuned with two optional `[vars]` in `wrangler.toml`
+(never dashboard variables): `OPENAI_FEEDBACK_MODEL` (default `gpt-6-luna`)
+and `AI_CHECK = "0"`, which turns it off everywhere. Each check is one small
+Responses API call (about 400 tokens in, 40 out, `store: false`); the
+question, the accepted answers and the student's answer are sent, nothing
+about the student. Set a monthly spending limit on the OpenAI account.
 
 ### No longer needed (kept on purpose for now)
 

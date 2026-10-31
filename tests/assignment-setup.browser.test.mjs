@@ -4,7 +4,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const { chromium } = await import('playwright').catch(() => ({}));
-const initial = { className: '4B', dueAt: '', attemptsLimit: 0, signIn: 'random', feedbackMode: 'instant', examMode: false, shuffleQuestions: false, format: 'all', adaptiveCount: 8 };
+const initial = { className: '4B', dueAt: '', attemptsLimit: 0, signIn: 'random', feedbackMode: 'instant', examMode: false, shuffleQuestions: false, aiCheck: false, format: 'all', adaptiveCount: 8 };
 let browser;
 describe('assignment setup with a real keyboard', { skip: !chromium && 'Install playwright to run browser checks' }, () => {
   before(async () => {
@@ -56,6 +56,10 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
     assert.equal(await focusedGroup(page), 'examMode');
     await page.keyboard.press('ArrowRight'); // off -> on
     await page.keyboard.press('Enter');
+    assert.equal(await focusedGroup(page), 'aiCheck');
+    assert.equal(await page.locator('[data-choice-group="aiCheck"] [aria-checked="true"]').getAttribute('data-choice'), 'off');
+    await page.keyboard.press('ArrowRight'); // off -> on
+    await page.keyboard.press('Enter');
     assert.equal(await focusedGroup(page), 'format');
     await page.keyboard.press('Enter');
     assert.equal(await focusedGroup(page), 'shuffleQuestions');
@@ -73,6 +77,7 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
     assert.equal(draft.attemptsLimit, 3); assert.equal(draft.examMode, true);
     assert.equal(draft.className, '4A');
     assert.equal(draft.shuffleQuestions, true);
+    assert.equal(draft.aiCheck, true);
     assert.equal(draft.dueAt, '2026-12-20T17:00');
     assert.equal(await page.locator('.assignment-setup-steps').isVisible(), false);
     assert.equal(await page.locator('[data-setup-action="next"]').isVisible(), false);
@@ -180,6 +185,8 @@ describe('assignment setup with a real keyboard', { skip: !chromium && 'Install 
     await page.keyboard.press('Enter');
     assert.equal(await focusedGroup(page), 'attemptsLimit');
     await page.keyboard.press('Enter'); // skips disabled exam-mode choices
+    assert.equal(await focusedGroup(page), 'aiCheck');
+    await page.keyboard.press('Enter');
     assert.equal(await focusedGroup(page), 'format');
     await page.keyboard.press('Enter'); // skips disabled shuffle choices
     assert.equal(await page.locator('[data-field="adaptiveCount"]').evaluate(el => el === document.activeElement), true);

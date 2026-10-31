@@ -1306,6 +1306,10 @@ function mapAssignmentStateToPlayerState() {
     }
   }
 
+  // 🤖 The AI's note on this saved answer (the server sends it only where
+  // answers are shown): an extra accepted answer, a reason, or open feedback.
+  const aiNote = isShowResults && answeredCurrent ? (attempt?.answersByQ?.[String(idx)]?.ai || null) : null;
+
   const player = {
     phase: question ? 'question' : 'results',
     pin: assignment.code,
@@ -1328,6 +1332,7 @@ function mapAssignmentStateToPlayerState() {
     revealedResult,
     correctAnswer,
     correctZones: correctZones || undefined,
+    aiNote,
   };
 
   // Retake-mode overrides: present the wrong question as a fresh attempt with
@@ -1336,6 +1341,7 @@ function mapAssignmentStateToPlayerState() {
   if (retake?.active) {
     player.feedbackMode = 'instant';
     player.assignmentSubmitted = false;
+    player.aiNote = null;
     if (retake.currentResult) {
       player.questionClosed = true;
       player.questionCloseReason = 'manual_reveal';
@@ -3853,6 +3859,47 @@ function renderPlayerState(state) {
     }
   };
 
+  // 🤖 AI check note under the answer. A teacher's own feedback replaces it.
+  const renderInlineAiNote = (note, rrNow = null) => {
+    const wrap = document.getElementById('joinQuestionInteractive') || joinAnswersEl;
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-join-ai-note="1"]').forEach((el) => el.remove());
+    if (!note || String(rrNow?.correction || '').trim() || rrNow?.correctionAudioKey) return;
+    const lines = [];
+    if (note.feedback) {
+      const task = { done: t('✅ Task done'), partly: t('⚠️ Part of the task is missing'), not_done: t('❌ This does not answer the task') }[note.task];
+      if (task) lines.push({ text: task, strong: true });
+      lines.push({ text: String(note.feedback) });
+      lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
+    } else if (note.ok && rrNow?.correct) {
+      lines.push({ text: t('✅ Your answer is also correct.'), strong: true });
+      if (note.why) lines.push({ text: String(note.why) });
+    } else if (note.why) {
+      lines.push({ text: String(note.why) });
+    }
+    if (!lines.length) return;
+    const box = document.createElement('div');
+    box.dataset.joinAiNote = '1';
+    box.className = 'student-answer-reveal ai-note-reveal';
+    box.setAttribute('role', 'status');
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
+    title.textContent = t('🤖 AI check');
+    const content = document.createElement('div');
+    content.className = 'student-answer-reveal-content';
+    lines.forEach((line) => {
+      const el = document.createElement('div');
+      el.textContent = line.text;
+      if (line.strong) el.style.fontWeight = '700';
+      if (line.muted) el.className = 'small muted';
+      content.appendChild(el);
+    });
+    box.append(title, content);
+    const submissionWrap = document.getElementById('joinSubmission');
+    if (wrap.id === 'joinQuestionInteractive' && submissionWrap) wrap.insertBefore(box, submissionWrap);
+    else wrap.appendChild(box);
+  };
+
   if (state.phase !== 'question' || !state.question) {
     cancelPendingAssignmentQuestionAutoplay();
     stopAssignmentQuestionAudioPlayback();
@@ -4125,6 +4172,7 @@ function renderPlayerState(state) {
 
   const rrNow = state.revealedResult;
   renderInlineCorrection(rrNow);
+  renderInlineAiNote(state.aiNote, rrNow);
   if (rrNow && rrNow.graded !== false) renderInlinePoints(rrNow.pointsAwarded);
 
   if (questionClosed) {
@@ -5323,6 +5371,10 @@ async function submitLiveAnswer(opts = {}) {
         live.player.assignment.suppressAmbientResume = true;
       }
 
+      // 🤖 AI check can take a moment on a wrong typed answer or an open one.
+      const aiTimer = !live.player.game && live.player.assignment.state?.attempt?.assignment?.aiCheck
+        && ['text', 'context_gap', 'error_hunt', 'open'].includes(live.player.currentQuestion?.type)
+        ? setTimeout(() => setJoinStatusHud(t('🤖 Checking your answer…'), 'ok'), 700) : null;
       const data = await api('/api/assignment/answer', {
         method: 'POST',
         body: {
@@ -5332,7 +5384,7 @@ async function submitLiveAnswer(opts = {}) {
           answer,
           bet: Number(live.player.selectedBet || 0), // <--- FIX: Sends bet to server
         },
-      });
+      }).finally(() => clearTimeout(aiTimer));
 
       const mode = data?.attempt?.assignment?.feedbackMode || 'none';
       if (mode !== 'instant' && !wasAlreadyAnswered) {

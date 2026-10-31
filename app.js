@@ -466,6 +466,7 @@ const assignmentSignInEl = document.getElementById('assignmentSignIn');
 const assignmentFeedbackEl = document.getElementById('assignmentFeedback');
 const assignmentExamModeEl = document.getElementById('assignmentExamMode');
 const assignmentShuffleQuestionsEl = document.getElementById('assignmentShuffleQuestions');
+const assignmentAiCheckEl = document.getElementById('assignmentAiCheck');
 const assignmentClassOptionsEl = document.getElementById('assignmentClassOptions');
 const createAssignmentBtn = document.getElementById('createAssignmentBtn');
 const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
@@ -8807,6 +8808,7 @@ async function fetchAssignmentAttemptDetail(code, attemptId) {
       } else {
         answer.textContent = t("Answer: {p1}", { p1: String(it?.answerText || '') || '(blank)' });
         li.append(head, prompt, answer);
+        if (it?.ai) li.insertAdjacentHTML('beforeend', aiNoteForTeacherHtml(it.ai));
       }
       if (!it?.isPoll) {
         li.appendChild(buildGradeControls({
@@ -8846,6 +8848,22 @@ async function uploadCorrectionAudioBlob(blob, code) {
   if (!resp.ok) throw new Error('Upload failed');
   const res = await resp.json();
   return res.path || res.key || '';
+}
+
+// 🤖 The AI check's note on a student's answer, as the teacher sees it.
+function aiNoteForTeacher(ai) {
+  if (!ai || typeof ai !== 'object') return '';
+  if (ai.feedback) {
+    const task = { done: t('task done'), partly: t('part of the task missing'), not_done: t('not the task') }[ai.task] || '';
+    return t('🤖 AI feedback ({task}): {feedback}', { task, feedback: String(ai.feedback) });
+  }
+  if (ai.ok) return ai.why ? t('🤖 Accepted by the AI check: {why}', { why: String(ai.why) }) : t('🤖 Accepted by the AI check');
+  return ai.why ? t('🤖 AI check: {why}', { why: String(ai.why) }) : '';
+}
+
+function aiNoteForTeacherHtml(ai) {
+  const text = aiNoteForTeacher(ai);
+  return text ? `<div class="small muted top-space">${escapeHtml(text)}</div>` : '';
 }
 
 function buildGradeControls({ code, attemptId, qIndex, servedIndex, maxPoints, initialGrade, onSaved, studentText, qType }) {
@@ -9364,7 +9382,7 @@ function renderGradingFocusItem() {
     answerHtml = `<div class="small">🖼️ Image</div><img src="${escapeHtml(src)}" alt="Student image" style="max-width:100%;max-height:340px;border-radius:8px;display:block;margin-top:6px;" />`;
   } else {
     const text = String(it?.answerText || '') || '(blank)';
-    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>`;
+    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>${aiNoteForTeacherHtml(it?.ai)}`;
   }
 
   const pendingBadge = !graded
@@ -9990,7 +10008,7 @@ function renderStudentGradingFocusItem() {
     answerHtml = `<div class="small">🖼️ Image</div><img src="${escapeHtml(src)}" alt="Student image" style="max-width:100%;max-height:340px;border-radius:8px;display:block;margin-top:6px;" />`;
   } else {
     const text = String(it?.answerText || '') || '(blank)';
-    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>`;
+    answerHtml = `<div class="grading-focus-answer">${escapeHtml(text)}</div>${aiNoteForTeacherHtml(it?.ai)}`;
   }
 
   const pendingBadge = !graded
@@ -10570,6 +10588,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
       label.className = 'small';
       label.textContent = t("Answer: {p1}", { p1: String(it?.answerText || '') || '(blank)' });
       answerWrap.appendChild(label);
+      if (it?.ai) answerWrap.insertAdjacentHTML('beforeend', aiNoteForTeacherHtml(it.ai));
     }
     li.appendChild(answerWrap);
 
@@ -12142,6 +12161,7 @@ function buildAssignmentListItem(a) {
   );
   if (a?.examMode) metaBits.push(t('🔒 Exam mode'));
   if (a?.shuffleQuestions && !a?.adaptiveCount) metaBits.push(t('Shuffle questions'));
+  if (a?.aiCheck) metaBits.push(t('🤖 AI check'));
   meta.textContent = metaBits.join(' · ');
 
   headerText.append(title, meta);
@@ -12395,6 +12415,7 @@ async function openAssignmentSettingsDialog(a) {
   field.assignmentExamMode.checked = !!a?.examMode;
   field.assignmentShuffleQuestions.checked = shuffleSupported && !!a?.shuffleQuestions;
   field.assignmentShuffleQuestions.disabled = !!a?.adaptiveCount;
+  field.assignmentAiCheck.checked = !!a?.aiCheck;
   // The copy carries the form's own lock (the form may be set to 🏔️ Climb for
   // a new assignment): this assignment decides it.
   field.assignmentFeedback.disabled = !!a?.buildup;
@@ -12448,6 +12469,13 @@ async function openAssignmentSettingsDialog(a) {
     ? t('Shuffle questions applies to new attempts. Attempts already started keep their question order.')
     : t('The API does not support Shuffle questions yet. Update the API before using this option.');
   notes.appendChild(shuffleNote);
+  // 🤖 Only an API with the OpenAI key can check answers.
+  if (formatOptions && !formatOptions.aiAvailable) {
+    const aiNote = document.createElement('p');
+    aiNote.className = 'small muted';
+    aiNote.textContent = t('🤖 AI check needs the OpenAI key on the API. Until it is set, answers are graded as usual.');
+    notes.appendChild(aiNote);
+  }
   // Switching who does it after students started gives them a new identity.
   const started = Number(a?.attemptsCount || 0);
   const signInWarn = document.createElement('p');
@@ -12492,9 +12520,13 @@ async function openAssignmentSettingsDialog(a) {
           feedbackMode: field.assignmentFeedback.value,
           examMode: field.assignmentExamMode.checked,
           ...(shuffleSupported ? { shuffleQuestions: field.assignmentShuffleQuestions.checked } : {}),
+          aiCheck: field.assignmentAiCheck.checked,
           ...(formatOptions ? { format: formatSelect.value, questionCount: Number(formatCount.value) } : {}),
         },
       });
+      if (field.assignmentAiCheck.checked && typeof saved?.assignment?.aiCheck !== 'boolean') {
+        throw new Error(t('The API did not confirm AI check was saved. Update the API and try again.'));
+      }
       if (shuffleSupported && saved?.assignment?.shuffleQuestions !== field.assignmentShuffleQuestions.checked) {
         throw new Error(t('The API did not confirm Shuffle questions was saved. Update the API and try again.'));
       }
@@ -12627,6 +12659,7 @@ async function openAssignmentCreationDialog() {
         attemptsLimit: Number(assignmentAttemptsEl?.value ?? 0), signIn: assignmentRandomNames() ? 'random' : 'signin',
         feedbackMode: assignmentFeedbackMode, examMode: assignmentExamMode,
         shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
+        aiCheck: !!assignmentAiCheckEl?.checked,
         format: adaptive.buildup ? 'climb' : adaptive.adaptive ? 'adaptive' : 'all',
         adaptiveCount: Number(document.getElementById('assignmentAdaptiveCount')?.value || 20),
       },
@@ -12650,6 +12683,7 @@ async function openAssignmentCreationDialog() {
         setAssignmentFeedbackMode(options.feedbackMode);
         setAssignmentExamMode(options.examMode);
         if (assignmentShuffleQuestionsEl) assignmentShuffleQuestionsEl.checked = !!options.shuffleQuestions;
+        if (assignmentAiCheckEl) assignmentAiCheckEl.checked = !!options.aiCheck;
         syncAssignmentAdaptiveControl();
         syncSignInRulesLine(assignmentSignInEl, document.getElementById('assignmentSignInRules'));
         return createAssignmentFromCurrentQuiz({ dialog: true });
@@ -12704,6 +12738,7 @@ async function createAssignmentFromCurrentQuiz({ dialog = false } = {}) {
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
         shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
+        aiCheck: !!assignmentAiCheckEl?.checked,
         adaptiveCount,
         adaptive: adaptiveOn,
         buildup: buildupOn,
@@ -17041,6 +17076,7 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
         feedbackMode: assignmentFeedbackMode,
         examMode: assignmentExamMode,
         shuffleQuestions: !!assignmentShuffleQuestionsEl?.checked,
+        aiCheck: !!assignmentAiCheckEl?.checked,
         ...adaptive,
         quiz: payload,
       },
