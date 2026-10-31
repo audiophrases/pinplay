@@ -69,7 +69,9 @@ let post;
 let bucket;
 
 before(async () => {
-  const src = fs.readFileSync(path.join(REPO, 'cloudflare', 'worker.js'), 'utf8');
+  // The copy lives in the temp folder: point its one local import back here.
+  const authModule = 'file://' + path.join(REPO, 'cloudflare', 'taskflow-auth.mjs').replace(/\\/g, '/');
+  const src = fs.readFileSync(path.join(REPO, 'cloudflare', 'worker.js'), 'utf8').replace("'./taskflow-auth.mjs'", JSON.stringify(authModule));
   const tmpFile = path.join(os.tmpdir(), `pinplay-worker-cloud-${process.pid}-${Date.now()}.mjs`);
   fs.writeFileSync(tmpFile, src);
   process.on('exit', () => { try { fs.unlinkSync(tmpFile); } catch { /* already gone */ } });

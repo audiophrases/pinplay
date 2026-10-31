@@ -15,7 +15,7 @@ const names = [
   'renderStudentGradingFocusItem', 'moveStudentGradingFocusTo', 'studentGradingFocusKeydown',
   'gradingMediaDetailsHtml', 'wireGradingMediaTts', 'CORRECTION_DIFF_PREFIX', 'CORRECTION_NOTE_PREFIX',
   'splitCorrectionNote', 'joinCorrectionNote', 'reconstructCorrectedFromDiff', 'computeWordDiff',
-  'renderStructuredCorrectionDiff', 'renderCorrectionNoteHtml',
+  'renderStructuredCorrectionDiff', 'renderCorrectionNoteHtml', 'aiNoteForTeacher', 'aiNoteForTeacherHtml',
 ];
 let browser;
 describe('reviewing auto-graded exams after release', { skip: !chromium && 'Install playwright to run browser checks' }, () => {
