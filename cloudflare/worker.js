@@ -4250,6 +4250,32 @@ export class QuizRoom {
         return json({ ok: true, notifiedAt: now, notified });
       }
 
+      // Shared directory additions. Only the service-bound ClassroomIdentity entrypoint
+      // calls these DO paths; no public Worker route forwards to /classroom/.
+      if (url.pathname.startsWith('/classroom/')) {
+        const body = await safeJson(request);
+        const email = sanitizeEmail(body?.email);
+        if (url.pathname === '/classroom/teacher') {
+          return json({ teacher: email ? await this.state.storage.get(`platform:teacher:${email}`) || null : null });
+        }
+        if (url.pathname === '/classroom/teachers') {
+          return json({ teachers: [...(await this.state.storage.list({ prefix: 'platform:teacher:' })).values()] });
+        }
+        if (url.pathname === '/classroom/save-teacher') {
+          if (!email) return json({ error: 'Valid teacher email required.' }, 400);
+          const prior = await this.state.storage.get(`platform:teacher:${email}`);
+          const teacher = {
+            id: prior?.id || `teacher_${crypto.randomUUID()}`, email,
+            displayName: sanitizeName(body.displayName || prior?.displayName || email),
+            classIds: Array.isArray(body.classIds) ? [...new Set(body.classIds.filter((s) => typeof s === 'string' && /^class_[a-f0-9]{24}$/.test(s)))].slice(0, 100) : [],
+            active: body.active !== false, updatedAt: Date.now(),
+          };
+          await this.state.storage.put(`platform:teacher:${email}`, teacher);
+          return json({ teacher });
+        }
+        return json({ error: 'Unknown classroom route.' }, 404);
+      }
+
       // ---------- Student roster ----------
       // The roster is a directory, not a credential store: identity is proven by
       // Google sign-in, and these rows only say who an address belongs to and
@@ -8557,6 +8583,11 @@ async function verifyCreatePassword(env, password, request, opts = {}) {
 
   return ok;
 }
+
+// The service-only classroom entrypoint reuses these implementations. Public
+// PinPlay routes, credential formats and assignment storage remain unchanged.
+export { verifyCreatePassword, resolveAuth, verifyGoogleIdToken, verifyStudentToken,
+  studentSessionSecret, rosterCall, rosterGetStudent, rosterGetSettings, isEmailAllowed };
 
 async function sha256Hex(input) {
   const data = new TextEncoder().encode(String(input || ''));
