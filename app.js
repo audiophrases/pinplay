@@ -20974,37 +20974,83 @@ function setMediaKeywordOn(questions, kind, keyword) {
   return changed;
 }
 
-// Replace "Use each answer": the keyword a question's own answer gives — the
-// whole answer when it is 3 words or fewer, else its first word. '' for types
-// with no single answer worth a search: True/False ("True"), error hunt (a
-// whole sentence), pairs, puzzles, sliders and teacher-graded answers.
-function answerMediaKeyword(q) {
+// Replace "Use each answer": the answer a question's search starts from. '' for
+// types with no single answer worth a search: True/False ("True"), error hunt
+// (a whole sentence), pairs, puzzles, sliders and teacher-graded answers.
+function mediaAnswerText(q) {
   const firstOf = (list) => String((Array.isArray(list) ? list : []).find((s) => String(s || '').trim()) || '');
-  let answer = '';
   switch (q?.type) {
     case 'mcq':
     case 'multi':
-      answer = firstOf((q.answers || []).filter((a) => a?.correct).map((a) => a.text));
-      break;
+      return firstOf((q.answers || []).filter((a) => a?.correct).map((a) => a.text));
     case 'text':
     case 'voice_text':
-      answer = firstOf(q.accepted);
-      break;
+      return firstOf(q.accepted);
     case 'context_gap':
-      answer = firstOf(q.gaps).split(',')[0]; // "dreamed, dreamt" lists alternatives
-      break;
+      return firstOf(q.gaps).split(',')[0]; // "dreamed, dreamt" lists alternatives
     case 'spellingbee':
-      answer = firstOf((q.words || []).map((w) => (typeof w === 'string' ? w : w?.target)));
-      break;
+      return firstOf((q.words || []).map((w) => (typeof w === 'string' ? w : w?.target)));
     case 'wordle':
-      answer = q.word;
-      break;
+      return String(q.word || '');
     default:
       return '';
   }
-  const words = String(answer || '').replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '').split(/\s+/).filter(Boolean);
+}
+
+// Words a picture search can do without: the Listening guess's little words
+// (articles, pronouns, auxiliaries…) and their contractions ("doesn't", "I'm").
+const MEDIA_KEYWORD_STOPWORDS = new Set([...LISTENING_STOPWORDS, 'as', 'if', 'than', 'then', 'because', 'some', 'any', 'all', "let's"]);
+function isMediaStopword(word) {
+  const w = String(word || '').toLowerCase().replace(/’/g, "'");
+  if (MEDIA_KEYWORD_STOPWORDS.has(w) || /n't$/.test(w)) return true;
+  const m = w.match(/^(\p{L}+)'(?:s|m|re|ve|ll|d)$/u);
+  return !!m && MEDIA_KEYWORD_STOPWORDS.has(m[1]);
+}
+
+// One form per word for comparing answers: "Likes" and "like" are the same word.
+const mediaWordKey = (word) => String(word || '').toLowerCase().replace(/’/g, "'").replace(/s$/, '');
+
+// The answer's words: `raw` as written, `bare` without punctuation at its ends,
+// `meaningful` when it is not a little word.
+function mediaAnswerWords(q) {
+  return String(mediaAnswerText(q) || '').replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '').split(/\s+/).filter(Boolean).map((raw) => {
+    const bare = raw.replace(/^[\p{P}]+|[\p{P}]+$/gu, '');
+    return { raw, bare, meaningful: !!bare && !isMediaStopword(bare) };
+  });
+}
+
+// The words (mediaWordKey) that two or more of these questions' answers share.
+function sharedAnswerWords(questions) {
+  const counts = new Map();
+  questions.forEach((q) => {
+    new Set(mediaAnswerWords(q).filter((w) => w.meaningful).map((w) => mediaWordKey(w.bare)))
+      .forEach((key) => counts.set(key, (counts.get(key) || 0) + 1));
+  });
+  return new Set([...counts].filter(([, n]) => n > 1).map(([key]) => key));
+}
+
+// Replace "Use each answer": the keyword a question's own answer gives. An answer
+// of 3 words or fewer is kept whole, minus little words at either end ("the red
+// car" → "red car", "doesn't like" → "like"); a longer one gives its first
+// meaningful word. Words in `shared` (sharedAnswerWords of the selection) are
+// skipped when another meaningful word is left, so "She likes pizza" and "He
+// likes football" search "pizza" and "football", not "likes" twice. An answer
+// of only little words: the whole short answer, else its first word.
+function answerMediaKeyword(q, shared = new Set()) {
+  const words = mediaAnswerWords(q);
   if (!words.length) return '';
-  return (words.length <= 3 ? words.join(' ') : words[0].replace(/[\p{P}]+$/u, '')).slice(0, 140);
+  const meaningful = words.filter((w) => w.meaningful);
+  let keyword;
+  if (!meaningful.length) {
+    keyword = words.length <= 3 ? words.map((w) => w.raw).join(' ') : words[0].bare;
+  } else if (words.length <= 3) {
+    const first = words.findIndex((w) => w.meaningful);
+    const last = words.findLastIndex((w) => w.meaningful);
+    keyword = words.slice(first, last + 1).map((w) => w.raw).join(' ').replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '');
+  } else {
+    keyword = (meaningful.find((w) => !shared.has(mediaWordKey(w.bare))) || meaningful[0]).bare;
+  }
+  return keyword.slice(0, 140);
 }
 
 // Change voice: for questions read with TTS. The old clip key is dropped so the
@@ -21348,9 +21394,9 @@ function refreshMediaSelection() {
          <option value="image">${escapeHtml(t('Picture keyword'))}</option>
          <option value="video">${escapeHtml(t('Video keyword'))}</option>
        </select>
-       <input type="text" data-mm-replace-keyword maxlength="140" placeholder="${escapeHtml(t('New keyword'))}" />
+       <input type="text" data-mm-replace-keyword maxlength="140" placeholder="${escapeHtml(only ? t('New keyword') : t('One keyword for all {n}', { n }))}" />
        <button type="button" class="btn btn-sm primary" data-mm-replace-apply>${escapeHtml(t('Set keyword and generate'))}</button>
-       <button type="button" class="btn btn-sm" data-mm-answer-keywords title="${escapeHtml(t('For questions with no keyword and no media yet: search with each question’s own answer (the whole answer when it is 3 words or fewer, else its first word)'))}">${escapeHtml(t('Use each answer'))}</button>
+       <button type="button" class="btn btn-sm" data-mm-answer-keywords title="${escapeHtml(t('Each question searches with its own answer, without little words like “the”, “an” or “doesn’t”: the whole answer when it is 3 words or fewer, else its first meaningful word, skipping words the other selected answers share'))}">${escapeHtml(t('Use each answer'))}</button>
        ${pickable ? `<button type="button" class="btn btn-sm" data-mm-pick>${escapeHtml(t('Pick by hand…'))}</button>` : ''}
        <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
     const kindEl = bar.querySelector('[data-mm-replace-kind]');
@@ -21358,7 +21404,8 @@ function refreshMediaSelection() {
     const firstKind = questionMediaStatus(first, quiz).visual.kind;
     kindEl.value = ['gif', 'image', 'video'].includes(firstKind) ? firstKind : 'gif';
     const keyOf = { gif: 'gifKeyword', image: 'imageKeyword', video: 'videoKeyword' };
-    bar.querySelector('[data-mm-replace-keyword]').value = String(first?.[keyOf[kindEl.value]] || answerMediaKeyword(first) || '');
+    // Several selected: no keyword, or one question's would go to all of them.
+    bar.querySelector('[data-mm-replace-keyword]').value = only ? String(only[keyOf[kindEl.value]] || answerMediaKeyword(only) || '') : '';
     setTimeout(() => bar.querySelector('[data-mm-replace-keyword]')?.focus(), 0);
   } else if (n && state.form === 'move') {
     const questions = quiz.questions;
@@ -21491,24 +21538,29 @@ function applyReplaceKeyword(kind, keyword) {
   runMediaManagerJob(t('Replace'), changed, generateMissingVisualFor);
 }
 
-// Replace, "Use each answer": every selected question with no keyword and no
-// picture, GIF or video gets its own answer (answerMediaKeyword) as the keyword.
+// Replace, "Use each answer": every selected question gets its own answer
+// (answerMediaKeyword) as the keyword. A picture, GIF, video or keyword already
+// there is replaced too, after a confirm.
 function applyAnswerKeywords(kind) {
   const state = mediaManagerState;
   const questions = mediaManagerJobQuestions('selected');
   if (!questions.length) return;
-  const empty = questions.filter((q) => questionMediaStatus(q, quiz).visual.status === 'none');
-  const changed = [];
+  const shared = sharedAnswerWords(questions);
+  const planned = [];
   let noAnswer = 0;
-  empty.forEach((q) => {
-    const kw = answerMediaKeyword(q);
-    if (!kw) { noAnswer += 1; return; }
-    changed.push(...setMediaKeywordOn([q], kind, kw));
+  let ownMedia = 0;
+  questions.forEach((q) => {
+    // Reading-text and pin questions keep their own media, as with Set keyword.
+    if (String(q?.readingText || '').trim() || q?.type === 'pin') { ownMedia += 1; return; }
+    const kw = answerMediaKeyword(q, shared);
+    if (kw) planned.push({ q, kw }); else noAnswer += 1;
   });
+  const withMedia = planned.filter(({ q }) => questionMediaStatus(q, quiz).visual.status !== 'none').length;
+  if (withMedia && !confirm(t('{n} of these questions already have a picture, GIF, video or keyword. Replace it with a search for each question’s own answer?', { n: withMedia }))) return;
+  const changed = planned.flatMap(({ q, kw }) => setMediaKeywordOn([q], kind, kw));
   const notes = [];
-  const hadMedia = questions.length - empty.length;
-  if (hadMedia) notes.push(t('{n} already had media or a keyword', { n: hadMedia }));
   if (noAnswer) notes.push(t('{n} have no answer to search for (True/False, error hunt, pairs, open answers…)', { n: noAnswer }));
+  if (ownMedia) notes.push(t('{n} keep their own media (reading text, pin on image)', { n: ownMedia }));
   state.form = '';
   if (!changed.length) {
     state.notice = `${t('Use each answer')}: ${notes.join(' · ') || t('nothing to do')}`;

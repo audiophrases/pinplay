@@ -26,7 +26,8 @@ const NAMES = [
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'prepareQuestionTts',
   'sha256HexClient', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
-  'setMediaKeywordOn', 'answerMediaKeyword', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
+  'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
+  'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -614,11 +615,42 @@ describe('Replace, Use each answer: answerMediaKeyword', () => {
     assert.equal(kw({ type: 'wordle', word: 'tiger' }), 'tiger');
   });
 
-  it('keeps answers of up to 3 words whole, else takes the first word', () => {
+  it('keeps answers of up to 3 words whole, minus little words at either end', () => {
     assert.equal(kw({ type: 'text', accepted: ['ran away fast'] }), 'ran away fast');
-    assert.equal(kw({ type: 'text', accepted: ['She has been living here'] }), 'She');
+    assert.equal(kw({ type: 'text', accepted: ['go to school'] }), 'go to school');
+    assert.equal(kw({ type: 'text', accepted: ['the red car'] }), 'red car');
+    assert.equal(kw({ type: 'text', accepted: ['doesn\'t like'] }), 'like');
+    assert.equal(kw({ type: 'text', accepted: ['Doesn’t like it.'] }), 'like');
     assert.equal(kw({ type: 'text', accepted: ['"Hello, world!"'] }), 'Hello, world');
+  });
+
+  it('takes the first meaningful word of a longer answer', () => {
+    assert.equal(kw({ type: 'text', accepted: ['She has been living here'] }), 'living');
+    assert.equal(kw({ type: 'text', accepted: ['The dog is sleeping on the sofa.'] }), 'dog');
+    assert.equal(kw({ type: 'text', accepted: ['I\'m sure they\'ll win'] }), 'sure');
+    assert.equal(kw({ type: 'mcq', answers: [{ text: 'She doesn\'t like coffee at all', correct: true }] }), 'like');
+  });
+
+  it('falls back to the answer itself when it is only little words', () => {
+    assert.equal(kw({ type: 'text', accepted: ['I do'] }), 'I do');
     assert.equal(kw({ type: 'text', accepted: ['Yes, I have been there.'] }), 'Yes');
+  });
+
+  it('skips words other selected answers share, so each question gets its own keyword', () => {
+    const qs = ['She likes pizza very much', 'He likes football a lot', 'They like dancing in the rain']
+      .map((a) => ({ type: 'text', accepted: [a] }));
+    const shared = A.sharedAnswerWords(qs);
+    assert.deepEqual(qs.map((q) => A.answerMediaKeyword(q, shared)), ['pizza', 'football', 'dancing']);
+    assert.equal(kw(qs[0]), 'likes', 'on its own, the first meaningful word');
+  });
+
+  it('keeps a shared word when the answer has nothing else, and short answers whole', () => {
+    const long = ['The cat is on the table', 'The cat is under the table'].map((a) => ({ type: 'text', accepted: [a] }));
+    const longShared = A.sharedAnswerWords(long);
+    assert.deepEqual(long.map((q) => A.answerMediaKeyword(q, longShared)), ['cat', 'cat']);
+    const short = ['likes pizza', 'likes football'].map((a) => ({ type: 'text', accepted: [a] }));
+    const shortShared = A.sharedAnswerWords(short);
+    assert.deepEqual(short.map((q) => A.answerMediaKeyword(q, shortShared)), ['likes pizza', 'likes football']);
   });
 
   it('gives nothing for types without a single answer worth a search', () => {
@@ -632,6 +664,61 @@ describe('Replace, Use each answer: answerMediaKeyword', () => {
       { type: 'mcq', answers: [{ text: 'x' }] },
       { type: 'text', accepted: ['  '] },
     ]) assert.equal(kw(q), '', q.type);
+  });
+});
+
+describe('Replace, Use each answer: applyAnswerKeywords', () => {
+  function setup(questions, confirmAnswer) {
+    const { A, sandbox } = load(() => jsonRes(200, {}));
+    const run = { confirms: [], jobs: [] };
+    Object.assign(sandbox, {
+      mediaManagerJobQuestions: () => questions,
+      confirm: (msg) => { run.confirms.push(msg); return confirmAnswer; },
+      confirmGifSearchBudget: () => true,
+      runMediaManagerJob: (label, changed, perQuestion, opts) => run.jobs.push({ changed, notes: opts?.notes || [] }),
+      renderMediaManager() {},
+      renderBuilder() {},
+    });
+    return { A, run };
+  }
+  const gifQ = (answer, gif) => ({ type: 'text', accepted: [answer], gifKeyword: gif, imageData: `https://media.giphy.com/${gif}/0.gif` });
+
+  it('fills questions with no media without asking', () => {
+    const qs = [{ type: 'text', accepted: ['dog'] }, { type: 'text', accepted: ['the cat'] }];
+    const { A, run } = setup(qs, false);
+    A.applyAnswerKeywords('gif');
+    assert.equal(run.confirms.length, 0);
+    assert.deepEqual(qs.map((q) => q.gifKeyword), ['dog', 'cat']);
+    assert.equal(run.jobs[0].changed.length, 2);
+  });
+
+  it('asks before redoing questions that already have a GIF, and changes nothing on Cancel', () => {
+    const qs = [gifQ('dog', 'apple'), gifQ('cat', 'apple'), { type: 'text', accepted: ['bird'] }];
+    const { A, run } = setup(qs, false);
+    A.applyAnswerKeywords('gif');
+    assert.equal(run.confirms.length, 1);
+    assert.match(run.confirms[0], /^2 of these questions/);
+    assert.equal(run.jobs.length, 0);
+    assert.deepEqual(qs.map((q) => q.gifKeyword), ['apple', 'apple', undefined]);
+    assert.equal(qs[0].imageData, 'https://media.giphy.com/apple/0.gif');
+  });
+
+  it('on OK gives every question its own answer, keeping reading-text and pin media', () => {
+    const reading = { type: 'mcq', readingText: 'A story', answers: [{ text: 'fox', correct: true }] };
+    const pin = { type: 'pin', imageData: 'data:image/png;base64,MAP' };
+    const tf = { type: 'tf', answers: [{ text: 'True', correct: true }] };
+    const qs = [gifQ('dog', 'apple'), gifQ('cat', 'apple'), reading, pin, tf];
+    const { A, run } = setup(qs, true);
+    A.applyAnswerKeywords('image');
+    assert.deepEqual([qs[0].imageKeyword, qs[1].imageKeyword], ['dog', 'cat']);
+    assert.deepEqual([qs[0].gifKeyword, qs[0].imageData], ['', '']);
+    assert.equal(pin.imageData, 'data:image/png;base64,MAP');
+    assert.equal(reading.imageKeyword, undefined);
+    assert.equal(run.jobs[0].changed.length, 2);
+    assert.deepEqual([...run.jobs[0].notes], [
+      '1 have no answer to search for (True/False, error hunt, pairs, open answers…)',
+      '2 keep their own media (reading text, pin on image)',
+    ]);
   });
 });
 
