@@ -4883,6 +4883,10 @@ body.review-mode-active #joinSubmission {
 }
 .ai-note-reveal .student-answer-reveal-title {
   color: #0369a1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .ai-note-reveal .student-answer-reveal-content {
   display: grid;

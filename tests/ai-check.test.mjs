@@ -216,40 +216,261 @@ it('an answer saved while OpenAI is answering is kept', async () => {
   assert.equal(correctness(res, 0).correct, true);
 });
 
-it('open answers get task and language feedback once per text, only with feedback after each answer', async () => {
+it('with instant feedback an open answer is scored at once: the score counts, nothing waits for the teacher, and the student sees it', async () => {
   reply = (input, body) => {
-    assert.equal(body.max_output_tokens, 120);
-    return { task: 'partly', feedback: 'Add a second sentence. Use "she is" for "she are".' };
+    assert.equal(body.max_output_tokens, 140);
+    assert.deepEqual(body.text.format.schema.required, ['task', 'score', 'feedback']);
+    return { task: 'partly', score: 6, feedback: 'Add a second sentence. Use "she is" for "she are".' };
   };
   const text = 'My friend Ana she are very kind.';
   const res = await answer('s1', 3, text);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].input, { task: 'Describe your best friend in two sentences.', answer: text });
-  const note = res.body.attempt.answersByQ['3'].ai;
-  assert.equal(note.task, 'partly');
-  assert.match(note.feedback, /she is/);
-  // Still the teacher's to grade.
-  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 1);
-  // The same text saved again keeps its feedback, with no call.
+  const saved = res.body.attempt.answersByQ['3'];
+  assert.equal(saved.ai.task, 'partly');
+  assert.equal(saved.ai.score, 6);
+  assert.match(saved.ai.feedback, /she is/);
+  assert.equal(saved.teacherGrade.by, 'ai');
+  assert.equal(saved.teacherGrade.graded, true);
+  assert.equal(saved.teacherGrade.pointsAwarded, 600);
+  assert.equal(saved.teacherGrade.correction, '');
+  const { metrics } = res.body.attempt;
+  assert.equal(metrics.pendingTeacherGradeCount, 0);
+  assert.equal(metrics.teacherScore, 600);
+  assert.equal(metrics.totalScore, 600);
+  assert.equal((await base()).pendingGradingCount, 0);
+  // The same text saved again keeps its feedback and score, with no call.
   const same = await answer('s1', 3, `  ${text} `);
   assert.equal(calls.length, 1);
-  assert.equal(same.body.attempt.answersByQ['3'].ai.task, 'partly');
-  // Too short to look at.
-  await answer('s2', 3, 'Ana kind.');
-  assert.equal(calls.length, 1);
-  // No instant feedback: no call.
-  await storage.put(`ab:${code}`, assignment({ feedbackMode: 'end' }));
-  await answer('s3', 3, 'My friend Ana is very kind and funny.');
-  assert.equal(calls.length, 1);
+  assert.equal(same.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 600);
+  // Every open answer gets a score, however short.
+  const short = await answer('s2', 3, 'Kind.');
+  assert.equal(calls.length, 2);
+  assert.equal(short.body.attempt.answersByQ['3'].teacherGrade.by, 'ai');
+  await answer('s3', 3, '   ');
+  assert.equal(calls.length, 2, 'nothing written, nothing to score');
 });
 
-it('open answers: at most three feedback calls per question per attempt', async () => {
-  reply = () => ({ task: 'done', feedback: 'Well done.' });
+it('scores follow the question\'s points: 10 is full marks, a score of 0 is a grade, and a 0-point question earns nothing', async () => {
+  const practice = assignment();
+  practice.quiz.questions[3].points = 0;
+  await storage.put(`ab:${code}`, practice);
+  reply = () => ({ task: 'done', score: 10, feedback: 'Well done.' });
+  const free = await answer('s3', 3, 'A good answer too.');
+  assert.equal(free.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 0);
+  assert.equal(free.body.attempt.answersByQ['3'].ai.feedback, 'Well done.', 'the feedback is still worth having');
+  assert.equal(free.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  const worth2000 = assignment();
+  worth2000.quiz.questions[3].points = 2000;
+  await storage.put(`ab:${code}`, worth2000);
+  assert.equal((await answer('s1', 3, 'A good answer.')).body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 2000);
+  reply = () => ({ task: 'not_done', score: 0, feedback: 'Describe your friend.' });
+  const zero = await answer('s2', 3, 'I like pizza.');
+  assert.equal(zero.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 0);
+  assert.equal(zero.body.attempt.answersByQ['3'].teacherGrade.graded, true);
+  assert.equal(zero.body.attempt.metrics.pendingTeacherGradeCount, 0);
+});
+
+it('a reply with no usable score changes nothing: the answer waits for the teacher', async () => {
+  for (const bad of [{ task: 'done', feedback: 'Fine.' }, { task: 'done', score: 11, feedback: 'Fine.' }, { task: 'done', score: 7.5, feedback: 'Fine.' }, { task: 'done', score: '7', feedback: 'Fine.' }]) {
+    reply = () => bad;
+    const res = await answer('s1', 3, `An answer with ${JSON.stringify(bad)}`);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const saved = res.body.attempt.answersByQ['3'];
+    assert.equal(saved.ai, undefined);
+    assert.equal(saved.teacherGrade, null);
+    assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 1);
+    const stored = await storage.get(`a:${code}:t:s1`);
+    delete stored.aiUse;
+    await storage.put(`a:${code}:t:s1`, stored);
+  }
+});
+
+it('OpenAI trouble on an open answer: it waits for the teacher, and submit tries again', async () => {
+  openAiStatus = 500;
+  const res = await answer('s1', 3, 'My friend is kind.');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 1);
+  openAiStatus = 200;
+  reply = () => ({ task: 'done', score: 8, feedback: 'Well done.' });
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(calls.length, 2);
+  assert.equal(done.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 800);
+  assert.equal(done.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  assert.equal((await base()).pendingGradingCount, 0);
+});
+
+it('without instant feedback an open answer is scored once, at submit, on its final text', async () => {
+  await storage.put(`ab:${code}`, assignment({ feedbackMode: 'end' }));
+  reply = () => ({ task: 'done', score: 9, feedback: 'Well done.' });
+  await answer('s1', 3, 'A first try.');
+  const edited = await answer('s1', 3, 'My friend Ana is very kind.');
+  assert.equal(calls.length, 0, 'it can still change');
+  assert.equal(edited.body.attempt.metrics.pendingTeacherGradeCount, 1);
+  assert.equal((await base()).pendingGradingCount, 1);
+  const refused = await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal(refused.body.code, 'UNANSWERED_REMAINING');
+  assert.equal(calls.length, 0, 'not handed in yet');
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].input.answer, 'My friend Ana is very kind.');
+  assert.equal(done.body.attempt.answersByQ['3'].ai.score, 9);
+  assert.equal(done.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 900);
+  assert.equal((await base()).pendingGradingCount, 0);
+  assert.equal(done.body.attempt.metrics.totalScore, 900);
+});
+
+it('no feedback: the score counts but stays off the student page, and Release needs no teacher marking', async () => {
+  await storage.put(`ab:${code}`, assignment({ feedbackMode: 'none' }));
+  reply = () => ({ task: 'done', score: 7, feedback: 'Well done.' });
+  await answer('s1', 3, 'My friend is kind.');
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const shown = done.body.attempt.answersByQ['3'];
+  assert.equal(shown.ai, undefined);
+  assert.equal(shown.teacherGrade, null);
+  assert.equal((await state('s1')).body.attempt.answersByQ['3'].teacherGrade, null);
+  const stored = await storage.get(`a:${code}:t:s1`);
+  assert.equal(stored.answersByQ['3'].teacherGrade.pointsAwarded, 700);
+  const released = await call('/api/assignments/release-grades', { password: teacherPassword, code, attemptIds: ['s1'] });
+  assert.equal(released.status, 200, JSON.stringify(released.body));
+  assert.equal(released.body.grades[0].releasedGrade, 14, '700 of 5000 points');
+});
+
+it('the teacher can change an AI score at any time, and it stays theirs', async () => {
+  reply = () => ({ task: 'done', score: 7, feedback: 'Well done.' });
+  await answer('s1', 3, 'My friend is kind.');
+  const grading = await room.fetch(new Request(`https://room/assignments/question-grading?code=${code}&qIndex=3`));
+  const item = (await grading.json()).items.find(i => i.attemptId === 's1');
+  assert.equal(item.grade.graded, true);
+  assert.equal(item.grade.pointsAwarded, 700);
+  assert.equal(item.ai.score, 7);
+  const changed = await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 3, points: 900 });
+  assert.equal(changed.status, 200, JSON.stringify(changed.body));
+  const st = (await state('s1')).body.attempt;
+  assert.equal(st.answersByQ['3'].teacherGrade.pointsAwarded, 900);
+  assert.equal(st.answersByQ['3'].teacherGrade.by, undefined);
+  assert.equal(st.metrics.teacherScore, 900);
+  assert.equal(st.metrics.pendingTeacherGradeCount, 0);
+  // A later submit leaves the teacher's grade alone, with no call.
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(calls.length, 1);
+  assert.equal(done.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 900);
+  // After Release too: the grade follows.
+  const released = await call('/api/assignments/release-grades', { password: teacherPassword, code, attemptIds: ['s1'] });
+  assert.equal(released.body.grades[0].releasedGrade, 18);
+  await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 3, points: 500 });
+  assert.equal((await storage.get(`a:${code}:t:s1`)).releasedGrade, 10);
+});
+
+it('a reopened attempt: unchanged scores stay, a changed answer is scored again, the teacher\'s grades are kept', async () => {
+  reply = () => ({ task: 'done', score: 7, feedback: 'Well done.' });
+  await answer('s1', 3, 'My friend is kind.');
+  await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal((await room.fetch(new Request('https://room/assignments/reopen-attempt', { method: 'POST', body: JSON.stringify({ code, attemptId: 's1' }) }))).status, 200);
+  assert.equal((await state('s1')).body.attempt.answersByQ['3'].teacherGrade, null, 'hidden while reopened');
+  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['3'].teacherGrade.pointsAwarded, 700);
+  await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(calls.length, 1, 'unchanged: no second call');
+  await room.fetch(new Request('https://room/assignments/reopen-attempt', { method: 'POST', body: JSON.stringify({ code, attemptId: 's1' }) }));
+  reply = () => ({ task: 'done', score: 10, feedback: 'Much better.' });
+  await answer('s1', 3, 'My friend Ana is kind, funny and generous.');
+  assert.equal(calls.length, 1, 'reopened: scored when handed in again');
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(calls.length, 2);
+  assert.equal(done.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 1000);
+  await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 3, points: 300 });
+  await room.fetch(new Request('https://room/assignments/reopen-attempt', { method: 'POST', body: JSON.stringify({ code, attemptId: 's1' }) }));
+  await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(calls.length, 2);
+  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['3'].teacherGrade.pointsAwarded, 300);
+});
+
+it('a grade the teacher gives while the AI is reading stays', async () => {
+  await storage.put(`ab:${code}`, assignment({ feedbackMode: 'end' }));
+  reply = () => ({ task: 'done', score: 2, feedback: 'Too short.' });
+  await answer('s1', 3, 'My friend is kind.');
+  duringCall = async () => {
+    const graded = await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 3, points: 800 });
+    assert.equal(graded.status, 200, JSON.stringify(graded.body));
+  };
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(calls.length, 1);
+  const grade = (await storage.get(`a:${code}:t:s1`)).answersByQ['3'].teacherGrade;
+  assert.equal(grade.pointsAwarded, 800);
+  assert.equal(grade.by, undefined);
+});
+
+it('listening: an open answer the teacher has already graded is left alone at the lock', async () => {
+  await useListening();
+  reply = () => ({ task: 'done', score: 2, feedback: 'Too short.' });
+  await answer('s1', 2, 'He bought a bike yesterday.');
+  const graded = await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 2, points: 800 });
+  assert.equal(graded.status, 200, JSON.stringify(graded.body));
+  const res = await submitSection('s1');
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 0);
+  const saved = (await storage.get(`a:${code}:t:s1`)).answersByQ['2'];
+  assert.equal(saved.teacherGrade.pointsAwarded, 800);
+  assert.equal(saved.teacherGrade.by, undefined);
+  assert.equal(saved.ai, undefined);
+});
+
+it('submit leaves a score it has already given alone', async () => {
+  reply = () => ({ task: 'done', score: 7, feedback: 'Well done.' });
+  await answer('s1', 3, 'My friend is kind.');
+  const saved = await storage.get(`a:${code}:t:s1`);
+  saved.answersByQ['3'].teacherGrade.gradedAt = 1;
+  await storage.put(`a:${code}:t:s1`, saved);
+  await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal(calls.length, 1);
+  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['3'].teacherGrade.gradedAt, 1);
+});
+
+it('feedback saved before answers had scores is read again, so the answer gets one', async () => {
+  const saved = attempt('s1');
+  saved.answersByQ['3'] = { answer: 'My friend is kind.', teacherGrade: null, ai: { key: 'my friend is kind', task: 'done', feedback: 'Well done.' } };
+  await storage.put(`a:${code}:t:s1`, saved);
+  reply = () => ({ task: 'done', score: 8, feedback: 'Well done.' });
+  const res = await answer('s1', 3, 'My friend is kind.');
+  assert.equal(calls.length, 1);
+  assert.equal(res.body.attempt.answersByQ['3'].teacherGrade.pointsAwarded, 800);
+});
+
+it('the teacher sees the AI score beside its feedback', async () => {
+  const { createRequire } = await import('node:module');
+  const { loadDeclarations } = createRequire(import.meta.url)('./helpers/extract-declaration');
+  const t = (text, args = {}) => text.replace(/\{(\w+)\}/g, (_, key) => String(args[key] ?? ''));
+  const { aiNoteForTeacher } = loadDeclarations(fs.readFileSync('app.js', 'utf8'), ['aiNoteForTeacher'], { t });
+  assert.equal(aiNoteForTeacher({ task: 'partly', score: 6, feedback: 'Add more.' }), '🤖 AI score 6/10 (part of the task missing): Add more.');
+  assert.equal(aiNoteForTeacher({ task: 'not_done', score: 0, feedback: 'Off-task.' }), '🤖 AI score 0/10 (not the task): Off-task.');
+  assert.equal(aiNoteForTeacher({ task: 'done', feedback: 'Older note.' }), '🤖 AI feedback (task done): Older note.');
+});
+
+it('an AI score is not teacher activity: the student is not told "new from teacher"', async () => {
+  reply = () => ({ task: 'done', score: 7, feedback: 'Well done.' });
+  await answer('s1', 3, 'My friend is kind.');
+  await call('/api/assignment/submit', { code, attemptId: 's1' });
+  const row = async () => (await call('/api/assignment/check-status', { code, studentKey: 'student_s1' })).body.previousAttempts[0];
+  assert.equal((await row()).teacherGradedCount, 0);
+  assert.equal((await row()).hasNewTeacherActivity, false);
+  await call('/api/assignments/grade', { password: teacherPassword, code, attemptId: 's1', qIndex: 3, points: 900 });
+  assert.equal((await row()).teacherGradedCount, 1);
+});
+
+it('open answers: at most three feedback calls per question per attempt, then the teacher grades it', async () => {
+  reply = () => ({ task: 'done', score: 8, feedback: 'Well done.' });
   for (let i = 0; i < 5; i += 1) await answer('s1', 3, `My friend is kind number ${i}.`);
   assert.equal(calls.length, 3);
   const saved = await storage.get(`a:${code}:t:s1`);
   assert.equal(saved.answersByQ['3'].ai, undefined, 'feedback about an older text is not kept');
+  assert.equal(saved.answersByQ['3'].teacherGrade, null, 'nor its score');
   assert.deepEqual(saved.aiUse, { calls: 3, open: { q4: 3 } });
+  assert.equal((await base()).pendingGradingCount, 1);
 });
 
 it('notes stay hidden where answers are hidden (no feedback before submitting)', async () => {
@@ -424,19 +645,24 @@ it('listening: without a transcript the AI reads the cues; with no words at all 
   assert.deepEqual(calls[1].input, { type: 'text', question: 'What did Tom buy?', check: [{ accepted: ['a bike'], student: 'a bicycle' }] });
 });
 
-it("listening: an open answer gets feedback at the lock, with the whole transcript, and stays the teacher's", async () => {
+it('listening: an open answer gets its score and feedback at the lock, with the whole transcript', async () => {
   await useListening();
-  reply = () => ({ task: 'partly', feedback: 'Say what Tom bought.' });
-  await answer('s1', 2, 'He talks about a car.');
+  reply = () => ({ task: 'partly', score: 4, feedback: 'Say what Tom bought.' });
+  const early = await answer('s1', 2, 'He talks about a car.');
+  assert.equal(early.body.attempt.metrics.pendingTeacherGradeCount, 1);
   const res = await submitSection('s1');
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].input, {
     task: 'What does Tom say?', instruction: 'Listen and answer.', recording: transcript, answer: 'He talks about a car.',
   });
-  const note = res.body.attempt.answersByQ['2'].ai;
-  assert.equal(note.task, 'partly');
-  assert.equal(note.feedback, 'Say what Tom bought.');
-  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 1);
+  const saved = res.body.attempt.answersByQ['2'];
+  assert.equal(saved.ai.task, 'partly');
+  assert.equal(saved.ai.feedback, 'Say what Tom bought.');
+  assert.equal(saved.teacherGrade.by, 'ai');
+  assert.equal(saved.teacherGrade.pointsAwarded, 400);
+  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  assert.equal((await base()).pendingGradingCount, 0);
+  assert.equal(res.body.attempt.metrics.totalScore, 400);
 });
 
 it('listening: the whole section is looked at together, and one failure loses only its own question', async () => {
@@ -520,19 +746,25 @@ it('listening: the ceiling holds when a section asks about several answers at on
   assert.equal((await storage.get(`a:${code}:t:s1`)).aiUse.calls, 40);
 });
 
-it('listening: without instant feedback answers are still accepted, open ones get no comment, and notes wait', async () => {
+it('listening: without instant feedback the section is read at the lock too, and notes and scores wait for the answers', async () => {
   await useListening({ feedbackMode: 'end' });
-  reply = () => ({ ok: [false], why: 'Not a bike.' });
+  reply = input => (input.task ? { task: 'done', score: 8, feedback: 'Well done.' } : { ok: [false], why: 'Not a bike.' });
   await answer('s1', 0, 'a car');
   await answer('s1', 2, 'He bought a bike yesterday.');
   const res = await submitSection('s1');
-  assert.equal(calls.length, 1, 'the typed answer only');
-  assert.equal(calls[0].input.type, 'text');
+  assert.equal(calls.length, 2, 'the typed answer and the open one');
   assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
-  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['0'].ai.ok, false);
+  assert.equal(res.body.attempt.answersByQ['2'].ai, undefined);
+  assert.equal(res.body.attempt.answersByQ['2'].teacherGrade, null);
+  const stored = await storage.get(`a:${code}:t:s1`);
+  assert.equal(stored.answersByQ['0'].ai.ok, false);
+  assert.equal(stored.answersByQ['2'].teacherGrade.pointsAwarded, 800);
+  assert.equal((await base()).pendingGradingCount, 0);
   const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
   assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(calls.length, 2, 'already read: no second call');
   assert.equal(done.body.attempt.answersByQ['0'].ai.why, 'Not a bike.');
+  assert.equal(done.body.attempt.answersByQ['2'].teacherGrade.pointsAwarded, 800);
 });
 
 it('listening: submitting the whole assignment reads a section left open, but only once it really goes through', async () => {
@@ -625,6 +857,55 @@ it('adaptive listening: submitting the whole assignment with the block open coun
   assert.equal(saved.submitted, true);
   assert.equal(saved.adaptive.block, null);
   assert.equal(saved.adaptive.sectionResults[0].right, 1);
+});
+
+it('adaptive: an open answer\'s score moves the level at once, and the teacher can change it later', async () => {
+  const questions = ['A1', 'A2'].flatMap(cefr => [1, 2, 3].map(n => ({ id: `${cefr}-${n}`, type: 'open', prompt: `${cefr} task ${n}`, points: 1000, cefr })));
+  const created = await call('/api/assignments/create', { password: teacherPassword, randomNames: true, feedbackMode: 'instant', adaptiveCount: 3, aiCheck: true, quiz: { title: 'Adaptive writing', questions } });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const adaptiveCode = created.body.assignment.code;
+  const started = await call('/api/assignment/start', { code: adaptiveCode, studentKey: 'writer', studentName: 'Writer' });
+  const attemptId = started.body.attempt.id;
+  reply = () => ({ task: 'done', score: 10, feedback: 'Well done.' });
+  const res = await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 0, answer: 'A fine answer.' });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 1);
+  assert.equal(res.body.attempt.answersByQ['0'].teacherGrade.by, 'ai');
+  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  const saved = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  const [item] = saved.adaptive.items;
+  assert.equal(item.teacherGrade.pointsAwarded, 1000);
+  assert.equal(item.levelEffect.outcome, 'right');
+  assert.equal(saved.adaptive.answered, 1);
+  assert.equal(saved.adaptive.path.at(-1).pending, false);
+  const moved = saved.adaptive.score;
+  const changed = await call('/api/assignments/grade', { password: teacherPassword, code: adaptiveCode, attemptId, qIndex: item.qi, points: 0 });
+  assert.equal(changed.status, 200, JSON.stringify(changed.body));
+  const after = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  assert.equal(after.adaptive.items[0].levelEffect.outcome, 'wrong');
+  assert.ok(after.adaptive.score < moved, 'the first effect is taken back');
+});
+
+it('adaptive listening: open answers are scored when the block closes, before the next question is chosen', async () => {
+  const section = { id: 's1', title: 'Listening', text: 'Listen.', transcript, audio: { kind: 'file', url: 'https://example.com/audio.mp3' } };
+  const questions = ['A1', 'A2'].flatMap(cefr => [1, 2].map(n => ({ id: `${cefr}-${n}`, type: 'open', prompt: `${cefr} task ${n}`, points: 1000, cefr, listeningSection: 's1' })));
+  const created = await call('/api/assignments/create', { password: teacherPassword, randomNames: true, feedbackMode: 'instant', adaptive: true, adaptiveCount: 0, aiCheck: true, quiz: { title: 'Adaptive listening', listeningSections: [section], questions } });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const adaptiveCode = created.body.assignment.code;
+  const started = await call('/api/assignment/start', { code: adaptiveCode, studentKey: 'listener', studentName: 'Listener' });
+  const attemptId = started.body.attempt.id;
+  reply = () => ({ task: 'done', score: 10, feedback: 'Well done.' });
+  await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 0, answer: 'One answer.' });
+  await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 1, answer: 'Another answer.' });
+  assert.equal(calls.length, 0);
+  const res = await call('/api/assignment/submit-section', { code: adaptiveCode, attemptId, sectionId: 's1' });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 2);
+  const saved = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  assert.equal(saved.adaptive.items.filter(it => it.teacherGrade?.by === 'ai').length, 2);
+  assert.equal(saved.adaptive.items.filter(it => it.levelEffect?.outcome === 'right').length, 2);
+  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 0);
+  assert.equal(res.body.attempt.answersByQ['1'].teacherGrade.pointsAwarded, 1000);
 });
 
 // ☁️ The quiz an assignment was made from: what the AI accepts is kept per

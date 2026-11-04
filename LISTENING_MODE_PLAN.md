@@ -661,9 +661,33 @@ only (never live or public games).
 | Order | The AI comes **before** the lock: closing an adaptive block fixes its score and level. If OpenAI fails, the section locks with the usual marks. |
 | Synonyms | **Accepted**, like everywhere else: the student understood. The accepted answers still decide what is right, and the recording only helps judge the meaning: a wrong detail it mentions stays wrong. If the section's instruction asks for the exact words heard, only other forms of those words count. |
 | What the AI reads | The section's instruction and the recording's words. A typed answer: the moment it is heard, else the transcript. An open answer: the transcript, else the moment. These go to OpenAI only, never to a student. |
-| Marks | All together on the locked sheet: an accepted answer is green with no note, a refused one has its reason under the correct answer, an open one its feedback. A teacher's own feedback replaces the note. |
+| Marks | All together on the locked sheet: an accepted answer is green with no note, a refused one has its reason under the correct answer, an open one its score and feedback. A teacher's own feedback replaces the note. |
 
-Other feedback modes: answers are still accepted at the lock, so the grade does
-not depend on the mode; notes wait for the answers; open answers get no comment.
+Other feedback modes: the AI still reads the section at the lock, so the grade
+does not depend on the mode; notes and scores wait until answers are shown.
 Submitting the whole assignment reads any section left open. Teacher's "release
 grades" on an unfinished attempt does not: the student never handed it in.
+
+### Open answers get a score (owner, 2026-11-04)
+
+With `aiCheck` on, every open answer is scored, in sections and outside them.
+This is not "Grade with AI": the point is teaching. With instant feedback the
+student sees the score and comment while the thinking is fresh, can correct
+their understanding, and can trust what they got right. So **the teacher does
+not confirm scores**. They count at once and the teacher can change one at any
+time.
+
+- A score is 0–10 from the AI, stored as a normal grade marked `by: 'ai'`
+  (`aiGrade`). Totals, Release and adaptive levels count it like a teacher's
+  grade, and the teacher's grade replaces it. It is not teacher activity: the
+  student is not told "new from teacher".
+- When: with instant feedback as the answer is saved, or at the section lock.
+  Otherwise at submit, when the answer can no longer change. Open answers that
+  got no score earlier (OpenAI failed) are tried again at submit.
+- An answer the AI could not score waits for the teacher, as before: OpenAI
+  failed twice, or a limit was reached (3 calls per question, 40 per attempt).
+- Students see scores only where answers are shown: at once with instant
+  feedback, after submitting with feedback at the end, never with no feedback.
+- Open answers only. Spoken and image answers still go to the teacher.
+- Instant mode locks an answer once saved, for every question type, so a student
+  cannot rewrite it after the feedback. A "try again" would be a new decision.

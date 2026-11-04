@@ -167,7 +167,7 @@
           ], 'Exam mode', true)
           + `<p class="assignment-setup-note">${esc(t('Pause when students leave the tab and log focus changes.'))}</p>`
           + choices('aiCheck', draft.aiCheck ? 'on' : 'off', [['off', '', 'Off'], ['on', '', 'On']], '🤖 AI check (testing)', true)
-          + `<p class="assignment-setup-note">${esc(t('When a typed answer is marked wrong, the AI checks whether you would accept it too. With feedback after each answer, open answers get a short AI comment; you still grade them. In a listening section the AI checks when the student submits the section, using the transcript.'))}</p>`
+          + `<p class="assignment-setup-note">${esc(t('When a typed answer is marked wrong, the AI checks whether you would accept it too. Every open answer gets a score and a short comment from the AI, and you can change the score at any time. With feedback after each answer, the student sees them at once. In a listening section the AI checks when the student submits the section, using the transcript.'))}</p>`
           + (climb ? `<p class="assignment-setup-note">${esc(t('Climb uses instant feedback and keeps exam mode off.'))}</p>` : '');
       } else if (step === 3) {
         content.innerHTML = heading('04 / QUESTIONS & TIMING', 'How should the assignment run?', 'Use the full quiz, or let the questions adapt to each student.') + choices('format', draft.format, [

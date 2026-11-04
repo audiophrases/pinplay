@@ -8909,6 +8909,7 @@ function aiNoteForTeacher(ai) {
   if (!ai || typeof ai !== 'object') return '';
   if (ai.feedback) {
     const task = { done: t('task done'), partly: t('part of the task missing'), not_done: t('not the task') }[ai.task] || '';
+    if (ai.score != null) return t('🤖 AI score {score}/10 ({task}): {feedback}', { score: ai.score, task, feedback: String(ai.feedback) });
     return t('🤖 AI feedback ({task}): {feedback}', { task, feedback: String(ai.feedback) });
   }
   if (ai.ok) return ai.why ? t('🤖 Accepted by the AI check: {why}', { why: String(ai.why) }) : t('🤖 Accepted by the AI check');

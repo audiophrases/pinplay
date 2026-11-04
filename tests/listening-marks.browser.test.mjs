@@ -14,7 +14,7 @@ const names = [
   'renderStructuredCorrectionDiff', 'renderCorrectionNoteHtml', 'escapeHtmlText', 'CORRECTION_DIFF_PREFIX', 'CORRECTION_NOTE_PREFIX',
   'contextGapAcceptedFromReveal', 'normalizeTextAnswer', 'listeningOptionOrder', 'questionShuffleSeed', 'seededShuffleIndices',
   'renderInlineContextGapInputs', 'countErrorHuntRequiredTokens', 'tokenizeWords', 'listeningSectionLocked', 'listeningHeardBox',
-  'listeningStatus', 'aiNoteBox',
+  'listeningStatus', 'aiNoteBox', 'gradePointsBadge',
 ];
 let browser;
 
@@ -147,6 +147,52 @@ describe('listening section marks', { skip: !chromium && 'Install playwright to 
     assert.deepEqual(out.accepted, { boxes: [], line: '' });
     assert.deepEqual(out.open, { boxes: ['AI check⚠️ Part of the task is missingSay why he travels.Your teacher still grades this answer.'], line: '' });
     assert.deepEqual(out.teacher, { boxes: ['Teacher Feedback1000 / 1000 ptsGood idea!'], line: '' }, 'a teacher’s own feedback replaces the note');
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+
+  it('shows an AI score in the AI check, never as Teacher Feedback, until the teacher changes it', async () => {
+    const { page, errors } = await open();
+    const out = await page.evaluate(() => {
+      const attempt = live.player.assignment.state.attempt;
+      const { questions } = attempt.assignment.quiz;
+      const shown = (ai, teacherGrade) => {
+        attempt.answersByQ[6] = { ...attempt.answersByQ[6], ai, teacherGrade };
+        const el = renderListeningQuestion(questions[6], 6, true, undefined);
+        return {
+          boxes: [...el.querySelectorAll('.student-answer-reveal')].map((x) => x.textContent.trim()),
+          line: el.querySelector('.ls-q-mark')?.textContent || '',
+        };
+      };
+      const ai = { task: 'done', score: 7, feedback: 'He visits his gran: well done.' };
+      return {
+        ai: shown(ai, { graded: true, pointsAwarded: 700, correction: '', by: 'ai' }),
+        zero: shown({ task: 'not_done', score: 0, feedback: 'Say why he travels.' }, { graded: true, pointsAwarded: 0, correction: '', by: 'ai' }),
+        changed: shown(ai, { graded: true, pointsAwarded: 900, correction: '' }),
+        corrected: shown(ai, { graded: true, pointsAwarded: 900, correction: 'Nice detail.' }),
+      };
+    });
+    assert.deepEqual(out.ai, { boxes: ['AI check700 / 1000 pts✅ Task doneHe visits his gran: well done.Your teacher can change this score.'], line: '' });
+    assert.deepEqual(out.zero, { boxes: ['AI check0 / 1000 pts❌ This does not answer the taskSay why he travels.Your teacher can change this score.'], line: '' });
+    assert.deepEqual(out.changed, { boxes: ['Teacher Feedback900 / 1000 pts', 'AI check✅ Task doneHe visits his gran: well done.'], line: '' }, 'the teacher’s score, and no AI score beside it');
+    assert.deepEqual(out.corrected, { boxes: ['Teacher Feedback900 / 1000 ptsNice detail.'], line: '' });
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+
+  it('colours an AI score by how much of the question it earned, and shows none on a 0-point question', async () => {
+    const { page, errors } = await open();
+    const out = await page.evaluate(() => {
+      const note = { task: 'partly', score: 4, feedback: 'Say more.' };
+      const grade = (points) => ({ graded: true, pointsAwarded: points, by: 'ai' });
+      const badge = (box) => box.querySelector('.student-answer-reveal-title span:last-child');
+      return {
+        weak: badge(aiNoteBox(note, grade(400), 1000)).style.background,
+        half: badge(aiNoteBox(note, grade(500), 1000)).style.background,
+        free: aiNoteBox(note, grade(0), 0).querySelector('.student-answer-reveal-title').textContent,
+      };
+    });
+    assert.deepEqual(out, { weak: 'rgb(220, 38, 38)', half: 'rgb(63, 185, 80)', free: 'AI check' });
     assert.deepEqual(errors, []);
     await page.close();
   });

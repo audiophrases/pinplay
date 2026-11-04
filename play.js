@@ -1259,9 +1259,12 @@ function mapAssignmentStateToPlayerState() {
     const autoResult = autoResults.find(a => Number(a.qIndex) === idx);
 
     if (teacherGrade && teacherGrade.graded) {
+      const pointsAwarded = Number(teacherGrade.pointsAwarded || 0);
       revealedResult = {
-        correct: Number(teacherGrade.pointsAwarded || 0) > 0,
-        pointsAwarded: Number(teacherGrade.pointsAwarded || 0),
+        // 🤖 An AI score is out of the question's points: a weak answer that
+        // earns a little does not turn green.
+        correct: teacherGrade.by === 'ai' ? pointsAwarded * 2 >= Number(question?.points || 0) : pointsAwarded > 0,
+        pointsAwarded,
         correction: String(teacherGrade.correction || ''),
         correctionAudioKey: String(teacherGrade.correctionAudioKey || ''),
         graded: true,
@@ -2280,10 +2283,13 @@ async function finalizeAssignmentAttempt({ force = false } = {}) {
     let onlyLockedBlanks = locked.size > 0;
     for (let i = 0; i < totalNow; i += 1) if (!answeredNow.has(i) && !locked.has(i)) onlyLockedBlanks = false;
     closeListeningSheet();
+    // 🤖 The AI may still have open answers to read: a few seconds at most.
+    const aiTimer = att?.assignment?.aiCheck && !live.player.game
+      ? setTimeout(() => setJoinStatusHud(t('Checking your answers…'), 'ok'), 700) : null;
     const data = await api('/api/assignment/submit', {
       method: 'POST',
       body: { code, attemptId, force: !!force || onlyLockedBlanks },
-    });
+    }).finally(() => clearTimeout(aiTimer));
 
     live.player.assignment.state = { attempt: data?.attempt || live.player.assignment.state?.attempt || null };
     if (live.player.game) {
@@ -3766,7 +3772,7 @@ function renderPlayerState(state) {
     if (!wrap) return;
     wrap.querySelectorAll('[data-join-ai-note="1"]').forEach((el) => el.remove());
     if (!note || String(rrNow?.correction || '').trim() || rrNow?.correctionAudioKey) return;
-    const box = aiNoteBox(note);
+    const box = aiNoteBox(note, rrNow?.teacherGrade, Number(state?.question?.points || 0));
     if (!box) return;
     box.dataset.joinAiNote = '1';
     const submissionWrap = document.getElementById('joinSubmission');
@@ -4084,6 +4090,9 @@ function renderPlayerState(state) {
           if (state.question.type === 'error_hunt' && state.correctAnswer) {
             feedback += t(' · Correct: {answer}', { answer: state.correctAnswer });
           }
+          // 🤖 An AI score is a mark, not right or wrong.
+          const possiblePts = Number(state.question.points || 0);
+          if (rr.teacherGrade?.by === 'ai') feedback = possiblePts > 0 ? t('🤖 AI score: {points} / {total}', { points: pts, total: possiblePts }) : `🤖 ${t('AI check')}`;
           setJoinStatusHud(feedback, rr.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
 
@@ -5111,14 +5120,17 @@ function buildCorrectionDiffHtml(correction, original) {
 }
 
 // 🤖 What the AI check tells the student about an answer, or null. Used by the
-// one-question screen and the listening sheet.
-function aiNoteBox(note) {
+// one-question screen and the listening sheet. `grade`: the answer's grade, the
+// AI's own while the teacher has not changed it.
+function aiNoteBox(note, grade = null, possiblePts = 0) {
+  const aiScored = !!note.feedback && grade?.by === 'ai';
   const lines = [];
   if (note.feedback) {
     const task = { done: t('✅ Task done'), partly: t('⚠️ Part of the task is missing'), not_done: t('❌ This does not answer the task') }[note.task];
     if (task) lines.push({ text: task, strong: true });
     lines.push({ text: String(note.feedback) });
-    lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
+    if (aiScored) lines.push({ text: t('Your teacher can change this score.'), muted: true });
+    else if (!grade?.graded) lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
   } else if (!note.ok && note.why) {
     // An answer the AI accepted is graded right like any other: no note.
     // A refused one gets its reason.
@@ -5130,7 +5142,13 @@ function aiNoteBox(note) {
   box.setAttribute('role', 'status');
   const title = document.createElement('div');
   title.className = 'student-answer-reveal-title';
-  title.textContent = t('AI check');
+  const titleText = document.createElement('span');
+  titleText.textContent = t('AI check');
+  title.appendChild(titleText);
+  if (aiScored && possiblePts > 0) {
+    const earnedPts = Number(grade.pointsAwarded || 0);
+    title.appendChild(gradePointsBadge(earnedPts, possiblePts, earnedPts * 2 >= possiblePts));
+  }
   const content = document.createElement('div');
   content.className = 'student-answer-reveal-content';
   lines.forEach((line) => {
@@ -5142,6 +5160,21 @@ function aiNoteBox(note) {
   });
   box.append(title, content);
   return box;
+}
+
+function gradePointsBadge(earnedPts, possiblePts, positive = earnedPts > 0) {
+  const scoreBadge = document.createElement('span');
+  scoreBadge.style.background = positive ? '#3fb950' : '#dc2626';
+  scoreBadge.style.color = 'white';
+  scoreBadge.style.borderRadius = '999px';
+  scoreBadge.style.padding = '2px 10px';
+  scoreBadge.style.fontSize = '0.78rem';
+  scoreBadge.style.fontWeight = '700';
+  scoreBadge.style.letterSpacing = '0.02em';
+  scoreBadge.textContent = possiblePts > 0
+    ? `${earnedPts} / ${possiblePts} pts`
+    : `${earnedPts} pts`;
+  return scoreBadge;
 }
 
 // The teacher's feedback under an answer: red-tinted, the points as a badge,
@@ -5172,19 +5205,7 @@ function teacherFeedbackBox(grade, possiblePts, studentText) {
 
   const earnedPts = Number(grade?.pointsAwarded || 0);
   if (Number.isFinite(earnedPts) && (possiblePts > 0 || earnedPts !== 0)) {
-    const scoreBadge = document.createElement('span');
-    const positive = earnedPts > 0;
-    scoreBadge.style.background = positive ? '#3fb950' : '#dc2626';
-    scoreBadge.style.color = 'white';
-    scoreBadge.style.borderRadius = '999px';
-    scoreBadge.style.padding = '2px 10px';
-    scoreBadge.style.fontSize = '0.78rem';
-    scoreBadge.style.fontWeight = '700';
-    scoreBadge.style.letterSpacing = '0.02em';
-    scoreBadge.textContent = possiblePts > 0
-      ? `${earnedPts} / ${possiblePts} pts`
-      : `${earnedPts} pts`;
-    title.appendChild(scoreBadge);
+    title.appendChild(gradePointsBadge(earnedPts, possiblePts));
   }
   p.appendChild(title);
 
@@ -10004,11 +10025,13 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
     const stored = isLive ? null : live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)];
     const grade = isLive ? mark?.liveTeacher : stored?.teacherGrade;
     // 🤖 As on the one-question screen, a teacher's own feedback replaces the note.
-    const aiNote = stored?.ai && !String(grade?.correction || '').trim() && !grade?.correctionAudioKey ? aiNoteBox(stored.ai) : null;
+    const aiNote = stored?.ai && !String(grade?.correction || '').trim() && !grade?.correctionAudioKey
+      ? aiNoteBox(stored.ai, grade, Number(q.points || 0)) : null;
     if (mark && !teacherOnly) markListeningAnswer(card, q, mark);
     // As on the one-question screen: an open answer always shows its grade,
     // an auto-marked one only when the teacher wrote or recorded something.
-    if (grade?.graded && (teacherOnly || grade.correction || grade.correctionAudioKey)) {
+    // An AI score shows in its note instead.
+    if (grade?.graded && grade.by !== 'ai' && (teacherOnly || grade.correction || grade.correctionAudioKey)) {
       const studentText = typeof saved === 'object' && saved ? String(saved.rewrite || '') : String(saved ?? '');
       const box = teacherFeedbackBox(grade, Number(q.points || 0), studentText);
       box.classList.add('ls-reveal');
