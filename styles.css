@@ -3437,7 +3437,9 @@ button.review-retake-attempt-row:active {
   margin: 0;
 }
 
-.assignment-archived {
+/* Just the row: results opened inside an archived assignment stay readable. */
+.assignment-archived > .assignment-header,
+.assignment-archived > .assignment-actions {
   opacity: 0.72;
 }
 
@@ -3500,6 +3502,17 @@ button.review-retake-attempt-row:active {
 
 .assignment-item.expanded .assignment-actions {
   display: flex;
+}
+
+.assignment-review-panel {
+  display: none;
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(99, 102, 241, 0.25);
+}
+
+.assignment-item.expanded > .assignment-review-panel {
+  display: block;
 }
 
 #toggleArchivedAssignmentsBtn.has-pending {

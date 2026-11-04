@@ -55,6 +55,7 @@ describe('saving grades without losing the current position or other edits', { s
       }));
       window.assignment = { code: 'EXAM123', title: 'Exam' };
       window.assignmentResultsCache = { code: 'EXAM123', data: { assignment, attempts: structuredClone(serverAttempts) } };
+      window.assignmentResultsOpenCode = 'EXAM123';
       window.calls = [];
       window.api = async (route, { body }) => {
         calls.push({ route, body });

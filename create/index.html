@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261020-assignment-keyboard" />
+    <link rel="stylesheet" href="../styles.css?v=20261104-inline-results" />
   </head>
   <body>
     <header class="topbar">
@@ -845,37 +845,40 @@
                     </div>
                   </div>
                   <ul id="assignmentList" class="list"></ul>
-                  <div class="row gap top-space" style="flex-wrap:wrap;">
-                    <p id="assignmentResultsSummary" class="small muted" style="margin:0;" data-i18n>Select assignment to view results.</p>
-                    <select id="assignmentResultsFilter" style="max-width:180px;" title="Filter attempts" aria-label="Filter attempts" data-i18n-title data-i18n-aria>
-                      <option value="all" data-i18n>All attempts</option>
-                      <option value="pending" data-i18n>Pending grading</option>
-                      <option value="submitted" data-i18n>Submitted only</option>
-                      <option value="fully-answered" data-i18n>Fully answered</option>
-                      <option value="notified" data-i18n>Notified</option>
-                      <option value="not-notified" data-i18n>Not notified</option>
-                    </select>
-                    <select id="assignmentResultsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class" data-i18n-title data-i18n-aria>
-                      <option value="" data-i18n>All classes</option>
-                    </select>
-                    <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts" data-i18n-title>
-                      <option value="name" data-i18n>Sort: Name (A→Z)</option>
-                      <option value="score-desc" data-i18n>Sort: Score (high→low)</option>
-                      <option value="accuracy-desc" data-i18n>Sort: Accuracy (high→low)</option>
-                      <option value="completion-desc" data-i18n>Sort: Completion (high→low)</option>
-                      <option value="latest" data-i18n>Sort: Latest activity</option>
-                      <option value="pending-desc" data-i18n>Sort: Pending grading first</option>
-                    </select>
-                    <label class="small" style="display:flex; align-items:center; gap:4px; white-space:nowrap;">
-                      <input type="checkbox" id="assignmentResultsBestOnly" /> <span data-i18n>Best per student</span>
-                    </label>
-                    <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)" data-i18n-title data-i18n>Grade by Question</button>
-                    <button id="gradeByStudentBtn" class="btn" type="button" title="Grade all questions for one student at a time (per-student focus mode)" data-i18n-title data-i18n>Grade by Student</button>
-                    <button id="aiGradePackAssignmentBtn" class="btn" type="button" title="Build a ZIP + prompt to grade with an AI, or import an AI response" data-i18n-title data-i18n>Grade with AI</button>
+                  <!-- Results and grading. "View results" moves this into that assignment's row; it only shows there. -->
+                  <div id="assignmentReviewPanel" class="assignment-review-panel">
+                    <div class="row gap" style="flex-wrap:wrap;">
+                      <p id="assignmentResultsSummary" class="small muted" style="margin:0;"></p>
+                      <select id="assignmentResultsFilter" style="max-width:180px;" title="Filter attempts" aria-label="Filter attempts" data-i18n-title data-i18n-aria>
+                        <option value="all" data-i18n>All attempts</option>
+                        <option value="pending" data-i18n>Pending grading</option>
+                        <option value="submitted" data-i18n>Submitted only</option>
+                        <option value="fully-answered" data-i18n>Fully answered</option>
+                        <option value="notified" data-i18n>Notified</option>
+                        <option value="not-notified" data-i18n>Not notified</option>
+                      </select>
+                      <select id="assignmentResultsClassFilter" style="max-width:160px;" title="Filter by class" aria-label="Filter by class" data-i18n-title data-i18n-aria>
+                        <option value="" data-i18n>All classes</option>
+                      </select>
+                      <select id="assignmentResultsSort" style="max-width:220px;" title="Sort attempts" data-i18n-title>
+                        <option value="name" data-i18n>Sort: Name (A→Z)</option>
+                        <option value="score-desc" data-i18n>Sort: Score (high→low)</option>
+                        <option value="accuracy-desc" data-i18n>Sort: Accuracy (high→low)</option>
+                        <option value="completion-desc" data-i18n>Sort: Completion (high→low)</option>
+                        <option value="latest" data-i18n>Sort: Latest activity</option>
+                        <option value="pending-desc" data-i18n>Sort: Pending grading first</option>
+                      </select>
+                      <label class="small" style="display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                        <input type="checkbox" id="assignmentResultsBestOnly" /> <span data-i18n>Best per student</span>
+                      </label>
+                      <button id="gradeByQuestionBtn" class="btn" type="button" title="Grade one question across all attempts (per-question focus mode)" data-i18n-title data-i18n>Grade by Question</button>
+                      <button id="gradeByStudentBtn" class="btn" type="button" title="Grade all questions for one student at a time (per-student focus mode)" data-i18n-title data-i18n>Grade by Student</button>
+                      <button id="aiGradePackAssignmentBtn" class="btn" type="button" title="Build a ZIP + prompt to grade with an AI, or import an AI response" data-i18n-title data-i18n>Grade with AI</button>
+                    </div>
+                    <ul id="assignmentResultsList" class="list"></ul>
+                    <p id="assignmentGradingSummary" class="small muted top-space" data-i18n>Open an attempt to grade teacher-graded answers.</p>
+                    <ul id="assignmentGradingList" class="list"></ul>
                   </div>
-                  <ul id="assignmentResultsList" class="list"></ul>
-                  <p id="assignmentGradingSummary" class="small muted top-space" data-i18n>Open an attempt to grade teacher-graded answers.</p>
-                  <ul id="assignmentGradingList" class="list"></ul>
                 </div>
               </div>
             </div>
@@ -954,7 +957,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261104-ai-score"></script>
+    <script src="../i18n-fr.js?v=20261104-inline-results"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -966,7 +969,7 @@
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261025-studio-link"></script>
     <script src="../assignment-setup.js?v=20261104-ai-score"></script>
-    <script src="../app.js?v=20261104-ai-score"></script>
+    <script src="../app.js?v=20261104-inline-results"></script>
     <script src="../voice-trim.js?v=20261104-record-finish"></script>
     <script src="../voice-actors.js?v=20261104-record-finish"></script>
     <script src="../listening-workspace.js?v=20261029-listening-prompt"></script>

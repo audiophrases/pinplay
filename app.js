@@ -473,8 +473,11 @@ const refreshAssignmentsBtn = document.getElementById('refreshAssignmentsBtn');
 const toggleArchivedAssignmentsBtn = document.getElementById('toggleArchivedAssignmentsBtn');
 let showArchivedAssignments = false;
 let assignmentsListCache = [];
+let assignmentExpandedCode = ''; // the row open in the assignments list
+let assignmentResultsOpenCode = ''; // the assignment whose results are open in its row
 const assignmentStatusEl = document.getElementById('assignmentStatus');
 const assignmentListEl = document.getElementById('assignmentList');
+const assignmentReviewPanelEl = document.getElementById('assignmentReviewPanel');
 const assignmentResultsSummaryEl = document.getElementById('assignmentResultsSummary');
 const assignmentResultsFilterEl = document.getElementById('assignmentResultsFilter');
 const assignmentResultsClassFilterEl = document.getElementById('assignmentResultsClassFilter');
@@ -12018,14 +12021,17 @@ function openNotifyModal(safeCode, assignment, attempts, onAfterMarked) {
   setTimeout(() => subjectInput.focus(), 10);
 }
 
-async function fetchAssignmentResults(code) {
+// quiet: refresh what is on screen, leaving the rows and the scroll position.
+async function fetchAssignmentResults(code, { quiet = false } = {}) {
   try {
     const safeCode = String(code || '').trim().toUpperCase();
     if (!safeCode) throw new Error('Assignment code required.');
     if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
 
-    if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = t("Loading results for {p1}...", { p1: safeCode });
-    if (assignmentResultsListEl) assignmentResultsListEl.innerHTML = '';
+    if (!quiet) {
+      if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = t("Loading results for {p1}...", { p1: safeCode });
+      if (assignmentResultsListEl) assignmentResultsListEl.innerHTML = '';
+    }
 
     const data = await api('/api/assignments/results', {
       method: 'POST',
@@ -12035,12 +12041,16 @@ async function fetchAssignmentResults(code) {
       },
     });
 
+    // Closed, or another assignment's results opened, while this was loading.
+    if (assignmentResultsOpenCode !== safeCode) return;
+
     assignmentResultsCache = { code: safeCode, data };
     renderAssignmentResults(safeCode, data);
     enrichAssignmentAttemptsWithClass(safeCode, data).catch(() => {});
 
-    const scrollTarget = assignmentResultsSummaryEl?.parentElement || assignmentResultsSummaryEl;
-    if (scrollTarget) {
+    // From the assignment's title: it says whose results these are.
+    const scrollTarget = assignmentResultsSummaryEl?.closest('.assignment-item') || assignmentResultsSummaryEl?.parentElement;
+    if (scrollTarget && !quiet) {
       requestAnimationFrame(() => {
         scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
@@ -12048,6 +12058,38 @@ async function fetchAssignmentResults(code) {
   } catch (err) {
     if (assignmentResultsSummaryEl) assignmentResultsSummaryEl.textContent = t("Results error: {p1}", { p1: err.message });
   }
+}
+
+function resetAssignmentGrading() {
+  if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
+  if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('Open an attempt to grade teacher-graded answers.');
+}
+
+function closeAssignmentResults() {
+  assignmentResultsOpenCode = '';
+  if (assignmentListEl && assignmentReviewPanelEl) assignmentListEl.after(assignmentReviewPanelEl);
+}
+
+// The results and grading panel is one block of the page: it moves into the row
+// of the assignment it shows, so the attempts open right under that assignment.
+function toggleAssignmentResults(code, li) {
+  if (code === assignmentResultsOpenCode) {
+    closeAssignmentResults();
+  } else {
+    // Grading stays open when the same results are closed and reopened, but
+    // another assignment's grading must not appear under this one.
+    if (assignmentResultsCache?.code !== code) {
+      assignmentResultsCache = null;
+      resetAssignmentGrading();
+    }
+    assignmentResultsOpenCode = code;
+    if (assignmentReviewPanelEl) li.append(assignmentReviewPanelEl);
+    fetchAssignmentResults(code);
+  }
+  assignmentListEl?.querySelectorAll('.assignment-item').forEach((item) => {
+    const btn = item.querySelector('[data-results-toggle]');
+    if (btn) btn.textContent = t(item.dataset.code === assignmentResultsOpenCode ? 'Hide results' : 'View results');
+  });
 }
 
 async function enrichAssignmentAttemptsWithClass(safeCode, data) {
@@ -12099,8 +12141,7 @@ async function refreshAssignmentsList() {
     if (refreshAssignmentsBtn) refreshAssignmentsBtn.disabled = true;
     assignmentResultsCache = null;
     if (assignmentListEl) assignmentListEl.innerHTML = '';
-    if (assignmentGradingListEl) assignmentGradingListEl.innerHTML = '';
-    if (assignmentGradingSummaryEl) assignmentGradingSummaryEl.textContent = t('Open an attempt to grade teacher-graded answers.');
+    resetAssignmentGrading();
 
     const data = await api('/api/assignments/list', {
       method: 'POST',
@@ -12112,7 +12153,11 @@ async function refreshAssignmentsList() {
 
     const rawList = Array.isArray(data?.assignments) ? data.assignments : [];
     assignmentsListCache = rawList.filter(a => a?.className !== '__preview__');
+    const resultsCode = assignmentResultsOpenCode;
+    const resultsStillListed = assignmentsListCache.some((a) => a?.code === resultsCode);
+    if (!resultsStillListed) closeAssignmentResults();
     renderAssignmentsList();
+    if (resultsStillListed) fetchAssignmentResults(resultsCode, { quiet: true });
   } catch (err) {
     if (assignmentStatusEl) assignmentStatusEl.textContent = t("Assignment list error: {p1}", { p1: err.message });
   } finally {
@@ -12170,12 +12215,15 @@ function buildAssignmentListItem(a) {
   li.classList.add('assignment-item');
   li.dataset.code = code;
   if (a?.archived) li.classList.add('assignment-archived');
+  // A refresh rebuilds every row; the open one stays open.
+  const isExpanded = code === assignmentExpandedCode;
+  li.classList.toggle('expanded', isExpanded);
 
   const header = document.createElement('div');
   header.className = 'assignment-header';
   header.setAttribute('role', 'button');
   header.setAttribute('tabindex', '0');
-  header.setAttribute('aria-expanded', 'false');
+  header.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
 
   const headerText = document.createElement('div');
   headerText.className = 'assignment-header-text';
@@ -12233,6 +12281,9 @@ function buildAssignmentListItem(a) {
 
   const toggleExpand = () => {
     const wasOpen = li.classList.contains('expanded');
+    // Closing the other row can take a long results list away from above this
+    // one, so hold this row where the teacher just clicked it.
+    const headerTop = header.getBoundingClientRect().top;
     if (assignmentListEl) {
       assignmentListEl.querySelectorAll('.assignment-item.expanded').forEach((el) => {
         if (el !== li) {
@@ -12244,6 +12295,9 @@ function buildAssignmentListItem(a) {
     }
     li.classList.toggle('expanded', !wasOpen);
     header.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
+    assignmentExpandedCode = wasOpen ? '' : code;
+    const shift = header.getBoundingClientRect().top - headerTop;
+    if (shift) window.scrollBy({ top: shift, behavior: 'instant' });
   };
   header.addEventListener('click', toggleExpand);
   header.addEventListener('keydown', (ev) => {
@@ -12278,10 +12332,9 @@ function buildAssignmentListItem(a) {
 
   const viewResultsBtn = document.createElement('button');
   viewResultsBtn.className = 'btn';
-  viewResultsBtn.textContent = t('View results');
-  viewResultsBtn.addEventListener('click', () => {
-    fetchAssignmentResults(code);
-  });
+  viewResultsBtn.dataset.resultsToggle = '1';
+  viewResultsBtn.textContent = t(code === assignmentResultsOpenCode ? 'Hide results' : 'View results');
+  viewResultsBtn.addEventListener('click', () => toggleAssignmentResults(code, li));
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'btn';
@@ -12400,6 +12453,7 @@ function buildAssignmentListItem(a) {
   }
   row.append(...actions, archiveBtn, deleteBtn);
   li.append(header, row);
+  if (code === assignmentResultsOpenCode && assignmentReviewPanelEl) li.append(assignmentReviewPanelEl);
   return li;
 }
 
