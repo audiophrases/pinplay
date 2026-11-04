@@ -14,7 +14,7 @@ const names = [
   'renderStructuredCorrectionDiff', 'renderCorrectionNoteHtml', 'escapeHtmlText', 'CORRECTION_DIFF_PREFIX', 'CORRECTION_NOTE_PREFIX',
   'contextGapAcceptedFromReveal', 'normalizeTextAnswer', 'listeningOptionOrder', 'questionShuffleSeed', 'seededShuffleIndices',
   'renderInlineContextGapInputs', 'countErrorHuntRequiredTokens', 'tokenizeWords', 'listeningSectionLocked', 'listeningHeardBox',
-  'listeningStatus',
+  'listeningStatus', 'aiNoteBox',
 ];
 let browser;
 
@@ -119,6 +119,34 @@ describe('listening section marks', { skip: !chromium && 'Install playwright to 
     assert.deepEqual(await card(page, 8), { options: {}, inputs: [''], pills: [], boxes: [], line: 'Not answered' });
     // A teacher's comment on an auto-marked answer joins its colour.
     assert.deepEqual(await card(page, 9), { options: {}, inputs: ['correct-highlight'], pills: [], boxes: ['Teacher Feedback1000 / 1000 ptsMonday: mind the spelling.'], line: '' });
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+
+  it('shows the AI check under the marks: a reason, or feedback, and nothing for an accepted answer', async () => {
+    const { page, errors } = await open();
+    const out = await page.evaluate(() => {
+      const attempt = live.player.assignment.state.attempt;
+      const { questions } = attempt.assignment.quiz;
+      const shown = (i, note, mark) => {
+        attempt.answersByQ[i].ai = note;
+        const el = renderListeningQuestion(questions[i], i, true, mark);
+        return {
+          boxes: [...el.querySelectorAll('.student-answer-reveal')].map((x) => x.textContent.trim()),
+          line: el.querySelector('.ls-q-mark')?.textContent || '',
+        };
+      };
+      return {
+        refused: shown(3, { ok: false, why: 'Platform 4 is not the one.' }, { qIndex: 3, correct: false, correctAnswer: 'platform 5' }),
+        accepted: shown(3, { ok: true, why: 'Same meaning.' }, { qIndex: 3, correct: true, correctAnswer: 'platform 5' }),
+        open: shown(6, { task: 'partly', feedback: 'Say why he travels.' }),
+        teacher: shown(7, { task: 'done', feedback: 'Well done.' }),
+      };
+    });
+    assert.deepEqual(out.refused, { boxes: ['Correct Answerplatform 5', 'AI checkPlatform 4 is not the one.'], line: '' });
+    assert.deepEqual(out.accepted, { boxes: [], line: '' });
+    assert.deepEqual(out.open, { boxes: ['AI check⚠️ Part of the task is missingSay why he travels.Your teacher still grades this answer.'], line: '' });
+    assert.deepEqual(out.teacher, { boxes: ['Teacher Feedback1000 / 1000 ptsGood idea!'], line: '' }, 'a teacher’s own feedback replaces the note');
     assert.deepEqual(errors, []);
     await page.close();
   });

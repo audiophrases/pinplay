@@ -3766,35 +3766,9 @@ function renderPlayerState(state) {
     if (!wrap) return;
     wrap.querySelectorAll('[data-join-ai-note="1"]').forEach((el) => el.remove());
     if (!note || String(rrNow?.correction || '').trim() || rrNow?.correctionAudioKey) return;
-    const lines = [];
-    if (note.feedback) {
-      const task = { done: t('✅ Task done'), partly: t('⚠️ Part of the task is missing'), not_done: t('❌ This does not answer the task') }[note.task];
-      if (task) lines.push({ text: task, strong: true });
-      lines.push({ text: String(note.feedback) });
-      lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
-    } else if (!note.ok && note.why) {
-      // An answer the AI accepted is graded right like any other: no note.
-      // A refused one gets its reason.
-      lines.push({ text: String(note.why) });
-    }
-    if (!lines.length) return;
-    const box = document.createElement('div');
+    const box = aiNoteBox(note);
+    if (!box) return;
     box.dataset.joinAiNote = '1';
-    box.className = 'student-answer-reveal ai-note-reveal';
-    box.setAttribute('role', 'status');
-    const title = document.createElement('div');
-    title.className = 'student-answer-reveal-title';
-    title.textContent = t('AI check');
-    const content = document.createElement('div');
-    content.className = 'student-answer-reveal-content';
-    lines.forEach((line) => {
-      const el = document.createElement('div');
-      el.textContent = line.text;
-      if (line.strong) el.style.fontWeight = '700';
-      if (line.muted) el.className = 'small muted';
-      content.appendChild(el);
-    });
-    box.append(title, content);
     const submissionWrap = document.getElementById('joinSubmission');
     if (wrap.id === 'joinQuestionInteractive' && submissionWrap) wrap.insertBefore(box, submissionWrap);
     else wrap.appendChild(box);
@@ -5134,6 +5108,40 @@ function buildCorrectionDiffHtml(correction, original) {
     }).join('');
   }
   return html + renderCorrectionNoteHtml(note);
+}
+
+// 🤖 What the AI check tells the student about an answer, or null. Used by the
+// one-question screen and the listening sheet.
+function aiNoteBox(note) {
+  const lines = [];
+  if (note.feedback) {
+    const task = { done: t('✅ Task done'), partly: t('⚠️ Part of the task is missing'), not_done: t('❌ This does not answer the task') }[note.task];
+    if (task) lines.push({ text: task, strong: true });
+    lines.push({ text: String(note.feedback) });
+    lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
+  } else if (!note.ok && note.why) {
+    // An answer the AI accepted is graded right like any other: no note.
+    // A refused one gets its reason.
+    lines.push({ text: String(note.why) });
+  }
+  if (!lines.length) return null;
+  const box = document.createElement('div');
+  box.className = 'student-answer-reveal ai-note-reveal';
+  box.setAttribute('role', 'status');
+  const title = document.createElement('div');
+  title.className = 'student-answer-reveal-title';
+  title.textContent = t('AI check');
+  const content = document.createElement('div');
+  content.className = 'student-answer-reveal-content';
+  lines.forEach((line) => {
+    const el = document.createElement('div');
+    el.textContent = line.text;
+    if (line.strong) el.style.fontWeight = '700';
+    if (line.muted) el.className = 'small muted';
+    content.appendChild(el);
+  });
+  box.append(title, content);
+  return box;
 }
 
 // The teacher's feedback under an answer: red-tinted, the points as a badge,
@@ -9993,7 +10001,10 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
     const answered = listeningAnswered(saved);
     const isLive = listeningSheet.mode === 'live';
     const teacherOnly = !!mark?.liveTeacher || q.type === 'open';
-    const grade = isLive ? mark?.liveTeacher : live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)]?.teacherGrade;
+    const stored = isLive ? null : live.player.assignment.state?.attempt?.answersByQ?.[String(qIndex)];
+    const grade = isLive ? mark?.liveTeacher : stored?.teacherGrade;
+    // 🤖 As on the one-question screen, a teacher's own feedback replaces the note.
+    const aiNote = stored?.ai && !String(grade?.correction || '').trim() && !grade?.correctionAudioKey ? aiNoteBox(stored.ai) : null;
     if (mark && !teacherOnly) markListeningAnswer(card, q, mark);
     // As on the one-question screen: an open answer always shows its grade,
     // an auto-marked one only when the teacher wrote or recorded something.
@@ -10002,12 +10013,16 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       const box = teacherFeedbackBox(grade, Number(q.points || 0), studentText);
       box.classList.add('ls-reveal');
       card.appendChild(box);
-    } else if (teacherOnly && answered) {
+    } else if (teacherOnly && answered && !aiNote) {
       fb.textContent = t('Your teacher will mark this one.');
     } else if (!mark && !answered && !(isLive && !listeningSheet.live?.closed)) {
       fb.textContent = t('Not answered');
     }
     if (fb.textContent) card.appendChild(fb);
+    if (aiNote) {
+      aiNote.classList.add('ls-reveal');
+      card.appendChild(aiNote);
+    }
     // Live correction: the words of the moment, once the teacher shows them.
     const heard = listeningSheet.mode === 'live' ? listeningSheet.live?.heard?.[qIndex] : null;
     if (Array.isArray(heard) && heard.length) card.appendChild(listeningHeardBox(heard));
@@ -10302,8 +10317,17 @@ async function submitListeningSection(info) {
     }
     const code = String(live.player.assignment.code || '').trim();
     const attemptId = String(live.player.assignment.attemptId || '').trim();
-    const data = await api('/api/assignment/submit-section', { method: 'POST', body: { code, attemptId, sectionId: info.section.id } });
     const st = live.player.assignment.state;
+    // 🤖 The AI reads the section before it locks: a few seconds, nothing more to type.
+    const aiCheck = !!st.attempt?.assignment?.aiCheck;
+    const held = aiCheck ? [...sheet.querySelectorAll('.ls-q, .ls-actions')] : [];
+    held.forEach((el) => { el.inert = true; });
+    const aiTimer = aiCheck ? setTimeout(() => listeningStatus(t('Checking your answers…')), 700) : null;
+    const data = await api('/api/assignment/submit-section', { method: 'POST', body: { code, attemptId, sectionId: info.section.id } })
+      .finally(() => {
+        clearTimeout(aiTimer);
+        held.forEach((el) => { el.inert = false; });
+      });
     if (data?.attempt) st.attempt = data.attempt;
     // Instant feedback on the quiz's last part: show the marks on the sheet
     // first; Continue then opens the end-of-quiz screen.

@@ -188,6 +188,32 @@ describe('listening submission requires an explicit confirmation', { skip: !chro
     });
   }
 
+  it('AI check: nothing can be changed while the AI reads the section, and a failure hands it back', async () => {
+    const { page, errors } = await open({ filled: true });
+    await page.evaluate(() => {
+      live.player.assignment.state.attempt.assignment.aiCheck = true;
+      const plain = window.api;
+      window.api = async (route, opts) => {
+        if (route.endsWith('/submit-section')) await new Promise((resolve) => { window.finishSubmit = resolve; });
+        return plain(route, opts);
+      };
+    });
+    await submitButton(page).click();
+    await page.getByRole('dialog').waitFor();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => typeof finishSubmit === 'function');
+    await page.waitForFunction(() => document.querySelector('.ls-status').textContent === 'Checking your answers…');
+    const held = () => page.evaluate(() => [...document.querySelectorAll('.ls-q, .ls-actions')].map((el) => el.inert));
+    assert.ok((await held()).every(Boolean));
+    await page.evaluate(() => { window.failSubmit = true; finishSubmit(); });
+    await page.waitForFunction(() => !listeningSheet.busy);
+    assert.equal(await page.locator('.ls-status').textContent(), 'Connection lost');
+    assert.ok((await held()).every((inert) => !inert));
+    assert.equal(await page.locator('.ls-q[data-q-index="0"] input').isDisabled(), false);
+    await assertClean(page, errors);
+  });
+
   it('a refresh with all drafts answered keeps the same editable sheet and focused unfinished sentence', async () => {
     const { page, errors } = await open({ filled: true });
     const input = page.locator('.ls-q[data-q-index="0"] input');

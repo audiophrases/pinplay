@@ -648,3 +648,22 @@ range requests to the media route (about a dozen per correction).
   and stripped, the guess (4 of 4 linked), Check → Change, Auto (moment 5.0 →
   9.4 s, then the words, then "You heard" on the wrong phone only) and Manual
   (nothing on reveal, P plays, T shows).
+
+
+## 13. 🤖 AI check in a section (built 2026-11-04)
+
+The assignment setting `aiCheck` covers listening sections too, in homework
+only (never live or public games).
+
+| Question | Decision (owner, 2026-11-04) |
+|---|---|
+| When it runs | Once, when the section locks. The sheet autosaves at every pause in typing, and instant marks wait for the lock, so a look at each save would pay for half-typed words and show verdicts early. |
+| Order | The AI comes **before** the lock: closing an adaptive block fixes its score and level. If OpenAI fails, the section locks with the usual marks. |
+| Synonyms | **Accepted**, like everywhere else: the student understood. The accepted answers still decide what is right, and the recording only helps judge the meaning: a wrong detail it mentions stays wrong. If the section's instruction asks for the exact words heard, only other forms of those words count. |
+| What the AI reads | The section's instruction and the recording's words. A typed answer: the moment it is heard, else the transcript. An open answer: the transcript, else the moment. These go to OpenAI only, never to a student. |
+| Marks | All together on the locked sheet: an accepted answer is green with no note, a refused one has its reason under the correct answer, an open one its feedback. A teacher's own feedback replaces the note. |
+
+Other feedback modes: answers are still accepted at the lock, so the grade does
+not depend on the mode; notes wait for the answers; open answers get no comment.
+Submitting the whole assignment reads any section left open. Teacher's "release
+grades" on an unfinished attempt does not: the student never handed it in.

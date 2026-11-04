@@ -310,10 +310,321 @@ it('created assignments are off unless asked for', async () => {
 
 it('a per-attempt ceiling stops the calls', async () => {
   const saved = attempt('s1');
-  saved.aiUse = { calls: 25 };
+  saved.aiUse = { calls: 40 };
   await storage.put(`a:${code}:t:s1`, saved);
   await answer('s1', 0, 'little');
   assert.equal(calls.length, 0);
+});
+
+// 🎧 Listening sections autosave, so the AI reads them once, as the section locks.
+const transcript = 'Tom: I bought a bike.\nAna: A car? No, a van.';
+const listeningQuiz = () => ({ title: 'Listening', questions: [
+  { id: 'l1', type: 'text', prompt: 'What did Tom buy?', points: 1000, accepted: ['a bike'], listeningSection: 'p1', heard: { from: 0, to: 0 } },
+  { id: 'l2', type: 'context_gap', prompt: 'Ana says a ____.', points: 1000, gaps: ['van'], listeningSection: 'p1' },
+  { id: 'l3', type: 'open', prompt: 'What does Tom say?', points: 1000, listeningSection: 'p1', heard: { from: 0, to: 0 } },
+  { id: 'l4', type: 'mcq', prompt: 'Pick one', points: 1000, answers: [{ text: 'a', correct: true }, { text: 'b', correct: false }], listeningSection: 'p1' },
+], listeningSections: [{
+  id: 'p1', title: 'Part 1', text: 'Listen and answer.', audio: { kind: 'file', url: 'https://example.com/p1.mp3' }, playsAllowed: 0, pauseAllowed: true,
+  transcript, cues: [{ s: 1, e: 2, who: 'Tom', text: 'I bought a bike.' }, { s: 3, e: 4, who: 'Ana', text: 'A car? No, a van.' }],
+}] });
+const useListening = (extra = {}) => storage.put(`ab:${code}`, assignment({ quiz: listeningQuiz(), ...extra }));
+const submitSection = (attemptId, sectionId = 'p1') => call('/api/assignment/submit-section', { code, attemptId, sectionId });
+
+it('listening: autosaves never reach the AI, whatever is typed', async () => {
+  await useListening();
+  const res = await answer('s1', 0, 'a bicycle');
+  await answer('s1', 2, 'Tom says he bought a bike.');
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 0);
+  assert.equal(correctness(res, 0), undefined);
+  assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
+});
+
+it('listening: Submit section accepts a synonym, with the recording to read, and the mark is right at once', async () => {
+  await useListening();
+  reply = () => ({ ok: [true], why: '"Bicycle" means the same as "bike".' });
+  await answer('s1', 0, 'a bicycle');
+  await answer('s1', 3, 0);
+  assert.equal(calls.length, 0);
+  const res = await submitSection('s1');
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].input, {
+    type: 'text', question: 'What did Tom buy?', instruction: 'Listen and answer.', recording: 'Tom: I bought a bike.',
+    check: [{ accepted: ['a bike'], student: 'a bicycle' }],
+  });
+  assert.equal(correctness(res, 0).correct, true);
+  assert.deepEqual((await base()).quiz.questions[0].accepted, ['a bike', 'a bicycle']);
+  const saved = await storage.get(`a:${code}:t:s1`);
+  assert.ok(saved.sectionsSubmitted.p1);
+  assert.equal(saved.autoScore, 2000);
+  assert.deepEqual(saved.aiUse, { calls: 1 });
+  assert.equal((await answer('s1', 0, 'a car')).body.code, 'SECTION_SUBMITTED');
+  // The next student is graded by the accepted list.
+  await answer('s2', 0, 'A bicycle');
+  await submitSection('s2');
+  assert.equal(calls.length, 1);
+});
+
+it('the instructions keep accepted answers in charge of a listening answer', () => {
+  const src = fs.readFileSync('cloudflare/worker.js', 'utf8');
+  assert.match(src, /accepted answers still decide what is right/);
+  assert.match(src, /so a synonym is fine, but anything else the recording mentions is wrong/);
+  assert.match(src, /If the instruction asks for the exact words heard/);
+});
+
+it('listening: a refusal shows its reason only after the lock, is remembered, and the recording stays off the student page', async () => {
+  await useListening();
+  reply = () => ({ ok: [false], why: 'He did not say that.' });
+  await answer('s1', 0, 'a car');
+  const early = await state('s1');
+  assert.equal(early.body.attempt.answersByQ['0'].ai, undefined);
+  assert.equal(correctness(early, 0), undefined);
+  const res = await submitSection('s1');
+  assert.equal(correctness(res, 0).correct, false);
+  assert.equal(res.body.attempt.answersByQ['0'].ai.why, 'He did not say that.');
+  assert.equal((await state('s1')).body.attempt.answersByQ['0'].ai.ok, false);
+  assert.deepEqual((await base()).quiz.questions[0].accepted, ['a bike']);
+  await answer('s2', 0, 'A car');
+  const next = await submitSection('s2');
+  assert.equal(calls.length, 1);
+  assert.equal(next.body.attempt.answersByQ['0'].ai.ok, false);
+  for (const text of [JSON.stringify(res.body), JSON.stringify(next.body), JSON.stringify((await state('s1')).body)]) {
+    assert.ok(!text.includes('I bought a bike'), 'never the words of the recording');
+  }
+});
+
+it('listening: one wrong gap is asked about alone, right answers and choices are not', async () => {
+  await useListening();
+  reply = () => ({ ok: [true], why: 'Same meaning here.' });
+  await answer('s1', 0, 'a bike');
+  await answer('s1', 1, ['truck']);
+  await answer('s1', 3, 1);
+  await submitSection('s1');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].input.check, [{ gap: 1, accepted: ['van'], student: 'truck' }]);
+  assert.equal(calls[0].input.recording, transcript, 'no moment linked: the transcript');
+});
+
+it('listening: without a transcript the AI reads the cues; with no words at all it still checks', async () => {
+  const noText = listeningQuiz();
+  delete noText.listeningSections[0].transcript;
+  await useListening({ quiz: noText });
+  reply = () => ({ ok: [false], why: 'No.' });
+  await answer('s1', 1, ['truck']);
+  await submitSection('s1');
+  assert.equal(calls[0].input.recording, transcript);
+  const empty = listeningQuiz();
+  delete empty.listeningSections[0].transcript;
+  delete empty.listeningSections[0].cues;
+  empty.listeningSections[0].text = '';
+  await useListening({ quiz: empty });
+  await answer('s2', 0, 'a bicycle');
+  await submitSection('s2');
+  assert.deepEqual(calls[1].input, { type: 'text', question: 'What did Tom buy?', check: [{ accepted: ['a bike'], student: 'a bicycle' }] });
+});
+
+it("listening: an open answer gets feedback at the lock, with the whole transcript, and stays the teacher's", async () => {
+  await useListening();
+  reply = () => ({ task: 'partly', feedback: 'Say what Tom bought.' });
+  await answer('s1', 2, 'He talks about a car.');
+  const res = await submitSection('s1');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].input, {
+    task: 'What does Tom say?', instruction: 'Listen and answer.', recording: transcript, answer: 'He talks about a car.',
+  });
+  const note = res.body.attempt.answersByQ['2'].ai;
+  assert.equal(note.task, 'partly');
+  assert.equal(note.feedback, 'Say what Tom bought.');
+  assert.equal(res.body.attempt.metrics.pendingTeacherGradeCount, 1);
+});
+
+it('listening: the whole section is looked at together, and one failure loses only its own question', async () => {
+  await useListening();
+  reply = input => ({ ok: input.check.map(() => true), why: 'Fine.' });
+  await answer('s1', 0, 'a bicycle');
+  await answer('s1', 1, ['truck']);
+  await answer('s1', 2, 'He bought a bike yesterday.');
+  let waiting = 0;
+  let most = 0;
+  const stub = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    waiting += 1;
+    most = Math.max(most, waiting);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    waiting -= 1;
+    if (JSON.parse(JSON.parse(init.body).input).task) return new Response('{}', { status: 500 });
+    return stub(url, init);
+  };
+  try {
+    const res = await submitSection('s1');
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(most, 3, 'all at once, not one after another');
+    assert.equal(correctness(res, 0).correct, true);
+    assert.equal(correctness(res, 1).correct, true);
+    assert.equal(res.body.attempt.answersByQ['2'].ai, undefined);
+    assert.equal((await storage.get(`a:${code}:t:s1`)).aiUse.calls, 3);
+  } finally { globalThis.fetch = stub; }
+});
+
+it('listening: OpenAI trouble still locks the section, with the usual marks', async () => {
+  await useListening();
+  openAiStatus = 500;
+  await answer('s1', 0, 'a bicycle');
+  const res = await submitSection('s1');
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(correctness(res, 0).correct, false);
+  assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
+  assert.ok((await storage.get(`a:${code}:t:s1`)).sectionsSubmitted.p1);
+  assert.equal(await storage.get(`ai:${code}`), undefined);
+});
+
+it('listening: the setting off, no key, or a section already submitted: no call', async () => {
+  await useListening({ aiCheck: undefined });
+  await answer('s1', 0, 'a bicycle');
+  await submitSection('s1');
+  assert.equal(calls.length, 0);
+  await useListening();
+  await answer('s2', 0, 'a bicycle');
+  const key = env.OPENAI_API_KEY;
+  delete env.OPENAI_API_KEY;
+  try { await submitSection('s2'); } finally { env.OPENAI_API_KEY = key; }
+  assert.equal(calls.length, 0);
+  await submitSection('s1');
+  await submitSection('s2');
+  assert.equal(calls.length, 0);
+});
+
+it('listening: an answer changed while OpenAI reads the section is kept, and gets no note about the old one', async () => {
+  await useListening();
+  reply = () => ({ ok: [false], why: 'Not a bike.' });
+  await answer('s1', 0, 'a car');
+  duringCall = async () => { assert.equal((await answer('s1', 0, 'a van')).status, 200); };
+  const res = await submitSection('s1');
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const saved = await storage.get(`a:${code}:t:s1`);
+  assert.equal(saved.answersByQ['0'].answer, 'a van');
+  assert.equal(saved.answersByQ['0'].ai, undefined);
+  assert.ok(saved.sectionsSubmitted.p1);
+});
+
+it('listening: the ceiling holds when a section asks about several answers at once', async () => {
+  await useListening();
+  const saved = attempt('s1');
+  saved.aiUse = { calls: 39 };
+  await storage.put(`a:${code}:t:s1`, saved);
+  await answer('s1', 0, 'a bicycle');
+  await answer('s1', 1, ['truck']);
+  await submitSection('s1');
+  assert.equal(calls.length, 1);
+  assert.equal((await storage.get(`a:${code}:t:s1`)).aiUse.calls, 40);
+});
+
+it('listening: without instant feedback answers are still accepted, open ones get no comment, and notes wait', async () => {
+  await useListening({ feedbackMode: 'end' });
+  reply = () => ({ ok: [false], why: 'Not a bike.' });
+  await answer('s1', 0, 'a car');
+  await answer('s1', 2, 'He bought a bike yesterday.');
+  const res = await submitSection('s1');
+  assert.equal(calls.length, 1, 'the typed answer only');
+  assert.equal(calls[0].input.type, 'text');
+  assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
+  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['0'].ai.ok, false);
+  const done = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.attempt.answersByQ['0'].ai.why, 'Not a bike.');
+});
+
+it('listening: submitting the whole assignment reads a section left open, but only once it really goes through', async () => {
+  await useListening({ feedbackMode: 'end' });
+  reply = () => ({ ok: [true], why: 'Same meaning.' });
+  await answer('s1', 0, 'a bicycle');
+  const refused = await call('/api/assignment/submit', { code, attemptId: 's1' });
+  assert.equal(refused.body.code, 'UNANSWERED_REMAINING');
+  assert.equal(calls.length, 0);
+  const res = await call('/api/assignment/submit', { code, attemptId: 's1', force: true });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 1);
+  assert.equal(correctness(res, 0).correct, true);
+  const saved = await storage.get(`a:${code}:t:s1`);
+  assert.equal(saved.submitted, true);
+  assert.equal(saved.autoScore, 1000);
+  assert.deepEqual((await base()).quiz.questions[0].accepted, ['a bike', 'a bicycle']);
+});
+
+it('listening: a reopened attempt hides its notes until it is submitted again', async () => {
+  await useListening();
+  reply = () => ({ ok: [false], why: 'Not a bike.' });
+  await answer('s1', 0, 'a car');
+  await submitSection('s1');
+  const reopened = await room.fetch(new Request('https://room/assignments/reopen-attempt', { method: 'POST', body: JSON.stringify({ code, attemptId: 's1' }) }));
+  assert.equal(reopened.status, 200);
+  assert.equal((await state('s1')).body.attempt.answersByQ['0'].ai, undefined);
+  const saved = await answer('s1', 3, 0);
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.attempt.answersByQ['0'].ai, undefined);
+  const again = await submitSection('s1');
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(calls.length, 1, 'the same wrong answer is not asked about again');
+  assert.equal((await storage.get(`a:${code}:t:s1`)).answersByQ['0'].ai.ok, false);
+});
+
+it('listening: public games stay out', async () => {
+  await useListening();
+  const saved = attempt('s1');
+  saved.via = 'play';
+  await storage.put(`a:${code}:t:s1`, saved);
+  await answer('s1', 0, 'a bicycle');
+  assert.equal((await submitSection('s1')).status, 200);
+  assert.equal(calls.length, 0);
+});
+
+// Adaptive: closing a block fixes its score and level, so the AI comes first.
+async function adaptiveAttempt() {
+  const section = { id: 's1', title: 'Listening', text: 'Listen.', transcript, audio: { kind: 'file', url: 'https://example.com/audio.mp3' } };
+  const questions = ['A1', 'A2'].flatMap(cefr => [1, 2].map(n => ({
+    id: `${cefr}-${n}`, type: 'text', prompt: `${cefr} question ${n}`, points: 1000, accepted: ['bike'], cefr, listeningSection: 's1',
+  })));
+  const created = await call('/api/assignments/create', { password: teacherPassword, randomNames: true,
+    feedbackMode: 'instant', adaptive: true, adaptiveCount: 0, aiCheck: true,
+    quiz: { title: 'Adaptive listening', listeningSections: [section], questions },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const adaptiveCode = created.body.assignment.code;
+  const started = await call('/api/assignment/start', { code: adaptiveCode, studentKey: 'listener', studentName: 'Listener' });
+  assert.equal(started.status, 201, JSON.stringify(started.body));
+  return { adaptiveCode, attemptId: started.body.attempt.id };
+}
+
+it('adaptive listening: what the AI accepts counts in the section score, and its notes survive the close', async () => {
+  const { adaptiveCode, attemptId } = await adaptiveAttempt();
+  reply = input => ({ ok: [input.check[0].student === 'bicycle'], why: 'Not a bike.' });
+  const save = (qIndex, value) => call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex, answer: value });
+  assert.equal((await save(0, 'bicycle')).status, 200);
+  assert.equal((await save(1, 'car')).status, 200);
+  assert.equal(calls.length, 0);
+  const res = await call('/api/assignment/submit-section', { code: adaptiveCode, attemptId, sectionId: 's1' });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].input.recording, transcript);
+  const saved = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  assert.equal(saved.adaptive.block, null);
+  assert.equal(saved.adaptive.sectionResults[0].right, 1, 'the accepted synonym counts as right');
+  assert.equal(saved.adaptive.items.find(it => it.answer === 'car').ai.why, 'Not a bike.');
+  assert.equal(res.body.attempt.answersByQ['1'].ai.why, 'Not a bike.');
+});
+
+it('adaptive listening: submitting the whole assignment with the block open counts the AI too', async () => {
+  const { adaptiveCode, attemptId } = await adaptiveAttempt();
+  reply = () => ({ ok: [true], why: 'Same meaning.' });
+  await call('/api/assignment/answer', { code: adaptiveCode, attemptId, qIndex: 0, answer: 'bicycle' });
+  const res = await call('/api/assignment/submit', { code: adaptiveCode, attemptId, force: true });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(calls.length, 1);
+  const saved = await storage.get(`a:${adaptiveCode}:t:${attemptId}`);
+  assert.equal(saved.submitted, true);
+  assert.equal(saved.adaptive.block, null);
+  assert.equal(saved.adaptive.sectionResults[0].right, 1);
 });
 
 // ☁️ The quiz an assignment was made from: what the AI accepts is kept per
