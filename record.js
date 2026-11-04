@@ -7,12 +7,15 @@
  * a line: the server keeps the script's own words so the teacher sees every
  * change. 📜 Whole script shows every line at once (the volunteer's own
  * highlighted), with ✏️ to change words in place and 🎙 to record a line.
+ * ▶ Listen to the whole thing plays every take so far in script order, trimmed
+ * like the teacher's recording (vaAutoTrim comes from voice-trim.js).
  * See VOICE_ACTORS_PLAN.md.
  */
 (() => {
   const BACKEND_KEY = 'pinplay.backend.v1';
   const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
   const MAX_TAKE_MS = 60 * 1000;
+  const WHOLE_PAUSE_S = 0.6; // the teacher's default pause between lines
   const TAKE_TYPES = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'];
 
   const t = (s, p) => (typeof window.t === 'function' ? window.t(s, p) : String(s).replace(/\{(\w+)\}/g, (m, k) => (p && k in p ? p[k] : m)));
@@ -23,7 +26,7 @@
     studio: $('recStudio'), done: $('recDone'),
     progress: $('recProgress'), prev: $('recPrev'),
     speaker: $('recSpeaker'), direction: $('recDirection'), badge: $('recBadge'), text: $('recText'),
-    level: $('recLevel'), hint: $('recHint'),
+    level: $('recLevel'), hint: $('recHint'), last: $('recLast'),
     record: $('recRecord'), listen: $('recListen'), save: $('recSave'),
     prevBtn: $('recPrevBtn'), nextBtn: $('recNextBtn'),
     back: $('recBack'), refresh: $('recRefresh'), doneBack: $('recDoneBack'),
@@ -31,7 +34,9 @@
     editSave: $('recEditSave'), editCancel: $('recEditCancel'), editOriginal: $('recEditOriginal'),
     script: $('recScript'), scriptList: $('recScriptList'), scriptInfo: $('recScriptInfo'), scriptHint: $('recScriptHint'),
     scriptBtn: $('recScriptBtn'), chooseScript: $('recChooseScript'), scriptBack: $('recScriptBack'),
-    scriptRefresh: $('recScriptRefresh'), scriptRecord: $('recScriptRecord'),
+    scriptRefresh: $('recScriptRefresh'), scriptRecord: $('recScriptRecord'), scriptListen: $('recScriptListen'),
+    doneListen: $('recDoneListen'), whole: $('recWhole'), wholeBack: $('recWholeBack'), wholeInfo: $('recWholeInfo'),
+    wholeHint: $('recWholeHint'), wholeToggle: $('recWholeToggle'), wholeList: $('recWholeList'),
   };
 
   const params = new URLSearchParams(location.search);
@@ -52,6 +57,13 @@
   let scriptEditing = null; // the line being edited in 📜 Whole script (its id)
   let scriptDraft = '';
   let scriptFrom = 'choose'; // where 📜 Whole script goes back to: 'choose' or 'studio'
+  let wholeCtx = null;
+  let wholeLines = []; // the lines ▶ plays: a fresh read, apart from the session
+  let wholeFrom = null; // the view ▶'s ◀ Back returns to
+  let wholeRun = null; // the playthrough under way; a new one or ◀ Back ends it
+  let wholeSource = null;
+  let wholePaused = false;
+  const wholeTakes = new Map(); // take key → its decoded audio (a promise)
 
   function backendUrl() {
     let raw = '';
@@ -69,18 +81,22 @@
   }
 
   function show(section) {
-    [el.choose, el.studio, el.done, el.script].forEach((s) => { s.hidden = s !== section; });
+    [el.choose, el.studio, el.done, el.script, el.whole].forEach((s) => { s.hidden = s !== section; });
   }
 
   // "Mia + Tom" speaks for both Mia and Tom.
   const speakersOf = (line) => String(line.speaker || '').split('+').map((s) => s.trim()).filter(Boolean);
   const needsWork = (line) => line.status === 'redo' || line.status === 'todo';
 
-  async function loadSession() {
+  async function fetchSession() {
     const res = await fetch(`${backendUrl()}/api/rec/actor?s=${encodeURIComponent(sessionId)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `${res.status}`);
-    session = data.session;
+    return data.session;
+  }
+
+  async function loadSession() {
+    session = await fetchSession();
     el.title.textContent = session.title || '';
     document.title = `PinPlay · ${session.title || t('Record your lines')}`; // i18n-ignore (already in t())
   }
@@ -202,11 +218,24 @@
     el.record.textContent = recorder ? t('■ Stop') : (pending || line.take ? t('● Record again') : t('● Record'));
     el.record.classList.toggle('rec-on', !!recorder);
     el.listen.disabled = !!recorder || editing || !(pending || line.take);
-    el.save.disabled = !!recorder || !pending || busy || editing;
+    // With no take to save, ✓ must still lead somewhere: to the thank-you when
+    // nothing is left, or to the skipped lines from the end of the script.
+    const others = queue.filter((l) => l !== line && needsWork(l)).length;
+    const idle = !pending && !recorder && !needsWork(line);
+    const finished = idle && !others;
+    const atEnd = idle && others > 0 && idx === queue.length - 1;
+    el.save.textContent = finished ? t('🏁 Finish') : atEnd ? t('Lines left ▶') : others ? t('✓ Save & next') : t('✓ Save & finish');
+    el.save.disabled = !!recorder || busy || editing || !(pending || finished || atEnd);
+    const last = finished ? t('🎉 Every line here is recorded. Press 🏁 Finish to listen to the whole thing, or go back to any line to record it again.')
+      : atEnd ? t('🏁 End of the script. Lines left to record: {n}.', { n: others })
+        : needsWork(line) && !others ? t('🏁 Last line!') : '';
+    el.last.textContent = last;
+    el.last.hidden = !last;
     if (approved) el.hint.textContent = t('Your teacher has approved this line.');
     else if (recorder) el.hint.textContent = t('Recording… press ■ Stop when you finish the line.');
-    else if (pending) el.hint.textContent = t('Listen to your take. Happy? ✓ Save & next. If not, record again.');
+    else if (pending) el.hint.textContent = others ? t('Listen to your take. Happy? ✓ Save & next. If not, record again.') : t('Listen to your take. Happy? ✓ Save & finish. If not, record again.');
     else if (line.status === 'redo') el.hint.textContent = t('Your teacher asked for a new take of this line.');
+    else if (finished || atEnd) el.hint.textContent = '';
     else el.hint.textContent = t('Read the line once to yourself, then press ● Record. Leave a second of silence before you start.');
   }
 
@@ -484,13 +513,22 @@
         const next = nextIndex(idx);
         busy = false;
         if (next < 0) { show(el.done); return; }
+        if (idx === queue.length - 1) setStatus(t('✅ Saved. That was the end of the script. Lines left to record: {n}.', { n: queue.filter(needsWork).length }), 'ok');
         idx = next;
       }
     } catch (err) {
-      setStatus(t('Not saved ({msg}). Check the connection and press ✓ Save & next again.', { msg: err.message }), 'bad');
+      setStatus(t('Not saved ({msg}). Check the connection and press {button} again.', { msg: err.message, button: el.save.textContent }), 'bad');
     }
     busy = false;
     renderLine();
+  }
+
+  function saveOrFinish() {
+    if (el.save.disabled) return;
+    if (pending) { saveTake(); return; }
+    const next = nextIndex(idx);
+    if (next < 0) show(el.done);
+    else goTo(next);
   }
 
   // ---------- changing the words ----------
@@ -623,6 +661,154 @@
     renderLine();
   }
 
+  // ---------- ▶ the whole thing ----------
+  // Every take so far, whoever recorded it, in script order: the silence at both
+  // ends trimmed and a short pause between lines, close to how the teacher's
+  // recording will sound. One fresh read of the lines (other volunteers may have
+  // recorded since the page loaded), then each take is fetched once, in turn.
+  function wholeTake(line) {
+    const { key } = line.take;
+    if (!wholeTakes.has(key)) {
+      const take = fetch(`${backendUrl()}/api/media/${key}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`${res.status}`);
+          return res.arrayBuffer();
+        })
+        .then((bytes) => wholeCtx.decodeAudioData(bytes));
+      take.catch(() => wholeTakes.delete(key));
+      wholeTakes.set(key, take);
+    }
+    return wholeTakes.get(key);
+  }
+
+  // Scheduled on the audio clock, so ⏸ holds the pause before a line as well.
+  function playTake(buffer, pauseS) {
+    const trim = vaAutoTrim(buffer);
+    return new Promise((resolve) => {
+      wholeSource = wholeCtx.createBufferSource();
+      wholeSource.buffer = buffer;
+      wholeSource.connect(wholeCtx.destination);
+      wholeSource.onended = resolve;
+      wholeSource.start(wholeCtx.currentTime + pauseS, trim.s / 1000, (trim.e - trim.s) / 1000);
+    });
+  }
+
+  function stopWhole() {
+    wholeRun = null;
+    wholePaused = false;
+    if (wholeSource) wholeSource.stop();
+    wholeSource = null;
+  }
+
+  function renderWholeToggle() {
+    el.wholeToggle.textContent = !wholeRun ? t('▶ Play from the start') : wholePaused ? t('▶ Resume') : t('⏸️ Pause');
+  }
+
+  function markWhole(line) {
+    el.wholeList.querySelectorAll('.current').forEach((li) => li.classList.remove('current'));
+    const li = line && el.wholeList.querySelector(`[data-line="${line.id}"]`);
+    if (!li) return;
+    li.classList.add('current');
+    li.scrollIntoView({ block: 'center' });
+  }
+
+  async function playWhole(from) {
+    stopWhole();
+    const run = {};
+    wholeRun = run;
+    wholeCtx.resume();
+    renderWholeToggle();
+    let failed = 0;
+    let pauseS = 0;
+    const lines = wholeLines.slice(from).filter((l) => l.take);
+    for (let i = 0; i < lines.length; i += 1) {
+      markWhole(lines[i]);
+      try {
+        const buffer = await wholeTake(lines[i]);
+        if (run !== wholeRun) return;
+        if (lines[i + 1]) wholeTake(lines[i + 1]).catch(() => {}); // ready when its turn comes
+        await playTake(buffer, pauseS);
+        pauseS = WHOLE_PAUSE_S;
+      } catch {
+        failed += 1;
+      }
+      if (run !== wholeRun) return;
+    }
+    stopWhole();
+    markWhole(null);
+    renderWholeToggle();
+    if (failed) setStatus(t('{n} takes could not be loaded.', { n: failed }), 'bad');
+  }
+
+  function renderWhole() {
+    const done = wholeLines.filter((l) => l.take).length;
+    el.wholeInfo.textContent = t('{done} of {n} lines recorded', { done, n: wholeLines.length });
+    if (!done) el.wholeHint.textContent = t('Nothing is recorded yet.');
+    else el.wholeHint.textContent = done < wholeLines.length ? t('Lines not recorded yet are skipped.') : '';
+    el.wholeToggle.disabled = !done;
+    el.wholeList.replaceChildren(...wholeLines.map((line, i) => {
+      const li = document.createElement('li');
+      li.className = `rec-script-line${isMine(line) ? ' mine' : ''}`;
+      li.dataset.line = line.id;
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'rec-whole-line';
+      row.dataset.wholeFrom = i;
+      row.disabled = !line.take;
+      const who = document.createElement('strong');
+      who.textContent = line.speaker;
+      const text = document.createElement('span');
+      text.className = 'rec-script-text';
+      text.textContent = line.text;
+      row.append(who, text);
+      if (!line.take) {
+        const badge = document.createElement('span');
+        badge.className = 'rec-badge';
+        badge.textContent = t('Not recorded');
+        row.append(badge);
+      }
+      li.append(row);
+      return li;
+    }));
+    renderWholeToggle();
+  }
+
+  async function openWhole() {
+    if (busy) return;
+    stopPlayer();
+    stopWhole();
+    // A phone only lets sound start from inside the tap.
+    wholeCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    wholeCtx.resume();
+    wholeFrom = el.done.hidden ? el.script : el.done;
+    setStatus('');
+    el.wholeInfo.textContent = t('Loading…');
+    el.wholeHint.textContent = '';
+    el.wholeList.replaceChildren();
+    el.wholeToggle.disabled = true;
+    renderWholeToggle();
+    show(el.whole);
+    window.scrollTo(0, 0);
+    wholeLines = await fetchSession().then((s) => s.lines, () => session.lines);
+    if (el.whole.hidden) return;
+    renderWhole();
+    if (wholeLines.some((l) => l.take)) playWhole(0);
+  }
+
+  function closeWhole() {
+    stopWhole();
+    show(wholeFrom);
+    window.scrollTo(0, 0);
+  }
+
+  function toggleWhole() {
+    if (!wholeRun) { playWhole(0); return; }
+    wholePaused = !wholePaused;
+    if (wholePaused) wholeCtx.suspend();
+    else wholeCtx.resume();
+    renderWholeToggle();
+  }
+
   // ---------- events ----------
   el.characters.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-rec-mode]');
@@ -631,7 +817,7 @@
   el.choose.querySelector('[data-rec-mode="all"]').addEventListener('click', () => startMode('all'));
   el.record.addEventListener('click', toggleRecording);
   el.listen.addEventListener('click', listen);
-  el.save.addEventListener('click', saveTake);
+  el.save.addEventListener('click', saveOrFinish);
   el.editBtn.addEventListener('click', startEdit);
   el.editCancel.addEventListener('click', cancelEdit);
   el.editSave.addEventListener('click', () => saveEdit(el.editText.value));
@@ -651,6 +837,14 @@
     renderChoose();
   });
   el.doneBack.addEventListener('click', () => { show(el.studio); renderLine(); });
+  el.doneListen.addEventListener('click', openWhole);
+  el.scriptListen.addEventListener('click', openWhole);
+  el.wholeBack.addEventListener('click', closeWhole);
+  el.wholeToggle.addEventListener('click', toggleWhole);
+  el.wholeList.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-whole-from]');
+    if (row) playWhole(Number(row.dataset.wholeFrom));
+  });
   el.scriptBtn.addEventListener('click', openScript);
   el.chooseScript.addEventListener('click', openScript);
   el.scriptBack.addEventListener('click', closeScript);
@@ -689,7 +883,7 @@
     if (el.studio.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.closest?.('input, textarea, select')) return;
     if (e.code === 'Space') { e.preventDefault(); toggleRecording(); }
-    else if (e.key === 'Enter' && !el.save.disabled) { e.preventDefault(); saveTake(); }
+    else if (e.key === 'Enter' && !el.save.disabled && (pending || !e.target.closest?.('button'))) { e.preventDefault(); saveOrFinish(); }
   });
   window.addEventListener('beforeunload', (e) => {
     if (pending || recorder || busy || hasUnsavedWords()) { e.preventDefault(); e.returnValue = ''; }

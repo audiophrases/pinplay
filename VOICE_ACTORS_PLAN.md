@@ -160,3 +160,22 @@ with its steps closed.
   the step around the button it points to.
 - Checked in headless Chrome with a faked session API (reading, editing,
   Escape, 🎙, a character link, the steps on the teacher page).
+
+## The last line, and ▶ the whole thing (2026-11-04)
+
+The owner's volunteers got stuck on the last line: with its take saved (back
+from the thank-you, Next line ▶, or the link opened again) Save & next and
+Next line were both disabled and nothing said why.
+
+| Topic | Decision |
+|---|---|
+| The last line | The line left to record shows **🏁 Last line!** and the button reads **✓ Save & finish**. It is "the last" by what is left to record, not by position, so the label never promises a next line that doesn't exist. |
+| With nothing left | ✓ becomes **🏁 Finish** and opens the thank-you, on any line. A banner says every line is recorded and that going back to record one again is fine. |
+| Disabled buttons | `.btn` has no disabled look, so a disabled ✓ was as green as a live one. On this page disabled buttons are now dimmed. |
+| Skipped lines | At the end of the script with lines still to record, the banner counts them and ✓ becomes **Lines left ▶**. Saving the last line jumps back to the first of them, and the status says why. |
+| ▶ Listen to the whole thing | On the thank-you and in 📜 Whole script. Its own view, so it never mixes with editing: every take so far in script order, whoever recorded it, ⏸ / ▶, tap a line to play from it. Lines not recorded are skipped and marked. |
+| How it sounds | `vaAutoTrim` (now in `voice-trim.js`, shared with the teacher's panel) removes the second of silence volunteers are asked to leave, with the session's default 0.6 s pause between lines. It doesn't level the takes or use the teacher's trims and pauses: the volunteer view has none of those. |
+
+Quota: one read of the lines when ▶ is pressed (other volunteers may have
+recorded since the page loaded), then one fetch per take, once per visit and
+one line ahead. The audio is decoded and played in the browser.

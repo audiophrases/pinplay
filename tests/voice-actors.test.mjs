@@ -377,7 +377,8 @@ describe('teacher panel helpers', () => {
     const data = new Float32Array(rate * 3); // 3 s: speech from 1.0 s to 2.0 s
     for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() - 0.5) * 0.002;
     for (let i = rate; i < rate * 2; i += 1) data[i] = Math.sin(i / 5) * 0.5;
-    const trim = va.vaAutoTrim({ sampleRate: rate, duration: 3, getChannelData: () => data });
+    const { vaAutoTrim } = require(path.join(REPO, 'voice-trim.js'));
+    const trim = vaAutoTrim({ sampleRate: rate, duration: 3, getChannelData: () => data });
     assert.ok(trim.s >= 840 && trim.s <= 900, `start ${trim.s}`);
     assert.ok(trim.e >= 2180 && trim.e <= 2240, `end ${trim.e}`);
   });

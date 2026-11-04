@@ -7,7 +7,7 @@
     <meta name="robots" content="noindex" />
     <title>PinPlay · Record your lines</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=20261016-script" />
+    <link rel="stylesheet" href="../styles.css?v=20261104-record-finish" />
   </head>
   <body class="rec-page">
     <header class="topbar">
@@ -49,6 +49,7 @@
           </div>
           <button type="button" class="btn btn-sm rec-edit-btn" id="recEditBtn" hidden data-i18n>✏️ Change the words</button>
         </div>
+        <p id="recLast" class="rec-last" role="status" hidden></p>
         <div class="rec-meter" aria-hidden="true"><span id="recLevel"></span></div>
         <div class="rec-controls">
           <button type="button" class="btn rec-big" id="recRecord" data-i18n>● Record</button>
@@ -69,6 +70,7 @@
           <button type="button" class="btn btn-sm" id="recScriptRefresh" title="Check for lines your teacher asked you to record again" data-i18n-title>↻</button>
         </div>
         <p id="recScriptHint" class="small muted"></p>
+        <button type="button" class="btn rec-choice" id="recScriptListen" data-i18n>▶ Listen to the whole thing</button>
         <ol id="recScriptList" class="rec-script"></ol>
         <button type="button" class="btn primary rec-choice" id="recScriptRecord" data-i18n>🎙 Record the lines</button>
       </section>
@@ -76,12 +78,24 @@
       <section id="recDone" class="rec-card" hidden>
         <h3 data-i18n>🎉 All done, thank you!</h3>
         <p class="small muted" data-i18n>Every line here is recorded. Your teacher will listen to them and may ask you to record a few again: come back to this link later and press ↻.</p>
+        <button type="button" class="btn primary rec-choice" id="recDoneListen" data-i18n>▶ Listen to the whole thing</button>
         <button type="button" class="btn" id="recDoneBack" data-i18n>◀ Back to the lines</button>
+      </section>
+
+      <section id="recWhole" class="rec-card" hidden>
+        <div class="rec-top">
+          <button type="button" class="btn btn-sm" id="recWholeBack" data-i18n>◀ Back</button>
+          <span id="recWholeInfo" class="small"></span>
+        </div>
+        <button type="button" class="btn primary rec-choice" id="recWholeToggle" disabled data-i18n>⏸️ Pause</button>
+        <p id="recWholeHint" class="small muted"></p>
+        <ol id="recWholeList" class="rec-script rec-whole"></ol>
       </section>
     </main>
 
-    <script src="../i18n-fr.js?v=20261026-record-save"></script>
+    <script src="../i18n-fr.js?v=20261104-record-finish"></script>
     <script src="../i18n.js"></script>
-    <script src="../record.js?v=20261026-record-save"></script>
+    <script src="../voice-trim.js?v=20261104-record-finish"></script>
+    <script src="../record.js?v=20261104-record-finish"></script>
   </body>
 </html>
