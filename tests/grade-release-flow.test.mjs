@@ -177,10 +177,11 @@ function teacherUi(attempts, api) {
   const sandbox = { document: d.document, t, api, createSessionPassword: teacherPassword,
     assignmentResultsFilterEl: null, assignmentResultsClassFilterEl: null, assignmentResultsSortEl: null, assignmentResultsBestOnlyEl: null,
     assignmentResultsSummaryEl: new d.El(), assignmentResultsListEl: new d.El(),
+    assignmentsListCache: [], assignmentListEl: null,
     notifySelection: { code, ids: new Set(attempts.map(a => a.id)) }, escapeHtml: String,
     setStatus: (el, text) => { el.textContent = text; },
   };
-  const { renderAssignmentResults } = loadDeclarations(appSource, ['renderAssignmentResults'], sandbox);
+  const { renderAssignmentResults } = loadDeclarations(appSource, ['renderAssignmentResults', 'assignmentAttemptToGrade', 'assignmentToGradeTotals', 'assignmentSetAsideBadge', 'assignmentToGradeBadge', 'updateAssignmentToGradeBadge'], sandbox);
   renderAssignmentResults(code, { assignment, attempts });
   const button = d.nodes.find(n => n.textContent === 'Release selected grades');
   return { ...d, button };

@@ -8,8 +8,17 @@ const { loadDeclarations } = require('./helpers/extract-declaration');
 // pure (no DOM), so we lift just those declarations into a sandbox.
 const APP_SRC = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
+// The prompt is one long template, too long a literal for the extractor.
+const PROMPT = APP_SRC.slice(APP_SRC.indexOf('const AI_GRADE_PROMPT_TEMPLATE'), APP_SRC.indexOf('function aiGradePackResolveMediaUrl'));
+
 const NEEDED = [
+  'AI_GRADE_PACK_MAX_AUDIO_MS',
+  'AI_GRADE_PACK_MAX_ANSWERS',
   'aiGradePackEntryFromItem',
+  'aiGradePackIsToGrade',
+  'assignmentAttemptToGrade',
+  'assignmentToGradeTotals',
+  'aiGradePackNextBatch',
   'aiGradePackBuildData',
   'aiGradeImportBucketRow',
   'aiGradeImportDedupe',
@@ -75,6 +84,107 @@ describe('pack: unfinished vs submitted attempts', () => {
   });
 });
 
+describe('pack: what the prompt tells the AI', () => {
+  it('no longer tells it to hold back answers from unfinished attempts', () => {
+    assert.match(PROMPT, /Grade both the same\s+way/);
+    assert.doesNotMatch(PROMPT, /draft/i);
+    const reviewRules = PROMPT.slice(PROMPT.indexOf('## When to use'), PROMPT.indexOf('## Feedback style'));
+    assert.doesNotMatch(reviewRules, /in_progress/);
+  });
+
+  it('asks for packBuiltAt back and explains listening sections', () => {
+    assert.match(PROMPT, /"packBuiltAt": <copy from data\.json>/);
+    assert.match(PROMPT, /listeningSections\[\]/);
+  });
+});
+
+describe('pack: which answers count', () => {
+  it('takes ungraded answers from attempts that count, and nothing else', () => {
+    assert.equal(A.aiGradePackIsToGrade({ grade: null }), true);
+    assert.equal(A.aiGradePackIsToGrade({ grade: { graded: false } }), true);
+    assert.equal(A.aiGradePackIsToGrade({ grade: { graded: true } }), false);
+    assert.equal(A.aiGradePackIsToGrade({ grade: null, setAside: true }), false);
+  });
+
+  it('adds attempts up the same way the card counts them', () => {
+    const pending = (n, over = {}) => ({ metrics: { pendingTeacherGradeCount: n }, ...over });
+    const totals = A.assignmentToGradeTotals([pending(2), pending(0), pending(3), pending(4, { setAside: true })]);
+    assert.equal(totals.answers, 5);
+    assert.equal(totals.attempts, 2);
+  });
+});
+
+describe('pack: one chat at a time', () => {
+  const answer = (attemptId, minutes, over = {}) => ({ attemptId, answerDurationMs: minutes * 60000, submitted: true, submittedAt: 1, ...over });
+
+  it('keeps everything when it fits', () => {
+    const entries = [answer('a', 5), answer('b', 5)];
+    assert.deepEqual(Array.from(A.aiGradePackNextBatch(entries), (e) => e.attemptId), ['a', 'b']);
+  });
+
+  it('stops at the recordings limit and never splits a student', () => {
+    const entries = [answer('a', 8), answer('a', 8), answer('b', 3), answer('b', 3)];
+    assert.deepEqual(Array.from(A.aiGradePackNextBatch(entries), (e) => e.attemptId), ['a', 'a']);
+  });
+
+  it('stops at the answers limit for packs without recordings', () => {
+    const entries = Array.from({ length: A.AI_GRADE_PACK_MAX_ANSWERS + 5 }, (_, i) => answer(`at${i}`, 0));
+    assert.equal(A.aiGradePackNextBatch(entries).length, A.AI_GRADE_PACK_MAX_ANSWERS);
+  });
+
+  it('still sends a student too big for one pack, rather than sending nothing', () => {
+    const entries = [answer('a', 15), answer('a', 15), answer('b', 1)];
+    assert.deepEqual(Array.from(A.aiGradePackNextBatch(entries), (e) => e.attemptId), ['a', 'a']);
+  });
+
+  it('puts finished work first, oldest first', () => {
+    const entries = [
+      answer('open', 8, { submitted: false, submittedAt: null }),
+      answer('late', 8, { submittedAt: 20 }),
+      answer('early', 8, { submittedAt: 10 }),
+    ];
+    assert.deepEqual(Array.from(A.aiGradePackNextBatch(entries), (e) => e.attemptId), ['early', 'late']);
+  });
+});
+
+describe('pack: reading and listening', () => {
+  const entry = (over) => A.aiGradePackEntryFromItem(item({ answerSavedAt: 500, ...over }));
+  const sections = [
+    { id: 'ls_a', title: 'Station', instruction: 'Listen.', script: 'The train leaves at nine.' },
+    { id: 'ls_other', title: 'Unused', instruction: '', script: 'Not in this pack.' },
+  ];
+
+  it('sends each section once, as words, and only the ones in the pack', () => {
+    const data = A.aiGradePackBuildData({
+      entries: [entry({ qIndex: 2, listeningSection: 'ls_a' }), entry({ qIndex: 3, listeningSection: 'ls_a', qId: 'q2' })],
+      meta: { code: 'ABC123', listeningSections: sections },
+      scope: 'pending',
+    });
+    assert.deepEqual(data.listeningSections.map((s) => s.id), ['ls_a']);
+    assert.equal(data.questions[0].listeningSection, 'ls_a');
+    assert.equal(data.questions[1].media.audio, null);
+  });
+
+  it('leaves the field out of a pack with no listening', () => {
+    const data = A.aiGradePackBuildData({ entries: [entry()], meta: { code: 'ABC123' }, scope: 'pending' });
+    assert.equal('listeningSections' in data, false);
+  });
+
+  it('carries the reading passage with its question', () => {
+    const data = A.aiGradePackBuildData({ entries: [entry({ readingText: 'Once upon a time.' })], meta: { code: 'ABC123' }, scope: 'pending' });
+    assert.equal(data.questions[0].readingText, 'Once upon a time.');
+  });
+
+  it('stamps the pack with its newest answer, by the server clock', () => {
+    const data = A.aiGradePackBuildData({
+      entries: [entry({ answerSavedAt: 500 }), entry({ attemptId: 'at_2', answerSavedAt: 700 })],
+      meta: { code: 'ABC123' },
+      scope: 'pending',
+    });
+    assert.equal(data.packBuiltAt, 700);
+  });
+});
+
 const ctx = (over = {}) => ({
   questionMap: new Map([[2, { qIndex: 2, qId: 'q_abc', qType: 'open', maxPoints: 1000, teacherGraded: true, prompt: 'p' }]]),
   currentGrades: new Map([['at_1::2', { graded: false, pointsAwarded: 0, correction: '' }]]),
@@ -95,10 +205,39 @@ describe('importer: bucketing', () => {
     assert.equal(row.bucket, 'apply');
   });
 
-  it('parks rows for in-progress attempts even when the model graded them', () => {
+  it('applies rows for unfinished attempts like any other, tagged so the teacher can see', () => {
     const row = A.aiGradeImportBucketRow(result(), ctx({ attemptSubmitted: new Map([['at_1', false]]) }));
+    assert.equal(row.bucket, 'apply');
+    assert.equal(row.unfinished, true);
+    assert.equal(A.aiGradeImportBucketRow(result(), ctx()).unfinished, false);
+  });
+
+  it('parks an answer the student changed after the pack was built', () => {
+    const changed = { answerData: new Map([['at_1::2', { qType: 'open', answerText: 'New words.', savedAt: 501 }]]), packBuiltAt: 500 };
+    const row = A.aiGradeImportBucketRow(result(), ctx(changed));
     assert.equal(row.bucket, 'skip');
-    assert.equal(row.skipReason, 'in_progress');
+    assert.equal(row.skipReason, 'changed');
+  });
+
+  it('keeps an answer saved up to the moment the pack was built', () => {
+    const same = { answerData: new Map([['at_1::2', { qType: 'open', answerText: 'I go.', savedAt: 500 }]]), packBuiltAt: 500 };
+    assert.equal(A.aiGradeImportBucketRow(result(), ctx(same)).bucket, 'apply');
+  });
+
+  it('does not mistake a teacher grade for a student change: that is an overwrite', () => {
+    const graded = {
+      answerData: new Map([['at_1::2', { qType: 'open', answerText: 'I go.', savedAt: 900 }]]),
+      currentGrades: new Map([['at_1::2', { graded: true, pointsAwarded: 500, correction: '' }]]),
+      packBuiltAt: 500,
+    };
+    const row = A.aiGradeImportBucketRow(result(), ctx(graded));
+    assert.equal(row.bucket, 'apply');
+    assert.equal(row.isOverwrite, true);
+  });
+
+  it('skips the check for a response without packBuiltAt', () => {
+    const old = { answerData: new Map([['at_1::2', { qType: 'open', answerText: 'I go.', savedAt: 900 }]]) };
+    assert.equal(A.aiGradeImportBucketRow(result(), ctx(old)).bucket, 'apply');
   });
 
   it('parks needs_review rows with their own reason', () => {

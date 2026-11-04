@@ -6,6 +6,7 @@ const { extractDeclaration } = createRequire(import.meta.url)('./helpers/extract
 const { chromium } = await import('playwright').catch(() => ({}));
 const app = fs.readFileSync('app.js', 'utf8');
 const names = [
+  'assignmentAttemptToGrade', 'assignmentToGradeTotals', 'assignmentSetAsideBadge', 'assignmentToGradeBadge', 'updateAssignmentToGradeBadge',
   'gradeAssignmentQuestion', 'fetchAssignmentAttemptDetail', 'fetchAssignmentResults', 'renderAssignmentResults',
   'buildGradeControls', 'inlineCorrectionDiffSetup', 'enterQuestionGradingFocus',
   'CORRECTION_DIFF_PREFIX', 'CORRECTION_NOTE_PREFIX', 'splitCorrectionNote', 'joinCorrectionNote',
@@ -38,6 +39,8 @@ describe('saving grades without losing the current position or other edits', { s
       window.assignmentResultsSummaryEl = document.getElementById('resultsSummary');
       window.assignmentResultsListEl = document.getElementById('results');
       window.assignmentResultsFilterEl = { value: pending ? 'pending' : 'all' };
+      window.assignmentsListCache = [];
+      window.assignmentListEl = null;
       window.assignmentResultsClassFilterEl = null;
       window.assignmentResultsSortEl = null;
       window.assignmentResultsBestOnlyEl = null;

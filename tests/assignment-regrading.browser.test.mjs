@@ -7,6 +7,7 @@ const { extractDeclaration } = createRequire(import.meta.url)('./helpers/extract
 const { chromium } = await import('playwright').catch(() => ({}));
 const app = fs.readFileSync('app.js', 'utf8');
 const names = [
+  'assignmentAttemptToGrade', 'assignmentToGradeTotals', 'assignmentSetAsideBadge',
   'gradeAssignmentQuestion', 'enterGradeByQuestionMode', 'openGradingFocusModal', 'gradingFocusState',
   'ensureGradingFocusModal', 'showGradingFocusModal', 'hideGradingFocusModal', 'closeGradingFocusModal',
   'renderGradingFocusItem', 'moveGradingFocusTo', 'gradingFocusKeydown',
