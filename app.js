@@ -7081,6 +7081,10 @@ async function gradeAssignmentQuestion(code, attemptId, qIndex, points, correcti
 // ---------------------------------------------------------------------------
 
 const AI_GRADE_PACK_SIZE_WARN_BYTES = 25 * 1024 * 1024;
+// How much one AI chat is given at once. Recordings are what wears an AI out:
+// each one has to be listened to, and 63 of them can run to two hours.
+const AI_GRADE_PACK_MAX_AUDIO_MS = 20 * 60 * 1000;
+const AI_GRADE_PACK_MAX_ANSWERS = 100;
 
 // How aggressively the AI should rewrite the student's text into
 // `correctedText` (the red/green diff). The teacher picks this in the
@@ -7145,6 +7149,11 @@ most. Don't pad. Don't praise.
 
 - \`questions[]\` — what students are answering. Decide what's correct from
   the available signals in this order of preference:
+  - \`listeningSection\` — the student answered from a recording. Find the
+    section with that \`id\` in \`listeningSections[]\`: \`script\` is what was
+    said (treat it as if you had heard the recording; there is no audio file
+    for it) and \`instruction\` is what students were told to do.
+  - \`readingText\` — the passage the student read. Judge the answer against it.
   - \`media.image\` — when there's an image, the expected answer is often
     the text shown in the image. Common for read-aloud / pronunciation
     tasks where students see a line on screen and read it back. Read the
@@ -7157,13 +7166,11 @@ most. Don't pad. Don't praise.
   - \`open\` — free-form typed response (long-form). Grade on content.
   - \`voice_record\` — student recorded audio (see \`answers[].audio\`).
     Listen and grade. \`transcript\` is auto-generated and unreliable.
-- \`attempts[].status\` — \`"submitted"\` or \`"in_progress"\`. An in-progress
-  attempt is still being edited: every answer under it is a draft, and a
-  blank one just means the student hasn't reached that question yet. For
-  each answer of an in-progress attempt return \`verdict: "needs_review"\` and
-  \`points: 0\`, with \`correction\` and \`correctedText\` empty. Do not correct
-  or complete a draft. (Packs built with "Submitted attempts only" contain
-  no in-progress attempts, so you may never see this value.)
+- \`attempts[].status\` — \`"submitted"\` or \`"in_progress"\`. Grade both the same
+  way. An in-progress attempt is one the student has not handed in: the answers
+  under it are what they have saved so far, and each one is graded on its own.
+  Questions they have not reached are not in the pack and do not count against
+  them.
 - \`attempts[].answers[]\` — one student's answer to one question.
   - \`text\` — typed answer or auto-transcript, may be empty.
   - \`audio\` — relative path to a recording (voice_record only). **Listen
@@ -7206,7 +7213,6 @@ it's known to be sparse and wrong on pronunciation tasks.
 ## When to use \`needs_review\`
 
 Use \`verdict: "needs_review"\` (and \`points: 0\`) when:
-- The attempt's \`status\` is \`"in_progress"\` (see above).
 - Audio is unintelligible or cut off.
 - The answer is off-topic in a way you can't confidently score.
 - Question depends on media you couldn't open.
@@ -7287,6 +7293,7 @@ else — no preamble, no closing remarks:
 {
   "version": 1,
   "assignmentCode": "<copy from data.json>",
+  "packBuiltAt": <copy from data.json>,
   "results": [
     {
       "attemptId": "<from data.json>",
@@ -7314,6 +7321,8 @@ grade is thrown away:
 
 - **Matching key is \`(attemptId, qIndex)\`.** Copy both verbatim from
   \`data.json\`. A pair that isn't in the pack is rejected.
+- **Copy \`packBuiltAt\` verbatim.** It tells the app which answers a student has
+  changed since you read them.
 - **\`qId\` is a cross-check, not a key.** Copy it from the question's \`id\` in
   \`data.json\`. When that \`id\` is \`null\`, return \`null\`. A \`qId\` that
   contradicts the question at that \`qIndex\` gets the row rejected, so never
@@ -7400,9 +7409,12 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
     questionImageUrl: String(item?.imageData || item?.questionImageUrl || item?.imageUrl || ''),
     questionAudioUrl: String(item?.audioMode || '') === 'file' ? String(item?.audioData || '') : '',
     questionAudioText: String(item?.audioMode || '') === 'file' ? '' : String(item?.audioText || ''),
+    readingText: String(item?.readingText || ''),
+    listeningSection: String(item?.listeningSection || ''),
     attemptId,
     studentName,
     answerText: String(item?.answerText || ''),
+    answerSavedAt: Number(item?.answerSavedAt || 0) || 0,
     answerAudioUrl: String(answer?.audioUrl || ''),
     answerImageUrl: String(answer?.imageUrl || ''),
     answerTranscript: String(answer?.transcript || ''),
@@ -7420,12 +7432,76 @@ function aiGradePackEntryFromItem(item, fallbackAttemptId, fallbackStudentName) 
   };
 }
 
+// What an attempt adds to "to grade": nothing once it is set aside. The server
+// counts the same way (computeAttemptPending), so the rows add up to the badge.
+function assignmentAttemptToGrade(a) {
+  return a?.setAside ? 0 : Number(a?.metrics?.pendingTeacherGradeCount || 0);
+}
+
+function assignmentToGradeTotals(attempts) {
+  const counts = attempts.map(assignmentAttemptToGrade);
+  return { answers: counts.reduce((sum, n) => sum + n, 0), attempts: counts.filter(Boolean).length };
+}
+
+// The same count, one answer at a time: what a "to grade" pack contains.
+function aiGradePackIsToGrade(item) {
+  return !item?.grade?.graded && !item?.setAside;
+}
+
+// One question's answers as pack entries; `wanted` picks which of them.
+function aiGradePackQuestionEntries(data, qi, wanted) {
+  const question = data?.question || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.filter(wanted).map((it) => aiGradePackEntryFromItem({
+    ...it,
+    qIndex: qi,
+    qType: question.qType,
+    maxPoints: question.maxPoints,
+    prompt: question.prompt,
+    media: question.media,
+    language: question.language,
+    answerLanguage: question.answerLanguage,
+    qId: question.id,
+    imageData: question.imageData || '',
+    audioData: question.audioData || '',
+    audioMode: question.audioMode || '',
+    audioText: question.audioText || '',
+    readingText: question.readingText || '',
+    teacherGraded: true,
+  }, it?.attemptId, it?.studentName)).filter(Boolean);
+}
+
+// The next pack out of a list of answers to grade. Each student stays whole,
+// finished work goes first, and what does not fit simply stays to grade: after
+// an import, building again carries on with no record of what was sent.
+function aiGradePackNextBatch(entries) {
+  const byAttempt = new Map();
+  entries.forEach((e) => {
+    if (!byAttempt.has(e.attemptId)) byAttempt.set(e.attemptId, []);
+    byAttempt.get(e.attemptId).push(e);
+  });
+  const students = [...byAttempt.values()].sort((a, b) => Number(b[0].submitted) - Number(a[0].submitted)
+    || Number(a[0].submittedAt || 0) - Number(b[0].submittedAt || 0));
+  const batch = [];
+  let audioMs = 0;
+  for (const answers of students) {
+    const ms = answers.reduce((sum, e) => sum + (e.answerDurationMs || 0), 0);
+    const full = batch.length + answers.length > AI_GRADE_PACK_MAX_ANSWERS || audioMs + ms > AI_GRADE_PACK_MAX_AUDIO_MS;
+    if (full && batch.length) break;
+    batch.push(...answers);
+    audioMs += ms;
+  }
+  return batch;
+}
+
 async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submittedOnly }) {
   const safeCode = String(code || '').trim().toUpperCase();
   if (!safeCode) throw new Error('Missing assignment code.');
   if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
   const entries = [];
   const meta = { code: safeCode };
+  const sections = new Map();
+  const addSections = (data) => (data?.listeningSections || []).forEach((s) => sections.set(s.id, s));
 
   if (scope === 'attempt') {
     const safeAttempt = String(attemptId || '').trim();
@@ -7447,6 +7523,7 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submitte
       );
       if (entry) entries.push(entry);
     });
+    addSections(data);
     meta.title = String(data?.assignment?.title || data?.title || '');
     meta.language = String(data?.assignment?.language || '');
   } else if (scope === 'question') {
@@ -7458,27 +7535,9 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submitte
     });
     const question = data?.question || {};
     if (!question.teacherGraded) throw new Error(`Q${qi + 1} is auto-graded — no AI grading needed.`);
-    const items = Array.isArray(data?.items) ? data.items : [];
-    items.forEach((it) => {
-      const merged = {
-        ...it,
-        qIndex: qi,
-        qType: question.qType,
-        maxPoints: question.maxPoints,
-        prompt: question.prompt,
-        media: question.media,
-        language: question.language,
-        answerLanguage: question.answerLanguage,
-        qId: question.id,
-        imageData: question.imageData || '',
-        audioData: question.audioData || '',
-        audioMode: question.audioMode || '',
-        audioText: question.audioText || '',
-        teacherGraded: true,
-      };
-      const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
-      if (entry) entries.push(entry);
-    });
+    entries.push(...aiGradePackQuestionEntries(data, qi, aiGradePackIsToGrade));
+    if (!entries.length) throw new Error(`Q${qi + 1} has nothing to grade.`);
+    addSections(data);
     meta.title = String(data?.assignment?.title || '');
     meta.language = String(data?.assignment?.language || question.language || '');
   } else if (scope === 'assignment' || scope === 'pending') {
@@ -7496,38 +7555,19 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submitte
       teacherQs = teacherQs.filter(({ q }) => Number(q?.pendingCount || 0) > 0);
       if (!teacherQs.length) throw new Error('No pending teacher-graded answers — everything is already graded.');
     }
+    // A question that fails to load fails the pack: it must not quietly hold
+    // fewer answers than the "to grade" count says.
     const responses = await Promise.all(
       teacherQs.map(({ idx }) => api('/api/assignments/question-grading', {
         method: 'POST',
         body: { password: createSessionPassword, code: safeCode, qIndex: idx },
-      }).catch(() => null))
+      }))
     );
+    // Going over a whole assignment follows the rule too: one attempt per student.
+    const wanted = pendingOnly ? aiGradePackIsToGrade : (it) => !it?.setAside;
     responses.forEach((data, i) => {
-      if (!data) return;
-      const qi = teacherQs[i].idx;
-      const question = data?.question || {};
-      const items = Array.isArray(data?.items) ? data.items : [];
-      items.forEach((it) => {
-        if (pendingOnly && it?.grade?.graded) return;
-        const merged = {
-          ...it,
-          qIndex: qi,
-          qType: question.qType,
-          maxPoints: question.maxPoints,
-          prompt: question.prompt,
-          media: question.media,
-          language: question.language,
-          answerLanguage: question.answerLanguage,
-          qId: question.id,
-          imageData: question.imageData || '',
-          audioData: question.audioData || '',
-          audioMode: question.audioMode || '',
-          audioText: question.audioText || '',
-          teacherGraded: true,
-        };
-        const entry = aiGradePackEntryFromItem(merged, it?.attemptId, it?.studentName);
-        if (entry) entries.push(entry);
-      });
+      entries.push(...aiGradePackQuestionEntries(data, teacherQs[i].idx, wanted));
+      addSections(data);
     });
     if (pendingOnly && !entries.length) {
       throw new Error('No pending answers found — looks like everything got graded between the overview and the fetch.');
@@ -7538,8 +7578,10 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submitte
     throw new Error(`Unknown scope: ${scope}`);
   }
 
-  // Grading a draft is wasted work: the next save by the student resets the
-  // teacher grade to pending. Leave in-progress attempts out unless asked.
+  meta.listeningSections = [...sections.values()];
+
+  // The teacher's choice: answers in attempts still open are left out of this
+  // pack, and stay to grade.
   meta.excludedInProgress = 0;
   if (submittedOnly) {
     const kept = entries.filter((e) => e.submitted);
@@ -7547,8 +7589,8 @@ async function aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submitte
     if (!kept.length && entries.length) {
       throw new Error(
         entries.length === 1
-          ? 'That attempt is still in progress. Untick "Submitted attempts only" to grade the draft anyway.'
-          : `All ${entries.length} answers belong to attempts still in progress. Untick "Submitted attempts only" to grade drafts anyway.`,
+          ? 'That attempt is still in progress. Untick "Submitted attempts only" to grade it.'
+          : `All ${entries.length} answers belong to attempts still in progress. Untick "Submitted attempts only" to grade them.`,
       );
     }
     entries.length = 0;
@@ -7570,6 +7612,8 @@ function aiGradePackBuildData({ entries, meta, scope }) {
       prompt: e.prompt,
       language: e.questionLanguage || null,
       answerLanguage: e.answerLanguage || null,
+      readingText: e.readingText || null,
+      listeningSection: e.listeningSection || null,
       media: {
         image: null,
         audio: null,
@@ -7603,15 +7647,23 @@ function aiGradePackBuildData({ entries, meta, scope }) {
     });
   });
 
+  const questions = [...questionsMap.values()].sort((a, b) => a.qIndex - b.qIndex);
+  const listeningSections = (meta.listeningSections || [])
+    .filter((s) => questions.some((q) => q.listeningSection === s.id));
+
   const data = {
     version: 1,
+    // The newest answer in the pack, by the server's clock: an answer saved
+    // later than this changed after the pack was built (see the importer).
+    packBuiltAt: entries.reduce((newest, e) => Math.max(newest, e.answerSavedAt || 0), 0),
     assignment: {
       code: meta.code,
       title: meta.title || null,
       language: meta.language || null,
     },
     scope,
-    questions: [...questionsMap.values()].sort((a, b) => a.qIndex - b.qIndex),
+    questions,
+    ...(listeningSections.length ? { listeningSections } : {}),
     attempts: [...attemptsMap.values()],
     instructions: {
       pointsScale: '0..maxPoints (typically 0..1000)',
@@ -7717,16 +7769,16 @@ function saveAiGradeDepth(mode) {
   } catch {}
 }
 
-// "Submitted attempts only" in the picker. Default on: grading a draft is
-// wasted work (the student's next save resets the grade) and in instant-
-// feedback mode would show them a correction mid-sentence.
-const AI_GRADE_SUBMITTED_ONLY_KEY = 'pinplay.aiGradeSubmittedOnly.v1';
+// "Submitted attempts only" in the picker. Default off: a pack grades what the
+// "to grade" count says. Nothing is lost on an unfinished attempt: if the student
+// changes a graded answer it simply goes back to pending. v2 of the key, because
+// v1 remembers the old default in every browser that built a pack.
+const AI_GRADE_SUBMITTED_ONLY_KEY = 'pinplay.aiGradeSubmittedOnly.v2';
 function loadAiGradeSubmittedOnly() {
   try {
-    const v = localStorage.getItem(AI_GRADE_SUBMITTED_ONLY_KEY);
-    return v == null ? true : v === '1';
+    return localStorage.getItem(AI_GRADE_SUBMITTED_ONLY_KEY) === '1';
   } catch {
-    return true;
+    return false;
   }
 }
 function saveAiGradeSubmittedOnly(on) {
@@ -7762,8 +7814,12 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, c
   }
 
   aiGradePackToast('Building AI grade pack — loading answers…');
-  const { entries, meta } = await aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submittedOnly });
-  if (!entries.length) throw new Error('Nothing to grade in this scope.');
+  const { entries: loaded, meta } = await aiGradePackLoadEntries({ scope, code, attemptId, qIndex, submittedOnly });
+  if (!loaded.length) throw new Error('Nothing to grade in this scope.');
+  // Only packs of work to do can stop early: their answers leave the list once
+  // graded, so the next build moves on. Going over graded answers would repeat.
+  const entries = scope === 'pending' || scope === 'question' ? aiGradePackNextBatch(loaded) : loaded;
+  const forNextPack = loaded.length - entries.length;
 
   aiGradePackToast(`Building AI grade pack — fetching media for ${entries.length} answer${entries.length === 1 ? '' : 's'}…`);
   const data = aiGradePackBuildData({ entries, meta, scope });
@@ -7802,11 +7858,15 @@ async function buildAiGradePack({ scope, code, attemptId, qIndex, teacherNote, c
 
   const finalMb = (zipBlob.size / (1024 * 1024)).toFixed(2);
   const skippedNote = meta.excludedInProgress
-    ? `${meta.excludedInProgress} draft answer${meta.excludedInProgress === 1 ? '' : 's'} from students still working left out. `
+    ? `${meta.excludedInProgress} answer${meta.excludedInProgress === 1 ? '' : 's'} from unfinished attempts left out. `
+    : '';
+  const nextPackNote = forNextPack
+    ? `${forNextPack} more to grade: import this pack's results, then build the next one. `
     : '';
   aiGradePackToast(
     `AI grade pack ready (${finalMb} MB, ${entries.length} answer${entries.length === 1 ? '' : 's'}). ` +
     skippedNote +
+    nextPackNote +
     (copied ? 'Prompt copied to clipboard. ' : 'Prompt is also inside the ZIP as prompt.md. ') +
     'Drop the ZIP into ChatGPT/Claude/Gemini and paste the prompt.'
   );
@@ -7837,13 +7897,14 @@ async function openAiGradePackPicker(code) {
       const attemptId = String(a?.id || a?.attemptId || '');
       return {
         attemptId,
-        label: `${String(a?.studentName || attemptId || '(unknown)')}${a?._class ? ` · ${a._class}` : ''}${a?.submitted ? '' : ' · in progress'}`,
+        label: `${String(a?.studentName || attemptId || '(unknown)')}${a?._class ? ` · ${a._class}` : ''}${a?.submitted ? '' : ' · in progress'}${a?.setAside ? ' · set aside' : ''}`,
       };
     })
     .filter((o) => o.attemptId);
 
   let questionOptions = [];
   let questionLoadError = '';
+  let toGrade = null;
   try {
     if (!createSessionPassword) throw new Error('Teacher password missing in session. Unlock again if needed.');
     const overview = await api('/api/assignments/grading-overview', {
@@ -7858,9 +7919,25 @@ async function openAiGradePackPicker(code) {
         qIndex: idx,
         label: `Q${idx + 1} · ${String(q?.qType || 'question')}${q?.pendingCount ? ` · ${q.pendingCount} pending` : ''}`,
       }));
+    const sum = (field) => qs.reduce((total, q) => total + Number(q?.[field] || 0), 0);
+    toGrade = {
+      answers: sum('pendingCount'),
+      unfinished: sum('pendingUnfinishedCount'),
+      audioMs: sum('pendingAudioMs'),
+      setAside: sum('setAsideCount'),
+    };
   } catch (err) {
     questionLoadError = String(err?.message || err);
   }
+  // Said before anything is built, so the picker and the card tell the same story.
+  const toGradeNotes = [];
+  if (toGrade?.answers) {
+    toGradeNotes.push(t('{submitted} submitted · {unfinished} in unfinished attempts', { submitted: toGrade.answers - toGrade.unfinished, unfinished: toGrade.unfinished }));
+    if (toGrade.audioMs) toGradeNotes.push(t('About {min} min of recordings.', { min: Math.max(1, Math.round(toGrade.audioMs / 60000)) }));
+    const packs = Math.ceil(Math.max(toGrade.audioMs / AI_GRADE_PACK_MAX_AUDIO_MS, toGrade.answers / AI_GRADE_PACK_MAX_ANSWERS));
+    if (packs > 1) toGradeNotes.push(t('About {packs} packs: import one, then build the next.', { packs }));
+  }
+  if (toGrade?.setAside) toGradeNotes.push(t('{n} in set-aside attempts not included', { n: toGrade.setAside }));
 
   const modal = document.createElement('div');
   modal.id = 'aiGradePackPickerModal';
@@ -7872,12 +7949,13 @@ async function openAiGradePackPicker(code) {
       #aiGradePackPickerModal .agp-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px 28px;align-items:start; }
       #aiGradePackPickerModal .agp-col-title { font-weight:600;font-size:0.92rem;margin:0 0 6px; }
       #aiGradePackPickerModal .agp-row { display:flex;align-items:center;gap:8px;padding:3px 0;margin:0;font-weight:normal; }
-      #aiGradePackPickerModal .agp-row input[type="radio"] { width:auto;margin:0;flex:none; }
+      #aiGradePackPickerModal .agp-row input[type="radio"], #aiGradePackPickerModal .agp-row input[type="checkbox"] { width:auto;margin:0;flex:none; }
       #aiGradePackPickerModal label.agp-field { display:block;font-weight:normal;margin-bottom:2px; }
       #aiGradePackPickerModal select { width:100%;margin:0;display:block;font-weight:normal; }
       #aiGradePackPickerModal .agp-indent { width:calc(100% - 26px);margin:2px 0 6px 26px; }
       #aiGradePackPickerModal textarea { width:100%;font:inherit;font-weight:normal;min-height:0;resize:vertical; }
       #aiGradePackPickerModal .agp-hint { display:block;margin:3px 0 12px; }
+      #aiGradePackPickerModal .agp-note { display:block;margin:0 0 2px 26px; }
       #aiGradePackPickerModal .agp-actions { display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:18px;flex-wrap:wrap; }
       @media (max-width:560px) { #aiGradePackPickerModal .agp-grid { grid-template-columns:1fr; } }
     </style>
@@ -7888,8 +7966,9 @@ async function openAiGradePackPicker(code) {
           <div class="agp-col-title">What to grade</div>
           <label class="agp-row">
             <input type="radio" name="aiGradePackScope" value="pending" checked />
-            <span>All <strong>pending</strong> teacher-graded answers</span>
+            <span>${toGrade ? t('All {n} answers to grade', { n: `<strong>${toGrade.answers}</strong>` }) : t('All answers to grade')}</span>
           </label>
+          ${toGradeNotes.map((note) => `<span class="small muted agp-note">${escapeHtml(note)}</span>`).join('')}
           <label class="agp-row">
             <input type="radio" name="aiGradePackScope" value="assignment" />
             <span>All teacher-graded answers</span>
@@ -7912,7 +7991,7 @@ async function openAiGradePackPicker(code) {
               ? questionOptions.map((o) => `<option value="${o.qIndex}">${escapeHtml(o.label)}</option>`).join('')
               : `<option>${escapeHtml(questionLoadError ? `(failed to load: ${questionLoadError})` : '(no teacher-graded questions)')}</option>`}
           </select>
-          <label class="agp-row" style="margin-top:12px;" title="Students still working can change their answers; grading a draft is wasted.">
+          <label class="agp-row" style="margin-top:12px;" title="Leaves out answers from attempts not handed in yet. They stay to grade.">
             <input type="checkbox" id="aiGradePackSubmittedOnly" ${aiGradeSubmittedOnlyDefault ? 'checked' : ''} />
             <span>Submitted attempts only <span class="small muted">(skip students still working)</span></span>
           </label>
@@ -8075,6 +8154,7 @@ async function aiGradeImportLoadContext(safeCode, qIndexesNeeded) {
         transcript: String(ans?.transcript || ''),
         durationMs: Number(ans?.durationMs || 0) || null,
         imageUrl: String(ans?.imageUrl || ''),
+        savedAt: Number(it?.answerSavedAt || 0),
       });
     });
   });
@@ -8124,11 +8204,12 @@ function aiGradeImportBucketRow(result, ctx) {
   if (current.graded) row.isOverwrite = true;
   row.answer = ctx.answerData.get(`${row.attemptId}::${row.qIndex}`) || null;
 
-  // The student can still change this answer, and their next save resets any
-  // grade. Park it regardless of what the model returned; the teacher can
-  // still tick it in the preview to apply anyway.
-  if (ctx.attemptSubmitted?.get(row.attemptId) === false) {
-    row.bucket = 'skip'; row.skipReason = 'in_progress'; return row;
+  row.unfinished = ctx.attemptSubmitted?.get(row.attemptId) === false;
+
+  // Saved after the pack was built: this grade is for words the AI never read.
+  // Still pending means the student did it, not a teacher grading it meanwhile.
+  if (!current.graded && ctx.packBuiltAt && Number(row.answer?.savedAt || 0) > ctx.packBuiltAt) {
+    row.bucket = 'skip'; row.skipReason = 'changed'; return row;
   }
   if (row.verdict === 'needs_review') { row.bucket = 'skip'; row.skipReason = 'needs_review'; return row; }
   if (!['correct', 'partial', 'wrong'].includes(row.verdict)) {
@@ -8281,11 +8362,12 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const bg = r.isOverwrite ? '#eff6ff' : (bgs[r.bucket] || '#fff');
     const editableDisabled = r.bucket === 'rejected';
     const checked = r.included ? 'checked' : '';
-    const subLabel = r.bucket === 'skip'
-      ? `<div class="small muted" style="margin-top:4px;font-size:0.7rem;">${r.skipReason === 'in_progress' ? '✎ still in progress' : '⏸ needs_review'}</div>`
-      : r.isOverwrite
-        ? '<div class="small muted" style="margin-top:4px;font-size:0.7rem;">↻ overwrites</div>'
-        : '';
+    const subLabelText = r.bucket === 'skip'
+      ? (r.skipReason === 'changed' ? t('✎ changed since this pack') : '⏸ needs_review')
+      : r.isOverwrite ? '↻ overwrites' : (r.unfinished ? t('✎ unfinished attempt') : '');
+    const subLabel = subLabelText
+      ? `<div class="small muted" style="margin-top:4px;font-size:0.7rem;">${escapeHtml(subLabelText)}</div>`
+      : '';
     const pointsBlock = r.bucket === 'rejected'
       ? `<div class="small muted" style="font-size:0.75rem;margin-top:4px;">— / ${r.maxPoints}</div>`
       : `<div style="margin-top:4px;">
@@ -8389,7 +8471,7 @@ function aiGradeImportRenderPreview(modal, response, rows) {
     const parts = [];
     parts.push(`✓ ${includedNonOverwrite.length} will be applied`);
     if (includedOverwrite.length) parts.push(`↻ ${includedOverwrite.length} overwrite${includedOverwrite.length === 1 ? '' : 's'}`);
-    if (promoted.length) parts.push(`⤴ ${promoted.length} promoted from needs_review`);
+    if (promoted.length) parts.push(`⤴ ${promoted.length} added by you`);
     if (skippedStill.length) parts.push(`⏸ ${skippedStill.length} still skipped`);
     if (rejected.length) parts.push(`✗ ${rejected.length} rejected`);
     if (summaryEl) summaryEl.textContent = parts.join(' · ');
@@ -8568,7 +8650,16 @@ async function aiGradeImportApply(modal, code, rowsToApply) {
   }
   progressEl.innerHTML = `<strong>Done.</strong> ${done} applied${failed ? `, ${failed} failed` : ''}.${failures.length ? `<details style="margin-top:6px;"><summary>Show failures</summary><pre style="white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(failures.join('\n'))}</pre></details>` : ''}`; // i18n-ignore
   if (assignmentResultsCache?.code === code) {
-    try { await fetchAssignmentResults(code); } catch {}
+    try { await fetchAssignmentResults(code, { quiet: true }); } catch {}
+    const cache = assignmentResultsCache;
+    if (cache?.code !== code) return;
+    const left = assignmentToGradeTotals(cache.data?.attempts || []).answers;
+    progressEl.insertAdjacentText('beforeend', ` ${t('{n} still to grade.', { n: left })}`);
+    // What is left is what the teacher wants to see behind this dialog.
+    if (left && assignmentResultsFilterEl) {
+      assignmentResultsFilterEl.value = 'pending';
+      renderAssignmentResults(code, cache.data);
+    }
   }
 }
 
@@ -8688,6 +8779,7 @@ function openAiGradeImport(code) {
       errEl.textContent = t("Could not load context: {p1}", { p1: err.message });
       return;
     }
+    ctx.packBuiltAt = Number(parsed.packBuiltAt) || 0;
     const rawRows = parsed.results.map((r) => aiGradeImportBucketRow(r, ctx));
     const rows = aiGradeImportDedupe(rawRows);
     const buckets = aiGradeImportRenderPreview(modal, parsed, rows);
@@ -9306,7 +9398,8 @@ async function openGradingFocusModal(code, qIndex) {
   });
 
   const question = data?.question || {};
-  const items = Array.isArray(data?.items) ? data.items : [];
+  // Set-aside attempts are not work to do; they stay open from their own row.
+  const items = (Array.isArray(data?.items) ? data.items : []).filter((it) => it?.grade?.graded || !it?.setAside);
 
   if (question.isPoll) return;
 
@@ -9845,13 +9938,13 @@ async function enterGradeByStudentMode(code) {
       || (Number(a?.metrics?.pendingTeacherGradeCount || 0) + Number(a?.metrics?.teacherGradedCount || 0)) > 0
   );
   gradable.sort((a, b) => {
-    const pa = Number(b?.metrics?.pendingTeacherGradeCount || 0);
-    const pb = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    const pa = assignmentAttemptToGrade(b);
+    const pb = assignmentAttemptToGrade(a);
     if (pa !== pb) return pa - pb;
     return String(a?.studentName || '').localeCompare(String(b?.studentName || ''));
   });
 
-  const totalPending = gradable.reduce((s, a) => s + Number(a?.metrics?.pendingTeacherGradeCount || 0), 0);
+  const totalPending = assignmentToGradeTotals(gradable).answers;
   const submittedCount = gradable.filter((a) => a?.submitted).length;
   const inProgressCount = gradable.filter((a) => !a?.submitted).length;
 
@@ -9876,7 +9969,7 @@ async function enterGradeByStudentMode(code) {
     const li = document.createElement('li');
     li.style.cursor = 'pointer';
 
-    const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    const pending = assignmentAttemptToGrade(a);
     const answered = Number(a?.metrics?.answeredCount || 0);
     const total = Number(a?.metrics?.totalQuestions || 0);
 
@@ -9884,7 +9977,7 @@ async function enterGradeByStudentMode(code) {
     const classBadge = a?._class
       ? ` <span style="background:rgba(0,0,0,0.07);border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:600;">${escapeHtml(String(a._class))}</span>`
       : '';
-    head.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${classBadge}`;
+    head.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${classBadge}${assignmentSetAsideBadge(a)}`;
 
     const counts = document.createElement('div');
     counts.className = 'small top-space';
@@ -10495,7 +10588,7 @@ async function enterQuestionGradingFocus(code, qIndex) {
   });
 
   const question = data?.question || {};
-  const items = Array.isArray(data?.items) ? data.items : [];
+  const items = (Array.isArray(data?.items) ? data.items : []).filter((it) => it?.grade?.graded || !it?.setAside);
   const maxPoints = Math.max(0, Math.round(Number(question?.maxPoints || 1000)));
   const icon = iconForType(question.qType) || '❓';
 
@@ -10676,10 +10769,17 @@ async function enterQuestionGradingFocus(code, qIndex) {
   });
 }
 
+function assignmentSetAsideBadge(a) {
+  if (!a?.setAside) return '';
+  const why = t("Not in \"to grade\": this student's latest submitted attempt is the one to grade. You can still open and grade this one.");
+  return ` <span class="badge-set-aside" title="${escapeHtml(why)}">${escapeHtml(t('Set aside'))}</span>`;
+}
+
 function renderAssignmentResults(safeCode, data) {
   const assignment = data?.assignment || {};
   const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
   const filter = String(assignmentResultsFilterEl?.value || 'all');
+  updateAssignmentToGradeBadge(safeCode, assignmentToGradeTotals(attempts));
 
   if (assignmentResultsClassFilterEl) {
     const current = String(assignmentResultsClassFilterEl.value || '');
@@ -10707,7 +10807,7 @@ function renderAssignmentResults(safeCode, data) {
 
   let working = attempts.filter((a) => {
     if (filter === 'submitted' && !a?.submitted) return false;
-    if (filter === 'pending' && Number(a?.metrics?.pendingTeacherGradeCount || 0) === 0) return false;
+    if (filter === 'pending' && assignmentAttemptToGrade(a) === 0) return false;
     if (filter === 'fully-answered') {
       const total = Number(a?.metrics?.totalQuestions || 0);
       if (!total || Number(a?.metrics?.answeredCount || 0) < total) return false;
@@ -10741,7 +10841,7 @@ function renderAssignmentResults(safeCode, data) {
     'accuracy-desc': (a, b) => Number(b?.metrics?.accuracy ?? -1) - Number(a?.metrics?.accuracy ?? -1),
     'completion-desc': (a, b) => attemptCompletion(b) - attemptCompletion(a),
     'latest': (a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0),
-    'pending-desc': (a, b) => Number(b?.metrics?.pendingTeacherGradeCount || 0) - Number(a?.metrics?.pendingTeacherGradeCount || 0),
+    'pending-desc': (a, b) => assignmentAttemptToGrade(b) - assignmentAttemptToGrade(a),
   };
   working.sort(sorters[sortMode] || sorters.name);
   const filtered = working;
@@ -10969,7 +11069,7 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(typeof lv.usualLevel === 'numbe
       ? `<span class="badge-public" title="${escapeHtml(t('Played from the Games page (signed in)'))}">${escapeHtml(t('🌐 via Games'))}</span>`
       : '';
     const releasedBadge = a.gradeReleasedAt ? `<span class="small">${escapeHtml(t('Grade released: {n}/100', { n: a.releasedGrade }))}</span>` : '';
-    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${classBadge}${viaGamesBadge}${levelBadge}${releasedBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
+    nameWrap.innerHTML = `<strong>${escapeHtml(String(a?.studentName || t('Student')))}</strong>${assignmentSetAsideBadge(a)}${classBadge}${viaGamesBadge}${levelBadge}${releasedBadge}${reviewedBadge}${selfCorrectedBadge}${notifiedBadge}${focusBadge}`;
 
     const scoreEl = document.createElement('span');
     scoreEl.style.cssText = 'flex:none; font-weight:600; font-size:0.95rem;';
@@ -10980,7 +11080,7 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(typeof lv.usualLevel === 'numbe
     const meta = document.createElement('div');
     meta.className = 'small muted';
     const answered = Number(a?.metrics?.answeredCount || 0);
-    const pending = Number(a?.metrics?.pendingTeacherGradeCount || 0);
+    const pending = assignmentAttemptToGrade(a);
     const total = Number(a?.metrics?.totalQuestions || 0);
     const acc = Number.isFinite(Number(a?.metrics?.accuracy)) ? `${Number(a.metrics.accuracy)}%` : '—';
     const completion = total ? `${Math.round((answered / total) * 100)}%` : '—';
@@ -10993,6 +11093,13 @@ ${escapeHtml(lv.path)}` : ''}">🎯 ${escapeHtml(typeof lv.usualLevel === 'numbe
     } else {
       meta.textContent = t("Completion: {p1} ({p2}/{p3}) · Accuracy: {p4} · Pending teacher: {p5}", { p1: completion, p2: answered, p3: total, p4: acc, p5: pending });
     }
+    const when = (at) => (at ? new Date(Number(at)).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
+    const lastActive = when(a?.updatedAt);
+    const handedIn = when(a?.submittedAt);
+    const attemptStatus = a?.submitted
+      ? (handedIn ? t('Submitted {when}', { when: handedIn }) : t('Submitted'))
+      : (lastActive ? t('In progress · last active {when}', { when: lastActive }) : t('In progress'));
+    meta.textContent += ` · ${attemptStatus}`; // i18n-ignore (text is t()-wrapped)
     let levelsLine = null;
     if (bu) {
       levelsLine = document.createElement('div');
@@ -12208,6 +12315,30 @@ function renderAssignmentsList() {
   }
 }
 
+function assignmentToGradeBadge(answers, attempts) {
+  return answers > 0
+    ? ` <span class="badge-pending" title="${attempts} attempt(s) with ungraded teacher-graded answers">${attempts} att · ${answers} to grade</span>`
+    : '';
+}
+
+// The card follows the open results, so grading shows on it straight away, and
+// it always adds up to the attempts listed under it.
+function updateAssignmentToGradeBadge(code, totals) {
+  const listed = assignmentsListCache.find((a) => a?.code === code);
+  if (listed) {
+    listed.pendingGradingCount = totals.answers;
+    listed.pendingAttemptsCount = totals.attempts;
+  }
+  const title = assignmentListEl?.querySelector(`.assignment-item[data-code="${CSS.escape(code)}"] .assignment-title-line`);
+  if (!title) return;
+  title.querySelector('.badge-pending')?.remove();
+  const badge = assignmentToGradeBadge(totals.answers, totals.attempts);
+  if (!badge) return;
+  const next = title.querySelector('.badge-archived, .badge-live, .badge-public');
+  if (next) next.insertAdjacentHTML('beforebegin', badge);
+  else title.insertAdjacentHTML('beforeend', badge);
+}
+
 function buildAssignmentListItem(a) {
   const code = String(a?.code || '').trim();
   const link = buildAssignmentJoinLink(code);
@@ -12229,11 +12360,8 @@ function buildAssignmentListItem(a) {
   headerText.className = 'assignment-header-text';
 
   const title = document.createElement('div');
-  const pendingGrading = Number(a?.pendingGradingCount || 0);
-  const pendingAttempts = Number(a?.pendingAttemptsCount || 0);
-  const pendingBadge = pendingGrading > 0
-    ? ` <span class="badge-pending" title="${pendingAttempts} attempt(s) with ungraded teacher-graded answers">${pendingAttempts} att · ${pendingGrading} to grade</span>`
-    : '';
+  title.className = 'assignment-title-line';
+  const pendingBadge = assignmentToGradeBadge(Number(a?.pendingGradingCount || 0), Number(a?.pendingAttemptsCount || 0));
   const archivedTag = a?.archived ? ' <span class="badge-archived" title="Archived — hidden from default view">archived</span>' : '';
   const liveTag = a?.origin === 'live' ? ' <span class="badge-live" title="Captured from a login-required live game">🔴 live</span>' : '';
   const publicTag = a?.public

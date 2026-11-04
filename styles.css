@@ -3375,6 +3375,17 @@ button.review-retake-attempt-row:active {
   vertical-align: baseline;
 }
 
+.badge-set-aside {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.16);
+  color: #475569;
+  white-space: nowrap;
+}
+
 .badge-archived {
   display: inline-block;
   font-size: 0.72rem;

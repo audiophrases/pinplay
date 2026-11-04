@@ -3403,8 +3403,9 @@ export class QuizRoom {
         assignment.attempts[attempt.id] = attempt;
         assignment.updatedAt = now;
         // This handler already loaded every attempt for the code, so the cached
-        // total is exact (no separate delta/backfill needed).
-        assignment.attemptsCount = Object.keys(assignment.attempts).length;
+        // totals are exact (no separate delta/backfill needed). A retry starts
+        // set aside: until it is handed in, the submitted attempt still counts.
+        await syncAttemptsSetAside(this.state.storage, code, assignment, assignment.attempts);
         await saveAttempt(this.state.storage, code, attempt.id, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
 
@@ -3428,6 +3429,10 @@ export class QuizRoom {
         // Filter by studentKey if provided (student-facing request)
         if (studentKey) {
           attempts = attempts.filter((a) => String(a?.studentKey || '') === studentKey);
+        } else if (await syncAttemptsSetAside(this.state.storage, code, assignment, attemptsByKey)) {
+          // The teacher's view has to add up, and this route reads every attempt
+          // anyway: assignments from before the rule catch up here.
+          await saveAssignmentBase(this.state.storage, code, assignment);
         }
 
         attempts = attempts
@@ -3462,6 +3467,8 @@ export class QuizRoom {
           return json({ error: 'Selected attempts must be fully graded before releasing grades.' }, 409);
         }
         const releasedAt = Date.now();
+        // Releasing an unfinished retry hands it in, so it takes over.
+        const retryHandedIn = attempts.some(a => a.setAside && !a.submitted);
         let submitted = 0;
         for (let i = 0; i < ids.length; i++) {
           const attempt = attempts[i];
@@ -3478,6 +3485,7 @@ export class QuizRoom {
           await saveAttempt(this.state.storage, code, ids[i], attempt);
         }
         assignment.updatedAt = releasedAt;
+        if (retryHandedIn) await syncAttemptsSetAside(this.state.storage, code, assignment, await loadAttemptsForCode(this.state.storage, code));
         await saveAssignmentBase(this.state.storage, code, assignment);
         return json({ ok: true, released: ids.length, submitted, grades: attempts.map((a, i) => ({
           attemptId: ids[i], releasedGrade: a.releasedGrade, gradeReleasedAt: a.gradeReleasedAt,
@@ -3613,6 +3621,7 @@ export class QuizRoom {
           assignment: publicAssignment(assignment, { includeQuiz: false }),
           attempt: publicAssignmentAttemptSummary(assignment, attempt),
           gradingItems: buildTeacherGradingItems(assignment, attempt),
+          listeningSections: gradingListeningSections(assignment.quiz),
         });
       }
 
@@ -4046,6 +4055,11 @@ export class QuizRoom {
         if (attempt.adaptive && !attempt.reopenedAt) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
         if (prevPending || looks.length) attempt.autoScore = evaluateAssignmentAttempt(assignment, attempt).autoScore;
         if (prevPending) applyPendingDelta(assignment, prevPending, computeAttemptPending(assignment, attempt));
+        // A retry takes over from the attempt before it once it is handed in.
+        if (attempt.setAside) {
+          const attempts = await loadAttemptsForCode(this.state.storage, code);
+          await syncAttemptsSetAside(this.state.storage, code, assignment, { ...attempts, [attemptId]: attempt });
+        }
 
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -4077,6 +4091,11 @@ export class QuizRoom {
         attempt.releasedGrade = null;
         attempt.selfCorrectedAt = null;
         assignment.updatedAt = attempt.updatedAt;
+        // Reopening a set-aside attempt makes it the student's current work.
+        if (attempt.setAside) {
+          const attempts = await loadAttemptsForCode(this.state.storage, code);
+          await syncAttemptsSetAside(this.state.storage, code, assignment, { ...attempts, [attemptId]: attempt });
+        }
 
         await saveAttempt(this.state.storage, code, attemptId, attempt);
         await saveAssignmentBase(this.state.storage, code, assignment);
@@ -4101,7 +4120,7 @@ export class QuizRoom {
         const answersByQuestion = new Map();
         attempts.forEach(a => buildTeacherGradingItems(assignment, a).forEach(item => {
           if (!answersByQuestion.has(item.qIndex)) answersByQuestion.set(item.qIndex, []);
-          answersByQuestion.get(item.qIndex).push(item);
+          answersByQuestion.get(item.qIndex).push({ ...item, submitted: !!a.submitted });
         }));
 
         const overview = questions.map((q, qIndex) => {
@@ -4109,14 +4128,21 @@ export class QuizRoom {
           let answeredCount = 0;
           let gradedCount = 0;
           let pendingCount = 0;
+          let pendingUnfinishedCount = 0;
+          let pendingAudioMs = 0;
+          let setAsideCount = 0;
           let withFeedbackCount = 0;
 
-          // Use all attempts (not just submitted) so pending counts match the assignment
-          // card's "X to grade" counter and the results view.
+          // Use all attempts that count (not just submitted) so pending counts
+          // match the assignment card's "X to grade" counter and the results view.
           (answersByQuestion.get(qIndex) || []).forEach((item) => {
+            const grade = item.grade;
+            if (item.setAside && !grade?.graded) {
+              if (!q?.isPoll) setAsideCount += 1;
+              return;
+            }
             answeredCount += 1;
             if (q?.isPoll) return;
-            const grade = item.grade;
             if (grade && grade.graded) {
               gradedCount += 1;
               if ((grade.correction && String(grade.correction).trim()) || (grade.correctionAudioKey && String(grade.correctionAudioKey).trim())) {
@@ -4124,6 +4150,8 @@ export class QuizRoom {
               }
             } else {
               pendingCount += 1;
+              if (!item.submitted) pendingUnfinishedCount += 1;
+              pendingAudioMs += Math.max(0, Number(item.answer?.durationMs) || 0);
             }
           });
 
@@ -4137,6 +4165,9 @@ export class QuizRoom {
             answeredCount,
             gradedCount,
             pendingCount,
+            pendingUnfinishedCount,
+            pendingAudioMs,
+            setAsideCount,
             withFeedbackCount,
           };
         });
@@ -4177,9 +4208,9 @@ export class QuizRoom {
             submittedAt: Number(a?.submittedAt || 0) || null,
           })));
         items.sort((a, b) => {
-          // Ungraded first, then submitted before in-progress, then by submission time.
-          const aPending = !a.grade?.graded ? 1 : 0;
-          const bPending = !b.grade?.graded ? 1 : 0;
+          // To grade first, then submitted before in-progress, then by submission time.
+          const aPending = !a.grade?.graded && !a.setAside ? 1 : 0;
+          const bPending = !b.grade?.graded && !b.setAside ? 1 : 0;
           if (aPending !== bPending) return bPending - aPending;
           const aSubmitted = a?.submitted ? 1 : 0;
           const bSubmitted = b?.submitted ? 1 : 0;
@@ -4209,6 +4240,7 @@ export class QuizRoom {
             media: normalizeQuestionMediaForGrading(question?.media),
           },
           items,
+          listeningSections: question.listeningSection ? gradingListeningSections(assignment.quiz, [question.listeningSection]) : [],
         });
       }
 
@@ -4231,6 +4263,8 @@ export class QuizRoom {
         assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
+        // The student's next attempt takes over from a deleted one that counted.
+        if (!attempt.setAside) await syncAttemptsSetAside(this.state.storage, code, assignment, await loadAttemptsForCode(this.state.storage, code));
         await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, deleted: attemptId });
@@ -4264,6 +4298,8 @@ export class QuizRoom {
         assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
+        // The student's next attempt takes over from a deleted one that counted.
+        if (!attempt.setAside) await syncAttemptsSetAside(this.state.storage, code, assignment, await loadAttemptsForCode(this.state.storage, code));
         await saveAssignmentBase(this.state.storage, code, assignment);
 
         return json({ ok: true, deleted: attemptId });
@@ -9792,12 +9828,20 @@ function aiHandedIn(assignment, attempt, sectionIds, { open = false } = {}) {
   return out;
 }
 
+function listeningLinesText(lines) {
+  return lines.map((c) => (c.who ? `${c.who}: ${c.text}` : c.text)).join('\n');
+}
+
+// Everything said in a section's recording.
+function listeningSectionWords(section) {
+  return String(section.transcript || '').trim() || listeningLinesText(section.cues || []);
+}
+
 // What the AI reads with a listening answer. A typed answer needs only the
 // moment it is heard, when that is known; an open one may be about all of it.
 function aiListeningContext(section, question) {
-  const said = (lines) => lines.map((c) => (c.who ? `${c.who}: ${c.text}` : c.text)).join('\n');
-  const moment = said(listeningMoment({ section }, question, true)?.lines || []);
-  const whole = String(section.transcript || '').trim() || said(section.cues || []);
+  const moment = listeningLinesText(listeningMoment({ section }, question, true)?.lines || []);
+  const whole = listeningSectionWords(section);
   return {
     instruction: String(section.text || '').trim(),
     recording: (question.type === 'open' ? whole || moment : moment || whole).slice(0, AI_RECORDING_MAX),
@@ -10497,26 +10541,15 @@ function summarizePendingGrading(assignment) {
 
   // Slow path: full scan when attempts are already in memory (admin
   // endpoints and the lazy-backfill path).
-  const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
   const attempts = assignment?.attempts && typeof assignment.attempts === 'object' ? assignment.attempts : {};
 
   let pendingGradingCount = 0;
   let pendingAttemptsCount = 0;
 
   Object.values(attempts).forEach((attempt) => {
-    const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
-    let attemptHasPending = false;
-    Object.entries(answers).forEach(([idxRaw, item]) => {
-      const qIndex = Number(idxRaw);
-      const question = questions[qIndex];
-      if (!question) return;
-      if (question.isPoll) return;
-      if (!isAssignmentTeacherGradedQuestion(question)) return;
-      if (item?.teacherGrade?.graded) return;
-      pendingGradingCount += 1;
-      attemptHasPending = true;
-    });
-    if (attemptHasPending) pendingAttemptsCount += 1;
+    const { pendingCount, hasPending } = computeAttemptPending(assignment, attempt);
+    pendingGradingCount += pendingCount;
+    if (hasPending) pendingAttemptsCount += 1;
   });
 
   return { pendingGradingCount, pendingAttemptsCount };
@@ -10536,6 +10569,7 @@ function publicAssignmentAttemptSummary(assignment, attempt) {
     updatedAt: full.updatedAt,
     submitted: full.submitted,
     submittedAt: full.submittedAt,
+    setAside: attempt?.setAside ? true : undefined,
     reviewedAt: full.reviewedAt,
     selfCorrectedAt: full.selfCorrectedAt,
     notifiedAt: Number(attempt?.notifiedAt || 0) || null,
@@ -10639,11 +10673,29 @@ function buildTeacherGradingItems(assignment, attempt) {
         answerLanguage: String(question?.answerLanguage || ''),
         media: normalizeQuestionMediaForGrading(question?.media),
         grade,
+        // When this answer last changed, by the server's clock (see packBuiltAt).
+        answerSavedAt: Number(item?.updatedAt || 0) || null,
+        ...(question.listeningSection ? { listeningSection: question.listeningSection } : {}),
+        ...(attempt?.setAside ? { setAside: true } : {}),
         ...(item?.ai ? { ai: item.ai } : {}),
       };
     })
     .filter(Boolean)
     .sort((a, b) => Number(a.qIndex || 0) - Number(b.qIndex || 0));
+}
+
+// Listening sections for whoever checks the answers: the words of the recording,
+// never the recording itself, so a pack stays small. Teacher routes only:
+// students must never receive these words.
+function gradingListeningSections(quiz, ids = null) {
+  return (Array.isArray(quiz?.listeningSections) ? quiz.listeningSections : [])
+    .filter((s) => !ids || ids.includes(s.id))
+    .map((s) => ({
+      id: s.id,
+      title: String(s.title || ''),
+      instruction: String(s.text || '').trim(),
+      script: listeningSectionWords(s),
+    }));
 }
 
 function withoutAiNotes(answersByQ) {
@@ -10990,6 +11042,7 @@ async function nextAssignmentCode(storage) {
 // current quiz definition. Used to compute deltas at write sites and to
 // recompute the cached totals on the base row.
 function computeAttemptPending(assignment, attempt) {
+  if (attempt?.setAside) return { pendingCount: 0, hasPending: false };
   const questions = Array.isArray(assignment?.quiz?.questions) ? assignment.quiz.questions : [];
   const answers = attempt?.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
   let pendingCount = 0;
@@ -11038,6 +11091,44 @@ function recomputeAssignmentPending(assignment) {
   assignment.pendingGradingCount = total;
   assignment.pendingAttemptsCount = attemptsWithPending;
   assignment.attemptsCount = Object.keys(attempts).length;
+}
+
+// One attempt per student is the one to grade: the latest handed in, or their
+// unfinished one if they never handed anything in. Reopening hands an attempt
+// back to the student, so it stays their current work. The others are set aside:
+// kept and still gradable, but not work to do, so "to grade", the grading views
+// and the AI packs all leave them out. The link and /play are separate entries.
+function attemptsSetAside(attempts) {
+  const handedIn = (a) => Number(a?.submittedAt || a?.reopenedAt || 0);
+  const newestFirst = Object.entries(attempts).sort(([, a], [, b]) => handedIn(b) - handedIn(a)
+    || Number(b?.startedAt || 0) - Number(a?.startedAt || 0));
+  const seen = new Set();
+  const aside = new Set();
+  for (const [id, attempt] of newestFirst) {
+    const student = attempt?.studentKey ? `${attempt.via === 'play' ? 'play' : 'link'}:${attempt.studentKey}` : id;
+    if (seen.has(student)) aside.add(id);
+    seen.add(student);
+  }
+  return aside;
+}
+
+// Applies the rule to every attempt of an assignment, writing only the attempts
+// that change, and refreshes the cached totals on `assignment`. Answer saves
+// never come here: they read one row, and `setAside` on it is all they need.
+// Returns whether the totals changed, for callers that would not save the base.
+async function syncAttemptsSetAside(storage, code, assignment, attempts) {
+  const aside = attemptsSetAside(attempts);
+  for (const [id, attempt] of Object.entries(attempts)) {
+    if (!!attempt.setAside === aside.has(id)) continue;
+    if (aside.has(id)) attempt.setAside = true;
+    else delete attempt.setAside;
+    await saveAttempt(storage, code, id, attempt);
+  }
+  const totals = () => [assignment.pendingGradingCount, assignment.pendingAttemptsCount, assignment.attemptsCount].join();
+  const before = totals();
+  assignment.attempts = attempts;
+  recomputeAssignmentPending(assignment);
+  return totals() !== before;
 }
 
 function publicAssignment(assignment, { includeQuiz = false, includeAnswerKey = false } = {}) {
