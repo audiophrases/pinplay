@@ -7528,13 +7528,8 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       return false;
     }
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = question.language || 'en-US';
       setAssignmentAudioPlayingUi(true);
-      utterance.addEventListener('end', () => { setAssignmentAudioPlayingUi(false); }, { once: true });
-      utterance.addEventListener('error', () => { setAssignmentAudioPlayingUi(false); }, { once: true });
-      window.speechSynthesis.speak(utterance);
+      speakTtsSegmentsInBrowser(text, question.language || 'en-US').then(() => setAssignmentAudioPlayingUi(false));
       return true;
     } catch {
       setAssignmentAudioPlayingUi(false);
@@ -7868,6 +7863,66 @@ function normalizeBackendUrl(url) {
 
 // Edge TTS cache for student UI
 const studentEdgeTtsCache = new Map();
+
+// Bilingual question audio (BILINGUAL_TTS_PLAN.md): "[ca] Escolta. [en] She has
+// lived here." switches the voice at each tag. A tag is a two-letter language
+// code or an Edge voice id; text before the first tag keeps the question's own
+// voice, and so does a tag of that voice's language. Identical in app.js,
+// play.js and worker.js.
+const TTS_TAG_VOICES = {
+  en: 'en-US-AriaNeural', ca: 'ca-ES-JoanaNeural', fr: 'fr-FR-DeniseNeural', es: 'es-ES-ElviraNeural',
+  de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
+};
+
+function splitTtsSegments(text, voice) {
+  const base = String(voice || '').trim() || 'en-US-AriaNeural';
+  const src = String(text || '');
+  const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
+  const out = [];
+  const push = (part, v) => {
+    const s = part.replace(/\s+/g, ' ').trim();
+    if (s) out.push({ text: s, voice: v });
+  };
+  let current = base;
+  let last = 0;
+  let m;
+  while ((m = tag.exec(src))) {
+    push(src.slice(last, m.index), current);
+    if (/neural$/i.test(m[1])) {
+      current = m[1];
+    } else {
+      const lang = m[1].toLowerCase();
+      current = base.toLowerCase().startsWith(`${lang}-`) ? base : (TTS_TAG_VOICES[lang] || base);
+    }
+    last = m.index + m[0].length;
+  }
+  push(src.slice(last), current);
+  return out;
+}
+
+// The browser's own voices as the last resort: one utterance per tagged
+// segment, queued in order, each in its language. Resolves when the last ends.
+function speakTtsSegmentsInBrowser(text, voice) {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) return resolve(false);
+    const segments = splitTtsSegments(text, voice);
+    if (!segments.length) return resolve(false);
+    try {
+      window.speechSynthesis.cancel();
+      segments.forEach((seg, i) => {
+        const utterance = new SpeechSynthesisUtterance(seg.text);
+        utterance.lang = (seg.voice.match(/^[a-z]{2}-[A-Za-z]{2}/) || [seg.voice])[0];
+        if (i === segments.length - 1) {
+          utterance.addEventListener('end', () => resolve(true), { once: true });
+          utterance.addEventListener('error', () => resolve(false), { once: true });
+        }
+        window.speechSynthesis.speak(utterance);
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
 
 // --- Spelling Bee (audio-first spelling game) -----------------------------
 // The interactive engine + UI lives in spellingbee.js (window.SpellingBee). We

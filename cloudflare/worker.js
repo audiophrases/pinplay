@@ -2452,43 +2452,13 @@ export default {
           }
         }
 
-        const headers = { 'Content-Type': 'application/json' };
-        const secret = String(env.EDGE_TTS_SECRET || '').trim();
-        if (secret) headers['Authorization'] = `Bearer ${secret}`;
+        const made = await synthesizeEdgeMp3(env, text, voice, rate);
+        if (!made.ok) return json({ error: made.error }, made.status === 501 ? 501 : 502);
 
-        let ttsRes = await fetch(edgeUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ text, voice, rate }),
-        });
-
-        // Convenience retry: if bridge base URL was provided without /tts.
-        if (ttsRes.status === 404) {
-          const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
-          if (retryUrl !== edgeUrl) {
-            ttsRes = await fetch(retryUrl, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({ text, voice, rate }),
-            });
-          }
-        }
-
-        if (!ttsRes.ok) {
-          const txt = await ttsRes.text();
-          let err = txt;
-          try {
-            const parsed = JSON.parse(txt);
-            err = parsed?.error || parsed?.detail || parsed?.message || txt;
-          } catch { }
-          return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
-        }
-
-        const audio = await ttsRes.arrayBuffer();
-        const out = new Response(audio, {
+        const out = new Response(made.audio, {
           status: 200,
           headers: {
-            'Content-Type': ttsRes.headers.get('content-type') || 'audio/mpeg',
+            'Content-Type': made.contentType || 'audio/mpeg',
             'Cache-Control': 'public, max-age=86400',
           },
         });
@@ -2528,29 +2498,10 @@ export default {
         const head = await env.QUIZ_MEDIA.head(key);
         if (head) return json({ ok: true, key, cached: true });
 
-        const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
-        if (!edgeUrl) return json({ error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' }, 501);
+        const made = await synthesizeEdgeMp3(env, text, voice, rate);
+        if (!made.ok) return json({ error: made.error }, made.status === 501 ? 501 : 502);
 
-        const headers = { 'Content-Type': 'application/json' };
-        const secret = String(env.EDGE_TTS_SECRET || '').trim();
-        if (secret) headers['Authorization'] = `Bearer ${secret}`;
-
-        let ttsRes = await fetch(edgeUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
-        if (ttsRes.status === 404) {
-          const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
-          if (retryUrl !== edgeUrl) {
-            ttsRes = await fetch(retryUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
-          }
-        }
-        if (!ttsRes.ok) {
-          const txt = await ttsRes.text();
-          let err = txt;
-          try { const p = JSON.parse(txt); err = p?.error || p?.detail || p?.message || txt; } catch { }
-          return json({ error: err || `Edge TTS failed (${ttsRes.status}).` }, 502);
-        }
-
-        const audio = await ttsRes.arrayBuffer();
-        await env.QUIZ_MEDIA.put(key, audio, { httpMetadata: { contentType: 'audio/mpeg' } });
+        await env.QUIZ_MEDIA.put(key, made.audio, { httpMetadata: { contentType: 'audio/mpeg' } });
         return json({ ok: true, key, cached: false });
       } catch (err) {
         return json({ error: `TTS ensure failed: ${err.message}` }, 502);
@@ -2568,9 +2519,6 @@ export default {
       const items = Array.isArray(body?.items) ? body.items.slice(0, 300) : [];
       const prefix = mediaPrefixFor(auth);
       const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
-      const secret = String(env.EDGE_TTS_SECRET || '').trim();
-      const headers = { 'Content-Type': 'application/json' };
-      if (secret) headers['Authorization'] = `Bearer ${secret}`;
 
       const seen = new Map(); // hash -> key (dedupe within this batch)
       const results = [];
@@ -2589,15 +2537,10 @@ export default {
           if (head) { seen.set(hash, key); results.push({ ok: true, key, cached: true }); continue; }
           if (!edgeUrl) { results.push({ ok: false, key, error: 'EDGE_TTS_URL not configured' }); continue; }
 
-          let ttsRes = await fetch(edgeUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
-          if (ttsRes.status === 404) {
-            const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
-            if (retryUrl !== edgeUrl) ttsRes = await fetch(retryUrl, { method: 'POST', headers, body: JSON.stringify({ text, voice, rate }) });
-          }
-          if (!ttsRes.ok) { results.push({ ok: false, key, error: `Edge TTS ${ttsRes.status}` }); continue; }
+          const made = await synthesizeEdgeMp3(env, text, voice, rate);
+          if (!made.ok) { results.push({ ok: false, key, error: `Edge TTS ${made.status}` }); continue; }
 
-          const audio = await ttsRes.arrayBuffer();
-          await env.QUIZ_MEDIA.put(key, audio, { httpMetadata: { contentType: 'audio/mpeg' } });
+          await env.QUIZ_MEDIA.put(key, made.audio, { httpMetadata: { contentType: 'audio/mpeg' } });
           seen.set(hash, key);
           results.push({ ok: true, key, cached: false });
         } catch (err) {
@@ -8714,6 +8657,81 @@ async function verifyCreatePassword(env, password, request, opts = {}) {
 // PinPlay routes, credential formats and assignment storage remain unchanged.
 export { verifyCreatePassword, resolveAuth, verifyGoogleIdToken, verifyStudentToken,
   studentSessionSecret, rosterCall, rosterGetStudent, rosterGetSettings, isEmailAllowed };
+
+// Bilingual question audio (BILINGUAL_TTS_PLAN.md): "[ca] Escolta. [en] She has
+// lived here." switches the voice at each tag. A tag is a two-letter language
+// code or an Edge voice id; text before the first tag keeps the question's own
+// voice, and so does a tag of that voice's language. Identical in app.js,
+// play.js and worker.js.
+const TTS_TAG_VOICES = {
+  en: 'en-US-AriaNeural', ca: 'ca-ES-JoanaNeural', fr: 'fr-FR-DeniseNeural', es: 'es-ES-ElviraNeural',
+  de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
+};
+
+function splitTtsSegments(text, voice) {
+  const base = String(voice || '').trim() || 'en-US-AriaNeural';
+  const src = String(text || '');
+  const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
+  const out = [];
+  const push = (part, v) => {
+    const s = part.replace(/\s+/g, ' ').trim();
+    if (s) out.push({ text: s, voice: v });
+  };
+  let current = base;
+  let last = 0;
+  let m;
+  while ((m = tag.exec(src))) {
+    push(src.slice(last, m.index), current);
+    if (/neural$/i.test(m[1])) {
+      current = m[1];
+    } else {
+      const lang = m[1].toLowerCase();
+      current = base.toLowerCase().startsWith(`${lang}-`) ? base : (TTS_TAG_VOICES[lang] || base);
+    }
+    last = m.index + m[0].length;
+  }
+  push(src.slice(last), current);
+  return out;
+}
+
+// One Edge bridge call per voice segment of a (possibly bilingual) text, joined
+// into one mp3: Edge clips share one format, so the bytes concatenate and play
+// as one clip. Returns { ok, audio, contentType } or { ok: false, status, error }.
+async function synthesizeEdgeMp3(env, text, voice, rate) {
+  const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
+  if (!edgeUrl) return { ok: false, status: 501, error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' };
+  const headers = { 'Content-Type': 'application/json' };
+  const secret = String(env.EDGE_TTS_SECRET || '').trim();
+  if (secret) headers['Authorization'] = `Bearer ${secret}`;
+
+  const segments = splitTtsSegments(text, voice);
+  if (!segments.length) return { ok: false, status: 400, error: 'Missing text.' };
+
+  const parts = [];
+  let contentType = 'audio/mpeg';
+  for (const seg of segments) {
+    const body = JSON.stringify({ text: seg.text, voice: seg.voice, rate });
+    let res = await fetch(edgeUrl, { method: 'POST', headers, body });
+    // Convenience retry: if bridge base URL was provided without /tts.
+    if (res.status === 404) {
+      const retryUrl = edgeUrl.endsWith('/tts') ? edgeUrl : `${edgeUrl.replace(/\/+$/, '')}/tts`;
+      if (retryUrl !== edgeUrl) res = await fetch(retryUrl, { method: 'POST', headers, body });
+    }
+    if (!res.ok) {
+      const txt = await res.text();
+      let err = txt;
+      try { const p = JSON.parse(txt); err = p?.error || p?.detail || p?.message || txt; } catch { }
+      return { ok: false, status: res.status, error: err || `Edge TTS failed (${res.status}).` };
+    }
+    contentType = res.headers.get('content-type') || contentType;
+    parts.push(new Uint8Array(await res.arrayBuffer()));
+  }
+  if (parts.length === 1) return { ok: true, audio: parts[0].buffer, contentType };
+  const joined = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
+  let at = 0;
+  for (const p of parts) { joined.set(p, at); at += p.byteLength; }
+  return { ok: true, audio: joined.buffer, contentType };
+}
 
 async function sha256Hex(input) {
   const data = new TextEncoder().encode(String(input || ''));

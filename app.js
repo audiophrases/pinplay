@@ -1046,9 +1046,17 @@ function syncCustomMediaFields() {
     const selectEl = document.getElementById(id);
     const textEl = document.getElementById(`${id}Custom`);
     if (!(selectEl instanceof HTMLSelectElement) || !(textEl instanceof HTMLInputElement)) return;
-    const isCustom = selectEl.value === 'custom';
+    // "Bilingual" audio shows the same box: which language says what, and an
+    // example for the grammar of the quiz, in the teacher's own words.
+    const isBilingual = id === 'promptAudio' && selectEl.value === 'bilingual';
+    const isCustom = selectEl.value === 'custom' || isBilingual;
     textEl.classList.toggle('hidden', !isCustom);
     textEl.disabled = !isCustom;
+    if (id === 'promptAudio') {
+      textEl.placeholder = isBilingual
+        ? t('e.g. explain in Catalan, read the sentence in English: [ca] Tria el verb. [en] She goes to school.')
+        : t('e.g. read every A1–A2 question aloud');
+    }
   });
 }
 
@@ -3636,6 +3644,42 @@ function renderBuilder() {
   }
 }
 
+// Bilingual question audio (BILINGUAL_TTS_PLAN.md): "[ca] Escolta. [en] She has
+// lived here." switches the voice at each tag. A tag is a two-letter language
+// code or an Edge voice id; text before the first tag keeps the question's own
+// voice, and so does a tag of that voice's language. Identical in app.js,
+// play.js and worker.js.
+const TTS_TAG_VOICES = {
+  en: 'en-US-AriaNeural', ca: 'ca-ES-JoanaNeural', fr: 'fr-FR-DeniseNeural', es: 'es-ES-ElviraNeural',
+  de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
+};
+
+function splitTtsSegments(text, voice) {
+  const base = String(voice || '').trim() || 'en-US-AriaNeural';
+  const src = String(text || '');
+  const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
+  const out = [];
+  const push = (part, v) => {
+    const s = part.replace(/\s+/g, ' ').trim();
+    if (s) out.push({ text: s, voice: v });
+  };
+  let current = base;
+  let last = 0;
+  let m;
+  while ((m = tag.exec(src))) {
+    push(src.slice(last, m.index), current);
+    if (/neural$/i.test(m[1])) {
+      current = m[1];
+    } else {
+      const lang = m[1].toLowerCase();
+      current = base.toLowerCase().startsWith(`${lang}-`) ? base : (TTS_TAG_VOICES[lang] || base);
+    }
+    last = m.index + m[0].length;
+  }
+  push(src.slice(last), current);
+  return out;
+}
+
 const EDGE_TTS_LANGUAGE_DEFAULTS = {
   NONE: '',
   EN: 'en-US-AriaNeural',
@@ -4181,6 +4225,7 @@ function buildAudioSettingsMarkup(idx, q) {
       </div>
       <label class="top-space">Text to read aloud (max 1000 chars)</label>
       <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
+      <div class="small muted">${t('Bilingual: a tag switches the voice — "[ca] Escolta i tria. [en] She has lived here since 2010." ([ca], [en], [fr], [es]… or a voice id such as [es-ES-ElviraNeural]).')}</div>
       <label>TTS text language</label>
       <select data-q="${idx}" data-field="ttsLanguageQuestion">${ttsLanguageOptions}</select>
       ${showOtherSearch ? `<label class="top-space">Find Edge voice (language · country · person · code)</label>
@@ -5217,6 +5262,11 @@ const TEACHER_GRADED_TYPES = ['open', 'speaking', 'voice_record', 'image_open'];
 
 const PROMPT_VOICE = '"ttsLanguage": "EN", "CA" or "FR" — for any other language, "OTHER" plus "language": a voice id such as "es-ES-ElviraNeural"';
 
+// Bilingual question audio (BILINGUAL_TTS_PLAN.md): how the AI writes it. The
+// instruction is said in the students' own language, the content being learned
+// in the language of the quiz; tags in the text switch the voice.
+const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Say "blank" for a gap, never ___. The quiz and every question carry the voice of the language of the quiz: ' + PROMPT_VOICE + '.';
+
 // The fields each question type needs, as the AI should write them.
 const PROMPT_TYPE_FIELDS = {
   mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
@@ -5299,6 +5349,8 @@ function promptMediaRules(req, allowed, agent) {
   }
   if (req.audio === 'some') {
     rules.push(`Audio: where hearing the question helps (listening, pronunciation, young readers), add "audioEnabled": true and "audioText" (what is said; write "blank" for a gap, never ___) and the voice of the language that is said: ${PROMPT_VOICE}.`);
+  } else if (req.audio === 'bilingual') {
+    rules.push(`Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO}${String(req.bilingualNote || '').trim() ? ' Which language says what, and any example, is what the teacher typed under "Bilingual audio" (above).' : ''}`);
   }
   const words = 'about 40–100 words at A1–A2, 100–200 at B1, 200–500 at B2 and above';
   if (req.readingText === 'some') {
@@ -5368,6 +5420,7 @@ function buildCreationPrompt(request) {
     typeof count === 'string' ? `How many questions: ${quote(count)}` : null,
     custom.images ? `Images: ${quote(custom.images)}` : null,
     custom.audio ? `Audio: ${quote(custom.audio)}` : null,
+    req.audio === 'bilingual' && String(req.bilingualNote || '').trim() ? `Bilingual audio: ${quote(req.bilingualNote)}` : null,
     custom.video ? `Video: ${quote(custom.video)}` : null,
     custom.readingText ? `Reading text: ${quote(custom.readingText)}` : null,
   ].filter(Boolean);
@@ -5749,6 +5802,7 @@ async function exportCreationPrompt() {
     batchSize: batchSize >= 3 ? Math.min(PROMPT_BATCH_MAX, batchSize) : 0,
     images: valueOf('promptImages') || 'no',
     audio: valueOf('promptAudio') || 'no',
+    bilingualNote: valueOf('promptAudio') === 'bilingual' ? valueOf('promptAudioCustom') : '',
     video: valueOf('promptVideo') || 'no',
     readingText: valueOf('promptReadingText') || 'no',
     mediaCustom,
@@ -5936,7 +5990,10 @@ function buildBuildupPrompt(req) {
     'Exactly ONE defensible solution per question. For single-choice questions, only one option is correct; for Multi, there is one complete set of correct options (several options are right); for Match, one complete pairing; for Puzzle, one correct order. Check each question against its step\'s rule: if another answer, selection set, pairing or order could also be right in some context, change the question.' + (allowed.includes('text') || allowed.includes('context_gap') ? ' For typed answers and gaps list every correct form in "accepted" / "gaps" (see the field list), because a right answer marked wrong costs the student a step.' : ''),
     'Wrong options are the real mistakes students make with this skill (use the teacher\'s list of mistakes if there is one, and the usual mistakes of speakers of their first language), one mistake per question. Never silly or impossible options; no trick questions.',
     'Prompts and options are short. Never a hint inside a question that gives the answer away.',
-    'Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "step": its step\'s number, and no "cefr". No pictures, audio, video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.',
+    `Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "step": its step's number, and no "cefr". No pictures, ${req.bilingualAudio ? '' : 'audio, '}video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.`,
+    req.bilingualAudio
+      ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} The students' own language is their first language (above)${req.notes ? '; the teacher\'s instructions (above) say more about what is said' : ''}.`
+      : undefined,
     batches.length
       ? `The quiz has more questions than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
       : undefined,
@@ -6003,6 +6060,7 @@ async function exportBuildupPrompt() {
     itemsPerStep: valueOf('promptBuildupItems'),
     selectedTypes,
     notes: valueOf('promptBuildupNotes'),
+    bilingualAudio: valueOf('promptBuildupAudio') === 'bilingual',
     aiMode: valueOf('promptAiMode') || 'chatbot',
   });
   await deliverPromptFile(text, filename);
@@ -23956,12 +24014,16 @@ function speakText(text, lang = 'en-US', onEnd = null) {
 
   try {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = String(lang || 'en-US').slice(0, 5);
-    if (typeof onEnd === 'function') {
-      utterance.addEventListener('end', () => onEnd(), { once: true });
-    }
-    window.speechSynthesis.speak(utterance);
+    // One utterance per tagged segment (bilingual audio), queued in order.
+    const segments = splitTtsSegments(value, lang || 'en-US');
+    segments.forEach((seg, i) => {
+      const utterance = new SpeechSynthesisUtterance(seg.text);
+      utterance.lang = String(seg.voice || 'en-US').slice(0, 5);
+      if (typeof onEnd === 'function' && i === segments.length - 1) {
+        utterance.addEventListener('end', () => onEnd(), { once: true });
+      }
+      window.speechSynthesis.speak(utterance);
+    });
   } catch {
     // ignore speech errors silently
   }

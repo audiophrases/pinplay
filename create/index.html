@@ -292,6 +292,7 @@
                         <select id="promptAudio">
                           <option value="some" selected data-i18n>Some (when relevant)</option>
                           <option value="no" data-i18n>No audio</option>
+                          <option value="bilingual" data-i18n>Bilingual (explain in the students' language, read the content in the quiz language)</option>
                           <option value="custom" data-i18n>Custom (type it)...</option>
                         </select>
                         <input id="promptAudioCustom" class="top-space hidden" type="text" placeholder="e.g. read every A1–A2 question aloud" data-i18n-ph />
@@ -337,6 +338,14 @@
                     <div class="prompt-field">
                       <label><span data-i18n>Students' first language (optional)</span>
                         <input id="promptBuildupFirstLanguage" type="text" placeholder="e.g. Catalan, Spanish" data-i18n-ph />
+                      </label>
+                    </div>
+                    <div class="prompt-field">
+                      <label><span data-i18n>Audio/TTS</span>
+                        <select id="promptBuildupAudio">
+                          <option value="no" selected data-i18n>No audio</option>
+                          <option value="bilingual" data-i18n>Bilingual (explain in the students' first language, read the content in the quiz language)</option>
+                        </select>
                       </label>
                     </div>
                     <div class="prompt-field full-width">
