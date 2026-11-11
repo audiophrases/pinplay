@@ -454,6 +454,12 @@ window.PINPLAY_FR_DICT = {
   'No attempt snapshot loaded yet.': 'Aucun aperçu de tentative chargé pour l\'instant.',
 
   /* ===================== Student dynamic (play.js) ===================== */
+  'Teaching slide': 'Diapositive pédagogique',
+  'No answer — teach or explain with big text, audio and media':
+    'Aucune réponse — enseignez ou expliquez avec un grand texte, de l’audio et des médias',
+  'Teaching slide — no answer needed': 'Diapositive pédagogique — aucune réponse requise',
+  'Teaching slide · no response needed': 'Diapositive pédagogique · aucune réponse requise',
+  'Watch and listen — no answer needed.': 'Regardez et écoutez — aucune réponse requise.',
   'Save answer': 'Enregistrer la réponse',
   ' · Due: {d}': ' · Échéance : {d}',
   'Assignment: {title}{due} · Random names mode': 'Devoir : {title}{due} · Mode noms aléatoires',

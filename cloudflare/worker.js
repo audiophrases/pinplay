@@ -3740,7 +3740,8 @@ export class QuizRoom {
           const qi = st.current;
           const served = assignment.quiz?.questions?.[qi];
           if (!served) return json({ error: 'Question not found.' }, 404);
-          const safeAnswer = sanitizeAssignmentAnswer(served, body?.answer);
+          const isSlide = served.type === 'slide';
+          const safeAnswer = isSlide ? '__viewed__' : sanitizeAssignmentAnswer(served, body?.answer);
           const bet = sanitizeBet(body?.bet);
           const band = buildupBandOf(st, served);
           const qBand = band >= 0 ? band : adaptiveBand(st);
@@ -3749,17 +3750,25 @@ export class QuizRoom {
           const teacher = isAssignmentTeacherGradedQuestion(served);
           await ensurePendingCounts(this.state.storage, code, assignment);
           const prevPending = computeAttemptPending(assignment, attempt);
-          st.items.push(withAiNote({ qi, answer: safeAnswer, bet, at: now, ...(teacher ? { band: adaptiveBand(st), qBand } : {}) }, served));
+          st.items.push(withAiNote({ qi, answer: safeAnswer, bet, at: now, ...(isSlide ? { slide: true } : {}), ...(teacher ? { band: adaptiveBand(st), qBand } : {}) }, served));
           attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
           attempt.answersByQ[String(qi)] = withAiNote({ answer: safeAnswer, bet, teacherGrade: null, updatedAt: now }, served);
-          if (teacher) {
+          if (isSlide) {
+            buildupAdvanceRemediation(assignment, st);
+          } else if (teacher) {
             adaptiveRecordPending(st, qi, qBand);
             // 🤖 A score moves the level now, as a teacher's grade does later.
             if (aiNote?.score != null) await adaptiveAttemptGrade(this.state.storage, attempt, qi, attempt.answersByQ[String(qi)].teacherGrade, assignmentMaxPoints(served));
+            adaptiveAttemptAdvance(assignment, st);
           }
-          else if (st.bu) buildupRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
-          else adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
-          adaptiveAttemptAdvance(assignment, st);
+          else if (st.bu) {
+            const outcome = adaptiveOutcome(evaluate(served, safeAnswer));
+            buildupRecord(st, qi, qBand, outcome);
+            if (outcome !== 'wrong' || !buildupStartRemediation(assignment, st, qBand)) adaptiveAttemptAdvance(assignment, st);
+          } else {
+            adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
+            adaptiveAttemptAdvance(assignment, st);
+          }
           if (st.done) await adaptiveAttemptSaveLevel(this.state.storage, attempt);
 
           const metrics = evaluateAssignmentAttempt(assignment, attempt);
@@ -5464,7 +5473,7 @@ export class QuizRoom {
         const resp = room.responsesByQuestion?.[qIndex]?.[playerId];
         if (!resp) return json({ error: 'No submitted open answer for this player.' }, 404);
 
-        const maxPoints = Number(question.points || 1000);
+        const maxPoints = Number.isFinite(Number(question.points)) ? Number(question.points) : 1000;
         const rawPoints = Math.round(clamp(pointsRaw, 0, maxPoints));
         const isCorrect = rawPoints > 0;
         const adjustedPoints = applyBetScore(maxPoints, rawPoints, isCorrect, sanitizeBet(resp?.bet));
@@ -5715,7 +5724,7 @@ export class QuizRoom {
           const lock = room.scoreLocksByQuestion[qIndex][playerId] || { lockedCorrect: false };
 
           verdict = evaluate(question, body?.answer);
-          const basePoints = Number(question.points || 1000);
+          const basePoints = Number.isFinite(Number(question.points)) ? Number(question.points) : 1000;
 
           const scoreFraction = verdictScoreFraction(verdict);
 
@@ -7151,7 +7160,7 @@ function finalizeListeningSection(room) {
         return;
       }
       const verdict = evaluate(question, answer);
-      const pointsAwarded = Math.floor(Number(question.points || 1000) * verdictScoreFraction(verdict));
+      const pointsAwarded = Math.floor((Number.isFinite(Number(question.points)) ? Number(question.points) : 1000) * verdictScoreFraction(verdict));
       room.responsesByQuestion[qIndex][playerId] = {
         answer,
         correct: !!verdict.correct,
@@ -7500,6 +7509,19 @@ function publicQuestion(question, { includeAnswerKey = false } = {}) {
   // on every type now). Lets old stored rows render without re-storing.
   if (question.type === 'audio') question = { ...question, type: 'mcq' };
 
+  if (question.type === 'slide') {
+    return {
+      type: 'slide',
+      prompt: question.prompt,
+      points: 0,
+      timeLimit: 0,
+      imageData: String(question.imageData || '') || undefined,
+      readingText: String(question.readingText || '') || undefined,
+      media: publicQuestionMediaPayload(question),
+      ...publicAudioPayload(question),
+    };
+  }
+
   if (['mcq', 'multi', 'tf'].includes(question.type)) {
     return {
       type: question.type,
@@ -7684,6 +7706,10 @@ function evaluate(question, answer) {
   // Blank/skipped answer ("Show answer?" in instant mode posts null). Without this,
   // Number(null) === 0 silently marked the first option as correct for mcq/tf/audio.
   if (answer === null || answer === undefined || answer === '') return { correct: false };
+
+  // A teaching slide records only that the student continued. It is never
+  // graded and is excluded from score/accuracy metrics.
+  if (question.type === 'slide') return { correct: String(answer) === '__viewed__' };
 
   if (['mcq', 'tf'].includes(question.type)) {
     const selected = Number(answer);
@@ -7984,6 +8010,11 @@ function normalizeQuiz(quiz) {
       ...(sanitizeListeningSectionId(q.listeningSection) ? { listeningSection: sanitizeListeningSectionId(q.listeningSection) } : {}),
       ...(normalizeListeningHeard(q.heard) ? { heard: normalizeListeningHeard(q.heard) } : {}),
     };
+
+    if (q.type === 'slide') {
+      normalized.questions.push({ ...base, points: 0, timeLimit: 0, isPoll: false });
+      return;
+    }
 
     if (['mcq', 'multi'].includes(q.type)) {
       const answers = (q.answers || [])
@@ -8594,6 +8625,7 @@ function distance2D(x1, y1, x2, y2) {
 }
 
 function minTimeByType(type) {
+  if (type === 'slide') return 0;
   if (type === 'slider') return 10;
   if (['text', 'open', 'speaking', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'pin'].includes(type)) return 20;
   return 5;
@@ -9377,7 +9409,7 @@ function assignmentAdaptivePool(assignment, { autoOnly = false } = {}) {
   const questions = assignment?.quiz?.questions || [];
   const eligible = autoOnly
     ? autoGradedQuestionIndexes(questions)
-    : questions.map((q, i) => (q && !q.isPoll ? i : -1)).filter((i) => i >= 0);
+    : questions.map((q, i) => (q && !q.isPoll && q.type !== 'slide' ? i : -1)).filter((i) => i >= 0);
   const { bands, pool } = adaptivePool(questions, eligible);
   return { bands, pool: pool.filter((p) => !questions[p.qi]?.listeningSection) };
 }
@@ -9480,7 +9512,11 @@ function adaptiveSectionPlan(quiz, { autoOnly = false } = {}) {
 function adaptiveAttemptTotal(st) {
   // Climb ends at the summit, before the cap: what was answered is the total.
   if (st?.bu && st.done) return (st.items || []).length;
-  return Number(st?.count || 0) + (st?.sections || []).reduce((n, s) => n + Number(s.size || 0), 0);
+  const slides = st?.bu ? (st.items || []).filter((it) => it.slide).length : 0;
+  const queuedSlides = st?.bu && st.currentSlide
+    ? 1 + (Array.isArray(st.slideQueue) ? st.slideQueue.length : 0)
+    : 0;
+  return Number(st?.count || 0) + slides + queuedSlides + (st?.sections || []).reduce((n, s) => n + Number(s.size || 0), 0);
 }
 
 function assignmentAdaptiveTotal(assignment) {
@@ -9514,7 +9550,7 @@ function adaptiveAttemptInit(assignment, saved = null, { count = assignmentAdapt
 // question while fewer than N are served, else done.
 function adaptiveAttemptServe(assignment, st, pool) {
   st.current = null;
-  const singles = (st.items || []).filter((it) => !it.section).length;
+  const singles = (st.items || []).filter((it) => !it.section && !it.slide).length;
   if (st.bu) {
     // Climb: no sections; the summit (or the cap) ends the attempt.
     if (!st.bu.summit && singles < st.count) st.current = buildupNext(st, pool);
@@ -9600,6 +9636,7 @@ function adaptiveAttemptRemap(assignment, st, mapQi, { climbKeyMap = null } = {}
     .map(([k, v]) => [mapQi(Number(k)), v])
     .filter(([k]) => k != null));
   st.last = st.last == null ? null : mapQi(st.last);
+  if (Array.isArray(st.slideQueue)) st.slideQueue = st.slideQueue.map(mapQi).filter((qi) => qi != null);
   if (!st.bu) {
     const { bands } = assignmentAdaptivePool(assignment, { autoOnly: !!st.autoOnly });
     adaptiveRebase(st, bands, climbKeyMap);
@@ -9619,6 +9656,13 @@ function adaptiveAttemptRemap(assignment, st, mapQi, { climbKeyMap = null } = {}
   }
   if (!st.done && !st.block) {
     st.current = st.current == null ? null : mapQi(st.current);
+    if (st.currentSlide && st.current == null) {
+      if (st.slideQueue?.length) st.current = st.slideQueue.shift();
+      else {
+        delete st.currentSlide;
+        delete st.slideQueue;
+      }
+    }
     if (st.bu) buildupRebase(st, buildupPool(assignment).bands, climbKeyMap);
     if (st.current == null) adaptiveAttemptAdvance(assignment, st);
   }
@@ -10229,15 +10273,26 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
     const qi = st.current;
     const served = assignment.quiz?.questions?.[qi];
     if (!served) return { status: 404, error: 'Question not found.' };
-    const answer = sanitizeAssignmentAnswer(served, rawAnswer);
+    const isSlide = served.type === 'slide';
+    const answer = isSlide ? '__viewed__' : sanitizeAssignmentAnswer(served, rawAnswer);
     const band = st.bands.indexOf(typeof st.bands[0] === 'number' ? normalizeClimbStep(served.step) : normalizeCefrLevel(served.cefr));
     const qBand = band >= 0 ? band : adaptiveBand(st);
     const teacher = isAssignmentTeacherGradedQuestion(served);
-    st.items.push({ qi, answer, bet, at: now, ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
+    st.items.push({ qi, answer, bet, at: now, ...(isSlide ? { slide: true } : {}), ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
     attempt.answersByQ[String(qi)] = { answer, bet, teacherGrade: null, updatedAt: now };
-    if (teacher) adaptiveRecordPending(st, qi, qBand);
-    else adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, answer)));
-    adaptiveAttemptAdvance(assignment, st);
+    if (isSlide) {
+      buildupAdvanceRemediation(assignment, st);
+    } else if (teacher) {
+      adaptiveRecordPending(st, qi, qBand);
+      adaptiveAttemptAdvance(assignment, st);
+    } else if (st.bu) {
+      const outcome = adaptiveOutcome(evaluate(served, answer));
+      buildupRecord(st, qi, qBand, outcome);
+      if (outcome !== 'wrong' || !buildupStartRemediation(assignment, st, qBand)) adaptiveAttemptAdvance(assignment, st);
+    } else {
+      adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, answer)));
+      adaptiveAttemptAdvance(assignment, st);
+    }
   } else {
     const question = assignment.quiz?.questions?.[qIndex];
     if (!question) return { status: 404, error: 'Question not found.' };
@@ -10321,6 +10376,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     if (!question) return;
 
     answeredCount += 1;
+    if (question.type === 'slide') return;
     if (question.isPoll) {
       autoGradedCount += 1;
       return;
@@ -10341,7 +10397,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 
     const verdict = evaluate(question, item?.answer);
     autoGradedCount += 1;
-    const basePoints = Math.round(Number(question.points || 1000));
+    const basePoints = Math.round(Number.isFinite(Number(question.points)) ? Number(question.points) : 1000);
 
     const scoreFraction = verdictScoreFraction(verdict);
 
@@ -10357,7 +10413,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   });
 
   const gradedCount = autoGradedCount + teacherGradedCount;
-  const gradableTotal = quizQuestions.reduce((n, q) => (q && !q.isPoll ? n + 1 : n), 0);
+  const gradableTotal = quizQuestions.reduce((n, q) => (q && !q.isPoll && q.type !== 'slide' ? n + 1 : n), 0);
   const accuracyDenominator = gradableTotal - pendingTeacherGradeCount;
   const accuracy = accuracyDenominator > 0 ? round((correctCount / accuracyDenominator) * 100, 1) : null;
 
@@ -10381,7 +10437,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
 // never gets answers to questions still ahead.
 function assignmentGradeOutOf100(assignment, attempt) {
   const view = attempt?.adaptive ? adaptiveAttemptView(assignment, attempt, { includeCurrent: false }) : { assignment, attempt };
-  const maximum = (view.assignment?.quiz?.questions || []).reduce((sum, q) => sum + (q && !q.isPoll ? Math.max(0, Number(q.points || 1000)) : 0), 0);
+  const maximum = (view.assignment?.quiz?.questions || []).reduce((sum, q) => sum + (q && !q.isPoll && q.type !== 'slide' ? Math.max(0, Number(q.points || 1000)) : 0), 0);
   const score = evaluateAssignmentAttempt(assignment, attempt).totalScore;
   return maximum > 0 ? round(Math.max(0, Math.min(100, score / maximum * 100)), 1) : 0;
 }
@@ -10433,7 +10489,7 @@ function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, 
     answersWithCorrectness = Object.entries(answers).map(([idxRaw, item]) => {
       const qIndex = Number(idxRaw);
       const question = assignment?.quiz?.questions?.[qIndex];
-      if (!question || isAssignmentTeacherGradedQuestion(question)) return null;
+      if (!question || question.type === 'slide' || isAssignmentTeacherGradedQuestion(question)) return null;
       // A listening section shows its marks only once it is submitted (locked).
       if (question.listeningSection && !attempt?.submitted && !attemptSectionSubmitted(attempt, question.listeningSection)) return null;
       const verdict = evaluate(question, item?.answer);
@@ -10641,7 +10697,7 @@ function assignmentAnswerGrade(question, item) {
   };
   if (question.isPoll || isAssignmentTeacherGradedQuestion(question)) return null;
   const verdict = evaluate(question, item?.answer);
-  const maxPoints = Math.round(Number(question.points || 1000));
+  const maxPoints = Math.round(Number.isFinite(Number(question.points)) ? Number(question.points) : 1000);
   const fraction = verdictScoreFraction(verdict);
   const points = verdict?.correct ? applyBetScore(maxPoints, Math.floor(maxPoints * fraction), true, item?.bet)
     : Math.floor(maxPoints * fraction) + applyBetScore(maxPoints, 0, false, item?.bet);
@@ -11412,6 +11468,7 @@ function autoGradedQuestionIndexes(questions) {
   return (questions || [])
     .map((q, i) => ({ q, i }))
     .filter(({ q }) => q && !q.isPoll
+      && q.type !== 'slide'
       && !['open', 'image_open', 'speaking', 'voice_record'].includes(q.type)
       && !isTeacherGradedTextQuestion(q))
     .map(({ i }) => i);
@@ -11868,7 +11925,7 @@ function assignmentBuildupOn(assignment) {
 // A quiz with any `step` climbs by its step numbers; its questions without a
 // step stay out of the climb.
 function quizUsesClimbSteps(questions) {
-  return (questions || []).some((q) => q && normalizeClimbStep(q.step));
+  return (questions || []).some((q) => q && q.type !== 'slide' && normalizeClimbStep(q.step));
 }
 
 // The climb's bands (step numbers from the bottom, or levels in a quiz
@@ -11879,6 +11936,42 @@ function buildupPool(assignment) {
   if (!quizUsesClimbSteps(questions)) return assignmentAdaptivePool(assignment, { autoOnly: true });
   const eligible = autoGradedQuestionIndexes(questions).filter((qi) => !questions[qi].listeningSection);
   return adaptivePool(questions, eligible);
+}
+
+// Slides are not part of the graded pool. After a miss, Climb inserts every
+// slide tagged to that missed band, in authoring order, before it serves the
+// next practice question. This makes adjacent slides a short teaching sequence.
+function buildupRemediationSlides(assignment, st, band) {
+  const questions = assignment?.quiz?.questions || [];
+  const key = st?.bands?.[band];
+  if (key == null) return [];
+  const byStep = typeof st.bands[0] === 'number';
+  return questions
+    .map((q, qi) => ({ q, qi }))
+    .filter(({ q }) => q?.type === 'slide' && !q.isPoll && !q.listeningSection
+      && (byStep ? normalizeClimbStep(q.step) : normalizeCefrLevel(q.cefr)) === key)
+    .map(({ qi }) => qi);
+}
+
+function buildupStartRemediation(assignment, st, band) {
+  const slides = buildupRemediationSlides(assignment, st, band);
+  if (!slides.length) return false;
+  st.current = slides[0];
+  st.slideQueue = slides.slice(1);
+  st.currentSlide = true;
+  return true;
+}
+
+function buildupAdvanceRemediation(assignment, st) {
+  const queue = Array.isArray(st.slideQueue) ? st.slideQueue : [];
+  if (queue.length) {
+    st.current = queue.shift();
+    st.slideQueue = queue;
+    return;
+  }
+  delete st.slideQueue;
+  delete st.currentSlide;
+  adaptiveAttemptAdvance(assignment, st);
 }
 
 // The same quiz can be assigned, played publicly or used in Cup. Its local
@@ -12648,7 +12741,7 @@ function buildAttemptSnapshots(room) {
     byKey.set(key, (byKey.get(key) || 0) + 1);
   });
 
-  const gradableTotal = (room?.quiz?.questions || []).reduce((n, q) => (q && !q.isPoll ? n + 1 : n), 0);
+  const gradableTotal = (room?.quiz?.questions || []).reduce((n, q) => (q && !q.isPoll && q.type !== 'slide' ? n + 1 : n), 0);
   const attempts = [...perStudent.values()]
     .map((r) => {
       const denom = gradableTotal - Number(r.pendingTeacherGradeCount || 0);

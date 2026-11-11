@@ -318,11 +318,25 @@ const TEMPLATE_ALL_13_TYPES = {
       "ttsLanguage": "EN",
       "imageKeyword": "",
       "imageData": ""
+    },
+    {
+      "id": "q18-slide",
+      "type": "slide",
+      "prompt": "Remember: regular past-tense verbs usually end in -ed.",
+      "points": 0,
+      "timeLimit": 0,
+      "audioEnabled": true,
+      "audioMode": "tts",
+      "audioText": "Remember: regular past-tense verbs usually end in e d.",
+      "ttsLanguage": "EN",
+      "imageKeyword": "timeline past",
+      "imageData": ""
     }
   ]
 };
 
 const QUESTION_TYPE_CATALOG = [
+  { type: 'slide', label: 'Teaching slide', inTemplate: true, supportsAudio: true },
   { type: 'mcq', label: 'MCQ', inTemplate: true, supportsAudio: true },
   { type: 'multi', label: 'Multi', inTemplate: true, supportsAudio: true },
   { type: 'tf', label: 'T/F', inTemplate: true, supportsAudio: true },
@@ -388,6 +402,7 @@ const addSliderBtn = document.getElementById('addSliderBtn');
 const addPinBtn = document.getElementById('addPinBtn');
 const addSpellingBeeBtn = document.getElementById('addSpellingBeeBtn');
 const addWordleBtn = document.getElementById('addWordleBtn');
+const addSlideBtn = document.getElementById('addSlideBtn');
 const saveBtn = document.getElementById('saveBtn');
 const openLocalBtn = document.getElementById('openLocalBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -1244,6 +1259,12 @@ function bindBuilderEvents() {
   if (clearAllTypesBtn && typesListEl) {
     clearAllTypesBtn.addEventListener('click', () => {
       typesListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+  }
+
+  if (addSlideBtn) {
+    addSlideBtn.addEventListener('click', () => {
+      addQuestionToBuilder(makeSlideQuestion());
     });
   }
 
@@ -3142,12 +3163,12 @@ function renderBuilder() {
       </div>`;
 
     let body = `<div class="${isCollapsed ? 'question-body-collapsed' : 'question-body'}">
-      <label>Question (max 1200 chars)</label>
+      <label>${q.type === 'slide' ? 'Teaching text' : 'Question'} (max 1200 chars)</label>
       <textarea data-q="${idx}" data-field="prompt" maxlength="1200">${escapeHtml(q.prompt || '')}</textarea>
       <div class="row gap top-space">
         <div style="min-width:120px;">
           <label>Points</label>
-          <select data-q="${idx}" data-field="points">
+          <select data-q="${idx}" data-field="points" ${q.type === 'slide' ? 'disabled title="Teaching slides are not scored"' : ''}>
             <option value="0" ${Number(q.points) === 0 ? 'selected' : ''}>0</option>
             <option value="1000" ${Number(q.points) === 1000 ? 'selected' : ''}>1000</option>
             <option value="2000" ${Number(q.points) === 2000 ? 'selected' : ''}>2000</option>
@@ -3155,7 +3176,7 @@ function renderBuilder() {
         </div>
         <div style="min-width:160px;">
           <label>Time limit (sec)</label>
-          <input data-q="${idx}" data-field="timeLimit" type="number" min="0" max="240" value="${Number.isFinite(Number(q.timeLimit)) ? Number(q.timeLimit) : 20}" />
+          <input data-q="${idx}" data-field="timeLimit" type="number" min="0" max="240" value="${Number.isFinite(Number(q.timeLimit)) ? Number(q.timeLimit) : 20}" ${q.type === 'slide' ? 'disabled title="Students continue when ready"' : ''} />
         </div>
         <div style="min-width:110px;">
           <label title="${escapeHtml(t('CEFR level (optional when using difficulty steps)'))}">${escapeHtml(t('Level'))}</label>
@@ -3178,6 +3199,12 @@ function renderBuilder() {
     `;
 
     let specific = '';
+
+    if (q.type === 'slide') {
+      specific += `
+        <p class="small top-space"><strong>🎓 No answer needed.</strong> Students watch, read or listen, then continue. Add pictures, GIFs, video, reading text or TTS below. In Climb, slides with the missed question's step appear as a remedial sequence after a wrong answer.</p>
+      `;
+    }
 
     if (['mcq', 'multi', 'tf'].includes(q.type)) {
       const isMulti = q.type === 'multi';
@@ -4307,6 +4334,11 @@ function syncQuizFromUI() {
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
     if (timeEl) q.timeLimit = normalizeTimeLimitValue(timeEl.value, q.type);
     q.isPoll = !!pollEl?.checked;
+    if (q.type === 'slide') {
+      q.points = 0;
+      q.timeLimit = 0;
+      q.isPoll = false;
+    }
     if (cefrEl) {
       const cefr = normalizeCefr(cefrEl.value);
       if (cefr) q.cefr = cefr;
@@ -5269,6 +5301,7 @@ const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "aud
 
 // The fields each question type needs, as the AI should write them.
 const PROMPT_TYPE_FIELDS = {
+  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types. Place it immediately before or after the question(s) it supports; several slides in a row may teach a multi-step idea.',
   mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
   multi: '"answers" as in mcq — 3 to 10 options, at least two correct.',
   tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
@@ -5301,6 +5334,7 @@ const PROMPT_EXAMPLE_CEFR = {
   'q6-match': 'A1', 'q7-error': 'A1', 'q8-open': 'A2', 'q9-speaking': 'A2', 'q10-puzzle': 'A1',
   'q11-slider': 'B1', 'q12-pin': 'A1', 'q13-voice-record': 'A2', 'q14-voice-text': 'A1',
   'q15-image-answer': 'B1', 'q16-spellingbee': 'A2', 'q17-wordle': 'A2',
+  'q18-slide': 'A1',
 };
 
 function shapePromptExample(q, req, index) {
@@ -5436,9 +5470,10 @@ function buildCreationPrompt(request) {
 
   const rules = [
     'Clear, short prompts and answer options. Distractors are near misses: believable, not obvious, not impossible.',
-    `Every question has a unique "id", "points": 1000 and "timeLimit": ${req.timeLimit} (seconds; 0 = no limit).`,
+    `Every item has a unique "id". Answer-bearing questions have "points": 1000 and "timeLimit": ${req.timeLimit} (seconds; 0 = no limit). Teaching slides have "points": 0 and "timeLimit": 0.`,
+    allowed.includes('slide') ? 'Teaching slides explain, model, recap or connect ideas; they never ask for an answer. Put each directly before or after the question(s) it supports. Use two or more consecutive slides when an idea is best taught in clear stages.' : null,
     ...promptMediaRules(req, allowed, agent),
-  ];
+  ].filter(Boolean);
   if (customMedia.length) {
     rules.push(`For ${customMedia.join(', ')}: how much and on which questions is what the teacher typed (above); the rules here only give the fields to use.`);
   }
@@ -5866,13 +5901,14 @@ async function exportListeningPrompt() {
 // equivalent questions for each step, in batches of whole steps past
 // PROMPT_BATCH_MAX questions.
 
-const BUILDUP_PROMPT_TYPES = ['mcq', 'tf', 'multi', 'match_pairs', 'puzzle', 'context_gap', 'text', 'error_hunt'];
+const BUILDUP_PROMPT_TYPES = ['slide', 'mcq', 'tf', 'multi', 'match_pairs', 'puzzle', 'context_gap', 'text', 'error_hunt'];
 const BUILDUP_PROMPT_DEFAULT_STEPS = 5;
 const BUILDUP_PROMPT_DEFAULT_ITEMS = 5;
 const BUILDUP_PROMPT_MAX_ITEMS = 10;
 
 // Where a type reads differently in a build up quiz (a wrong answer costs a step).
 const BUILDUP_PROMPT_TYPE_FIELDS = {
+  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text; always "points": 0 and "timeLimit": 0, with no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
   multi: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 4–5 options, with 2–3 correct. Ask the student to tick every correct option (e.g. the sentences that are correct). Scoring is all-or-nothing: every correct option, and no wrong ones, must be ticked. Use it mid-climb, never at step 1 (Base Camp).',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 3–4 pairs at most. Use form drills such as base verb → past form, subject → verb form, or question → short answer. Each item must have exactly one matching partner, with no interchangeable partners. Scoring is all-or-nothing: one wrong pair costs a step, so never use a long set.',
   puzzle: PROMPT_TYPE_FIELDS.puzzle + ' Use words or short chunks to build the form without spelling it: word order, do/does questions, negatives or adverb position. There must be exactly ONE grammatically correct order: PinPlay accepts only the stored order, so another valid order would wrongly cost a step. Avoid movable time/place phrases, adverbs with several valid positions, and reversible subjects/objects. Do not rely on capitals or punctuation to rule out another valid order. If a sentence can be reordered correctly in another way, rewrite it or use another allowed type.',
@@ -5973,24 +6009,25 @@ function buildBuildupPrompt(req) {
     `One skill: the one in "Skill" above, and nothing else.`,
     `Steps: ${steps}, numbered 1 to ${steps} (step 1 is the easiest).`,
     batches.length
-      ? `Questions: ${items} per step, ${total} in all, in ${batches.length} batches of whole steps (${batches.map(span).join(', then ')}), one JSON object per batch`
-      : `Questions: ${items} per step, ${total} in all, in one JSON object`,
+      ? `Questions: ${items} per step, ${total} in all, in ${batches.length} batches of whole steps (${batches.map(span).join(', then ')}), one JSON object per batch. These counts are answer-bearing practice questions; teaching slides are extra.`
+      : `Questions: ${items} per step, ${total} in all, in one JSON object. These counts are answer-bearing practice questions; teaching slides are extra.`,
     `Question types: use only ${allowed.join(', ')}.`,
   ];
   const rules = [
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     'How it is played: every student starts at step 1 and climbs. A right answer helps them up a step (two in a row on most steps); a wrong answer sends them one step back, where they get a different question of that step. So each step must be climbable by a student who has just got the step before right, and a student sent back must meet a question like the ones they already know.',
+    allowed.includes('slide') ? 'Teaching after a miss: add 1–3 slide items to a step when a concise explanation, worked example or visual would help with its likely mistake. A slide is shown only after the student misses practice at that same step; it does not move the climber or use up the practice-question cap. Several slides with the same step are shown consecutively in quiz order, so make each one a single stage and make the sequence coherent. Slides are optional where the step rule already says enough.' : undefined,
     'Use the teacher\'s comments to set the endpoint and pace, including any CEFR target. Spread the increase gradually over the requested steps: more steps mean smaller increases, not a higher final target. A request to reach B2 at the final step does not require reaching C1 or C2.',
     agent ? 'Check the grammar or rule you teach against a reliable source (a grammar reference or a dictionary) before you write the plan; do not invent rules or exceptions.' : undefined,
     'First write "stepsPlan", before any question: one entry per step, in order, with "step" (the step\'s number), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
     'One new thing per step, and only one: the form, OR the kind of subject or word, OR the kind of answer. Increase the demand slowly: T/F (tf) or two-option MCQ (mcq) → MCQ with three close options → Multi (multi) → Match (match_pairs) → Puzzle (puzzle) → Gap fill (context_gap) → Typed answer (text) → Error Hunt (error_hunt). Use only the allowed types and skip the others. Fit this progression to the number of steps: a short climb need not use every type; a longer climb can keep a type across several steps, changing only one thing at a time. The last step mixes what the earlier steps taught, introducing no new form or answer type.',
     `Every question practises the skill and nothing else. Use only very common, short words (the first words a beginner learns) and keep reusing the same small set of about 15 to 20 words and names across all the steps, so grammar is the only difficulty. Sentences are about everyday life in the students' world.`,
-    `Exactly ${items} questions per step. The questions of a step are equivalent: the same pattern, the same difficulty, different words, and none is a copy of another. A student sent back to a step must not meet the same question again straight away.`,
+    `Exactly ${items} questions per step are answer-bearing practice questions; teaching slides do not count toward this number. The questions of a step are equivalent: the same pattern, the same difficulty, different words, and none is a copy of another. A student sent back to a step must not meet the same question again straight away.`,
     'Step 1 is so easy that a student who has read its rule cannot get it wrong: a clear case and no distraction.',
     'Exactly ONE defensible solution per question. For single-choice questions, only one option is correct; for Multi, there is one complete set of correct options (several options are right); for Match, one complete pairing; for Puzzle, one correct order. Check each question against its step\'s rule: if another answer, selection set, pairing or order could also be right in some context, change the question.' + (allowed.includes('text') || allowed.includes('context_gap') ? ' For typed answers and gaps list every correct form in "accepted" / "gaps" (see the field list), because a right answer marked wrong costs the student a step.' : ''),
     'Wrong options are the real mistakes students make with this skill (use the teacher\'s list of mistakes if there is one, and the usual mistakes of speakers of their first language), one mistake per question. Never silly or impossible options; no trick questions.',
     'Prompts and options are short. Never a hint inside a question that gives the answer away.',
-    `Questions come step by step: all the questions of step 1, then step 2, and so on. Every question has "step": its step's number, and no "cefr". No pictures, ${req.bilingualAudio ? '' : 'audio, '}video, reading texts or listening sections, and no polls. Every question has a unique "id", "points": 1000 and "timeLimit": 0.`,
+    `Items come step by step: any teaching slides and all practice questions of step 1, then step 2, and so on. Every item has "step": its step's number, and no "cefr". No pictures, ${req.bilingualAudio ? '' : 'audio, '}video, reading texts or listening sections on practice questions, and no polls. Every practice question has a unique "id", "points": 1000 and "timeLimit": 0; every slide has a unique "id", "points": 0 and "timeLimit": 0 and may use TTS/audio, a picture/GIF or a video when it materially helps teach the rule.`,
     req.bilingualAudio
       ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} The students' own language is their first language (above)${req.notes ? '; the teacher\'s instructions (above) say more about what is said' : ''}.`
       : undefined,
@@ -15156,7 +15193,7 @@ function renderHostQuestion(state) {
     return;
   }
 
-  const inQuestionIntro = phase === 'question' && !showReveal;
+  const inQuestionIntro = phase === 'question' && !showReveal && question?.type !== 'slide';
   if (!inQuestionIntro) {
     hostQuestionCardEl?.classList.remove('intro-active');
     if (hostQuestionCardEl) delete hostQuestionCardEl.dataset.introStage;
@@ -15350,6 +15387,11 @@ function renderHostQuestion(state) {
       }
       hostQuestionAnswersEl.appendChild(wrap);
     }
+  }
+
+  if (question.type === 'slide') {
+    hostQuestionHintEl.textContent = t('Teaching slide · no response needed');
+    return;
   }
 
   if (question.isPoll) {
@@ -18337,9 +18379,16 @@ function bindSoloEvents() {
     if (!soloGame || soloGame.answered) return;
 
     const q = quiz.questions[soloGame.index];
+    if (q.type === 'slide') {
+      soloGame.index += 1;
+      if (soloGame.index >= quiz.questions.length) finishSoloGame();
+      else renderSoloQuestion();
+      return;
+    }
     const result = evaluateSoloQuestion(q);
 
-    const basePoints = Number(q.points || 1000);
+    const configuredPoints = Number(q.points);
+    const basePoints = Number.isFinite(configuredPoints) ? configuredPoints : 1000;
     let pts = 0;
     const scoreFraction = verdictScoreFraction(result);
 
@@ -18420,9 +18469,71 @@ function renderSoloQuestion() {
 
   setStatus(feedbackEl, '', '');
   submitBtn.classList.remove('hidden');
+  submitBtn.textContent = q.type === 'slide' ? t('Continue') : t('Submit');
   nextBtn.classList.add('hidden');
 
   answersEl.innerHTML = '';
+
+  if (q.type === 'slide') {
+    if (betBtn) betBtn.disabled = true;
+    const media = normalizeQuestionMedia(q.media);
+    const video = toVideoEmbedConfig(media);
+    if (media.kind === 'video' && video.src) {
+      const wrap = document.createElement('div');
+      wrap.className = 'question-video-wrap';
+      if (video.provider === 'direct') {
+        const el = document.createElement('video');
+        el.controls = true;
+        el.preload = 'metadata';
+        el.src = video.src;
+        el.className = 'question-video-el';
+        el.addEventListener('loadedmetadata', () => { el.currentTime = video.start || 0; }, { once: true });
+        el.addEventListener('timeupdate', () => {
+          if (video.end != null && el.currentTime >= video.end) el.pause();
+        });
+        wrap.appendChild(el);
+      } else {
+        const el = document.createElement('iframe');
+        el.src = video.src;
+        el.allowFullscreen = true;
+        el.className = 'question-video-el';
+        wrap.appendChild(el);
+      }
+      answersEl.appendChild(wrap);
+    } else if (q.imageData) {
+      const preview = document.createElement('div');
+      preview.className = 'pin-preview question-image-preview';
+      const img = document.createElement('img');
+      img.src = q.imageData;
+      img.alt = 'Teaching visual';
+      img.dataset.zoomable = '1';
+      preview.appendChild(img);
+      answersEl.appendChild(preview);
+    }
+
+    const reading = String(q.readingText || '').trim();
+    if (reading) {
+      const passage = document.createElement('div');
+      passage.className = 'reading-text top-space';
+      passage.innerHTML = formatReadingTextHtml(reading).replace(/\n/g, '<br>');
+      answersEl.appendChild(passage);
+    }
+
+    const note = document.createElement('p');
+    note.className = 'teaching-slide-note';
+    note.textContent = t('Watch and listen — no answer needed.');
+    answersEl.appendChild(note);
+    if (hasQuestionAudio(q)) {
+      const audioBtn = document.createElement('button');
+      audioBtn.type = 'button';
+      audioBtn.className = 'btn top-space';
+      audioBtn.textContent = t('🔊 Play audio');
+      audioBtn.addEventListener('click', () => playQuestionAudio(q));
+      answersEl.appendChild(audioBtn);
+      playQuestionAudio(q);
+    }
+    return;
+  }
 
   if (['mcq', 'multi', 'tf'].includes(q.type)) {
     const isMulti = q.type === 'multi';
@@ -18747,6 +18858,8 @@ function renderSoloQuestion() {
   }
 }
 function evaluateSoloQuestion(q) {
+  if (q.type === 'slide') return { correct: true };
+
   if (['mcq', 'tf'].includes(q.type)) {
     const checked = answersEl.querySelector('input[name="solo-answer"]:checked');
     if (!checked) return { correct: false, hint: 'Select an answer first.' };
@@ -18905,7 +19018,11 @@ function finishSoloGame() {
   gameCard.classList.add('hidden');
   resultCard.classList.remove('hidden');
 
-  const totalPossible = quiz.questions.reduce((sum, q) => sum + Number(q.points || 1000), 0);
+  const totalPossible = quiz.questions.reduce((sum, q) => {
+    if (q.type === 'slide') return sum;
+    const configuredPoints = Number(q.points);
+    return sum + (Number.isFinite(configuredPoints) ? configuredPoints : 1000);
+  }, 0);
   finalScoreEl.textContent = t("{p1}, you scored {p2} / {p3}.", { p1: soloGame.student, p2: soloGame.score, p3: totalPossible });
 }
 
@@ -18951,11 +19068,11 @@ function normalizeCefr(value) {
   return CEFR_LEVELS.includes(v) ? v : '';
 }
 
-// Mirrors assignmentAdaptivePool in the worker: every question but polls can
-// be served in an adaptive assignment. Teacher-graded ones move the level once
-// graded; PinPlay Cup skips them.
+// Mirrors assignmentAdaptivePool in the worker. Teaching slides are not
+// assessment evidence: linear quizzes keep them in sequence, while Climb
+// serves step-tagged slides only as remediation after a miss.
 function isAdaptiveEligibleQuestion(q) {
-  return !!q && !q.isPoll;
+  return !!q && !q.isPoll && q.type !== 'slide';
 }
 
 function cefrCoverage(questions) {
@@ -18978,7 +19095,7 @@ function cefrCoverage(questions) {
 // then producing it freely. Adaptive prompts lean easy levels towards the
 // front of this list and hard levels towards the back.
 const SCAFFOLD_ORDER = [
-  'tf', 'mcq', 'multi', 'match_pairs', 'slider', 'pin', 'puzzle', 'wordle', 'context_gap',
+  'slide', 'tf', 'mcq', 'multi', 'match_pairs', 'slider', 'pin', 'puzzle', 'wordle', 'context_gap',
   'error_hunt', 'spellingbee', 'text', 'voice_text', 'image_open', 'voice_record', 'speaking', 'open',
 ];
 
@@ -19655,6 +19772,29 @@ function makeMcqQuestion(opts = {}) {
   };
 }
 
+function makeSlideQuestion(opts = {}) {
+  const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
+  const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
+  return {
+    id: crypto.randomUUID(),
+    type: 'slide',
+    prompt: 'Watch, listen and remember…',
+    points: 0,
+    timeLimit: 0,
+    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioMode: 'tts',
+    audioText: '',
+    ttsLanguage,
+    language,
+    audioData: '',
+    imageKeyword: '',
+    gifKeyword: '',
+    videoKeyword: '',
+    readingText: '',
+    media: makeDefaultQuestionMedia(),
+  };
+}
+
 function makeMultiQuestion(opts = {}) {
   const ttsLanguage = quiz.ttsLanguage || DEFAULT_EDGE_TTS_LANGUAGE;
   const language = quiz.ttsLanguage === 'NONE' ? '' : (quiz.language || DEFAULT_EDGE_TTS_VOICE);
@@ -20186,6 +20326,11 @@ function normalizeQuizForLive(raw) {
 
     if (base.ttsLanguage === 'OTHER' && !String(q.language || '').trim() && !String(raw.language || '').trim()) {
       base._ttsVoiceMissing = true;
+    }
+
+    if (q.type === 'slide') {
+      normalized.questions.push({ ...base, points: 0, timeLimit: 0, isPoll: false });
+      return;
     }
 
     if (['mcq', 'multi'].includes(q.type)) {
@@ -22600,6 +22745,7 @@ function setBackendStatus(text, mode = '') {
 function labelForType(type) {
   return t(
     {
+      slide: 'Teaching slide',
       mcq: 'Multiple choice',
       multi: 'Multi-select',
       tf: 'True / False',
@@ -22620,6 +22766,7 @@ function labelForType(type) {
 function iconForType(type) {
   return (
     {
+      slide: '🎓',
       mcq: '🔘',
       multi: '☑️',
       tf: '✅❌',
@@ -22643,6 +22790,7 @@ function iconForType(type) {
 }
 
 function minTimeByType(type) {
+  if (type === 'slide') return 0;
   if (type === 'slider') return 10;
   if (type === 'spellingbee') return 60;
   if (type === 'wordle') return 30;

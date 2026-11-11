@@ -1775,6 +1775,43 @@ body.question-active .join-title-row {
   width: 100% !important;
 }
 
+/* Teaching slides are presentation surfaces, not compact question labels. */
+#joinCard.question-active[data-qtype="slide"] #joinPrompt {
+  font-size: clamp(2rem, 4.5vw, 4.5rem) !important;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  padding: 18px clamp(20px, 5vw, 72px) !important;
+}
+
+#joinCard.question-active[data-qtype="slide"].slide-text-only #joinPrompt {
+  top: 46px;
+  bottom: 102px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  background: radial-gradient(circle at 50% 45%, #f3f0ff 0, #fff 68%) !important;
+  font-size: clamp(3rem, 7vw, 7rem) !important;
+}
+
+.teaching-slide-note {
+  width: 100%;
+  text-align: center;
+  color: #625d78;
+  font-weight: 750;
+  font-size: 0.95rem;
+}
+
+#hostQuestionCard[data-qtype="slide"] #hostQuestionPrompt {
+  font-size: clamp(2.5rem, 6vw, 6.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  text-align: center;
+  max-width: 18ch;
+  margin-inline: auto;
+}
+
 /* "Audio is playing" indicator — headphones emoji on a green pulsing halo.
    Always reserves space (toggles opacity, not display) so the question bar
    doesn't jump. Three rings with coprime durations and unique keyframes

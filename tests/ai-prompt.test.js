@@ -100,11 +100,14 @@ describe('question types', () => {
     assert.match(build({ typesMode: 'include', selectedTypes: ['text', 'tf'] }), /use each of these at least once, and no others: tf, text/);
     assert.match(build({ typesMode: 'all', questionCount: 5 }), /fewer questions than types/);
     assert.match(build({ typesMode: 'all' }), /\(pin only if something in the theme fits it\)/);
-    assert.match(build({ typesMode: 'exclude_teacher_graded' }), /use only mcq, multi/);
+    assert.match(build({ typesMode: 'exclude_teacher_graded' }), /use only slide, mcq, multi/);
   });
 
   it('gets the shapes bots got wrong right', () => {
     const f = A.PROMPT_TYPE_FIELDS;
+    assert.match(f.slide, /not a question/);
+    assert.match(f.slide, /always "points": 0 and "timeLimit": 0/);
+    assert.match(f.slide, /several slides in a row/i);
     assert.match(f.puzzle, /CORRECT order/);
     assert.match(f.text, /"accepted"/);
     assert.match(f.text, /not "answers"/);
@@ -114,6 +117,14 @@ describe('question types', () => {
     assert.match(f.slider, /"min", "max", "target"/);
     assert.match(f.match_pairs, /"pairs": \[\{"left"/);
     assert.match(f.wordle, /exactly "Guess the word\."/);
+  });
+
+  it('teaching slides can bracket practice or form a multi-step lesson', () => {
+    const text = build({ typesMode: 'include', selectedTypes: ['slide', 'mcq'] });
+    assert.match(section(text, 'Task'), /slide, mcq/);
+    assert.match(section(text, 'Rules'), /before or after the question/);
+    assert.match(section(text, 'Rules'), /two or more consecutive slides/i);
+    assert.match(section(text, 'Question fields'), /no answer fields/);
   });
 });
 

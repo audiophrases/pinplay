@@ -16,6 +16,7 @@ const PW = 'teacher-secret';
 const LEVELS = ['A1', 'A2', 'B1', 'B2'];
 
 const mcq = (id, extra = {}) => ({ id, type: 'mcq', prompt: `Q ${id}?`, answers: [{ text: 'a', correct: true }, { text: 'b', correct: false }], ...extra });
+const slide = (id, extra = {}) => ({ id, type: 'slide', prompt: `Teach ${id}`, points: 2000, timeLimit: 30, audioEnabled: true, audioText: `Listen ${id}`, ...extra });
 // 4 questions at each of 4 levels; the first option is always right.
 const quiz = (levels = LEVELS, perLevel = 4) => ({
   title: 'Present simple',
@@ -286,6 +287,58 @@ describe('build up assignments (real worker, in-memory storage)', () => {
     assert.match(servedId(s), /^A1-/);
   });
 
+  it('shows same-step teaching slides in order after a miss without grading or moving the climber', async () => {
+    const q = {
+      title: 'Remedial slides',
+      questions: [
+        mcq('S1-1', { step: 1 }),
+        slide('first', { step: 1 }),
+        slide('second', { step: 1 }),
+        mcq('S1-2', { step: 1 }),
+        mcq('S2-1', { step: 2 }),
+        mcq('S2-2', { step: 2 }),
+      ],
+    };
+    const a = await create(q);
+    let s = await start(a.code, 'anon-remedial-slides');
+    const attemptId = s.attempt.id;
+
+    s = await send(a.code, attemptId, s, false);
+    let current = s.attempt.assignment.quiz.questions.at(-1);
+    assert.deepEqual(plain([current.type, current.prompt, current.points, current.timeLimit]), ['slide', 'Teach first', 0, 0]);
+    assert.equal(s.attempt.assignment.totalQuestions, 18, 'the 16-practice cap plus two queued slides');
+    assert.equal(s.metrics.autoGradedCount, 1);
+    const climbAfterMiss = plain(s.attempt.climb);
+
+    let response = await post('/api/assignment/answer', {
+      code: a.code,
+      attemptId,
+      qIndex: s.attempt.assignment.quiz.questions.length - 1,
+      answer: 'anything is ignored',
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    s = response.body;
+    current = s.attempt.assignment.quiz.questions.at(-1);
+    assert.deepEqual(plain([current.type, current.prompt]), ['slide', 'Teach second']);
+    assert.deepEqual(plain(s.attempt.climb), climbAfterMiss);
+    assert.equal(s.metrics.autoGradedCount, 1, 'viewing a slide is not a graded answer');
+    assert.equal(s.attempt.assignment.totalQuestions, 18);
+
+    response = await post('/api/assignment/answer', {
+      code: a.code,
+      attemptId,
+      qIndex: s.attempt.assignment.quiz.questions.length - 1,
+      answer: '__viewed__',
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    s = response.body;
+    current = s.attempt.assignment.quiz.questions.at(-1);
+    assert.notEqual(current.type, 'slide');
+    assert.deepEqual(plain(s.attempt.climb), climbAfterMiss);
+    assert.equal(s.metrics.autoGradedCount, 1);
+    assert.equal(s.attempt.assignment.totalQuestions, 18);
+  });
+
   it('a student who answers everything right reaches the summit and the attempt is done', async () => {
     const a = await create();
     let s = await start(a.code, 'anon-summit');
@@ -538,7 +591,7 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.match(task, /Steps: 5, numbered 1 to 5 \(step 1 is the easiest\)/);
     assert.match(task, /5 per step, 25 in all, in one JSON object/);
     assert.doesNotMatch(text, /tagged "A1"/);
-    assert.match(section(text, 'Rules'), /Every question has "step": its step's number, and no "cefr"/);
+    assert.match(section(text, 'Rules'), /Every item has "step": its step's number, and no "cefr"/);
   });
 
   it('asks for the plan first, one new thing per step, equivalent questions and one defensible solution', () => {
@@ -571,7 +624,7 @@ describe('the Climb AI prompt and the steps plan', () => {
   it('names the fields of the chosen types only, with the typed-answer warning', () => {
     const fields = (text) => section(text, 'Quiz fields').split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
     assert.deepEqual(fields(build({ selectedTypes: ['mcq', 'text'] })), ['mcq', 'text']);
-    assert.deepEqual(fields(build()), ['mcq', 'tf', 'multi', 'match_pairs', 'puzzle', 'context_gap', 'text', 'error_hunt']);
+    assert.deepEqual(fields(build()), ['slide', 'mcq', 'tf', 'multi', 'match_pairs', 'puzzle', 'context_gap', 'text', 'error_hunt']);
     assert.match(section(build({ selectedTypes: ['text'] }), 'Quiz fields'), /A typed answer that is right but missing here sends the student back/);
     assert.doesNotMatch(build({ selectedTypes: ['mcq'] }), /list every correct form in "accepted"/);
   });

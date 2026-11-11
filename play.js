@@ -35,6 +35,7 @@ const studentSession = {
 const REACTION_EMOJIS = ['👍', '😅', '🔥', '🤯', '🙌', '☕', '👀', '🧠', '❤️', '6️⃣', '7️⃣'];
 
 const QUESTION_TYPE_ICONS = {
+  slide: '🎓',
   mcq: '🔘',
   multi: '☑️',
   tf: '✅❌',
@@ -3974,25 +3975,31 @@ function renderPlayerState(state) {
 
   if (joinSubmitBtn) {
     const isAssignment = live.player.mode === 'assignment';
+    const isSlide = state.question?.type === 'slide';
     // After a saved answer, show Continue so the student can advance. If they edit the
     // inputs (dirty), flip back to Save answer so the change actually gets persisted.
     const isContinueMode = isAssignment
       && (questionClosed || (state.answeredCurrent && !live.player.assignment.dirtyAnswer))
       && !assignmentSubmitted;
 
-    if (isContinueMode) {
+    if (isSlide && !isAssignment) {
+      joinSubmitBtn.classList.add('hidden');
+      joinSubmitBtn.disabled = true;
+      joinSubmitBtn.dataset.mode = 'slide';
+    } else if (isContinueMode) {
       joinSubmitBtn.innerHTML = (live.player.assignment.pendingComplete ? t('Finish quiz') : t('Continue')) + joinSubmitEnterHint();
       joinSubmitBtn.dataset.mode = live.player.assignment.pendingComplete ? 'finish' : 'continue';
       joinSubmitBtn.disabled = false;
     } else {
-      joinSubmitBtn.innerHTML = isAssignment ? t('Save answer') + joinSubmitEnterHint() : t('Submit');
+      joinSubmitBtn.classList.remove('hidden');
+      joinSubmitBtn.innerHTML = isSlide ? t('Continue') + joinSubmitEnterHint() : (isAssignment ? t('Save answer') + joinSubmitEnterHint() : t('Submit'));
       joinSubmitBtn.dataset.mode = isAssignment ? 'save' : 'submit';
       joinSubmitBtn.disabled = shouldDisable;
     }
     syncJoinSubmitGameMute();
 
     const pts = Number(state.question?.points || 0).toLocaleString('en-US');
-    joinSubmitBtn.title = isPoll ? t('Poll question (no points)') : t('{pts} points', { pts });
+    joinSubmitBtn.title = isSlide ? t('Teaching slide — no answer needed') : (isPoll ? t('Poll question (no points)') : t('{pts} points', { pts }));
     if (isAnswerFullscreenLocked()) {
       setJoinStatusHud('Exit fullscreen to answer.', 'bad');
     } else if (!questionClosed && joinSubmitBtn.disabled && live.player.mode === 'live' && !live.player.liveRevealApplied) {
@@ -4281,6 +4288,9 @@ function applyJoinLayoutMode(active, question = null) {
   if (qType) joinCardEl.dataset.qtype = qType;
   else delete joinCardEl.dataset.qtype;
   joinCardEl.classList.toggle('has-image', !!question?.imageData);
+  const hasVideo = question?.media?.kind === 'video' && !!(question.media.url || question.media.embedUrl);
+  joinCardEl.classList.toggle('has-video', !!hasVideo);
+  joinCardEl.classList.toggle('slide-text-only', qType === 'slide' && !question?.imageData && !hasVideo && !String(question?.readingText || '').trim());
 }
 
 function renderJoinQuestion(question) {
@@ -4319,7 +4329,7 @@ function renderJoinQuestion(question) {
 
   applyJoinLayoutMode(true, question);
   if (joinSubmitBtn) {
-    if (live.player.assignment.reviewMode) {
+    if (live.player.assignment.reviewMode || (question.type === 'slide' && live.player.mode !== 'assignment')) {
       joinSubmitBtn.classList.add('hidden');
     } else {
       joinSubmitBtn.classList.remove('hidden');
@@ -4487,6 +4497,14 @@ function renderJoinQuestion(question) {
       }
     }
     joinQuestionWrap.insertBefore(wrap, document.getElementById('joinQuestionInteractive') || null);
+  }
+
+  if (question.type === 'slide') {
+    const note = document.createElement('div');
+    note.className = 'teaching-slide-note';
+    note.textContent = t('Watch and listen — no answer needed.');
+    joinAnswersEl.appendChild(note);
+    return;
   }
 
   // Remove the old inline image preview logic for generic questions
@@ -5411,7 +5429,8 @@ async function submitLiveAnswer(opts = {}) {
       }).finally(() => clearTimeout(aiTimer));
 
       const mode = data?.attempt?.assignment?.feedbackMode || 'none';
-      if (mode !== 'instant' && !wasAlreadyAnswered) {
+      const viewedSlide = live.player.currentQuestion?.type === 'slide';
+      if ((mode !== 'instant' || viewedSlide) && !wasAlreadyAnswered) {
         live.player.assignment.forceAutoAdvance = true;
       }
       // Save succeeded → clear dirty so the button rebuilds as Continue (deferred mode)
@@ -5526,6 +5545,8 @@ async function submitLiveAnswer(opts = {}) {
 function readJoinAnswer() {
   const q = live.player.currentQuestion;
   if (!q || !joinAnswersEl) return null;
+
+  if (q.type === 'slide') return '__viewed__';
 
   if (['mcq', 'tf'].includes(q.type)) {
     const checked = joinAnswersEl.querySelector('input[name="join-answer"]:checked');
@@ -6900,7 +6921,7 @@ function cancelPendingAssignmentQuestionAutoplay() {
 }
 
 function supportsAssignmentQuestionAudio(type) {
-  return ['mcq', 'multi', 'tf', 'text', 'voice_text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'speaking', 'voice_record'].includes(String(type || ''));
+  return ['slide', 'mcq', 'multi', 'tf', 'text', 'voice_text', 'open', 'image_open', 'context_gap', 'match_pairs', 'error_hunt', 'puzzle', 'slider', 'pin', 'speaking', 'voice_record'].includes(String(type || ''));
 }
 
 function normalizeAssignmentQuestionMedia(rawMedia) {
