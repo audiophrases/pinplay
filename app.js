@@ -5343,9 +5343,11 @@ function shapePromptExample(q, req, index) {
     ex.step = 1;
     ex.cefr = PROMPT_EXAMPLE_CEFR[q.id] || 'A2';
   }
-  ex.points = 1000;
-  ex.timeLimit = req.timeLimit;
-  PROMPT_EXAMPLE_FIELDS.forEach((k) => { if (q[k] !== undefined) ex[k] = JSON.parse(JSON.stringify(q[k])); });
+  ex.points = q.type === 'slide' ? 0 : 1000;
+  ex.timeLimit = q.type === 'slide' ? 0 : req.timeLimit;
+  if (q.type !== 'slide') {
+    PROMPT_EXAMPLE_FIELDS.forEach((k) => { if (q[k] !== undefined) ex[k] = JSON.parse(JSON.stringify(q[k])); });
+  }
   const pic = String(q.imageKeyword || '').trim();
   const gif = String(q.gifKeyword || '').trim();
   if (q.type === 'pin') ex.imageKeyword = pic;

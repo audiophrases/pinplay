@@ -126,6 +126,15 @@ describe('question types', () => {
     assert.match(section(text, 'Rules'), /two or more consecutive slides/i);
     assert.match(section(text, 'Question fields'), /no answer fields/);
   });
+
+  it('slide examples stay unscored and untimed even in a timed quiz', () => {
+    const q = { id: 'q18-slide', type: 'slide', prompt: 'Remember this', answers: [{ text: 'stale answer' }], accepted: ['stale'] };
+    const ex = A.shapePromptExample(q, { ...base, timeLimit: 30 }, 0);
+    assert.equal(ex.points, 0);
+    assert.equal(ex.timeLimit, 0);
+    assert.equal(ex.answers, undefined);
+    assert.equal(ex.accepted, undefined);
+  });
 });
 
 describe('rules follow the request', () => {

@@ -10442,8 +10442,9 @@ function assignmentGradeOutOf100(assignment, attempt) {
   return maximum > 0 ? round(Math.max(0, Math.min(100, score / maximum * 100)), 1) : 0;
 }
 
-// Shuffle standalone questions and whole listening sections. When a quiz is
-// edited, retain the existing block order and append newly added blocks.
+// Slides preserve lesson boundaries. Shuffle standalone questions and whole
+// listening sections only within each authored run between slides. After edits,
+// preserve existing order within a run and append its newly added blocks.
 function assignmentQuestionOrder(questions, previousOrder = null) {
   const blocks = [];
   questions.forEach((question, index) => {
@@ -10451,17 +10452,30 @@ function assignmentQuestionOrder(questions, previousOrder = null) {
     if (question.listeningSection && last && questions[last[0]].listeningSection === question.listeningSection) last.push(index);
     else blocks.push([index]);
   });
-  if (previousOrder) {
-    const ranks = new Map(previousOrder.map((index, rank) => [index, rank]));
-    const rank = block => Math.min(...block.map(index => ranks.get(index) ?? Infinity));
-    blocks.sort((a, b) => rank(a) - rank(b));
-  } else {
-    for (let i = blocks.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+  const ranks = previousOrder ? new Map(previousOrder.map((index, rank) => [index, rank])) : null;
+  const ordered = [];
+  let run = [];
+  const flush = () => {
+    if (ranks) {
+      const rank = block => Math.min(...block.map(index => ranks.get(index) ?? Infinity));
+      run.sort((a, b) => rank(a) - rank(b));
+    } else {
+      for (let i = run.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [run[i], run[j]] = [run[j], run[i]];
+      }
     }
-  }
-  return blocks.flat();
+    ordered.push(...run);
+    run = [];
+  };
+  blocks.forEach(block => {
+    if (questions[block[0]].type === 'slide') {
+      flush();
+      ordered.push(block);
+    } else run.push(block);
+  });
+  flush();
+  return ordered.flat();
 }
 
 function publicAssignmentAttempt(assignment, attempt, { includeAnswers = false, includeAnswerKey = includeAnswers && !!attempt?.submitted } = {}) {
@@ -10687,6 +10701,7 @@ function sanitizeCupLevels(src) {
 // Present the current automatic score in the same shape as a saved teacher
 // grade, so opening a review never initializes an auto-graded answer to zero.
 function assignmentAnswerGrade(question, item) {
+  if (question?.type === 'slide') return null;
   const grade = item?.teacherGrade;
   if (grade && typeof grade === 'object' && (grade.graded || isAssignmentTeacherGradedQuestion(question))) return {
     graded: !!grade.graded,
@@ -10721,7 +10736,7 @@ function buildTeacherGradingItems(assignment, attempt) {
     .map(([idxRaw, item]) => {
       const qIndex = Number(idxRaw);
       const question = questions[qIndex];
-      if (!question) return null;
+      if (!question || question.type === 'slide') return null;
 
       const teacher = isAssignmentTeacherGradedQuestion(question);
       const grade = assignmentAnswerGrade(question, item);

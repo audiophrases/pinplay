@@ -69,6 +69,16 @@ it('shuffles every question once and keeps listening blocks together, including 
   assert.deepEqual(Array.from(W.assignmentQuestionOrder(edited, order)), [...order, 11]);
 });
 
+it('keeps teaching sequences fixed and shuffles only inside their lesson boundaries', () => {
+  const W = loadDeclarations(workerSource, ['assignmentQuestionOrder'], { Math: Object.assign(Object.create(Math), { random: () => 0 }) });
+  const questions = ['slide', 'slide', 'tf', 'tf', 'slide', 'tf', 'tf', 'slide'].map(type => ({ type }));
+  const order = Array.from(W.assignmentQuestionOrder(questions));
+  assert.deepEqual(order, [0, 1, 3, 2, 4, 6, 5, 7]);
+  assert.deepEqual(Array.from(W.assignmentQuestionOrder(questions, order)), order);
+  // A saved order from before slide boundaries were respected is repaired.
+  assert.deepEqual(Array.from(W.assignmentQuestionOrder(questions, [7, 6, 1, 5, 4, 3, 0, 2])), order);
+});
+
 it('saves per-attempt orders, resumes after a restart, and toggles only affect new attempts', async () => {
   const code = await create();
   const first = (await call('/api/assignment/start', { code, studentKey: 'student1' })).attempt;
