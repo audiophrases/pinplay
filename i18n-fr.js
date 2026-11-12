@@ -12,6 +12,10 @@
  * JSON schema text) are intentionally NOT translated and must stay English.
  */
 window.PINPLAY_FR_DICT = {
+  "Quiz language": "Langue du quiz",
+  "Audio instructions for the AI (optional)": "Consignes audio pour l’IA (facultatif)",
+  "e.g. explain briefly in Catalan, then read the English sentence; do not read the answer choices": "ex. expliquez brièvement en catalan, puis lisez la phrase anglaise ; ne lisez pas les choix de réponse",
+  "Listening uses its section recording, without additional question TTS.": "La compréhension orale utilise l’enregistrement de la section, sans synthèse vocale supplémentaire pour les questions.",
   /* ===================== Shared / generic ===================== */
   'Submit': 'Envoyer',
   'Refresh': 'Actualiser',

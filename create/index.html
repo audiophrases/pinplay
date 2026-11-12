@@ -287,15 +287,17 @@
                         <input id="promptImagesCustom" class="top-space hidden" type="text" placeholder="e.g. mostly images, with a GIF here and there" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field prompt-standard-only">
+                    <div class="prompt-field" id="promptAudioWrap">
                       <label><span data-i18n>Audio/TTS</span>
                         <select id="promptAudio">
-                          <option value="some" selected data-i18n>Some (when relevant)</option>
-                          <option value="no" data-i18n>No audio</option>
-                          <option value="bilingual" data-i18n>Bilingual (explain in the students' language, read the content in the quiz language)</option>
-                          <option value="custom" data-i18n>Custom (type it)...</option>
+                          <option value="no" selected data-i18n>No audio</option>
+                          <option value="quiz" data-i18n>Quiz language</option>
+                          <option value="bilingual" data-i18n>Bilingual (explain in the students' first language, read the content in the quiz language)</option>
                         </select>
-                        <input id="promptAudioCustom" class="top-space hidden" type="text" placeholder="e.g. read every A1–A2 question aloud" data-i18n-ph />
+                      </label>
+                      <label id="promptAudioInstructionsWrap" class="top-space hidden">
+                        <span data-i18n>Audio instructions for the AI (optional)</span>
+                        <input id="promptAudioCustom" type="text" placeholder="e.g. explain briefly in Catalan, then read the English sentence; do not read the answer choices" data-i18n-ph />
                       </label>
                     </div>
                     <div class="prompt-field prompt-standard-only">
@@ -340,14 +342,6 @@
                         <input id="promptBuildupFirstLanguage" type="text" placeholder="e.g. Catalan, Spanish" data-i18n-ph />
                       </label>
                     </div>
-                    <div class="prompt-field">
-                      <label><span data-i18n>Audio/TTS</span>
-                        <select id="promptBuildupAudio">
-                          <option value="no" selected data-i18n>No audio</option>
-                          <option value="bilingual" data-i18n>Bilingual (explain in the students' first language, read the content in the quiz language)</option>
-                        </select>
-                      </label>
-                    </div>
                     <div class="prompt-field full-width">
                       <label><span data-i18n>Mistakes I see in my class (optional)</span>
                         <textarea id="promptBuildupErrors" rows="2" placeholder="e.g. they forget the -s with he/she; they add -s after they" data-i18n-ph></textarea>
@@ -364,6 +358,7 @@
                     </div>
                   </div>
                   <div class="creation-prompt-grid top-space hidden" id="promptListeningWrap">
+                    <p class="small muted full-width" data-i18n>Listening uses its section recording, without additional question TTS.</p>
                     <div class="prompt-field">
                       <label><span data-i18n>Transcript</span>
                         <select id="promptListeningSource">
