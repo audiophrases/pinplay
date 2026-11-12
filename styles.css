@@ -6827,7 +6827,7 @@ body.question-active .climb:not(.hidden) { display: flex; }
 .climb-msg[data-kind="up"], .climb-msg[data-kind="pip"] { color: #0f6f2c; }
 .climb-msg[data-kind="summit"] { color: #8a5a00; background: #fff3cf; }
 .climb-msg[data-kind="down"] { color: #1f4d8a; }
-.climb-tip { margin: 0; font-size: .75rem; line-height: 1.3; color: #3a4a5d; background: rgba(255, 255, 255, .92); border-left: 4px solid #6b7f95; border-radius: 8px; padding: 6px 8px; }
+.climb-tip { margin: 0; font-size: .875rem; line-height: 1.4; color: #3a4a5d; background: rgba(255, 255, 255, .92); border-left: 4px solid #6b7f95; border-radius: 8px; padding: 8px 10px; }
 
 /* More than seven camps (BUILDUP_MODE_PLAN.md section 10): smaller camps, and
    only the student's camp keeps its label (the head names it too). */
