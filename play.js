@@ -371,7 +371,14 @@ function init() {
       const t = e.target;
       if (!(t instanceof HTMLElement)) return;
       const tag = t.tagName.toLowerCase();
-      if (tag !== 'input' && tag !== 'select') return;
+      // The sentence of an error hunt is one line: Enter saves it, as in a text
+      // box, and never breaks the line. Other textareas (open answers) keep Enter.
+      const errorHunt = t.id === 'joinErrorHuntRewrite';
+      if (tag !== 'input' && tag !== 'select' && !errorHunt) return;
+      if (errorHunt) {
+        if (e.isComposing) return;
+        e.preventDefault();
+      }
       if (!joinSubmitBtn || joinSubmitBtn.disabled || joinSubmitBtn.classList.contains('hidden')) return;
       e.preventDefault();
       submitLiveAnswer();
@@ -10008,6 +10015,14 @@ function renderListeningQuestion(q, qIndex, locked, mark, { pending = false, cur
       save(isErrorHunt ? listeningErrorHuntAnswer(q, v) : v, 700);
     });
     input.addEventListener('blur', () => flushListeningSaves());
+    if (isErrorHunt) {
+      // One sentence, one line: Enter saves it now and does not break the line.
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        flushListeningSaves();
+      });
+    }
     body.appendChild(input);
     if (isErrorHunt && !locked) {
       const status = document.createElement('div');
