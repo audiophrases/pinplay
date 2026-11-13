@@ -17,7 +17,7 @@ let A;
 // The server's sandbox: its `fetch` is swapped per test.
 const server = { fetch: null, TextEncoder, TextDecoder };
 before(() => {
-  W = loadDeclarations(read('cloudflare/worker.js'), [...SHARED, 'synthesizeEdgeMp3'], server);
+  W = loadDeclarations(read('cloudflare/worker.js'), [...SHARED, 'ttsClipSeed', 'readMp3Frames', 'MP3_SILENCE_GAIN', 'trimMp3Silence', 'TTS_JOIN_LEAD_MS', 'TTS_JOIN_PAUSE_MS', 'TTS_JOIN_SENTENCE_PAUSE_MS', 'synthesizeEdgeMp3'], server);
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
@@ -117,6 +117,97 @@ describe('the server joins one Edge clip per segment', () => {
     assert.equal(none.status, 501);
     const empty = await W.synthesizeEdgeMp3(env, '  ', 'en-US-AriaNeural', '+0%');
     assert.equal(empty.status, 400);
+  });
+});
+
+// An Edge clip as the server sees it: 24 kHz mono frames of 144 bytes and 24 ms,
+// each with its loudness (global gain) and how far back its data starts.
+const mp3 = (...frames) => {
+  const out = new Uint8Array(frames.length * 144);
+  frames.forEach(([gain, back = 0], i) => {
+    const bits = [[back, 8], [0, 1], [gain ? 900 : 0, 12], [gain ? 200 : 0, 9], [gain, 8]];
+    out.set([0xff, 0xf3, 0x64, 0xc4], i * 144);
+    let at = (i * 144 + 4) * 8;
+    bits.forEach(([value, n]) => {
+      for (let b = n - 1; b >= 0; b -= 1, at += 1) out[at >> 3] |= ((value >> b) & 1) << (7 - (at & 7));
+    });
+    out[i * 144 + 143] = i + 1; // which frame this is, to follow it through a cut
+  });
+  return out;
+};
+const kept = (bytes) => Array.from({ length: bytes.length / 144 }, (_, i) => bytes[i * 144 + 143]);
+const QUIET = [133];
+const LOUD = [180];
+
+describe('the silence around a clip is cut where two voices meet', () => {
+  it('reads the frames of an Edge clip', () => {
+    const frames = plain(W.readMp3Frames(mp3(QUIET, [180, 131], [0])));
+    assert.deepEqual(frames.map((x) => [x.at, x.size, x.back, x.gain, x.ms]), [[0, 144, 0, 133, 24], [144, 144, 131, 180, 24], [288, 144, 0, 0, 24]]);
+    assert.equal(frames[0].room, 131);
+  });
+
+  it('keeps the asked milliseconds of silence at each end, and leaves an end alone on null', () => {
+    const clip = mp3(QUIET, QUIET, QUIET, QUIET, LOUD, LOUD, QUIET, QUIET, QUIET, QUIET, QUIET, [0]);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 24, 72)), [4, 5, 6, 7, 8, 9]);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 0, 0)), [5, 6]);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, null, 48)), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 24, null)), [4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 9999, 9999)), kept(clip));
+  });
+
+  it('keeps the frames that hold the start of the first sound', () => {
+    const clip = mp3(QUIET, QUIET, QUIET, QUIET, [180, 200], LOUD, QUIET);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 0, 0)), [3, 4, 5, 6]);
+  });
+
+  it('a quiet frame inside the speech is not a place to cut', () => {
+    const clip = mp3(QUIET, LOUD, QUIET, QUIET, LOUD, QUIET, QUIET);
+    assert.deepEqual(kept(W.trimMp3Silence(clip, 0, 0)), [2, 3, 4, 5]);
+  });
+
+  it('gives back whole what is not such a clip, or has no sound', () => {
+    const text = new TextEncoder().encode('<not an mp3>');
+    assert.equal(W.trimMp3Silence(text, 0, 0), text);
+    const silent = mp3(QUIET, QUIET, [0]);
+    assert.equal(W.trimMp3Silence(silent, 0, 0), silent);
+    const broken = mp3(QUIET, LOUD, QUIET);
+    broken[144] = 0;
+    assert.equal(W.trimMp3Silence(broken, 0, 0), broken);
+  });
+
+  it('the server cuts between the voices: a short pause mid-sentence, a longer one after a sentence', async () => {
+    const clip = () => mp3(...Array(6).fill(QUIET), LOUD, LOUD, ...Array(40).fill(QUIET));
+    server.fetch = async () => ({ ok: true, status: 200, headers: { get: () => 'audio/mpeg' }, arrayBuffer: async () => clip().buffer });
+    const env = { EDGE_TTS_URL: 'https://bridge.test/tts' };
+    const made = await W.synthesizeEdgeMp3(env, '[ca] Amb [en] I [ca] fem servir: [en] am.', 'en-US-AriaNeural', '+0%');
+    const frames = kept(new Uint8Array(made.audio));
+    // first clip: its start as it is, 3 frames (72 ms) of pause; then 1 frame (24 ms) before each voice;
+    // after the colon 12 frames (288 ms); the last clip keeps its end.
+    assert.deepEqual(frames, [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      6, 7, 8, 9, 10, 11,
+      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      ...Array.from({ length: 43 }, (_, i) => i + 6),
+    ]);
+    const one = await W.synthesizeEdgeMp3(env, 'I am happy.', 'en-US-AriaNeural', '+0%');
+    assert.equal(one.audio.byteLength, clip().length);
+  });
+});
+
+describe('a clip in more than one voice is cached under the way it is joined', () => {
+  it('is the same on the teacher page and the server', () => {
+    assert.equal(extractDeclaration(read('app.js'), 'ttsClipSeed'), extractDeclaration(read('cloudflare/worker.js'), 'ttsClipSeed'));
+  });
+
+  it('a plain text keeps its key; a text in two voices gets a new one', () => {
+    assert.equal(W.ttsClipSeed('I am happy.', 'en-US-AriaNeural', '+0%'), 'en-US-AriaNeural::+0%::I am happy.');
+    assert.equal(W.ttsClipSeed('[en] I am happy.', 'en-US-AriaNeural', '+0%'), 'en-US-AriaNeural::+0%::[en] I am happy.');
+    assert.equal(W.ttsClipSeed('[ca] Escolta. [en] I am happy.', 'en-US-AriaNeural', '+0%'), 'en-US-AriaNeural::+0%::[ca] Escolta. [en] I am happy.::joined-2');
+  });
+
+  it('every route and the teacher page hash that seed', () => {
+    assert.equal(read('cloudflare/worker.js').split('sha256Hex(ttsClipSeed(text, voice, rate))').length - 1, 3);
+    assert.ok(read('app.js').includes('sha256HexClient(ttsClipSeed('));
   });
 });
 

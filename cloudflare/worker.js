@@ -2434,7 +2434,7 @@ export default {
       if (!edgeUrl) return json({ error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' }, 501);
 
       try {
-        const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+        const hash = await sha256Hex(ttsClipSeed(text, voice, rate));
         const cacheUrl = new URL(request.url);
         cacheUrl.pathname = `/__edge_tts_cache/${hash}.mp3`;
         cacheUrl.search = '';
@@ -2490,7 +2490,7 @@ export default {
       const rate = String(body?.rate || '+0%').trim();
       if (!text) return json({ error: 'Missing text.' }, 400);
 
-      const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+      const hash = await sha256Hex(ttsClipSeed(text, voice, rate));
       const key = `${mediaPrefixFor(auth)}tts/${hash}.mp3`;
 
       try {
@@ -2528,7 +2528,7 @@ export default {
         const rate = String(it?.rate || '+0%').trim();
         if (!text) { results.push({ ok: false, error: 'empty text' }); continue; }
 
-        const hash = await sha256Hex(`${voice}::${rate}::${text}`);
+        const hash = await sha256Hex(ttsClipSeed(text, voice, rate));
         const key = `${prefix}tts/${hash}.mp3`;
         if (seen.has(hash)) { results.push({ ok: true, key, cached: true }); continue; }
 
@@ -8726,9 +8726,98 @@ function splitTtsSegments(text, voice) {
   return out;
 }
 
+// What a clip's cache key is the hash of. A text in more than one voice has a
+// mark for the way its clips are joined: change it when the join changes, and
+// the clips made the old way are made again. Identical in app.js and worker.js.
+function ttsClipSeed(text, voice, rate) {
+  const seed = `${voice}::${rate}::${text}`;
+  return splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+}
+
+// Reads the frames of an MPEG Layer III clip: where each one is, how long it
+// lasts, how far back its sound data starts (bit reservoir) and how
+// loud it is (the frame's global gain, about 1.5 dB a step; 0 for an empty
+// frame). null when the bytes are not such a clip.
+function readMp3Frames(bytes) {
+  const V1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+  const V2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+  const RATES = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
+  let at = 0;
+  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) { // ID3v2
+    at = 10 + ((bytes[6] & 127) << 21 | (bytes[7] & 127) << 14 | (bytes[8] & 127) << 7 | (bytes[9] & 127));
+  }
+  const frames = [];
+  while (at + 4 <= bytes.length) {
+    const b1 = bytes[at + 1];
+    const b2 = bytes[at + 2];
+    const version = (b1 >> 3) & 3;
+    const rate = (RATES[version] || [])[(b2 >> 2) & 3];
+    const kbps = (version === 3 ? V1 : V2)[b2 >> 4];
+    if (bytes[at] !== 0xff || (b1 & 0xe0) !== 0xe0 || ((b1 >> 1) & 3) !== 1 || !rate || !kbps) return null;
+    const v1 = version === 3;
+    const size = Math.floor((v1 ? 144000 : 72000) * kbps / rate) + ((b2 >> 1) & 1);
+    if (at + size > bytes.length) break;
+    const channels = (bytes[at + 3] >> 6) === 3 ? 1 : 2;
+    const side = at + 4 + ((b1 & 1) ? 0 : 2);
+    let bit = 0;
+    const take = (n) => {
+      let v = 0;
+      for (let i = 0; i < n; i += 1, bit += 1) v = (v << 1) | ((bytes[side + (bit >> 3)] >> (7 - (bit & 7))) & 1);
+      return v;
+    };
+    const back = take(v1 ? 9 : 8);
+    take(v1 ? (channels === 1 ? 5 : 3) + 4 * channels : channels);
+    let gain = 0;
+    for (let g = 0; g < (v1 ? 2 : 1) * channels; g += 1) {
+      const start = bit;
+      const bits = take(12);
+      const values = take(9);
+      if (bits && values > 8) gain = Math.max(gain, take(8));
+      bit = start + (v1 ? 59 : 63);
+    }
+    const head = side - at + (v1 ? (channels === 1 ? 17 : 32) : (channels === 1 ? 9 : 17));
+    frames.push({ at, size, back, gain, room: size - head, ms: (v1 ? 1152000 : 576000) / rate });
+    at += size;
+  }
+  return frames.length ? frames : null;
+}
+
+const MP3_SILENCE_GAIN = 140;
+
+// Cuts the silence Edge puts around a clip: `lead` and `tail` are the
+// milliseconds of it to keep (null leaves that end as it is). The frames just
+// before the first sound stay when its data starts in them. A clip that is not
+// MPEG Layer III, or has no sound in it, comes back whole.
+function trimMp3Silence(bytes, lead, tail) {
+  const frames = readMp3Frames(bytes);
+  if (!frames) return bytes;
+  // In Edge's clips the noise around the speech stays at a gain of 138 or less
+  // and speech down to -45 dB is above 140.
+  const first = frames.findIndex((f) => f.gain > MP3_SILENCE_GAIN);
+  if (first < 0) return bytes;
+  let last = frames.length - 1;
+  while (frames[last].gain <= MP3_SILENCE_GAIN) last -= 1;
+  let from = 0;
+  if (lead != null) {
+    from = first;
+    for (let need = frames[first].back; from > 0 && need > 0; from -= 1) need -= frames[from - 1].room;
+    from = Math.max(0, Math.min(from, first - Math.round(lead / frames[first].ms)));
+  }
+  const to = tail == null ? frames.length - 1 : Math.min(frames.length - 1, last + Math.round(tail / frames[last].ms));
+  return bytes.subarray(frames[from].at, frames[to].at + frames[to].size);
+}
+
+// Milliseconds of silence left where the voice changes: before the next voice,
+// after a voice that stopped mid-sentence, and after one that ended a sentence.
+const TTS_JOIN_LEAD_MS = 24;
+const TTS_JOIN_PAUSE_MS = 70;
+const TTS_JOIN_SENTENCE_PAUSE_MS = 280;
+
 // One Edge bridge call per voice segment of a (possibly bilingual) text, joined
 // into one mp3: Edge clips share one format, so the bytes concatenate and play
-// as one clip. Returns { ok, audio, contentType } or { ok: false, status, error }.
+// as one clip. Edge puts about a second of silence after every clip, which is
+// cut where two clips meet. Returns { ok, audio, contentType } or
+// { ok: false, status, error }.
 async function synthesizeEdgeMp3(env, text, voice, rate) {
   const edgeUrl = String(env.EDGE_TTS_URL || '').trim();
   if (!edgeUrl) return { ok: false, status: 501, error: 'Edge TTS is not configured on worker (EDGE_TTS_URL).' };
@@ -8759,6 +8848,14 @@ async function synthesizeEdgeMp3(env, text, voice, rate) {
     parts.push(new Uint8Array(await res.arrayBuffer()));
   }
   if (parts.length === 1) return { ok: true, audio: parts[0].buffer, contentType };
+  parts.forEach((part, i) => {
+    const endsSentence = /[.!?:;…]$/.test(segments[i].text);
+    parts[i] = trimMp3Silence(
+      part,
+      i === 0 ? null : TTS_JOIN_LEAD_MS,
+      i === parts.length - 1 ? null : (endsSentence ? TTS_JOIN_SENTENCE_PAUSE_MS : TTS_JOIN_PAUSE_MS),
+    );
+  });
   const joined = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
   let at = 0;
   for (const p of parts) { joined.set(p, at); at += p.byteLength; }

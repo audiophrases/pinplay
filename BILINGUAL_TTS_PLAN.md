@@ -110,3 +110,11 @@ bilingual rule and the teacher's words only when asked.
   misreads. `PROMPT_BILINGUAL_AUDIO` now asks for a tag on every quiz-language
   word, with a wrong/right example, a reread before answering, and no answer in
   the audio.
+- 2026-11-13: the pauses where the voice changes were 1.1 to 1.6 s: Edge puts
+  about 0.15 s of silence before every clip and 0.9 to 1.4 s after it. The Worker
+  now cuts it where two clips meet (`trimMp3Silence`, read from the frames' global
+  gain, no decoding): 24 ms before a voice, 70 ms after one that stopped
+  mid-sentence, 280 ms after one that ended a sentence. The start of the first
+  clip and the end of the last are left alone, and a text in one voice is not
+  touched. Clips in more than one voice get a new cache key (`ttsClipSeed`), so
+  publishing again makes them again.

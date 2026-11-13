@@ -20678,9 +20678,17 @@ async function sha256HexClient(str) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// What a clip's cache key is the hash of. A text in more than one voice has a
+// mark for the way its clips are joined: change it when the join changes, and
+// the clips made the old way are made again. Identical in app.js and worker.js.
+function ttsClipSeed(text, voice, rate) {
+  const seed = `${voice}::${rate}::${text}`;
+  return splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+}
+
 async function computeTtsAudioKey(voice, text, rate = '+0%') {
   const v = String(voice || 'en-US-AriaNeural');
-  const hash = await sha256HexClient(`${v}::${rate}::${String(text || '').trim().slice(0, 1200)}`);
+  const hash = await sha256HexClient(ttsClipSeed(String(text || '').trim().slice(0, 1200), v, rate));
   return `tts/${hash}.mp3`;
 }
 
