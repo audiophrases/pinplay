@@ -1204,6 +1204,7 @@ function bindBuilderEvents() {
   ['promptQuestionCount', 'promptBatchSize', 'promptBuildupSteps', 'promptBuildupItems'].forEach((id) => {
     document.getElementById(id)?.addEventListener('input', syncPromptBatchNotes);
   });
+  document.getElementById('promptAiMode')?.addEventListener('change', syncPromptBatchNotes);
   syncPromptBatchNotes();
   // "Only the script" is made in the 🎧 Listening recordings card: the option
   // takes you there and the choice goes back to what it was.
@@ -5399,6 +5400,8 @@ function promptMediaRules(req, allowed, agent) {
 // The most questions one AI reply is asked to hold: a bigger quiz comes in
 // batches of whole parts, one reply each, joined with Import → Append.
 const PROMPT_BATCH_MAX = 60;
+// An agent is not held to one reply: it builds the file in several writes.
+const PROMPT_AGENT_ONE_FILE_RULE = 'A long quiz is more than you can safely write in one go: build the file in several writes (create it, then add the next questions), and deliver ONE complete, valid JSON file with every question. Do not split the quiz into parts.';
 
 // req: { theme, language, level, adaptive, levelNotes, goal, timeLimit,
 // questionCount (number or brief text), batchSize, images, audio, video,
@@ -5427,7 +5430,9 @@ function buildCreationPrompt(request) {
   const count = req.questionCount;
   const numeric = typeof count === 'number' ? count : null;
   // More than one reply can hold comes in batches, the teacher's size if smaller.
-  req.batchSize = Math.min(PROMPT_BATCH_MAX, Number(req.batchSize) || (numeric > PROMPT_BATCH_MAX ? PROMPT_BATCH_MAX : 0));
+  // An agent writes the file piece by piece, so it only batches when the
+  // teacher asked for a batch size.
+  req.batchSize = Math.min(PROMPT_BATCH_MAX, Number(req.batchSize) || (!agent && numeric > PROMPT_BATCH_MAX ? PROMPT_BATCH_MAX : 0));
 
   let typesLine = `use only ${list}`;
   if (req.typesMode === 'ai_choice') typesLine = `choose the ones that best fit the goal, from ${list}`;
@@ -5441,7 +5446,7 @@ function buildCreationPrompt(request) {
   const nextBatches = 'give batch 1 now and each next batch when the teacher asks for it (the teacher joins them with Import → Append)';
   let delivery = 'all in one JSON object';
   if (req.batchSize) delivery = `in batches of ${req.batchSize}, one JSON object per batch: ${nextBatches}`;
-  else if (typeof count === 'string') delivery = `all in one JSON object, or, if that is more than ${PROMPT_BATCH_MAX} questions, in batches of at most ${PROMPT_BATCH_MAX}, one JSON object per batch: ${nextBatches}`;
+  else if (typeof count === 'string' && !agent) delivery = `all in one JSON object, or, if that is more than ${PROMPT_BATCH_MAX} questions, in batches of at most ${PROMPT_BATCH_MAX}, one JSON object per batch: ${nextBatches}`;
 
   // Only what the teacher typed by hand, word for word, so the AI can tell it
   // apart from PinPlay's own wording (dropdown choices stay in Task).
@@ -5479,6 +5484,7 @@ function buildCreationPrompt(request) {
     rules.push(`For ${customMedia.join(', ')}: how much and on which questions is what the teacher typed (above); the rules here only give the fields to use.`);
   }
   if (agent) {
+    if (!req.batchSize && (numeric > PROMPT_BATCH_MAX || typeof count === 'string')) rules.push(PROMPT_AGENT_ONE_FILE_RULE);
     rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
   }
   // What the teacher typed by hand is the most specific instruction there is.
@@ -5973,12 +5979,14 @@ function syncPromptBatchNotes() {
   const count = /^\d+$/.test(countRaw) ? Number(countRaw) : 0;
   const typed = Number(document.getElementById('promptBatchSize')?.value || 0);
   const size = Math.min(PROMPT_BATCH_MAX, typed >= 3 ? typed : PROMPT_BATCH_MAX);
+  // An agent only batches when the teacher typed a batch size.
+  const agent = document.getElementById('promptAiMode')?.value === 'agent';
   let standard = '';
-  if (count > PROMPT_BATCH_MAX) standard = t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in batches of {size}. Import the first, then add each next one with Import → Append.', { n: count, size });
+  if (count > PROMPT_BATCH_MAX && !(agent && typed < 3)) standard = t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in batches of {size}. Import the first, then add each next one with Import → Append.', { n: count, size });
   else if (typed > PROMPT_BATCH_MAX) standard = t('Batches hold at most {max} questions.', { max: PROMPT_BATCH_MAX });
   note('promptBatchNote', standard);
   const { steps, items } = buildupPromptSize(document.getElementById('promptBuildupSteps')?.value, document.getElementById('promptBuildupItems')?.value);
-  const batches = steps * items > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
+  const batches = !agent && steps * items > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
   note('promptBuildupBatchNote', batches.length
     ? t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in {count} batches of whole steps (steps {parts}). Import the first, then add each next one with Import → Append.', {
       n: steps * items, count: batches.length, parts: batches.map(([from, to]) => (from === to ? String(from) : `${from}–${to}`)).join(', '),
@@ -6005,8 +6013,8 @@ function buildBuildupPrompt(req) {
   ].filter(Boolean);
   const name = toSafeFilename(skill) || 'build-up';
   const total = steps * items;
-  const batches = total > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
-  const span = ([from, to]) => (from === to ? `step ${from}` : `steps ${from}–${to}`);
+  const batches = !agent && total > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
+  const span =([from, to]) => (from === to ? `step ${from}` : `steps ${from}–${to}`);
 
   const task = [
     `One skill: the one in "Skill" above, and nothing else.`,
@@ -6032,6 +6040,7 @@ function buildBuildupPrompt(req) {
     'Prompts and options are short. Never a hint inside a question that gives the answer away.',
     `Items come step by step: any teaching slides and all practice questions of step 1, then step 2, and so on. Every item has "step": its step's number, and no "cefr". No pictures, video, reading texts or listening sections on practice questions, and no polls. Every practice question has a unique "id", "points": 1000 and "timeLimit": 0; every slide has a unique "id", "points": 0 and "timeLimit": 0 and may use a picture/GIF or a video when it materially helps teach the rule.`,
     ...promptAudioRules(req),
+    agent && total > PROMPT_BATCH_MAX ? PROMPT_AGENT_ONE_FILE_RULE : undefined,
     batches.length
       ? `The quiz has more questions than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
       : undefined,
