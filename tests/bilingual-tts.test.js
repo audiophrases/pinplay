@@ -8,7 +8,7 @@ const { extractDeclaration, loadDeclarations } = require('./helpers/extract-decl
 // lived here." is said in two voices. One splitter on the teacher page, the
 // student page and the server; the server joins one Edge clip per segment.
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const SHARED = ['TTS_TAG_VOICES', 'splitTtsSegments'];
+const SHARED = ['TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments'];
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const split = (text, voice) => plain(W.splitTtsSegments(text, voice));
 
@@ -17,7 +17,7 @@ let A;
 // The server's sandbox: its `fetch` is swapped per test.
 const server = { fetch: null, TextEncoder, TextDecoder };
 before(() => {
-  W = loadDeclarations(read('cloudflare/worker.js'), [...SHARED, 'ttsClipSeed', 'readMp3Frames', 'MP3_SILENCE_GAIN', 'trimMp3Silence', 'TTS_JOIN_LEAD_MS', 'TTS_JOIN_PAUSE_MS', 'TTS_JOIN_SENTENCE_PAUSE_MS', 'synthesizeEdgeMp3'], server);
+  W = loadDeclarations(read('cloudflare/worker.js'), [...SHARED, 'ttsClipSeed', 'ttsClipFile', 'readMp3Frames', 'MP3_SILENCE_GAIN', 'trimMp3Silence', 'TTS_JOIN_LEAD_MS', 'TTS_JOIN_PAUSE_MS', 'TTS_JOIN_SENTENCE_PAUSE_MS', 'TTS_GAP_PAUSE_MS', 'synthesizeEdgeMp3'], server);
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
@@ -194,6 +194,63 @@ describe('the silence around a clip is cut where two voices meet', () => {
   });
 });
 
+// A gap in the sentence was read out as "underscore underscore underscore".
+describe('a gap in the sentence is a pause, never read out', () => {
+  const texts = (t) => split(t, 'en-US-AriaNeural').map((x) => (x.gap ? ['gap', x.text] : [x.text]));
+
+  it('cuts the text at each gap and marks the piece after it', () => {
+    assert.deepEqual(texts('If it rains, the street ___ wet.'), [['If it rains, the street'], ['gap', 'wet.']]);
+    assert.deepEqual(texts('I went to the ____ and bought some [ ].'), [['I went to the'], ['gap', 'and bought some.']]);
+    assert.deepEqual(texts('She ____ TV every day. (watch)'), [['She'], ['gap', 'TV every day. (watch)']]);
+  });
+
+  it('a gap at an end leaves no pause, and its punctuation closes the piece before', () => {
+    assert.deepEqual(texts('If you heat ice, it ___.'), [['If you heat ice, it.']]);
+    assert.deepEqual(texts('___ you heat ice, it melts.'), [['you heat ice, it melts.']]);
+    assert.deepEqual(texts('"___ is my name."'), [['is my name."']]);
+    assert.deepEqual(texts('___'), []);
+  });
+
+  it('works inside each voice of a bilingual text, and not across a change of voice', () => {
+    assert.deepEqual(plain(W.splitTtsSegments('[ca] Tria. [en] ___ you heat ice, it ___ fast.', 'en-US-AriaNeural')), [
+      { text: 'Tria.', voice: 'ca-ES-JoanaNeural' },
+      { text: 'you heat ice, it', voice: 'en-US-AriaNeural' },
+      { text: 'fast.', voice: 'en-US-AriaNeural', gap: true },
+    ]);
+  });
+
+  it('the server leaves the pause where the gap is', async () => {
+    const clip = () => mp3(...Array(6).fill(QUIET), LOUD, LOUD, ...Array(40).fill(QUIET));
+    const calls = [];
+    server.fetch = async (url, init) => {
+      calls.push(JSON.parse(init.body).text);
+      return { ok: true, status: 200, headers: { get: () => 'audio/mpeg' }, arrayBuffer: async () => clip().buffer };
+    };
+    const made = await W.synthesizeEdgeMp3({ EDGE_TTS_URL: 'https://bridge.test/tts' }, 'The street ___ wet.', 'en-US-AriaNeural', '+0%');
+    assert.deepEqual(calls, ['The street', 'wet.']);
+    assert.equal(W.TTS_GAP_PAUSE_MS, 700);
+    // first clip: its start, the speech and 29 frames (696 ms) of pause; then 1 frame before the rest.
+    assert.deepEqual(kept(new Uint8Array(made.audio)), [
+      ...Array.from({ length: 37 }, (_, i) => i + 1),
+      ...Array.from({ length: 43 }, (_, i) => i + 6),
+    ]);
+  });
+
+  it('such a clip has its own cache key and a name that tells it from the ones read out', () => {
+    assert.equal(extractDeclaration(read('app.js'), 'ttsClipFile'), extractDeclaration(read('cloudflare/worker.js'), 'ttsClipFile'));
+    assert.equal(W.ttsClipSeed('It ___ wet.', 'en-US-AriaNeural', '+0%'), 'en-US-AriaNeural::+0%::It ___ wet.::joined-2::gap-1');
+    assert.equal(W.ttsClipSeed('It ___.', 'en-US-AriaNeural', '+0%'), 'en-US-AriaNeural::+0%::It ___.::gap-1');
+    assert.equal(W.ttsClipFile('abc', 'It ___ wet.'), 'tts/gap1-abc.mp3');
+    assert.equal(W.ttsClipFile('abc', 'It gets wet.'), 'tts/abc.mp3');
+    assert.equal(read('cloudflare/worker.js').split('${ttsClipFile(hash, text)}').length - 1, 2);
+  });
+
+  it('a stored key from before is not played, on the teacher page and the student page', () => {
+    assert.ok(read('app.js').includes("const stale = TTS_GAP.test(text) && !ttsKey.includes('tts/gap1-');"));
+    assert.ok(read('play.js').includes("if (ttsKey && !(TTS_GAP.test(text) && !ttsKey.includes('tts/gap1-'))) {"));
+  });
+});
+
 describe('a clip in more than one voice is cached under the way it is joined', () => {
   it('is the same on the teacher page and the server', () => {
     assert.equal(extractDeclaration(read('app.js'), 'ttsClipSeed'), extractDeclaration(read('cloudflare/worker.js'), 'ttsClipSeed'));
@@ -228,7 +285,7 @@ describe('the AI prompts ask for bilingual audio only when the teacher does', ()
       assert.match(text, /EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation/);
       assert.ok(text.includes('Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am."'));
       assert.match(text, /reread every "audioText" and tag any quiz-language word/);
-      assert.ok(text.includes('it never says the answer: read a gap as "blank", never ___ ("[en] I blank happy.")'));
+      assert.ok(text.includes('it never says the answer: write a gap as ___, where the voice pauses ("[en] I ___ happy.")'));
     });
   });
 

@@ -7518,8 +7518,9 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
 
   // Prefer the pre-rendered R2 cache (instant, survives Edge cold-starts). Students
   // can't synthesize/store, so on a miss we just fall through to live Edge TTS.
+  // A key from before gaps were pauses holds "underscore underscore": the clip is made live instead.
   const ttsKey = String(question.ttsAudioKey || '').trim();
-  if (ttsKey) {
+  if (ttsKey && !(TTS_GAP.test(text) && !ttsKey.includes('tts/gap1-'))) {
     const cb = loadBackendUrl() || DEFAULT_BACKEND_URL;
     const cacheUrl = (ttsKey.startsWith('http')) ? ttsKey : `${cb}/api/media/${ttsKey}`;
     try {
@@ -7902,14 +7903,28 @@ const TTS_TAG_VOICES = {
   de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
 };
 
+// A gap in a sentence ("it ___ wet", or []) is not read out: the text is cut
+// there and the piece after it is marked `gap`, where the server leaves a
+// pause. Punctuation alone beside a gap closes the piece before it.
+const TTS_GAP = /__+|\[\s*\]/;
+
 function splitTtsSegments(text, voice) {
   const base = String(voice || '').trim() || 'en-US-AriaNeural';
   const src = String(text || '');
   const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
   const out = [];
   const push = (part, v) => {
-    const s = part.replace(/\s+/g, ' ').trim();
-    if (s) out.push({ text: s, voice: v });
+    let said = false;
+    part.split(new RegExp(TTS_GAP.source, 'g')).forEach((piece, i, pieces) => {
+      const s = piece.replace(/\s+/g, ' ').trim();
+      if (!s) return;
+      if (pieces.length > 1 && !/[\p{L}\p{N}]/u.test(s)) {
+        if (said) out[out.length - 1].text += s;
+        return;
+      }
+      out.push(said ? { text: s, voice: v, gap: true } : { text: s, voice: v });
+      said = true;
+    });
   };
   let current = base;
   let last = 0;

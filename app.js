@@ -104,7 +104,7 @@ const TEMPLATE_ALL_13_TYPES = {
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "I went to the blank and bought some blank.",
+      "audioText": "I went to the ____ and bought some ____.",
       "ttsLanguage": "EN",
       "imageKeyword": "supermarket aisle",
       "videoKeyword": "",
@@ -3676,14 +3676,28 @@ const TTS_TAG_VOICES = {
   de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
 };
 
+// A gap in a sentence ("it ___ wet", or []) is not read out: the text is cut
+// there and the piece after it is marked `gap`, where the server leaves a
+// pause. Punctuation alone beside a gap closes the piece before it.
+const TTS_GAP = /__+|\[\s*\]/;
+
 function splitTtsSegments(text, voice) {
   const base = String(voice || '').trim() || 'en-US-AriaNeural';
   const src = String(text || '');
   const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
   const out = [];
   const push = (part, v) => {
-    const s = part.replace(/\s+/g, ' ').trim();
-    if (s) out.push({ text: s, voice: v });
+    let said = false;
+    part.split(new RegExp(TTS_GAP.source, 'g')).forEach((piece, i, pieces) => {
+      const s = piece.replace(/\s+/g, ' ').trim();
+      if (!s) return;
+      if (pieces.length > 1 && !/[\p{L}\p{N}]/u.test(s)) {
+        if (said) out[out.length - 1].text += s;
+        return;
+      }
+      out.push(said ? { text: s, voice: v, gap: true } : { text: s, voice: v });
+      said = true;
+    });
   };
   let current = base;
   let last = 0;
@@ -5292,7 +5306,7 @@ const PROMPT_VOICE = '"ttsLanguage": "EN", "CA" or "FR" — for any other langua
 // Bilingual question audio (BILINGUAL_TTS_PLAN.md): how the AI writes it. The
 // instruction is said in the students' own language, the content being learned
 // in the language of the quiz; tags in the text switch the voice.
-const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Each voice can only pronounce its own language, so EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation (a pronoun, a verb form, an ending): left untagged, the other voice reads it as a word or an abbreviation of its own language. Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am." Go back to the students\' language with its tag after each one. Where you can, word the explanation so that the quiz-language words come together at the end, which changes the voice fewer times: "[ca] Fixa\'t en el subjecte i el verb: [en] I am. You are." Before you answer, reread every "audioText" and tag any quiz-language word still inside a segment of the students\' language. The audio plays while the student is answering, so it never says the answer: read a gap as "blank", never ___ ("[en] I blank happy."), read a sentence to correct as it is printed, and keep the model sentence that gives the answer away out of the audio. The quiz and every question carry the voice of the language of the quiz: ' + PROMPT_VOICE + '.';
+const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Each voice can only pronounce its own language, so EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation (a pronoun, a verb form, an ending): left untagged, the other voice reads it as a word or an abbreviation of its own language. Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am." Go back to the students\' language with its tag after each one. Where you can, word the explanation so that the quiz-language words come together at the end, which changes the voice fewer times: "[ca] Fixa\'t en el subjecte i el verb: [en] I am. You are." Before you answer, reread every "audioText" and tag any quiz-language word still inside a segment of the students\' language. The audio plays while the student is answering, so it never says the answer: write a gap as ___, where the voice pauses ("[en] I ___ happy."), read a sentence to correct as it is printed, and keep the model sentence that gives the answer away out of the audio. The quiz and every question carry the voice of the language of the quiz: ' + PROMPT_VOICE + '.';
 
 // The fields each question type needs, as the AI should write them.
 const PROMPT_TYPE_FIELDS = {
@@ -5363,7 +5377,7 @@ function promptAudioRules(req) {
   if (!req.audio || req.audio === 'no') return ['No generated audio on any question or teaching slide: set "readAllQuestionsAloud": false on the quiz and "audioEnabled": false on every item; omit "audioText" and audio files.'];
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
-    : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language. Say "blank" for gaps, never ___. Set the quiz and item voice using ${PROMPT_VOICE}.`;
+    : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language. Write a gap as ___ in "audioText" too: the voice pauses there and never says the answer. Set the quiz and item voice using ${PROMPT_VOICE}.`;
   return [rule, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. Never reveal a practice answer in the audio.'];
 }
 
@@ -20679,17 +20693,26 @@ async function sha256HexClient(str) {
 }
 
 // What a clip's cache key is the hash of. A text in more than one voice has a
-// mark for the way its clips are joined: change it when the join changes, and
-// the clips made the old way are made again. Identical in app.js and worker.js.
+// mark for the way its clips are joined, and a text with a gap has one for the
+// way the gap is said: change a mark when its way changes, and the clips made
+// the old way are made again. Identical in app.js and worker.js.
 function ttsClipSeed(text, voice, rate) {
   const seed = `${voice}::${rate}::${text}`;
-  return splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+  const joined = splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+  return TTS_GAP.test(text) ? `${joined}::gap-1` : joined;
+}
+
+// The R2 key of a clip, without the workspace in front. A text with a gap has
+// `gap1-` in its name: a key without it is a clip from when the gap was read
+// out ("underscore underscore"), and is not played. Identical in app.js and worker.js.
+function ttsClipFile(hash, text) {
+  return `tts/${TTS_GAP.test(text) ? 'gap1-' : ''}${hash}.mp3`;
 }
 
 async function computeTtsAudioKey(voice, text, rate = '+0%') {
   const v = String(voice || 'en-US-AriaNeural');
   const hash = await sha256HexClient(ttsClipSeed(String(text || '').trim().slice(0, 1200), v, rate));
-  return `tts/${hash}.mp3`;
+  return ttsClipFile(hash, String(text || '').trim().slice(0, 1200));
 }
 
 // Ask the worker to make sure one cached mp3 exists on R2 (synth once if missing).
@@ -23606,7 +23629,9 @@ async function playQuestionAudio(question, opts = {}) {
     const cb = normalizeBackendUrl(loadBackendUrl()) || DEFAULT_BACKEND_URL;
     const toUrl = (k) => (/^https?:/i.test(k) ? k : `${cb}/api/media/${k}`);
     let cok = false;
-    try { cok = await playAudioEl(new Audio(toUrl(ttsKey))); } catch { cok = false; }
+    // A key from before gaps were pauses holds "underscore underscore": made again below.
+    const stale = TTS_GAP.test(text) && !ttsKey.includes('tts/gap1-');
+    if (!stale) { try { cok = await playAudioEl(new Audio(toUrl(ttsKey))); } catch { cok = false; } }
     if (cok) return true;
     // Miss (not yet materialized / purged): populate R2 once, then retry.
     try {

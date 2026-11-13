@@ -162,7 +162,7 @@ describe('rules follow the request', () => {
     const rules = section(text, 'Rules');
     assert.equal((rules.match(/Audio:/g) || []).length, 1);
     assert.match(rules, /es-ES-ElviraNeural/);
-    assert.match(rules, /"blank"/);
+    assert.match(rules, /Write a gap as ___ in "audioText" too: the voice pauses there/);
     assert.ok(examplesOf(text).some((ex) => ex.audioEnabled === true && ex.audioText));
   });
 

@@ -2491,7 +2491,7 @@ export default {
       if (!text) return json({ error: 'Missing text.' }, 400);
 
       const hash = await sha256Hex(ttsClipSeed(text, voice, rate));
-      const key = `${mediaPrefixFor(auth)}tts/${hash}.mp3`;
+      const key = `${mediaPrefixFor(auth)}${ttsClipFile(hash, text)}`;
 
       try {
         // Already cached → no synth, no write. Just confirm the key.
@@ -2529,7 +2529,7 @@ export default {
         if (!text) { results.push({ ok: false, error: 'empty text' }); continue; }
 
         const hash = await sha256Hex(ttsClipSeed(text, voice, rate));
-        const key = `${prefix}tts/${hash}.mp3`;
+        const key = `${prefix}${ttsClipFile(hash, text)}`;
         if (seen.has(hash)) { results.push({ ok: true, key, cached: true }); continue; }
 
         try {
@@ -8700,14 +8700,28 @@ const TTS_TAG_VOICES = {
   de: 'de-DE-KatjaNeural', it: 'it-IT-ElsaNeural', pt: 'pt-PT-RaquelNeural', nl: 'nl-NL-ColetteNeural',
 };
 
+// A gap in a sentence ("it ___ wet", or []) is not read out: the text is cut
+// there and the piece after it is marked `gap`, where the server leaves a
+// pause. Punctuation alone beside a gap closes the piece before it.
+const TTS_GAP = /__+|\[\s*\]/;
+
 function splitTtsSegments(text, voice) {
   const base = String(voice || '').trim() || 'en-US-AriaNeural';
   const src = String(text || '');
   const tag = /\[([a-z]{2}(?:-[a-z]{2}-[a-z]+neural)?)\]/gi;
   const out = [];
   const push = (part, v) => {
-    const s = part.replace(/\s+/g, ' ').trim();
-    if (s) out.push({ text: s, voice: v });
+    let said = false;
+    part.split(new RegExp(TTS_GAP.source, 'g')).forEach((piece, i, pieces) => {
+      const s = piece.replace(/\s+/g, ' ').trim();
+      if (!s) return;
+      if (pieces.length > 1 && !/[\p{L}\p{N}]/u.test(s)) {
+        if (said) out[out.length - 1].text += s;
+        return;
+      }
+      out.push(said ? { text: s, voice: v, gap: true } : { text: s, voice: v });
+      said = true;
+    });
   };
   let current = base;
   let last = 0;
@@ -8727,11 +8741,20 @@ function splitTtsSegments(text, voice) {
 }
 
 // What a clip's cache key is the hash of. A text in more than one voice has a
-// mark for the way its clips are joined: change it when the join changes, and
-// the clips made the old way are made again. Identical in app.js and worker.js.
+// mark for the way its clips are joined, and a text with a gap has one for the
+// way the gap is said: change a mark when its way changes, and the clips made
+// the old way are made again. Identical in app.js and worker.js.
 function ttsClipSeed(text, voice, rate) {
   const seed = `${voice}::${rate}::${text}`;
-  return splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+  const joined = splitTtsSegments(text, voice).length > 1 ? `${seed}::joined-2` : seed;
+  return TTS_GAP.test(text) ? `${joined}::gap-1` : joined;
+}
+
+// The R2 key of a clip, without the workspace in front. A text with a gap has
+// `gap1-` in its name: a key without it is a clip from when the gap was read
+// out ("underscore underscore"), and is not played. Identical in app.js and worker.js.
+function ttsClipFile(hash, text) {
+  return `tts/${TTS_GAP.test(text) ? 'gap1-' : ''}${hash}.mp3`;
 }
 
 // Reads the frames of an MPEG Layer III clip: where each one is, how long it
@@ -8812,9 +8835,12 @@ function trimMp3Silence(bytes, lead, tail) {
 const TTS_JOIN_LEAD_MS = 24;
 const TTS_JOIN_PAUSE_MS = 70;
 const TTS_JOIN_SENTENCE_PAUSE_MS = 280;
+// The pause that stands for a gap in the sentence.
+const TTS_GAP_PAUSE_MS = 700;
 
-// One Edge bridge call per voice segment of a (possibly bilingual) text, joined
-// into one mp3: Edge clips share one format, so the bytes concatenate and play
+// One Edge bridge call per segment of a text (one per voice of a bilingual
+// text, and one per piece between the gaps of a sentence), joined into one
+// mp3: Edge clips share one format, so the bytes concatenate and play
 // as one clip. Edge puts about a second of silence after every clip, which is
 // cut where two clips meet. Returns { ok, audio, contentType } or
 // { ok: false, status, error }.
@@ -8850,11 +8876,8 @@ async function synthesizeEdgeMp3(env, text, voice, rate) {
   if (parts.length === 1) return { ok: true, audio: parts[0].buffer, contentType };
   parts.forEach((part, i) => {
     const endsSentence = /[.!?:;…]$/.test(segments[i].text);
-    parts[i] = trimMp3Silence(
-      part,
-      i === 0 ? null : TTS_JOIN_LEAD_MS,
-      i === parts.length - 1 ? null : (endsSentence ? TTS_JOIN_SENTENCE_PAUSE_MS : TTS_JOIN_PAUSE_MS),
-    );
+    const pause = segments[i + 1]?.gap ? TTS_GAP_PAUSE_MS : (endsSentence ? TTS_JOIN_SENTENCE_PAUSE_MS : TTS_JOIN_PAUSE_MS);
+    parts[i] = trimMp3Silence(part, i === 0 ? null : TTS_JOIN_LEAD_MS, i === parts.length - 1 ? null : pause);
   });
   const joined = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
   let at = 0;
