@@ -24,7 +24,7 @@ const NAMES = [
   'videoBackendCandidates', 'videoProviderPreferenceOf', 'applyFoundVideo', 'searchVideosForKeyword', 'autoFillVideos',
   'generateMissingVisualFor', 'regenerateVisualFor', 'removeMediaFrom', 'mediaManagerState',
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
-  'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'prepareQuestionTts',
+  'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll', 'questionWantsTts', 'prepareQuestionTts',
   'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
   'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
@@ -123,13 +123,40 @@ describe('questionMediaStatus', () => {
   });
 
   it('audio: TTS ready or missing, uploaded file, quiz-wide read-aloud, hearing off', () => {
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }).audio, { kind: 'tts', status: 'ready' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }).audio, { kind: 'tts', status: 'missing' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }).audio, { kind: 'tts', status: 'ready' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi' }).audio, { kind: 'tts', status: 'missing' });
     assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3' }).audio, { kind: 'file', status: 'ready' });
     assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'data:audio/webm;base64,AA' }).audio, { kind: 'file', status: 'local' });
     assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }).audio, { kind: 'none', status: 'none' });
     assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, { ttsLanguage: 'EN', readAllQuestionsAloud: true }).audio, { kind: 'tts', status: 'missing' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }, { ttsLanguage: 'NONE' }).audio, { kind: 'none', status: 'none' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi' }, { ttsLanguage: 'NONE' }).audio, { kind: 'none', status: 'none' });
+  });
+
+  // Clips were made for questions nobody asked to hear: every question is in
+  // `tts` mode until it gets a file, so the mode alone says nothing.
+  it('audio: with read-all off, only a question with its own text is read', () => {
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }).audio, { kind: 'none', status: 'none' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioEnabled: true, prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }).audio, { kind: 'none', status: 'none' });
+    assert.deepEqual(st({ type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' }).audio, { kind: 'tts', status: 'missing' });
+  });
+
+  it('publishing makes no clip for such a question, and marks it as not heard', () => {
+    const { A: app } = load(() => jsonRes(200, {}));
+    const off = { type: 'mcq', audioMode: 'tts', audioEnabled: true, prompt: 'If you heat ice, it ___.', ttsAudioKey: 'tts/old.mp3' };
+    assert.equal(app.prepareQuestionTts(off, 'EN', false), null);
+    assert.equal(off.audioEnabled, false);
+    assert.equal(off.ttsAudioKey, '');
+    const own = { type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' };
+    assert.equal(app.prepareQuestionTts(own, 'EN', false).text, 'Listen.');
+    assert.equal(app.prepareQuestionTts({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }, 'EN', true).text, 'Hi');
+  });
+
+  it('an imported file decides: its own setting, or an item with the audio off', () => {
+    const { A: app } = load(() => jsonRes(200, {}));
+    assert.equal(app.importedReadAll({ readAllQuestionsAloud: false, questions: [{}] }), false);
+    assert.equal(app.importedReadAll({ readAllQuestionsAloud: true, questions: [{ audioEnabled: false }] }), true);
+    assert.equal(app.importedReadAll({ questions: [{ audioEnabled: true, audioText: 'Listen.' }, { audioEnabled: false }] }), false);
+    assert.equal(app.importedReadAll({ questions: [{ prompt: 'Hi' }] }), true);
   });
 
   it('changedAt is the later of the picture and audio revisions', () => {
@@ -255,7 +282,7 @@ describe('Media Manager rows, filters and sorting', () => {
     qs = [
       { type: 'mcq', cefr: 'B1', prompt: 'Past of go?', imageData: 'https://media.giphy.com/a/1.gif' },       // Q1 gif ready
       { type: 'mcq', cefr: 'A1', prompt: 'Colour of the sky', gifKeyword: 'blue sky' },                     // Q2 gif missing
-      { type: 'text', prompt: 'Spell it', audioMode: 'tts', ttsAudioKey: 'tts/x.mp3' },                     // Q3 tts ready, untagged
+      { type: 'text', prompt: 'Spell it', audioMode: 'tts', audioText: 'Spell it', ttsAudioKey: 'tts/x.mp3' }, // Q3 tts ready, untagged
       { type: 'mcq', cefr: 'C2', prompt: 'Nuance', imageData: 'data:image/png;base64,AA' },                  // Q4 image local
       { type: 'mcq', cefr: 'A1', prompt: 'Nothing here' },                                                   // Q5 none
       { type: 'mcq', cefr: 'B1', prompt: 'Apple', imageKeyword: 'apple' },                                   // Q6 image missing
@@ -478,8 +505,8 @@ describe('generateMissingTtsFor', () => {
       batches.push(items.length);
       return jsonRes(200, { results: items.map((it, i) => (it.text === 'Q7' ? { ok: false } : { ok: true, key: `ws/tts/${i}.mp3` })) });
     });
-    const questions = Array.from({ length: 30 }, (_, i) => ({ type: 'mcq', audioMode: 'tts', prompt: `Q${i}` }));
-    questions.push({ type: 'mcq', audioMode: 'tts', prompt: 'ready', ttsAudioKey: 'tts/done.mp3' });
+    const questions = Array.from({ length: 30 }, (_, i) => ({ type: 'mcq', audioMode: 'tts', audioText: `Q${i}`, prompt: `Q${i}` }));
+    questions.push({ type: 'mcq', audioMode: 'tts', audioText: 'ready', prompt: 'ready', ttsAudioKey: 'tts/done.mp3' });
     sandbox.quiz = { questions, ttsLanguage: 'EN', readAllQuestionsAloud: false };
     sandbox.createSessionPassword = 'secret';
     const outcomes = await A.generateMissingTtsFor(questions, { cancelled: false });
@@ -493,7 +520,7 @@ describe('generateMissingTtsFor', () => {
 
   it('when not signed in, computes the keys and leaves R2 to the next publish', async () => {
     const { A, calls, sandbox } = load(() => jsonRes(500, {}));
-    const q = { type: 'mcq', audioMode: 'tts', prompt: 'Hello' };
+    const q = { type: 'mcq', audioMode: 'tts', audioText: 'Hello', prompt: 'Hello' };
     sandbox.quiz = { questions: [q], ttsLanguage: 'EN' };
     const outcomes = await A.generateMissingTtsFor([q], { cancelled: false });
     assert.equal(outcomes.get(q).status, 'filled');
@@ -579,7 +606,7 @@ describe('Change voice', () => {
 
   it('sets the voice on TTS questions only and drops the old clip key', () => {
     const { A } = load(() => jsonRes(200, {}));
-    const tts = { type: 'mcq', audioMode: 'tts', prompt: 'Hi', ttsAudioKey: 'tts/old.mp3', language: 'en-US-AriaNeural' };
+    const tts = { type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsAudioKey: 'tts/old.mp3', language: 'en-US-AriaNeural' };
     const file = { type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3', language: 'en-US-AriaNeural' };
     const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
     const changed = A.setTtsVoiceOn([tts, file], voice, EN);
@@ -593,7 +620,7 @@ describe('Change voice', () => {
   it('the voice survives the publish preparation and the builder dropdown', () => {
     const { A } = load(() => jsonRes(200, {}));
     const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
-    const q = { type: 'mcq', audioMode: 'tts', prompt: 'Hi', language: voice };
+    const q = { type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', language: voice };
     const clip = A.prepareQuestionTts(q, 'EN', false);
     assert.equal(clip.voice, voice);
     // The builder's voice <select> must list it, or syncing would fall back to the first default.

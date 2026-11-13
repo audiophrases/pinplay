@@ -236,6 +236,8 @@ window.PINPLAY_FR_DICT = {
   'e.g. Vertebrates vs Invertebrates': 'ex. Vertébrés vs invertébrés',
   'Hear questions': 'Écouter les questions',
   "Don't hear questions": 'Ne pas écouter les questions',
+  'Read every question aloud': 'Lire toutes les questions à voix haute',
+  'Off: only the questions and slides with their own audio (a text to read aloud, or an audio file) are heard.': 'Désactivé : seules les questions et diapositives qui ont leur propre audio (un texte à lire, ou un fichier audio) sont entendues.',
   'Other': 'Autre',
   'Language / voice': 'Langue / voix',
   'Search voice / language / code': 'Rechercher une voix / langue / un code',

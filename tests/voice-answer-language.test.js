@@ -33,7 +33,7 @@ function load() {
     'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE', 'normalizeTtsLanguage', 'getVoiceForTtsLanguage',
     'normalizeTtsVoice', 'guessTtsLanguageFromVoice',
     'round', 'detectVideoProvider', 'makeDefaultQuestionMedia', 'normalizeQuestionMedia',
-    'CEFR_LEVELS', 'normalizeCefr', 'normalizeQuizForLive',
+    'CEFR_LEVELS', 'normalizeCefr', 'importedReadAll', 'normalizeQuizForLive',
   ], sandbox);
 }
 
