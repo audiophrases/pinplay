@@ -5430,9 +5430,8 @@ function buildCreationPrompt(request) {
   const count = req.questionCount;
   const numeric = typeof count === 'number' ? count : null;
   // More than one reply can hold comes in batches, the teacher's size if smaller.
-  // An agent writes the file piece by piece, so it only batches when the
-  // teacher asked for a batch size.
-  req.batchSize = Math.min(PROMPT_BATCH_MAX, Number(req.batchSize) || (!agent && numeric > PROMPT_BATCH_MAX ? PROMPT_BATCH_MAX : 0));
+  // An agent writes the file piece by piece, so it never batches.
+  req.batchSize = agent ? 0 : Math.min(PROMPT_BATCH_MAX, Number(req.batchSize) || (numeric > PROMPT_BATCH_MAX ? PROMPT_BATCH_MAX : 0));
 
   let typesLine = `use only ${list}`;
   if (req.typesMode === 'ai_choice') typesLine = `choose the ones that best fit the goal, from ${list}`;
@@ -5484,7 +5483,7 @@ function buildCreationPrompt(request) {
     rules.push(`For ${customMedia.join(', ')}: how much and on which questions is what the teacher typed (above); the rules here only give the fields to use.`);
   }
   if (agent) {
-    if (!req.batchSize && (numeric > PROMPT_BATCH_MAX || typeof count === 'string')) rules.push(PROMPT_AGENT_ONE_FILE_RULE);
+    if (numeric > PROMPT_BATCH_MAX || typeof count === 'string') rules.push(PROMPT_AGENT_ONE_FILE_RULE);
     rules.unshift('Check every fact, name, date and number (e.g. slider targets) in a reliable source before writing a question; drop what you can\'t check.');
   }
   // What the teacher typed by hand is the most specific instruction there is.
@@ -5979,10 +5978,13 @@ function syncPromptBatchNotes() {
   const count = /^\d+$/.test(countRaw) ? Number(countRaw) : 0;
   const typed = Number(document.getElementById('promptBatchSize')?.value || 0);
   const size = Math.min(PROMPT_BATCH_MAX, typed >= 3 ? typed : PROMPT_BATCH_MAX);
-  // An agent only batches when the teacher typed a batch size.
+  // An agent never batches: the batch size field is off and no note shows.
   const agent = document.getElementById('promptAiMode')?.value === 'agent';
+  const batchEl = document.getElementById('promptBatchSize');
+  if (batchEl) batchEl.disabled = agent;
   let standard = '';
-  if (count > PROMPT_BATCH_MAX && !(agent && typed < 3)) standard = t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in batches of {size}. Import the first, then add each next one with Import → Append.', { n: count, size });
+  if (agent) standard = '';
+  else if (count > PROMPT_BATCH_MAX) standard = t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in batches of {size}. Import the first, then add each next one with Import → Append.', { n: count, size });
   else if (typed > PROMPT_BATCH_MAX) standard = t('Batches hold at most {max} questions.', { max: PROMPT_BATCH_MAX });
   note('promptBatchNote', standard);
   const { steps, items } = buildupPromptSize(document.getElementById('promptBuildupSteps')?.value, document.getElementById('promptBuildupItems')?.value);
