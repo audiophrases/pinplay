@@ -22,7 +22,7 @@ before(() => {
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
-    'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename', 'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf',
+    'shapePromptExample', 'promptAudioRules', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename', 'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf',
     'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'buildupPromptBatches', 'buildupPromptSize',
     'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
   ]);
@@ -122,52 +122,64 @@ describe('the server joins one Edge clip per segment', () => {
 
 describe('the AI prompts ask for bilingual audio only when the teacher does', () => {
   const base = { theme: 'Present perfect', language: 'English', level: 'A2', goal: '', timeLimit: 0, questionCount: 10, images: 'no', video: 'no', readingText: 'no', typesMode: 'all', selectedTypes: [], aiMode: 'chatbot' };
+  const climb = { skill: 'third person -s', language: 'English', level: 'A1', firstLanguage: 'Catalan', errors: '', steps: 4, itemsPerStep: 4, selectedTypes: ['mcq'], notes: 'short sentences', aiMode: 'chatbot' };
 
-  it('standard prompt: the rule, the example and the teacher\'s note', () => {
-    const { text } = A.buildCreationPrompt({ ...base, audio: 'bilingual', bilingualNote: 'ask in Catalan, read the sentence in English' });
+  it('standard prompt: the rule, the example and the teacher\'s instructions', () => {
+    const { text } = A.buildCreationPrompt({ ...base, audio: 'bilingual', audioInstructions: 'ask in Catalan, read the sentence in English' });
     assert.match(text, /Audio, bilingual: every question has "audioEnabled": true and "audioText"/);
-    assert.match(text, /\[ca\] Escolta la frase i tria el temps verbal correcte\. \[en\] She has lived in Girona since 2010\./);
-    assert.match(text, /- Bilingual audio: "ask in Catalan, read the sentence in English"/);
-    assert.match(text, /what the teacher typed under "Bilingual audio"/);
+    assert.ok(text.includes('[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010.'));
+    assert.match(text, /- Audio instructions: "ask in Catalan, read the sentence in English"/);
     assert.match(text, /"ttsLanguage": "EN", "CA" or "FR"/);
   });
 
-  it('standard prompt: without a note, no quoted line and no pointer to one', () => {
-    const { text } = A.buildCreationPrompt({ ...base, audio: 'bilingual', bilingualNote: '' });
-    assert.match(text, /Audio, bilingual:/);
-    assert.doesNotMatch(text, /Bilingual audio:/);
-    assert.doesNotMatch(text, /typed under "Bilingual audio"/);
+  it('every word of the quiz language is tagged, even one inside an explanation', () => {
+    [A.buildCreationPrompt({ ...base, audio: 'bilingual' }).text, A.buildBuildupPrompt({ ...climb, audio: 'bilingual' }).text].forEach((text) => {
+      assert.match(text, /EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation/);
+      assert.ok(text.includes('Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am."'));
+      assert.match(text, /reread every "audioText" and tag any quiz-language word/);
+      assert.ok(text.includes('it never says the answer: read a gap as "blank", never ___ ("[en] I blank happy.")'));
+    });
   });
 
-  it('standard and adaptive prompts without it say nothing about tags', () => {
-    ['no', 'some'].forEach((audio) => {
+  it('the rule\'s own examples split as it says', () => {
+    const voices = (t) => split(t, 'en-US-AriaNeural').map((x) => [x.voice.slice(0, 2), x.text]);
+    assert.deepEqual(voices('[ca] Amb [en] I [ca] fem servir [en] am.'), [['ca', 'Amb'], ['en', 'I'], ['ca', 'fem servir'], ['en', 'am.']]);
+    assert.deepEqual(voices('[ca] Amb I fem servir am.'), [['ca', 'Amb I fem servir am.']]);
+  });
+
+  it('standard prompt: without instructions, no quoted line', () => {
+    const { text } = A.buildCreationPrompt({ ...base, audio: 'bilingual' });
+    assert.match(text, /Audio, bilingual:/);
+    assert.doesNotMatch(text, /- Audio instructions:/);
+  });
+
+  it('prompts without it say nothing about tags; the adaptive one carries it', () => {
+    ['no', 'quiz'].forEach((audio) => {
       const { text } = A.buildCreationPrompt({ ...base, audio });
       assert.doesNotMatch(text, /bilingual/i);
-      assert.doesNotMatch(text, /\[ca\]/);
+      assert.ok(!text.includes('[ca]'));
     });
     const { text } = A.buildCreationPrompt({ ...base, adaptive: true, steps: 4, audio: 'bilingual' });
     assert.match(text, /Audio, bilingual:/);
   });
 
-  it('climb prompt: the rule replaces "no audio" and names the first language', () => {
-    const req = { skill: 'third person -s', language: 'English', level: 'A1', firstLanguage: 'Catalan', errors: '', steps: 4, itemsPerStep: 4, selectedTypes: ['mcq'], notes: 'short sentences', aiMode: 'chatbot' };
-    const off = A.buildBuildupPrompt(req).text;
-    assert.match(off, /No pictures, audio, video, reading texts/);
+  it('climb prompt: no audio unless asked, then the same rule', () => {
+    const off = A.buildBuildupPrompt(climb).text;
+    assert.match(off, /No generated audio on any question or teaching slide/);
     assert.doesNotMatch(off, /bilingual/i);
-    const on = A.buildBuildupPrompt({ ...req, bilingualAudio: true }).text;
-    assert.match(on, /No pictures, video, reading texts/);
-    assert.match(on, /Audio, bilingual: every question has "audioEnabled": true/);
-    assert.match(on, /their first language \(above\); the teacher's instructions \(above\) say more/);
-    const noNotes = A.buildBuildupPrompt({ ...req, notes: '', bilingualAudio: true }).text;
-    assert.match(noNotes, /their first language \(above\)\./);
+    ['audio', 'bilingualAudio'].forEach((key) => {
+      const on = A.buildBuildupPrompt({ ...climb, [key]: key === 'audio' ? 'bilingual' : true }).text;
+      assert.match(on, /Audio, bilingual: every question has "audioEnabled": true/);
+      assert.match(on, /Use the students' first language specified by the teacher\./);
+      assert.match(on, /- The students' first language: "Catalan"/);
+    });
   });
 });
 
 describe('the pages', () => {
-  it('the create page offers Bilingual audio for the standard and the climb prompt, and the French is there', () => {
+  it('the create page offers Bilingual audio, and the French is there', () => {
     const html = read('create/index.html');
     assert.match(html, /<select id="promptAudio">[\s\S]*?value="bilingual"/);
-    assert.match(html, /<select id="promptBuildupAudio">[\s\S]*?value="bilingual"/);
     const vm = require('node:vm');
     const dict = (() => { const w = {}; vm.runInNewContext(read('i18n-fr.js'), { window: w }); return w.PINPLAY_FR_DICT; })();
     [...html.matchAll(/<option value="bilingual" data-i18n>([^<]+)<\/option>/g)].forEach((m) => assert.ok(dict[m[1]], `no French for: ${m[1]}`));

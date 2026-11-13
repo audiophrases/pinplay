@@ -105,3 +105,8 @@ bilingual rule and the teacher's words only when asked.
   one Edge clip per segment, the student page's browser-voice fallback speaks
   the segments in turn, "Bilingual" in the standard/adaptive and climb prompt
   forms, hint in the editor, `tests/bilingual-tts.test.js`.
+- 2026-11-13: first AI-made quiz left quiz-language words untagged inside the
+  first-language segments ("[ca] Amb I fem servir am"), which the Catalan voice
+  misreads. `PROMPT_BILINGUAL_AUDIO` now asks for a tag on every quiz-language
+  word, with a wrong/right example, a reread before answering, and no answer in
+  the audio.
