@@ -5392,7 +5392,7 @@ function promptAudioRules(req) {
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
     : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language. Write a gap as ___ in "audioText" too: the voice pauses there and never says the answer. Set the quiz and item voice using ${PROMPT_VOICE}.`;
-  return [rule, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. Never reveal a practice answer in the audio.'];
+  return [rule, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText", and set "readAllQuestionsAloud": false on the quiz, so only the items with an "audioText" are heard. Never reveal a practice answer in the audio.'];
 }
 
 // Picture, video, audio and reading-passage rules for this request.
