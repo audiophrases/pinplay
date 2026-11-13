@@ -6752,6 +6752,8 @@ body.question-active .climb:not(.hidden) { display: flex; }
   body.climb-active.question-active #joinHeaderRow,
   body.climb-active.question-active #joinQuestionInteractive { left: var(--climb-w) !important; }
   body.climb-active.question-active #joinPrompt { left: var(--climb-w) !important; width: auto !important; }
+  /* The right/wrong flash is centred on the question, not on the whole screen. */
+  body.climb-active.question-active .verdict-fx { left: var(--climb-w); }
   .climb-head { text-align: center; line-height: 1.15; }
   .climb-alt { font-size: 1.5rem; font-weight: 800; color: #17324f; letter-spacing: .01em; }
   .climb-camp { font-size: .8rem; font-weight: 700; color: #4a6785; text-transform: uppercase; letter-spacing: .06em; }
