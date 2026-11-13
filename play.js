@@ -4300,6 +4300,40 @@ function applyJoinLayoutMode(active, question = null) {
   joinCardEl.classList.toggle('slide-text-only', qType === 'slide' && !question?.imageData && !hasVideo && !String(question?.readingText || '').trim());
 }
 
+// A teaching slide with a picture or a text: the title takes at most about a
+// third of the screen (its letters shrink until it does), and the picture
+// fills the room left between the title and the bottom bar.
+const SLIDE_TITLE_MAX_SHARE = 0.3;
+const SLIDE_TITLE_MIN_PX = 22;
+const SLIDE_GAP_PX = 14;
+function fitSlideLayout() {
+  if (!joinCardEl || !joinPromptEl || !joinQuestionWrap) return;
+  joinPromptEl.style.removeProperty('font-size');
+  const isSlide = joinCardEl.classList.contains('question-active') && joinCardEl.dataset.qtype === 'slide';
+  if (!isSlide || joinCardEl.classList.contains('slide-text-only')) {
+    joinQuestionWrap.style.removeProperty('--slide-top');
+    joinQuestionWrap.style.removeProperty('--slide-bottom');
+    return;
+  }
+  const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;
+  const maxH = viewportH * SLIDE_TITLE_MAX_SHARE;
+  let size = parseFloat(getComputedStyle(joinPromptEl).fontSize) || 32;
+  while (joinPromptEl.offsetHeight > maxH && size > SLIDE_TITLE_MIN_PX) {
+    size = Math.max(SLIDE_TITLE_MIN_PX, size - 2);
+    joinPromptEl.style.setProperty('font-size', `${size}px`, 'important');
+  }
+  const bar = document.getElementById('joinQuestionInteractive');
+  const top = joinPromptEl.getBoundingClientRect().bottom;
+  const bottom = bar ? viewportH - bar.getBoundingClientRect().top : 0;
+  joinQuestionWrap.style.setProperty('--slide-top', `${Math.round(top + SLIDE_GAP_PX)}px`);
+  joinQuestionWrap.style.setProperty('--slide-bottom', `${Math.round(Math.max(0, bottom) + SLIDE_GAP_PX)}px`);
+}
+window.addEventListener('resize', fitSlideLayout);
+if (typeof ResizeObserver === 'function') {
+  const slideBar = document.getElementById('joinQuestionInteractive');
+  if (slideBar) new ResizeObserver(fitSlideLayout).observe(slideBar);
+}
+
 function renderJoinQuestion(question) {
   const oldOverlay = document.getElementById('matchPairsCenterOverlay');
   if (oldOverlay) oldOverlay.remove();
@@ -4335,6 +4369,7 @@ function renderJoinQuestion(question) {
   _wordleRoundActive = false;
 
   applyJoinLayoutMode(true, question);
+  if (question.type !== 'slide') fitSlideLayout();
   if (joinSubmitBtn) {
     if (live.player.assignment.reviewMode || (question.type === 'slide' && live.player.mode !== 'assignment')) {
       joinSubmitBtn.classList.add('hidden');
@@ -4507,10 +4542,8 @@ function renderJoinQuestion(question) {
   }
 
   if (question.type === 'slide') {
-    const note = document.createElement('div');
-    note.className = 'teaching-slide-note';
-    note.textContent = t('Watch and listen — no answer needed.');
-    joinAnswersEl.appendChild(note);
+    fitSlideLayout();
+    requestAnimationFrame(fitSlideLayout);
     return;
   }
 

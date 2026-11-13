@@ -1795,12 +1795,16 @@ body.question-active .join-title-row {
   font-size: clamp(3rem, 7vw, 7rem) !important;
 }
 
-.teaching-slide-note {
-  width: 100%;
-  text-align: center;
-  color: #625d78;
-  font-weight: 750;
-  font-size: 0.95rem;
+/* A slide with a picture or a text: the title is shrunk to fit (play.js
+   fitSlideLayout), and the picture starts under it, whatever its height. */
+#joinCard.question-active[data-qtype="slide"] #joinQuestionWrap {
+  padding-top: var(--slide-top, 130px) !important;
+  padding-bottom: var(--slide-bottom, 192px) !important;
+}
+
+#joinCard.question-active[data-qtype="slide"] #joinQuestionWrap .reading-text-block {
+  top: var(--slide-top, 130px);
+  bottom: var(--slide-bottom, 192px);
 }
 
 #hostQuestionCard[data-qtype="slide"] #hostQuestionPrompt {
@@ -6837,6 +6841,14 @@ body.question-active .climb:not(.hidden) { display: flex; }
 .climb.is-crowded .climb-node:not(.is-here) .climb-label { display: none; }
 .climb.is-crowded .climb-token { width: 40px; height: 40px; }
 .climb.is-crowded .climb-av-fallback { font-size: 22px; line-height: 34px; }
+/* With the other labels gone, the label column would leave the path off
+   centre: the path takes the whole panel, and the one label left sits on the
+   free side of its camp. */
+@media (min-width: 900px) {
+  .climb.is-crowded { --lw: 0px; }
+  .climb.is-crowded .climb-label { width: 38%; }
+  .climb.is-crowded .climb-node.is-left .climb-label { left: auto; right: 2px; text-align: right; align-items: flex-end; }
+}
 @media (max-width: 899px) {
   .climb.is-crowded .climb-spot { width: 20px; height: 20px; }
   .climb.is-crowded .climb-token { width: 34px; height: 34px; }

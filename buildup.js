@@ -142,7 +142,7 @@
       $('line').setAttribute('points', pointsV(0, n - 1, n));
       $('lineH').setAttribute('points', pointsH(0, n - 1, n));
       $('nodes').innerHTML = Array.from({ length: n }, (_, i) => `
-        <li class="climb-node" data-i="${i}" style="${nodeVars(pos(i, n), '')}">
+        <li class="climb-node${zig(i, n) < 0.5 ? ' is-left' : ''}" data-i="${i}" style="${nodeVars(pos(i, n), '')}">
           <span class="climb-label"><b>${campName(i, n)}</b><small>${fmtAlt(altitude(i, n))}</small><span class="climb-pips" data-pips></span></span>
           <span class="climb-spot" aria-hidden="true"><span class="climb-icon">${i === n - 1 ? '🏔️' : '⛺'}</span><span class="climb-flag">🚩</span></span>
         </li>`).join('');
@@ -187,8 +187,8 @@
       // arriving, and when the weather closes in), else the general advice.
       const tip = $('tip');
       const text = quiet ? '' : (c.rule
-        ? tr("Guide's tip: {rule}", { rule: c.rule })
-        : (c.tip ? tr("Guide's tip: the weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : ''));
+        ? String(c.rule)
+        : (c.tip ? tr("The weather is closing in. Look carefully at each right answer, ask your teacher for a hint, then keep climbing.") : ''));
       tip.classList.toggle('hidden', !text);
       tip.textContent = text;
     }

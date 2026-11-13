@@ -18560,10 +18560,6 @@ function renderSoloQuestion() {
       answersEl.appendChild(passage);
     }
 
-    const note = document.createElement('p');
-    note.className = 'teaching-slide-note';
-    note.textContent = t('Watch and listen — no answer needed.');
-    answersEl.appendChild(note);
     if (hasQuestionAudio(q)) {
       const audioBtn = document.createElement('button');
       audioBtn.type = 'button';
