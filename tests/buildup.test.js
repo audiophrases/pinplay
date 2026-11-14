@@ -571,7 +571,7 @@ describe('the Climb AI prompt and the steps plan', () => {
   let A;
   before(() => {
     A = loadDeclarations(read('app.js'), [
-      'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
+      'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
       'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'buildupPromptBatches', 'buildupPromptSize',
       'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     ]);
@@ -943,7 +943,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   });
 
   it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
-    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
     const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
     const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
     const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });

@@ -1654,6 +1654,11 @@ function bindBuilderEvents() {
     });
   }
 
+  questionListEl.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-q][data-field="prompt"], [data-q][data-field="readingText"]');
+    if (el) updateSlideTextFit(Number(el.dataset.q));
+  });
+
   questionListEl.addEventListener('click', async (e) => {
     const togglePinModeBtn = e.target.closest('[data-toggle-pin-mode]');
     if (togglePinModeBtn) {
@@ -3172,6 +3177,7 @@ function renderBuilder() {
     let body = `<div class="${isCollapsed ? 'question-body-collapsed' : 'question-body'}">
       <label>${q.type === 'slide' ? 'Teaching text' : 'Question'} (max 1200 chars)</label>
       <textarea data-q="${idx}" data-field="prompt" maxlength="1200">${escapeHtml(q.prompt || '')}</textarea>
+      ${q.type === 'slide' ? (() => { const fit = slideTextFit(q.prompt, slideHasMedia(q)); return `<p class="small${fit.over ? ' warn' : ''}" data-slide-fit="${idx}">${escapeHtml(slideTextFitLabel(fit))}</p>`; })() : ''}
       <div class="row gap top-space">
         <div style="min-width:120px;">
           <label>Points</label>
@@ -5323,8 +5329,47 @@ const PROMPT_VOICE = '"ttsLanguage": "EN", "CA" or "FR" — for any other langua
 const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Each voice can only pronounce its own language, so EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation (a pronoun, a verb form, an ending): left untagged, the other voice reads it as a word or an abbreviation of its own language. Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am." Go back to the students\' language with its tag after each one. Where you can, word the explanation so that the quiz-language words come together at the end, which changes the voice fewer times: "[ca] Fixa\'t en el subjecte i el verb: [en] I am. You are." Before you answer, reread every "audioText" and tag any quiz-language word still inside a segment of the students\' language. The audio plays while the student is answering, so it never says the answer: write a gap as ___, where the voice pauses ("[en] I ___ happy."), read a sentence to correct as it is printed, and keep the model sentence that gives the answer away out of the audio. The quiz and every question carry the voice of the language of the quiz: ' + PROMPT_VOICE + '.';
 
 // The fields each question type needs, as the AI should write them.
+// How much teaching text a slide shows at a comfortable size on a phone held
+// upright, the narrowest screen it meets (about 22 letters a line). A slide that
+// also shows a picture, GIF, video or reading text keeps only a title strip.
+// Longer text still fits (the letters shrink), so this is advice, not a limit.
+const SLIDE_TEXT_BUDGET = {
+  text: { chars: 200, lines: 5 },
+  media: { chars: 90, lines: 2 },
+  lineChars: 40,
+};
+// One line, no braces and no semicolon inside: the tests' extractor reads it up to the first of either.
+const PROMPT_SLIDE_TEXT = 'it must stay readable on a phone: at most ' + SLIDE_TEXT_BUDGET.text.chars + ' characters and ' + SLIDE_TEXT_BUDGET.text.lines + ' lines when the slide has only text, at most ' + SLIDE_TEXT_BUDGET.media.chars + ' characters and ' + SLIDE_TEXT_BUDGET.media.lines + ' lines when it also has a picture, GIF, video or reading text. "\\n" inside "prompt" starts a new line (keep each line to ' + SLIDE_TEXT_BUDGET.lineChars + ' characters or fewer). Markdown is not rendered, so no **, # or - markup. An explanation that needs more room is split over consecutive slides';
+function slideHasMedia(q) {
+  return !!(q?.imageData || String(q?.readingText || '').trim()
+    || (q?.media?.kind === 'video' && (q.media.url || q.media.embedUrl)));
+}
+function slideTextFit(text, hasMedia) {
+  const budget = hasMedia ? SLIDE_TEXT_BUDGET.media : SLIDE_TEXT_BUDGET.text;
+  const clean = String(text || '').trim();
+  const chars = clean.length;
+  const lines = clean ? clean.split(/\r?\n/).length : 0;
+  return { chars, lines, budget, over: chars > budget.chars || lines > budget.lines };
+}
+function slideTextFitLabel(fit) {
+  const base = `${fit.chars} / ${fit.budget.chars} characters · ${fit.lines} / ${fit.budget.lines} lines`;
+  return fit.over ? `⚠ ${base} — the text will shrink on phones. Consider splitting it over two slides.` : base;
+}
+// Keeps the counter under a slide's teaching text current while typing.
+function updateSlideTextFit(idx) {
+  const el = questionListEl?.querySelector(`[data-slide-fit="${idx}"]`);
+  const promptEl = questionListEl?.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
+  if (!el || !promptEl) return;
+  const readingEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="readingText"]`);
+  const q = quiz?.questions?.[idx];
+  const hasMedia = slideHasMedia(readingEl ? { ...q, readingText: readingEl.value } : q);
+  const fit = slideTextFit(promptEl.value, hasMedia);
+  el.textContent = slideTextFitLabel(fit);
+  el.classList.toggle('warn', fit.over);
+}
+
 const PROMPT_TYPE_FIELDS = {
-  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types. Place it immediately before or after the question(s) it supports; several slides in a row may teach a multi-step idea.',
+  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types. Place it immediately before or after the question(s) it supports; several slides in a row may teach a multi-step idea.',
   mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
   multi: '"answers" as in mcq — 3 to 10 options, at least two correct.',
   tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
@@ -5942,7 +5987,7 @@ const BUILDUP_PROMPT_MAX_ITEMS = 10;
 
 // Where a type reads differently in a build up quiz (a wrong answer costs a step).
 const BUILDUP_PROMPT_TYPE_FIELDS = {
-  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text; always "points": 0 and "timeLimit": 0, with no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
+  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
   multi: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 4–5 options, with 2–3 correct. Ask the student to tick every correct option (e.g. the sentences that are correct). Scoring is all-or-nothing: every correct option, and no wrong ones, must be ticked. Use it mid-climb, never at step 1 (Base Camp).',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 3–4 pairs at most. Use form drills such as base verb → past form, subject → verb form, or question → short answer. Each item must have exactly one matching partner, with no interchangeable partners. Scoring is all-or-nothing: one wrong pair costs a step, so never use a long set.',
   puzzle: PROMPT_TYPE_FIELDS.puzzle + ' Use words or short chunks to build the form without spelling it: word order, do/does questions, negatives or adverb position. There must be exactly ONE grammatically correct order: PinPlay accepts only the stored order, so another valid order would wrongly cost a step. Avoid movable time/place phrases, adverbs with several valid positions, and reversible subjects/objects. Do not rely on capitals or punctuation to rule out another valid order. If a sentence can be reordered correctly in another way, rewrite it or use another allowed type.',

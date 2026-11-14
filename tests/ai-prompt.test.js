@@ -15,7 +15,7 @@ before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
-    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
+    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
@@ -125,6 +125,29 @@ describe('question types', () => {
     assert.match(section(text, 'Rules'), /before or after the question/);
     assert.match(section(text, 'Rules'), /two or more consecutive slides/i);
     assert.match(section(text, 'Question fields'), /no answer fields/);
+  });
+
+  it('teaching slides get a text budget that keeps them readable on a phone', () => {
+    const text = build({ typesMode: 'include', selectedTypes: ['slide', 'mcq'] });
+    const fields = section(text, 'Question fields');
+    assert.match(fields, /at most 200 characters and 5 lines when the slide has only text/);
+    assert.match(fields, /at most 90 characters and 2 lines when it also has a picture/);
+    assert.match(fields, /"\\n" inside "prompt" starts a new line/);
+    assert.match(fields, /Markdown is not rendered/);
+    assert.match(fields, /split over consecutive slides/);
+  });
+
+  it('the editor counter warns past the budget, tighter when the slide has media', () => {
+    const short = A.slideTextFit('Regular verbs:\nadd -ed', false);
+    assert.deepEqual([short.chars, short.lines, short.over], [22, 2, false]);
+    assert.equal(A.slideTextFit('x'.repeat(201), false).over, true);
+    assert.equal(A.slideTextFit('a\nb\nc\nd\ne\nf', false).over, true);
+    assert.equal(A.slideTextFit('x'.repeat(120), false).over, false);
+    assert.equal(A.slideTextFit('x'.repeat(120), true).over, true);
+    assert.equal(A.slideHasMedia({ readingText: '  ' }), false);
+    assert.equal(A.slideHasMedia({ media: { kind: 'video', url: 'https://x/y.mp4' } }), true);
+    assert.match(A.slideTextFitLabel(A.slideTextFit('x'.repeat(201), false)), /201 \/ 200 characters .* shrink on phones/);
+    assert.equal(A.slideTextFitLabel(short), '22 / 200 characters · 2 / 5 lines');
   });
 
   it('slide examples stay unscored and untimed even in a timed quiz', () => {

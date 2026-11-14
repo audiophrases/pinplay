@@ -57,6 +57,10 @@ h3 {
   color: var(--bad);
 }
 
+.small.warn {
+  color: #b45309;
+}
+
 /* Student sign-in block on the join page. The Google button supplies its own
    chrome, so this only styles what surrounds it. */
 .link-btn {
