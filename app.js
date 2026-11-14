@@ -22352,6 +22352,20 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   wrapReadingSelection(document.querySelector(btn.dataset.readingTarget), btn.dataset.readingFormat);
 });
+// Toolbar targets are the source of truth for which fields accept formatting.
+function handleFormattingShortcut(e) {
+  if (e.defaultPrevented || e.isComposing || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  const format = { b: 'bold', i: 'italic', u: 'underline' }[String(e.key).toLowerCase()];
+  const field = e.target;
+  if (!format || field?.tagName !== 'TEXTAREA' || field.disabled || field.readOnly) return;
+  const button = [...document.querySelectorAll('[data-reading-format]')].find(btn =>
+    btn.dataset.readingFormat === format && document.querySelector(btn.dataset.readingTarget) === field);
+  if (!button) return;
+  e.preventDefault();
+  if (!e.repeat) wrapReadingSelection(field, format);
+}
+document.addEventListener('keydown', handleFormattingShortcut);
+
 // Keep the selection in the textarea when a format button is pressed.
 document.addEventListener('mousedown', (e) => {
   if (e.target.closest('[data-reading-format]')) e.preventDefault();
