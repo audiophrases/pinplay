@@ -17524,10 +17524,29 @@ function openEditorPreview(index = 0) {
 function closeEditorAssignmentPreview() {
   document.getElementById('editorAssignmentPreview')?.remove();
 }
+// The builder keeps empty answer slots and authoring-only pair/item fields.
+// Convert those to the assignment renderer's shape without mutating the draft
+// or dropping incomplete questions (their editor indexes must remain stable).
+function buildEditorPreviewQuestion(question) {
+  if (!question) return null;
+  const q = { ...question };
+  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
+    if (q.type === 'audio') q.type = 'mcq';
+    q.answers = (q.answers || []).filter(a => String(a?.text || '').trim()).map(a => ({ ...a }));
+  }
+  if (q.type === 'match_pairs') {
+    q.pairs = (q.pairs || []).filter(p => String(p?.left || '').trim() && String(p?.right || '').trim()).map(p => ({ ...p }));
+    q.leftItems = q.pairs.map(p => String(p.left).trim());
+    q.rightOptions = q.pairs.map(p => String(p.right).trim());
+  }
+  if (q.type === 'puzzle') q.options = (q.items || []).map(item => String(item).trim()).filter(Boolean);
+  if (q.type === 'context_gap') q.gapCount = (q.gaps || []).filter(Boolean).length;
+  return q;
+}
 function renderEditorAssignmentPreview() {
   updateEditorPreviewNav();
   const frame = document.querySelector('#editorAssignmentPreview iframe');
-  frame?.contentWindow?.postMessage({ type: 'editor-question', question: quiz.questions[previewMode.index], index: previewMode.index, total: quiz.questions.length }, location.origin);
+  frame?.contentWindow?.postMessage({ type: 'editor-question', question: buildEditorPreviewQuestion(quiz.questions[previewMode.index]), index: previewMode.index, total: quiz.questions.length }, location.origin);
 }
 window.addEventListener('message', (e) => {
   const frame = document.querySelector('#editorAssignmentPreview iframe');

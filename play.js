@@ -10745,7 +10745,9 @@ function initEditorAssignmentPreview() {
     live.player.mode = 'assignment';
     live.player.assignment.currentIndex = index;
     live.player.assignment.reviewMode = false;
-    live.player.assignment.state = { assignment: { quiz: { questions: [question] } }, attempt: { answersByQ: {} } };
+    const questions = [];
+    questions[index] = question;
+    live.player.assignment.state = { assignment: { quiz: { questions } }, attempt: { answersByQ: {} } };
     document.getElementById('joinStepPin')?.classList.add('hidden');
     document.getElementById('joinStepIdentity')?.classList.add('hidden');
     joinQuestionWrap.classList.remove('hidden');
