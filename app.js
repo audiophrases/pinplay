@@ -6013,7 +6013,18 @@ const BUILDUP_PROMPT_EXAMPLE = {
     { id: 'q5', type: 'text', prompt: 'She ____ TV every day. (watch)', points: 1000, timeLimit: 0, step: 3, accepted: ['watches'] },
     { id: 'q6', type: 'text', prompt: 'He ____ his teeth. (brush)', points: 1000, timeLimit: 0, step: 3, accepted: ['brushes'] },
   ],
+  // Shown only when slides are allowed, before the questions of its step. One
+  // slide in three steps: slides are occasional. It contrasts forms side by
+  // side, which the step's one-line rule cannot do.
+  slide: { id: 's3', type: 'slide', prompt: 'play → plays\nwatch → watches\nbrush → brushes', points: 0, timeLimit: 0, step: 3 },
 };
+function buildupPromptExampleQuestions(allowed) {
+  const questions = BUILDUP_PROMPT_EXAMPLE.questions.slice();
+  if (!allowed.includes('slide')) return questions;
+  const at = questions.findIndex((q) => q.step === BUILDUP_PROMPT_EXAMPLE.slide.step);
+  questions.splice(at < 0 ? questions.length : at, 0, BUILDUP_PROMPT_EXAMPLE.slide);
+  return questions;
+}
 
 // Past PROMPT_BATCH_MAX questions a climb comes in batches of whole steps,
 // as even as they can be: each batch is [first step, last step].
@@ -6150,9 +6161,9 @@ function buildBuildupPrompt(req) {
     ...allowed.map((type) => `- ${type}: ${BUILDUP_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
     '## Example',
-    `Shape only (3 steps and 2 questions each): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each.`,
+    `Shape only (3 steps and 2 questions each${allowed.includes('slide') ? ', plus one optional teaching slide' : ''}): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each.`,
     '```json',
-    `{"version": 3, "title": "Present simple: -s", "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${BUILDUP_PROMPT_EXAMPLE.questions.map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
+    `{"version": 3, "title": "Present simple: -s", "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${buildupPromptExampleQuestions(allowed).map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
     '```',
     '',
     'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions, follow the teacher. Only the JSON format and field names are fixed.',

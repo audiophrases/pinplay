@@ -573,7 +573,7 @@ describe('the Climb AI prompt and the steps plan', () => {
     A = loadDeclarations(read('app.js'), [
       'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
       'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'buildupPromptBatches', 'buildupPromptSize',
-      'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
+      'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     ]);
   });
   const req = (over = {}) => ({ skill: 'present simple third person -s', language: 'English', level: 'weak A2 students', firstLanguage: 'Catalan', errors: 'they forget the -s', steps: 5, itemsPerStep: 5, selectedTypes: [], notes: '', aiMode: 'chatbot', ...over });
@@ -644,6 +644,25 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.ok(plan.every((p) => p.title && p.change && p.rule));
     assert.ok(ex.questions.every((q) => plan.some((p) => p.step === q.step) && q.cefr === undefined));
     assert.ok(ex.questions.filter((q) => q.type === 'text').every((q) => q.accepted.length));
+  });
+
+  it('shows one short slide in the example, before its step\'s questions, only when slides are allowed', () => {
+    const text = build();
+    const ex = exampleOf(text);
+    const slides = ex.questions.filter((q) => q.type === 'slide');
+    assert.equal(slides.length, 1);
+    const [slide] = slides;
+    assert.deepEqual([slide.points, slide.timeLimit, slide.step], [0, 0, 3]);
+    assert.match(slide.prompt, /\n/);
+    assert.ok(slide.prompt.length <= 200 && slide.prompt.split('\n').length <= 5);
+    const at = ex.questions.indexOf(slide);
+    assert.equal(ex.questions[at + 1].step, 3);
+    assert.ok(ex.questions.slice(0, at).every((q) => q.step < 3));
+    assert.match(section(text, 'Example'), /2 questions each, plus one optional teaching slide\)/);
+
+    const without = build({ selectedTypes: ['mcq', 'text'] });
+    assert.ok(exampleOf(without).questions.every((q) => q.type !== 'slide'));
+    assert.doesNotMatch(section(without, 'Example'), /teaching slide/);
   });
 
   it('uses one identical copy of the plan cleaner in app.js and worker.js', () => {
@@ -943,7 +962,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   });
 
   it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
-    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
     const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
     const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
     const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });
