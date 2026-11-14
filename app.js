@@ -1751,6 +1751,11 @@ function bindBuilderEvents() {
       return;
     }
 
+    const previewQuestionBtn = e.target.closest('[data-preview-question]');
+    if (previewQuestionBtn) {
+      openEditorPreview(Number(previewQuestionBtn.dataset.previewQuestion));
+      return;
+    }
     const toggleBtn = e.target.closest('[data-toggle-question]');
     if (toggleBtn) {
       const idx = Number(toggleBtn.dataset.toggleQuestion);
@@ -3229,6 +3234,7 @@ function renderBuilder() {
           ${isCollapsed ? `<span class="q-preview">${truncPrompt}</span>` : ''}
         </div>
         <div class="question-actions">
+          <button type="button" class="btn btn-sm" data-preview-question="${idx}">Preview</button>
           <button class="btn btn-sm" data-move-up-question="${idx}" title="Move up">↑</button>
           <button class="btn btn-sm" data-move-down-question="${idx}" title="Move down">↓</button>
           <button class="btn btn-sm" data-remove-question="${idx}" title="Remove">✕</button>
@@ -17471,6 +17477,83 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
+// Local editor preview uses the same renderer as the live screen.
+let editorPreviewQuestionId = null;
+function openEditorPreview(index = 0) {
+  syncQuizFromUI();
+  if (!quiz.questions.length) return;
+  previewMode.index = Math.max(0, Math.min(index, quiz.questions.length - 1));
+  if (!previewMode.active) startPreviewMode();
+  else renderPreviewFrame();
+  document.getElementById('editorPreviewReturn')?.remove();
+  let bar = document.getElementById('editorPreviewNav');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'editorPreviewNav';
+    bar.className = 'row gap wrap editor-preview-nav';
+    bar.innerHTML = '<button type="button" class="btn" data-preview-nav="-1" aria-label="Previous question">← Previous</button><span data-preview-position aria-live="polite"></span><button type="button" class="btn" data-preview-nav="1" aria-label="Next question">Next →</button><button type="button" class="btn" data-preview-edit>Edit question</button><button type="button" class="btn" data-preview-close>Close preview</button>';
+    hostQuestionCardEl.before(bar);
+    bar.addEventListener('click', (e) => {
+      const nav = e.target.closest('[data-preview-nav]');
+      if (nav) browseEditorPreview(Number(nav.dataset.previewNav));
+      if (e.target.closest('[data-preview-edit]')) editPreviewQuestion();
+      if (e.target.closest('[data-preview-close]')) stopPreviewMode();
+    });
+  }
+  updateEditorPreviewNav();
+  bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  bar.querySelector('[data-preview-edit]').focus({ preventScroll: true });
+}
+function updateEditorPreviewNav() {
+  const bar = document.getElementById('editorPreviewNav');
+  if (!bar) return;
+  bar.querySelector('[data-preview-position]').textContent = `Question ${previewMode.index + 1} / ${quiz.questions.length}`;
+  bar.querySelector('[data-preview-nav="-1"]').disabled = previewMode.index <= 0;
+  bar.querySelector('[data-preview-nav="1"]').disabled = previewMode.index >= quiz.questions.length - 1;
+}
+function browseEditorPreview(delta) {
+  previewMode.index = Math.max(0, Math.min(previewMode.index + delta, quiz.questions.length - 1));
+  previewMode.showReveal = false;
+  previewMode.answeredCurrent = false;
+  previewMode.revealedResult = null;
+  renderPreviewFrame();
+}
+function editPreviewQuestion() {
+  const q = quiz.questions[previewMode.index];
+  if (!q) return;
+  editorPreviewQuestionId = q.id;
+  stopPreviewMode();
+  q.collapsed = false;
+  renderBuilder();
+  setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
+  setSectionCollapsed(builderQuestionsToggleEl, builderQuestionsBodyEl, false);
+  const button = document.createElement('button');
+  button.id = 'editorPreviewReturn';
+  button.type = 'button';
+  button.className = 'btn primary editor-preview-return';
+  button.textContent = 'Back to preview';
+  button.onclick = () => {
+    syncQuizFromUI();
+    const index = quiz.questions.findIndex(item => item.id === editorPreviewQuestionId);
+    openEditorPreview(index < 0 ? previewMode.index : index);
+  };
+  document.getElementById('editorPreviewReturn')?.remove();
+  builderQuestionsBodyEl.prepend(button);
+  const input = questionListEl.querySelector(`[data-q="${previewMode.index}"][data-field="prompt"]`);
+  input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  input?.focus({ preventScroll: true });
+}
+document.addEventListener('keydown', (e) => {
+  if (!previewMode.active || !document.getElementById('editorPreviewNav')) return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  browseEditorPreview(e.key === 'ArrowLeft' ? -1 : 1);
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-preview-all]')) openEditorPreview(0);
+});
+
 function startPreviewMode() {
   syncQuizFromUI();
   if (!quiz.questions?.length) {
@@ -17519,6 +17602,7 @@ function startPreviewMode() {
 }
 
 function stopPreviewMode() {
+  document.getElementById('editorPreviewNav')?.remove();
   previewMode.active = false;
   if (previewMode.prevPrimaryAudioHost != null) {
     live.host.isPrimaryAudioHost = !!previewMode.prevPrimaryAudioHost;
@@ -18513,6 +18597,7 @@ function buildPreviewSimulationState(question) {
 }
 
 function renderPreviewFrame() {
+  updateEditorPreviewNav();
   if (!previewMode.active) return;
   const q = quiz.questions[previewMode.index];
   if (!q) return;

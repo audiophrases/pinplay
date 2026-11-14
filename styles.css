@@ -6915,3 +6915,16 @@ body.question-active .climb:not(.hidden) { display: flex; }
   white-space: pre-line;
 }
 .slide-prompt-text { min-width: 0; max-width: 100%; }
+
+/* Keep the edit/preview return path available while adjusting long questions. */
+.editor-preview-return {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100;
+  box-shadow: 0 4px 16px #0003;
+}
+.editor-preview-nav {
+  padding: 12px;
+  margin-bottom: 12px;
+}
