@@ -107,7 +107,9 @@ describe('question types', () => {
     const f = A.PROMPT_TYPE_FIELDS;
     assert.match(f.slide, /not a question/);
     assert.match(f.slide, /always "points": 0 and "timeLimit": 0/);
-    assert.match(f.slide, /several slides in a row/i);
+    // Where slides go is said once, in the Rules, not again here.
+    assert.match(f.slide, /Split a longer explanation over consecutive slides/);
+    assert.doesNotMatch(f.slide, /before or after the question/);
     assert.match(f.puzzle, /CORRECT order/);
     assert.match(f.text, /"accepted"/);
     assert.match(f.text, /not "answers"/);
@@ -189,6 +191,13 @@ describe('rules follow the request', () => {
     assert.match(rules, /es-ES-ElviraNeural/);
     assert.match(rules, /Write a gap as ___ in "audioText" too: the voice pauses there/);
     assert.ok(examplesOf(text).some((ex) => ex.audioEnabled === true && ex.audioText));
+    // The rule about the teacher's audio instructions comes only when they typed some.
+    assert.match(rules, /Never reveal a practice answer in the audio\./);
+    assert.doesNotMatch(rules, /Audio instructions from the teacher/);
+    const typed = section(build({ audio: 'some', audioInstructions: 'read only the gap questions' }), 'Rules');
+    assert.match(typed, /Audio instructions from the teacher specify what to say and which items to read/);
+    assert.match(typed, /When they leave some items out, give each of those "audioEnabled": false/);
+    assert.match(typed, /Never reveal a practice answer in the audio\./);
   });
 
   it('every question gets the requested time limit (a missing one would default to 20 s)', () => {
@@ -345,7 +354,7 @@ describe('size', () => {
     };
     assert.ok(sizes.default < 9000, JSON.stringify(sizes));
     assert.ok(sizes.allTypes < 10000, JSON.stringify(sizes));
-    assert.ok(sizes.adaptiveAll < 13000, JSON.stringify(sizes));
+    assert.ok(sizes.adaptiveAll < 12000, JSON.stringify(sizes));
     assert.ok(sizes.twoTypes < 5000, JSON.stringify(sizes));
   });
 });

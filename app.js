@@ -5368,7 +5368,7 @@ function updateSlideTextFit(idx) {
 }
 
 const PROMPT_TYPE_FIELDS = {
-  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types. Place it immediately before or after the question(s) it supports; several slides in a row may teach a multi-step idea.',
+  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types.',
   mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
   multi: '"answers" as in mcq — 3 to 10 options, at least two correct.',
   tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
@@ -5436,7 +5436,9 @@ function promptAudioRules(req) {
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
     : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language. Write a gap as ___ in "audioText" too: the voice pauses there and never says the answer. Set the quiz and item voice using ${PROMPT_VOICE}.`;
-  return [rule, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText", and set "readAllQuestionsAloud": false on the quiz, so only the items with an "audioText" are heard. Never reveal a practice answer in the audio.'];
+  // The rule about the teacher's audio instructions goes only with a prompt that quotes some.
+  const typed = String(req.audioInstructions || req.bilingualNote || '').trim();
+  return [rule, (typed ? 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText", and set "readAllQuestionsAloud": false on the quiz, so only the items with an "audioText" are heard. ' : '') + 'Never reveal a practice answer in the audio.'];
 }
 
 // Picture, video, audio and reading-passage rules for this request.
@@ -19207,16 +19209,16 @@ function buildAdaptiveLevelRules(cleanRequest, allowedTypes = []) {
   const scaffold = SCAFFOLD_ORDER.filter((type) => allowedTypes.includes(type));
   const steps = Math.max(2, Math.min(BUILDUP_MAX_STEPS, Math.round(Number(cleanRequest.steps) || BUILDUP_MAX_STEPS)));
   return [
-    `Use exactly ${steps} difficulty steps, numbered 1 to ${steps}. Every question has "step": a whole number in that range. Adaptive and Climb use the same step numbers; Adaptive selects questions around the student's current step, while Climb starts at the bottom.`,
-    'Read the teacher\'s own words, including their goal and notes on levels, to decide the starting difficulty and the final target. A request such as "reach CEFR level B2 by level 12" means reach B2 at step 12, with small progressive increases across the requested steps. It does not mean cover A1–C2. Never force C1 or C2 beyond the requested target. If no target or range is given, choose an appropriate progression for the theme and students.',
+    `Use exactly ${steps} difficulty steps, numbered 1 to ${steps}. Every question has "step": a whole number in that range.`,
+    'Read the teacher\'s own words, including their goal and notes on levels, to decide the starting difficulty and the final target. "Reach CEFR level B2 by level 12" means B2 at step 12 after small progressive increases, not covering A1–C2. Never force C1 or C2 beyond the requested target. If no target or range is given, choose an appropriate progression for the theme and students.',
     `Before the questions, write "stepsPlan": ${steps} entries in order, each with "step", a short "title", "change" (the one small increase from the previous step) and "rule" (a short useful tip in the quiz language). More steps mean smaller changes, not a higher final target. Keep adjacent steps close in difficulty; questions within a step have equivalent difficulty and vary the content.`,
     'Make the difficulty real, not just the label: vocabulary, grammar, sentence length and the kind of task must all match the step. Recognising an answer (multiple choice, true/false, matching) suits lower steps; producing language (typing an answer, correcting errors, filling gaps from memory) suits higher steps.',
-    'CEFR is optional descriptive context: "cefr" may be "A1", "A2", "B1", "B2", "C1" or "C2" when accurate. Several steps can share the same CEFR level. Never use CEFR tags as a substitute for "step", or invent CEFR labels to make twelve levels.',
-    'For language questions the level comes from how the language is used, not from which grammar point it is: any tense or structure the quiz works on can appear at every level (e.g. the past simple at A1 with very common verbs in short sentences, and at C1 in a complex sentence with less common words). The levels mean: A1 = very common words, short simple sentences, familiar situations. A2 = everyday topics, short connected sentences. B1 = familiar topics with some detail, sentences joined with linking words. B2 = abstract topics, longer sentences, less obvious distractors. C1 = less common words, idioms, nuance. C2 = rare words, fine shades of meaning and register: hard even for a very advanced learner. Never tag an easy question C1 or C2.',
+    'CEFR is optional: "cefr" may be "A1", "A2", "B1", "B2", "C1" or "C2" when accurate, and several steps can share a level. Never use CEFR tags instead of "step", or invent CEFR labels to make twelve levels.',
+    'For language questions the level comes from how the language is used, not from the grammar point: any tense or structure the quiz works on can appear at every level (the past simple at A1 in short sentences with very common verbs, at C1 in a complex sentence with less common words). A1 = very common words, short simple sentences, familiar situations. A2 = everyday topics, short connected sentences. B1 = familiar topics with some detail, linking words. B2 = abstract topics, longer sentences, less obvious distractors. C1 = less common words, idioms, nuance. C2 = rare words, fine shades of meaning and register. Never tag an easy question C1 or C2.',
     scaffold.length >= 2
       ? `This quiz's question types, from most to least scaffolded: ${scaffold.join(', ')}. Lean towards the first ones at lower levels and the last ones at higher levels. This is a tendency, not a rule: any type can appear at any level when it fits.`
       : undefined,
-    'The examples at the end show the field shapes at step 1, with honest optional CEFR tags; build the actual step progression from your own plan, not the order of the examples.',
+    'The examples at the end only show field shapes, at step 1, with optional CEFR tags: build the progression from your own plan, not from their order.',
     `Cover every requested step. Spread the questions as evenly as possible across all ${steps} steps unless the teacher asks for another balance; aim for at least three different questions per step when the total allows it. If the requested total is smaller than ${steps}, explain that every step needs at least one question and request a larger total instead of silently omitting steps.`,
     cleanRequest.levelNotes
       ? 'Follow the teacher\'s notes on levels (above), including their endpoint, pace and question balance. Keep their instructions verbatim in mind when planning all steps.'
