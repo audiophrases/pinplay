@@ -156,9 +156,12 @@ describe('AI prompt examples', () => {
     });
   });
 
-  it('stays short: at most one simple, one complex, plus those two', () => {
+  it('stays short: at most one simple, one complex, plus those two and a slide', () => {
     assert.deepEqual(plain(pick(['mcq', 'context_gap'])), ['mcq', 'context_gap']);
-    assert.ok(pick(allTypes()).length <= 4);
+    assert.ok(pick(allTypes()).length <= 5);
+    assert.equal(pick(allTypes()).filter((type) => type === 'slide').length, 1);
+    assert.deepEqual(plain(pick(['slide', 'mcq'])), ['slide', 'mcq']);
+    assert.deepEqual(plain(pick(['slide'])), ['slide']);
   });
 });
 

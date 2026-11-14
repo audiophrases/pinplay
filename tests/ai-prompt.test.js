@@ -106,7 +106,9 @@ describe('question types', () => {
   it('gets the shapes bots got wrong right', () => {
     const f = A.PROMPT_TYPE_FIELDS;
     assert.match(f.slide, /not a question/);
-    assert.match(f.slide, /always "points": 0 and "timeLimit": 0/);
+    // A slide's points and time limit are said once, in the Rules (and the server sets them anyway).
+    assert.doesNotMatch(f.slide, /"points"|"timeLimit"/);
+    assert.match(section(build({ typesMode: 'include', selectedTypes: ['slide', 'mcq'] }), 'Rules'), /Teaching slides have "points": 0 and "timeLimit": 0\./);
     // Where slides go is said once, in the Rules, not again here.
     assert.match(f.slide, /Split a longer explanation over consecutive slides/);
     assert.doesNotMatch(f.slide, /before or after the question/);
@@ -192,18 +194,33 @@ describe('rules follow the request', () => {
     assert.match(rules, /Write a gap as ___ in "audioText" too: the voice pauses there/);
     assert.ok(examplesOf(text).some((ex) => ex.audioEnabled === true && ex.audioText));
     // The rule about the teacher's audio instructions comes only when they typed some.
-    assert.match(rules, /Never reveal a practice answer in the audio\./);
+    // "Never the answer" is said once, inside the audio rule.
+    assert.equal((rules.match(/never a practice answer/g) || []).length, 1);
+    assert.doesNotMatch(rules, /Never reveal/);
     assert.doesNotMatch(rules, /Audio instructions from the teacher/);
+    // An example's gap is written the way the rule says: three underscores.
+    const gapEx = examplesOf(build({ audio: 'some', typesMode: 'include', selectedTypes: ['mcq', 'context_gap'] })).find((ex) => ex.type === 'context_gap');
+    assert.match(gapEx.audioText, /(^|[^_])___([^_]|$)/);
+    assert.doesNotMatch(gapEx.audioText, /____/);
     const typed = section(build({ audio: 'some', audioInstructions: 'read only the gap questions' }), 'Rules');
     assert.match(typed, /Audio instructions from the teacher specify what to say and which items to read/);
     assert.match(typed, /When they leave some items out, give each of those "audioEnabled": false/);
-    assert.match(typed, /Never reveal a practice answer in the audio\./);
+  });
+
+  it('shows a slide example within the text budget whenever slides are allowed', () => {
+    const slide = examplesOf(build({ typesMode: 'include', selectedTypes: ['slide', 'mcq', 'text'], images: 'some', audio: 'some' })).find((ex) => ex.type === 'slide');
+    assert.ok(slide, 'a slide example is shown');
+    assert.match(slide.prompt, /\n/);
+    assert.equal(A.slideTextFit(slide.prompt, A.slideHasMedia(slide) || !!slide.imageKeyword || !!slide.gifKeyword).over, false);
+    assert.equal(slide.imageKeyword, undefined);
+    assert.deepEqual([slide.points, slide.timeLimit], [0, 0]);
+    assert.ok(!examplesOf(build({ typesMode: 'include', selectedTypes: ['mcq', 'text'] })).some((ex) => ex.type === 'slide'));
   });
 
   it('every question gets the requested time limit (a missing one would default to 20 s)', () => {
     const text = build({ timeLimit: 30 });
     assert.match(section(text, 'Rules'), /"timeLimit": 30/);
-    examplesOf(text).forEach((ex) => assert.equal(ex.timeLimit, 30));
+    examplesOf(text).forEach((ex) => assert.equal(ex.timeLimit, ex.type === 'slide' ? 0 : 30));
   });
 
   it('adaptive: a Levels section and a level on every example', () => {

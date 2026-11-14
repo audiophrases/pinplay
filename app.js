@@ -322,14 +322,14 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q18-slide",
       "type": "slide",
-      "prompt": "Remember: regular past-tense verbs usually end in -ed.",
+      "prompt": "Regular verbs in the past: add -ed\nwalk → walked\nplay → played",
       "points": 0,
       "timeLimit": 0,
       "audioEnabled": true,
       "audioMode": "tts",
-      "audioText": "Remember: regular past-tense verbs usually end in e d.",
+      "audioText": "Regular verbs in the past: add e d. Walk, walked. Play, played.",
       "ttsLanguage": "EN",
-      "imageKeyword": "timeline past",
+      "imageKeyword": "",
       "imageData": ""
     }
   ]
@@ -5368,7 +5368,7 @@ function updateSlideTextFit(idx) {
 }
 
 const PROMPT_TYPE_FIELDS = {
-  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types.',
+  slide: 'a teaching/learning screen, not a question: "prompt" is the large on-screen teaching text, and ' + PROMPT_SLIDE_TEXT + '. A slide has no answer fields. It may use the same TTS/audio, image/GIF, reading-text and video fields as other types.',
   mcq: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 2 to 10 options, exactly one correct.',
   multi: '"answers" as in mcq — 3 to 10 options, at least two correct.',
   tf: 'the prompt is a statement; "answers": [{"text": "True", "correct": true}, {"text": "False", "correct": false}].',
@@ -5423,7 +5423,8 @@ function shapePromptExample(q, req, index) {
   else if (req.images === 'mix' && (gif || pic)) ex[gif ? 'gifKeyword' : 'imageKeyword'] = gif || pic;
   if (req.audio === 'some' && q.audioText && q.type !== 'wordle') {
     ex.audioEnabled = true;
-    ex.audioText = q.audioText;
+    // A gap is written the way the audio rule says it: three underscores.
+    ex.audioText = q.audioText.replace(/_{2,}/g, '___');
     ex.ttsLanguage = 'EN';
   }
   if (q.type === 'spellingbee') ex.ttsLanguage = 'EN';
@@ -5435,10 +5436,10 @@ function promptAudioRules(req) {
   if (!req.audio || req.audio === 'no') return ['No generated audio on any question or teaching slide: set "readAllQuestionsAloud": false on the quiz and "audioEnabled": false on every item; omit "audioText" and audio files.'];
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
-    : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language. Write a gap as ___ in "audioText" too: the voice pauses there and never says the answer. Set the quiz and item voice using ${PROMPT_VOICE}.`;
+    : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText" containing the content to read in the quiz language, never a practice answer. Write a gap as ___ in "audioText" too: the voice pauses there. Set the quiz and item voice using ${PROMPT_VOICE}.`;
   // The rule about the teacher's audio instructions goes only with a prompt that quotes some.
   const typed = String(req.audioInstructions || req.bilingualNote || '').trim();
-  return [rule, (typed ? 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText", and set "readAllQuestionsAloud": false on the quiz, so only the items with an "audioText" are heard. ' : '') + 'Never reveal a practice answer in the audio.'];
+  return typed ? [rule, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText", and set "readAllQuestionsAloud": false on the quiz, so only the items with an "audioText" are heard.'] : [rule];
 }
 
 // Picture, video, audio and reading-passage rules for this request.
@@ -5988,7 +5989,7 @@ const BUILDUP_PROMPT_MAX_ITEMS = 10;
 
 // Where a type reads differently in a build up quiz (a wrong answer costs a step).
 const BUILDUP_PROMPT_TYPE_FIELDS = {
-  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text, and ' + PROMPT_SLIDE_TEXT + '; always "points": 0 and "timeLimit": 0, with no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
+  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text, and ' + PROMPT_SLIDE_TEXT + '. A slide has no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
   multi: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 4–5 options, with 2–3 correct. Ask the student to tick every correct option (e.g. the sentences that are correct). Scoring is all-or-nothing: every correct option, and no wrong ones, must be ticked. Use it mid-climb, never at step 1 (Base Camp).',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 3–4 pairs at most. Use form drills such as base verb → past form, subject → verb form, or question → short answer. Each item must have exactly one matching partner, with no interchangeable partners. Scoring is all-or-nothing: one wrong pair costs a step, so never use a long set.',
   puzzle: PROMPT_TYPE_FIELDS.puzzle + ' Use words or short chunks to build the form without spelling it: word order, do/does questions, negatives or adverb position. There must be exactly ONE grammatically correct order: PinPlay accepts only the stored order, so another valid order would wrongly cost a step. Avoid movable time/place phrases, adverbs with several valid positions, and reversible subjects/objects. Do not rely on capitals or punctuation to rule out another valid order. If a sentence can be reordered correctly in another way, rewrite it or use another allowed type.',
@@ -23238,6 +23239,9 @@ function pickPromptExamples(questions) {
     const ex = questions.find((q) => q.type === type);
     if (ex) picked.push(ex);
   });
+  // A slide's short lines are copied from an example more reliably than from a rule.
+  const slideEx = questions.find((q) => q.type === 'slide');
+  if (slideEx && !picked.includes(slideEx)) picked.unshift(slideEx);
   return picked;
 }
 
