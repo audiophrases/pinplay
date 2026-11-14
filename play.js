@@ -201,6 +201,10 @@ const live = {
 init();
 
 function init() {
+  if (new URLSearchParams(location.search).get('editorPreview') === '1' && window.parent !== window) {
+    initEditorAssignmentPreview();
+    return;
+  }
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
   // `assignmentAmbient` is declared further down with `const`, so calling
@@ -10728,4 +10732,35 @@ function renderListeningPlayer(wrap, section, attempt, locked) {
     refresh();
   });
   refresh();
+}
+
+
+// Same question UI as assignments, with no attempt, identity or submission API.
+function initEditorAssignmentPreview() {
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent || e.data?.type !== 'editor-question') return;
+    const { question, index, total } = e.data;
+    if (!question || !Number.isInteger(index) || !Number.isInteger(total)) return;
+    stopAssignmentQuestionAudioPlayback();
+    live.player.mode = 'assignment';
+    live.player.assignment.currentIndex = index;
+    live.player.assignment.reviewMode = false;
+    live.player.assignment.state = { assignment: { quiz: { questions: [question] } }, attempt: { answersByQ: {} } };
+    document.getElementById('joinStepPin')?.classList.add('hidden');
+    document.getElementById('joinStepIdentity')?.classList.add('hidden');
+    joinQuestionWrap.classList.remove('hidden');
+    renderJoinQuestion(question);
+    document.getElementById('joinProgress').textContent = `Question ${index + 1} / ${total}`;
+    document.getElementById('joinModeLabel').textContent = 'Assignment preview';
+    document.getElementById('joinSubmission').classList.add('hidden');
+    for (const id of ['joinTimer', 'joinScore', 'muteMusicBtn']) document.getElementById(id)?.classList.add('hidden');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    e.preventDefault();
+    window.parent.postMessage({ type: 'editor-nav', delta: e.key === 'ArrowLeft' ? -1 : 1 }, location.origin);
+  });
+  window.addEventListener('resize', scheduleJoinAdaptiveFit);
+  queueMicrotask(() => window.parent.postMessage({ type: 'editor-ready' }, location.origin));
 }

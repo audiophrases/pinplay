@@ -6928,3 +6928,7 @@ body.question-active .climb:not(.hidden) { display: flex; }
   padding: 12px;
   margin-bottom: 12px;
 }
+
+.editor-assignment-preview { position: fixed; inset: 0; z-index: 2000; background: white; display: flex; flex-direction: column; }
+.editor-assignment-preview .editor-preview-nav { flex: none; margin: 0; }
+.editor-assignment-preview iframe { flex: 1; min-height: 0; width: 100%; border: 0; }

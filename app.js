@@ -17484,14 +17484,24 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
-// Local editor preview uses the same renderer as the live screen.
+// Editor preview embeds the assignment renderer without creating an assignment.
 let editorPreviewQuestionId = null;
 function openEditorPreview(index = 0) {
   syncQuizFromUI();
   if (!quiz.questions.length) return;
   previewMode.index = Math.max(0, Math.min(index, quiz.questions.length - 1));
-  if (!previewMode.active) startPreviewMode();
-  else renderPreviewFrame();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  let panel = document.getElementById('editorAssignmentPreview');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'editorAssignmentPreview';
+    panel.className = 'editor-assignment-preview';
+    panel.innerHTML = '<iframe title="Assignment question preview"></iframe>';
+    document.body.appendChild(panel);
+    const frame = panel.querySelector('iframe');
+    frame.addEventListener('load', renderEditorAssignmentPreview);
+    frame.src = new URL('../?editorPreview=1', location.href).href;
+  }
   document.getElementById('editorPreviewReturn')?.remove();
   let bar = document.getElementById('editorPreviewNav');
   if (!bar) {
@@ -17499,18 +17509,32 @@ function openEditorPreview(index = 0) {
     bar.id = 'editorPreviewNav';
     bar.className = 'row gap wrap editor-preview-nav';
     bar.innerHTML = '<button type="button" class="btn" data-preview-nav="-1" aria-label="Previous question">← Previous</button><span data-preview-position aria-live="polite"></span><button type="button" class="btn" data-preview-nav="1" aria-label="Next question">Next →</button><button type="button" class="btn" data-preview-edit>Edit question</button><button type="button" class="btn" data-preview-close>Close preview</button>';
-    hostQuestionCardEl.before(bar);
+    panel.prepend(bar);
     bar.addEventListener('click', (e) => {
       const nav = e.target.closest('[data-preview-nav]');
       if (nav) browseEditorPreview(Number(nav.dataset.previewNav));
       if (e.target.closest('[data-preview-edit]')) editPreviewQuestion();
-      if (e.target.closest('[data-preview-close]')) stopPreviewMode();
+      if (e.target.closest('[data-preview-close]')) closeEditorAssignmentPreview();
     });
   }
-  updateEditorPreviewNav();
+  renderEditorAssignmentPreview();
   bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
   bar.querySelector('[data-preview-edit]').focus({ preventScroll: true });
 }
+function closeEditorAssignmentPreview() {
+  document.getElementById('editorAssignmentPreview')?.remove();
+}
+function renderEditorAssignmentPreview() {
+  updateEditorPreviewNav();
+  const frame = document.querySelector('#editorAssignmentPreview iframe');
+  frame?.contentWindow?.postMessage({ type: 'editor-question', question: quiz.questions[previewMode.index], index: previewMode.index, total: quiz.questions.length }, location.origin);
+}
+window.addEventListener('message', (e) => {
+  const frame = document.querySelector('#editorAssignmentPreview iframe');
+  if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
+  if (e.data?.type === 'editor-ready') renderEditorAssignmentPreview();
+  if (e.data?.type === 'editor-nav' && [-1, 1].includes(e.data.delta)) browseEditorPreview(e.data.delta);
+});
 function updateEditorPreviewNav() {
   const bar = document.getElementById('editorPreviewNav');
   if (!bar) return;
@@ -17523,13 +17547,13 @@ function browseEditorPreview(delta) {
   previewMode.showReveal = false;
   previewMode.answeredCurrent = false;
   previewMode.revealedResult = null;
-  renderPreviewFrame();
+  renderEditorAssignmentPreview();
 }
 function editPreviewQuestion() {
   const q = quiz.questions[previewMode.index];
   if (!q) return;
   editorPreviewQuestionId = q.id;
-  stopPreviewMode();
+  closeEditorAssignmentPreview();
   q.collapsed = false;
   renderBuilder();
   setSectionCollapsed(builderSectionToggleEl, builderCardBodyEl, false);
@@ -17551,7 +17575,7 @@ function editPreviewQuestion() {
   input?.focus({ preventScroll: true });
 }
 document.addEventListener('keydown', (e) => {
-  if (!previewMode.active || !document.getElementById('editorPreviewNav')) return;
+  if (!document.getElementById('editorPreviewNav')) return;
   if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   e.preventDefault();
