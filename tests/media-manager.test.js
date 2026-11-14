@@ -13,6 +13,7 @@ const NAMES = [
   'DEFAULT_BACKEND_URL', 'QUESTION_TYPE_CATALOG', 'AUDIO_CAPABLE_QUESTION_TYPES', 'supportsQuestionAudio',
   'round', 'detectVideoProvider', 'normalizeQuestionMedia', 'makeDefaultQuestionMedia',
   'makeImageRevisionToken', 'replaceQuestionImageData',
+  'questionSpeechText', 'stripTeachingTextMarks',
   'isGifMediaUrl', 'mediaVersionTime', 'questionMediaStatus',
   'MEDIA_SEARCH_RESULTS', 'MEDIA_SEARCH_CACHE_LIMIT', 'GIF_LIMIT_PAUSE_MS', 'mediaSearchState',
   'isRateLimitError', 'isGifSearchPaused', 'cachedMediaSearch', 'isGifKeywordBlocked',

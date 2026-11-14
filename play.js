@@ -4395,7 +4395,9 @@ function renderJoinQuestion(question) {
     } else {
       const icon = questionTypeIcon(question.type);
       const promptText = question.prompt || '(No question text)';
-      joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+      joinPromptEl.innerHTML = question.type === 'slide'
+        ? `<span class="slide-prompt-text">${formatReadingTextHtml(icon ? `${icon} ${promptText}` : promptText)}</span>`
+        : escapeHtml(icon ? `${icon} ${promptText}` : promptText);
     }
     const isReplayable = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
     const eq = document.createElement('span');
@@ -7554,7 +7556,7 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     // File missing/undecodable → fall through to TTS synthesis from the question text.
   }
 
-  const text = String(question.audioText || question.prompt || '').trim();
+  const text = questionSpeechText(question);
   if (!text) {
     return false;
   }
@@ -9415,6 +9417,20 @@ function formatReadingTextHtml(text) {
     .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '<strong>$1</strong>')
     .replace(/__(?=\S)([^\n]*?\S)__/g, '<u>$1</u>')
     .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1<em>$2</em>');
+}
+
+// Only strip paired formatting marks; literal punctuation and question gaps stay intact.
+function stripTeachingTextMarks(text) {
+  return String(text || '')
+    .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '$1')
+    .replace(/__(?=\S)([^\n]*?\S)__/g, '$1')
+    .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1$2');
+}
+
+function questionSpeechText(question) {
+  const override = String(question.audioText || '').trim();
+  const prompt = String(question.prompt || '');
+  return override || (question.type === 'slide' ? stripTeachingTextMarks(prompt) : prompt).trim();
 }
 
 function renderInlineContextGapInputs(container, prompt, count, datasetKey) {

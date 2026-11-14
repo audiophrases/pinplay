@@ -324,7 +324,7 @@ const TEMPLATE_ALL_13_TYPES = {
     {
       "id": "q18-slide",
       "type": "slide",
-      "prompt": "Regular verbs in the past: add -ed\nwalk → walked\nplay → played",
+      "prompt": "Regular verbs in the past: add -ed\nwalk → walk**ed**\nplay → play**ed**",
       "points": 0,
       "timeLimit": 0,
       "audioEnabled": true,
@@ -3237,6 +3237,7 @@ function renderBuilder() {
 
     let body = `<div class="${isCollapsed ? 'question-body-collapsed' : 'question-body'}">
       <label>${q.type === 'slide' ? 'Teaching text' : 'Question'} (max 1200 chars)</label>
+      ${q.type === 'slide' ? readingFormatButtonsHtml(`[data-q="${idx}"][data-field="prompt"]`) : ''}
       <textarea data-q="${idx}" data-field="prompt" maxlength="1200">${escapeHtml(q.prompt || '')}</textarea>
       ${q.type === 'slide' ? (() => { const fit = slideTextFit(q.prompt, slideHasMedia(q)); return `<p class="small${fit.over ? ' warn' : ''}" data-slide-fit="${idx}">${escapeHtml(slideTextFitLabel(fit))}</p>`; })() : ''}
       <div class="row gap top-space">
@@ -5399,14 +5400,14 @@ const SLIDE_TEXT_BUDGET = {
   media: { chars: 90, lines: 2 },
 };
 // One line, no braces and no semicolon inside: the tests' extractor reads it up to the first of either.
-const PROMPT_SLIDE_TEXT = 'it must stay readable on a phone: at most ' + SLIDE_TEXT_BUDGET.text.chars + ' characters and ' + SLIDE_TEXT_BUDGET.text.lines + ' lines, or ' + SLIDE_TEXT_BUDGET.media.chars + ' characters and ' + SLIDE_TEXT_BUDGET.media.lines + ' lines if the slide also has a picture, GIF, video or reading text. "\\n" starts a new line. No Markdown. Split a longer explanation over consecutive slides';
+const PROMPT_SLIDE_TEXT = 'it must stay readable on a phone: at most ' + SLIDE_TEXT_BUDGET.text.chars + ' characters and ' + SLIDE_TEXT_BUDGET.text.lines + ' lines, or ' + SLIDE_TEXT_BUDGET.media.chars + ' characters and ' + SLIDE_TEXT_BUDGET.media.lines + ' lines if the slide also has a picture, GIF, video or reading text. "\\n" starts a new line. Use **bold** for the taught form, no other markup. Marks do not count. Split a longer explanation over consecutive slides';
 function slideHasMedia(q) {
   return !!(q?.imageData || String(q?.readingText || '').trim()
     || (q?.media?.kind === 'video' && (q.media.url || q.media.embedUrl)));
 }
 function slideTextFit(text, hasMedia) {
   const budget = hasMedia ? SLIDE_TEXT_BUDGET.media : SLIDE_TEXT_BUDGET.text;
-  const clean = String(text || '').trim();
+  const clean = stripTeachingTextMarks(text).trim();
   const chars = clean.length;
   const lines = clean ? clean.split(/\r?\n/).length : 0;
   return { chars, lines, budget, over: chars > budget.chars || lines > budget.lines };
@@ -6077,7 +6078,7 @@ const BUILDUP_PROMPT_EXAMPLE = {
   // Shown only when slides are allowed, before the questions of its step. One
   // slide in three steps: slides are occasional. It contrasts forms side by
   // side, which the step's one-line rule cannot do.
-  slide: { id: 's3', type: 'slide', prompt: 'play → plays\nwatch → watches\nbrush → brushes', points: 0, timeLimit: 0, step: 3 },
+  slide: { id: 's3', type: 'slide', prompt: 'play → play**s**\nwatch → watch**es**\nbrush → brush**es**', points: 0, timeLimit: 0, step: 3 },
 };
 function buildupPromptExampleQuestions(allowed) {
   const questions = BUILDUP_PROMPT_EXAMPLE.questions.slice();
@@ -14900,7 +14901,7 @@ function renderHostListeningReview(state, L, review) {
   const stats = review.stats || {};
   const revealed = !!review.revealed;
   const last = review.step >= review.count - 1;
-  hostQuestionPromptEl.textContent = `${review.qIndex + 1}. ${q.prompt || ''}`;
+  hostQuestionPromptEl.innerHTML = q.type === 'slide' ? formatReadingTextHtml(`${review.qIndex + 1}. ${q.prompt || ''}`) : escapeHtml(`${review.qIndex + 1}. ${q.prompt || ''}`);
 
   const wrap = document.createElement('div');
   wrap.className = 'host-review';
@@ -15453,7 +15454,9 @@ function renderHostQuestion(state) {
             hostQuestionAnswersEl.appendChild(splash);
           } else {
             // Stage 1: keep splash mounted underneath if any so we cross-fade rather than hard-cut.
-            hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+            hostQuestionPromptEl.innerHTML = question.type === 'slide'
+              ? formatReadingTextHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt)
+              : escapeHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt);
           }
         }
 
@@ -15473,7 +15476,9 @@ function renderHostQuestion(state) {
 
   hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('center-stage');
-  hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+  hostQuestionPromptEl.innerHTML = question.type === 'slide'
+    ? formatReadingTextHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt)
+    : escapeHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt);
   fitHostSlidePrompt();
   requestAnimationFrame(fitHostSlidePrompt);
 
@@ -16931,7 +16936,9 @@ function renderJoinQuestion(question) {
   } else {
     const icon = iconForType(question.type);
     const promptText = question.prompt || '(No question text)';
-    joinPromptEl.textContent = icon ? `${icon} ${promptText}` : promptText;
+    joinPromptEl.innerHTML = question.type === 'slide'
+        ? `<span class="slide-prompt-text">${formatReadingTextHtml(icon ? `${icon} ${promptText}` : promptText)}</span>`
+        : escapeHtml(icon ? `${icon} ${promptText}` : promptText);
   }
   joinAnswersEl.innerHTML = '';
 
@@ -18633,7 +18640,8 @@ function renderSoloQuestion() {
   const q = quiz.questions[soloGame.index];
   progressEl.textContent = t("Question {p1} / {p2}", { p1: soloGame.index + 1, p2: quiz.questions.length });
   scoreEl.textContent = t("Score: {p1}", { p1: soloGame.score });
-  qPromptEl.textContent = q.prompt || '(No question text)';
+  qPromptEl.classList.toggle('teaching-slide-prompt', q.type === 'slide');
+  qPromptEl.innerHTML = q.type === 'slide' ? formatReadingTextHtml(q.prompt || '(No question text)') : escapeHtml(q.prompt || '(No question text)');
 
   soloGame.pinSelection = null;
   soloGame.puzzleOptions = null;
@@ -20932,8 +20940,7 @@ function prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud) {
   }
 
   const ttsMode = String(q.audioMode || '').toLowerCase() === 'tts';
-  const promptText = String(q.prompt || '').trim();
-  const ttsText = (overrideText || promptText).slice(0, 1200);
+  const ttsText = questionSpeechText(q).slice(0, 1200);
   const wantsTts = supportsQuestionAudio(q.type) && questionWantsTts(q, readAllQuestionsAloud);
 
   // If hearing is disabled, skip TTS generation
@@ -21254,7 +21261,7 @@ function questionMediaStatus(q, quizCtx = {}) {
     audio = { kind: 'file', status: audioData.startsWith('data:') ? 'local' : 'ready' };
   } else {
     const overrideText = String(q.audioText || '').trim();
-    const ttsText = overrideText || String(q.prompt || '').trim();
+    const ttsText = questionSpeechText(q);
     const quizLanguage = String(quizCtx.ttsLanguage || 'NONE').toUpperCase();
     const questionLanguage = overrideText ? String(q.ttsLanguage || quizLanguage).toUpperCase() : quizLanguage;
     const hearingDisabled = quizLanguage === 'NONE' || questionLanguage === 'NONE';
@@ -23257,6 +23264,20 @@ function formatReadingTextHtml(text) {
     .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1<em>$2</em>');
 }
 
+// Only strip paired formatting marks; literal punctuation and question gaps stay intact.
+function stripTeachingTextMarks(text) {
+  return String(text || '')
+    .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '$1')
+    .replace(/__(?=\S)([^\n]*?\S)__/g, '$1')
+    .replace(/(^|[^*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?!\*)/g, '$1$2');
+}
+
+function questionSpeechText(question) {
+  const override = String(question.audioText || '').trim();
+  const prompt = String(question.prompt || '');
+  return override || (question.type === 'slide' ? stripTeachingTextMarks(prompt) : prompt).trim();
+}
+
 function normalizeImportedQuestion(q) {
   const next = { ...q };
   if (!next.prompt && next.question) next.prompt = next.question;
@@ -23731,7 +23752,7 @@ async function playQuestionAudio(question, opts = {}) {
   });
 
   // Text we can regenerate from if the attached file is unplayable/missing.
-  const ttsFallbackText = String(question.audioText || question.prompt || '').trim();
+  const ttsFallbackText = questionSpeechText(question);
 
   if (question.audioMode === 'file' && question.audioData) {
     const src = question.audioData;
@@ -24613,7 +24634,7 @@ function buildPaperQuestionHtml(q, index, showReadingText) {
       return `<span class="pdf-gap">(${gIdx})___</span>`;
     });
   } else {
-    promptHtml = escapeHtml(promptText);
+    promptHtml = q.type === 'slide' ? formatReadingTextHtml(promptText).replace(/\n/g, '<br>') : escapeHtml(promptText);
   }
 
   return `<div class="pdf-q">${readingHtml}<span class="pdf-q-num">${number}.</span> <span class="pdf-q-prompt">${promptHtml}</span>${body}</div>`;

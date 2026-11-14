@@ -15,7 +15,7 @@ before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
-    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
+    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
@@ -135,7 +135,7 @@ describe('question types', () => {
     const text = build({ typesMode: 'include', selectedTypes: ['slide', 'mcq'] });
     const fields = section(text, 'Question fields');
     assert.match(fields, /at most 200 characters and 5 lines, or 90 characters and 2 lines if the slide also has a picture/);
-    assert.match(fields, /"\\n" starts a new line\. No Markdown\./);
+    assert.match(fields, /"\\n" starts a new line\. Use \*\*bold\*\*/);
     assert.match(fields, /Split a longer explanation over consecutive slides/);
   });
 
@@ -143,6 +143,8 @@ describe('question types', () => {
     const short = A.slideTextFit('Regular verbs:\nadd -ed', false);
     assert.deepEqual([short.chars, short.lines, short.over], [22, 2, false]);
     assert.equal(A.slideTextFit('x'.repeat(201), false).over, true);
+    assert.equal(A.slideTextFit('**' + 'x'.repeat(200) + '**', false).over, false);
+    assert.equal(A.slideTextFit('walk**ed** / play**s**', false).chars, 14);
     assert.equal(A.slideTextFit('a\nb\nc\nd\ne\nf', false).over, true);
     assert.equal(A.slideTextFit('x'.repeat(120), false).over, false);
     assert.equal(A.slideTextFit('x'.repeat(120), true).over, true);
@@ -211,6 +213,7 @@ describe('rules follow the request', () => {
     const slide = examplesOf(build({ typesMode: 'include', selectedTypes: ['slide', 'mcq', 'text'], images: 'some', audio: 'some' })).find((ex) => ex.type === 'slide');
     assert.ok(slide, 'a slide example is shown');
     assert.match(slide.prompt, /\n/);
+    assert.match(slide.prompt, /walk\*\*ed\*\*/);
     assert.equal(A.slideTextFit(slide.prompt, A.slideHasMedia(slide) || !!slide.imageKeyword || !!slide.gifKeyword).over, false);
     assert.equal(slide.imageKeyword, undefined);
     assert.deepEqual([slide.points, slide.timeLimit], [0, 0]);

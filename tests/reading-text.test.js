@@ -10,8 +10,8 @@ const { loadDeclarations } = require('./helpers/extract-declaration');
 let P;
 let A;
 before(() => {
-  P = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'play.js'), 'utf8'), ['escapeHtml', 'formatReadingTextHtml']);
-  A = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8'), ['escapeHtml', 'formatReadingTextHtml']);
+  P = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'play.js'), 'utf8'), ['escapeHtml', 'formatReadingTextHtml', 'stripTeachingTextMarks', 'questionSpeechText']);
+  A = loadDeclarations(fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8'), ['escapeHtml', 'formatReadingTextHtml', 'stripTeachingTextMarks', 'questionSpeechText']);
 });
 
 const cases = [
@@ -40,6 +40,23 @@ describe('reading text formatting', () => {
   it('leaves lone or spaced marks alone', () => {
     for (const plain of ['5 * 3 = 15', 'a * b * c', 'snake_case_name', '** not bold **', 'price: 10*']) {
       assert.equal(P.formatReadingTextHtml(plain), P.escapeHtml(plain), plain);
+    }
+  });
+});
+
+
+describe('teaching slide text', () => {
+  it('formats and reads mid-word endings with single characters', () => {
+    for (const api of [A, P]) {
+      assert.equal(api.formatReadingTextHtml('walk**ed** / she play**s**'), 'walk<strong>ed</strong> / she play<strong>s</strong>');
+      assert.equal(api.questionSpeechText({ type: 'slide', prompt: 'walk**ed**\nshe play**s** / *soft* / __line__' }), 'walked\nshe plays / soft / line');
+    }
+  });
+  it('preserves overrides, question gaps, unmatched marks and literal HTML', () => {
+    for (const api of [A, P]) {
+      assert.equal(api.questionSpeechText({ type: 'slide', prompt: '**shown**', audioText: 'Read this instead' }), 'Read this instead');
+      assert.equal(api.questionSpeechText({ type: 'context_gap', prompt: '__ and __ **literal**' }), '__ and __ **literal**');
+      assert.equal(api.stripTeachingTextMarks('5 * 3 < 20 & **yes**'), '5 * 3 < 20 & yes');
     }
   });
 });

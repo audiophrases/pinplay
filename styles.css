@@ -6906,3 +6906,12 @@ body.question-active .climb:not(.hidden) { display: flex; }
 .steps-plan { margin-bottom: .6rem; padding: .5rem .7rem; border: 1px solid #ecd9a0; background: #fff9e6; border-radius: 10px; }
 .steps-plan-list { margin: .3rem 0 0; padding-left: 1.2rem; }
 .steps-plan-list li { margin-bottom: .35rem; }
+
+/* Keep inline emphasis visible and word endings together on teaching slides. */
+#joinCard.question-active[data-qtype="slide"] #joinPrompt,
+#hostQuestionCard[data-qtype="slide"] #hostQuestionPrompt,
+.teaching-slide-prompt {
+  font-weight: 400;
+  white-space: pre-line;
+}
+.slide-prompt-text { min-width: 0; max-width: 100%; }
