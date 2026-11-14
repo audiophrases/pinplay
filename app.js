@@ -3,6 +3,8 @@ const STORAGE_LIBRARY_KEY = 'pinplay.quiz.library.v1';
 const BACKEND_KEY = 'pinplay.backend.v1';
 const DEFAULT_BACKEND_URL = 'https://api.pinplay.win';
 const CREATOR_TOKEN_KEY = 'pinplay.creatorToken';
+// "Stay signed in on this device": the owner's device token (see setupCreateAccess).
+const DEVICE_TOKEN_KEY = 'pinplay.deviceToken';
 
 // Set to 'guest' once an invite-link token is in use; null otherwise. Mutated
 // at boot by setupCreateAccess() before any cloud-save / preview call runs.
@@ -834,6 +836,63 @@ function setupCreateAccess() {
     return; // skip password flow
   }
 
+  // The owner is in: show the workspace. `credential` is what later requests
+  // send as the password — the typed password, or this device's token.
+  const openOwnerWorkspace = (authResult, credential) => {
+    createSessionPassword = credential;
+    creatorRole = authResult?.role || 'owner';
+    creatorWsid = authResult?.wsid || null;
+    if (createWorkspace) createWorkspace.classList.remove('hidden');
+    if (createAuthCard) createAuthCard.classList.add('hidden');
+    setStatus(createAuthStatusEl, t('Unlocked ✅'), 'ok');
+    if (createPasswordEl) createPasswordEl.value = '';
+    // Owner: initialize the guest-workspaces admin tile lazily on first expand.
+    if (creatorRole === 'owner') {
+      initWorkspacesAdmin();
+      syncPreviewTitle();
+      syncAllSignInRulesLines();
+      renderLevelUsage();
+    }
+  };
+
+  // ---- "Stay signed in on this device" ----
+  // Ticking the box buys a device token with the password (90 days, see
+  // signDeviceToken in the Worker). It is kept here and stands for the password
+  // on later visits; the password itself is never stored.
+  const staySignedInEl = document.getElementById('createStaySignedIn');
+  const deviceSignOutBtn = document.getElementById('deviceSignOutBtn');
+  const readDeviceToken = () => { try { return localStorage.getItem(DEVICE_TOKEN_KEY) || ''; } catch { return ''; } };
+  const forgetDeviceToken = () => { try { localStorage.removeItem(DEVICE_TOKEN_KEY); } catch { /* */ } };
+  const showDeviceSignOut = (on) => { if (deviceSignOutBtn) deviceSignOutBtn.classList.toggle('hidden', !on); };
+  if (deviceSignOutBtn) {
+    deviceSignOutBtn.addEventListener('click', () => {
+      forgetDeviceToken();
+      window.location.reload();
+    });
+  }
+  const deviceToken = readDeviceToken();
+  if (deviceToken) {
+    (async () => {
+      setStatus(createAuthStatusEl, t('Signing in…'), 'ok');
+      try {
+        const authResult = await api('/api/create/auth', { method: 'POST', body: { password: deviceToken } });
+        if (authResult?.role !== 'owner') throw new Error('Wrong password.');
+        // The teacher may have typed the password in the meantime.
+        if (createSessionPassword) return;
+        openOwnerWorkspace(authResult, deviceToken);
+        showDeviceSignOut(true);
+      } catch (err) {
+        // Refused (expired, or the password changed): forget it. Anything else
+        // (no connection) keeps the token for the next visit.
+        const refused = /wrong password/i.test(String(err?.message || ''));
+        if (refused) forgetDeviceToken();
+        if (!createSessionPassword) {
+          setStatus(createAuthStatusEl, refused ? t('Your sign-in on this device has ended. Enter the password.') : t('Could not sign in automatically. Enter the password.'), 'bad');
+        }
+      }
+    })();
+  }
+
   const unlock = async () => {
     try {
       let value = String(createPasswordEl?.value || '');
@@ -855,19 +914,19 @@ function setupCreateAccess() {
         body: { password: value },
       });
 
-      createSessionPassword = value;
-      creatorRole = authResult?.role || 'owner';
-      creatorWsid = authResult?.wsid || null;
-      if (createWorkspace) createWorkspace.classList.remove('hidden');
-      if (createAuthCard) createAuthCard.classList.add('hidden');
-      setStatus(createAuthStatusEl, t('Unlocked ✅'), 'ok');
-      if (createPasswordEl) createPasswordEl.value = '';
-      // Owner: initialize the guest-workspaces admin tile lazily on first expand.
-      if (creatorRole === 'owner') {
-        initWorkspacesAdmin();
-        syncPreviewTitle();
-        syncAllSignInRulesLines();
-        renderLevelUsage();
+      openOwnerWorkspace(authResult, value);
+      if (creatorRole === 'owner' && staySignedInEl?.checked) {
+        // Best effort: without a token the teacher is simply asked again next time.
+        try {
+          const issued = await api('/api/create/device-token', { method: 'POST', body: { password: value } });
+          if (issued?.token) {
+            localStorage.setItem(DEVICE_TOKEN_KEY, issued.token);
+            showDeviceSignOut(true);
+          }
+        } catch { /* stays a one-visit sign-in */ }
+      } else if (creatorRole === 'owner' && readDeviceToken()) {
+        // Signed in by hand on a device that already stays signed in.
+        showDeviceSignOut(true);
       }
     } catch (err) {
       setStatus(createAuthStatusEl, err?.message || 'Wrong password', 'bad');
@@ -876,9 +935,11 @@ function setupCreateAccess() {
     }
   };
 
-  // Always require password on every page load/refresh. Persisting an "unlocked"
-  // flag in sessionStorage was confusing: the flag survived reloads but the
-  // in-memory password did not, so owner actions would silently re-prompt later.
+  // The password is asked on every page load unless this device stays signed
+  // in (above). Persisting an "unlocked" flag in sessionStorage was confusing:
+  // the flag survived reloads but the in-memory password did not, so owner
+  // actions would silently re-prompt later. A device token is a credential in
+  // itself, so it does not have that problem.
   if (createWorkspace) createWorkspace.classList.add('hidden');
   if (createAuthCard) createAuthCard.classList.remove('hidden');
   if (unlockCreateBtn) unlockCreateBtn.addEventListener('click', unlock);

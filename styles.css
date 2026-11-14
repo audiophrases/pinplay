@@ -61,6 +61,20 @@ h3 {
   color: #b45309;
 }
 
+/* "Stay signed in on this device" under the teacher password. */
+.stay-signed-in {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.stay-signed-in input {
+  width: auto;
+  margin: 0;
+}
+
 /* Student sign-in block on the join page. The Google button supplies its own
    chrome, so this only styles what surrounds it. */
 .link-btn {

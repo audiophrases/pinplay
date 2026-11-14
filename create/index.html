@@ -11,11 +11,12 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="apple-touch-icon" href="../icons/teacher-192.png" />
-    <link rel="stylesheet" href="../styles.css?v=20261104-to-grade" />
+    <link rel="stylesheet" href="../styles.css?v=20261114-device" />
   </head>
   <body>
     <header class="topbar">
       <h1>🎯 PinPlay<span id="guestBadge" class="guest-badge guest-only" data-i18n>Guest creator</span></h1>
+      <button id="deviceSignOutBtn" class="btn btn-sm hidden" title="Forget this device: the password is asked again next time" data-i18n data-i18n-title>Sign out</button>
     </header>
 
     <main class="container">
@@ -25,6 +26,10 @@
 
           <label><span data-i18n>Password</span>
             <input id="createPassword" type="password" placeholder="Enter teacher password" data-i18n-ph />
+          </label>
+          <label class="stay-signed-in top-space">
+            <input id="createStaySignedIn" type="checkbox" />
+            <span data-i18n>Stay signed in on this device for 90 days</span>
           </label>
           <div class="row gap top-space">
             <button id="unlockCreateBtn" class="btn primary" data-i18n>Unlock</button>
@@ -974,7 +979,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="../i18n-fr.js?v=20261104-to-grade"></script>
+    <script src="../i18n-fr.js?v=20261114-device"></script>
     <script src="../i18n.js"></script>
     <script src="../buildup.js?v=20261014-climb"></script>
     <script src="../spellingbee.js"></script>
@@ -986,7 +991,7 @@
     <script src="../live-socket.js?v=20261001-emojis"></script>
     <script src="../listening-script.js?v=20261025-studio-link"></script>
     <script src="../assignment-setup.js?v=20261104-ai-score"></script>
-    <script src="../app.js?v=20261104-to-grade"></script>
+    <script src="../app.js?v=20261114-device"></script>
     <script src="../voice-trim.js?v=20261104-record-finish"></script>
     <script src="../voice-actors.js?v=20261104-record-finish"></script>
     <script src="../listening-workspace.js?v=20261029-listening-prompt"></script>

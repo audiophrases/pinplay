@@ -757,6 +757,18 @@ export default {
       return json({ ok: true, role: 'owner' }, 200);
     }
 
+    // "Stay signed in on this device": the real password (never another token)
+    // buys a device token that then stands for it. See signDeviceToken.
+    if (url.pathname === '/api/create/device-token' && request.method === 'POST') {
+      const body = await safeJson(request);
+      if (!(await verifyCreatePassword(env, body?.password, request, { passwordOnly: true }))) {
+        return json({ error: 'Wrong password.' }, 401);
+      }
+      const issued = await signDeviceToken(env);
+      if (!issued) return json({ error: 'Could not issue a device token.' }, 500);
+      return json({ ok: true, token: issued.token, expiresAt: issued.expiresAt }, 200);
+    }
+
     // Student preview: wraps assignment-create with className locked to
     // __preview__. Accepts owner or guest. Guest media goes under the
     // workspace prefix so it's covered by workspace deletion.
@@ -8668,6 +8680,9 @@ async function verifyCreatePassword(env, password, request, opts = {}) {
   const raw = String(password || '').trim().normalize('NFC');
   const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
   if (!hash) return false;
+  // A device token ("Stay signed in" on the teacher page) stands for the
+  // password everywhere, except where a new token is issued (passwordOnly).
+  if (!opts.passwordOnly && raw.startsWith(DEVICE_TOKEN_PREFIX) && await verifyDeviceToken(env, raw)) return true;
   const digest = await sha256Hex(raw);
   const ok = digest === hash;
 
@@ -8683,6 +8698,45 @@ async function verifyCreatePassword(env, password, request, opts = {}) {
   }
 
   return ok;
+}
+
+// Device tokens: one password entry keeps a teacher's own device signed in as
+// the owner for DEVICE_TOKEN_DAYS. The token is signed with a key made from the
+// password hash, so changing the teacher password cancels every token. Nothing
+// is stored on the server: a device signs out by forgetting its token.
+const DEVICE_TOKEN_PREFIX = 'dev1.';
+const DEVICE_TOKEN_DAYS = 90;
+
+function deviceTokenSecret(env) {
+  const hash = String(env.CREATE_PASSWORD_HASH || '').trim().toLowerCase();
+  return hash ? `device-token:${hash}:${String(env.CREATOR_SIGNING_KEY || '').trim()}` : '';
+}
+
+async function signDeviceToken(env, now = Date.now()) {
+  const secret = deviceTokenSecret(env);
+  if (!secret) return null;
+  const exp = Math.floor(now / 1000) + DEVICE_TOKEN_DAYS * 86400;
+  const idBytes = new Uint8Array(9);
+  crypto.getRandomValues(idBytes);
+  const payloadB64 = b64urlEncodeBytes(new TextEncoder().encode(JSON.stringify({ k: 'device', id: b64urlEncodeBytes(idBytes), exp })));
+  const sig = await hmacSignBytes(secret, payloadB64);
+  return { token: `${DEVICE_TOKEN_PREFIX}${payloadB64}.${b64urlEncodeBytes(sig)}`, expiresAt: exp * 1000 };
+}
+
+async function verifyDeviceToken(env, token, now = Date.now()) {
+  const secret = deviceTokenSecret(env);
+  const raw = String(token || '');
+  if (!secret || !raw.startsWith(DEVICE_TOKEN_PREFIX)) return false;
+  const parts = raw.slice(DEVICE_TOKEN_PREFIX.length).split('.');
+  if (parts.length !== 2) return false;
+  try {
+    const expected = await hmacSignBytes(secret, parts[0]);
+    if (!constantTimeEqual(expected, b64urlDecodeBytes(parts[1]))) return false;
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecodeBytes(parts[0])));
+    return payload?.k === 'device' && Number(payload.exp) > now / 1000;
+  } catch {
+    return false;
+  }
 }
 
 // The service-only classroom entrypoint reuses these implementations. Public
