@@ -5336,10 +5336,9 @@ const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "aud
 const SLIDE_TEXT_BUDGET = {
   text: { chars: 200, lines: 5 },
   media: { chars: 90, lines: 2 },
-  lineChars: 40,
 };
 // One line, no braces and no semicolon inside: the tests' extractor reads it up to the first of either.
-const PROMPT_SLIDE_TEXT = 'it must stay readable on a phone: at most ' + SLIDE_TEXT_BUDGET.text.chars + ' characters and ' + SLIDE_TEXT_BUDGET.text.lines + ' lines when the slide has only text, at most ' + SLIDE_TEXT_BUDGET.media.chars + ' characters and ' + SLIDE_TEXT_BUDGET.media.lines + ' lines when it also has a picture, GIF, video or reading text. "\\n" inside "prompt" starts a new line (keep each line to ' + SLIDE_TEXT_BUDGET.lineChars + ' characters or fewer). Markdown is not rendered, so no **, # or - markup. An explanation that needs more room is split over consecutive slides';
+const PROMPT_SLIDE_TEXT = 'it must stay readable on a phone: at most ' + SLIDE_TEXT_BUDGET.text.chars + ' characters and ' + SLIDE_TEXT_BUDGET.text.lines + ' lines, or ' + SLIDE_TEXT_BUDGET.media.chars + ' characters and ' + SLIDE_TEXT_BUDGET.media.lines + ' lines if the slide also has a picture, GIF, video or reading text. "\\n" starts a new line. No Markdown. Split a longer explanation over consecutive slides';
 function slideHasMedia(q) {
   return !!(q?.imageData || String(q?.readingText || '').trim()
     || (q?.media?.kind === 'video' && (q.media.url || q.media.embedUrl)));

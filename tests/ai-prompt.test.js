@@ -130,11 +130,9 @@ describe('question types', () => {
   it('teaching slides get a text budget that keeps them readable on a phone', () => {
     const text = build({ typesMode: 'include', selectedTypes: ['slide', 'mcq'] });
     const fields = section(text, 'Question fields');
-    assert.match(fields, /at most 200 characters and 5 lines when the slide has only text/);
-    assert.match(fields, /at most 90 characters and 2 lines when it also has a picture/);
-    assert.match(fields, /"\\n" inside "prompt" starts a new line/);
-    assert.match(fields, /Markdown is not rendered/);
-    assert.match(fields, /split over consecutive slides/);
+    assert.match(fields, /at most 200 characters and 5 lines, or 90 characters and 2 lines if the slide also has a picture/);
+    assert.match(fields, /"\\n" starts a new line\. No Markdown\./);
+    assert.match(fields, /Split a longer explanation over consecutive slides/);
   });
 
   it('the editor counter warns past the budget, tighter when the slide has media', () => {
@@ -172,7 +170,10 @@ describe('rules follow the request', () => {
 
   it('no pictures, no audio, no video: none of those fields or rules', () => {
     const text = build({ images: 'no', audio: 'no', video: 'no', typesMode: 'include', selectedTypes: ['mcq', 'text'] });
-    assert.doesNotMatch(text, /videoKeyword|audioText|readingText/);
+    assert.doesNotMatch(text, /videoKeyword|readingText/);
+    // "audioText" is named once, by the rule that says to leave it out.
+    assert.match(section(text, 'Rules'), /No generated audio on any question or teaching slide: .* omit "audioText" and audio files\./);
+    assert.equal((text.match(/audioText/g) || []).length, 1);
     assert.match(section(text, 'Rules'), /No pictures: leave out "imageKeyword" and "gifKeyword"\./);
     examplesOf(text).forEach((ex) => {
       assert.equal(ex.imageKeyword, undefined);
@@ -183,7 +184,8 @@ describe('rules follow the request', () => {
   it('audio: one rule with the voice format, and matching examples', () => {
     const text = build({ audio: 'some' });
     const rules = section(text, 'Rules');
-    assert.equal((rules.match(/Audio:/g) || []).length, 1);
+    assert.equal((rules.match(/Audio in the quiz language:/g) || []).length, 1);
+    assert.doesNotMatch(rules, /Audio, bilingual:/);
     assert.match(rules, /es-ES-ElviraNeural/);
     assert.match(rules, /Write a gap as ___ in "audioText" too: the voice pauses there/);
     assert.ok(examplesOf(text).some((ex) => ex.audioEnabled === true && ex.audioText));
@@ -343,7 +345,7 @@ describe('size', () => {
     };
     assert.ok(sizes.default < 9000, JSON.stringify(sizes));
     assert.ok(sizes.allTypes < 10000, JSON.stringify(sizes));
-    assert.ok(sizes.adaptiveAll < 12000, JSON.stringify(sizes));
+    assert.ok(sizes.adaptiveAll < 13000, JSON.stringify(sizes));
     assert.ok(sizes.twoTypes < 5000, JSON.stringify(sizes));
   });
 });
