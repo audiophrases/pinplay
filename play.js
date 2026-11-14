@@ -4306,6 +4306,9 @@ function applyJoinLayoutMode(active, question = null) {
 const SLIDE_TITLE_MAX_SHARE = 0.3;
 const SLIDE_TITLE_MIN_PX = 22;
 const SLIDE_GAP_PX = 14;
+// A text-only slide fills the screen: its letters shrink until the whole text
+// fits between the header and the bottom bar.
+const SLIDE_TEXT_MIN_PX = 16;
 function fitSlideLayout() {
   if (!joinCardEl || !joinPromptEl || !joinQuestionWrap) return;
   joinPromptEl.style.removeProperty('font-size');
@@ -4313,6 +4316,13 @@ function fitSlideLayout() {
   if (!isSlide || joinCardEl.classList.contains('slide-text-only')) {
     joinQuestionWrap.style.removeProperty('--slide-top');
     joinQuestionWrap.style.removeProperty('--slide-bottom');
+    if (isSlide) {
+      let textSize = parseFloat(getComputedStyle(joinPromptEl).fontSize) || 48;
+      while (joinPromptEl.scrollHeight > joinPromptEl.clientHeight + 1 && textSize > SLIDE_TEXT_MIN_PX) {
+        textSize = Math.max(SLIDE_TEXT_MIN_PX, Math.floor(textSize * 0.94));
+        joinPromptEl.style.setProperty('font-size', `${textSize}px`, 'important');
+      }
+    }
     return;
   }
   const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;

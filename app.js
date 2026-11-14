@@ -15055,6 +15055,26 @@ function toggleHostListeningAudio() {
   return true;
 }
 
+// A long teaching slide on the projector: the text takes the full width and
+// its letters shrink until it fits in about two thirds of the screen.
+const HOST_SLIDE_MAX_SHARE = 0.66;
+const HOST_SLIDE_MIN_PX = 20;
+function fitHostSlidePrompt() {
+  if (!hostQuestionPromptEl) return;
+  hostQuestionPromptEl.style.removeProperty('font-size');
+  hostQuestionPromptEl.style.removeProperty('max-width');
+  if (hostQuestionCardEl?.dataset.qtype !== 'slide') return;
+  const maxH = (window.innerHeight || 900) * HOST_SLIDE_MAX_SHARE;
+  if (hostQuestionPromptEl.offsetHeight <= maxH) return;
+  hostQuestionPromptEl.style.setProperty('max-width', '100%');
+  let size = parseFloat(getComputedStyle(hostQuestionPromptEl).fontSize) || 48;
+  while (hostQuestionPromptEl.offsetHeight > maxH && size > HOST_SLIDE_MIN_PX) {
+    size = Math.max(HOST_SLIDE_MIN_PX, Math.floor(size * 0.94));
+    hostQuestionPromptEl.style.setProperty('font-size', `${size}px`);
+  }
+}
+window.addEventListener('resize', fitHostSlidePrompt);
+
 function renderHostQuestion(state) {
   const phase = state.phase;
   const question = state.question;
@@ -15070,6 +15090,7 @@ function renderHostQuestion(state) {
 
     hostQuestionCardEl.classList.toggle('has-image', !!q?.imageData);
     hostQuestionCardEl.classList.toggle('poll-mode', !!q?.isPoll);
+    fitHostSlidePrompt();
   };
 
   const renderPollSummary = () => {
@@ -15334,6 +15355,8 @@ function renderHostQuestion(state) {
   hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('center-stage');
   hostQuestionPromptEl.textContent = qIcon ? `${qIcon} ${qPrompt}` : qPrompt;
+  fitHostSlidePrompt();
+  requestAnimationFrame(fitHostSlidePrompt);
 
   // Preserve video element across re-renders so playback + event listeners survive
   const prevVideoWrap = hostQuestionAnswersEl.querySelector('.question-video-wrap');
