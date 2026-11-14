@@ -4415,17 +4415,24 @@ function buildVideoSettingsMarkup(idx, q) {
   `;
 }
 
-function syncQuizFromUI() {
+function syncQuizFromUI(event) {
+  // Field events need only synchronize their own question. Explicit save,
+  // preview and publish calls still synchronize the entire editor.
+  const field = event?.target;
+  const index = field?.dataset?.q;
+  const changedIndex = index != null && /^\d+$/.test(index) ? Number(index) : null;
   quiz.title = quizTitleEl.value.trim();
   applyHearQuestionsMode(quiz, quizTtsLanguageEl?.value || getHearQuestionsMode(quiz), quizReadAllEl ? quizReadAllEl.checked : quiz.readAllQuestionsAloud);
 
   quiz.questions.forEach((q, idx) => {
-    const promptEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
-    const pointsEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="points"]`);
-    const timeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
-    const pollEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
+    if (changedIndex !== null && idx !== changedIndex) return;
+    const questionRoot = questionListEl.querySelector(`[data-question-index="${idx}"]`) || questionListEl;
+    const promptEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="prompt"]`);
+    const pointsEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="points"]`);
+    const timeEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="timeLimit"]`);
+    const pollEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="isPoll"]`);
 
-    const cefrEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="cefr"]`);
+    const cefrEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="cefr"]`);
 
     if (promptEl) q.prompt = String(promptEl.value || '').slice(0, 1200);
     if (pointsEl) q.points = Number(pointsEl.value || 1000);
@@ -4440,22 +4447,22 @@ function syncQuizFromUI() {
       const cefr = normalizeCefr(cefrEl.value);
       if (cefr) q.cefr = cefr;
       else delete q.cefr;
-      const chip = questionListEl.querySelector(`[data-cefr-chip="${idx}"]`);
+      const chip = questionRoot.querySelector(`[data-cefr-chip="${idx}"]`);
       if (chip) chip.textContent = cefr;
-      if (q.listeningSection) refreshListeningSectionLevels();
+      if (q.listeningSection && (changedIndex === null || field.dataset.field === 'cefr')) refreshListeningSectionLevels();
     }
-    const stepEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="step"]`);
+    const stepEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="step"]`);
     if (stepEl) {
       const step = normalizeClimbStep(stepEl.value);
       if (step) q.step = step;
       else delete q.step;
-      const chip = questionListEl.querySelector(`[data-step-chip="${idx}"]`);
+      const chip = questionRoot.querySelector(`[data-step-chip="${idx}"]`);
       if (chip) chip.textContent = step ? `🏔️${step}` : '';
     }
-    const mediaUrlEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
-    const mediaProviderEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
-    const mediaStartEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaStartAt"]`);
-    const mediaEndEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="mediaEndAt"]`);
+    const mediaUrlEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="mediaUrl"]`);
+    const mediaProviderEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="mediaProvider"]`);
+    const mediaStartEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="mediaStartAt"]`);
+    const mediaEndEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="mediaEndAt"]`);
     const nextMedia = normalizeQuestionMedia({
       ...(q.media || makeDefaultQuestionMedia()),
       url: String(mediaUrlEl?.value || '').trim(),
@@ -4478,17 +4485,17 @@ function syncQuizFromUI() {
       while (q.answers.length < answerSlots) q.answers.push({ text: '', correct: false });
 
       q.answers.slice(0, answerSlots).forEach((a, aIdx) => {
-        const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-answer-index="${aIdx}"]`);
+        const aEl = questionRoot.querySelector(`[data-q="${idx}"][data-answer-index="${aIdx}"]`);
         if (aEl) a.text = String(aEl.value || '').slice(0, 90);
       });
 
       if (q.type === 'multi') {
         q.answers.forEach((a, aIdx) => {
-          const cEl = questionListEl.querySelector(`[data-q="${idx}"][data-correct-index="${aIdx}"]`);
+          const cEl = questionRoot.querySelector(`[data-q="${idx}"][data-correct-index="${aIdx}"]`);
           a.correct = !!cEl?.checked;
         });
       } else {
-        const selectedCorrect = questionListEl.querySelector(`[data-q="${idx}"][data-correct-index]:checked`);
+        const selectedCorrect = questionRoot.querySelector(`[data-q="${idx}"][data-correct-index]:checked`);
         const correctIndex = selectedCorrect ? Number(selectedCorrect.dataset.correctIndex) : 0;
         q.answers.forEach((a, aIdx) => {
           a.correct = aIdx === correctIndex;
@@ -4507,11 +4514,11 @@ function syncQuizFromUI() {
     }
 
     if (supportsQuestionAudio(q.type)) {
-      const audioModeEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
-      const audioTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
-      const languageEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="language"]`);
-      const ttsLanguageQuestionEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="ttsLanguageQuestion"]`);
-      const voiceSearchEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="voiceSearch"]`);
+      const audioModeEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
+      const audioTextEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
+      const languageEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="language"]`);
+      const ttsLanguageQuestionEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="ttsLanguageQuestion"]`);
+      const voiceSearchEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="voiceSearch"]`);
 
       const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
       q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
@@ -4558,16 +4565,16 @@ function syncQuizFromUI() {
     }
 
     // Sync imageKeyword from form
-    const imageKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="imageKeyword"]`);
+    const imageKeywordEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="imageKeyword"]`);
     if (imageKeywordEl) q.imageKeyword = String(imageKeywordEl.value || '').trim().slice(0, 140);
-    const gifKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="gifKeyword"]`);
+    const gifKeywordEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="gifKeyword"]`);
     if (gifKeywordEl) q.gifKeyword = String(gifKeywordEl.value || '').trim().slice(0, 140);
-    const videoKeywordEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoKeyword"]`);
+    const videoKeywordEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="videoKeyword"]`);
     if (videoKeywordEl) q.videoKeyword = String(videoKeywordEl.value || '').trim().slice(0, 140);
-    const readingTextEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="readingText"]`);
+    const readingTextEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="readingText"]`);
     if (readingTextEl) {
       q.readingText = String(readingTextEl.value || '').slice(0, 10000);
-      const counterEl = questionListEl.querySelector(`[data-reading-counter="${idx}"]`);
+      const counterEl = questionRoot.querySelector(`[data-reading-counter="${idx}"]`);
       if (counterEl) {
         const len = q.readingText.length;
         counterEl.textContent = t("{p1} / 10,000 chars", { p1: len });
@@ -4575,7 +4582,7 @@ function syncQuizFromUI() {
       }
     }
     if (q.type === 'pin') q.readingText = '';
-    const videoProviderPreferenceEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="videoProviderPreference"]`);
+    const videoProviderPreferenceEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="videoProviderPreference"]`);
     q.videoProviderPreference = ['youtube', 'vimeo', 'direct'].includes(String(videoProviderPreferenceEl?.value || ''))
       ? String(videoProviderPreferenceEl.value)
       : '';
@@ -4583,14 +4590,14 @@ function syncQuizFromUI() {
     if (q.type === 'text' || q.type === 'voice_text') {
       const accepted = [];
       for (let aIdx = 0; aIdx < 20; aIdx++) {
-        const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-accepted-index="${aIdx}"]`);
+        const aEl = questionRoot.querySelector(`[data-q="${idx}"][data-accepted-index="${aIdx}"]`);
         accepted.push(String(aEl?.value || '').slice(0, 120));
       }
       q.accepted = accepted;
     }
 
     if (q.type === 'voice_text' || q.type === 'voice_record') {
-      const langEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="answerLanguage"]`);
+      const langEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="answerLanguage"]`);
       const raw = String(langEl?.value || '').trim();
       const result = normalizeRecognitionLang(raw);
       q.answerLanguage = result.ok ? result.value : '';
@@ -4599,7 +4606,7 @@ function syncQuizFromUI() {
     if (q.type === 'context_gap') {
       const gaps = [];
       for (let aIdx = 0; aIdx < 10; aIdx++) {
-        const aEl = questionListEl.querySelector(`[data-q="${idx}"][data-gap-index="${aIdx}"]`);
+        const aEl = questionRoot.querySelector(`[data-q="${idx}"][data-gap-index="${aIdx}"]`);
         gaps.push(String(aEl?.value || '').slice(0, 120));
       }
       q.gaps = gaps;
@@ -4608,8 +4615,8 @@ function syncQuizFromUI() {
     if (q.type === 'match_pairs') {
       const pairs = [];
       for (let i = 0; i < 10; i++) {
-        const leftEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-left="${i}"]`);
-        const rightEl = questionListEl.querySelector(`[data-q="${idx}"][data-pair-right="${i}"]`);
+        const leftEl = questionRoot.querySelector(`[data-q="${idx}"][data-pair-left="${i}"]`);
+        const rightEl = questionRoot.querySelector(`[data-q="${idx}"][data-pair-right="${i}"]`);
         const left = String(leftEl?.value || '').slice(0, 60).trim();
         const right = String(rightEl?.value || '').slice(0, 60).trim();
         if (left || right) pairs.push({ left, right });
@@ -4618,7 +4625,7 @@ function syncQuizFromUI() {
     }
 
     if (q.type === 'error_hunt') {
-      const correctedEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
+      const correctedEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="corrected"]`);
       const correctedRaw = String(correctedEl?.value || '').trimEnd();
       const variants = correctedRaw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
       q.correctedVariants = variants;
@@ -4630,7 +4637,7 @@ function syncQuizFromUI() {
     if (q.type === 'puzzle') {
       const items = [];
       for (let i = 0; i < 12; i++) {
-        const itemEl = questionListEl.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
+        const itemEl = questionRoot.querySelector(`[data-q="${idx}"][data-puzzle-index="${i}"]`);
         items.push(String(itemEl?.value || '').slice(0, 90));
       }
       q.items = items;
@@ -4640,12 +4647,12 @@ function syncQuizFromUI() {
       const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6);
       const words = [];
       for (let i = 0; i < 20; i++) {
-        const tEl = questionListEl.querySelector(`[data-q="${idx}"][data-sb-target="${i}"]`);
+        const tEl = questionRoot.querySelector(`[data-q="${idx}"][data-sb-target="${i}"]`);
         const target = String(tEl?.value || '').trim().slice(0, 40);
         if (!target) continue;
-        const clue = String(questionListEl.querySelector(`[data-q="${idx}"][data-sb-clue="${i}"]`)?.value || '').trim().slice(0, 200);
-        const distractors = splitList(questionListEl.querySelector(`[data-q="${idx}"][data-sb-distractors="${i}"]`)?.value);
-        const clusters = splitList(questionListEl.querySelector(`[data-q="${idx}"][data-sb-clusters="${i}"]`)?.value);
+        const clue = String(questionRoot.querySelector(`[data-q="${idx}"][data-sb-clue="${i}"]`)?.value || '').trim().slice(0, 200);
+        const distractors = splitList(questionRoot.querySelector(`[data-q="${idx}"][data-sb-distractors="${i}"]`)?.value);
+        const clusters = splitList(questionRoot.querySelector(`[data-q="${idx}"][data-sb-clusters="${i}"]`)?.value);
         const word = { target };
         if (clue) word.audioText = clue;
         if (distractors.length) word.distractors = distractors;
@@ -4653,36 +4660,36 @@ function syncQuizFromUI() {
         words.push(word);
       }
       q.words = words;
-      q.feature = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbFeature"]`)?.value || '').slice(0, 80);
+      q.feature = String(questionRoot.querySelector(`[data-q="${idx}"][data-field="sbFeature"]`)?.value || '').slice(0, 80);
       // No level/timer/max-tries: difficulty is fixed (3 passes), timing uses the
       // standard per-question timeLimit. Drop any legacy fields.
       delete q.scaffoldLevel; delete q.timer; delete q.maxAttemptsPerWord;
-      const bucket = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="sbLang"]`)?.value || 'EN');
+      const bucket = String(questionRoot.querySelector(`[data-q="${idx}"][data-field="sbLang"]`)?.value || 'EN');
       q.ttsLanguage = ['EN', 'FR', 'CA', 'OTHER'].includes(bucket) ? bucket : 'EN';
       // Keep a concrete Edge-TTS voice: reuse the quiz voice for OTHER, else the bucket default.
       q.language = (q.ttsLanguage === 'OTHER' && quiz.language) ? quiz.language : (EDGE_TTS_LANGUAGE_DEFAULTS[q.ttsLanguage] || DEFAULT_EDGE_TTS_VOICE);
     }
 
     if (q.type === 'wordle') {
-      q.word = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdWord"]`)?.value || '').trim().slice(0, 16);
-      const att = parseInt(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdAttempts"]`)?.value, 10);
+      q.word = String(questionRoot.querySelector(`[data-q="${idx}"][data-field="wdWord"]`)?.value || '').trim().slice(0, 16);
+      const att = parseInt(questionRoot.querySelector(`[data-q="${idx}"][data-field="wdAttempts"]`)?.value, 10);
       q.maxAttempts = Number.isFinite(att) ? Math.max(3, Math.min(8, att)) : 6;
-      const lex = String(questionListEl.querySelector(`[data-q="${idx}"][data-field="wdLexicon"]`)?.value || 'none');
+      const lex = String(questionRoot.querySelector(`[data-q="${idx}"][data-field="wdLexicon"]`)?.value || 'none');
       q.lexicon = ['en', 'ca', 'fr', 'es'].includes(lex) ? lex : 'none';
       const hints = [];
       for (let i = 0; i < 3; i++) {
-        const h = String(questionListEl.querySelector(`[data-q="${idx}"][data-wd-hint="${i}"]`)?.value || '').trim().slice(0, 120);
+        const h = String(questionRoot.querySelector(`[data-q="${idx}"][data-wd-hint="${i}"]`)?.value || '').trim().slice(0, 120);
         if (h) hints.push(h);
       }
       q.hints = hints;
     }
 
     if (q.type === 'slider') {
-      const minEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMin"]`);
-      const maxEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMax"]`);
-      const targetEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderTarget"]`);
-      const marginEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderMargin"]`);
-      const unitEl = questionListEl.querySelector(`[data-q="${idx}"][data-field="sliderUnit"]`);
+      const minEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="sliderMin"]`);
+      const maxEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="sliderMax"]`);
+      const targetEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="sliderTarget"]`);
+      const marginEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="sliderMargin"]`);
+      const unitEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="sliderUnit"]`);
 
       const min = Number(minEl?.value ?? 0);
       const max = Number(maxEl?.value ?? 100);
@@ -4699,11 +4706,11 @@ function syncQuizFromUI() {
     }
 
     if (q.type === 'pin') {
-      const xEls = [...questionListEl.querySelectorAll(`[data-q="${idx}"][data-pin-zone-x]`)];
+      const xEls = [...questionRoot.querySelectorAll(`[data-q="${idx}"][data-pin-zone-x]`)];
       const zones = xEls.map((xEl) => {
         const zi = Number(xEl.dataset.pinZoneX);
-        const yEl = questionListEl.querySelector(`[data-q="${idx}"][data-pin-zone-y="${zi}"]`);
-        const rEl = questionListEl.querySelector(`[data-q="${idx}"][data-pin-zone-r="${zi}"]`);
+        const yEl = questionRoot.querySelector(`[data-q="${idx}"][data-pin-zone-y="${zi}"]`);
+        const rEl = questionRoot.querySelector(`[data-q="${idx}"][data-pin-zone-r="${zi}"]`);
         return {
           x: round(clamp(Number(xEl?.value ?? 50), 0, 100), 1),
           y: round(clamp(Number(yEl?.value ?? 50), 0, 100), 1),
@@ -4712,11 +4719,11 @@ function syncQuizFromUI() {
       }).slice(0, 12);
       q.zones = zones.length ? zones : [{ x: 50, y: 50, r: 15 }];
       q.zone = q.zones[0];
-      q.pinMode = questionListEl.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all';
+      q.pinMode = questionRoot.querySelector(`[data-q="${idx}"][data-field="pinMode"]`)?.value || q.pinMode || 'all';
       if (q.pinMode !== 'any' && q.pinMode !== 'all') q.pinMode = String(q.pinMode);
     }
   });
-  renderLevelCoverage();
+  if (changedIndex === null || ['cefr', 'step'].includes(field.dataset.field)) renderLevelCoverage();
 }
 
 async function openImageSearchDialog(questionIdx) {
