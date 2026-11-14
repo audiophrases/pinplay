@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PinPlay · Teacher Create</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <!-- Lets a teacher install this page on a phone's home screen. There is no
+         service worker on purpose: the installed app loads the live site, so
+         every deploy reaches it like any browser tab. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="apple-touch-icon" href="../icons/teacher-192.png" />
     <link rel="stylesheet" href="../styles.css?v=20261104-to-grade" />
   </head>
   <body>
