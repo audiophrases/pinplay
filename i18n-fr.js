@@ -12,6 +12,10 @@
  * JSON schema text) are intentionally NOT translated and must stay English.
  */
 window.PINPLAY_FR_DICT = {
+  "Assignment preview": "Aperçu du devoir",
+  "Back to preview": "Retour à l’aperçu",
+  "Edit question": "Modifier la question",
+  "Close preview": "Fermer l’aperçu",
   "Quiz language": "Langue du quiz",
   "Audio instructions for the AI (optional)": "Consignes audio pour l’IA (facultatif)",
   "e.g. explain briefly in Catalan, then read the English sentence; do not read the answer choices": "ex. expliquez brièvement en catalan, puis lisez la phrase anglaise ; ne lisez pas les choix de réponse",

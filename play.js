@@ -10765,8 +10765,8 @@ function initEditorAssignmentPreview() {
     document.getElementById('joinStepIdentity')?.classList.add('hidden');
     joinQuestionWrap.classList.remove('hidden');
     renderJoinQuestion(question);
-    document.getElementById('joinProgress').textContent = `Question ${index + 1} / ${total}`;
-    document.getElementById('joinModeLabel').textContent = 'Assignment preview';
+    document.getElementById('joinProgress').textContent = t('Question {p1} / {p2}', { p1: index + 1, p2: total });
+    document.getElementById('joinModeLabel').textContent = t('Assignment preview');
     document.getElementById('joinSubmission').classList.add('hidden');
     for (const id of ['joinTimer', 'joinScore', 'muteMusicBtn']) document.getElementById(id)?.classList.add('hidden');
   });

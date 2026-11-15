@@ -17508,7 +17508,13 @@ function openEditorPreview(index = 0) {
     bar = document.createElement('div');
     bar.id = 'editorPreviewNav';
     bar.className = 'row gap wrap editor-preview-nav';
-    bar.innerHTML = '<button type="button" class="btn" data-preview-nav="-1" aria-label="Previous question">← Previous</button><span data-preview-position aria-live="polite"></span><button type="button" class="btn" data-preview-nav="1" aria-label="Next question">Next →</button><button type="button" class="btn" data-preview-edit>Edit question</button><button type="button" class="btn" data-preview-close>Close preview</button>';
+    bar.innerHTML = [
+      `<button type="button" class="btn" data-preview-nav="-1" aria-label="${escapeHtml(t('Previous question'))}">← ${escapeHtml(t('Previous'))}</button>`,
+      '<span data-preview-position aria-live="polite"></span>',
+      `<button type="button" class="btn" data-preview-nav="1" aria-label="${escapeHtml(t('Next question'))}">${escapeHtml(t('Next'))} →</button>`,
+      `<button type="button" class="btn" data-preview-edit>${escapeHtml(t('Edit question'))}</button>`,
+      `<button type="button" class="btn" data-preview-close>${escapeHtml(t('Close preview'))}</button>`,
+    ].join('');
     panel.prepend(bar);
     bar.addEventListener('click', (e) => {
       const nav = e.target.closest('[data-preview-nav]');
@@ -17557,7 +17563,7 @@ window.addEventListener('message', (e) => {
 function updateEditorPreviewNav() {
   const bar = document.getElementById('editorPreviewNav');
   if (!bar) return;
-  bar.querySelector('[data-preview-position]').textContent = `Question ${previewMode.index + 1} / ${quiz.questions.length}`;
+  bar.querySelector('[data-preview-position]').textContent = t('Question {p1} / {p2}', { p1: previewMode.index + 1, p2: quiz.questions.length });
   bar.querySelector('[data-preview-nav="-1"]').disabled = previewMode.index <= 0;
   bar.querySelector('[data-preview-nav="1"]').disabled = previewMode.index >= quiz.questions.length - 1;
 }
@@ -17581,7 +17587,7 @@ function editPreviewQuestion() {
   button.id = 'editorPreviewReturn';
   button.type = 'button';
   button.className = 'btn primary editor-preview-return';
-  button.textContent = 'Back to preview';
+  button.textContent = t('Back to preview');
   button.onclick = () => {
     syncQuizFromUI();
     const index = quiz.questions.findIndex(item => item.id === editorPreviewQuestionId);
