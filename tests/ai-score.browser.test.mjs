@@ -98,13 +98,13 @@ describe('an open answer scored on the student page', { skip: !chromium && 'Inst
     const { page, errors } = await open();
     await saveAnswer(page, 'My friend Ana is kind.');
     await note(page).waitFor();
-    assert.equal(await hud(page).textContent(), '🤖 AI score: 400 / 1000');
+    assert.equal(await hud(page).textContent(), 'Score: 400 / 1000');
     assert.ok(await hud(page).evaluate(el => el.classList.contains('bad')), 'a weak answer does not read as right');
     const text = await note(page).textContent();
     assert.match(text, /400 \/ 1000 pts/);
     assert.match(text, /Part of the task is missing/);
     assert.match(text, /Say what she is like\./);
-    assert.match(text, /Your teacher can change this score\./);
+    assert.doesNotMatch(text, /AI check|Your teacher can change this score\./i);
     assert.equal(await note(page).locator('.student-answer-reveal-title span').last().evaluate(el => el.style.background), 'rgb(220, 38, 38)');
     assert.equal(await page.getByText('Teacher Feedback').count(), 0);
     assert.equal(await answerBox(page).isDisabled(), true);
@@ -118,7 +118,7 @@ describe('an open answer scored on the student page', { skip: !chromium && 'Inst
     assert.equal(await note(page).count(), 0, 'nothing left over from the last question');
     await saveAnswer(page, 'I went to the beach.');
     await note(page).waitFor();
-    assert.equal(await hud(page).textContent(), '🤖 AI score: 2000 / 2000');
+    assert.equal(await hud(page).textContent(), 'Score: 2000 / 2000');
     assert.ok(await hud(page).evaluate(el => el.classList.contains('ok')));
     assert.match(await page.locator('#joinScore').textContent(), /2,?400/);
     assert.equal(calls.length, 2);

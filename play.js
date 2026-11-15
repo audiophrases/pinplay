@@ -4112,7 +4112,7 @@ function renderPlayerState(state) {
           }
           // 🤖 An AI score is a mark, not right or wrong.
           const possiblePts = Number(state.question.points || 0);
-          if (rr.teacherGrade?.by === 'ai') feedback = possiblePts > 0 ? t('🤖 AI score: {points} / {total}', { points: pts, total: possiblePts }) : `🤖 ${t('AI check')}`;
+          if (rr.teacherGrade?.by === 'ai') feedback = t('Score: {n}', { n: possiblePts > 0 ? `${pts} / ${possiblePts}` : pts });
           setJoinStatusHud(feedback, rr.correct || (isPartial && pts > 0) ? 'ok' : 'bad');
           highlightAnswerItems(rr.correct, state);
 
@@ -5205,8 +5205,7 @@ function aiNoteBox(note, grade = null, possiblePts = 0) {
     const task = { done: t('✅ Task done'), partly: t('⚠️ Part of the task is missing'), not_done: t('❌ This does not answer the task') }[note.task];
     if (task) lines.push({ text: task, strong: true });
     lines.push({ text: String(note.feedback) });
-    if (aiScored) lines.push({ text: t('Your teacher can change this score.'), muted: true });
-    else if (!grade?.graded) lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
+    if (!aiScored && !grade?.graded) lines.push({ text: t('Your teacher still grades this answer.'), muted: true });
   } else if (!note.ok && note.why) {
     // An answer the AI accepted is graded right like any other: no note.
     // A refused one gets its reason.
@@ -5216,14 +5215,12 @@ function aiNoteBox(note, grade = null, possiblePts = 0) {
   const box = document.createElement('div');
   box.className = 'student-answer-reveal ai-note-reveal';
   box.setAttribute('role', 'status');
-  const title = document.createElement('div');
-  title.className = 'student-answer-reveal-title';
-  const titleText = document.createElement('span');
-  titleText.textContent = t('AI check');
-  title.appendChild(titleText);
   if (aiScored && possiblePts > 0) {
+    const title = document.createElement('div');
+    title.className = 'student-answer-reveal-title';
     const earnedPts = Number(grade.pointsAwarded || 0);
     title.appendChild(gradePointsBadge(earnedPts, possiblePts, earnedPts * 2 >= possiblePts));
+    box.appendChild(title);
   }
   const content = document.createElement('div');
   content.className = 'student-answer-reveal-content';
@@ -5234,7 +5231,7 @@ function aiNoteBox(note, grade = null, possiblePts = 0) {
     if (line.muted) el.className = 'small muted';
     content.appendChild(el);
   });
-  box.append(title, content);
+  box.appendChild(content);
   return box;
 }
 
