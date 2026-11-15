@@ -7814,15 +7814,13 @@ function nextVerdictClip(correct) {
 // Instant-feedback verdict: short sound stinger + full-screen flash/badge.
 // Called once at the moment an answer is graded (save or retake submit) —
 // never from render paths, so navigating back to an answered question
-// doesn't replay it. Sound respects the music-mute toggle; motion respects
+// doesn't replay it. Feedback sounds stay audible when music is muted; motion respects
 // prefers-reduced-motion (the HUD text + answer highlights already convey
 // the verdict, so the overlay is purely celebratory).
 function playVerdictFx(correct) {
   try {
-    if (!assignmentMusicMuted) {
-      const a = nextVerdictClip(correct);
-      if (a) { a.currentTime = 0; a.play().catch(() => { }); }
-    }
+    const a = nextVerdictClip(correct);
+    if (a) { a.currentTime = 0; a.play().catch(() => { }); }
   } catch { }
 
   try {
