@@ -54,7 +54,12 @@ before(async () => {
     calls.push({ url: String(url), body, input, auth: init.headers.authorization });
     if (duringCall) { const run = duringCall; duringCall = null; await run(); }
     if (openAiStatus !== 200) return new Response('{}', { status: openAiStatus });
-    const text = JSON.stringify(reply(input, body));
+    const result = reply(input, body);
+    // Most route tests care about grading, not the model's error classification.
+    if (Array.isArray(result?.ok) && result.issues === undefined) {
+      result.issues = result.ok.map(ok => ({ kind: ok ? 'none' : 'meaning', source: '', replacement: '' }));
+    }
+    const text = JSON.stringify(result);
     return new Response(JSON.stringify({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text }] }] }), { status: 200 });
   };
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(teacherPassword))).toString('hex');
@@ -114,8 +119,8 @@ it('a wrong typed answer the AI accepts counts right, joins the accepted answers
   assert.equal(sent.url, 'https://api.openai.com/v1/responses');
   assert.equal(sent.auth, 'Bearer sk-test');
   assert.equal(sent.body.store, false);
-  assert.deepEqual(sent.body.reasoning, { effort: 'none' });
-  assert.equal(sent.body.max_output_tokens, 60);
+  assert.deepEqual(sent.body.reasoning, { effort: 'low' });
+  assert.equal(sent.body.max_output_tokens, 2048);
   assert.equal(sent.body.text.format.strict, true);
   // Token frugal: only what the check needs.
   assert.deepEqual(sent.input, { type: 'text', question: 'Opposite of "big"', check: [{ accepted: ['small'], student: 'Little' }] });
@@ -988,4 +993,110 @@ it('the editor adds them once: skipped when already there or on a changed questi
   editor._r2QuizId = 'quiz-grammar';
   sandbox.api = async () => { throw new Error('offline'); };
   assert.equal(await app.pullAiAcceptedAnswers(), 0);
+});
+
+// These tests exercise request construction, verdict validation and grading.
+// Model replies are stubbed: semantic accuracy still needs live-model evaluation.
+async function useCatalanQuestions() {
+  const a = await base();
+  a.quiz.questions[0] = { id: 'q1', type: 'text', points: 1000,
+    prompt: 'Quin nou grup social van formar els comerciants i els artesans de les ciutats al segle XII?',
+    accepted: ['burgesia', 'la burgesia', 'burgesos', 'els burgesos'] };
+  a.quiz.questions[1] = { id: 'q2', type: 'error_hunt', points: 1000,
+    prompt: 'Les esglésies romàniques tenen finestres grans.',
+    corrected: 'Les esglésies romàniques tenen finestres petites.',
+    correctedVariants: ['Les esglésies gòtiques tenen finestres grans.'],
+    readingText: 'Les esglésies romàniques tenen murs gruixuts i finestres petites. Les gòtiques tenen grans finestrals.' };
+  await storage.put(`ab:${code}`, a);
+}
+
+it('Catalan: an exact accepted burgesia answer never needs AI', async () => {
+  await useCatalanQuestions();
+  const res = await answer('s1', 0, 'burgesia');
+  assert.equal(correctness(res, 0).correct, true);
+  assert.equal(calls.length, 0);
+});
+
+it('Catalan: a mislabeled accent error displays only the grounded spelling correction', async () => {
+  await useCatalanQuestions();
+  reply = () => ({ ok: [false], why: 'Cal accent: «burgesia».',
+    issues: [{ kind: 'accent', source: 'burguesia', replacement: 'burgesia' }] });
+  const res = await answer('s1', 0, 'burguesia');
+  assert.equal(correctness(res, 0).correct, false);
+  assert.equal(res.body.attempt.answersByQ['0'].ai.why, '«burguesia» → «burgesia»');
+  const next = await answer('s2', 0, 'burguesia');
+  assert.equal(calls.length, 1);
+  assert.equal(next.body.attempt.answersByQ['0'].ai.why, '«burguesia» → «burgesia»');
+});
+
+it('Catalan: fabricated and unchanged spelling replacements are not shown', async () => {
+  await useCatalanQuestions();
+  for (const [student, source, replacement] of [
+    ['s1', 'burguesia', 'burgesía'], ['s2', 'burguesia', 'burguesia'], ['s3', 'burguesía', 'burgesia'],
+  ]) {
+    // Each case asks the model afresh rather than reading the previous refusal.
+    await storage.delete(`ai:${code}`);
+    reply = () => ({ ok: [false], why: 'Cal accent.', issues: [{ kind: 'accent', source, replacement }] });
+    const res = await answer(student, 0, 'burguesia');
+    assert.equal(correctness(res, 0).correct, false);
+    assert.equal(res.body.attempt.answersByQ['0'].ai.why, '');
+  }
+});
+
+it('Catalan: the complete negative rewrite and reading reach the AI, and acceptance changes grading', async () => {
+  await useCatalanQuestions();
+  const rewrite = 'Les esglésies romàniques no tenen finestres grans.';
+  reply = input => {
+    assert.equal(input.question, 'Les esglésies romàniques tenen finestres grans.');
+    assert.equal(input.check[0].student, rewrite);
+    assert.match(input.text, /finestres petites/);
+    return { ok: [true], why: 'La negació corregeix l’afirmació.' };
+  };
+  // Old cached refusals must not survive the new policy.
+  await storage.put(`ai:${code}`, { v: 1, q: { q2: {
+    sig: 'error_hunt|les esglésies romàniques tenen finestres grans', added: [],
+    refused: { 'les esglésies romàniques no tenen finestres grans': 'La frase continua afirmant que tenen finestres grans.' },
+  } } });
+  const res = await answer('s1', 1, { rewrite, selectedTokens: [4] });
+  assert.equal(calls.length, 1);
+  assert.equal(correctness(res, 1).correct, true);
+  assert.ok((await base()).quiz.questions[1].correctedVariants.includes(rewrite));
+});
+
+it('the AI receives the end of long questions and their reading context', async () => {
+  const a = await base();
+  const prompt = 'Context. '.repeat(60) + 'Name the opposite of big.';
+  a.quiz.questions[0].prompt = prompt;
+  a.quiz.questions[0].readingText = 'A large animal and a small animal.';
+  await storage.put(`ab:${code}`, a);
+  await answer('s1', 0, 'little');
+  assert.equal(calls[0].input.question, prompt);
+  assert.equal(calls[0].input.text, a.quiz.questions[0].readingText);
+});
+
+it('contradictory issue classifications do not modify the accepted list', async () => {
+  reply = () => ({ ok: [true], why: 'Wrong.', issues: [{ kind: 'spelling', source: 'little', replacement: 'small' }] });
+  const res = await answer('s1', 0, 'little');
+  assert.equal(correctness(res, 0).correct, false);
+  assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
+  assert.deepEqual((await base()).quiz.questions[0].accepted, ['small']);
+});
+
+it('each wrong gap caches its own verified correction, not another gap’s explanation', async () => {
+  reply = () => ({ ok: [false, false], why: 'Wrong past tense.', issues: [
+    { kind: 'spelling', source: 'wennt', replacement: 'went' },
+    { kind: 'spelling', source: 'atte', replacement: 'ate' },
+  ] });
+  await answer('s1', 2, ['wennt', 'atte']);
+  const again = await answer('s2', 2, ['went', 'atte']);
+  assert.equal(calls.length, 1);
+  assert.equal(again.body.attempt.answersByQ['2'].ai.why, '«atte» → «ate»');
+});
+
+it('an uncertain model judgment is not cached as a definitive refusal', async () => {
+  reply = () => ({ ok: [false], why: '', issues: [{ kind: 'uncertain', source: '', replacement: '' }] });
+  const res = await answer('s1', 0, 'little');
+  assert.equal(res.body.attempt.answersByQ['0'].ai, undefined);
+  await answer('s2', 0, 'little');
+  assert.equal(calls.length, 2);
 });
