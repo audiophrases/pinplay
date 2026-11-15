@@ -6924,11 +6924,19 @@ body.question-active .climb:not(.hidden) { display: flex; }
   z-index: 100;
   box-shadow: 0 4px 16px #0003;
 }
-.editor-preview-nav {
-  padding: 12px;
-  margin-bottom: 12px;
+.editor-preview-navigation {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 20000;
+  max-width: min(560px, calc(100vw - 16px));
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 4px 16px #0002;
 }
-
-.editor-assignment-preview { position: fixed; inset: 0; z-index: 2000; background: white; display: flex; flex-direction: column; }
-.editor-assignment-preview .editor-preview-nav { flex: none; margin: 0; }
-.editor-assignment-preview iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
+.editor-preview-navigation summary { cursor: pointer; font-weight: 600; }
+.editor-preview-navigation[open] summary { margin-bottom: 8px; }
+.editor-preview-navigation select { min-width: 0; max-width: 100%; flex: 1 1 180px; }

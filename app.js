@@ -17484,96 +17484,44 @@ function renderLeaderboardInJoin(leaderboard) {
   joinAnswersEl.appendChild(ul);
 }
 
-// Editor preview embeds the assignment renderer without creating an assignment.
+// Editor previews use a disposable assignment on the real student page.
 let editorPreviewQuestionId = null;
-function openEditorPreview(index = 0) {
+let editorPreviewOpening = false;
+async function openEditorPreview(index = 0) {
+  if (editorPreviewOpening) return;
   syncQuizFromUI();
-  if (!quiz.questions.length) return;
-  previewMode.index = Math.max(0, Math.min(index, quiz.questions.length - 1));
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  let panel = document.getElementById('editorAssignmentPreview');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'editorAssignmentPreview';
-    panel.className = 'editor-assignment-preview';
-    panel.innerHTML = '<iframe title="Assignment question preview"></iframe>';
-    document.body.appendChild(panel);
-    const frame = panel.querySelector('iframe');
-    frame.addEventListener('load', renderEditorAssignmentPreview);
-    frame.src = new URL('../?editorPreview=1', location.href).href;
+  const question = quiz.questions[index];
+  if (!question) return;
+  editorPreviewQuestionId = question.id;
+  previewMode.index = index;
+  editorPreviewOpening = true;
+  try {
+    await launchStudentPreviewAssignment({ editorQuestionId: question.id });
+  } finally {
+    editorPreviewOpening = false;
   }
-  document.getElementById('editorPreviewReturn')?.remove();
-  let bar = document.getElementById('editorPreviewNav');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'editorPreviewNav';
-    bar.className = 'row gap wrap editor-preview-nav';
-    bar.innerHTML = [
-      `<button type="button" class="btn" data-preview-nav="-1" aria-label="${escapeHtml(t('Previous question'))}">← ${escapeHtml(t('Previous'))}</button>`,
-      '<span data-preview-position aria-live="polite"></span>',
-      `<button type="button" class="btn" data-preview-nav="1" aria-label="${escapeHtml(t('Next question'))}">${escapeHtml(t('Next'))} →</button>`,
-      `<button type="button" class="btn" data-preview-edit>${escapeHtml(t('Edit question'))}</button>`,
-      `<button type="button" class="btn" data-preview-close>${escapeHtml(t('Close preview'))}</button>`,
-    ].join('');
-    panel.prepend(bar);
-    bar.addEventListener('click', (e) => {
-      const nav = e.target.closest('[data-preview-nav]');
-      if (nav) browseEditorPreview(Number(nav.dataset.previewNav));
-      if (e.target.closest('[data-preview-edit]')) editPreviewQuestion();
-      if (e.target.closest('[data-preview-close]')) closeEditorAssignmentPreview();
-    });
-  }
-  renderEditorAssignmentPreview();
-  bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  bar.querySelector('[data-preview-edit]').focus({ preventScroll: true });
 }
 function closeEditorAssignmentPreview() {
-  document.getElementById('editorAssignmentPreview')?.remove();
-}
-// The builder keeps empty answer slots and authoring-only pair/item fields.
-// Convert those to the assignment renderer's shape without mutating the draft
-// or dropping incomplete questions (their editor indexes must remain stable).
-function buildEditorPreviewQuestion(question) {
-  if (!question) return null;
-  const q = { ...question };
-  if (['mcq', 'multi', 'tf', 'audio'].includes(q.type)) {
-    if (q.type === 'audio') q.type = 'mcq';
-    q.answers = (q.answers || []).filter(a => String(a?.text || '').trim()).map(a => ({ ...a }));
+  if (previewPoll?.editor) {
+    previewPoll.win?.close();
+    cleanupPreviewPoll();
   }
-  if (q.type === 'match_pairs') {
-    q.pairs = (q.pairs || []).filter(p => String(p?.left || '').trim() && String(p?.right || '').trim()).map(p => ({ ...p }));
-    q.leftItems = q.pairs.map(p => String(p.left).trim());
-    q.rightOptions = q.pairs.map(p => String(p.right).trim());
-  }
-  if (q.type === 'puzzle') q.options = (q.items || []).map(item => String(item).trim()).filter(Boolean);
-  if (q.type === 'context_gap') q.gapCount = (q.gaps || []).filter(Boolean).length;
-  return q;
-}
-function renderEditorAssignmentPreview() {
-  updateEditorPreviewNav();
-  const frame = document.querySelector('#editorAssignmentPreview iframe');
-  frame?.contentWindow?.postMessage({ type: 'editor-question', question: buildEditorPreviewQuestion(quiz.questions[previewMode.index]), index: previewMode.index, total: quiz.questions.length }, location.origin);
 }
 window.addEventListener('message', (e) => {
-  const frame = document.querySelector('#editorAssignmentPreview iframe');
-  if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
-  if (e.data?.type === 'editor-ready') renderEditorAssignmentPreview();
-  if (e.data?.type === 'editor-nav' && [-1, 1].includes(e.data.delta)) browseEditorPreview(e.data.delta);
+  if (e.origin !== location.origin || !previewPoll?.editor || e.source !== previewPoll.win
+    || e.data?.code !== previewPoll.code) return;
+  if (e.data.type === 'editor-preview-ready') {
+    e.source.postMessage({ type: 'editor-preview-questions', code: previewPoll.code, questionIds: previewPoll.questionIds }, location.origin);
+    return;
+  }
+  if (e.data.type !== 'editor-preview-edit') return;
+  syncQuizFromUI();
+  const index = quiz.questions.findIndex(q => q.id === e.data.questionId);
+  if (index < 0) return;
+  previewMode.index = index;
+  editPreviewQuestion();
+  window.focus();
 });
-function updateEditorPreviewNav() {
-  const bar = document.getElementById('editorPreviewNav');
-  if (!bar) return;
-  bar.querySelector('[data-preview-position]').textContent = t('Question {p1} / {p2}', { p1: previewMode.index + 1, p2: quiz.questions.length });
-  bar.querySelector('[data-preview-nav="-1"]').disabled = previewMode.index <= 0;
-  bar.querySelector('[data-preview-nav="1"]').disabled = previewMode.index >= quiz.questions.length - 1;
-}
-function browseEditorPreview(delta) {
-  previewMode.index = Math.max(0, Math.min(previewMode.index + delta, quiz.questions.length - 1));
-  previewMode.showReveal = false;
-  previewMode.answeredCurrent = false;
-  previewMode.revealedResult = null;
-  renderEditorAssignmentPreview();
-}
 function editPreviewQuestion() {
   const q = quiz.questions[previewMode.index];
   if (!q) return;
@@ -17599,13 +17547,6 @@ function editPreviewQuestion() {
   input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   input?.focus({ preventScroll: true });
 }
-document.addEventListener('keydown', (e) => {
-  if (!document.getElementById('editorPreviewNav')) return;
-  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
-  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  e.preventDefault();
-  browseEditorPreview(e.key === 'ArrowLeft' ? -1 : 1);
-});
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-preview-all]')) openEditorPreview(0);
 });
@@ -17658,7 +17599,6 @@ function startPreviewMode() {
 }
 
 function stopPreviewMode() {
-  document.getElementById('editorPreviewNav')?.remove();
   previewMode.active = false;
   if (previewMode.prevPrimaryAudioHost != null) {
     live.host.isPrimaryAudioHost = !!previewMode.prevPrimaryAudioHost;
@@ -17690,9 +17630,7 @@ function cleanupPreviewPoll() {
     api('/api/preview/cleanup', {
       method: 'POST',
       body: { password: createSessionPassword, code: oldCode },
-    }).then(() => {
-      setStatus(hostStatusEl, t('Preview assignment {code} cleaned up.', { code: oldCode }), 'ok');
-    }).catch(() => {});
+    }).catch(() => {}); // Background cleanup must not overwrite the next preview's status.
   }
 }
 
@@ -17701,10 +17639,15 @@ function cleanupPreviewPoll() {
 // closes. The Live game card's plays every question; the Assignments form's
 // "Try it as a student" (followAdaptive) plays as the assignment will, with
 // 🎯 Adaptive or 🏔️ Climb.
-async function launchStudentPreviewAssignment({ button = null, statusEl = hostStatusEl, followAdaptive = false } = {}) {
+async function launchStudentPreviewAssignment({ button = null, statusEl = hostStatusEl, followAdaptive = false, editorQuestionId = null } = {}) {
   const btn = button || document.getElementById('studentPreviewBtn');
   const btnLabel = btn?.textContent || '';
+  // Reserve the tab inside the click gesture, before media preparation awaits.
+  const editorWin = editorQuestionId ? window.open('about:blank', '_blank') : null;
+  let opened = false;
   try {
+    if (editorQuestionId && !editorWin) throw new Error(t('Allow pop-ups to open the preview.'));
+    if (editorWin) editorWin.document.body.textContent = t('Creating preview assignment…');
     syncQuizFromUI();
     requireQuizTitle();
     if (!quiz.questions?.length) {
@@ -17727,12 +17670,17 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
       }
     }
 
-    // Clean up any previous preview assignment
+    // Close the previous editor tab before deleting its disposable assignment.
+    if (previewPoll?.editor) previewPoll.win?.close();
     cleanupPreviewPoll();
 
     await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false, materializeTts: true });
 
     const payload = normalizeQuizForLive(quiz);
+    if (editorQuestionId && !payload.questions.some(q => q.id === editorQuestionId)) {
+      throw new Error(t('This question is incomplete. Finish its answer options before previewing.'));
+    }
+    if (editorWin?.closed) return;
     // /api/preview/create works for both owner and guest. Server forces
     // className='__preview__' and (for guests) scopes media to the workspace
     // prefix so deletion of the workspace cleans it up too.
@@ -17755,12 +17703,17 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
     if (!code) throw new Error('No assignment code returned.');
 
     const baseUrl = window.location.origin + window.location.pathname.replace(/\/create\/?$/, '/');
-    const previewUrl = `${baseUrl}?assignment=${encodeURIComponent(code)}`;
-    const previewWin = window.open(previewUrl, '_blank');
+    const previewUrl = `${baseUrl}?assignment=${encodeURIComponent(code)}`
+      + (editorQuestionId ? `&editorQuestion=${encodeURIComponent(editorQuestionId)}` : '');
+    const previewWin = editorWin || window.open(previewUrl, '_blank');
+    if (editorWin && !editorWin.closed) editorWin.location.replace(previewUrl);
+    opened = true;
 
     // Poll for preview tab close → auto-delete assignment
     if (previewWin) {
       previewPoll = {
+        editor: !!editorQuestionId,
+        questionIds: payload.questions.map(q => q.id),
         code,
         win: previewWin,
         timer: setInterval(() => {
@@ -17773,6 +17726,7 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
   } catch (err) {
     setStatus(statusEl, t('Preview failed: {msg}', { msg: err?.message || err }), 'bad');
   } finally {
+    if (editorWin && !opened) editorWin.close();
     if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
   }
 }

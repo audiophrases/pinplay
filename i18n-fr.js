@@ -12,6 +12,12 @@
  * JSON schema text) are intentionally NOT translated and must stay English.
  */
 window.PINPLAY_FR_DICT = {
+  "Preview controls": "Commandes de l’aperçu",
+  "Reopen the preview from the editor.": "Rouvrez l’aperçu depuis l’éditeur.",
+  "Jump to question": "Aller à la question",
+  "Edit this question": "Modifier cette question",
+  "Allow pop-ups to open the preview.": "Autorisez les fenêtres contextuelles pour ouvrir l’aperçu.",
+  "This question is incomplete. Finish its answer options before previewing.": "Cette question est incomplète. Complétez ses réponses avant d’ouvrir l’aperçu.",
   "Assignment preview": "Aperçu du devoir",
   "Back to preview": "Retour à l’aperçu",
   "Edit question": "Modifier la question",

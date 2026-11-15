@@ -201,10 +201,6 @@ const live = {
 init();
 
 function init() {
-  if (new URLSearchParams(location.search).get('editorPreview') === '1' && window.parent !== window) {
-    initEditorAssignmentPreview();
-    return;
-  }
   setupImageLightbox();
   pingEdgeTtsBridgeWarmup();
   // `assignmentAmbient` is declared further down with `const`, so calling
@@ -866,6 +862,11 @@ async function validatePin() {
       }
       if (joinBtn) joinBtn.textContent = t('Start assignment');
       setStatus(joinStatusEl, t('Assignment code valid ✅'), 'ok');
+      if (a.className === '__preview__' && window.opener
+        && new URLSearchParams(location.search).has('editorQuestion')) {
+        await initEditorPreviewNavigation();
+        await startAssignmentAttempt(true);
+      }
       return;
     }
 
@@ -1405,6 +1406,17 @@ async function loadAssignmentState() {
     live.player.assignment.currentIndex = clampAssignmentIndex(live.player.assignment.currentIndex, total);
   }
 
+  let previewStartIndex = -1;
+  if (editorPreviewNavigation?.initialQuestionId) {
+    const questions = editorPreviewQuestions();
+    const index = questions.findIndex(q => q.id === editorPreviewNavigation.initialQuestionId);
+    editorPreviewNavigation.initialQuestionId = null;
+    if (index >= 0) {
+      live.player.assignment.currentIndex = index;
+      previewStartIndex = index;
+    }
+  }
+
   // Gate rendering on the exam-mode notice so question audio + ambient music
   // don't start playing in the background while the student is still reading
   // the "stay on this page" warning.
@@ -1412,6 +1424,7 @@ async function loadAssignmentState() {
 
   const mapped = mapAssignmentStateToPlayerState();
   if (mapped) renderPlayerState(mapped);
+  if (previewStartIndex >= 0) scrollEditorPreviewQuestion(previewStartIndex);
   renderInstantFeedbackFromState();
   maybeActivateExamModeFocusTracking();
 }
@@ -3612,6 +3625,7 @@ window.onLocaleChange = function () {
 };
 
 function renderPlayerState(state) {
+  refreshEditorPreviewNavigation();
   _i18nLastPlayerState = state;
   syncLobbyAvatarEditor(state);
   syncClimbTrail();
@@ -10745,34 +10759,105 @@ function renderListeningPlayer(wrap, section, attempt, locked) {
 }
 
 
-// Same question UI as assignments, with no attempt, identity or submission API.
-function initEditorAssignmentPreview() {
-  window.addEventListener('message', (e) => {
-    if (e.origin !== location.origin || e.source !== window.parent || e.data?.type !== 'editor-question') return;
-    const { question, index, total } = e.data;
-    if (!question || !Number.isInteger(index) || !Number.isInteger(total)) return;
-    stopAssignmentQuestionAudioPlayback();
-    live.player.mode = 'assignment';
-    live.player.assignment.currentIndex = index;
-    live.player.assignment.reviewMode = false;
-    const questions = [];
-    questions[index] = question;
-    live.player.assignment.state = { assignment: { quiz: { questions } }, attempt: { answersByQ: {} } };
-    document.getElementById('joinStepPin')?.classList.add('hidden');
-    document.getElementById('joinStepIdentity')?.classList.add('hidden');
-    joinQuestionWrap.classList.remove('hidden');
-    renderJoinQuestion(question);
-    document.getElementById('joinProgress').textContent = t('Question {p1} / {p2}', { p1: index + 1, p2: total });
-    document.getElementById('joinModeLabel').textContent = t('Assignment preview');
-    document.getElementById('joinSubmission').classList.add('hidden');
-    for (const id of ['joinTimer', 'joinScore', 'muteMusicBtn']) document.getElementById(id)?.classList.add('hidden');
+// Preview-only controls float above the real assignment; they never resize it.
+let editorPreviewNavigation = null;
+// Student payloads omit authoring IDs. Keep the preview's ID list separately,
+// applying the attempt's display order without changing student question data.
+function editorPreviewQuestions() {
+  const attempt = live.player.assignment.state?.attempt;
+  return (attempt?.assignment?.quiz?.questions || []).map((q, index) => ({
+    ...q, id: editorPreviewNavigation?.questionIds?.[attempt.questionOrder?.[index] ?? index],
+  }));
+}
+async function initEditorPreviewNavigation() {
+  if (editorPreviewNavigation) return;
+  const questionIds = await new Promise((resolve, reject) => {
+    const receive = (e) => {
+      if (e.origin !== location.origin || e.source !== window.opener
+        || e.data?.type !== 'editor-preview-questions' || e.data.code !== live.player.assignment.code
+        || !Array.isArray(e.data.questionIds)) return;
+      clearTimeout(timer);
+      window.removeEventListener('message', receive);
+      resolve(e.data.questionIds);
+    };
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', receive);
+      reject(new Error(t('Reopen the preview from the editor.')));
+    }, 10000);
+    window.addEventListener('message', receive);
+    window.opener.postMessage({ type: 'editor-preview-ready', code: live.player.assignment.code }, location.origin);
   });
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.target.closest('input, textarea, select, [contenteditable]')) return;
-    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-    e.preventDefault();
-    window.parent.postMessage({ type: 'editor-nav', delta: e.key === 'ArrowLeft' ? -1 : 1 }, location.origin);
+  const panel = document.createElement('details');
+  panel.id = 'editorPreviewNavigation';
+  panel.className = 'editor-preview-navigation';
+  panel.open = true;
+  const summary = document.createElement('summary');
+  summary.textContent = t('Preview controls');
+  const controls = document.createElement('div');
+  controls.className = 'row gap wrap';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', t('Jump to question'));
+  select.addEventListener('change', () => navigateEditorPreview(select.value));
+  const makeButton = (label, action) => {
+    const button = document.createElement('button');
+    button.className = 'btn';
+    button.type = 'button';
+    button.textContent = label;
+    button.addEventListener('click', action);
+    return button;
+  };
+  const move = (delta) => {
+    const questions = editorPreviewQuestions();
+    const index = Number(live.player.assignment.currentIndex || 0) + delta;
+    if (questions[index]) navigateEditorPreview(questions[index].id);
+  };
+  const prev = makeButton(t('Previous'), () => move(-1));
+  const next = makeButton(t('Next'), () => move(1));
+  const edit = makeButton(t('Edit this question'), () => {
+    const q = editorPreviewQuestions()[live.player.assignment.currentIndex];
+    if (!q || !window.opener || window.opener.closed) return;
+    window.opener.postMessage({ type: 'editor-preview-edit', code: live.player.assignment.code, questionId: q.id }, location.origin);
   });
-  window.addEventListener('resize', scheduleJoinAdaptiveFit);
-  queueMicrotask(() => window.parent.postMessage({ type: 'editor-ready' }, location.origin));
+  controls.append(prev, select, next, edit, makeButton(t('Close preview'), () => window.close()));
+  panel.append(summary, controls);
+  document.body.appendChild(panel);
+  editorPreviewNavigation = {
+    panel, select, prev, next, edit, questionIds,
+    initialQuestionId: new URLSearchParams(location.search).get('editorQuestion'),
+  };
+}
+function refreshEditorPreviewNavigation() {
+  if (!editorPreviewNavigation) return;
+  const { select, prev, next, edit } = editorPreviewNavigation;
+  const questions = editorPreviewQuestions();
+  const index = Number(live.player.assignment.currentIndex || 0);
+  if (select.options.length !== questions.length) {
+    select.replaceChildren(...questions.map((q, i) => {
+      const option = document.createElement('option');
+      option.value = q.id;
+      option.textContent = `${t('Question {n}', { n: i + 1 })}: ${String(q.prompt || '').slice(0, 65)}`;
+      return option;
+    }));
+  }
+  select.value = questions[index]?.id || '';
+  prev.disabled = index <= 0;
+  next.disabled = index >= questions.length - 1;
+  edit.disabled = !questions[index] || !window.opener || window.opener.closed;
+}
+function scrollEditorPreviewQuestion(index) {
+  requestAnimationFrame(() => {
+    document.querySelector(`.ls-q[data-q-index="${index}"]`)?.scrollIntoView({ block: 'center' });
+  });
+}
+function navigateEditorPreview(questionId) {
+  const assignment = live.player.assignment;
+  const questions = editorPreviewQuestions();
+  const index = questions.findIndex(q => q.id === questionId);
+  if (!editorPreviewNavigation || index < 0) return;
+  assignment.currentIndex = index;
+  assignment.bypassAllAnsweredScreen = true;
+  assignment.forceAutoAdvance = false;
+  const mapped = mapAssignmentStateToPlayerState();
+  if (mapped) renderPlayerState(mapped);
+  scrollEditorPreviewQuestion(index);
 }
