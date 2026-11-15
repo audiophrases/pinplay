@@ -3891,6 +3891,8 @@ function renderPlayerState(state) {
   // will start ambient only after the audio finishes, so it never overlaps.
   if (assignmentQuestionChanged) {
     cancelPendingAssignmentQuestionAutoplay();
+    stopAssignmentQuestionAudioPlayback();
+    lastAssignmentAudioKey = '';
     // New question on screen — the reveal (if any) is over, ambient may flow again.
     live.player.assignment.suppressAmbientResume = false;
     lastRenderedQuestionIndex = state.currentIndex;
@@ -7607,8 +7609,19 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     }
     try {
       setAssignmentAudioPlayingUi(true);
-      speakTtsSegmentsInBrowser(text, question.language || 'en-US').then(() => setAssignmentAudioPlayingUi(false));
-      return true;
+      const ok = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          if (activeAssignmentQuestionAudioFinish === finish) activeAssignmentQuestionAudioFinish = null;
+          if (!aborted()) setAssignmentAudioPlayingUi(false);
+          resolve(result);
+        };
+        activeAssignmentQuestionAudioFinish = finish;
+        speakTtsSegmentsInBrowser(text, question.language || 'en-US').then(finish, () => finish(false));
+      });
+      return aborted() ? 'aborted' : ok;
     } catch {
       setAssignmentAudioPlayingUi(false);
       return false;
