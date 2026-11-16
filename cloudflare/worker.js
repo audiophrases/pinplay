@@ -10580,6 +10580,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
   let teacherGradedCount = 0;
   let autoScore = 0;
   let teacherScore = 0;
+  const pendingQIndexes = new Set();
 
   Object.entries(answersByQ).forEach(([idxRaw, item]) => {
     const qIndex = Number(idxRaw);
@@ -10602,6 +10603,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
         if (pts > 0) correctCount += 1;
       } else {
         pendingTeacherGradeCount += 1;
+        pendingQIndexes.add(qIndex);
       }
       return;
     }
@@ -10623,10 +10625,16 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     }
   });
 
-  const gradedCount = autoGradedCount + teacherGradedCount;
-  const gradableTotal = quizQuestions.reduce((n, q) => (q && !q.isPoll && q.type !== 'slide' ? n + 1 : n), 0);
-  const accuracyDenominator = gradableTotal - pendingTeacherGradeCount;
-  const accuracy = accuracyDenominator > 0 ? round((correctCount / accuracyDenominator) * 100, 1) : null;
+  // Accuracy is points earned over points available — the same figure the
+  // student sees in their Final Results drawer (play.js), so partial credit
+  // counts. Blanks count as zero; polls, slides and answers still waiting for
+  // the teacher are left out of the denominator.
+  const totalScore = Math.max(0, Math.round(autoScore + teacherScore));
+  const earnablePoints = quizQuestions.reduce((sum, q, i) => {
+    if (!q || q.isPoll || q.type === 'slide' || pendingQIndexes.has(i)) return sum;
+    return sum + Math.max(0, Math.round(Number.isFinite(Number(q.points)) ? Number(q.points) : 1000));
+  }, 0);
+  const accuracy = earnablePoints > 0 ? Math.round(Math.min(100, (totalScore / earnablePoints) * 100)) : null;
 
   return {
     answeredCount,
@@ -10636,7 +10644,7 @@ function evaluateAssignmentAttempt(assignment, attempt) {
     teacherGradedCount,
     autoScore: Math.max(0, Math.round(autoScore)), // <-- Clamped at 0 gracefully
     teacherScore: Math.max(0, Math.round(teacherScore)),
-    totalScore: Math.max(0, Math.round(autoScore + teacherScore)),
+    totalScore,
     accuracy,
     totalQuestions: Number(quizQuestions.length || 0),
   };
