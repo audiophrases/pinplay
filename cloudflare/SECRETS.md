@@ -54,6 +54,8 @@ and `AI_CHECK = "0"`, which turns it off everywhere. Each check is one small
 Responses API call (about 400 tokens in, 40 out, `store: false`); the
 question, the accepted answers and the student's answer are sent, nothing
 about the student. Set a monthly spending limit on the OpenAI account.
+Which models are free on this account (data-sharing tokens) and which are billed, `gpt-6-luna` included:
+[OPENAI-FREE-TOKENS.md](../OPENAI-FREE-TOKENS.md).
 
 ### No longer needed (kept on purpose for now)
 
