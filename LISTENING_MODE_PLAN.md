@@ -286,6 +286,16 @@ As built (2026-10-03):
   fields of each chosen type (gap fill, match, error hunt and open reworded
   for a recording) and one worked example: a short dialogue with a question
   of each chosen type, which the server's cleaner keeps as one section.
+  **2026-11-17:** matching is the exception. One matching question runs
+  through a whole recording, so the prompt asks for a section of its own
+  (or, sharing a recording, first and on other information), pairs in the
+  order heard, `heard` = the first pair. The example shows it as a second
+  section with its own short recording (`LISTENING_PROMPT_MATCH_EXAMPLE`).
+  The old example put it last, quoting an earlier line and re-asking what
+  other questions asked, so the moment guess (never backwards) linked it to
+  the wrong line. The open example had the same fault and now comes first,
+  on information nothing else asks. A test keeps every example in the
+  order heard.
 - The AI copies each transcript (or writes its transcription or script) into
   the section's `transcript`. In the editor it shows, collapsed, as
   "Transcript (only you see it)" and can be edited.

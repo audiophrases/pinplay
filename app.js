@@ -5711,26 +5711,48 @@ function splitListeningTranscript(text) {
 // Where a type reads differently when its answers come from a recording.
 const LISTENING_PROMPT_TYPE_FIELDS = {
   context_gap: 'notes or a summary of what is heard, with each gap marked ____; "gaps": exactly one string per ____, in order. Two accepted answers for one gap go in that ONE string, comma-separated: ["15, fifteen"]. No hints in brackets: the answer comes from the recording.',
-  match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs. "left": who or what is heard about (Speaker 1, a person, a place, a day); "right": what matches it.',
+  match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 2 to 10 pairs, in the order heard. "left": who or what is heard about (Speaker 1, a person, a place, a day); "right": what matches it, a different one for each. One matching question is a whole task that runs through the recording, like the matching part of an exam: give it a section of its own (its recording, and no other question). If it has to share a recording, it is the section\'s first question and no other question asks about its pairs. "heard": where its first pair is said.',
   error_hunt: 'the prompt is ONLY a sentence with one detail that is wrong according to the recording. "correctedVariants": every full sentence, made true, that you accept; "corrected": the first of them.',
   open: 'the student writes an answer about the recording; the teacher grades it. No answer fields.',
 };
 
-// One short recording and a question of each type written from it.
+// One short recording and a question of each type written from it (matching
+// has its own: LISTENING_PROMPT_MATCH_EXAMPLE), each on its own information.
 const LISTENING_PROMPT_EXAMPLE = {
   text: 'You will hear Anna and Tom planning to meet. Answer the questions.',
   transcript: 'Anna: Hi Tom! Are we still meeting on Saturday?\nTom: Not Saturday, sorry, I\'m working. Can we do Sunday at half past ten?\nAnna: Sure. At the café on Bridge Street?\nTom: It\'s closed for repairs. Let\'s meet at the library instead. Bring your notebook: we need to finish the history project.\nAnna: OK. Is Emma coming?\nTom: Yes, and Leo too, but he\'ll be a bit late.',
   // In the order their answers are heard.
   questions: [
+    { type: 'open', prompt: 'Why does Tom change the day?', heard: 'Not Saturday, sorry, I\'m working.' },
     { type: 'text', prompt: 'What time will they meet?', accepted: ['10:30', 'half past ten', 'ten thirty'], heard: 'Can we do Sunday at half past ten?' },
     { type: 'tf', prompt: 'The café on Bridge Street is open as usual.', answers: [{ text: 'True', correct: false }, { text: 'False', correct: true }], heard: 'It\'s closed for repairs.' },
     { type: 'mcq', prompt: 'Where will they meet?', answers: [{ text: 'At the café', correct: false }, { text: 'At the library', correct: true }, { text: 'At Tom\'s work', correct: false }], heard: 'Let\'s meet at the library instead.' },
     { type: 'context_gap', prompt: 'Bring: your ____ for the ____ project.', gaps: ['notebook', 'history'], heard: 'Bring your notebook: we need to finish the history project.' },
     { type: 'multi', prompt: 'Who else is coming? Choose all the right answers.', answers: [{ text: 'Emma', correct: true }, { text: 'Leo', correct: true }, { text: 'Tom\'s sister', correct: false }], heard: 'Is Emma coming? Yes, and Leo too' },
     { type: 'error_hunt', prompt: 'Leo will arrive early.', correctedVariants: ['Leo will arrive late.', 'Leo will be late.', 'Leo will be a bit late.'], corrected: 'Leo will arrive late.', heard: 'but he\'ll be a bit late.' },
-    { type: 'match_pairs', prompt: 'Match each person with what they say or do.', pairs: [{ left: 'Anna', right: 'suggests the café' }, { left: 'Tom', right: 'is working on Saturday' }, { left: 'Emma', right: 'is coming too' }], heard: 'At the café on Bridge Street?' },
-    { type: 'open', prompt: 'Why can\'t they meet at the café?', heard: 'It\'s closed for repairs.' },
   ],
+};
+
+// A matching question runs through a whole recording, so the example gives it
+// a section of its own: a second, shorter recording (script: for "The AI
+// writes the script", the same words as the transcript).
+const LISTENING_PROMPT_MATCH_EXAMPLE = {
+  text: 'You will hear a teacher talking to students about a camping trip. For each person, choose what they will bring.',
+  transcript: 'Mr Hill: Right, the camping trip on Friday. Maya, can you bring the tent?\nMaya: Sure, my dad has a big one.\nMr Hill: Great. Sam, you\'re making the sandwiches.\nSam: OK. And Jake has the map, doesn\'t he?\nMr Hill: No, Lucy has the map. Jake, you bring the torch.',
+  script: `TITLE: Camping jobs
+LANGUAGE: English
+AMBIENCE: room
+VOICE Mr Hill: A British man in his forties with a calm, deep voice, friendly and organised, even conversational intonation.
+VOICE Maya: A British woman of about twenty with a soft, mid-range voice, relaxed and kind.
+VOICE Sam: A British man of about twenty with a mid-range voice, calm and easy-going.
+
+Mr Hill: Right, the camping trip on Friday. Maya, can you bring the tent?
+Maya: Sure, my dad has a big one.
+Mr Hill: Great. Sam, you're making the sandwiches.
+Sam (unsure): OK. And Jake has the map, doesn't he?
+Mr Hill: No, Lucy has the map. Jake, you bring the torch.`,
+  // Pairs in the order heard; "heard" is where the first pair is said.
+  question: { type: 'match_pairs', prompt: 'What will each person bring?', pairs: [{ left: 'Maya', right: 'a tent' }, { left: 'Sam', right: 'food' }, { left: 'Lucy', right: 'a map' }, { left: 'Jake', right: 'a torch' }], heard: 'Maya, can you bring the tent?' },
 };
 
 // The same recording with levels: two moments, one question per level each.
@@ -5854,17 +5876,32 @@ function buildListeningPrompt(req) {
   const exampleSource = levelled
     ? LISTENING_PROMPT_LEVEL_EXAMPLE.flatMap((moment) => levels.map((l) => (moment[l] ? { ...moment[l], cefr: l } : null)).filter(Boolean))
     : LISTENING_PROMPT_EXAMPLE.questions;
-  const exampleQuestions = exampleSource.filter((q) => allowed.includes(q.type))
-    .map((q, i) => ({ id: `q${i + 1}`, type: q.type, prompt: q.prompt, ...(q.cefr ? { cefr: q.cefr } : {}), points: 1000, timeLimit: 0, listeningSection: 'part1',
+  // One recording with a question of each chosen type, then (not levelled) a
+  // matching question in a section of its own. A part with no chosen type is
+  // left out, unless that would leave none.
+  const allParts = [
+    { ...LISTENING_PROMPT_EXAMPLE, script: LISTENING_PROMPT_SCRIPT_EXAMPLE, questions: exampleSource.filter((q) => allowed.includes(q.type)) },
+    ...(!levelled && allowed.includes('match_pairs') ? [{ ...LISTENING_PROMPT_MATCH_EXAMPLE, questions: [LISTENING_PROMPT_MATCH_EXAMPLE.question] }] : []),
+  ];
+  const exampleParts = allParts.filter((p) => p.questions.length);
+  if (!exampleParts.length) exampleParts.push(allParts[0]);
+  const exampleSections = [];
+  const exampleQuestions = [];
+  exampleParts.forEach((p, i) => {
+    const part = `part${i + 1}`;
+    const first = exampleQuestions.length + 1;
+    p.questions.forEach((q) => exampleQuestions.push({ id: `q${exampleQuestions.length + 1}`, type: q.type, prompt: q.prompt, ...(q.cefr ? { cefr: q.cefr } : {}), points: 1000, timeLimit: 0, listeningSection: part,
       ...JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(q).filter(([k]) => !['type', 'prompt', 'cefr'].includes(k))))) }));
-  const exampleSection = {
-    id: 'part1',
-    title: `Part 1 — Questions 1–${levelled ? LISTENING_PROMPT_LEVEL_EXAMPLE.length : exampleQuestions.length}`,
-    text: LISTENING_PROMPT_EXAMPLE.text,
-    transcript: source === 'write' ? LISTENING_PROMPT_SCRIPT_EXAMPLE : LISTENING_PROMPT_EXAMPLE.transcript,
-    playsAllowed: plays,
-    pauseAllowed: pause,
-  };
+    const last = levelled ? LISTENING_PROMPT_LEVEL_EXAMPLE.length : exampleQuestions.length;
+    exampleSections.push({
+      id: part,
+      title: `Part ${i + 1} — ${first === last ? `Question ${first}` : `Questions ${first}–${last}`}`,
+      text: p.text,
+      transcript: source === 'write' ? p.script : p.transcript,
+      playsAllowed: plays,
+      pauseAllowed: pause,
+    });
+  });
   const name = toSafeFilename(theme || 'listening');
 
   const out = [
@@ -5925,7 +5962,7 @@ function buildListeningPrompt(req) {
     '## Example',
     'Shape only: your recordings, questions and language come from the task above.',
     '```json',
-    `{"version": 3, "title": "Meeting on Sunday", "listeningSections": [\n  ${JSON.stringify(exampleSection)}\n], "questions": [\n${exampleQuestions.map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
+    `{"version": 3, "title": "Meeting on Sunday", "listeningSections": [\n${exampleSections.map((s) => `  ${JSON.stringify(s)}`).join(',\n')}\n], "questions": [\n${exampleQuestions.map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
     '```',
     '',
     'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions, follow the teacher. Only the JSON format and field names are fixed.',

@@ -18,7 +18,7 @@ before(() => {
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
-    'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
+    'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_MATCH_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
     'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
   ], { LISTENING_SCRIPT_RULES: require('../listening-script.js').LISTENING_SCRIPT_RULES });
   W = loadDeclarations(read('cloudflare/worker.js'), [
@@ -480,6 +480,11 @@ describe('listening prompt', () => {
     // Same words as the plain example, so its questions still fit.
     assert.equal(S.cleanListeningTranscript(transcript), A.LISTENING_PROMPT_EXAMPLE.transcript);
     assert.equal(W.normalizeQuiz(example).listeningSections[0].transcript, transcript);
+    // The matching part's script too.
+    const match = S.parseListeningScript(example.listeningSections[1].transcript);
+    assert.deepEqual(plain(match.notes), []);
+    assert.deepEqual(Object.keys(match.voices).sort(), ['Maya', 'Mr Hill', 'Sam']);
+    assert.equal(S.cleanListeningTranscript(example.listeningSections[1].transcript), A.LISTENING_PROMPT_MATCH_EXAMPLE.transcript);
     // Other modes work from real recordings: no script section.
     assert.equal(section(lbuild({ source: 'paste' }), 'Recording script'), '');
     assert.equal(section(lbuild({ source: 'attach' }), 'Recording script'), '');
@@ -528,13 +533,22 @@ describe('listening prompt', () => {
       assert.match(section(text, 'Rules'), /Every question has "heard": the words of the transcript where its answer is said, copied exactly/, source);
       assert.match(text, /"listeningSection", "heard", plus the fields of its type/, source);
     });
-    const said = A.LISTENING_PROMPT_EXAMPLE.transcript;
     [false, true].forEach((levelled) => {
       const example = lexample(lbuild({ selectedTypes: [...A.LISTENING_SECTION_TYPES], ...(levelled ? { levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] } : {}) }));
+      const said = (q) => example.listeningSections.find((s) => s.id === q.listeningSection).transcript;
       example.questions.forEach((q) => {
         assert.ok(q.heard, `${q.id} has no "heard"`);
-        // One sentence, or two from two speakers: each is in the transcript.
-        q.heard.split(/(?<=[.?!])\s+/).forEach((part) => assert.ok(said.includes(part), `${q.id}: "${part}"`));
+        // One sentence, or two from two speakers: each is in its section's transcript.
+        q.heard.split(/(?<=[.?!])\s+/).forEach((part) => assert.ok(said(q).includes(part), `${q.id}: "${part}"`));
+      });
+      // Questions follow the recording, as the prompt asks (the moment guess
+      // never goes backwards): within a level, never an earlier moment.
+      const at = {};
+      example.questions.forEach((q) => {
+        const key = `${q.listeningSection}|${q.cefr || ''}`;
+        const pos = said(q).indexOf(q.heard.split(/(?<=[.?!])\s+/)[0]);
+        assert.ok(pos >= (at[key] ?? 0), `${q.id} goes back in the recording`);
+        at[key] = pos;
       });
       // Imported, the quote stays with the question (teacher-only).
       const quiz = W.normalizeQuiz(example);
@@ -561,21 +575,42 @@ describe('listening prompt', () => {
     assert.match(A.buildListeningPrompt({ ...lbase, aiMode: 'agent' }).filename, /^prompt-agent-listening-weekend-plans\.md$/);
   });
 
-  it('the example survives the server\'s cleaner as one section with its transcript, and is gradable', () => {
+  it('the example survives the server\'s cleaner, its sections with their transcripts, and is gradable', () => {
     const example = lexample(lbuild({ selectedTypes: [...A.LISTENING_SECTION_TYPES] }));
     assert.deepEqual(new Set(example.questions.map((q) => q.type)), new Set(A.LISTENING_SECTION_TYPES));
     const quiz = W.normalizeQuiz(example);
     assert.equal(quiz.questions.length, example.questions.length);
-    assert.equal(quiz.listeningSections.length, 1);
-    assert.equal(quiz.listeningSections[0].transcript, A.LISTENING_PROMPT_EXAMPLE.transcript);
-    assert.equal(quiz.listeningSections[0].pauseAllowed, false);
+    assert.deepEqual(plain(quiz.listeningSections.map((s) => s.transcript)), [A.LISTENING_PROMPT_EXAMPLE.transcript, A.LISTENING_PROMPT_MATCH_EXAMPLE.transcript]);
+    assert.ok(quiz.listeningSections.every((s) => s.pauseAllowed === false));
     quiz.questions.forEach((q) => {
-      assert.equal(q.listeningSection, 'part1', q.id);
+      // Matching has a section of its own; everything else shares the first.
+      assert.equal(q.listeningSection, q.type === 'match_pairs' ? 'part2' : 'part1', q.id);
       if (GRADABLE[q.type]) assert.ok(GRADABLE[q.type](q), `${q.id} is not gradable: ${JSON.stringify(q)}`);
     });
+    assert.deepEqual(example.listeningSections.map((s) => s.title), ['Part 1 — Questions 1–7', 'Part 2 — Question 8']);
     // Every written answer in the example is actually said in its recording.
     const said = A.LISTENING_PROMPT_EXAMPLE.transcript.toLowerCase();
     quiz.questions.filter((q) => q.type === 'text').forEach((q) => assert.ok(q.accepted.some((a) => said.includes(String(a).toLowerCase())), q.id));
     quiz.questions.filter((q) => q.type === 'context_gap').forEach((q) => q.gaps.forEach((g) => assert.ok(said.includes(String(g).split(',')[0].trim().toLowerCase()), g)));
+    // Every person to match is named in the matching recording.
+    const matchSaid = A.LISTENING_PROMPT_MATCH_EXAMPLE.transcript;
+    quiz.questions.filter((q) => q.type === 'match_pairs').forEach((q) => q.pairs.forEach((p) => assert.ok(matchSaid.includes(p.left), p.left)));
+  });
+
+  it('shows matching as a section of its own, and only when it is chosen', () => {
+    assert.match(section(lbuild({ selectedTypes: ['match_pairs'] }), 'Quiz fields'), /give it a section of its own/);
+    // Matching alone: one section, the matching one.
+    const only = lexample(lbuild({ selectedTypes: ['match_pairs'] }));
+    assert.deepEqual(only.listeningSections.map((s) => s.id), ['part1']);
+    assert.equal(only.listeningSections[0].title, 'Part 1 — Question 1');
+    assert.equal(only.listeningSections[0].transcript, A.LISTENING_PROMPT_MATCH_EXAMPLE.transcript);
+    assert.deepEqual(only.questions.map((q) => [q.type, q.listeningSection]), [['match_pairs', 'part1']]);
+    // Not chosen: one section, no matching.
+    const none = lexample(lbuild());
+    assert.equal(none.listeningSections.length, 1);
+    assert.ok(none.questions.every((q) => q.type !== 'match_pairs'));
+    // Levelled examples are moment by moment: no matching part.
+    const levelled = lexample(lbuild({ levels: ['A2', 'B1'], selectedTypes: [...A.LISTENING_SECTION_TYPES] }));
+    assert.equal(levelled.listeningSections.length, 1);
   });
 });
