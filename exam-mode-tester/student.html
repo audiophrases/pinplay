@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Exam Mode Test</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #fff; --ink: #1c2333; --muted: #5b6478; --line: #d9deea;
+    --blue: #2563eb; --blue-soft: #e6eeff; --green: #15803d; --green-soft: #e3f6e8; --amber: #b45309;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #sentinel { position: fixed; top: 0; left: 0; right: 0; height: 4px; background: var(--blue); z-index: 10; pointer-events: none; }
+  .bar { position: sticky; top: 0; z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .bar h1 { font-size: 1.1rem; margin: 0 auto 0 0; }
+  .bar label { font-size: 0.9rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .bar input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; width: 12em; }
+  .pill { font-size: 0.85rem; padding: 4px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
+  .pill.ok { color: var(--green); border-color: #a7dcb5; background: var(--green-soft); }
+  .pill.bad { color: #b91c1c; border-color: #f2b8b8; background: #fdecec; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px 60px; }
+  .intro { background: var(--blue-soft); border: 1px solid #c3d4fb; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
+  .intro p { margin: 0.2em 0; }
+  ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .test { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: 2.2em 1fr; gap: 0 12px; }
+  .test.active { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .test.done { border-color: #a7dcb5; }
+  .num { width: 2em; height: 2em; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-weight: 700; color: var(--muted); }
+  .test.done .num { background: var(--green); color: #fff; }
+  .test.active .num { background: var(--blue); color: #fff; }
+  .test h3 { margin: 0.15em 0 0.2em; font-size: 1.05rem; }
+  .steps { margin: 0 0 10px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: inherit; font-weight: 600; border-radius: 10px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.outcome { background: var(--green-soft); border-color: #a7dcb5; color: #12532c; }
+  .result { color: var(--green); font-weight: 600; }
+  .hint { width: 100%; margin: 4px 0 2px; font-weight: 600; color: var(--blue); }
+  .note { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .optional { font-weight: 400; color: var(--amber); font-size: 0.85rem; }
+  details.feed { margin-top: 20px; }
+  details.feed summary { cursor: pointer; color: var(--muted); }
+  #feed { font: 12px/1.5 ui-monospace, Consolas, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="sentinel"></div>
+<div class="bar">
+  <h1>Exam mode test</h1>
+  <label>Chromebook name <input id="label" maxlength="60" placeholder="e.g. CB 12" autocomplete="off"></label>
+  <span id="conn" class="pill">Connecting…</span>
+  <span id="fsPill" class="pill">Full screen: off</span>
+  <button id="fsBtn" type="button" class="primary">Go full screen</button>
+</div>
+
+<main>
+  <div class="intro">
+    <p><strong>Your teacher is testing exam mode on this Chromebook.</strong></p>
+    <p>For each step: press <b>Start</b>, do what it says, then tap what happened. Go in order. Stay in full screen unless a step says otherwise.</p>
+  </div>
+  <ol id="tests"></ol>
+  <details class="feed">
+    <summary>What this page noticed (for your teacher)</summary>
+    <div id="feed"></div>
+  </details>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  // --- The checklist ---------------------------------------------------------
+  // Each test, when started, goes full screen (like a PinPlay exam) unless
+  // `fullscreen: false`. The outcomes are what the student saw; the page logs
+  // what the browser saw, and the teacher's dashboard puts the two side by side.
+  const WALLPAPER = [
+    { id: 'wallpaper', label: 'Wallpaper showed, then came back' },
+    { id: 'locked', label: 'It locked' },
+    { id: 'nothing', label: 'Nothing happened' },
+  ];
+  const TESTS = [
+    { id: 'keys', title: 'Keyboard check', steps: 'Type the letters a, s, d.',
+      outcomes: [{ id: 'done', label: 'Done' }] },
+    { id: 'lock-tap', title: 'Tap the lock key once', steps: 'Press the lock key 🔒 (top-right of the keyboard) and let go straight away. The wallpaper should flash, but the Chromebook should NOT lock.',
+      outcomes: WALLPAPER },
+    { id: 'lock-tap-3', title: 'Tap the lock key 3 times', steps: 'Same as before: three quick taps on 🔒, without locking.',
+      outcomes: WALLPAPER },
+    { id: 'lock-peek', title: 'Hold the lock key a little longer', steps: 'Hold 🔒 for as long as you can WITHOUT it locking (about half a second), then let go.',
+      outcomes: WALLPAPER },
+    { id: 'power-tap', title: 'Tap the power button', steps: 'If this Chromebook has a separate power button (on the side, or a top-right key), tap it once quickly. If there is none, choose the last option.',
+      outcomes: [
+        { id: 'menu', label: 'A power menu appeared' },
+        { id: 'screen-off', label: 'The screen went off' },
+        { id: 'wallpaper', label: 'Wallpaper showed' },
+        { id: 'none', label: 'Nothing / no power button' },
+      ] },
+    { id: 'overview', title: 'Show-windows key', steps: 'Press the show-windows key (top row: a box with two lines next to it). Then press it again to come back.',
+      outcomes: [{ id: 'shrank', label: 'Windows got small / wallpaper showed' }, { id: 'nothing', label: 'Nothing happened' }] },
+    { id: 'swipe3', title: 'Three-finger swipe', steps: 'Swipe UP with three fingers on the touchpad. Then swipe DOWN to come back.',
+      outcomes: [{ id: 'shrank', label: 'Windows got small / wallpaper showed' }, { id: 'nothing', label: 'Nothing happened' }] },
+    { id: 'swipe4', title: 'Four-finger swipe', steps: 'Swipe LEFT or RIGHT with four fingers on the touchpad, then swipe back.',
+      outcomes: [{ id: 'desk', label: 'It switched desk / showed something else' }, { id: 'nothing', label: 'Nothing happened' }] },
+    { id: 'launcher', title: 'Launcher key', steps: 'Tap the Search/Launcher key once (left side, where Caps Lock is on other keyboards). Then tap it again to close.',
+      outcomes: [{ id: 'opened', label: 'The launcher opened' }, { id: 'nothing', label: 'Nothing happened' }] },
+    { id: 'lock-full', title: 'Lock for real', steps: 'Hold 🔒 until the lock screen appears. Then sign back in.',
+      outcomes: [{ id: 'locked', label: 'It locked, I signed back in' }, { id: 'no', label: "It didn't lock" }] },
+    { id: 'search-l', title: 'Search + L', steps: 'Hold the Search/Launcher key and press L. Then sign back in.',
+      outcomes: [{ id: 'locked', label: 'It locked, I signed back in' }, { id: 'nothing', label: 'Nothing happened' }] },
+    { id: 'lid', title: 'Close the lid', optional: true, steps: 'Close the lid for 3 seconds, open it again, sign in if asked.',
+      outcomes: [{ id: 'done', label: 'Done' }, { id: 'skipped', label: 'Skipped' }] },
+    { id: 'new-tab', title: 'Open a new tab', steps: 'Press Ctrl + T. Then press Ctrl + W to close the new tab.',
+      outcomes: [{ id: 'done', label: 'Done' }] },
+    { id: 'esc', title: 'Leave full screen', steps: 'Press Esc once.',
+      outcomes: [{ id: 'done', label: 'Done' }] },
+    { id: 'other', title: 'Anything else', optional: true, note: true, steps: 'Try any other way to see the desktop or wallpaper. Write what you did.',
+      outcomes: [{ id: 'done', label: 'Done' }] },
+  ];
+
+  // --- Storage (sessionStorage: survives a reload, not a closed tab) ---------
+  const store = {
+    get(k, d) { try { const v = sessionStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch { } },
+  };
+  // crypto.randomUUID needs a secure context, and this page is plain http over the LAN.
+  const rid = (n) => { let s = ''; const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; for (let i = 0; i < n; i++) s += a[Math.floor(Math.random() * a.length)]; return s; };
+
+  let SESSION = store.get('emt.session', null);
+  if (!SESSION) { SESSION = 's-' + rid(10); store.set('emt.session', SESSION); }
+  const PAGE = rid(8);
+  const results = store.get('emt.results', {});
+  let label = store.get('emt.label', '');
+
+  // --- Event log ---------------------------------------------------------------
+  let seq = 0;
+  let runN = 0;
+  let run = null; // { id, test }
+  const queue = [];
+  const feedEl = document.getElementById('feed');
+
+  function log(type, data) {
+    const ev = Object.assign({
+      seq: ++seq, page: PAGE, t: Math.round(performance.now()), at: Date.now(), type,
+      run: run ? run.id : null, test: run ? run.test : null,
+      fs: !!document.fullscreenElement, vis: document.visibilityState, focus: document.hasFocus(),
+    }, data || {});
+    queue.push(ev);
+    addFeed(ev);
+    scheduleFlush(250);
+    return ev;
+  }
+
+  function addFeed(ev) {
+    const { seq: _s, page: _p, at: _a, run: _r, fs: _f, vis: _v, focus: _fo, t, type, test, ...rest } = ev;
+    const extra = Object.keys(rest).length ? ' ' + JSON.stringify(rest) : '';
+    const line = `${(t / 1000).toFixed(2)}s ${test ? '[' + test + '] ' : ''}${type}${extra}\n`;
+    feedEl.textContent = (line + feedEl.textContent).slice(0, 12000);
+  }
+
+  // --- Sending to the teacher's laptop ---------------------------------------
+  let flushTimer = null, flushing = false, lastOk = 0, failing = false;
+  const connEl = document.getElementById('conn');
+
+  function payload(events) { return { session: SESSION, label, ua: navigator.userAgent, events }; }
+
+  function scheduleFlush(delay) {
+    if (flushTimer) return;
+    flushTimer = setTimeout(flush, delay);
+  }
+
+  async function flush() {
+    flushTimer = null;
+    if (flushing) { scheduleFlush(200); return; }
+    flushing = true;
+    const batch = queue.slice(0, 150);
+    try {
+      const r = await fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload(batch)) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      queue.splice(0, batch.length); // the server ignores repeats, so a retry is safe
+      lastOk = Date.now();
+      failing = false;
+    } catch {
+      failing = true;
+    }
+    flushing = false;
+    renderConn();
+    if (queue.length) scheduleFlush(failing ? 1500 : 50);
+  }
+
+  function renderConn() {
+    if (failing) {
+      connEl.className = 'pill bad';
+      connEl.textContent = `Can't reach teacher's laptop (${queue.length} waiting)`;
+    } else if (lastOk) {
+      connEl.className = 'pill ok';
+      connEl.textContent = queue.length ? `Sending… (${queue.length})` : 'Connected ✓';
+    }
+  }
+
+  // Heartbeat: keeps "online" fresh on the dashboard and retries anything waiting.
+  setInterval(() => scheduleFlush(0), 3000);
+
+  function beacon() {
+    if (!queue.length) return;
+    try {
+      const blob = new Blob([JSON.stringify(payload(queue.slice(-100)))], { type: 'text/plain' });
+      navigator.sendBeacon('/api/log', blob);
+    } catch { }
+  }
+
+  // --- PinPlay's current exam-mode rules, copied from play.js ----------------
+  // So the dashboard can say whether PinPlay would have counted each test as
+  // "left the tab". `ppLost` mirrors examFocus.blurAt: one leave is counted,
+  // then nothing more until the student clicks (PinPlay's resume overlay) or,
+  // here only, comes back to the page, so repeated leaves each show up.
+  let ppLost = false, ppTotal = 0;
+  function ppCount(reason) {
+    if (ppLost) return;
+    ppLost = true;
+    ppTotal += 1;
+    log('pinplay-count', { reason, total: ppTotal });
+  }
+
+  // --- Everything the browser might tell us ----------------------------------
+  let lastVisChange = 0;
+
+  function keyInfo(e) {
+    return {
+      key: e.key, code: e.code, keyCode: e.keyCode, repeat: e.repeat,
+      mods: [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Search'].filter(Boolean).join('+'),
+    };
+  }
+  window.addEventListener('keydown', (e) => log('keydown', keyInfo(e)), true);
+  window.addEventListener('keyup', (e) => log('keyup', keyInfo(e)), true);
+
+  window.addEventListener('blur', () => {
+    log('blur', { active: document.activeElement ? document.activeElement.tagName : '' });
+    setTimeout(() => {
+      if (document.hasFocus()) return;
+      ppCount('window blur, focus left the page');
+    }, 0);
+  });
+  window.addEventListener('focus', () => log('focus'));
+
+  document.addEventListener('visibilitychange', () => {
+    lastVisChange = performance.now();
+    log('visibility', { state: document.visibilityState });
+    if (document.hidden) { ppCount('tab hidden'); scheduleFlush(0); }
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    const on = !!document.fullscreenElement;
+    log('fullscreen', { on });
+    renderFs();
+    if (on) return;
+    setTimeout(() => {
+      const tag = document.activeElement ? document.activeElement.tagName : '';
+      if (!document.hidden && (tag === 'IFRAME' || tag === 'VIDEO')) return;
+      ppCount('left full screen');
+    }, 0);
+  });
+  document.addEventListener('fullscreenerror', () => log('fullscreen-error'));
+
+  window.addEventListener('pagehide', (e) => { log('pagehide', { persisted: e.persisted }); beacon(); });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) log('pageshow', { persisted: true }); });
+  document.addEventListener('freeze', () => { log('freeze'); beacon(); });
+  document.addEventListener('resume', () => log('resume'));
+  window.addEventListener('online', () => log('online'));
+  window.addEventListener('offline', () => log('offline'));
+  window.addEventListener('resize', () => log('resize', { w: innerWidth, h: innerHeight }));
+  if (screen.orientation) screen.orientation.addEventListener('change', () => log('orientation', { type: screen.orientation.type }));
+
+  document.addEventListener('mouseout', (e) => { if (!e.relatedTarget) log('mouse-left', { x: e.clientX, y: e.clientY }); });
+  document.addEventListener('mouseover', (e) => { if (!e.relatedTarget) log('mouse-back', { x: e.clientX, y: e.clientY }); });
+
+  function describeTarget(el) {
+    if (!el || !el.tagName) return '';
+    return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.dataset && el.dataset.outcome ? '[' + el.dataset.outcome + ']' : '');
+  }
+  document.addEventListener('pointerdown', (e) => {
+    log('pointerdown', { target: describeTarget(e.target), pointer: e.pointerType });
+    ppLost = false; // like clicking PinPlay's "resume" overlay
+  }, true);
+  for (const type of ['pointercancel', 'touchcancel', 'contextmenu']) {
+    document.addEventListener(type, () => log(type), true);
+  }
+
+  // document.hasFocus() can change without a blur event reaching us.
+  let lastHasFocus = document.hasFocus();
+  setInterval(() => {
+    const f = document.hasFocus();
+    if (f === lastHasFocus) return;
+    lastHasFocus = f;
+    log('hasfocus', { value: f });
+    if (f && !document.hidden) ppLost = false;
+  }, 50);
+
+  // Window position/size, as the page sees them.
+  const geom = () => ({
+    sx: screenX, sy: screenY, ow: outerWidth, oh: outerHeight, iw: innerWidth, ih: innerHeight,
+    dpr: devicePixelRatio, sw: screen.width, sh: screen.height, aw: screen.availWidth, ah: screen.availHeight,
+  });
+  let lastGeom = geom();
+  setInterval(() => {
+    const g = geom();
+    const changed = {};
+    for (const k of Object.keys(g)) if (g[k] !== lastGeom[k]) changed[k] = [lastGeom[k], g[k]];
+    if (Object.keys(changed).length) { lastGeom = g; log('geometry', { changed }); }
+  }, 100);
+
+  // Frame and timer gaps: if ChromeOS pauses or slows the page while it
+  // animates, frames or timers arrive late even though the tab stays visible.
+  let lastFrame = performance.now();
+  function frame(now) {
+    const gap = now - lastFrame;
+    if (gap > 120 && !document.hidden && lastVisChange < lastFrame) log('raf-gap', { ms: Math.round(gap) });
+    lastFrame = now;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  let lastTick = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    const gap = now - lastTick;
+    if (gap > 400 && !document.hidden && lastVisChange < lastTick) log('timer-gap', { ms: Math.round(gap) });
+    lastTick = now;
+  }, 100);
+
+  // IntersectionObserver v2 says whether the element is actually visible
+  // (not covered or faded). Probably only sees our own page, but it's cheap.
+  let iov2 = false;
+  try {
+    let lastVisible = null;
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!('isVisible' in en)) continue;
+        iov2 = true;
+        if (en.isVisible !== lastVisible) { lastVisible = en.isVisible; log('iov2', { visible: en.isVisible }); }
+      }
+    }, { trackVisibility: true, delay: 100, threshold: [0, 1] });
+    io.observe(document.getElementById('sentinel'));
+  } catch { }
+
+  // --- Full screen -------------------------------------------------------------
+  const fsBtn = document.getElementById('fsBtn');
+  const fsPill = document.getElementById('fsPill');
+  function goFullscreen() {
+    if (document.fullscreenElement) return;
+    try {
+      const p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch((err) => log('fullscreen-error', { msg: String(err && err.message || err) }));
+    } catch (err) { log('fullscreen-error', { msg: String(err && err.message || err) }); }
+  }
+  function renderFs() {
+    const on = !!document.fullscreenElement;
+    fsPill.textContent = 'Full screen: ' + (on ? 'on' : 'off');
+    fsPill.className = 'pill ' + (on ? 'ok' : '');
+    fsBtn.hidden = on;
+  }
+  fsBtn.addEventListener('click', goFullscreen);
+
+  // --- Name ---------------------------------------------------------------------
+  const labelEl = document.getElementById('label');
+  labelEl.value = label;
+  labelEl.addEventListener('input', () => { label = labelEl.value.trim().slice(0, 60); store.set('emt.label', label); scheduleFlush(600); });
+
+  // --- Checklist UI ---------------------------------------------------------------
+  const listEl = document.getElementById('tests');
+  const cards = new Map();
+
+  function buildList() {
+    TESTS.forEach((tst, i) => {
+      const li = document.createElement('li');
+      li.className = 'test';
+      const num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = String(i + 1);
+      const body = document.createElement('div');
+      const h = document.createElement('h3');
+      h.textContent = tst.title;
+      if (tst.optional) { const o = document.createElement('span'); o.className = 'optional'; o.textContent = '  (optional)'; h.appendChild(o); }
+      const p = document.createElement('p');
+      p.className = 'steps';
+      p.textContent = tst.steps;
+
+      const startRow = document.createElement('div');
+      startRow.className = 'row';
+      const startBtn = document.createElement('button');
+      startBtn.type = 'button';
+      startBtn.className = 'primary';
+      startBtn.id = 'start-' + tst.id;
+      const resultEl = document.createElement('span');
+      resultEl.className = 'result';
+      startRow.append(startBtn, resultEl);
+
+      const outRow = document.createElement('div');
+      outRow.className = 'row';
+      outRow.hidden = true;
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = 'Now do it. Then tap what happened:';
+      outRow.appendChild(hint);
+      let noteEl = null;
+      if (tst.note) {
+        noteEl = document.createElement('input');
+        noteEl.className = 'note';
+        noteEl.placeholder = 'What did you do?';
+        noteEl.maxLength = 300;
+        outRow.appendChild(noteEl);
+      }
+      for (const o of tst.outcomes) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'outcome';
+        b.dataset.outcome = o.id;
+        b.textContent = o.label;
+        b.addEventListener('click', () => finishTest(tst, o, noteEl ? noteEl.value.trim() : ''));
+        outRow.appendChild(b);
+      }
+      startBtn.addEventListener('click', () => startTest(tst));
+
+      body.append(h, p, startRow, outRow);
+      li.append(num, body);
+      listEl.appendChild(li);
+      cards.set(tst.id, { li, startBtn, resultEl, outRow });
+    });
+    renderList();
+  }
+
+  function renderList() {
+    for (const tst of TESTS) {
+      const c = cards.get(tst.id);
+      const active = !!run && run.test === tst.id;
+      const done = results[tst.id];
+      c.li.classList.toggle('active', active);
+      c.li.classList.toggle('done', !!done && !active);
+      c.outRow.hidden = !active;
+      c.startBtn.hidden = active;
+      c.startBtn.textContent = done ? 'Do it again' : 'Start';
+      c.startBtn.className = done ? '' : 'primary';
+      c.resultEl.textContent = done && !active ? '✓ ' + done : '';
+    }
+  }
+
+  function startTest(tst) {
+    if (run) log('test-done', { outcome: 'abandoned', outcomeLabel: '(not finished)' });
+    run = { id: PAGE + ':' + (++runN), test: tst.id };
+    ppLost = false;
+    if (tst.fullscreen !== false) goFullscreen();
+    log('test-start', { title: tst.title });
+    renderList();
+    scheduleFlush(0);
+  }
+
+  function finishTest(tst, outcome, note) {
+    if (!run || run.test !== tst.id) return;
+    log('test-done', { outcome: outcome.id, outcomeLabel: outcome.label, note });
+    run = null;
+    results[tst.id] = outcome.label;
+    store.set('emt.results', results);
+    renderList();
+    scheduleFlush(0);
+    const idx = TESTS.indexOf(tst);
+    const next = TESTS[idx + 1] && cards.get(TESTS[idx + 1].id);
+    if (next) next.li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  buildList();
+  renderFs();
+  log('hello', {
+    secure: window.isSecureContext, w: innerWidth, h: innerHeight, dpr: devicePixelRatio,
+    screen: screen.width + 'x' + screen.height, hasFocus: document.hasFocus(),
+  });
+  setTimeout(() => log('capabilities', { iov2 }), 1500);
+  flush();
+})();
+</script>
+</body>
+</html>

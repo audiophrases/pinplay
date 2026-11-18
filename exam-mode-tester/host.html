@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Exam Mode Tester</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #fff; --ink: #1c2333; --muted: #5b6478; --line: #d9deea;
+    --blue: #2563eb; --blue-soft: #e6eeff; --green: #15803d; --green-soft: #e3f6e8;
+    --red: #b91c1c; --red-soft: #fdecec; --amber: #92400e; --amber-soft: #fef3c7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 1.3rem; margin: 0 0 14px; }
+  .url-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .url-card .label { color: var(--muted); }
+  .big-url { font: 700 clamp(1.6rem, 5vw, 2.8rem)/1.2 ui-monospace, Consolas, monospace; color: var(--blue); margin: 6px 0 10px; word-break: break-all; }
+  .url-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .others { margin-top: 10px; color: var(--muted); font-size: 0.9rem; }
+  .others code { color: var(--ink); }
+  button, .btn { font: inherit; font-weight: 600; border-radius: 9px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); text-decoration: none; display: inline-block; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  details.help { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; }
+  details.help summary { cursor: pointer; font-weight: 600; }
+  details.help li { margin: 4px 0; }
+  .waiting { color: var(--muted); text-align: center; padding: 40px 0; }
+  .session { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 18px; }
+  .s-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+  .s-head h2 { margin: 0; font-size: 1.15rem; }
+  .s-meta { color: var(--muted); font-size: 0.88rem; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #9aa3b5; margin-right: 5px; }
+  .dot.on { background: #22c55e; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
+  th { text-align: left; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  td { border-bottom: 1px solid #edf0f6; padding: 7px 8px; vertical-align: top; }
+  .verdict { font-weight: 700; white-space: nowrap; }
+  .verdict.yes { color: var(--green); }
+  .verdict.no { color: var(--red); }
+  .verdict.wait { color: var(--muted); font-weight: 400; }
+  .chip { display: inline-block; font-size: 0.8rem; padding: 1px 8px; border-radius: 999px; margin: 1px 4px 2px 0; white-space: nowrap; border: 1px solid transparent; }
+  .chip.strong { background: var(--red-soft); color: var(--red); border-color: #f2b8b8; }
+  .chip.weak { background: var(--amber-soft); color: var(--amber); border-color: #f5d98a; }
+  .chip.key { background: var(--blue-soft); color: #1e40af; border-color: #c3d4fb; }
+  .none { color: var(--muted); }
+  details.ev summary { cursor: pointer; color: var(--blue); font-size: 0.85rem; }
+  pre { font: 12px/1.5 ui-monospace, Consolas, monospace; background: #f7f8fc; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0 0; max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  .legend { margin-top: 10px; font-size: 0.82rem; color: var(--muted); }
+  .feed-title { margin: 16px 0 0; font-size: 0.95rem; }
+  footer { margin-top: 24px; color: var(--muted); font-size: 0.85rem; }
+  @media (max-width: 720px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Exam mode tester</h1>
+
+  <section class="url-card">
+    <div class="label">On the student's Chromebook, open Chrome and type:</div>
+    <div class="big-url" id="mainUrl">…</div>
+    <div class="url-row">
+      <button class="primary" id="copyBtn" type="button">Copy</button>
+      <span class="s-meta" id="mainNet"></span>
+    </div>
+    <div class="others" id="others"></div>
+  </section>
+
+  <details class="help">
+    <summary>The Chromebook can't open the address?</summary>
+    <ol>
+      <li><b>Windows firewall.</b> The first time, Windows asks whether Node.js may use the network. Tick <i>Private networks</i> and click <i>Allow</i>. If you missed it: Start → "Allow an app through Windows Firewall" → find Node.js → tick Private (and Public if your Wi-Fi is set as public).</li>
+      <li><b>Same network.</b> Both machines must be on the same Wi-Fi. School Wi-Fi often blocks devices from talking to each other. If so, on this laptop turn on <i>Settings → Network → Mobile hotspot</i>, connect the Chromebook to that hotspot, and reload this page: the hotspot address (192.168.137.1) appears above.</li>
+      <li><b>Blocked sites.</b> If the student account blocks the address, sign in to the Chromebook with another account. The lock key behaves the same, since ChromeOS handles it, not the account.</li>
+      <li>Type the address exactly, starting with <code>http://</code> (not https).</li>
+    </ol>
+  </details>
+
+  <div id="sessions"><p class="waiting">Waiting for a Chromebook to connect…</p></div>
+
+  <p class="legend">
+    <b>PinPlay counted it?</b> applies PinPlay's current exam-mode rules (tab hidden, focus left the page, left full screen).
+    <b>Other signals</b> are anything else the browser reported during the test that a fix could use:
+    <span class="chip strong">strong</span> focus or visibility,
+    <span class="chip weak">weak</span> timing or window changes,
+    <span class="chip key">key</span> a key event reached the page.
+  </p>
+  <footer id="footer"></footer>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // --- Student URL -----------------------------------------------------------
+  const KIND = { wifi: 'Wi-Fi', hotspot: 'Mobile hotspot', ethernet: 'Ethernet', other: 'network', virtual: 'virtual adapter (probably not this one)' };
+  async function loadInfo() {
+    try {
+      const info = await (await fetch('/api/info', { cache: 'no-store' })).json();
+      const [main, ...rest] = info.addresses || [];
+      if (!main) {
+        $('mainUrl').textContent = 'No network found';
+        $('mainNet').textContent = 'Connect this laptop to Wi-Fi (or turn on Mobile hotspot), then reload.';
+      } else {
+        $('mainUrl').textContent = main.url;
+        $('mainNet').textContent = `via ${KIND[main.kind] || main.kind} (${main.name})`;
+        $('copyBtn').onclick = async () => {
+          try { await navigator.clipboard.writeText(main.url); $('copyBtn').textContent = 'Copied ✓'; } catch { $('copyBtn').textContent = 'Copy failed'; }
+          setTimeout(() => { $('copyBtn').textContent = 'Copy'; }, 1500);
+        };
+      }
+      $('others').innerHTML = rest.length
+        ? 'If that doesn’t work, try: ' + rest.map((a) => `<code>${esc(a.url)}</code> <span>(${esc(KIND[a.kind] || a.kind)})</span>`).join(' · ')
+        : '';
+      $('footer').textContent = 'Logs are saved on this laptop in ' + info.logDir;
+    } catch {
+      $('mainUrl').textContent = 'Server not running';
+    }
+  }
+
+  // --- Reading the events ----------------------------------------------------
+  function classify(ev) {
+    switch (ev.type) {
+      case 'blur': return { level: 'strong', label: 'window blur' };
+      case 'visibility': return ev.state === 'hidden' ? { level: 'strong', label: 'tab hidden' } : null;
+      case 'fullscreen': return ev.on ? null : { level: 'strong', label: 'left full screen' };
+      case 'hasfocus': return ev.value ? null : { level: 'strong', label: 'lost focus' };
+      case 'pagehide': case 'freeze': return { level: 'strong', label: ev.type };
+      case 'keydown': case 'keyup': {
+        const name = ev.code || ev.key || '?';
+        return { level: 'key', label: name + (ev.type === 'keydown' ? ' ↓' : ' ↑') };
+      }
+      case 'mouse-left': return { level: 'weak', label: 'mouse left page' };
+      case 'raf-gap': return { level: 'weak', label: 'frame gap' };
+      case 'timer-gap': return { level: 'weak', label: 'timer gap' };
+      case 'geometry': case 'resize': return { level: 'weak', label: 'window changed' };
+      case 'pointercancel': case 'touchcancel': return { level: 'weak', label: ev.type };
+      case 'iov2': return ev.visible ? null : { level: 'weak', label: 'covered (IntersectionObserver)' };
+      case 'offline': return { level: 'weak', label: 'offline' };
+      case 'orientation': return { level: 'weak', label: 'orientation' };
+      default: return null;
+    }
+  }
+
+  function describe(ev) {
+    switch (ev.type) {
+      case 'keydown': case 'keyup':
+        return `${ev.type} key="${ev.key}" code="${ev.code}" keyCode=${ev.keyCode}${ev.mods ? ' with ' + ev.mods : ''}${ev.repeat ? ' (repeat)' : ''}`;
+      case 'visibility': return `tab ${ev.state}`;
+      case 'fullscreen': return ev.on ? 'entered full screen' : 'left full screen';
+      case 'hasfocus': return ev.value ? 'page has focus again' : 'page lost focus (document.hasFocus)';
+      case 'blur': return `window blur (focused element: ${ev.active || '?'})`;
+      case 'focus': return 'window focus';
+      case 'pinplay-count': return `PINPLAY COUNTS A LEAVE: ${ev.reason}`;
+      case 'raf-gap': return `animation frames stopped for ${ev.ms} ms`;
+      case 'timer-gap': return `timers stopped for ${ev.ms} ms`;
+      case 'geometry': return 'window numbers changed: ' + Object.entries(ev.changed || {}).map(([k, v]) => `${k} ${v[0]}→${v[1]}`).join(', ');
+      case 'resize': return `resize to ${ev.w}×${ev.h}`;
+      case 'mouse-left': return `mouse left the page at ${ev.x},${ev.y}`;
+      case 'mouse-back': return 'mouse came back';
+      case 'iov2': return ev.visible ? 'visible again (IntersectionObserver v2)' : 'covered or faded (IntersectionObserver v2)';
+      case 'pointerdown': return `${ev.pointer || 'pointer'} down on ${ev.target}`;
+      case 'test-start': return `▶ START ${ev.title}`;
+      case 'test-done': return `■ DONE: ${ev.outcomeLabel}${ev.note ? ' — "' + ev.note + '"' : ''}`;
+      case 'hello': return `page loaded (${ev.w}×${ev.h}, screen ${ev.screen}, secure=${ev.secure})`;
+      case 'capabilities': return `IntersectionObserver v2 available: ${ev.iov2}`;
+      case 'pagehide': return `pagehide (persisted=${ev.persisted})`;
+      case 'fullscreen-error': return `full screen refused${ev.msg ? ': ' + ev.msg : ''}`;
+      default: return ev.type;
+    }
+  }
+
+  function buildRuns(events) {
+    const runs = new Map();
+    const order = [];
+    for (const ev of events) {
+      if (!ev.run) continue;
+      let r = runs.get(ev.run);
+      if (!r) {
+        r = { id: ev.run, test: ev.test, title: ev.test, start: ev.at, end: null, outcome: null, note: '', events: [] };
+        runs.set(ev.run, r);
+        order.push(r);
+      }
+      if (ev.type === 'test-start') { r.title = ev.title || r.title; r.start = ev.at; }
+      else if (ev.type === 'test-done') { r.outcome = ev.outcomeLabel || ev.outcome; r.note = ev.note || ''; r.end = ev.at; }
+      else r.events.push(ev);
+    }
+    return order;
+  }
+
+  function chipsFor(evts) {
+    const groups = new Map();
+    for (const ev of evts) {
+      const c = classify(ev);
+      if (!c) continue;
+      const k = c.level + '|' + c.label;
+      const g = groups.get(k) || { ...c, n: 0 };
+      g.n += 1;
+      groups.set(k, g);
+    }
+    const rank = { strong: 0, weak: 1, key: 2 };
+    return [...groups.values()].sort((a, b) => rank[a.level] - rank[b.level]);
+  }
+
+  function shortUa(ua) {
+    const cros = /CrOS \S+ ([\d.]+)/.exec(ua || '');
+    const chrome = /Chrome\/([\d.]+)/.exec(ua || '');
+    if (cros) return `ChromeOS (Chrome ${chrome ? chrome[1].split('.')[0] : '?'})`;
+    if (/Windows/.test(ua)) return 'Windows (not a Chromebook)';
+    if (/Mac OS/.test(ua)) return 'Mac (not a Chromebook)';
+    if (/Android/.test(ua)) return 'Android (not a Chromebook)';
+    return 'Unknown device';
+  }
+
+  const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const ago = (now, t) => { const s = Math.max(0, Math.round((now - t) / 1000)); return s < 60 ? `${s}s ago` : `${Math.round(s / 60)} min ago`; };
+
+  // --- Rendering ---------------------------------------------------------------
+  const openDetails = new Set();
+  document.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (!d.dataset || !d.dataset.key) return;
+    if (d.open) openDetails.add(d.dataset.key); else openDetails.delete(d.dataset.key);
+  }, true);
+
+  function renderSession(s, now) {
+    const events = s.events.slice().sort((a, b) => (a.at - b.at) || (a.seq - b.seq));
+    const runs = buildRuns(events);
+    const online = now - s.lastSeen < 8000;
+    const counted = events.filter((e) => e.type === 'pinplay-count').length;
+
+    const rows = runs.map((r, i) => {
+      const pp = r.events.filter((e) => e.type === 'pinplay-count');
+      const finished = !!r.outcome;
+      let verdict;
+      if (pp.length) verdict = `<span class="verdict yes">✔ yes${pp.length > 1 ? ' ×' + pp.length : ''}</span>`;
+      else if (!finished) verdict = '<span class="verdict wait">in progress…</span>';
+      else verdict = '<span class="verdict no">✘ no</span>';
+      const chips = chipsFor(r.events);
+      const chipHtml = chips.length
+        ? chips.map((c) => `<span class="chip ${c.level}">${esc(c.label)}${c.n > 1 ? ' ×' + c.n : ''}</span>`).join('')
+        : (finished ? '<span class="none">none</span>' : '');
+      const key = s.id + '|' + r.id;
+      const lines = [{ at: r.start, type: 'test-start', title: r.title }].concat(r.events);
+      if (finished) lines.push({ at: r.end, type: 'test-done', outcomeLabel: r.outcome, note: r.note });
+      const detail = lines.map((e) => `+${((e.at - r.start) / 1000).toFixed(2)}s  ${describe(e)}`).join('\n');
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><b>${esc(r.title)}</b>
+          <details class="ev" data-key="${esc(key)}"${openDetails.has(key) ? ' open' : ''}><summary>${r.events.length} events</summary><pre>${esc(detail)}</pre></details></td>
+        <td>${finished ? esc(r.outcome) + (r.note ? `<div class="s-meta">"${esc(r.note)}"</div>` : '') : '<span class="none">—</span>'}</td>
+        <td>${verdict}</td>
+        <td>${chipHtml}</td>
+      </tr>`;
+    }).join('');
+
+    const feedKey = s.id + '|feed';
+    const feed = events.slice(-40).reverse()
+      .map((e) => `${fmtTime(e.at)}  ${e.test ? '[' + e.test + '] ' : ''}${describe(e)}`).join('\n');
+
+    return `<section class="session">
+      <div class="s-head">
+        <h2><span class="dot ${online ? 'on' : ''}"></span>${esc(s.label || 'Unnamed Chromebook')}</h2>
+        <span class="s-meta">${esc(shortUa(s.ua))} · ${esc(s.ip)} · ${online ? 'online' : 'last seen ' + ago(now, s.lastSeen)} · ${events.length} events · PinPlay counted ${counted} leave${counted === 1 ? '' : 's'}</span>
+        <a class="btn" href="/api/download?id=${encodeURIComponent(s.id)}">Download log</a>
+      </div>
+      ${runs.length ? `<table>
+        <thead><tr><th>#</th><th>Test</th><th>Student says</th><th>PinPlay counted it?</th><th>Other signals</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<p class="s-meta">Connected. No test started yet.</p>'}
+      <details class="ev" data-key="${esc(feedKey)}"${openDetails.has(feedKey) ? ' open' : ''}>
+        <summary>Live events (newest first)</summary><pre>${esc(feed)}</pre>
+      </details>
+    </section>`;
+  }
+
+  let lastSig = '';
+  async function poll() {
+    try {
+      const data = await (await fetch('/api/sessions', { cache: 'no-store' })).json();
+      const sessions = data.sessions || [];
+      // Re-render when something changed, or every ~5 s for the "last seen" text.
+      const sig = sessions.map((s) => s.id + ':' + s.events.length + ':' + s.label + ':' + (data.now - s.lastSeen < 8000)).join('|') + ':' + Math.floor(data.now / 5000);
+      if (sig !== lastSig) {
+        lastSig = sig;
+        $('sessions').innerHTML = sessions.length
+          ? sessions.map((s) => renderSession(s, data.now)).join('')
+          : '<p class="waiting">Waiting for a Chromebook to connect…</p>';
+      }
+    } catch { }
+    setTimeout(poll, 1000);
+  }
+
+  loadInfo();
+  poll();
+})();
+</script>
+</body>
+</html>

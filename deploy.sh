@@ -9,7 +9,7 @@ rsync -a --delete --delete-excluded \
   --exclude='.git' --exclude='.wrangler' --exclude='.codegraph' --exclude='.claude' --exclude='node_modules' \
   --exclude='.vscode' --exclude='.githooks' --exclude='__pycache__' \
   --exclude='cloudflare' --exclude='tests' --exclude='_site' \
-  --exclude='question-bank' --exclude='listening-studio' --exclude='.generated' \
+  --exclude='question-bank' --exclude='listening-studio' --exclude='exam-mode-tester' --exclude='.generated' \
   --exclude='*.cmd' --exclude='*.bat' --exclude='*.sh' --exclude='*.log' --exclude='*.jsonc' \
   --exclude='*.toml' --exclude='*.md' --exclude='.gitignore' --exclude='.gitattributes' --exclude='.wranglerignore' \
   --exclude='test*.js' --exclude='out*.txt' --exclude='REVERT-commit-*.txt' --exclude='t8.mp3' --exclude='feedback-test.html' \

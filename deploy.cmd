@@ -7,7 +7,7 @@ rem computer), the setup wizard's generated files, editor and git settings,
 rem and scratch files (test*.js, out*.txt, the REVERT note, t8.mp3).
 if exist _site rmdir /s /q _site
 mkdir _site
-robocopy . _site /S /XD .git .wrangler .codegraph .claude .vscode .githooks node_modules __pycache__ cloudflare tests _site question-bank listening-studio .generated /XF *.cmd *.bat *.sh *.log *.jsonc *.toml *.md .gitignore .gitattributes .wranglerignore test*.js out*.txt REVERT-commit-*.txt t8.mp3 feedback-test.html > nul
+robocopy . _site /S /XD .git .wrangler .codegraph .claude .vscode .githooks node_modules __pycache__ cloudflare tests _site question-bank listening-studio exam-mode-tester .generated /XF *.cmd *.bat *.sh *.log *.jsonc *.toml *.md .gitignore .gitattributes .wranglerignore test*.js out*.txt REVERT-commit-*.txt t8.mp3 feedback-test.html > nul
 
 echo.
 echo Deploying Assets (pinplay-cdn)...
