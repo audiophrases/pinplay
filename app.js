@@ -17711,7 +17711,7 @@ async function launchStudentPreviewAssignment({ button = null, statusEl = hostSt
     if (previewPoll?.editor) previewPoll.win?.close();
     cleanupPreviewPoll();
 
-    await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false, materializeTts: true });
+    await ensureQuizMediaReady({ contextLabel: 'student preview', convertTtsToMp3: true, strictMediaCheck: false, materializeTts: true, requirePreviewAudio: !!editorQuestionId });
 
     const payload = normalizeQuizForLive(quiz);
     if (editorQuestionId && !payload.questions.some(q => q.id === editorQuestionId)) {
@@ -21088,7 +21088,7 @@ function prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud) {
   return null;
 }
 
-async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false } = {}) {
+async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false, requirePreviewAudio = false } = {}) {
   normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
@@ -21185,7 +21185,13 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     // once and reused; we only materialize it on R2 at publish boundaries
     // (materializeTts), not on every local save / media check.
     const ttsClip = prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud);
-    if (ttsClip) {
+    if (ttsClip && requirePreviewAudio) {
+      // The server confirms the stored clip and supplies its canonical key.
+      if (!q.listeningSection && !(q.audioMode === 'file' && q.audioData)) {
+        pendingTts.push({ q, ...ttsClip, questionNumber: i + 1 });
+        q.audioEnabled = true;
+      }
+    } else if (ttsClip) {
       try {
         q.ttsAudioKey = await computeTtsAudioKey(ttsClip.voice, ttsClip.text);
         q.audioEnabled = true; // this question has playable TTS audio (incl. quiz-wide read-aloud)
@@ -21211,14 +21217,26 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   if (pendingTts.length) {
     setProgress(`🔄 Preparing ${pendingTts.length} question audio clip(s)...`);
     try {
-      const keys = await ensureTtsAudioBatchOnR2(pendingTts.map(({ voice, text }) => ({ voice, text })));
-      if (Array.isArray(keys)) {
-        pendingTts.forEach((item, idx) => {
-          const k = keys[idx];
-          if (k) { item.q.ttsAudioKey = k; uploaded += 1; }
-        });
+      const batchSize = requirePreviewAudio ? MEDIA_TTS_CHUNK : pendingTts.length;
+      for (let offset = 0; offset < pendingTts.length; offset += batchSize) {
+        const batch = pendingTts.slice(offset, offset + batchSize);
+        const keys = await ensureTtsAudioBatchOnR2(batch.map(({ voice, text }) => ({ voice, text })));
+        for (const [idx, item] of batch.entries()) {
+          const key = keys?.[idx];
+          if (key) {
+            item.q.ttsAudioKey = key;
+            uploaded += 1;
+          } else if (item.questionNumber) {
+            item.q.ttsAudioKey = '';
+            throw new Error(`Could not prepare audio for question ${item.questionNumber}. Try preview again.`);
+          }
+        }
       }
     } catch (err) {
+      if (requirePreviewAudio) {
+        setProgress(err.message, 'bad');
+        throw err;
+      }
       console.warn('TTS batch prepare failed:', err?.message || err);
     }
   }
@@ -23426,6 +23444,7 @@ function questionSpeechText(question) {
 
 function normalizeImportedQuestion(q) {
   const next = { ...q };
+  if (!next.audioMode && next.audioText && !next.audioData) next.audioMode = 'tts';
   if (!next.prompt && next.question) next.prompt = next.question;
   // An AI quiz's "heard" (the words where the answer is said) becomes the quote.
   if ('heard' in next) {
