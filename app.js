@@ -21096,19 +21096,68 @@ async function ensureTtsAudioOnR2(voice, text, rate = '+0%') {
   return String(data?.key || '') || null;
 }
 
-// Materialize many TTS clips in a single authed request (one auth check, not N).
-// Returns an array of canonical keys aligned to `items` (null where it failed).
-async function ensureTtsAudioBatchOnR2(items, rate = '+0%') {
+// A Worker on the free plan may make 50 outbound calls per request, and
+// /api/tts/ensure-batch makes one Edge call per voice segment of every clip it
+// has not stored yet (a bilingual slide can have 16). Past 50 every clip fails
+// with "Too many subrequests", so the clips are packed into requests of at most
+// this many segments, counting each clip as not stored.
+const TTS_EDGE_CALLS_PER_REQUEST = 45;
+// Requests sent at the same time: each one is its own Worker invocation.
+const TTS_BATCH_PARALLEL = 3;
+
+// Splits clips ({ voice, text }) into groups of indexes whose segments fit one
+// request. A clip with more segments than that goes alone.
+function packTtsBatches(clips) {
+  const groups = [];
+  let group = [];
+  let calls = 0;
+  clips.forEach(({ voice, text }, index) => {
+    const cost = Math.max(1, splitTtsSegments(text, voice).length);
+    if (group.length && calls + cost > TTS_EDGE_CALLS_PER_REQUEST) {
+      groups.push(group);
+      group = [];
+      calls = 0;
+    }
+    group.push(index);
+    calls += cost;
+  });
+  if (group.length) groups.push(group);
+  return groups;
+}
+
+// Materialize many TTS clips with a few authed requests (one auth check per
+// request, not per clip). Returns an array of canonical keys aligned to `items`
+// (null where it failed). onProgress(done, total) follows the requests.
+async function ensureTtsAudioBatchOnR2(items, rate = '+0%', onProgress = null) {
   if (!createSessionPassword || !items?.length) return null;
   const base = loadBackendUrl() || 'https://api.pinplay.win';
-  const res = await fetch(`${base}/api/tts/ensure-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionPassword}` },
-    body: JSON.stringify({ items: items.map(({ voice, text }) => ({ voice, text: String(text || '').slice(0, 1200), rate })) }),
-  });
-  if (!res.ok) throw new Error(`TTS batch ensure failed (${res.status})`);
-  const data = await res.json();
-  return Array.isArray(data?.results) ? data.results.map((r) => (r?.ok ? String(r.key || '') || null : null)) : null;
+  const clips = items.map(({ voice, text }) => ({ voice, text: String(text || '').slice(0, 1200), rate }));
+  const groups = packTtsBatches(clips);
+  const keys = clips.map(() => null);
+  let next = 0;
+  let done = 0;
+  const sendGroups = async () => {
+    while (next < groups.length) {
+      const group = groups[next];
+      next += 1;
+      const res = await fetch(`${base}/api/tts/ensure-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionPassword}` },
+        body: JSON.stringify({ items: group.map((i) => clips[i]) }),
+      });
+      if (!res.ok) throw new Error(`TTS batch ensure failed (${res.status})`);
+      const data = await res.json();
+      const results = Array.isArray(data?.results) ? data.results : [];
+      group.forEach((i, k) => {
+        const r = results[k];
+        keys[i] = r?.ok ? String(r.key || '') || null : null;
+      });
+      done += group.length;
+      if (onProgress) onProgress(done, clips.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(TTS_BATCH_PARALLEL, groups.length) }, sendGroups));
+  return keys;
 }
 
 // Whether an imported quiz reads every question aloud. The file's own
@@ -21289,19 +21338,19 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
   if (pendingTts.length) {
     setProgress(`🔄 Preparing ${pendingTts.length} question audio clip(s)...`);
     try {
-      const batchSize = requirePreviewAudio ? MEDIA_TTS_CHUNK : pendingTts.length;
-      for (let offset = 0; offset < pendingTts.length; offset += batchSize) {
-        const batch = pendingTts.slice(offset, offset + batchSize);
-        const keys = await ensureTtsAudioBatchOnR2(batch.map(({ voice, text }) => ({ voice, text })));
-        for (const [idx, item] of batch.entries()) {
-          const key = keys?.[idx];
-          if (key) {
-            item.q.ttsAudioKey = key;
-            uploaded += 1;
-          } else if (item.questionNumber) {
-            item.q.ttsAudioKey = '';
-            throw new Error(`Could not prepare audio for question ${item.questionNumber}. Try preview again.`);
-          }
+      const keys = await ensureTtsAudioBatchOnR2(
+        pendingTts.map(({ voice, text }) => ({ voice, text })),
+        '+0%',
+        (done, total) => setProgress(`🔄 Preparing question audio: ${done}/${total}`),
+      );
+      for (const [idx, item] of pendingTts.entries()) {
+        const key = keys?.[idx];
+        if (key) {
+          item.q.ttsAudioKey = key;
+          uploaded += 1;
+        } else if (item.questionNumber) {
+          item.q.ttsAudioKey = '';
+          throw new Error(`Could not prepare audio for question ${item.questionNumber}. Try preview again.`);
         }
       }
     } catch (err) {

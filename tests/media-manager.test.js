@@ -26,7 +26,7 @@ const NAMES = [
   'generateMissingVisualFor', 'regenerateVisualFor', 'removeMediaFrom', 'mediaManagerState',
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll', 'questionWantsTts', 'prepareQuestionTts',
-  'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
+  'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
   'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
@@ -517,6 +517,34 @@ describe('generateMissingTtsFor', () => {
     assert.equal(questions[7].ttsAudioKey, '');
     assert.equal(outcomes.get(questions[8]).status, 'filled');
     assert.match(questions[8].ttsAudioKey, /^ws\/tts\//);
+  });
+
+  it('keeps every request under the Worker\'s 50 outbound calls when clips switch voices', async () => {
+    // A bilingual slide is one Edge call per segment: 25 such clips in one
+    // request made the Worker fail with "Too many subrequests" past call 50.
+    const requests = [];
+    const { A, sandbox } = load((url, opts) => {
+      const items = JSON.parse(opts.body).items;
+      requests.push(items.reduce((n, it) => n + A.splitTtsSegments(it.text, it.voice).length, 0));
+      return jsonRes(200, { results: items.map((it) => ({ ok: true, key: `ws/tts/${it.text.length}-${it.text.slice(-3)}.mp3` })) });
+    });
+    sandbox.createSessionPassword = 'secret';
+    const switches = (n, tag) => Array.from({ length: n }, (_, k) => `[ca] part ${k} [en] word${k}`).join(' ') + tag;
+    const items = Array.from({ length: 25 }, (_, i) => ({ voice: 'en-US-AriaNeural', text: switches(1 + (i % 8), `#${String(i).padStart(2, '0')}`) }));
+    const progress = [];
+    const keys = await A.ensureTtsAudioBatchOnR2(items, '+0%', (done, total) => progress.push([done, total]));
+    assert.ok(requests.length > 1, 'split into several requests');
+    assert.ok(requests.every((n) => n <= 45), `segments per request: ${requests.join(', ')}`);
+    assert.equal(keys.length, 25);
+    keys.forEach((key, i) => assert.ok(key.endsWith(`#${String(i).padStart(2, '0')}.mp3`), `key ${i} lines up with its clip`));
+    assert.deepEqual(progress.at(-1), [25, 25]);
+  });
+
+  it('sends a clip with more segments than one request allows on its own', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const big = { voice: 'en-US-AriaNeural', text: Array.from({ length: 30 }, (_, k) => `[ca] a${k} [en] b${k}`).join(' ') };
+    const small = { voice: 'en-US-AriaNeural', text: 'Hello' };
+    assert.equal(JSON.stringify(A.packTtsBatches([small, big, small])), '[[0],[1],[2]]');
   });
 
   it('when not signed in, computes the keys and leaves R2 to the next publish', async () => {
