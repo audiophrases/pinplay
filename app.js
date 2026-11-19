@@ -15254,6 +15254,7 @@ function slideTextLineCount(el) {
 }
 function fitSlideText(el, minPx, fits, priority = '') {
   el.style.removeProperty('font-size');
+  el.style.removeProperty('--slide-line-gap');
   const start = parseFloat(getComputedStyle(el).fontSize) || 48;
   const setSize = (px) => el.style.setProperty('font-size', `${px}px`, priority);
   let size = start;
@@ -15294,6 +15295,36 @@ function fitSlideText(el, minPx, fits, priority = '') {
   return size;
 }
 
+// Each typed line of a teaching slide is its own block, so room left under
+// the text spreads the lines apart and each idea or example stands on its own;
+// the wrapped parts of one line stay together. At most 0.8 of the letter
+// height goes between two lines. Mirrored in app.js and play.js.
+const SLIDE_LINE_GAP_MAX_EM = 0.8;
+function slideLinesHtml(text) {
+  return formatReadingTextHtml(text).split(/\r?\n/)
+    .map((line) => `<span class="slide-line">${line.trim() ? line : ''}</span>`)
+    .join('');
+}
+function spreadSlideLines(el, fits) {
+  el.style.removeProperty('--slide-line-gap');
+  if (el.querySelectorAll('.slide-line').length < 2) return 0;
+  const setGap = (px) => el.style.setProperty('--slide-line-gap', `${px}px`);
+  let lo = 0;
+  let hi = (parseFloat(getComputedStyle(el).fontSize) || 16) * SLIDE_LINE_GAP_MAX_EM;
+  setGap(hi);
+  if (fits()) return hi;
+  while (hi - lo > 0.5) {
+    const mid = (lo + hi) / 2;
+    setGap(mid);
+    if (fits()) lo = mid;
+    else hi = mid;
+  }
+  lo = Math.floor(lo);
+  if (lo > 0) setGap(lo);
+  else el.style.removeProperty('--slide-line-gap');
+  return lo;
+}
+
 // A teaching slide on the projector: the text takes the full width. With
 // nothing under it, it may fill the screen down to the bottom edge; with a
 // picture, video or text under it, about two thirds of the screen.
@@ -15305,12 +15336,15 @@ function fitHostSlidePrompt() {
   hostQuestionPromptEl.style.removeProperty('font-size');
   if (hostQuestionCardEl?.dataset.qtype !== 'slide') return;
   const viewportH = window.innerHeight || 900;
+  const textOnly = hostQuestionCardEl.classList.contains('slide-text-only');
   let maxH = viewportH * HOST_SLIDE_MAX_SHARE;
-  if (hostQuestionCardEl.classList.contains('slide-text-only')) {
+  if (textOnly) {
     const top = Math.max(0, hostQuestionPromptEl.getBoundingClientRect().top);
     maxH = Math.max(maxH, viewportH - top - HOST_SLIDE_BOTTOM_PX);
   }
-  fitSlideText(hostQuestionPromptEl, HOST_SLIDE_MIN_PX, () => hostQuestionPromptEl.offsetHeight <= maxH);
+  const fits = () => hostQuestionPromptEl.offsetHeight <= maxH;
+  fitSlideText(hostQuestionPromptEl, HOST_SLIDE_MIN_PX, fits);
+  if (textOnly) spreadSlideLines(hostQuestionPromptEl, fits);
 }
 window.addEventListener('resize', fitHostSlidePrompt);
 
@@ -15600,7 +15634,7 @@ function renderHostQuestion(state) {
   hostQuestionWrap.classList.remove('center-stage');
   // A teaching slide's 🎓 is in the hint above it, so the text gets the whole slide.
   hostQuestionPromptEl.innerHTML = question.type === 'slide'
-    ? formatReadingTextHtml(qPrompt)
+    ? slideLinesHtml(qPrompt)
     : escapeHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt);
   fitHostSlidePrompt();
   requestAnimationFrame(fitHostSlidePrompt);

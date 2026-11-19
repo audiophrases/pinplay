@@ -4358,6 +4358,7 @@ function slideTextLineCount(el) {
 }
 function fitSlideText(el, minPx, fits, priority = '') {
   el.style.removeProperty('font-size');
+  el.style.removeProperty('--slide-line-gap');
   const start = parseFloat(getComputedStyle(el).fontSize) || 48;
   const setSize = (px) => el.style.setProperty('font-size', `${px}px`, priority);
   let size = start;
@@ -4398,6 +4399,36 @@ function fitSlideText(el, minPx, fits, priority = '') {
   return size;
 }
 
+// Each typed line of a teaching slide is its own block, so room left under
+// the text spreads the lines apart and each idea or example stands on its own;
+// the wrapped parts of one line stay together. At most 0.8 of the letter
+// height goes between two lines. Mirrored in app.js and play.js.
+const SLIDE_LINE_GAP_MAX_EM = 0.8;
+function slideLinesHtml(text) {
+  return formatReadingTextHtml(text).split(/\r?\n/)
+    .map((line) => `<span class="slide-line">${line.trim() ? line : ''}</span>`)
+    .join('');
+}
+function spreadSlideLines(el, fits) {
+  el.style.removeProperty('--slide-line-gap');
+  if (el.querySelectorAll('.slide-line').length < 2) return 0;
+  const setGap = (px) => el.style.setProperty('--slide-line-gap', `${px}px`);
+  let lo = 0;
+  let hi = (parseFloat(getComputedStyle(el).fontSize) || 16) * SLIDE_LINE_GAP_MAX_EM;
+  setGap(hi);
+  if (fits()) return hi;
+  while (hi - lo > 0.5) {
+    const mid = (lo + hi) / 2;
+    setGap(mid);
+    if (fits()) lo = mid;
+    else hi = mid;
+  }
+  lo = Math.floor(lo);
+  if (lo > 0) setGap(lo);
+  else el.style.removeProperty('--slide-line-gap');
+  return lo;
+}
+
 // A teaching slide with a picture or a text: the title takes at most about a
 // third of the screen (its letters shrink until it does), and the picture
 // fills the room left between the title and the bottom bar.
@@ -4415,7 +4446,9 @@ function fitSlideLayout() {
     joinQuestionWrap.style.removeProperty('--slide-top');
     joinQuestionWrap.style.removeProperty('--slide-bottom');
     if (isSlide) {
-      fitSlideText(joinPromptEl, SLIDE_TEXT_MIN_PX, () => joinPromptEl.scrollHeight <= joinPromptEl.clientHeight + 1, 'important');
+      const fits = () => joinPromptEl.scrollHeight <= joinPromptEl.clientHeight;
+      fitSlideText(joinPromptEl, SLIDE_TEXT_MIN_PX, fits, 'important');
+      spreadSlideLines(joinPromptEl, fits);
     }
     return;
   }
@@ -4486,7 +4519,7 @@ function renderJoinQuestion(question) {
       const icon = questionTypeIcon(question.type);
       const promptText = question.prompt || '(No question text)';
       joinPromptEl.innerHTML = question.type === 'slide'
-        ? `<span class="slide-prompt-text">${formatReadingTextHtml(promptText)}</span>`
+        ? `<span class="slide-prompt-text">${slideLinesHtml(promptText)}</span>`
         : escapeHtml(icon ? `${icon} ${promptText}` : promptText);
     }
     const isReplayable = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);

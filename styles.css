@@ -6937,6 +6937,11 @@ body.question-active .climb:not(.hidden) { display: flex; }
   white-space: pre-line;
 }
 .slide-prompt-text { min-width: 0; max-width: 100%; }
+/* Each typed line is a block; spreadSlideLines sets the gap between them from
+   the room left on the slide. A blank typed line keeps its height. */
+.slide-line { display: block; }
+.slide-line:empty::before { content: '\a0'; }
+.slide-line + .slide-line { margin-top: var(--slide-line-gap, 0px); }
 
 /* Keep the edit/preview return path available while adjusting long questions. */
 .editor-preview-return {
