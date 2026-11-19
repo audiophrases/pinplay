@@ -1712,6 +1712,25 @@ body.question-active .join-title-row {
   color: #8250df;
 }
 
+/* A teaching slide's 🎓 (beside the "2 / 39" it marks) and 🎧 replay (beside
+   the 🎵) live in the header, so the slide text gets the whole width. */
+.join-slide-mark {
+  font-size: 1.2rem;
+  line-height: 1;
+  margin-right: -9px;
+}
+
+.join-slide-audio {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.join-slide-audio .audio-eq {
+  margin-left: 0;
+}
+
 #joinStatusHud {
   background: #ffffff;
   padding: 2px 10px;

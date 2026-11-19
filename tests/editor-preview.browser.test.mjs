@@ -20,7 +20,8 @@ let browser, worker, QuizRoom, env, room, rows, temp;
 const quiz = () => ({ title: 'Draft quiz', questions: [
   { id: 'first', type: 'mcq', prompt: 'First question', points: 1000, answers: [{ text: 'A', correct: true }, { text: 'B', correct: false }] },
   { id: 'target', type: 'mcq', prompt: 'Target question', points: 1000, audioEnabled: true, audioMode: 'tts', audioText: 'Target question', ttsAudioKey: 'tts/target.mp3', answers: [{ text: 'One', correct: true }, { text: 'Two', correct: false }, { text: 'Three', correct: false }] },
-  { id: 'slide', type: 'slide', prompt: 'Teaching slide', points: 0 },
+  { id: 'slide', type: 'slide', prompt: 'Comparative: 2 things\nB is **bigger than** A.\nSuperlative: number 1 in a group\nC is **the biggest**.', points: 0,
+    audioEnabled: true, audioMode: 'tts', audioText: 'Comparative and superlative', ttsAudioKey: 'tts/slide.mp3' },
   { id: 'listen1', type: 'text', prompt: 'First listening question', points: 1000, acceptedAnswers: ['one'], listeningSection: 'section1' },
   { id: 'listen2', type: 'text', prompt: 'Second listening question', points: 1000, acceptedAnswers: ['two'], listeningSection: 'section1' },
 ], listeningSections: [{ id: 'section1', title: 'Listening together', audio: { kind: 'file', url: 'https://pinplay.test/recording.mp3' } }] });
@@ -138,9 +139,17 @@ describe('editor preview uses the real assignment page', { skip: !chromium && 'I
       const order = await page.locator('#joinAnswers').textContent();
       const select = page.locator('#editorPreviewNavigation select');
       await select.selectOption('slide');
-      assert.match(await page.locator('#joinPrompt').textContent(), /Teaching slide/);
+      assert.match(await page.locator('#joinPrompt').textContent(), /Superlative/);
       assert.equal(await page.locator('#joinSubmitBtn').isVisible(), true);
+      // A teaching slide's 🎓 and 🎧 replay sit in the header; its text gets the whole slide.
+      assert.equal(await page.locator('#joinSlideMark').isVisible(), true);
+      assert.equal(await page.locator('#joinSlideAudio .audio-eq-replay').isVisible(), true);
+      assert.doesNotMatch(await page.locator('#joinPrompt').textContent(), /🎓|🎧/);
+      if (process.env.PINPLAY_SLIDE_SHOTS) await page.screenshot({ path: path.join(process.env.PINPLAY_SLIDE_SHOTS, 'preview-slide.png'), style: '#editorPreviewNavigation { visibility: hidden }' });
       await select.selectOption('target');
+      assert.equal(await page.locator('#joinSlideMark').isVisible(), false);
+      assert.equal(await page.locator('#joinSlideAudio').isVisible(), false);
+      assert.equal(await page.locator('#joinPrompt .audio-eq-replay').count(), 1);
       assert.equal(await page.locator('#joinAnswers').textContent(), order);
       await select.selectOption('listen2');
       await page.locator('#listeningSheet').waitFor();

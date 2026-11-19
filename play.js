@@ -142,6 +142,9 @@ const assignmentNextPendingBtn = document.getElementById('assignmentNextPendingB
 const assignmentBannerEl = document.getElementById('assignmentBanner');
 const joinStatusHudEl = document.getElementById('joinStatusHud');
 const joinFeedbackEl = document.getElementById('joinStatusHud');
+// A teaching slide's 🎓 and 🎧 sit in the header, so its text gets the whole slide.
+const joinSlideMarkEl = document.getElementById('joinSlideMark');
+const joinSlideAudioEl = document.getElementById('joinSlideAudio');
 const joinCardEl = document.getElementById('joinCard');
 const joinTimerBarFill = ensureTimerProgressBar(joinCardEl, 'joinTimerBar');
 
@@ -4318,6 +4321,12 @@ function applyJoinLayoutMode(active, question = null) {
   const hasVideo = question?.media?.kind === 'video' && !!(question.media.url || question.media.embedUrl);
   joinCardEl.classList.toggle('has-video', !!hasVideo);
   joinCardEl.classList.toggle('slide-text-only', qType === 'slide' && !question?.imageData && !hasVideo && !String(question?.readingText || '').trim());
+  joinSlideMarkEl?.classList.toggle('hidden', !(isActive && qType === 'slide'));
+  if (joinSlideAudioEl) {
+    joinSlideAudioEl.replaceChildren();
+    joinSlideAudioEl.classList.add('hidden');
+    joinSlideAudioEl.classList.remove('audio-playing');
+  }
 }
 
 // Teaching slide letters: the stylesheet size is the largest. They shrink only
@@ -4332,7 +4341,7 @@ function slideTextLineCount(el) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const middles = [];
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.nodeValue.trim() || node.parentElement?.closest('.audio-eq')) continue;
+    if (!node.nodeValue.trim()) continue;
     range.selectNodeContents(node);
     for (const r of range.getClientRects()) if (r.width >= 1) middles.push((r.top + r.bottom) / 2);
   }
@@ -4477,7 +4486,7 @@ function renderJoinQuestion(question) {
       const icon = questionTypeIcon(question.type);
       const promptText = question.prompt || '(No question text)';
       joinPromptEl.innerHTML = question.type === 'slide'
-        ? `<span class="slide-prompt-text">${formatReadingTextHtml(icon ? `${icon} ${promptText}` : promptText)}</span>`
+        ? `<span class="slide-prompt-text">${formatReadingTextHtml(promptText)}</span>`
         : escapeHtml(icon ? `${icon} ${promptText}` : promptText);
     }
     const isReplayable = live.player.mode === 'assignment' && hasAssignmentQuestionAudio(question);
@@ -4510,7 +4519,11 @@ function renderJoinQuestion(question) {
       eq.setAttribute('aria-hidden', 'true');
     }
     eq.innerHTML = '<span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="emoji">🎧</span>';
-    joinPromptEl.append(' ', eq);
+    if (question.type !== 'slide' || !joinSlideAudioEl) joinPromptEl.append(' ', eq);
+    else if (isReplayable) {
+      joinSlideAudioEl.append(eq);
+      joinSlideAudioEl.classList.remove('hidden');
+    }
     joinPromptEl.classList.remove('audio-playing');
   }
 
@@ -7214,6 +7227,7 @@ let _assignmentAudioPlaying = false;
 function setAssignmentAudioPlayingUi(playing) {
   _assignmentAudioPlaying = !!playing;
   if (joinPromptEl) joinPromptEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
+  if (joinSlideAudioEl) joinSlideAudioEl.classList.toggle('audio-playing', _assignmentAudioPlaying);
 }
 
 // Hide just the visual bars (used to fade them out ~0.7s before audio ends
@@ -7221,6 +7235,7 @@ function setAssignmentAudioPlayingUi(playing) {
 // felt abrupt). The record-button lock stays until actual audio end.
 function hideAssignmentAudioBarsEarly() {
   if (joinPromptEl) joinPromptEl.classList.remove('audio-playing');
+  if (joinSlideAudioEl) joinSlideAudioEl.classList.remove('audio-playing');
 }
 
 function stopAssignmentQuestionAudioPlayback() {

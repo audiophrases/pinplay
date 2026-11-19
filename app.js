@@ -15237,7 +15237,7 @@ function slideTextLineCount(el) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const middles = [];
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.nodeValue.trim() || node.parentElement?.closest('.audio-eq')) continue;
+    if (!node.nodeValue.trim()) continue;
     range.selectNodeContents(node);
     for (const r of range.getClientRects()) if (r.width >= 1) middles.push((r.top + r.bottom) / 2);
   }
@@ -15598,8 +15598,9 @@ function renderHostQuestion(state) {
 
   hostQuestionCardEl?.classList.remove('intro-active');
   hostQuestionWrap.classList.remove('center-stage');
+  // A teaching slide's 🎓 is in the hint above it, so the text gets the whole slide.
   hostQuestionPromptEl.innerHTML = question.type === 'slide'
-    ? formatReadingTextHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt)
+    ? formatReadingTextHtml(qPrompt)
     : escapeHtml(qIcon ? `${qIcon} ${qPrompt}` : qPrompt);
   fitHostSlidePrompt();
   requestAnimationFrame(fitHostSlidePrompt);
@@ -15700,7 +15701,7 @@ function renderHostQuestion(state) {
   }
 
   if (question.type === 'slide') {
-    hostQuestionHintEl.textContent = t('Teaching slide · no response needed');
+    hostQuestionHintEl.textContent = `🎓 ${t('Teaching slide · no response needed')}`;
     return;
   }
 
