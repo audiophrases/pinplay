@@ -1723,6 +1723,18 @@ export default {
         }));
       }
 
+      // 📊 Results: every attempt by these students (one, a class, or whoever
+      // the list shows), across assignments and saved live games.
+      if (url.pathname === '/api/students/history' && request.method === 'POST') {
+        const { ok, status, data } = await rosterCall(env, 'history', {
+          method: 'POST',
+          body: JSON.stringify({ emails: Array.isArray(body?.emails) ? body.emails : [], from: Number(body?.from) || 0 }),
+        });
+        const response = withCors(json(data, ok ? 200 : (status || 400)));
+        response.headers.set('Cache-Control', 'no-store');
+        return response;
+      }
+
       // Teacher's level picker: { email, level: 'B1' } sets it, level null/'' resets it.
       if (url.pathname === '/api/students/level' && request.method === 'POST') {
         const { ok, status, data } = await rosterCall(env, 'set-level', {
@@ -4224,6 +4236,7 @@ export class QuizRoom {
 
         await ensurePendingCounts(this.state.storage, code, assignment);
         applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
+        dropAttemptOwner(assignment, attemptId);
         assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
@@ -4259,6 +4272,7 @@ export class QuizRoom {
 
         await ensurePendingCounts(this.state.storage, code, assignment);
         applyPendingDelta(assignment, computeAttemptPending(assignment, attempt), null);
+        dropAttemptOwner(assignment, attemptId);
         assignment.attemptsCount = Math.max(0, (Number(assignment.attemptsCount) || 0) - 1);
         assignment.updatedAt = Date.now();
         await deleteAttemptKey(this.state.storage, code, attemptId);
@@ -4355,6 +4369,30 @@ export class QuizRoom {
 
       if (url.pathname === '/roster/list' && request.method === 'GET') {
         return json({ ok: true, students: await loadRosterRows(this.state.storage) });
+      }
+
+      // 👥 Students → 📊 Results. Only ever on a teacher's click: there is no
+      // per-student index, so this reads every attempt row once (see
+      // loadStudentHistory).
+      if (url.pathname === '/roster/history' && request.method === 'POST') {
+        const body = await safeJson(request);
+        const emails = [...new Set((Array.isArray(body?.emails) ? body.emails : []).map(sanitizeEmail).filter(Boolean))];
+        if (!emails.length) return json({ error: 'Choose at least one student.' }, 400);
+        if (emails.length > STUDENT_HISTORY_MAX) return json({ error: `Choose at most ${STUDENT_HISTORY_MAX} students at a time.` }, 400);
+        const rows = await getMany(this.state.storage, emails.map(rosterKey));
+        const students = emails.map((email) => {
+          const row = rows.get(rosterKey(email));
+          return {
+            email,
+            displayName: String(row?.displayName || ''),
+            className: String(row?.className || ''),
+            legacyUsername: String(row?.legacyUsername || ''),
+          };
+        });
+        const from = Math.max(0, Math.round(Number(body?.from) || 0));
+        const result = await loadStudentHistory(this.state.storage, students, { from });
+        result.cost.reads += emails.length;
+        return json({ ok: true, students, from, ...result });
       }
 
       if (url.pathname === '/roster/get' && request.method === 'POST') {
@@ -4594,6 +4632,12 @@ export class QuizRoom {
         if (!dryRun && changedAttempts.length > 0) {
           for (const { code, attemptId, attempt } of changedAttempts) {
             await saveAttempt(this.state.storage, code, attemptId, attempt);
+          }
+          // New keys, so each touched assignment's owner map (📊 Results).
+          for (const code of new Set(changedAttempts.map((c) => c.code))) {
+            if (!assignments[code]?.quiz) continue; // attempts whose assignment row is gone
+            recomputeAssignmentPending(assignments[code]);
+            await saveAssignmentBase(this.state.storage, code, assignments[code]);
           }
         }
 
@@ -11057,6 +11101,277 @@ async function loadRosterRows(storage) {
   return rows;
 }
 
+// ---------- Student results (👥 Students → 📊 Results) ----------
+//
+// Quota (free plan: 5M row reads and 100k row writes a day). A report reads
+// the chosen students' roster rows, only their attempts (found through each
+// assignment's owner map, see attemptOwnersMap), and the assignment rows those
+// attempts are scored against. Which assignments exist comes from a directory
+// kept in memory, so a warm report reads no other assignment row. It writes
+// nothing, except once for an assignment whose owner map is missing or stale:
+// that map is rebuilt from the assignment's attempts and saved (one write).
+
+const STUDENT_HISTORY_MAX = 400;
+const STUDENT_HISTORY_PAGE = 100; // assignment rows per page while filling the directory
+const STORAGE_GET_BATCH = 128; // storage.get takes at most 128 keys at once
+const DIRECTORY_TTL_MS = 30 * 60 * 1000;
+
+// storage → { at, entries: Map(code → directoryEntry) }, one per Durable
+// Object. saveAssignmentBase and deleteAssignmentKeys keep it exact; the TTL
+// only covers a write that went around them.
+const assignmentDirectories = new WeakMap();
+
+async function getMany(storage, keys, cost) {
+  const out = new Map();
+  for (let i = 0; i < keys.length; i += STORAGE_GET_BATCH) {
+    const batch = keys.slice(i, i + STORAGE_GET_BATCH);
+    const got = await storage.get(batch);
+    if (cost) cost.reads += batch.length;
+    for (const [key, value] of got) out.set(key, value);
+  }
+  return out;
+}
+
+// What a report needs from an assignment row, without its quiz.
+function directoryEntry(code, base) {
+  return {
+    code,
+    title: String(base?.title || base?.quiz?.title || code).slice(0, 120),
+    className: sanitizeClassName(base?.className),
+    createdAt: Number(base?.createdAt || 0) || null,
+    updatedAt: Number(base?.updatedAt || 0) || null,
+    dueAt: Number(base?.dueAt || 0) > 0 ? Number(base.dueAt) : null,
+    attemptsLimit: clamp(Math.round(Number(base?.attemptsLimit ?? 1)), 0, 10),
+    format: base?.adaptive?.mode === 'buildup' ? 'climb' : base?.adaptive ? 'adaptive' : 'all',
+    active: !!base?.active,
+    archived: !!base?.archived,
+    live: base?.origin === 'live',
+    timed: base?.liveMode === 'arena',
+    preview: base?.className === '__preview__',
+    attemptsCount: base?.attemptsCount,
+    owners: base?.owners,
+    ownersOf: base?.ownersOf,
+  };
+}
+
+// The entry as the dialog gets it.
+function historyAssignmentMeta(entry) {
+  const { owners, ownersOf, attemptsCount, preview, updatedAt, ...meta } = entry;
+  return meta;
+}
+
+function noteDirectoryEntry(storage, code, base) {
+  try {
+    assignmentDirectories.get(storage)?.entries.set(code, directoryEntry(code, base));
+  } catch { /* the directory refills after DIRECTORY_TTL_MS */ }
+}
+
+// Every assignment's entry: from memory while fresh, else one read of each
+// assignment row (what refreshing 📋 Assignments costs), a page at a time.
+// `keep(entry)` picks rows to hold on to, so they are not read twice.
+async function loadAssignmentDirectory(storage, cost, keep = () => false) {
+  const kept = new Map();
+  const cached = assignmentDirectories.get(storage);
+  if (cached && Date.now() - cached.at < DIRECTORY_TTL_MS) {
+    cost.directory = 'memory';
+    return { entries: cached.entries, kept };
+  }
+  const entries = new Map();
+  let startAfter = '';
+  for (;;) {
+    const page = await storage.list({ prefix: 'ab:', limit: STUDENT_HISTORY_PAGE, ...(startAfter ? { startAfter } : {}) });
+    cost.reads += page.size;
+    for (const [key, base] of page) {
+      startAfter = key;
+      if (!base || typeof base !== 'object') continue;
+      const entry = directoryEntry(key.slice(3), base);
+      entries.set(entry.code, entry);
+      if (keep(entry)) kept.set(entry.code, base);
+    }
+    if (page.size < STUDENT_HISTORY_PAGE) break;
+  }
+  assignmentDirectories.set(storage, { at: Date.now(), entries });
+  cost.directory = 'read';
+  return { entries, kept };
+}
+
+// Which attempts belong to whom. An attempt stamped with an email belongs to
+// that email and nobody else. One without (saved live games, work from before
+// Google sign-in) goes by its key: the email key, or the old username key that
+// /assignments/start still accepts as legacyStudentKey. Email keys win a clash.
+function studentHistoryOwners(students) {
+  const byEmail = new Set();
+  const byKey = new Map();
+  const list = Array.isArray(students) ? students : [];
+  list.forEach((s) => {
+    const email = sanitizeEmail(s?.email);
+    if (!email) return;
+    byEmail.add(email);
+    const key = makeStudentKeyFromEmail(email);
+    if (key) byKey.set(key, email);
+  });
+  list.forEach((s) => {
+    const email = sanitizeEmail(s?.email);
+    const legacy = email && s?.legacyUsername ? makeStudentKeyFromUsername(s.legacyUsername) : '';
+    if (legacy && !byKey.has(legacy)) byKey.set(legacy, email);
+  });
+  return { byEmail, byKey };
+}
+
+function studentHistoryOwner(attempt, owners) {
+  const email = sanitizeEmail(attempt?.studentEmail);
+  if (email) return owners.byEmail.has(email) ? email : '';
+  return owners.byKey.get(String(attempt?.studentKey || '')) || '';
+}
+
+// The level an adaptive attempt mostly worked at, or how high a Climb got.
+function studentHistoryLevel(assignment, attempt) {
+  try {
+    const st = attempt?.adaptive;
+    if (st?.bu) {
+      const climb = buildupSummary(st, assignment?.quiz?.stepsPlan);
+      return climb.summit ? { climb: 'summit' } : { climb: climb.bands[climb.best] ?? null };
+    }
+    if (st) return { level: adaptiveUsualLevel(st) || null };
+    if (attempt?.cupLevels?.usualLevel) return { level: attempt.cupLevels.usualLevel };
+  } catch { /* an odd old attempt: no level shown */ }
+  return null;
+}
+
+// One attempt as 📊 Results shows it. The percentage is the one 📋 Assignments
+// & results shows: points over points available, or for a timed Cup (nobody is
+// meant to reach every question) right answers over answers given. Everything
+// comes from the attempt and assignment rows already read for it.
+function studentHistoryAttempt(assignment, attempt, code, id, email) {
+  const m = evaluateAssignmentAttempt(assignment, attempt);
+  const answered = Number(m.answeredCount || 0);
+  const pending = Number(m.pendingTeacherGradeCount || 0);
+  let pct = m.accuracy == null ? null : Number(m.accuracy);
+  if (assignment?.liveMode === 'arena') {
+    const graded = answered - pending;
+    pct = graded > 0 ? Math.round((Number(m.correctCount || 0) / graded) * 100) : null;
+  }
+  const submittedAt = Number(attempt?.submittedAt || 0) || null;
+  const dueAt = Number(assignment?.dueAt || 0);
+  const focus = Array.isArray(attempt?.focusEvents) ? attempt.focusEvents : [];
+  const when = (v) => Number(v || 0) || undefined;
+  const level = studentHistoryLevel(assignment, attempt);
+  return {
+    code,
+    id,
+    email,
+    name: sanitizeName(attempt?.studentName || ''),
+    startedAt: Number(attempt?.startedAt || 0) || null,
+    updatedAt: Number(attempt?.updatedAt || 0) || null,
+    submitted: !!attempt?.submitted,
+    submittedAt,
+    score: Number(m.totalScore || 0),
+    pct: Number.isFinite(pct) ? pct : null,
+    answered,
+    correct: Number(m.correctCount || 0),
+    total: Number(m.totalQuestions || 0),
+    // A set-aside attempt is not "to grade" (its retry is), as in the results list.
+    pending: attempt?.setAside ? 0 : pending,
+    releasedGrade: attempt?.submitted && attempt?.gradeReleasedAt ? Number(attempt.releasedGrade) : null,
+    // Handed in after the due date (the Games page has none).
+    ...(attempt?.submitted && dueAt > 0 && submittedAt > dueAt && attempt?.via !== 'play' ? { late: true } : {}),
+    ...(focus.length ? { leftTab: focus.length, leftTabMs: focus.reduce((sum, e) => sum + Math.max(0, Number(e?.durationMs || 0)), 0) } : {}),
+    reviewedAt: when(attempt?.reviewedAt),
+    selfCorrectedAt: when(attempt?.selfCorrectedAt),
+    reopenedAt: when(attempt?.reopenedAt),
+    ...(attempt?.setAside ? { setAside: true } : {}),
+    ...(attempt?.via === 'play' ? { via: 'play' } : {}),
+    ...(level ? level : {}),
+  };
+}
+
+const classKey = (value) => String(value || '').trim().toLowerCase();
+
+// Every attempt by `students` (email, legacyUsername, className) started since
+// `from` (ms; 0 for all), across assignments and saved live games, plus the
+// assignments labelled with their classes, so work not done shows too.
+// Teacher previews are left out. Returns what it cost in `cost`.
+async function loadStudentHistory(storage, students, { from = 0 } = {}) {
+  const cost = { reads: 0, writes: 0, rebuilt: 0, directory: '' };
+  const owners = studentHistoryOwners(students);
+  const keys = [...owners.byKey.keys()];
+  const mine = (entry) => !!entry.owners && keys.some((k) => entry.owners[k]);
+  // An assignment with no activity since `from` can hold no attempt started
+  // since then: its attempts are not read, nor its owner map rebuilt.
+  const relevant = (entry) => !entry.preview && !(from && entry.updatedAt && entry.updatedAt < from);
+
+  const { entries, kept } = await loadAssignmentDirectory(storage, cost,
+    (entry) => relevant(entry) && attemptOwnersFresh(entry) && mine(entry));
+
+  // Owner maps from before this feature, or gone stale: rebuilt once from the
+  // assignment's attempts and saved. The attempts read on the way are reused.
+  const loaded = new Map();
+  for (const stale of [...entries.values()]) {
+    if (!relevant(stale) || attemptOwnersFresh(stale)) continue;
+    const base = await storage.get(`ab:${stale.code}`);
+    cost.reads += 1;
+    if (!base) { entries.delete(stale.code); continue; }
+    const attempts = await loadAttemptsForCode(storage, stale.code);
+    cost.reads += Object.keys(attempts).length;
+    const seeded = { ...base, attempts };
+    recomputeAssignmentPending(seeded);
+    await saveAssignmentBase(storage, stale.code, seeded);
+    cost.writes += 1;
+    cost.rebuilt += 1;
+    const entry = directoryEntry(stale.code, seeded);
+    entries.set(stale.code, entry);
+    if (mine(entry)) {
+      kept.set(stale.code, seeded);
+      loaded.set(stale.code, attempts);
+    }
+  }
+
+  // Only these students' attempts.
+  const found = [];
+  const toGet = [];
+  for (const entry of entries.values()) {
+    if (!relevant(entry) || !entry.owners) continue;
+    const have = loaded.get(entry.code);
+    for (const key of keys) {
+      for (const id of entry.owners[key] || []) {
+        if (!have) toGet.push(`a:${entry.code}:t:${id}`);
+        else if (have[id]) found.push([entry.code, id, have[id]]);
+      }
+    }
+  }
+  for (const [key, attempt] of await getMany(storage, toGet, cost)) {
+    const sep = key.indexOf(':t:');
+    found.push([key.slice(2, sep), key.slice(sep + 3), attempt]);
+  }
+
+  // The assignment rows to score them against.
+  const needed = [...new Set(found.map(([code]) => code))].filter((code) => !kept.has(code));
+  for (const [key, base] of await getMany(storage, needed.map((code) => `ab:${code}`), cost)) kept.set(key.slice(3), base);
+
+  const attempts = [];
+  const withAttempts = new Set();
+  for (const [code, id, attempt] of found) {
+    const email = attempt && typeof attempt === 'object' ? studentHistoryOwner(attempt, owners) : '';
+    const base = kept.get(code);
+    if (!email || !base) continue;
+    if (from && Number(attempt.startedAt || attempt.updatedAt || 0) < from) continue;
+    attempts.push(studentHistoryAttempt(base, attempt, code, id, email));
+    withAttempts.add(code);
+  }
+
+  // Assignments labelled with one of these students' classes: work they were
+  // set, done or not (live games are labelled too, but nobody "misses" one).
+  const classes = new Set((students || []).map((s) => classKey(s?.className)).filter(Boolean));
+  const assignments = {};
+  for (const entry of entries.values()) {
+    if (entry.preview) continue;
+    const setForClass = !entry.live && classes.has(classKey(entry.className))
+      && (!from || Math.max(entry.createdAt || 0, entry.dueAt || 0) >= from);
+    if (withAttempts.has(entry.code) || setForClass) assignments[entry.code] = historyAssignmentMeta(entry);
+  }
+  return { assignments, attempts, cost };
+}
+
 // Build a roster row from an incoming payload, preserving fields the caller
 // didn't send and never letting the email drift from the storage key.
 function mergeRosterRow(existing, input, email) {
@@ -11251,6 +11566,7 @@ async function saveAssignmentBase(storage, code, assignment) {
   // `ensurePendingCounts` before applyPendingDelta at write sites that
   // mutate grading state.
   await storage.put(`ab:${code}`, base);
+  noteDirectoryEntry(storage, code, base);
 }
 
 // Ensures cached pending counts are present on `assignment` before a delta
@@ -11273,6 +11589,8 @@ async function ensurePendingCounts(storage, code, assignment) {
   assignment.pendingGradingCount = seeded.pendingGradingCount;
   assignment.pendingAttemptsCount = seeded.pendingAttemptsCount;
   assignment.attemptsCount = seeded.attemptsCount;
+  assignment.owners = seeded.owners;
+  assignment.ownersOf = seeded.ownersOf;
   return assignment;
 }
 
@@ -11320,6 +11638,7 @@ async function deleteAssignmentKeys(storage, code) {
     if (key === `a:${code}` || key.startsWith(`a:${code}:`)) toDelete.push(key);
   }
   if (toDelete.length) await storage.delete(toDelete);
+  assignmentDirectories.get(storage)?.entries.delete(code);
 }
 
 async function nextAssignmentCode(storage) {
@@ -11399,6 +11718,52 @@ function recomputeAssignmentPending(assignment) {
   assignment.pendingGradingCount = total;
   assignment.pendingAttemptsCount = attemptsWithPending;
   assignment.attemptsCount = Object.keys(attempts).length;
+  assignment.owners = attemptOwnersMap(assignment, attempts);
+  assignment.ownersOf = assignment.attemptsCount;
+}
+
+// Who has attempts here: owner key → attempt ids. It rides on the assignment
+// row, which every new attempt already rewrites, so 👥 Students → 📊 Results
+// finds a student's attempts without reading anyone else's and without a write
+// of its own. `ownersOf` is the attempt count it was built from: when it no
+// longer matches `attemptsCount`, the map is rebuilt (see loadStudentHistory).
+function attemptOwnersMap(assignment, attempts) {
+  const owners = {};
+  for (const [id, attempt] of Object.entries(attempts || {})) {
+    const key = attemptOwnerKey(assignment, attempt);
+    if (key) (owners[key] ||= []).push(id);
+  }
+  return owners;
+}
+
+// The key a roster student is found by: their email key when the attempt was
+// signed in, else the attempt's own key (saved live games, work from before
+// Google sign-in). Random-name players belong to nobody on the roster.
+function attemptOwnerKey(assignment, attempt) {
+  const email = sanitizeEmail(attempt?.studentEmail);
+  if (email) return makeStudentKeyFromEmail(email);
+  const key = sanitizeAssignmentStudentKey(attempt?.studentKey);
+  if (!key || (assignment?.randomNames && !key.includes('@'))) return '';
+  return key;
+}
+
+function attemptOwnersFresh(assignment) {
+  return !!assignment?.owners && typeof assignment.owners === 'object'
+    && Number.isFinite(Number(assignment.attemptsCount))
+    && Number(assignment.ownersOf) === Number(assignment.attemptsCount);
+}
+
+// Deleting one attempt: call before attemptsCount goes down by one. A map that
+// was right stays right; a stale one stays stale and is rebuilt later.
+function dropAttemptOwner(assignment, attemptId) {
+  if (!attemptOwnersFresh(assignment)) return;
+  for (const [key, ids] of Object.entries(assignment.owners)) {
+    if (!ids.includes(attemptId)) continue;
+    const left = ids.filter((id) => id !== attemptId);
+    if (left.length) assignment.owners[key] = left;
+    else delete assignment.owners[key];
+  }
+  assignment.ownersOf = Number(assignment.attemptsCount) - 1;
 }
 
 // One attempt per student is the one to grade: the latest handed in, or their
@@ -11432,7 +11797,8 @@ async function syncAttemptsSetAside(storage, code, assignment, attempts) {
     else delete attempt.setAside;
     await saveAttempt(storage, code, id, attempt);
   }
-  const totals = () => [assignment.pendingGradingCount, assignment.pendingAttemptsCount, assignment.attemptsCount].join();
+  // ownersOf too: a row from before the owner map gets one, saved for free here.
+  const totals = () => [assignment.pendingGradingCount, assignment.pendingAttemptsCount, assignment.attemptsCount, assignment.ownersOf].join();
   const before = totals();
   assignment.attempts = attempts;
   recomputeAssignmentPending(assignment);

@@ -11544,6 +11544,7 @@ const studentsRefreshBtn = document.getElementById('studentsRefreshBtn');
 const studentsImportBtn = document.getElementById('studentsImportBtn');
 const studentsExportBtn = document.getElementById('studentsExportBtn');
 const studentsSettingsBtn = document.getElementById('studentsSettingsBtn');
+const studentsResultsBtn = document.getElementById('studentsResultsBtn');
 
 let studentsCache = [];
 
@@ -11553,6 +11554,7 @@ function setupStudentsPanel() {
   if (studentsImportBtn) studentsImportBtn.addEventListener('click', openStudentsImportDialog);
   if (studentsExportBtn) studentsExportBtn.addEventListener('click', exportStudentsCsv);
   if (studentsSettingsBtn) studentsSettingsBtn.addEventListener('click', openStudentsSettingsDialog);
+  if (studentsResultsBtn) studentsResultsBtn.addEventListener('click', () => openStudentResults(filteredStudentRows()));
   if (studentsFilterEl) studentsFilterEl.addEventListener('input', renderStudentsList);
   if (studentsClassFilterEl) studentsClassFilterEl.addEventListener('change', renderStudentsList);
   if (studentsNoClassOnlyEl) studentsNoClassOnlyEl.addEventListener('change', renderStudentsList);
@@ -11616,17 +11618,8 @@ function renderStudentsList() {
     if (current && classes.includes(current)) studentsClassFilterEl.value = current;
   }
 
-  const query = String(studentsFilterEl?.value || '').trim().toLowerCase();
-  const classFilter = String(studentsClassFilterEl?.value || '').trim();
-  const noClassOnly = !!studentsNoClassOnlyEl?.checked;
-
-  const rows = studentsCache.filter((s) => {
-    if (classFilter && String(s?.className || '').trim() !== classFilter) return false;
-    if (noClassOnly && String(s?.className || '').trim()) return false;
-    if (!query) return true;
-    return [s?.displayName, s?.email, s?.className, s?.legacyUsername]
-      .some((v) => String(v || '').toLowerCase().includes(query));
-  });
+  const rows = filteredStudentRows();
+  if (studentsResultsBtn) studentsResultsBtn.disabled = !rows.length;
 
   studentsListEl.innerHTML = '';
   if (!rows.length) {
@@ -11640,6 +11633,21 @@ function renderStudentsList() {
   }
 
   rows.forEach((s) => studentsListEl.appendChild(renderStudentRow(s)));
+}
+
+// The students the list shows, as its search box, class and "Needs a class"
+// filters choose them. 📊 Results reports on exactly these.
+function filteredStudentRows() {
+  const query = String(studentsFilterEl?.value || '').trim().toLowerCase();
+  const classFilter = String(studentsClassFilterEl?.value || '').trim();
+  const noClassOnly = !!studentsNoClassOnlyEl?.checked;
+  return studentsCache.filter((s) => {
+    if (classFilter && String(s?.className || '').trim() !== classFilter) return false;
+    if (noClassOnly && String(s?.className || '').trim()) return false;
+    if (!query) return true;
+    return [s?.displayName, s?.email, s?.className, s?.legacyUsername]
+      .some((v) => String(v || '').toLowerCase().includes(query));
+  });
 }
 
 function renderStudentRow(student) {
@@ -11767,7 +11775,14 @@ function renderStudentRow(student) {
     }
   });
 
-  actions.append(levelSelect, classInput, renameBtn, removeBtn);
+  const resultsBtn = document.createElement('button');
+  resultsBtn.className = 'btn';
+  resultsBtn.type = 'button';
+  resultsBtn.textContent = t('📊 Results');
+  resultsBtn.title = t('Every attempt by {name}: dates, scores and best results', { name: student.displayName || student.email });
+  resultsBtn.addEventListener('click', () => openStudentResults([student]));
+
+  actions.append(levelSelect, classInput, resultsBtn, renameBtn, removeBtn);
   row.append(info, actions);
   li.appendChild(row);
   return li;
@@ -11794,6 +11809,727 @@ async function addStudentFromForm() {
   } catch (err) {
     setStatus(studentsStatusEl, t('Could not add student: {msg}', { msg: err.message }), 'bad');
   }
+}
+
+// ==================== 📊 Results (Students panel) ====================
+// Attempts, dates, points and percentages for one student, a class, or
+// whoever the list shows, and the work set for their class that they haven't
+// done. One request per set of students and period: the Worker reads only
+// those students' attempts (loadStudentHistory). The answer is kept here for a
+// few minutes and reused, so a name in a class report, a row's own button, a
+// shorter period or any filter never ask the server again. Refresh does.
+
+const STUDENT_RESULTS_MAX = 400; // the Worker's limit (STUDENT_HISTORY_MAX)
+const STUDENT_RESULTS_FRESH_MS = 5 * 60 * 1000;
+const STUDENT_RESULTS_PERIOD_KEY = 'pinplay.studentResultsPeriod.v1';
+const studentResultsCache = new Map(); // key → { emails: Set, from, at, data }
+
+// 1 September: the school year a report starts from unless the teacher picks another period.
+function schoolYearStart(now = new Date()) {
+  const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  return new Date(year, 8, 1).getTime();
+}
+
+// The first moment a period covers, in ms (0: all time).
+function studentResultsPeriodFrom(period, customDate = '', now = new Date()) {
+  // Calendar days, so a clock change inside the period moves nothing.
+  const daysAgo = (n) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - n).getTime();
+  if (period === 'year') return schoolYearStart(now);
+  if (period === '90') return daysAgo(90);
+  if (period === '30') return daysAgo(30);
+  if (period === 'custom' && customDate) return new Date(`${customDate}T00:00:00`).getTime() || 0;
+  return 0;
+}
+
+// Data fetched in the last few minutes that covers these students over this
+// period: the same students or more, the same period or a longer one.
+function cachedStudentResults(emails, from, now = Date.now()) {
+  let hit = null;
+  for (const entry of studentResultsCache.values()) {
+    if (now - entry.at > STUDENT_RESULTS_FRESH_MS || entry.from > from) continue;
+    if (!emails.every((email) => entry.emails.has(email))) continue;
+    if (!hit || entry.at > hit.at) hit = entry;
+  }
+  return hit;
+}
+
+function rememberStudentResults(emails, from, data, now = Date.now()) {
+  for (const [key, entry] of studentResultsCache) {
+    if (now - entry.at > STUDENT_RESULTS_FRESH_MS) studentResultsCache.delete(key);
+  }
+  const entry = { emails: new Set(emails), from, at: now, data };
+  studentResultsCache.set(`${from}|${[...emails].sort().join(',')}`, entry);
+  return entry;
+}
+
+// Best attempt: highest percentage, then most points; the earlier one on a tie.
+function studentResultsBest(list) {
+  let best = null;
+  (list || []).forEach((a) => {
+    if (!best) { best = a; return; }
+    const pa = a.pct ?? -1;
+    const pb = best.pct ?? -1;
+    if (pa > pb || (pa === pb && Number(a.score || 0) > Number(best.score || 0))) best = a;
+  });
+  return best;
+}
+
+function studentResultsMean(values) {
+  const nums = values.filter((v) => v != null && Number.isFinite(Number(v))).map(Number);
+  return nums.length ? Math.round(nums.reduce((sum, v) => sum + v, 0) / nums.length) : null;
+}
+
+// Work set for a student: an assignment labelled with their class (not a live
+// game, not archived) that the period covers.
+function studentResultsIsSet(assignment, student, from = 0) {
+  const cls = String(student?.className || '').trim().toLowerCase();
+  if (!cls || !assignment || assignment.live || assignment.archived) return false;
+  if (String(assignment.className || '').trim().toLowerCase() !== cls) return false;
+  return !from || Math.max(Number(assignment.createdAt || 0), Number(assignment.dueAt || 0)) >= from;
+}
+
+// Groups the Worker's flat list per student and per assignment, with
+// everything the dialog shows. `from` (ms) leaves out attempts started
+// earlier; includeLive:false leaves out saved live games.
+function summarizeStudentResults(data, { from = 0, includeLive = true, now = Date.now() } = {}) {
+  const assignments = data?.assignments && typeof data.assignments === 'object' ? data.assignments : {};
+  const startOf = (a) => Number(a?.startedAt || a?.updatedAt || 0);
+  const lastOf = (a) => Math.max(Number(a?.updatedAt || 0), Number(a?.submittedAt || 0), Number(a?.startedAt || 0));
+  const attempts = (Array.isArray(data?.attempts) ? data.attempts : []).filter((a) => {
+    const assignment = assignments[a?.code];
+    if (!assignment) return false;
+    if (!includeLive && assignment.live) return false;
+    return !from || startOf(a) >= from;
+  });
+
+  const byStudent = new Map();
+  attempts.forEach((a) => {
+    if (!byStudent.has(a.email)) byStudent.set(a.email, new Map());
+    const perCode = byStudent.get(a.email);
+    if (!perCode.has(a.code)) perCode.set(a.code, []);
+    perCode.get(a.code).push(a);
+  });
+
+  const students = (Array.isArray(data?.students) ? data.students : []).map((s) => {
+    const rows = [...(byStudent.get(s.email) || new Map()).entries()].map(([code, list]) => {
+      list.sort((x, y) => startOf(x) - startOf(y));
+      const best = studentResultsBest(list);
+      const first = list[0];
+      return {
+        code,
+        assignment: assignments[code],
+        attempts: list,
+        best,
+        first,
+        // Points of percentage gained from the first attempt to the best.
+        gain: list.length > 1 && first.pct != null && best.pct != null ? best.pct - first.pct : null,
+        lastAt: Math.max(...list.map(lastOf)),
+        pending: list.reduce((sum, a) => sum + Number(a.pending || 0), 0),
+        late: list.some((a) => a.late),
+        handedIn: list.some((a) => a.submitted),
+      };
+    }).sort((x, y) => y.lastAt - x.lastAt);
+    const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
+
+    // Work set for their class: done (handed in), started, or not started:
+    // missing once the due date has passed, to do before that.
+    const setWork = Object.values(assignments)
+      .filter((a) => (includeLive || !a.live) && studentResultsIsSet(a, s, from))
+      .map((a) => {
+        const row = byCode[a.code];
+        const state = row?.handedIn ? 'done' : row ? 'started' : (a.dueAt && a.dueAt < now ? 'missing' : 'todo');
+        return { code: a.code, assignment: a, state };
+      })
+      .sort((a, b) => Number(b.assignment.createdAt || 0) - Number(a.assignment.createdAt || 0));
+    const count = (state) => setWork.filter((w) => w.state === state).length;
+
+    return {
+      email: s.email,
+      displayName: s.displayName || '',
+      className: s.className || '',
+      rows,
+      byCode,
+      setWork,
+      setStates: Object.fromEntries(setWork.map((w) => [w.code, w.state])),
+      assigned: setWork.length,
+      done: count('done'),
+      started: count('started'),
+      missing: count('missing'),
+      todo: count('todo'),
+      late: rows.filter((r) => r.late).length,
+      attemptCount: rows.reduce((sum, r) => sum + r.attempts.length, 0),
+      average: studentResultsMean(rows.map((r) => r.best?.pct)),
+      lastAt: rows.reduce((max, r) => Math.max(max, r.lastAt), 0) || null,
+      pending: rows.reduce((sum, r) => sum + r.pending, 0),
+      // Best result per assignment, oldest first, for the progress chart.
+      trend: rows.filter((r) => r.best?.pct != null)
+        .map((r) => ({ code: r.code, title: r.assignment?.title || r.code, at: startOf(r.first), pct: r.best.pct }))
+        .sort((a, b) => a.at - b.at),
+    };
+  });
+
+  // The gradebook's columns: every assignment someone here did or was set, newest first.
+  const codes = new Set(attempts.map((a) => a.code));
+  students.forEach((s) => s.setWork.forEach((w) => codes.add(w.code)));
+  const columns = [...codes].map((code) => {
+    const did = students.filter((s) => s.byCode[code]);
+    const concerned = students.filter((s) => s.byCode[code] || s.setStates[code]);
+    return {
+      ...assignments[code],
+      code,
+      done: did.length,
+      of: concerned.length,
+      average: studentResultsMean(did.map((s) => s.byCode[code].best?.pct)),
+    };
+  }).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+  const sum = (key) => students.reduce((total, s) => total + s[key], 0);
+  return {
+    students,
+    columns,
+    totals: {
+      students: students.length,
+      active: students.filter((s) => s.attemptCount).length,
+      attempts: attempts.length,
+      assignments: columns.length,
+      average: studentResultsMean(students.map((s) => s.average)),
+      lastAt: students.reduce((max, s) => Math.max(max, s.lastAt || 0), 0) || null,
+      pending: sum('pending'),
+      assigned: sum('assigned'),
+      missing: sum('missing'),
+      late: sum('late'),
+    },
+  };
+}
+
+// One line per attempt, and one per piece of set work not handed in; local times.
+function studentResultsCsv(summary) {
+  const esc = (v) => {
+    const s = String(v ?? '');
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const stamp = (ms) => {
+    if (!ms) return '';
+    const d = new Date(Number(ms));
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const lines = ['student,email,class,assignment,code,due,attempt,best,started,handed_in,minutes,late,points,percent,answered,questions,to_grade,released_grade,left_tab,status'];
+  summary.students.forEach((s) => {
+    const who = [s.displayName || s.email, s.email, s.className];
+    s.rows.forEach((r) => r.attempts.forEach((a, i) => {
+      const minutes = a.submitted && a.startedAt && a.submittedAt ? Math.max(0, Math.round((a.submittedAt - a.startedAt) / 60000)) : '';
+      lines.push([
+        ...who, r.assignment?.title || r.code, r.code, stamp(r.assignment?.dueAt),
+        i + 1, a === r.best ? 'yes' : '', stamp(a.startedAt), stamp(a.submittedAt), minutes, a.late ? 'yes' : '',
+        a.score, a.pct ?? '', a.answered, a.total, a.pending || 0, a.releasedGrade ?? '', a.leftTab || '',
+        a.submitted ? 'submitted' : 'in progress',
+      ].map(esc).join(','));
+    }));
+    s.setWork.filter((w) => w.state === 'missing' || w.state === 'todo').forEach((w) => {
+      lines.push([
+        ...who, w.assignment.title || w.code, w.code, stamp(w.assignment.dueAt),
+        '', '', '', '', '', '', '', '', '', '', '', '', '', w.state === 'missing' ? 'missing' : 'not started',
+      ].map(esc).join(','));
+    });
+  });
+  return lines.join('\n');
+}
+
+function studentResultsPct(pct) {
+  return pct == null ? '—' : `${pct}%`;
+}
+
+function studentResultsBand(pct) {
+  if (pct == null) return '';
+  return pct >= 80 ? 'sr-good' : pct >= 50 ? 'sr-mid' : 'sr-low';
+}
+
+function studentResultsDate(ms) {
+  return ms ? new Date(Number(ms)).toLocaleDateString() : '—';
+}
+
+function studentResultsDateTime(ms) {
+  return ms ? new Date(Number(ms)).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
+}
+
+// Start to hand-in. Students can stop and come back, so it is elapsed time.
+function studentResultsDuration(a) {
+  if (!a?.submitted || !a.startedAt || !a.submittedAt) return '—';
+  const minutes = Math.max(0, Math.round((a.submittedAt - a.startedAt) / 60000));
+  if (minutes < 1) return t('<1 min');
+  if (minutes < 60) return t('{n} min', { n: minutes });
+  if (minutes < 48 * 60) return t('{n} h', { n: Math.round(minutes / 60) });
+  return t('{n} days', { n: Math.round(minutes / 1440) });
+}
+
+function studentResultsLevel(a) {
+  if (a?.climb === 'summit') return `🏔️ ${t('Summit')}`;
+  if (a?.climb != null) return `🏔️ ${t('step {n}', { n: a.climb })}`;
+  if (a?.level != null && a.level !== '') return `🎯 ${typeof a.level === 'number' ? t('Step {n}', { n: a.level }) : a.level}`;
+  return '';
+}
+
+function studentResultsBadges(assignment) {
+  const tag = (text, cls = 'sr-tag') => `<span class="${cls}">${escapeHtml(text)}</span>`;
+  const out = [];
+  if (assignment?.live) out.push(tag(assignment.timed ? t('🔴 Cup') : t('🔴 live'), 'badge-live'));
+  if (assignment?.format === 'adaptive') out.push(tag(t('🎯 Adaptive')));
+  if (assignment?.format === 'climb') out.push(tag(t('🏔️ Climb')));
+  if (assignment?.archived) out.push(tag(t('Archived')));
+  return out.join('');
+}
+
+function studentResultsStatus(a) {
+  const parts = [];
+  if (a.releasedGrade != null) parts.push(t('Grade {n}/100', { n: a.releasedGrade }));
+  else parts.push(a.submitted ? t('Submitted') : t('In progress'));
+  if (a.late) parts.push(t('🕒 Late'));
+  if (a.pending) parts.push(t('⏳ {n} to grade', { n: a.pending }));
+  if (a.leftTab) parts.push(t('⚠ Left the tab {n}×', { n: a.leftTab }));
+  if (a.selfCorrectedAt) parts.push(t('✔ Self-corrected'));
+  else if (a.reviewedAt) parts.push(t('👀 Saw the feedback'));
+  if (a.setAside) parts.push(t('Set aside'));
+  if (a.via === 'play') parts.push(t('🌐 via Games'));
+  const level = studentResultsLevel(a);
+  if (level) parts.push(level);
+  return parts.join(' · ');
+}
+
+function studentResultsTiles(tiles) {
+  return tiles.map(([label, value, cls = '']) => `<div class="sr-tile ${cls}"><div class="sr-tile-value">${escapeHtml(String(value))}</div><div class="sr-tile-label">${escapeHtml(label)}</div></div>`).join('');
+}
+
+// One student's best result per assignment, oldest to newest: one line in the
+// accent colour, the student's average dashed, a tooltip on each point
+// (clicking one jumps to that assignment). The table under it is the same data.
+function studentResultsTrendSvg(trend, average, width) {
+  const w = Math.max(260, Math.round(width || 600));
+  const h = 150;
+  const left = 36;
+  const right = 14;
+  const top = 10;
+  const bottom = 24;
+  const inset = 12; // first and last points clear of the plot's edges
+  const x = (i) => (trend.length === 1 ? (left + w - right) / 2 : left + inset + (i * (w - left - right - 2 * inset)) / (trend.length - 1));
+  const y = (pct) => top + (1 - Math.max(0, Math.min(100, pct)) / 100) * (h - top - bottom);
+  const grid = [0, 50, 100].map((p) => `<line class="sr-trend-grid" x1="${left}" x2="${w - right}" y1="${y(p)}" y2="${y(p)}"/><text class="sr-trend-label" x="${left - 6}" y="${y(p) + 4}" text-anchor="end">${p}%</text>`).join('');
+  // The caption names the dashed line, so nothing sits on the points.
+  const avg = average == null ? '' : `<line class="sr-trend-avg" x1="${left}" x2="${w - right}" y1="${y(average)}" y2="${y(average)}"/>`;
+  const path = trend.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.pct).toFixed(1)}`).join(' ');
+  const points = trend.map((p, i) => {
+    const tip = `${p.title} · ${studentResultsDate(p.at)} · ${t('best {pct}', { pct: `${p.pct}%` })}`;
+    return `<g class="sr-trend-point" data-focus-code="${escapeHtml(p.code)}"><title>${escapeHtml(tip)}</title><circle class="sr-trend-hit" cx="${x(i)}" cy="${y(p.pct)}" r="12"/><circle class="sr-trend-dot" cx="${x(i)}" cy="${y(p.pct)}" r="4"/></g>`;
+  }).join('');
+  const dates = `<text class="sr-trend-label" x="${x(0)}" y="${h - 6}" text-anchor="${trend.length === 1 ? 'middle' : 'start'}">${escapeHtml(studentResultsDate(trend[0].at))}</text>${trend.length > 1 ? `<text class="sr-trend-label" x="${x(trend.length - 1)}" y="${h - 6}" text-anchor="end">${escapeHtml(studentResultsDate(trend[trend.length - 1].at))}</text>` : ''}`;
+  const label = t('Best result per assignment over time: from {first} to {last}', { first: `${trend[0].pct}%`, last: `${trend[trend.length - 1].pct}%` });
+  return `<svg class="sr-trend" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(label)}">${grid}${avg}<path class="sr-trend-line" d="${path}"/>${points}${dates}</svg>`;
+}
+
+function openStudentResults(students) {
+  const chosen = (Array.isArray(students) ? students : []).filter((s) => s?.email);
+  if (!chosen.length) {
+    setStatus(studentsStatusEl, t('No students to show. Change the filter first.'), 'bad');
+    return;
+  }
+  if (chosen.length > STUDENT_RESULTS_MAX) {
+    setStatus(studentsStatusEl, t('{n} students is too many at once. Pick a class or filter the list to {max} or fewer.', { n: chosen.length, max: STUDENT_RESULTS_MAX }), 'bad');
+    return;
+  }
+  const emails = chosen.map((s) => s.email);
+  const single = chosen.length === 1;
+  const classes = [...new Set(chosen.map((s) => String(s.className || '').trim()))];
+  const oneClass = classes.length === 1 && classes[0] ? classes[0] : '';
+  const state = { entry: null, reused: false, view: single ? 'student' : 'class', email: single ? emails[0] : '', focusCode: '', sort: 'name' };
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-card student-results';
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+
+  const head = document.createElement('div');
+  head.className = 'sr-head';
+  const titleWrap = document.createElement('div');
+  const titleEl = document.createElement('h3');
+  titleEl.id = 'studentResultsTitle';
+  dialog.setAttribute('aria-labelledby', titleEl.id);
+  const subEl = document.createElement('div');
+  subEl.className = 'small muted';
+  titleWrap.append(titleEl, subEl);
+  const headBtns = document.createElement('div');
+  headBtns.className = 'row gap';
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn hidden';
+  backBtn.type = 'button';
+  backBtn.textContent = t('← All students');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn';
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('Close');
+  headBtns.append(backBtn, closeBtn);
+  head.append(titleWrap, headBtns);
+
+  const controls = document.createElement('div');
+  controls.className = 'sr-controls';
+  const periodSelect = document.createElement('select');
+  periodSelect.title = t('Which attempts to show. A shorter period also reads less from the server.');
+  periodSelect.setAttribute('aria-label', t('Period'));
+  [
+    ['year', t('This school year')],
+    ['90', t('Last 90 days')],
+    ['30', t('Last 30 days')],
+    ['all', t('All time')],
+    ['custom', t('Since a date…')],
+  ].forEach(([value, label]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    periodSelect.appendChild(opt);
+  });
+  try { periodSelect.value = localStorage.getItem(STUDENT_RESULTS_PERIOD_KEY) || 'year'; } catch { periodSelect.value = 'year'; }
+  if (!periodSelect.value || periodSelect.value === 'custom') periodSelect.value = 'year';
+  const fromInput = document.createElement('input');
+  fromInput.type = 'date';
+  fromInput.className = 'hidden';
+  fromInput.title = t('Attempts started on or after this day');
+  fromInput.setAttribute('aria-label', t('Since'));
+  const liveLabel = document.createElement('label');
+  liveLabel.className = 'small';
+  const liveCheck = document.createElement('input');
+  liveCheck.type = 'checkbox';
+  liveCheck.checked = true;
+  const liveText = document.createElement('span');
+  liveText.textContent = t('Include live games');
+  liveLabel.append(liveCheck, liveText);
+  const sortSelect = document.createElement('select');
+  sortSelect.title = t('Sort students');
+  sortSelect.setAttribute('aria-label', t('Sort students'));
+  [
+    ['name', t('Sort: Name (A→Z)')],
+    ['average-desc', t('Sort: Average (high→low)')],
+    ['average-asc', t('Sort: Average (low→high)')],
+    ['missing-desc', t('Sort: Most work missing')],
+    ['attempts-desc', t('Sort: Most attempts')],
+    ['latest', t('Sort: Latest activity')],
+  ].forEach(([value, label]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    sortSelect.appendChild(opt);
+  });
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'btn';
+  refreshBtn.type = 'button';
+  refreshBtn.textContent = t('Refresh');
+  refreshBtn.title = t('Ask the server again for the latest attempts');
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn';
+  exportBtn.type = 'button';
+  exportBtn.textContent = t('Export CSV');
+  exportBtn.title = t('One line per attempt, and per piece of work not handed in, for a spreadsheet');
+  exportBtn.disabled = true;
+  controls.append(periodSelect, fromInput, liveLabel, sortSelect, refreshBtn, exportBtn);
+
+  const statusEl = document.createElement('p');
+  statusEl.className = 'small muted';
+  statusEl.setAttribute('role', 'status');
+  const tilesEl = document.createElement('div');
+  tilesEl.className = 'sr-tiles';
+  const hintEl = document.createElement('p');
+  hintEl.className = 'small muted';
+  const bodyEl = document.createElement('div');
+  bodyEl.className = 'sr-body';
+  const costEl = document.createElement('p');
+  costEl.className = 'small muted sr-cost';
+  costEl.title = t('PinPlay runs on Cloudflare’s free plan: 5 million storage rows read a day, for everything. This report reads only the chosen students’ attempts, and reuses what it already has for 5 minutes.');
+
+  dialog.append(head, controls, statusEl, tilesEl, hintEl, bodyEl, costEl);
+  overlay.appendChild(dialog);
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  }
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', onKey);
+
+  const currentFrom = () => studentResultsPeriodFrom(periodSelect.value, fromInput.value);
+  const summarize = () => summarizeStudentResults(
+    { ...state.entry.data, students: chosen },
+    { from: currentFrom(), includeLive: liveCheck.checked },
+  );
+  const emptyText = () => (periodSelect.value === 'all' ? t('No attempts yet.') : t('No attempts in this period.'));
+
+  function renderCost() {
+    const entry = state.entry;
+    const time = new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (state.reused) {
+      costEl.textContent = t('Updated {time}. Reused without asking the server again; Refresh for the latest.', { time });
+      return;
+    }
+    const cost = entry.data?.cost || {};
+    const bits = [t('Updated {time}', { time }), t('{n} storage rows read', { n: Number(cost.reads || 0).toLocaleString() })];
+    if (cost.rebuilt) bits.push(t('{n} assignment(s) indexed for reports, once', { n: cost.rebuilt }));
+    costEl.textContent = bits.join(' · ');
+  }
+
+  function renderClass(summary) {
+    titleEl.textContent = oneClass ? t('📊 Results · {cls}', { cls: oneClass }) : t('📊 Results · {n} students', { n: chosen.length });
+    subEl.textContent = '';
+    const { totals, columns } = summary;
+    const tiles = [
+      [t('Students with attempts'), `${totals.active}/${totals.students}`],
+      [t('Class average'), studentResultsPct(totals.average)],
+      [t('Assignments'), totals.assignments],
+      [t('Attempts'), totals.attempts],
+    ];
+    if (totals.assigned) tiles.push([t('Missing (overdue)'), totals.missing, totals.missing ? 'sr-tile-alert' : '']);
+    if (totals.late) tiles.push([t('Late hand-ins'), totals.late]);
+    if (totals.pending) tiles.push([t('To grade'), totals.pending]);
+    tiles.push([t('Last activity'), studentResultsDate(totals.lastAt)]);
+    tilesEl.innerHTML = studentResultsTiles(tiles);
+    if (!columns.length) {
+      hintEl.textContent = '';
+      bodyEl.innerHTML = `<p class="small muted">${escapeHtml(emptyText())}</p>`;
+      return;
+    }
+    hintEl.textContent = t('Best result per assignment, newest first. ×2: two attempts · ⏳ to grade · 🕒 late. Missing: set for their class, overdue, not started. Click a name or a cell for every attempt.');
+
+    const nameOf = (s) => s.displayName || s.email;
+    const byName = (a, b) => nameOf(a).localeCompare(nameOf(b));
+    const sorters = {
+      name: byName,
+      'average-desc': (a, b) => (b.average ?? -1) - (a.average ?? -1) || byName(a, b),
+      'average-asc': (a, b) => (a.average ?? 101) - (b.average ?? 101) || byName(a, b),
+      'missing-desc': (a, b) => b.missing - a.missing || b.todo - a.todo || byName(a, b),
+      'attempts-desc': (a, b) => b.attemptCount - a.attemptCount || byName(a, b),
+      latest: (a, b) => (b.lastAt || 0) - (a.lastAt || 0),
+    };
+    const rows = summary.students.slice().sort(sorters[state.sort] || sorters.name);
+    const band = studentResultsBand;
+    const anyAssigned = totals.assigned > 0;
+
+    const headCols = columns.map((c) => {
+      const due = c.dueAt ? ` · ${t('due {date}', { date: studentResultsDate(c.dueAt) })}` : '';
+      const tip = `${c.title} · ${studentResultsDate(c.createdAt)}${due} · ${c.code}`;
+      return `<th class="sr-col" title="${escapeHtml(tip)}"><span class="sr-col-title">${escapeHtml(c.title)}</span><span class="sr-col-date">${escapeHtml(studentResultsDate(c.createdAt))}</span>${studentResultsBadges(c)}</th>`;
+    }).join('');
+    const bodyRows = rows.map((s) => {
+      const cells = columns.map((c) => {
+        const r = s.byCode[c.code];
+        const where = `data-email="${escapeHtml(s.email)}" data-code="${escapeHtml(c.code)}"`;
+        if (!r) {
+          const setState = s.setStates[c.code];
+          if (setState === 'missing') return `<td class="sr-cell sr-missing" ${where} title="${escapeHtml(t('Not started; due {date}', { date: studentResultsDate(c.dueAt) }))}">${escapeHtml(t('Missing'))}</td>`;
+          if (setState === 'todo') return `<td class="sr-cell sr-todo" ${where} title="${escapeHtml(c.dueAt ? t('Not started; due {date}', { date: studentResultsDate(c.dueAt) }) : t('Not started'))}">${escapeHtml(t('To do'))}</td>`;
+          return '<td class="sr-none">—</td>';
+        }
+        const n = r.attempts.length;
+        const best = r.best || {};
+        const tip = [
+          c.title,
+          t('{n} attempt(s)', { n }),
+          t('best {pct}', { pct: studentResultsPct(best.pct) }),
+          t('{p1} pts', { p1: best.score }),
+          r.late ? t('🕒 Late') : '',
+          t('last {when}', { when: studentResultsDateTime(r.lastAt) }),
+        ].filter(Boolean).join(' · ');
+        // No percentage yet: points if handed in, else that it is still open.
+        const open = best.pct == null && !best.submitted;
+        const shown = best.pct != null ? studentResultsPct(best.pct) : open ? t('In progress') : t('{p1} pts', { p1: best.score });
+        return `<td class="sr-cell ${band(best.pct)}${open ? ' sr-open' : ''}" ${where} title="${escapeHtml(tip)}">${escapeHtml(shown)}${n > 1 ? `<sup>×${n}</sup>` : ''}${r.pending ? ' ⏳' : ''}${r.late ? ' 🕒' : ''}</td>`;
+      }).join('');
+      const cls = !oneClass && s.className ? `<span class="sr-sub">${escapeHtml(s.className)}</span>` : '';
+      const done = s.assigned ? `${s.done}/${s.assigned}` : '—';
+      const missing = s.assigned ? `<td class="${s.missing ? 'sr-low' : ''}">${s.missing}</td>` : '<td class="sr-none">—</td>';
+      return `<tr><th class="sr-sticky" scope="row"><button type="button" class="sr-link" data-email="${escapeHtml(s.email)}" title="${escapeHtml(s.email)}">${escapeHtml(nameOf(s))}</button>${cls}</th><td class="${band(s.average)}">${escapeHtml(studentResultsPct(s.average))}</td>${anyAssigned ? `<td>${done}</td>${missing}` : ''}<td>${s.attemptCount}</td><td>${escapeHtml(studentResultsDate(s.lastAt))}</td>${cells}</tr>`;
+    }).join('');
+    const footCols = columns.map((c) => `<td class="${band(c.average)}">${escapeHtml(studentResultsPct(c.average))}<div class="sr-done">${escapeHtml(t('{done}/{n} did it', { done: c.done, n: c.of }))}</div></td>`).join('');
+    const assignedHead = anyAssigned
+      ? `<th title="${escapeHtml(t('Set work handed in, out of the work set for their class'))}">${escapeHtml(t('Done'))}</th><th title="${escapeHtml(t('Set work past its due date and not started'))}">${escapeHtml(t('Missing'))}</th>`
+      : '';
+    const assignedFoot = anyAssigned ? `<td></td><td class="${totals.missing ? 'sr-low' : ''}">${totals.missing}</td>` : '';
+
+    bodyEl.innerHTML = `<div class="sr-scroll"><table class="sr-table sr-grid">
+      <thead><tr><th class="sr-sticky">${escapeHtml(t('Student'))}</th><th>${escapeHtml(t('Average'))}</th>${assignedHead}<th>${escapeHtml(t('Attempts'))}</th><th>${escapeHtml(t('Last activity'))}</th>${headCols}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+      <tfoot><tr><th class="sr-sticky" scope="row">${escapeHtml(t('Class average'))}</th><td class="${band(totals.average)}">${escapeHtml(studentResultsPct(totals.average))}</td>${assignedFoot}<td>${totals.attempts}</td><td></td>${footCols}</tr></tfoot>
+    </table></div>`;
+  }
+
+  function renderStudent(student) {
+    titleEl.textContent = `📊 ${student.displayName || student.email}`;
+    subEl.textContent = [student.email, student.className].filter(Boolean).join(' · ');
+    const tiles = [];
+    if (student.assigned) {
+      tiles.push([t('Set work done'), `${student.done}/${student.assigned}`]);
+      tiles.push([t('Missing (overdue)'), student.missing, student.missing ? 'sr-tile-alert' : '']);
+    }
+    tiles.push([t('Average of best results'), studentResultsPct(student.average)]);
+    tiles.push([t('Assignments'), student.rows.length]);
+    tiles.push([t('Attempts'), student.attemptCount]);
+    if (student.late) tiles.push([t('Late hand-ins'), student.late]);
+    if (student.pending) tiles.push([t('To grade'), student.pending]);
+    tiles.push([t('Last activity'), studentResultsDate(student.lastAt)]);
+    tilesEl.innerHTML = studentResultsTiles(tiles);
+
+    const notDone = student.setWork.filter((w) => w.state === 'missing' || w.state === 'todo');
+    if (!student.rows.length && !notDone.length) {
+      hintEl.textContent = '';
+      bodyEl.innerHTML = `<p class="small muted">${escapeHtml(emptyText())}</p>`;
+      return;
+    }
+    hintEl.textContent = t('Most recent assignment first; its attempts in order. ★ marks the best attempt. Time is from start to hand-in, breaks included.');
+
+    const chart = student.trend.length >= 2
+      ? `<figure class="sr-chart"><figcaption class="small muted">${escapeHtml(student.average == null ? t('Best result per assignment, oldest to newest') : t('Best result per assignment, oldest to newest. Dashed: their average, {pct}.', { pct: `${student.average}%` }))}</figcaption>${studentResultsTrendSvg(student.trend, student.average, (bodyEl.clientWidth || 640) - 2)}</figure>`
+      : '';
+
+    const groups = student.rows.map((r) => {
+      const n = r.attempts.length;
+      const best = r.best || {};
+      const asg = r.assignment || {};
+      const tries = asg.attemptsLimit && !asg.live ? t('{n} of {max} attempts', { n, max: asg.attemptsLimit }) : t('{n} attempt(s)', { n });
+      const sum = [
+        tries,
+        t('best {pct}', { pct: studentResultsPct(best.pct) }),
+        t('{p1} pts', { p1: best.score }),
+        r.gain ? t('{gain} since the first', { gain: `${r.gain > 0 ? '+' : ''}${r.gain}` }) : '',
+      ].filter(Boolean).join(' · ');
+      const meta = [r.code, studentResultsDate(asg.createdAt), asg.dueAt ? t('due {date}', { date: studentResultsDateTime(asg.dueAt) }) : ''].filter(Boolean).join(' · ');
+      const groupRow = `<tr class="sr-group"><th colspan="8"><div class="sr-group-head"><span><strong>${escapeHtml(asg.title || r.code)}</strong>${studentResultsBadges(asg)} <span class="sr-sub">${escapeHtml(meta)}</span></span><span class="sr-group-sum">${escapeHtml(sum)}</span></div></th></tr>`;
+      const attemptRows = r.attempts.map((a, i) => {
+        const isBest = n > 1 && a === r.best;
+        const answered = a.total ? `${a.answered}/${a.total}` : String(a.answered);
+        return `<tr class="${isBest ? 'sr-best' : ''}"><td>#${i + 1}${isBest ? ' ★' : ''}</td><td>${escapeHtml(studentResultsDateTime(a.startedAt))}</td><td>${escapeHtml(a.submitted ? studentResultsDateTime(a.submittedAt) : '—')}</td><td>${escapeHtml(studentResultsDuration(a))}</td><td>${escapeHtml(t('{p1} pts', { p1: a.score }))}</td><td class="${studentResultsBand(a.pct)}">${escapeHtml(studentResultsPct(a.pct))}</td><td>${escapeHtml(answered)}</td><td class="sr-status">${escapeHtml(studentResultsStatus(a))}</td></tr>`;
+      }).join('');
+      return `<tbody data-code="${escapeHtml(r.code)}" class="${r.code === state.focusCode ? 'sr-focus' : ''}">${groupRow}${attemptRows}</tbody>`;
+    }).join('');
+    const attemptsTable = student.rows.length ? `<div class="sr-scroll"><table class="sr-table sr-attempts">
+      <thead><tr><th>${escapeHtml(t('Attempt'))}</th><th>${escapeHtml(t('Started'))}</th><th>${escapeHtml(t('Handed in'))}</th><th>${escapeHtml(t('Time'))}</th><th>${escapeHtml(t('Score'))}</th><th>%</th><th>${escapeHtml(t('Answered'))}</th><th>${escapeHtml(t('Status'))}</th></tr></thead>
+      ${groups}
+    </table></div>` : '';
+
+    const notDoneRows = notDone.map((w) => {
+      const asg = w.assignment;
+      const due = asg.dueAt ? studentResultsDateTime(asg.dueAt) : '—';
+      const label = w.state === 'missing' ? t('Missing: overdue, not started') : t('Not started');
+      return `<tr class="${w.code === state.focusCode ? 'sr-focus-row' : ''}"><td><strong>${escapeHtml(asg.title || w.code)}</strong>${studentResultsBadges(asg)} <span class="sr-sub sr-inline">${escapeHtml(w.code)}</span></td><td>${escapeHtml(studentResultsDate(asg.createdAt))}</td><td>${escapeHtml(due)}</td><td class="${w.state === 'missing' ? 'sr-low' : ''}">${escapeHtml(label)}</td></tr>`;
+    }).join('');
+    const notDoneTable = notDone.length ? `<h4 class="sr-subhead">${escapeHtml(t('Set for {cls}, not handed in yet', { cls: student.className }))}</h4><div class="sr-scroll"><table class="sr-table">
+      <thead><tr><th>${escapeHtml(t('Assignment'))}</th><th>${escapeHtml(t('Set on'))}</th><th>${escapeHtml(t('Due'))}</th><th>${escapeHtml(t('Status'))}</th></tr></thead>
+      <tbody>${notDoneRows}</tbody>
+    </table></div>` : '';
+
+    bodyEl.innerHTML = `${chart}${attemptsTable}${notDoneTable}`;
+    if (state.focusCode) {
+      const focus = bodyEl.querySelector('.sr-focus, .sr-focus-row');
+      if (focus) focus.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function render() {
+    if (!state.entry) return;
+    renderCost();
+    const summary = summarize();
+    const student = state.view === 'student' ? summary.students.find((s) => s.email === state.email) : null;
+    backBtn.classList.toggle('hidden', !student || single);
+    sortSelect.classList.toggle('hidden', !!student);
+    if (student) renderStudent(student);
+    else renderClass(summary);
+  }
+
+  // From what this session already has when it covers these students and
+  // this period (a few minutes old at most), else from the server.
+  async function load(force = false) {
+    const from = currentFrom();
+    const hit = force ? null : cachedStudentResults(emails, from);
+    if (hit) {
+      state.entry = hit;
+      state.reused = true;
+      statusEl.textContent = '';
+      exportBtn.disabled = false;
+      render();
+      return;
+    }
+    refreshBtn.disabled = true;
+    setStatus(statusEl, t('Loading results…'), 'ok');
+    try {
+      const data = await studentsApi('/api/students/history', { method: 'POST', body: { emails, from } });
+      state.entry = rememberStudentResults(emails, from, {
+        assignments: data?.assignments || {},
+        attempts: Array.isArray(data?.attempts) ? data.attempts : [],
+        cost: data?.cost || null,
+      });
+      state.reused = false;
+      statusEl.textContent = '';
+      exportBtn.disabled = false;
+      render();
+    } catch (err) {
+      setStatus(statusEl, t('Could not load results: {msg}', { msg: err.message }), 'bad');
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  bodyEl.addEventListener('click', (e) => {
+    const point = e.target.closest('[data-focus-code]');
+    if (point && bodyEl.contains(point)) {
+      state.focusCode = point.dataset.focusCode;
+      bodyEl.querySelectorAll('.sr-focus').forEach((el) => el.classList.remove('sr-focus'));
+      const group = [...bodyEl.querySelectorAll('tbody[data-code]')].find((el) => el.dataset.code === state.focusCode);
+      if (group) {
+        group.classList.add('sr-focus');
+        group.scrollIntoView({ block: 'nearest' });
+      }
+      return;
+    }
+    const target = e.target.closest('[data-email]');
+    if (!target || !bodyEl.contains(target) || state.view !== 'class') return;
+    state.view = 'student';
+    state.email = target.dataset.email;
+    state.focusCode = target.dataset.code || '';
+    render();
+    dialog.scrollTop = 0;
+  });
+  backBtn.addEventListener('click', () => {
+    state.view = 'class';
+    state.focusCode = '';
+    render();
+  });
+  periodSelect.addEventListener('change', () => {
+    fromInput.classList.toggle('hidden', periodSelect.value !== 'custom');
+    if (periodSelect.value !== 'custom') {
+      try { localStorage.setItem(STUDENT_RESULTS_PERIOD_KEY, periodSelect.value); } catch { /* storage off */ }
+    }
+    if (periodSelect.value === 'custom' && !fromInput.value) {
+      fromInput.focus();
+      return;
+    }
+    load();
+  });
+  fromInput.addEventListener('change', () => load());
+  liveCheck.addEventListener('change', render);
+  sortSelect.addEventListener('change', () => { state.sort = sortSelect.value; render(); });
+  refreshBtn.addEventListener('click', () => load(true));
+  exportBtn.addEventListener('click', () => {
+    if (!state.entry) return;
+    const summary = summarize();
+    const shown = state.view === 'student' ? summary.students.filter((s) => s.email === state.email) : summary.students;
+    const who = state.view === 'student'
+      ? (shown[0]?.displayName || shown[0]?.email || 'student')
+      : (oneClass || 'students');
+    const slug = String(who).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'students';
+    downloadTextFile(studentResultsCsv({ ...summary, students: shown }), `pinplay-results-${slug}.csv`, 'text/csv;charset=utf-8');
+  });
+
+  document.body.appendChild(overlay);
+  closeBtn.focus();
+  load();
 }
 
 // sources: File objects or { name, text } (pasted JSON).

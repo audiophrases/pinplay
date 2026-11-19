@@ -208,6 +208,7 @@
     B('studentsImportBtn', STUDENTS, 'import students csv'),
     B('studentsExportBtn', STUDENTS, 'export students csv'),
     B('studentsSettingsBtn', STUDENTS, 'sign in rules accounts login'),
+    B('studentsResultsBtn', STUDENTS, 'results attempts scores grades gradebook report history class best'),
 
     // Admin and page
     S('adminSectionToggle', ADMIN, 'admin settings workspaces maintenance'),
