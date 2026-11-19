@@ -1794,8 +1794,9 @@ body.question-active .join-title-row {
 }
 
 /* Teaching slides are presentation surfaces, not compact question labels. */
+/* Font sizes on slides are the largest; play.js fitSlideText shrinks them. */
 #joinCard.question-active[data-qtype="slide"] #joinPrompt {
-  font-size: clamp(2rem, 4.5vw, 4.5rem) !important;
+  font-size: clamp(1.7rem, 3.825vw, 3.825rem) !important;
   line-height: 1.08;
   letter-spacing: -0.025em;
   padding: 18px clamp(20px, 5vw, 72px) !important;
@@ -1816,7 +1817,7 @@ body.question-active .join-title-row {
   background: radial-gradient(circle at 50% 45%, #f3f0ff 0, #fff 68%) !important;
   /* Starting size: play.js fitSlideLayout shrinks long texts until they fit.
      A text too long even at the smallest size scrolls instead of spilling. */
-  font-size: clamp(3rem, 7vw, 7rem) !important;
+  font-size: clamp(2.55rem, 5.95vw, 5.95rem) !important;
   overflow-y: auto;
 }
 
@@ -1832,12 +1833,14 @@ body.question-active .join-title-row {
   bottom: var(--slide-bottom, 192px);
 }
 
+/* The projector slide uses the whole width; typed line breaks decide where
+   lines end. app.js fitHostSlidePrompt shrinks the letters to fit. */
 #hostQuestionCard[data-qtype="slide"] #hostQuestionPrompt {
-  font-size: clamp(2.5rem, 6vw, 6.5rem);
+  font-size: clamp(2.125rem, 5.1vw, 5.525rem);
   line-height: 1.08;
   letter-spacing: -0.025em;
   text-align: center;
-  max-width: 18ch;
+  max-width: none;
   margin-inline: auto;
   white-space: pre-line;
   overflow-wrap: break-word;

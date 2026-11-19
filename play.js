@@ -4320,6 +4320,75 @@ function applyJoinLayoutMode(active, question = null) {
   joinCardEl.classList.toggle('slide-text-only', qType === 'slide' && !question?.imageData && !hasVideo && !String(question?.readingText || '').trim());
 }
 
+// Teaching slide letters: the stylesheet size is the largest. They shrink only
+// as far as the room needs (halving the gap, so no room is wasted), and the
+// line breaks the teacher typed stay. Then, if shrinking up to 10% more keeps
+// a typed line whole instead of wrapping it, they shrink that far too.
+// Mirrored in app.js and play.js.
+const SLIDE_NO_WRAP_SHRINK = 0.9;
+function slideTextLineCount(el) {
+  const fontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const middles = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.nodeValue.trim() || node.parentElement?.closest('.audio-eq')) continue;
+    range.selectNodeContents(node);
+    for (const r of range.getClientRects()) if (r.width >= 1) middles.push((r.top + r.bottom) / 2);
+  }
+  middles.sort((a, b) => a - b);
+  let lines = 0;
+  let lineMiddle = -Infinity;
+  for (const y of middles) {
+    if (y - lineMiddle > fontPx * 0.5) {
+      lines += 1;
+      lineMiddle = y;
+    }
+  }
+  return lines;
+}
+function fitSlideText(el, minPx, fits, priority = '') {
+  el.style.removeProperty('font-size');
+  const start = parseFloat(getComputedStyle(el).fontSize) || 48;
+  const setSize = (px) => el.style.setProperty('font-size', `${px}px`, priority);
+  let size = start;
+  if (!fits()) {
+    let lo = Math.min(minPx, start);
+    let hi = start;
+    setSize(lo);
+    if (fits()) {
+      while (hi - lo > 0.5) {
+        const mid = (lo + hi) / 2;
+        setSize(mid);
+        if (fits()) lo = mid;
+        else hi = mid;
+      }
+    }
+    size = lo;
+    setSize(size);
+  }
+  const floor = Math.max(minPx, size * SLIDE_NO_WRAP_SHRINK);
+  if (floor < size) {
+    const lines = slideTextLineCount(el);
+    setSize(floor);
+    const fewest = slideTextLineCount(el);
+    if (fewest < lines) {
+      let lo = floor;
+      let hi = size;
+      while (hi - lo > 0.25) {
+        const mid = (lo + hi) / 2;
+        setSize(mid);
+        if (slideTextLineCount(el) <= fewest) lo = mid;
+        else hi = mid;
+      }
+      size = lo;
+    }
+  }
+  if (size === start) el.style.removeProperty('font-size');
+  else setSize(size);
+  return size;
+}
+
 // A teaching slide with a picture or a text: the title takes at most about a
 // third of the screen (its letters shrink until it does), and the picture
 // fills the room left between the title and the bottom bar.
@@ -4337,21 +4406,13 @@ function fitSlideLayout() {
     joinQuestionWrap.style.removeProperty('--slide-top');
     joinQuestionWrap.style.removeProperty('--slide-bottom');
     if (isSlide) {
-      let textSize = parseFloat(getComputedStyle(joinPromptEl).fontSize) || 48;
-      while (joinPromptEl.scrollHeight > joinPromptEl.clientHeight + 1 && textSize > SLIDE_TEXT_MIN_PX) {
-        textSize = Math.max(SLIDE_TEXT_MIN_PX, Math.floor(textSize * 0.94));
-        joinPromptEl.style.setProperty('font-size', `${textSize}px`, 'important');
-      }
+      fitSlideText(joinPromptEl, SLIDE_TEXT_MIN_PX, () => joinPromptEl.scrollHeight <= joinPromptEl.clientHeight + 1, 'important');
     }
     return;
   }
   const viewportH = window.innerHeight || document.documentElement.clientHeight || 900;
   const maxH = viewportH * SLIDE_TITLE_MAX_SHARE;
-  let size = parseFloat(getComputedStyle(joinPromptEl).fontSize) || 32;
-  while (joinPromptEl.offsetHeight > maxH && size > SLIDE_TITLE_MIN_PX) {
-    size = Math.max(SLIDE_TITLE_MIN_PX, size - 2);
-    joinPromptEl.style.setProperty('font-size', `${size}px`, 'important');
-  }
+  fitSlideText(joinPromptEl, SLIDE_TITLE_MIN_PX, () => joinPromptEl.offsetHeight <= maxH, 'important');
   const bar = document.getElementById('joinQuestionInteractive');
   const top = joinPromptEl.getBoundingClientRect().bottom;
   const bottom = bar ? viewportH - bar.getBoundingClientRect().top : 0;

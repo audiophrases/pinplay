@@ -15225,23 +15225,92 @@ function toggleHostListeningAudio() {
   return true;
 }
 
-// A long teaching slide on the projector: the text takes the full width and
-// its letters shrink until it fits in about two thirds of the screen.
+// Teaching slide letters: the stylesheet size is the largest. They shrink only
+// as far as the room needs (halving the gap, so no room is wasted), and the
+// line breaks the teacher typed stay. Then, if shrinking up to 10% more keeps
+// a typed line whole instead of wrapping it, they shrink that far too.
+// Mirrored in app.js and play.js.
+const SLIDE_NO_WRAP_SHRINK = 0.9;
+function slideTextLineCount(el) {
+  const fontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const middles = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.nodeValue.trim() || node.parentElement?.closest('.audio-eq')) continue;
+    range.selectNodeContents(node);
+    for (const r of range.getClientRects()) if (r.width >= 1) middles.push((r.top + r.bottom) / 2);
+  }
+  middles.sort((a, b) => a - b);
+  let lines = 0;
+  let lineMiddle = -Infinity;
+  for (const y of middles) {
+    if (y - lineMiddle > fontPx * 0.5) {
+      lines += 1;
+      lineMiddle = y;
+    }
+  }
+  return lines;
+}
+function fitSlideText(el, minPx, fits, priority = '') {
+  el.style.removeProperty('font-size');
+  const start = parseFloat(getComputedStyle(el).fontSize) || 48;
+  const setSize = (px) => el.style.setProperty('font-size', `${px}px`, priority);
+  let size = start;
+  if (!fits()) {
+    let lo = Math.min(minPx, start);
+    let hi = start;
+    setSize(lo);
+    if (fits()) {
+      while (hi - lo > 0.5) {
+        const mid = (lo + hi) / 2;
+        setSize(mid);
+        if (fits()) lo = mid;
+        else hi = mid;
+      }
+    }
+    size = lo;
+    setSize(size);
+  }
+  const floor = Math.max(minPx, size * SLIDE_NO_WRAP_SHRINK);
+  if (floor < size) {
+    const lines = slideTextLineCount(el);
+    setSize(floor);
+    const fewest = slideTextLineCount(el);
+    if (fewest < lines) {
+      let lo = floor;
+      let hi = size;
+      while (hi - lo > 0.25) {
+        const mid = (lo + hi) / 2;
+        setSize(mid);
+        if (slideTextLineCount(el) <= fewest) lo = mid;
+        else hi = mid;
+      }
+      size = lo;
+    }
+  }
+  if (size === start) el.style.removeProperty('font-size');
+  else setSize(size);
+  return size;
+}
+
+// A teaching slide on the projector: the text takes the full width. With
+// nothing under it, it may fill the screen down to the bottom edge; with a
+// picture, video or text under it, about two thirds of the screen.
 const HOST_SLIDE_MAX_SHARE = 0.66;
+const HOST_SLIDE_BOTTOM_PX = 56;
 const HOST_SLIDE_MIN_PX = 20;
 function fitHostSlidePrompt() {
   if (!hostQuestionPromptEl) return;
   hostQuestionPromptEl.style.removeProperty('font-size');
-  hostQuestionPromptEl.style.removeProperty('max-width');
   if (hostQuestionCardEl?.dataset.qtype !== 'slide') return;
-  const maxH = (window.innerHeight || 900) * HOST_SLIDE_MAX_SHARE;
-  if (hostQuestionPromptEl.offsetHeight <= maxH) return;
-  hostQuestionPromptEl.style.setProperty('max-width', '100%');
-  let size = parseFloat(getComputedStyle(hostQuestionPromptEl).fontSize) || 48;
-  while (hostQuestionPromptEl.offsetHeight > maxH && size > HOST_SLIDE_MIN_PX) {
-    size = Math.max(HOST_SLIDE_MIN_PX, Math.floor(size * 0.94));
-    hostQuestionPromptEl.style.setProperty('font-size', `${size}px`);
+  const viewportH = window.innerHeight || 900;
+  let maxH = viewportH * HOST_SLIDE_MAX_SHARE;
+  if (hostQuestionCardEl.classList.contains('slide-text-only')) {
+    const top = Math.max(0, hostQuestionPromptEl.getBoundingClientRect().top);
+    maxH = Math.max(maxH, viewportH - top - HOST_SLIDE_BOTTOM_PX);
   }
+  fitSlideText(hostQuestionPromptEl, HOST_SLIDE_MIN_PX, () => hostQuestionPromptEl.offsetHeight <= maxH);
 }
 window.addEventListener('resize', fitHostSlidePrompt);
 
@@ -15260,6 +15329,9 @@ function renderHostQuestion(state) {
 
     hostQuestionCardEl.classList.toggle('has-image', !!q?.imageData);
     hostQuestionCardEl.classList.toggle('poll-mode', !!q?.isPoll);
+    const media = normalizeQuestionMedia(q?.media);
+    const hasVideo = media.kind === 'video' && !!(media.url || media.embedUrl);
+    hostQuestionCardEl.classList.toggle('slide-text-only', qType === 'slide' && !q?.imageData && !hasVideo && !String(q?.readingText || '').trim());
     fitHostSlidePrompt();
   };
 
