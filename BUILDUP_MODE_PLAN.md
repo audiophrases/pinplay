@@ -255,9 +255,13 @@ The AI prompt (`buildBuildupPrompt`, when the slide type is allowed):
 - The example gives its three steps lessons of 2, 1 and 3 slides; the final
   self-check asks whether each lesson teaches exactly its step's change.
 
-Not done: batches still count practice questions only (60 per reply). A
-12-step climb with full lessons can reach about 100 items in one reply; if
-replies get cut off, count the expected slides toward the batch size.
+Batches count the lessons too: with slides allowed, each step counts as its
+questions plus 2 slides (`BUILDUP_PROMPT_LESSON_SLIDES`, the average lesson)
+toward the 60 items of one reply. 12 × 5 now comes in two batches (steps
+1–6, 7–12), 12 × 10 in three. Only the numbers change: no instruction about
+slides was added to the batch rule (the owner's wish: no extra rules that
+dilute the prompt). The form's note says "N questions and their lessons"
+and updates when the slide type is ticked or unticked.
 
 Tests: `tests/buildup.test.js` (the lesson at the start and its place, the
 same lesson after each miss, first arrival only, the step missed, a step

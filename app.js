@@ -1268,6 +1268,8 @@ function bindBuilderEvents() {
     document.getElementById(id)?.addEventListener('input', syncPromptBatchNotes);
   });
   document.getElementById('promptAiMode')?.addEventListener('change', syncPromptBatchNotes);
+  // Climb: allowing slides adds lessons, which can tip the quiz into batches.
+  document.getElementById('promptBuildupTypes')?.addEventListener('change', syncPromptBatchNotes);
   syncPromptBatchNotes();
   // "Only the script" is made in the 🎧 Listening recordings card: the option
   // takes you there and the choice goes back to what it was.
@@ -6146,8 +6148,16 @@ function buildupPromptExampleQuestions(allowed) {
   return steps.flatMap((s) => [...lessons.filter((l) => l.step === s), ...questions.filter((q) => q.step === s)]);
 }
 
-// Past PROMPT_BATCH_MAX questions a climb comes in batches of whole steps,
-// as even as they can be: each batch is [first step, last step].
+// What a step's lesson adds to a reply, on average, when slides are allowed:
+// a batch counts it with the step's questions.
+const BUILDUP_PROMPT_LESSON_SLIDES = 2;
+function buildupPromptStepItems(items, slides) {
+  return items + (slides ? BUILDUP_PROMPT_LESSON_SLIDES : 0);
+}
+
+// Past PROMPT_BATCH_MAX items a climb comes in batches of whole steps,
+// as even as they can be: each batch is [first step, last step]. `items` is
+// what one step holds (its questions, plus its lesson when slides are allowed).
 function buildupPromptBatches(steps, items) {
   const most = Math.max(1, Math.floor(PROMPT_BATCH_MAX / Math.max(1, items)));
   const count = Math.ceil(steps / most);
@@ -6194,12 +6204,13 @@ function syncPromptBatchNotes() {
   else if (typed > PROMPT_BATCH_MAX) standard = t('Batches hold at most {max} questions.', { max: PROMPT_BATCH_MAX });
   note('promptBatchNote', standard);
   const { steps, items } = buildupPromptSize(document.getElementById('promptBuildupSteps')?.value, document.getElementById('promptBuildupItems')?.value);
-  const batches = !agent && steps * items > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
-  note('promptBuildupBatchNote', batches.length
-    ? t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in {count} batches of whole steps (steps {parts}). Import the first, then add each next one with Import → Append.', {
-      n: steps * items, count: batches.length, parts: batches.map(([from, to]) => (from === to ? String(from) : `${from}–${to}`)).join(', '),
-    })
-    : '');
+  const slides = !!document.querySelector('#promptBuildupTypes input[value="slide"]')?.checked;
+  const perStep = buildupPromptStepItems(items, slides);
+  const batches = !agent && steps * perStep > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, perStep) : [];
+  const batchVars = { n: steps * items, count: batches.length, parts: batches.map(([from, to]) => (from === to ? String(from) : `${from}–${to}`)).join(', ') };
+  note('promptBuildupBatchNote', !batches.length ? '' : (slides
+    ? t('⚠ {n} questions and their lessons are more than one AI reply can safely hold: the AI will send them in {count} batches of whole steps (steps {parts}). Import the first, then add each next one with Import → Append.', batchVars)
+    : t('⚠ {n} questions are more than one AI reply can safely hold: the AI will send them in {count} batches of whole steps (steps {parts}). Import the first, then add each next one with Import → Append.', batchVars)));
 }
 
 function buildBuildupPrompt(req) {
@@ -6221,7 +6232,8 @@ function buildBuildupPrompt(req) {
   ].filter(Boolean);
   const name = toSafeFilename(skill) || 'build-up';
   const total = steps * items;
-  const batches = !agent && total > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, items) : [];
+  const perStep = buildupPromptStepItems(items, allowed.includes('slide'));
+  const batches = !agent && steps * perStep > PROMPT_BATCH_MAX ? buildupPromptBatches(steps, perStep) : [];
   const span =([from, to]) => (from === to ? `step ${from}` : `steps ${from}–${to}`);
 
   const task = [
@@ -6251,7 +6263,7 @@ function buildBuildupPrompt(req) {
     ...promptAudioRules(req),
     agent && total > PROMPT_BATCH_MAX ? PROMPT_AGENT_ONE_FILE_RULE : undefined,
     batches.length
-      ? `The quiz has more questions than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
+      ? `The quiz is more than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
       : undefined,
     batches.length
       ? `Before you send a batch, walk through its steps: for each, say to yourself what is new compared with the one before, ${allowed.includes('slide') ? 'check that its lesson teaches exactly that, ' : ''}count its ${items} questions and check every answer once more.`

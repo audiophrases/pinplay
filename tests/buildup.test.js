@@ -622,7 +622,7 @@ describe('the Climb AI prompt and the steps plan', () => {
   before(() => {
     A = loadDeclarations(read('app.js'), [
       'CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
-      'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'buildupPromptBatches', 'buildupPromptSize',
+      'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_LESSON_SLIDES', 'buildupPromptStepItems', 'buildupPromptBatches', 'buildupPromptSize',
       'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
     ]);
   });
@@ -766,15 +766,27 @@ describe('the Climb AI prompt and the steps plan', () => {
   });
 
   it('up to 60 questions come in one JSON object, more in batches of whole steps', () => {
-    const one = build({ steps: 12, itemsPerStep: 5 });
+    const noSlides = { selectedTypes: ['mcq', 'text'] };
+    const one = build({ steps: 12, itemsPerStep: 5, ...noSlides });
     assert.match(section(one, 'Task'), /60 in all, in one JSON object/);
     assert.doesNotMatch(one, /batch/);
-    const two = build({ steps: 12, itemsPerStep: 10 });
+    const two = build({ steps: 12, itemsPerStep: 10, ...noSlides });
     assert.match(section(two, 'Task'), /120 in all, in 2 batches of whole steps \(steps 1–6, then steps 7–12\), one JSON object per batch/);
     assert.match(section(two, 'Rules'), /batch 1 = steps 1–6; batch 2 = steps 7–12\. Batch 1 starts with the whole "stepsPlan" \(all 12 steps\)/);
     assert.match(section(two, 'Rules'), /Send batch 1 now and stop/);
     assert.match(two, /-part1\.json" \(part2, part3/);
-    assert.match(section(build({ steps: 7, itemsPerStep: 9 }), 'Task'), /in 2 batches of whole steps \(steps 1–4, then steps 5–7\)/);
+    assert.match(section(build({ steps: 7, itemsPerStep: 9, ...noSlides }), 'Task'), /in 2 batches of whole steps \(steps 1–4, then steps 5–7\)/);
+  });
+
+  it('counts each step\'s lesson toward a batch when slides are allowed, with no extra instructions', () => {
+    // 12 × 5 = 60 questions fit one reply; with about 2 lesson slides a step they don't.
+    assert.match(section(build({ steps: 12, itemsPerStep: 5 }), 'Task'), /60 in all, in 2 batches of whole steps \(steps 1–6, then steps 7–12\)/);
+    assert.match(section(build({ steps: 12, itemsPerStep: 10 }), 'Task'), /in 3 batches of whole steps \(steps 1–4, then steps 5–8, then steps 9–12\)/);
+    assert.match(section(build({ steps: 5, itemsPerStep: 5 }), 'Task'), /25 in all, in one JSON object/);
+    // Only the numbers change: the batch rule says nothing about slides.
+    const rule = section(build({ steps: 12, itemsPerStep: 10 }), 'Rules').split('\n').find((l) => l.includes('Send batch 1 now'));
+    assert.match(rule, /The quiz is more than one reply can safely hold, so it comes in 3 batches: batch 1 = steps 1–4; batch 2 = steps 5–8; batch 3 = steps 9–12\./);
+    assert.doesNotMatch(rule, /slide|lesson/i);
   });
 
   it('every batch holds whole steps, at most 60 questions, from step 1 to the last with no gap', () => {
@@ -1033,7 +1045,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
   });
 
   it('a quiz made by the prompt\'s own example is accepted as a build up', async () => {
-    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildupPromptSize', 'buildupPromptBatches', 'buildBuildupPrompt']);
+    const A = loadDeclarations(read('app.js'), ['CEFR_LEVELS', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'toSafeFilename', 'PROMPT_BATCH_MAX', 'BUILDUP_MAX_STEPS', 'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildupPromptSize', 'BUILDUP_PROMPT_LESSON_SLIDES', 'buildupPromptStepItems', 'buildupPromptBatches', 'buildBuildupPrompt']);
     const text = A.buildBuildupPrompt({ skill: 'x', steps: 3, itemsPerStep: 2 }).text;
     const ex = JSON.parse(text.slice(text.indexOf('```json', text.indexOf('## Example')) + 7, text.lastIndexOf('```')));
     const created = await post('/api/assignments/create', { password: PW, quiz: ex, buildup: true, adaptive: true, adaptiveCount: 12, randomNames: true });
