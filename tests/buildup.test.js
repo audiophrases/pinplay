@@ -29,7 +29,7 @@ describe('the build up engine (pure functions)', () => {
     E = loadDeclarations(read('cloudflare/worker.js'), [
       'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
       'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'BUILDUP_MAX_COUNT', 'climbPlanEntry',
-      'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupNext', 'buildupRebase', 'buildupView', 'buildupSummary',
+      'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupNext', 'buildupRebase', 'buildupLessonPlace', 'buildupView', 'buildupSummary',
     ]);
   });
   const fresh = (bands = LEVELS) => E.buildupInit(bands);
@@ -287,56 +287,106 @@ describe('build up assignments (real worker, in-memory storage)', () => {
     assert.match(servedId(s), /^A1-/);
   });
 
-  it('shows same-step teaching slides in order after a miss without grading or moving the climber', async () => {
-    const q = {
-      title: 'Remedial slides',
-      questions: [
-        mcq('S1-1', { step: 1 }),
-        slide('first', { step: 1 }),
-        slide('second', { step: 1 }),
-        mcq('S1-2', { step: 1 }),
-        mcq('S2-1', { step: 2 }),
-        mcq('S2-2', { step: 2 }),
-      ],
-    };
-    const a = await create(q);
-    let s = await start(a.code, 'anon-remedial-slides');
+  // A step's slides are its lesson: before the step's first question, and
+  // the same lesson again after each miss there.
+  const lessonQuiz = () => ({
+    title: 'Lessons',
+    questions: [
+      mcq('S1-1', { step: 1 }),
+      slide('first', { step: 1 }),
+      slide('second', { step: 1 }),
+      mcq('S1-2', { step: 1 }),
+      slide('third', { step: 2 }),
+      mcq('S2-1', { step: 2 }),
+      mcq('S2-2', { step: 2 }),
+      mcq('S3-1', { step: 3 }),
+      mcq('S3-2', { step: 3 }),
+    ],
+  });
+  const served = (s) => s.attempt.assignment.quiz.questions.at(-1);
+  const view = async (code, attemptId, s, answer = '__viewed__') => {
+    const r = await post('/api/assignment/answer', { code, attemptId, qIndex: s.attempt.assignment.quiz.questions.length - 1, answer });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return r.body;
+  };
+
+  it('opens the climb with step 1\'s lesson, in order, without grading or moving the climber', async () => {
+    const a = await create(lessonQuiz());
+    let s = await start(a.code, 'anon-lesson-start');
     const attemptId = s.attempt.id;
-
-    s = await send(a.code, attemptId, s, false);
-    let current = s.attempt.assignment.quiz.questions.at(-1);
-    assert.deepEqual(plain([current.type, current.prompt, current.points, current.timeLimit]), ['slide', 'Teach first', 0, 0]);
+    assert.deepEqual(plain([served(s).type, served(s).prompt, served(s).points, served(s).timeLimit]), ['slide', 'Teach first', 0, 0]);
+    assert.deepEqual(plain(s.attempt.climb.lesson), { i: 1, n: 2 });
     assert.equal(s.attempt.assignment.totalQuestions, 18, 'the 16-practice cap plus two queued slides');
-    assert.equal(s.metrics.autoGradedCount, 1);
-    const climbAfterMiss = plain(s.attempt.climb);
+    const climbAtStart = plain({ ...s.attempt.climb, lesson: undefined });
 
-    let response = await post('/api/assignment/answer', {
-      code: a.code,
-      attemptId,
-      qIndex: s.attempt.assignment.quiz.questions.length - 1,
-      answer: 'anything is ignored',
-    });
-    assert.equal(response.status, 200, JSON.stringify(response.body));
-    s = response.body;
-    current = s.attempt.assignment.quiz.questions.at(-1);
-    assert.deepEqual(plain([current.type, current.prompt]), ['slide', 'Teach second']);
-    assert.deepEqual(plain(s.attempt.climb), climbAfterMiss);
-    assert.equal(s.metrics.autoGradedCount, 1, 'viewing a slide is not a graded answer');
-    assert.equal(s.attempt.assignment.totalQuestions, 18);
+    s = await view(a.code, attemptId, s, 'anything is ignored');
+    assert.deepEqual(plain([served(s).type, served(s).prompt]), ['slide', 'Teach second']);
+    assert.deepEqual(plain(s.attempt.climb.lesson), { i: 2, n: 2 });
+    assert.deepEqual(plain({ ...s.attempt.climb, lesson: undefined }), climbAtStart);
+    assert.equal(s.metrics.autoGradedCount, 0, 'viewing a slide is not a graded answer');
 
-    response = await post('/api/assignment/answer', {
-      code: a.code,
-      attemptId,
-      qIndex: s.attempt.assignment.quiz.questions.length - 1,
-      answer: '__viewed__',
-    });
-    assert.equal(response.status, 200, JSON.stringify(response.body));
-    s = response.body;
-    current = s.attempt.assignment.quiz.questions.at(-1);
-    assert.notEqual(current.type, 'slide');
-    assert.deepEqual(plain(s.attempt.climb), climbAfterMiss);
-    assert.equal(s.metrics.autoGradedCount, 1);
+    s = await view(a.code, attemptId, s);
+    assert.equal(served(s).type, 'mcq');
+    assert.match(servedId(s), /^S1-/);
+    assert.equal(s.attempt.climb.lesson, undefined);
     assert.equal(s.attempt.assignment.totalQuestions, 18);
+  });
+
+  it('plays the same lesson again after each miss on its step', async () => {
+    const a = await create(lessonQuiz());
+    let s = await start(a.code, 'anon-lesson-miss');
+    const attemptId = s.attempt.id;
+    s = await view(a.code, attemptId, s);
+    s = await view(a.code, attemptId, s);
+    s = await send(a.code, attemptId, s, false);
+    assert.deepEqual(plain([served(s).type, served(s).prompt]), ['slide', 'Teach first']);
+    assert.deepEqual(plain(s.attempt.climb.lesson), { i: 1, n: 2 });
+    assert.equal(s.attempt.climb.moved, 'hold');
+    assert.equal(s.metrics.autoGradedCount, 1);
+    assert.equal(s.attempt.assignment.totalQuestions, 20, 'the cap plus two slides seen and two queued');
+    s = await view(a.code, attemptId, s);
+    assert.equal(served(s).prompt, 'Teach second');
+    s = await view(a.code, attemptId, s);
+    assert.match(servedId(s), /^S1-/);
+    s = await send(a.code, attemptId, s, false);
+    assert.equal(served(s).prompt, 'Teach first', 'every miss, the whole lesson');
+  });
+
+  it('plays a step\'s lesson on reaching its camp the first time, never on coming back, and none for a step without one', async () => {
+    const a = await create(lessonQuiz());
+    let s = await start(a.code, 'anon-lesson-camp');
+    const attemptId = s.attempt.id;
+    s = await view(a.code, attemptId, s);
+    s = await view(a.code, attemptId, s);
+    s = await send(a.code, attemptId, s, true); // Camp 1, first time
+    assert.equal(s.attempt.climb.flag, 1);
+    assert.deepEqual(plain([served(s).type, served(s).prompt]), ['slide', 'Teach third']);
+    assert.deepEqual(plain(s.attempt.climb.lesson), { i: 1, n: 1 });
+    s = await view(a.code, attemptId, s);
+    assert.match(servedId(s), /^S2-/);
+    s = await send(a.code, attemptId, s, false); // missed step 2: back to Base Camp, step 2's lesson
+    assert.equal(s.attempt.climb.rung, 0);
+    assert.equal(served(s).prompt, 'Teach third', 'the lesson of the step missed');
+    s = await view(a.code, attemptId, s);
+    assert.match(servedId(s), /^S1-/);
+    s = await send(a.code, attemptId, s, true); // back at Camp 1: no lesson
+    assert.equal(s.attempt.climb.flag, null);
+    assert.match(servedId(s), /^S2-/);
+    s = await send(a.code, attemptId, s, true);
+    s = await send(a.code, attemptId, s, true); // Camp 2, first time, step 3 has no lesson
+    assert.equal(s.attempt.climb.flag, 2);
+    assert.match(servedId(s), /^S3-/);
+  });
+
+  it('plays no lesson when no question would follow it (the cap)', async () => {
+    const a = await create(lessonQuiz(), { adaptiveCount: 1 });
+    let s = await start(a.code, 'anon-lesson-cap');
+    const attemptId = s.attempt.id;
+    s = await view(a.code, attemptId, s);
+    s = await view(a.code, attemptId, s);
+    s = await send(a.code, attemptId, s, false);
+    assert.equal(s.attempt.climb.done, true);
+    assert.equal(s.attempt.climb.lesson, undefined);
   });
 
   it('a student who answers everything right reaches the summit and the attempt is done', async () => {
@@ -646,23 +696,31 @@ describe('the Climb AI prompt and the steps plan', () => {
     assert.ok(ex.questions.filter((q) => q.type === 'text').every((q) => q.accepted.length));
   });
 
-  it('shows one short slide in the example, before its step\'s questions, only when slides are allowed', () => {
+  it('gives every step of the example a lesson sized to its change, just before its questions, only when slides are allowed', () => {
     const text = build();
     const ex = exampleOf(text);
     const slides = ex.questions.filter((q) => q.type === 'slide');
-    assert.equal(slides.length, 1);
-    const [slide] = slides;
-    assert.deepEqual([slide.points, slide.timeLimit, slide.step], [0, 0, 3]);
-    assert.match(slide.prompt, /\n/);
-    assert.ok(slide.prompt.length <= 200 && slide.prompt.split('\n').length <= 5);
-    const at = ex.questions.indexOf(slide);
-    assert.equal(ex.questions[at + 1].step, 3);
-    assert.ok(ex.questions.slice(0, at).every((q) => q.step < 3));
-    assert.match(section(text, 'Example'), /2 questions each, plus one optional teaching slide\)/);
+    assert.deepEqual(plain([1, 2, 3].map((s) => slides.filter((q) => q.step === s).length)), [2, 1, 3], 'a new form gets more slides than a new kind of subject');
+    assert.ok(slides.every((q) => q.points === 0 && q.timeLimit === 0));
+    // Within the phone budget, marks not counted.
+    assert.ok(slides.every((q) => q.prompt.replace(/\*\*/g, '').length <= 200 && q.prompt.split('\n').length <= 5));
+    // Item order: each step's lesson, then its questions.
+    assert.deepEqual(plain(ex.questions.map((q) => `${q.step}${q.type === 'slide' ? 's' : 'q'}`)), ['1s', '1s', '1q', '1q', '2s', '2q', '2q', '3s', '3s', '3s', '3q', '3q']);
+    // A lesson never gives a practice answer away.
+    const answers = ex.questions.flatMap((q) => [...(q.answers || []).filter((x) => x.correct).map((x) => x.text), ...(q.accepted || [])]);
+    slides.forEach((sl) => answers.forEach((ans) => assert.doesNotMatch(sl.prompt.replace(/\*\*/g, ''), new RegExp(`\\b${ans}\\b`, 'i'), `${sl.id}: ${ans}`)));
+    assert.match(section(text, 'Example'), /2 questions each, each step after its lesson of 2, 1 and 3 slides\)/);
+    const rules = section(text, 'Rules');
+    assert.match(rules, /A lesson for each step/);
+    assert.match(rules, /before the student's first question at that step, and again after every wrong answer there/);
+    assert.match(rules, /Size each lesson to its step's "change"/);
+    assert.match(rules, /never a practice question's sentence or answer/);
+    assert.match(rules, /the lesson slides of step 1, then its practice questions/);
+    assert.match(section(text, 'Task'), /each step's lesson slides come on top/);
 
     const without = build({ selectedTypes: ['mcq', 'text'] });
     assert.ok(exampleOf(without).questions.every((q) => q.type !== 'slide'));
-    assert.doesNotMatch(section(without, 'Example'), /teaching slide/);
+    assert.doesNotMatch(without, /lesson/i);
   });
 
   it('uses one identical copy of the plan cleaner in app.js and worker.js', () => {
@@ -742,7 +800,7 @@ describe('Climb steps: the pure rules (BUILDUP_MODE_PLAN.md section 10)', () => 
       'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
       'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'climbPlanEntry', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep',
       'normalizeCefrLevel', 'quizUsesClimbSteps', 'buildupKeyMap',
-      'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupRebase', 'buildupView', 'buildupSummary',
+      'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupRebase', 'buildupLessonPlace', 'buildupView', 'buildupSummary',
     ]);
   });
   // A student on step `rung` (an index), having reached `best` and cleared the steps below.
@@ -865,7 +923,7 @@ describe('the guide\'s tip carries the step\'s rule', () => {
   before(() => {
     E = loadDeclarations(read('cloudflare/worker.js'), [
       'CEFR_LEVELS', 'clamp', 'ADAPTIVE_START', 'ADAPTIVE_PATH_MAX', 'adaptiveInit', 'adaptivePathOk', 'adaptiveTally',
-      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupView', 'climbPlanEntry',
+      'BUILDUP_NEED', 'BUILDUP_NEED_EASY', 'BUILDUP_TIP_AFTER', 'buildupInit', 'buildupNeed', 'buildupRecord', 'buildupLessonPlace', 'buildupView', 'climbPlanEntry',
     ]);
   });
   const plan = [{ cefr: 'A1', rule: 'Rule one.' }, { cefr: 'A2', rule: 'Rule two.' }, { cefr: 'B1', rule: 'Rule three.' }];
@@ -874,6 +932,19 @@ describe('the guide\'s tip carries the step\'s rule', () => {
 
   it('shows the first step\'s rule at the very start', () => {
     assert.equal(E.buildupView(st(), plan).rule, 'Rule one.');
+  });
+
+  it('keeps the first rule through step 1\'s lesson, and says where the lesson is', () => {
+    const s = st();
+    Object.assign(s, { current: 7, currentSlide: true, slideQueue: [8], lessonSize: 2 });
+    assert.deepEqual(plain(E.buildupView(s, plan).lesson), { i: 1, n: 2 });
+    s.items.push({ qi: 7, slide: true });
+    Object.assign(s, { current: 8, slideQueue: [] });
+    const v = E.buildupView(s, plan);
+    assert.equal(v.rule, 'Rule one.', 'a slide seen is not an answer');
+    assert.deepEqual(plain(v.lesson), { i: 2, n: 2 });
+    delete s.currentSlide;
+    assert.equal(E.buildupView(s, plan).lesson, undefined);
   });
 
   it('shows a step\'s rule on arriving at its camp for the first time, not on every answer', () => {
@@ -970,5 +1041,7 @@ describe('a build up quiz with a plan (real worker, in-memory storage)', () => {
     const started = await post('/api/assignment/start', { code: created.body.assignment.code, studentKey: 'anon-ex', studentName: 'Kid' });
     assert.equal(started.body.attempt.climb.n, 4);
     assert.ok(started.body.attempt.climb.rule);
+    assert.equal(started.body.attempt.assignment.quiz.questions.at(-1).type, 'slide', 'step 1\'s lesson first');
+    assert.deepEqual(plain(started.body.attempt.climb.lesson), { i: 1, n: 2 });
   });
 });

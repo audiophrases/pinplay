@@ -1793,6 +1793,20 @@ body.question-active .join-title-row {
   margin-right: -9px;
 }
 
+/* Climb: the slide's place in its step's lesson (🎓 2/4). */
+.join-slide-mark.has-lesson {
+  margin-right: 0;
+  white-space: nowrap;
+}
+
+.join-slide-mark.has-lesson::after {
+  content: attr(data-lesson);
+  margin-left: 3px;
+  font-size: 0.68em;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 .join-slide-audio {
   display: inline-flex;
   align-items: center;

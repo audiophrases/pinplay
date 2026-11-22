@@ -3778,7 +3778,7 @@ export class QuizRoom {
           attempt.answersByQ = attempt.answersByQ && typeof attempt.answersByQ === 'object' ? attempt.answersByQ : {};
           attempt.answersByQ[String(qi)] = withAiNote({ answer: safeAnswer, bet, teacherGrade: null, updatedAt: now }, served);
           if (isSlide) {
-            buildupAdvanceRemediation(assignment, st);
+            buildupAdvanceLesson(assignment, st);
           } else if (teacher) {
             adaptiveRecordPending(st, qi, qBand);
             // 🤖 A score moves the level now, as a teacher's grade does later.
@@ -3788,7 +3788,7 @@ export class QuizRoom {
           else if (st.bu) {
             const outcome = adaptiveOutcome(evaluate(served, safeAnswer));
             buildupRecord(st, qi, qBand, outcome);
-            if (outcome !== 'wrong' || !buildupStartRemediation(assignment, st, qBand)) adaptiveAttemptAdvance(assignment, st);
+            buildupAfterAnswer(assignment, st, qBand, outcome);
           } else {
             adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, safeAnswer)));
             adaptiveAttemptAdvance(assignment, st);
@@ -9876,10 +9876,7 @@ function adaptiveAttemptRemap(assignment, st, mapQi, { climbKeyMap = null } = {}
     st.current = st.current == null ? null : mapQi(st.current);
     if (st.currentSlide && st.current == null) {
       if (st.slideQueue?.length) st.current = st.slideQueue.shift();
-      else {
-        delete st.currentSlide;
-        delete st.slideQueue;
-      }
+      else buildupEndLesson(st);
     }
     if (st.bu) buildupRebase(st, buildupPool(assignment).bands, climbKeyMap);
     if (st.current == null) adaptiveAttemptAdvance(assignment, st);
@@ -10536,14 +10533,14 @@ function applyPublicPlayAnswer(assignment, attempt, qIndex, rawAnswer, rawBet, n
     st.items.push({ qi, answer, bet, at: now, ...(isSlide ? { slide: true } : {}), ...(teacher ? { band: adaptiveBand(st), qBand } : {}) });
     attempt.answersByQ[String(qi)] = { answer, bet, teacherGrade: null, updatedAt: now };
     if (isSlide) {
-      buildupAdvanceRemediation(assignment, st);
+      buildupAdvanceLesson(assignment, st);
     } else if (teacher) {
       adaptiveRecordPending(st, qi, qBand);
       adaptiveAttemptAdvance(assignment, st);
     } else if (st.bu) {
       const outcome = adaptiveOutcome(evaluate(served, answer));
       buildupRecord(st, qi, qBand, outcome);
-      if (outcome !== 'wrong' || !buildupStartRemediation(assignment, st, qBand)) adaptiveAttemptAdvance(assignment, st);
+      buildupAfterAnswer(assignment, st, qBand, outcome);
     } else {
       adaptiveRecord(st, qi, qBand, adaptiveOutcome(evaluate(served, answer)));
       adaptiveAttemptAdvance(assignment, st);
@@ -12538,10 +12535,12 @@ function buildupPool(assignment) {
   return adaptivePool(questions, eligible);
 }
 
-// Slides are not part of the graded pool. After a miss, Climb inserts every
-// slide tagged to that missed band, in authoring order, before it serves the
-// next practice question. This makes adjacent slides a short teaching sequence.
-function buildupRemediationSlides(assignment, st, band) {
+// A step's lesson: every slide tagged to it, in quiz order. Slides are not
+// part of the graded pool. One lesson both teaches and reminds: it plays
+// before the step's first question (step 1's at the start, the others on
+// reaching their camp for the first time) and again after every miss on
+// that step, before the next practice question.
+function buildupLessonSlides(assignment, st, band) {
   const questions = assignment?.quiz?.questions || [];
   const key = st?.bands?.[band];
   if (key == null) return [];
@@ -12553,25 +12552,51 @@ function buildupRemediationSlides(assignment, st, band) {
     .map(({ qi }) => qi);
 }
 
-function buildupStartRemediation(assignment, st, band) {
-  const slides = buildupRemediationSlides(assignment, st, band);
+// Queue the lesson of a band. Not when no question would follow it: the
+// summit, or the cap reached.
+function buildupStartLesson(assignment, st, band) {
+  if (!(band >= 0) || st.bu?.summit) return false;
+  const singles = (st.items || []).filter((it) => !it.section && !it.slide).length;
+  if (singles >= st.count) return false;
+  const slides = buildupLessonSlides(assignment, st, band);
   if (!slides.length) return false;
   st.current = slides[0];
   st.slideQueue = slides.slice(1);
   st.currentSlide = true;
+  st.lessonSize = slides.length;
   return true;
 }
 
-function buildupAdvanceRemediation(assignment, st) {
+function buildupEndLesson(st) {
+  delete st.slideQueue;
+  delete st.currentSlide;
+  delete st.lessonSize;
+}
+
+function buildupAdvanceLesson(assignment, st) {
   const queue = Array.isArray(st.slideQueue) ? st.slideQueue : [];
   if (queue.length) {
     st.current = queue.shift();
     st.slideQueue = queue;
     return;
   }
-  delete st.slideQueue;
-  delete st.currentSlide;
+  buildupEndLesson(st);
   adaptiveAttemptAdvance(assignment, st);
+}
+
+// After a graded climb answer: the lesson of the step just missed, or of a
+// camp reached for the first time; else (or without one) the next question.
+function buildupAfterAnswer(assignment, st, qBand, outcome) {
+  const band = outcome === 'wrong' ? qBand : (st.bu.flag != null ? st.bu.rung : -1);
+  if (!buildupStartLesson(assignment, st, band)) adaptiveAttemptAdvance(assignment, st);
+}
+
+// Where the student is in the lesson on screen: slide i of n.
+function buildupLessonPlace(st) {
+  if (!st?.currentSlide) return null;
+  const n = Math.max(1, Number(st.lessonSize) || 1);
+  const left = Array.isArray(st.slideQueue) ? st.slideQueue.length : 0;
+  return { i: Math.max(1, Math.min(n, n - left)), n };
 }
 
 // The same quiz can be assigned, played publicly or used in Cup. Its local
@@ -12748,9 +12773,10 @@ function buildupView(st, plan = null) {
   const n = st.bands.length + 1;
   // The AI's rule for the step the student is on (quiz.stepsPlan), shown as
   // the guide's tip on arriving at a camp for the first time, at the very
-  // start, and after three wrong answers in a row.
+  // start (through step 1's lesson), and after three wrong answers in a row.
   const rule = bu.summit ? '' : String(climbPlanEntry(plan, st.bands[bu.rung])?.rule || '');
-  const showRule = !!rule && (bu.wrongRun >= BUILDUP_TIP_AFTER || bu.flag != null || !(st.items || []).length);
+  const showRule = !!rule && (bu.wrongRun >= BUILDUP_TIP_AFTER || bu.flag != null || !(st.items || []).some((it) => !it.slide));
+  const lesson = buildupLessonPlace(st);
   return {
     n,
     rung: bu.summit ? n - 1 : bu.rung,
@@ -12763,6 +12789,7 @@ function buildupView(st, plan = null) {
     summit: !!bu.summit,
     done: !!st.done,
     ...(showRule ? { rule } : {}),
+    ...(lesson ? { lesson } : {}),
   };
 }
 
@@ -12787,7 +12814,8 @@ function buildupAttemptInit(assignment) {
   st.items = [];
   st.done = false;
   st.current = null;
-  adaptiveAttemptServe(assignment, st, pool);
+  // Step 1's lesson comes before its first question.
+  if (!buildupStartLesson(assignment, st, 0)) adaptiveAttemptServe(assignment, st, pool);
   return st;
 }
 

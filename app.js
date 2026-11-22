@@ -3283,7 +3283,7 @@ function renderBuilder() {
 
     if (q.type === 'slide') {
       specific += `
-        <p class="small top-space"><strong>🎓 No answer needed.</strong> Students watch, read or listen, then continue. Add pictures, GIFs, video, reading text or TTS below. In Climb, slides with the missed question's step appear as a remedial sequence after a wrong answer.</p>
+        <p class="small top-space"><strong>🎓 No answer needed.</strong> Students watch, read or listen, then continue. Add pictures, GIFs, video, reading text or TTS below. In Climb, the slides of a step are its lesson: they play in order before the step's first question, and again after each wrong answer on that step.</p>
       `;
     }
 
@@ -6101,7 +6101,7 @@ const BUILDUP_PROMPT_MAX_ITEMS = 10;
 
 // Where a type reads differently in a build up quiz (a wrong answer costs a step).
 const BUILDUP_PROMPT_TYPE_FIELDS = {
-  slide: 'a remedial teaching screen, not a question: "prompt" is large teaching text, and ' + PROMPT_SLIDE_TEXT + '. A slide has no answer fields. Give it the same "step" as the missed practice it explains. After a wrong answer, PinPlay automatically shows every slide for that step in quiz order, so 2–3 consecutive slides can teach a short sequence. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
+  slide: 'one screen of a step\'s lesson, not a question: "prompt" is large teaching text, and ' + PROMPT_SLIDE_TEXT + '. A slide has no answer fields. Give it the "step" of the step it teaches. Optional media: "imageKeyword" or "gifKeyword" (1–3 English words), "videoKeyword", and TTS with "audioEnabled": true, "audioText" and the voice fields.',
   multi: '"answers": [{"text": "…", "correct": true}, {"text": "…", "correct": false}] — 4–5 options, with 2–3 correct. Ask the student to tick every correct option (e.g. the sentences that are correct). Scoring is all-or-nothing: every correct option, and no wrong ones, must be ticked. Use it mid-climb, never at step 1 (Base Camp).',
   match_pairs: '"pairs": [{"left": "…", "right": "…"}] — 3–4 pairs at most. Use form drills such as base verb → past form, subject → verb form, or question → short answer. Each item must have exactly one matching partner, with no interchangeable partners. Scoring is all-or-nothing: one wrong pair costs a step, so never use a long set.',
   puzzle: PROMPT_TYPE_FIELDS.puzzle + ' Use words or short chunks to build the form without spelling it: word order, do/does questions, negatives or adverb position. There must be exactly ONE grammatically correct order: PinPlay accepts only the stored order, so another valid order would wrongly cost a step. Avoid movable time/place phrases, adverbs with several valid positions, and reversible subjects/objects. Do not rely on capitals or punctuation to rule out another valid order. If a sentence can be reordered correctly in another way, rewrite it or use another allowed type.',
@@ -6125,17 +6125,25 @@ const BUILDUP_PROMPT_EXAMPLE = {
     { id: 'q5', type: 'text', prompt: 'She ____ TV every day. (watch)', points: 1000, timeLimit: 0, step: 3, accepted: ['watches'] },
     { id: 'q6', type: 'text', prompt: 'He ____ his teeth. (brush)', points: 1000, timeLimit: 0, step: 3, accepted: ['brushes'] },
   ],
-  // Shown only when slides are allowed, before the questions of its step. One
-  // slide in three steps: slides are occasional. It contrasts forms side by
-  // side, which the step's one-line rule cannot do.
-  slide: { id: 's3', type: 'slide', prompt: 'play → play**s**\nwatch → watch**es**\nbrush → brush**es**', points: 0, timeLimit: 0, step: 3 },
+  // Shown only when slides are allowed: each step's lesson, just before its
+  // questions. Its size follows the step's change: a new form (steps 1 and 3)
+  // gets more slides than a new kind of subject (step 2). One idea per slide,
+  // and never a practice question's sentence or answer.
+  lessons: [
+    { id: 's1a', type: 'slide', prompt: 'With **he**, **she** and **it**,\nthe verb ends in **-s**.\nHe run**s**. She sing**s**.', points: 0, timeLimit: 0, step: 1 },
+    { id: 's1b', type: 'slide', prompt: '✗ He run.\n✓ He run**s**.', points: 0, timeLimit: 0, step: 1 },
+    { id: 's2a', type: 'slide', prompt: 'I, you, we, they: no -s.\nWe run. They sing.\nHe, she, it: **-s**.\nHe run**s**.', points: 0, timeLimit: 0, step: 2 },
+    { id: 's3a', type: 'slide', prompt: 'Verbs ending in **-ch** or **-sh**\ntake **-es**.', points: 0, timeLimit: 0, step: 3 },
+    { id: 's3b', type: 'slide', prompt: 'run → run**s**\nteach → teach**es**\nwash → wash**es**', points: 0, timeLimit: 0, step: 3 },
+    { id: 's3c', type: 'slide', prompt: '✗ She washs.\n✓ She wash**es**.', points: 0, timeLimit: 0, step: 3 },
+  ],
 };
+// The example's items, step by step: each step's lesson, then its questions.
 function buildupPromptExampleQuestions(allowed) {
-  const questions = BUILDUP_PROMPT_EXAMPLE.questions.slice();
-  if (!allowed.includes('slide')) return questions;
-  const at = questions.findIndex((q) => q.step === BUILDUP_PROMPT_EXAMPLE.slide.step);
-  questions.splice(at < 0 ? questions.length : at, 0, BUILDUP_PROMPT_EXAMPLE.slide);
-  return questions;
+  const { questions, lessons } = BUILDUP_PROMPT_EXAMPLE;
+  if (!allowed.includes('slide')) return questions.slice();
+  const steps = [...new Set(questions.map((q) => q.step))];
+  return steps.flatMap((s) => [...lessons.filter((l) => l.step === s), ...questions.filter((q) => q.step === s)]);
 }
 
 // Past PROMPT_BATCH_MAX questions a climb comes in batches of whole steps,
@@ -6220,14 +6228,15 @@ function buildBuildupPrompt(req) {
     `One skill: the one in "Skill" above, and nothing else.`,
     `Steps: ${steps}, numbered 1 to ${steps} (step 1 is the easiest).`,
     batches.length
-      ? `Questions: ${items} per step, ${total} in all, in ${batches.length} batches of whole steps (${batches.map(span).join(', then ')}), one JSON object per batch. These counts are answer-bearing practice questions; teaching slides are extra.`
-      : `Questions: ${items} per step, ${total} in all, in one JSON object. These counts are answer-bearing practice questions; teaching slides are extra.`,
+      ? `Questions: ${items} per step, ${total} in all, in ${batches.length} batches of whole steps (${batches.map(span).join(', then ')}), one JSON object per batch. These counts are answer-bearing practice questions${allowed.includes('slide') ? '; each step\'s lesson slides come on top' : ''}.`
+      : `Questions: ${items} per step, ${total} in all, in one JSON object. These counts are answer-bearing practice questions${allowed.includes('slide') ? '; each step\'s lesson slides come on top' : ''}.`,
     `Question types: use only ${allowed.join(', ')}.`,
   ];
   const rules = [
     'The teacher\'s own words (the section above) come first: if they contradict anything else in these instructions, follow the teacher. Only the JSON format and the field names below stay fixed, because PinPlay needs them to import the quiz.',
     'How it is played: every student starts at step 1 and climbs. A right answer helps them up a step (two in a row on most steps); a wrong answer sends them one step back, where they get a different question of that step. So each step must be climbable by a student who has just got the step before right, and a student sent back must meet a question like the ones they already know.',
-    allowed.includes('slide') ? 'Teaching after a miss: add 1–3 slide items to a step when a concise explanation, worked example or visual would help with its likely mistake. A slide is shown only after the student misses practice at that same step; it does not move the climber or use up the practice-question cap. Several slides with the same step are shown consecutively in quiz order, so make each one a single stage and make the sequence coherent. Slides are optional where the step rule already says enough.' : undefined,
+    allowed.includes('slide') ? 'A lesson for each step: slide items with that step\'s "step", placed just before its practice questions. PinPlay plays the whole lesson, in quiz order, before the student\'s first question at that step, and again after every wrong answer there: the same lesson teaches and then reminds. Slides do not move the climber or use up the practice-question cap.' : undefined,
+    allowed.includes('slide') ? 'Size each lesson to its step\'s "change": a new form or rule, 2–4 slides; a new kind of subject or word, 1–2; only a new kind of answer, none or 1 (the step\'s rule may be enough); the last, mixed step, 1 slide that sums up. One idea per slide, in this order: the new thing with one model sentence; the pattern in 2–3 short examples side by side; the usual mistake beside the right form ("✗ …" / "✓ …", from the teacher\'s list or the students\' first language); an exception or another example only if the step needs it. Keep every slide short: students see the lesson again after each miss. Use simple words, as in the questions, but never a practice question\'s sentence or answer: the lesson shows the pattern, the questions practise it.' : undefined,
     'Use the teacher\'s comments to set the endpoint and pace, including any CEFR target. Spread the increase gradually over the requested steps: more steps mean smaller increases, not a higher final target. A request to reach B2 at the final step does not require reaching C1 or C2.',
     agent ? 'Check the grammar or rule you teach against a reliable source (a grammar reference or a dictionary) before you write the plan; do not invent rules or exceptions.' : undefined,
     'First write "stepsPlan", before any question: one entry per step, in order, with "step" (the step\'s number), "title" (short, for the teacher), "change" (the ONE thing that is new compared with the step before; for step 1, the simplest clear case) and "rule" (one short sentence, in the language of the quiz and at the students\' level, that explains the step; students see it as a guide\'s tip when they reach the step and when they struggle). If you find two new things in one step, split it, or move one to another step. Then write the questions from the plan.',
@@ -6238,15 +6247,15 @@ function buildBuildupPrompt(req) {
     'Exactly ONE defensible solution per question. For single-choice questions, only one option is correct; for Multi, there is one complete set of correct options (several options are right); for Match, one complete pairing; for Puzzle, one correct order. Check each question against its step\'s rule: if another answer, selection set, pairing or order could also be right in some context, change the question.' + (allowed.includes('text') || allowed.includes('context_gap') ? ' For typed answers and gaps list every correct form in "accepted" / "gaps" (see the field list), because a right answer marked wrong costs the student a step.' : ''),
     'Wrong options are the real mistakes students make with this skill (use the teacher\'s list of mistakes if there is one, and the usual mistakes of speakers of their first language), one mistake per question. Never silly or impossible options; no trick questions.',
     'Prompts and options are short. Never a hint inside a question that gives the answer away.',
-    `Items come step by step: any teaching slides and all practice questions of step 1, then step 2, and so on. Every item has "step": its step's number, and no "cefr". No pictures, video, reading texts or listening sections on practice questions, and no polls. Every practice question has a unique "id", "points": 1000 and "timeLimit": 0; every slide has a unique "id", "points": 0 and "timeLimit": 0 and may use a picture/GIF or a video when it materially helps teach the rule.`,
+    `Items come step by step: ${allowed.includes('slide') ? 'the lesson slides of step 1, then its practice questions' : 'all practice questions of step 1'}, then step 2, and so on. Every item has "step": its step's number, and no "cefr". No pictures, video, reading texts or listening sections on practice questions, and no polls. Every practice question has a unique "id", "points": 1000 and "timeLimit": 0; every slide has a unique "id", "points": 0 and "timeLimit": 0 and may use a picture/GIF or a video when it materially helps teach the rule.`,
     ...promptAudioRules(req),
     agent && total > PROMPT_BATCH_MAX ? PROMPT_AGENT_ONE_FILE_RULE : undefined,
     batches.length
       ? `The quiz has more questions than one reply can safely hold, so it comes in ${batches.length} batches: ${batches.map((b, i) => `batch ${i + 1} = ${span(b)}`).join('; ')}. Batch 1 starts with the whole "stepsPlan" (all ${steps} steps); each next batch has only "version", "title" and its "questions", with the same step numbers and ids that go on from the batch before. Send batch 1 now and stop; send each next batch when the teacher asks for it. The teacher imports batch 1 and adds each next one with Import → Append.`
       : undefined,
     batches.length
-      ? `Before you send a batch, walk through its steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`
-      : `Before you reply, walk through the steps: for each, say to yourself what is new compared with the one before, count its ${items} questions and check every answer once more.`,
+      ? `Before you send a batch, walk through its steps: for each, say to yourself what is new compared with the one before, ${allowed.includes('slide') ? 'check that its lesson teaches exactly that, ' : ''}count its ${items} questions and check every answer once more.`
+      : `Before you reply, walk through the steps: for each, say to yourself what is new compared with the one before, ${allowed.includes('slide') ? 'check that its lesson teaches exactly that, ' : ''}count its ${items} questions and check every answer once more.`,
   ].filter(Boolean);
 
   const out = [
@@ -6273,7 +6282,7 @@ function buildBuildupPrompt(req) {
     ...allowed.map((type) => `- ${type}: ${BUILDUP_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
     '',
     '## Example',
-    `Shape only (3 steps and 2 questions each${allowed.includes('slide') ? ', plus one optional teaching slide' : ''}): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each.`,
+    `Shape only (3 steps and 2 questions each${allowed.includes('slide') ? ', each step after its lesson of 2, 1 and 3 slides' : ''}): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each${allowed.includes('slide') ? ', and lessons sized to each step\'s change' : ''}.`,
     '```json',
     `{"version": 3, "title": "Present simple: -s", "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${buildupPromptExampleQuestions(allowed).map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
     '```',
@@ -20232,7 +20241,7 @@ function normalizeCefr(value) {
 
 // Mirrors assignmentAdaptivePool in the worker. Teaching slides are not
 // assessment evidence: linear quizzes keep them in sequence, while Climb
-// serves step-tagged slides only as remediation after a miss.
+// plays a step's slides as its lesson (on arrival, and after each miss).
 function isAdaptiveEligibleQuestion(q) {
   return !!q && !q.isPoll && q.type !== 'slide';
 }
@@ -20565,18 +20574,21 @@ function renderStepsPlan(counts) {
   const steps = climbStepsOf(questions);
   const plan = normalizeStepsPlan(quiz?.stepsPlan);
   const byStep = steps.length > 0;
+  // A step's lesson: its slides (they play on arrival and after each miss).
+  const lessonOf = (match) => questions.filter((q) => q?.type === 'slide' && !q.isPoll && !q.listeningSection && match(q)).length;
   const rows = byStep
     ? [...new Set([...steps, ...plan.map((p) => p.step).filter(Boolean)])].sort((a, b) => a - b)
-      .map((s) => ({ key: s, label: t('Step {n}', { n: s }), entry: plan.find((p) => p.step === s) || {}, n: questions.filter((q) => isAdaptiveEligibleQuestion(q) && normalizeClimbStep(q.step) === s).length }))
-    : plan.filter((p) => p.cefr).map((p) => ({ key: p.cefr, label: p.cefr, entry: p, n: counts[p.cefr] || 0 }));
+      .map((s) => ({ key: s, label: t('Step {n}', { n: s }), entry: plan.find((p) => p.step === s) || {}, n: questions.filter((q) => isAdaptiveEligibleQuestion(q) && normalizeClimbStep(q.step) === s).length, slides: lessonOf((q) => normalizeClimbStep(q.step) === s) }))
+    : plan.filter((p) => p.cefr).map((p) => ({ key: p.cefr, label: p.cefr, entry: p, n: counts[p.cefr] || 0, slides: lessonOf((q) => normalizeCefr(q.cefr) === p.cefr) }));
   const levelled = !byStep && buildupAvailableSteps().length >= 2;
   el.classList.toggle('hidden', !rows.length);
   if (!rows.length) { el.innerHTML = ''; return; }
   const left = byStep ? questions.filter((q) => isAdaptiveEligibleQuestion(q) && !normalizeClimbStep(q.step)).length : 0;
   el.innerHTML = `<strong>${escapeHtml(plan.length ? t('🏔️ Steps plan') : t('Difficulty steps'))}</strong>`
-    + `<ol class="steps-plan-list">${rows.map(({ label, entry, n }) => {
+    + `<ol class="steps-plan-list">${rows.map(({ label, entry, n, slides }) => {
       const thin = n < STEPS_PLAN_MIN_ITEMS ? ` <span class="bad">${escapeHtml(t('⚠ only {n} questions', { n }))}</span>` : '';
-      return `<li><b>${escapeHtml(label)}</b>${entry.title ? ` · ${escapeHtml(entry.title)}` : ''} <span class="muted">(${n})</span>${thin}`
+      const lesson = slides ? ` <span class="muted">· 🎓 ${escapeHtml(slides === 1 ? t('lesson: 1 slide') : t('lesson: {n} slides', { n: slides }))}</span>` : '';
+      return `<li><b>${escapeHtml(label)}</b>${entry.title ? ` · ${escapeHtml(entry.title)}` : ''} <span class="muted">(${n})</span>${lesson}${thin}`
         + (entry.change ? `<div class="small muted">${escapeHtml(entry.change)}</div>` : '')
         + (entry.rule ? `<div class="small">${escapeHtml(t('Rule shown to students: {rule}', { rule: entry.rule }))}</div>` : '')
         + '</li>'; // i18n-ignore (text is t()-wrapped)

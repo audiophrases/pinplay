@@ -3,8 +3,10 @@
 Status: **built 2026-10-11** (worker, assignment toggle, student trail, teacher
 results, FR strings, tests); **the AI prompt built 2026-10-11** (section 8);
 **Climb steps 1 to 12 built 2026-10-27** (section 10: a `step` number on each
-question instead of levels, prompt batches of 60). Decisions settled with the
-owner on 2026-10-10/11 and 2026-10-27.
+question instead of levels, prompt batches of 60); **a lesson per step built
+2026-11-22** (section 11: a step's slides play before its first question and
+again after each miss). Decisions settled with the owner on 2026-10-10/11,
+2026-10-27 and 2026-11-22.
 
 **Shared with Adaptive since 2026-10-28:** numbered steps 1–12 now drive both
 modes, using the same question pool logic. The builder offers either mode on
@@ -207,3 +209,57 @@ Tests: `tests/buildup.test.js` (steps on the real worker: 12 steps and 13
 camps, unstepped questions left out, results with titles, a renumbering edit;
 the pure rules; appending; the prompt and its batches), `tests/ai-prompt.test.js`
 (Standard batches).
+
+## 11. A lesson per step (built 2026-11-22)
+
+Why: a step was taught by its one-sentence rule, plus at most a slide or two
+shown only after a miss, so a student met each new thing by getting it wrong.
+A slide holds one idea (200 characters and 5 lines, less with a picture), so
+one slide cannot teach a step.
+
+The owner's decision: **a step's slides are its lesson, and the same lesson
+both teaches and reminds.** No separate recap slides: lesson slides are short
+by design, so the whole lesson replays after a miss.
+
+Engine (`cloudflare/worker.js`):
+- A step's lesson is every slide with its `step` (or its level, in a quiz
+  climbed by levels), in quiz order (`buildupLessonSlides`).
+- It plays **before the step's first question**: step 1's when the attempt
+  starts (`buildupAttemptInit`), the others on reaching their camp for the
+  first time (`bu.flag`). Coming back to a camp plays nothing.
+- It plays **again after every miss on that step**, before the next question.
+  After a drop that is the step just missed, not the one the student lands on.
+- None when no question would follow (the summit, the cap reached).
+- Slides still don't fill pips or use up the cap; seen and queued slides add
+  to the total shown. `buildupAfterAnswer` decides, for both answer paths.
+- `attempt.climb.lesson = { i, n }` while a lesson slide is served
+  (`buildupLessonPlace`); the step's rule stays up through step 1's lesson
+  (a slide seen is not an answer).
+
+Student (`play.js`, `styles.css`): the header's 🎓 reads **🎓 2/4** on a
+lesson slide, with "Lesson: slide 2 of 4" as its label.
+
+Editor (`app.js`): the slide note says how Climb plays a step's slides; the
+steps list shows each step's lesson ("🎓 lesson: 3 slides").
+
+The AI prompt (`buildBuildupPrompt`, when the slide type is allowed):
+- A lesson for each step, just before its practice questions, played on
+  arrival and after every miss.
+- Sized to the step's `change`: a new form or rule 2–4 slides, a new kind of
+  subject or word 1–2, only a new kind of answer none or 1, the last mixed
+  step 1 that sums up.
+- One idea per slide, in order: the new thing with a model sentence, the
+  pattern in 2–3 examples side by side, the usual mistake beside the right
+  form (✗ / ✓, from the teacher's list or the first language), an exception
+  only if needed. Never a practice question's sentence or answer.
+- The example gives its three steps lessons of 2, 1 and 3 slides; the final
+  self-check asks whether each lesson teaches exactly its step's change.
+
+Not done: batches still count practice questions only (60 per reply). A
+12-step climb with full lessons can reach about 100 items in one reply; if
+replies get cut off, count the expected slides toward the batch size.
+
+Tests: `tests/buildup.test.js` (the lesson at the start and its place, the
+same lesson after each miss, first arrival only, the step missed, a step
+without a lesson, the cap; the rule through step 1's lesson; the example's
+lessons, their order, sizes and budget, and no answer given away).

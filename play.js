@@ -4322,6 +4322,15 @@ function applyJoinLayoutMode(active, question = null) {
   joinCardEl.classList.toggle('has-video', !!hasVideo);
   joinCardEl.classList.toggle('slide-text-only', qType === 'slide' && !question?.imageData && !hasVideo && !String(question?.readingText || '').trim());
   joinSlideMarkEl?.classList.toggle('hidden', !(isActive && qType === 'slide'));
+  if (joinSlideMarkEl) {
+    // Climb: the slide's place in its step's lesson, as 🎓 2/4.
+    const lesson = isActive && qType === 'slide' ? climbLessonPlace() : null;
+    joinSlideMarkEl.dataset.lesson = lesson ? `${lesson.i}/${lesson.n}` : '';
+    joinSlideMarkEl.classList.toggle('has-lesson', !!lesson);
+    const label = lesson ? t('Lesson: slide {i} of {n}', { i: lesson.i, n: lesson.n }) : t('Teaching slide');
+    joinSlideMarkEl.title = label;
+    joinSlideMarkEl.setAttribute('aria-label', label);
+  }
   if (joinSlideAudioEl) {
     joinSlideAudioEl.replaceChildren();
     joinSlideAudioEl.classList.add('hidden');
@@ -6867,6 +6876,16 @@ function currentClimb() {
   if (live.player.mode !== 'assignment' || a?.reviewMode) return null;
   const c = a?.state?.attempt?.climb;
   return c && c.n >= 2 ? c : null;
+}
+
+// A step's lesson slide on screen: its place in the lesson ({ i, n }), while
+// it is the item the climb is serving (not one looked back at).
+function climbLessonPlace() {
+  const c = currentClimb();
+  if (!c?.lesson) return null;
+  const a = live.player.assignment;
+  const served = Number(a.state.attempt.adaptive?.step || 0);
+  return Number(a.currentIndex || 0) === served ? c.lesson : null;
 }
 
 function syncClimbTrail() {
