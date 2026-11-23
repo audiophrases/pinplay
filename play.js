@@ -10919,39 +10919,51 @@ async function initEditorPreviewNavigation() {
     window.addEventListener('message', receive);
     window.opener.postMessage({ type: 'editor-preview-ready', code: live.player.assignment.code }, location.origin);
   });
-  const panel = document.createElement('details');
+  // One slim row in the bottom-left corner, which the student page leaves
+  // free (its header, question and centred Save button stay uncovered).
+  // 👁 folds it to one button; it starts folded on a phone.
+  const panel = document.createElement('div');
   panel.id = 'editorPreviewNavigation';
   panel.className = 'editor-preview-navigation';
-  panel.open = true;
-  const summary = document.createElement('summary');
-  summary.textContent = t('Preview controls');
+  panel.setAttribute('role', 'toolbar');
+  panel.setAttribute('aria-label', t('Preview controls'));
   const controls = document.createElement('div');
-  controls.className = 'row gap wrap';
+  controls.className = 'editor-preview-controls';
   const select = document.createElement('select');
   select.setAttribute('aria-label', t('Jump to question'));
   select.addEventListener('change', () => navigateEditorPreview(select.value));
-  const makeButton = (label, action) => {
+  const makeButton = (label, action, name) => {
     const button = document.createElement('button');
     button.className = 'btn';
     button.type = 'button';
     button.textContent = label;
+    if (name) {
+      button.title = name;
+      button.setAttribute('aria-label', name);
+    }
     button.addEventListener('click', action);
     return button;
   };
+  const toggle = makeButton('👁', () => setOpen(panel.classList.contains('is-folded')), t('Preview controls'));
+  const setOpen = (open) => {
+    panel.classList.toggle('is-folded', !open);
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  setOpen(!window.matchMedia?.('(max-width: 600px)').matches);
   const move = (delta) => {
     const questions = editorPreviewQuestions();
     const index = Number(live.player.assignment.currentIndex || 0) + delta;
     if (questions[index]) navigateEditorPreview(questions[index].id);
   };
-  const prev = makeButton(t('Previous'), () => move(-1));
-  const next = makeButton(t('Next'), () => move(1));
-  const edit = makeButton(t('Edit this question'), () => {
+  const prev = makeButton('◀', () => move(-1), t('Previous'));
+  const next = makeButton('▶', () => move(1), t('Next'));
+  const edit = makeButton('✏️', () => {
     const q = editorPreviewQuestions()[live.player.assignment.currentIndex];
     if (!q || !window.opener || window.opener.closed) return;
     window.opener.postMessage({ type: 'editor-preview-edit', code: live.player.assignment.code, questionId: q.id }, location.origin);
-  });
-  controls.append(prev, select, next, edit, makeButton(t('Close preview'), () => window.close()));
-  panel.append(summary, controls);
+  }, t('Edit this question'));
+  controls.append(prev, select, next, edit, makeButton('✕', () => window.close(), t('Close preview')));
+  panel.append(toggle, controls);
   document.body.appendChild(panel);
   editorPreviewNavigation = {
     panel, select, prev, next, edit, questionIds,

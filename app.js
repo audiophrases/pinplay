@@ -4131,25 +4131,42 @@ async function changeBuilderQuizAudio(mode, voice) {
   setQuizAudio(proposed, mode, { voice });
   if (getQuizAudio(proposed) === getQuizAudio(quiz) && proposed.language === quiz.language) return;
   const readAloud = !!quizReadAloudLanguage(proposed);
-  const hasConflict = quiz.questions.some((q) => {
-    if (!supportsQuestionAudio(q?.type) || q.listeningSection) return false;
+  // The questions the new setting would change if applied to all: their own
+  // read-aloud or file, and (when the quiz reads aloud) the ones on No audio.
+  const own = { tts: 0, file: 0, none: 0 };
+  quiz.questions.forEach((q) => {
+    if (!supportsQuestionAudio(q?.type) || q.listeningSection) return;
     const setting = questionAudioSetting(q);
-    if (setting === 'none') return readAloud;
-    return setting === 'tts' || setting === 'file';
+    if (setting in own && (setting !== 'none' || readAloud)) own[setting] += 1;
   });
-  const overrideQuestions = hasConflict && await confirmQuizAudioOverride();
+  const hasConflict = own.tts + own.file + own.none > 0;
+  const overrideQuestions = hasConflict && await confirmQuizAudioOverride(own, readAloud ? quizAudioLanguageName(proposed) : '');
   if (quiz !== targetQuiz) return;
   setQuizAudio(quiz, mode, { voice, overrideQuestions });
   renderBuilder();
 }
 
-function confirmQuizAudioOverride() {
+// `own` counts the questions with their own setting ({ tts, file, none });
+// `language` is the new read-aloud language ('' for No audio). Says what
+// each answer does before the teacher picks one.
+function confirmQuizAudioOverride(own = {}, language = '') {
+  const items = [
+    own.tts ? t('{n} read aloud with their own text or voice', { n: own.tts }) : '',
+    own.file ? t('{n} play an audio file or recording', { n: own.file }) : '',
+    own.none ? t('{n} set to 🔇 No audio', { n: own.none }) : '',
+  ].filter(Boolean);
+  const applied = language
+    ? t('Apply to all: every question is read aloud in {language}.', { language })
+    : t('Apply to all: every question is silent.');
+  const kept = own.tts || own.file ? ` ${t('Their own texts and files are kept, but no longer play.')}` : '';
   const dialog = document.createElement('dialog');
   dialog.className = 'dialog-card';
   dialog.setAttribute('aria-labelledby', 'quizAudioOverrideTitle');
   dialog.innerHTML = `
     <h3 id="quizAudioOverrideTitle">${escapeHtml(t('Change quiz audio'))}</h3>
-    <p>${escapeHtml(t('Some questions have individual audio settings. Should they keep their settings or follow the new quiz audio setting?'))}</p>
+    <p>${escapeHtml(t('These questions have their own audio setting:'))}</p>
+    <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+    <p class="small">${escapeHtml(t('Keep: only the questions on "Same as quiz" change.'))}<br>${escapeHtml(applied + kept)}</p>
     <form method="dialog" class="row gap">
       <button class="btn primary" value="keep" autofocus>${escapeHtml(t('Keep individual settings'))}</button>
       <button class="btn" value="override">${escapeHtml(t('Apply to all questions'))}</button>
@@ -4171,6 +4188,12 @@ function normalizeQuizAudioDefaults(targetQuiz) {
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
   targetQuiz.readAllQuestionsAloud = false;
+  // "Custom" names a quiz on No audio whose questions have audio of their
+  // own; it plays as No audio, so it goes when the last of them does.
+  if (targetQuiz.audioCustom && !(Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).some((q) => q
+    && supportsQuestionAudio(q.type) && !q.listeningSection && ['tts', 'file'].includes(questionAudioSetting(q)))) {
+    delete targetQuiz.audioCustom;
+  }
   if (!targetQuiz.audioCustom) delete targetQuiz.audioCustom;
   (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
     if (!q || q.audioSetting === 'tts' || typeof q.savedAudioText !== 'string') return;

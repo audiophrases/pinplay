@@ -280,6 +280,7 @@ it('refreshing a reopened attempt exits stale review mode and restores saved ans
   let rendered;
   const { loadAssignmentState } = loadDeclarations(fs.readFileSync('play.js', 'utf8'), ['loadAssignmentState', 'mapAssignmentStateToPlayerState'], {
     live, api: async () => data, joinSubmitBtn: button, _spellingBeeProgress: new Map(), _wordleProgress: new Map(),
+    editorPreviewNavigation: null, // a student's page, not the editor's question preview
     document: { getElementById: () => null, body: { classList: { remove() {} } } },
     clampAssignmentIndex: n => n, deriveAssignmentCurrentIndex: () => 0, assignmentLockedIndexes: () => [],
     maybeShowExamModeNoticeBeforeRender: async () => {}, renderPlayerState: state => { rendered = state; },

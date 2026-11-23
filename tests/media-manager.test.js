@@ -391,6 +391,40 @@ describe('questionMediaStatus', () => {
     assert.equal(prompts, 2);
   });
 
+  it('tells the teacher which questions "Apply to all" would change', async () => {
+    const { A, sandbox } = load();
+    sandbox.quiz = { ttsLanguage: 'CA', language: 'ca-ES-JoanaNeural', questions: [
+      { type: 'slide', audioSetting: 'tts', audioText: 'Hola' },
+      { type: 'slide', audioSetting: 'tts', audioText: 'Adéu' },
+      { type: 'mcq', audioSetting: 'none' },
+      { type: 'slide', audioSetting: 'file', audioData: 'https://x/a.mp3' },
+      { type: 'mcq', audioSetting: 'quiz' },
+    ] };
+    sandbox.syncQuizFromUI = () => {};
+    sandbox.renderBuilder = () => {};
+    const asked = [];
+    sandbox.confirmQuizAudioOverride = async (own, language) => { asked.push([own, language]); return false; };
+    await A.changeBuilderQuizAudio('EN');
+    await A.changeBuilderQuizAudio('NONE');
+    // Reading aloud, the muted question would be heard; with No audio it stays as it is.
+    assert.deepEqual(JSON.parse(JSON.stringify(asked)), [
+      [{ tts: 2, file: 1, none: 1 }, 'English'],
+      [{ tts: 2, file: 1, none: 0 }, ''],
+    ]);
+  });
+
+  it('"Custom" goes once no question has audio of its own', () => {
+    const quiz = { audioPerQuestion: true, ttsLanguage: 'NONE', audioCustom: true, questions: [
+      { type: 'slide', prompt: 'A', audioSetting: 'tts', audioText: 'Hola' },
+      { type: 'mcq', prompt: 'B', audioSetting: 'quiz' },
+    ] };
+    A.normalizeQuizAudioDefaults(quiz);
+    assert.equal(A.getQuizAudio(quiz), 'CUSTOM');
+    A.removeMediaFrom(quiz.questions, 'audio');
+    A.normalizeQuizAudioDefaults(quiz);
+    assert.equal(A.getQuizAudio(quiz), 'NONE');
+  });
+
   it('preserves item audio including silence when appending to a different quiz audio default', () => {
     const source = { ttsLanguage: 'CA', questions: [
       { type: 'slide', audioText: '[ca] Hola. [en] Hello.' },

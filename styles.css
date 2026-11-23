@@ -7038,19 +7038,41 @@ body.question-active .climb:not(.hidden) { display: flex; }
   z-index: 100;
   box-shadow: 0 4px 16px #0003;
 }
+/* The editor's question preview: one slim row in the bottom-left corner,
+   which the student page leaves free; 👁 folds it to one round button. */
 .editor-preview-navigation {
   position: fixed;
-  top: 8px;
-  right: 8px;
+  left: 8px;
+  bottom: 8px;
   z-index: 20000;
-  max-width: min(560px, calc(100vw - 16px));
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
   border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 999px;
+  background: #fffffff0;
   color: #172033;
   box-shadow: 0 4px 16px #0002;
 }
-.editor-preview-navigation summary { cursor: pointer; font-weight: 600; }
-.editor-preview-navigation[open] summary { margin-bottom: 8px; }
-.editor-preview-navigation select { min-width: 0; max-width: 100%; flex: 1 1 180px; }
+.editor-preview-controls { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.editor-preview-navigation.is-folded .editor-preview-controls { display: none; }
+.editor-preview-navigation .btn {
+  flex: none;
+  min-width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+}
+.editor-preview-navigation select {
+  flex: 0 1 220px;
+  width: 220px;
+  min-width: 0;
+  height: 36px;
+  margin: 0;
+  font-size: 14px;
+}
