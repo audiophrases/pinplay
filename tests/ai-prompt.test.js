@@ -15,7 +15,7 @@ before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
-    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
+    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'promptQuizShape', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_MATCH_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
@@ -209,6 +209,19 @@ describe('rules follow the request', () => {
     assert.match(typed, /When they leave some items out, give each of those "audioEnabled": false/);
   });
 
+  // 2026-11-23: AIs copied the shape line and left out the quiz-level fields,
+  // so a quiz with audio on its slides came in reading nothing aloud.
+  it('audio: the quiz shape shows the quiz-level audio fields, only with audio', () => {
+    const shapeLine = (text) => text.split('\n').find((l) => l.startsWith('Quiz: {'));
+    assert.equal(shapeLine(build({ audio: 'some' })), 'Quiz: {"version": 3, "title": "…", "ttsLanguage": "…", "readAllQuestionsAloud": false, "questions": [ … ]}');
+    assert.equal(shapeLine(build({ audio: 'no' })), 'Quiz: {"version": 3, "title": "…", "questions": [ … ]}');
+    assert.equal(shapeLine(build({ audio: 'bilingual', adaptive: true, steps: 4 })), 'Quiz: {"version": 3, "title": "…", "ttsLanguage": "…", "readAllQuestionsAloud": false, "stepsPlan": [ … ], "questions": [ … ]}');
+    assert.match(section(build({ audio: 'some' }), 'Rules'), /Only items with "audioText" are heard\./);
+    assert.match(section(build({ audio: 'some', audioInstructions: 'only the slides' }), 'Rules'), /give each of those "audioEnabled": false and no "audioText": they stay silent\./);
+    // The create page's "Quiz language" choice shows the audio fields in its examples too.
+    assert.ok(examplesOf(build({ audio: 'quiz' })).some((ex) => ex.audioEnabled === true && ex.audioText));
+  });
+
   it('shows a slide example within the text budget whenever slides are allowed', () => {
     const slide = examplesOf(build({ typesMode: 'include', selectedTypes: ['slide', 'mcq', 'text'], images: 'some', audio: 'some' })).find((ex) => ex.type === 'slide');
     assert.ok(slide, 'a slide example is shown');
@@ -374,7 +387,9 @@ describe('size', () => {
     };
     assert.ok(sizes.default < 9000, JSON.stringify(sizes));
     assert.ok(sizes.allTypes < 10000, JSON.stringify(sizes));
-    assert.ok(sizes.adaptiveAll < 12000, JSON.stringify(sizes));
+    // +100 for the quiz-level audio fields in the shape line ("ttsLanguage",
+    // "readAllQuestionsAloud"): AIs left them out when the shape didn't show them.
+    assert.ok(sizes.adaptiveAll < 12100, JSON.stringify(sizes));
     assert.ok(sizes.twoTypes < 5000, JSON.stringify(sizes));
   });
 });

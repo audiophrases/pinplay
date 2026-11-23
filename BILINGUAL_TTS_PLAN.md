@@ -118,3 +118,26 @@ bilingual rule and the teacher's words only when asked.
   clip and the end of the last are left alone, and a text in one voice is not
   touched. Clips in more than one voice get a new cache key (`ttsClipSeed`), so
   publishing again makes them again.
+- 2026-11-23: two AI-made quizzes (bilingual slides only) came in silent. The
+  prompt's shape line had no quiz-level fields, so the quiz arrived without
+  `ttsLanguage`, the builder read that as "Don't hear questions", and that
+  switch muted every item's own `audioText`. Fixed by one rule
+  (`questionHeardByTts`, shared by publishing and the Media Manager):
+  - A question or slide with its own audio (a text to read aloud, a file or a
+    recording) is always heard, in its own voice (`ownAudioLanguage`: its
+    `ttsLanguage`, else the quiz's, else English).
+  - The quiz's one control, "Read every question aloud" (No / a language),
+    only decides whether the OTHER questions are read too. It replaces "Hear
+    questions" and its tick, which came back ticked after "Don't hear".
+  - No keeps the quiz language and touches no question; a language moves only
+    the questions without their own text (`applyQuizVoiceToQuestions`), so an
+    uploaded file stays a file.
+  - A question's own "TTS text language" can be "🔇 Not heard" (`ttsLanguage`
+    NONE): that one question is silent, even when every question is read.
+    Typing text into an empty one makes it heard.
+  - New questions get a real language, never NONE. An imported file without
+    `readAllQuestionsAloud` reads everything unless it turns the audio off on
+    some item (`importedReadAll`).
+  - The prompts show `"ttsLanguage"` and `"readAllQuestionsAloud": false` in
+    the quiz shape (and the climb example) when audio is asked, and say that
+    only items with `"audioText"` are heard.
