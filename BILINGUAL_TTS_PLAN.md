@@ -171,3 +171,32 @@ bilingual rule and the teacher's words only when asked.
     question's own audio and puts it back on Same as quiz.
   - Prompts: no quiz-level audio fields; "Audio is set per item: only items
     with "audioText" are heard."
+- 2026-11-23 (review of conflicting settings): who wins, top first.
+  0. Never heard: listening sections and types without question audio.
+  1. The question's own choice (No audio / its own read-aloud / a file)
+     beats the quiz. Only a teacher action on that question changes it:
+     imports, previews and Remove… never turn a silent question into a heard
+     one, or the reverse.
+  2. The quiz's 🔊 Audio applies to the questions on Same as quiz.
+  3. When the chosen source fails: a file that does not play is not replaced
+     by reading the question (editor, live host and student page alike); a
+     missing clip is made live, then read by the browser.
+  Fixes that follow from it:
+  - "Remove… 🔊 Audio" keeps a question on No audio (its old file or script
+    is still removed); it used to send it to Same as quiz, so a quiz reading
+    English read it.
+  - AI prompt without audio leaves the audio fields out (it set "none" on
+    every item, which kept the quiz silent after the teacher picked English),
+    and the migration turns a quiz whose every item is on No audio with
+    nothing of its own into Same as quiz (it plays the same).
+  - ▶ Play preview of a file gone from the cloud drops the dead reference and
+    keeps "Audio file" (it switched the question to read-aloud).
+  - Media Manager: a file question with no file shows "🎵 File ⚠ no file
+    yet" (status `empty`, not counted as audio); 🔊 Audio… with a voice says
+    how many questions kept their audio file.
+  - ✏️ on an assignment stored by the old Worker (no quiz 🔊 Audio): when its
+    plain questions were heard and agree on a language, that language (and
+    their voice) is the quiz's again (`inferStoredQuizReadAloud`); before,
+    those questions came back silent.
+  - Student page: a missing file reads nothing in its place, except a script
+    stored beside it (old assignments stored read-aloud as generated files).

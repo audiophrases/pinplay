@@ -7698,7 +7698,13 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
     try { ok = await playAudioEl(new Audio(audioUrl)); } catch { ok = false; }
     if (ok) return true;
     if (aborted()) return 'aborted';
-    // File missing/undecodable → fall through to TTS synthesis from the question text.
+    // File missing/undecodable: the question text is never read in its place.
+    // The teacher chose this file, and reading the question in a voice they
+    // never picked (a No audio quiz has none) is the worse surprise. Only a
+    // script written for it is read: an old assignment stored its read-aloud
+    // as a generated file with the script beside it (a file question
+    // published now carries no script).
+    if (!String(question.audioText || '').trim()) return false;
   }
 
   const text = questionSpeechText(question);

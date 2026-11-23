@@ -313,7 +313,7 @@ describe('the AI prompts ask for bilingual audio only when the teacher does', ()
 
   it('climb prompt: no audio unless asked, then the same rule', () => {
     const off = A.buildBuildupPrompt(climb).text;
-    assert.match(off, /No generated audio: set "audioSetting": "none"/);
+    assert.match(off, /No generated audio: leave out "audioSetting"/);
     assert.doesNotMatch(off, /bilingual/i);
     ['audio', 'bilingualAudio'].forEach((key) => {
       const on = A.buildBuildupPrompt({ ...climb, [key]: key === 'audio' ? 'bilingual' : true }).text;

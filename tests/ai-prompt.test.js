@@ -179,7 +179,7 @@ describe('rules follow the request', () => {
     const text = build({ images: 'no', audio: 'no', video: 'no', typesMode: 'include', selectedTypes: ['mcq', 'text'] });
     assert.doesNotMatch(text, /videoKeyword|readingText/);
     // "audioText" is named once, by the rule that says to leave it out.
-    assert.match(section(text, 'Rules'), /No generated audio: .*"audioSetting": "none".*Omit "audioText" and audio files\./);
+    assert.match(section(text, 'Rules'), /No generated audio: leave out "audioSetting", "audioEnabled", "audioText" and audio files on every item, so each item follows the quiz audio the teacher sets\./);
     assert.equal((text.match(/audioText/g) || []).length, 1);
     assert.match(section(text, 'Rules'), /No pictures: leave out "imageKeyword" and "gifKeyword"\./);
     examplesOf(text).forEach((ex) => {

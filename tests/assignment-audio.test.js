@@ -120,3 +120,44 @@ test('browser speech cancellation settles playback and late completion preserves
   clips[0].events.ended();
   assert.equal(await current, true);
 });
+
+// A file that does not play is not replaced by reading the question aloud:
+// the teacher chose the file. Only a script stored beside it (an old
+// assignment whose read-aloud became a generated file) is read instead.
+function failingFileSetup() {
+  const env = setup();
+  const fetched = [];
+  env.context.fetch = async (url) => { fetched.push(url); return { ok: true, blob: async () => ({}) }; };
+  env.context.questionSpeechText = (q) => String(q.audioText || '').trim() || q.prompt;
+  env.context.Audio = class {
+    constructor(url) { this.url = url; this.events = {}; env.clips.push(this); }
+    addEventListener(event, fn) { this.events[event] = fn; }
+    play() {
+      if (this.url.endsWith('.mp3') && this.url.includes('/files/')) return Promise.reject(new Error('404'));
+      this.playing = true;
+      setImmediate(() => this.events.ended && this.events.ended());
+      return Promise.resolve();
+    }
+    pause() { this.playing = false; }
+  };
+  return { ...env, fetched };
+}
+
+test('a missing audio file plays nothing in its place', async () => {
+  const { api, clips, fetched } = failingFileSetup();
+  const result = await api.playAssignmentQuestionAudio({
+    audioEnabled: true, audioMode: 'file', audioData: 'https://example.test/files/a.mp3', prompt: 'Question', language: 'en-US-AriaNeural',
+  });
+  assert.equal(result, false);
+  assert.equal(clips.length, 1);
+  assert.deepEqual(fetched, [], 'no live read-aloud of the question');
+});
+
+test('a missing generated file from an old assignment reads its script', async () => {
+  const { api, fetched } = failingFileSetup();
+  const result = await api.playAssignmentQuestionAudio({
+    audioEnabled: true, audioMode: 'file', audioData: 'https://example.test/files/a.mp3', audioText: 'Listen carefully.', prompt: 'Question', language: 'en-US-AriaNeural',
+  });
+  assert.equal(result, true);
+  assert.deepEqual(fetched, ['https://example.test/api/tts/edge']);
+});

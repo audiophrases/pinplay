@@ -35,7 +35,7 @@ function load() {
     'round', 'detectVideoProvider', 'makeDefaultQuestionMedia', 'normalizeQuestionMedia',
     'CEFR_LEVELS', 'normalizeCefr', 'importedReadAll',
     'QUESTION_TYPE_CATALOG', 'AUDIO_CAPABLE_QUESTION_TYPES', 'supportsQuestionAudio', 'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting',
-    'normalizeQuizForLive', 'normalizeQuizAudioDefaults', 'migrateQuestionAudio',
+    'normalizeQuizForLive', 'normalizeQuizAudioDefaults', 'migrateQuestionAudio', 'inferStoredQuizReadAloud', 'ttsLanguageForVoice',
   ], sandbox);
 }
 

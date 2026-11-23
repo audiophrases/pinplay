@@ -4257,19 +4257,16 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   audioBtn.disabled = true;
   audioBtn.textContent = t('⏳ Loading…');
   let healed = false;
-  // If the attached cloud file is gone, drop the dead reference and switch
-  // back to Text-to-speech so the next save regenerates a fresh mp3.
+  // If the attached cloud file is gone, drop the dead reference. The question
+  // stays on "Audio file" (a preview never changes what the teacher chose):
+  // it shows "No audio file yet" until one is uploaded or recorded again.
   const onMissingFile = (reason) => {
     if (q.audioData !== playable.audioData || questionAudioSetting(q) !== 'file') return;
     q.audioData = '';
-    q.audioSetting = 'tts';
-    q.audioMode = 'tts';
-    q.ttsAudioKey = '';
-    q._ttsGenerated = false;
     q._userAudioUploaded = false;
     q._audioVersion = '';
     healed = true;
-    setStatus(hostStatusEl, t('{reason} Switched back to Text-to-speech — it will regenerate on the next save.', { reason: reason || '' }).trim(), 'checking');
+    setStatus(hostStatusEl, t('{reason} Upload or record the audio file again.', { reason: reason || '' }).trim(), 'bad');
   };
   try {
     if (clip) {
@@ -4284,7 +4281,7 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   } finally {
     restore();
   }
-  // Re-render after playback so the source dropdown reflects the auto-reset.
+  // Re-render after playback so the question shows its file is missing.
   if (healed) renderBuilder();
   return healed;
 }
@@ -5535,7 +5532,10 @@ function shapePromptExample(q, req, index) {
 // Shared TTS policy for Standard, Adaptive and Climb prompt generation. Audio
 // is a setting of each item.
 function promptAudioRules(req) {
-  if (!req.audio || req.audio === 'no') return ['No generated audio: set "audioSetting": "none" and "audioEnabled": false on every item. Omit "audioText" and audio files.'];
+  // Without generated audio the items follow the quiz's 🔊 Audio (No audio
+  // until the teacher picks a language): marking them "none" kept them silent
+  // after the teacher picked one.
+  if (!req.audio || req.audio === 'no') return ['No generated audio: leave out "audioSetting", "audioEnabled", "audioText" and audio files on every item, so each item follows the quiz audio the teacher sets.'];
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
     : `Audio in the quiz language: every audio-capable item has "audioEnabled": true and "audioText": the script in the quiz language. Never read a practice answer. Write gaps as ___ so the voice pauses. Set each spoken item's voice using ${PROMPT_VOICE}.`;
@@ -22114,10 +22114,19 @@ function ttsLanguageForVoice(voice) {
 // NONE) becomes No audio, so it stays silent.
 function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } = {}) {
   if (!targetQuiz || typeof targetQuiz !== 'object' || targetQuiz.audioPerQuestion) return;
+  // An assignment stored before the Worker kept the quiz's 🔊 Audio: the
+  // questions it read aloud tell which language it read them in.
+  const inferred = recoverAssignmentScripts && !String(targetQuiz.ttsLanguage || '').trim()
+    ? inferStoredQuizReadAloud(targetQuiz)
+    : null;
+  if (inferred) {
+    targetQuiz.ttsLanguage = inferred.ttsLanguage;
+    targetQuiz.language = inferred.language;
+  }
   const quizLang = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   const hasLang = ['EN', 'CA', 'FR', 'OTHER'].includes(quizLang);
   const explicitReadAll = typeof targetQuiz.readAllQuestionsAloud === 'boolean';
-  const readAll = hasLang && importedReadAll(targetQuiz);
+  const readAll = hasLang && (!!inferred || importedReadAll(targetQuiz));
   let hasOwnAudio = false;
   (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
     if (!q || !supportsQuestionAudio(q.type)) return;
@@ -22145,8 +22154,48 @@ function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } =
     targetQuiz.ttsLanguage = 'NONE';
     if (hasOwnAudio) targetQuiz.audioCustom = true;
   }
+  // A quiz where every question is on No audio with nothing of its own (an AI
+  // quiz made without audio) is a quiz with No audio: its questions follow the
+  // quiz, so picking a language later reads them. It plays the same now.
+  if (!readAll && !hasOwnAudio) {
+    const eligible = (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : [])
+      .filter((q) => q && supportsQuestionAudio(q.type) && !q.listeningSection);
+    const plainMute = (q) => q.audioSetting === 'none' && !q.audioData && !String(q.audioText || q.savedAudioText || '').trim();
+    if (eligible.length && eligible.every(plainMute)) eligible.forEach((q) => { q.audioSetting = 'quiz'; });
+  }
   targetQuiz.readAllQuestionsAloud = false;
   targetQuiz.audioPerQuestion = true;
+}
+
+// The read-aloud language of a quiz stored without its 🔊 Audio (an
+// assignment saved by a Worker from before 2026-11-23, which kept only the
+// questions). A quiz that read every question aloud published its plain
+// questions (nothing of their own) as heard, in the quiz's voice: when all of
+// them agree on the language, that is the quiz's. Returns
+// { ttsLanguage, language } or null (nothing heard, or languages that differ).
+function inferStoredQuizReadAloud(targetQuiz) {
+  const heard = (Array.isArray(targetQuiz?.questions) ? targetQuiz.questions : []).filter((q) => {
+    if (!q || !supportsQuestionAudio(q.type) || q.listeningSection || q.audioEnabled !== true) return false;
+    const hasFile = q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file');
+    return !hasFile && !String(q.audioText || '').trim();
+  });
+  if (!heard.length) return null;
+  const languageOf = (q) => {
+    const own = String(q.ttsLanguage || '').trim().toUpperCase();
+    return ['EN', 'CA', 'FR', 'OTHER'].includes(own) ? own : ttsLanguageForVoice(q.language);
+  };
+  const languages = new Set(heard.map(languageOf));
+  if (languages.size !== 1) return null;
+  const [ttsLanguage] = languages;
+  // The voice most of them used (one voice per quiz, unless edited by hand).
+  const tally = new Map();
+  heard.forEach((q) => {
+    const voice = String(q.language || '').trim();
+    if (EDGE_TTS_VOICE_OPTIONS.includes(voice)) tally.set(voice, (tally.get(voice) || 0) + 1);
+  });
+  const voice = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  if (ttsLanguage === 'OTHER' && !voice) return null;
+  return { ttsLanguage, language: normalizeTtsVoice(voice, ttsLanguage) };
 }
 
 // An inherited setting can follow the destination when the two defaults match.
@@ -22478,6 +22527,7 @@ function mediaVersionTime(token) {
  *   visual.kind: 'image' | 'gif' | 'video' | 'none' | 'na' (reading-text questions)
  *   audio.kind:  'tts' | 'file' | 'none' | 'na' (types without question audio)
  *   status: 'ready' | 'missing' (keyword/text set, nothing yet) | 'local' (not uploaded) | 'none' | 'na'
+ *     | 'empty' (audio: set to a file, none uploaded or recorded)
  */
 function questionMediaStatus(q, quizCtx = {}) {
   if (!q || typeof q !== 'object') {
@@ -22511,6 +22561,10 @@ function questionMediaStatus(q, quizCtx = {}) {
     audio = { kind: 'na', status: 'na' };
   } else if (choice === 'file' && audioData) {
     audio = { kind: 'file', status: audioData.startsWith('data:') ? 'local' : 'ready' };
+  } else if (choice === 'file') {
+    // Set to an audio file with none uploaded: students hear nothing (nothing
+    // is generated for it, so it is not "missing").
+    audio = { kind: 'file', status: 'empty' };
   } else if (choice === 'tts' && questionTtsText(q)) {
     audio = { kind: 'tts', status: q.ttsAudioKey ? 'ready' : 'missing' };
   } else {
@@ -22592,7 +22646,7 @@ function mediaSummaryCounts(rows) {
   rows.forEach((r) => {
     if (r.status in counts) counts[r.status] += 1;
     if (['gif', 'image', 'video'].includes(r.visual.kind) && r.visual.status !== 'missing') counts[r.visual.kind] += 1;
-    if (r.audio.kind === 'tts' || r.audio.kind === 'file') counts.audio += 1;
+    if ((r.audio.kind === 'tts' || r.audio.kind === 'file') && r.audio.status !== 'empty') counts.audio += 1;
   });
   return counts;
 }
@@ -22957,10 +23011,11 @@ function removeMediaFrom(questions, what) {
       q.videoKeyword = '';
     } else if (what === 'audio') {
       // Its own audio (an uploaded/recorded file, its own text to read) is
-      // gone, and the question goes back to "Same as quiz".
+      // gone, and the question goes back to "Same as quiz". One set to
+      // 🔇 No audio keeps it: removing audio never makes a question heard.
       const setting = questionAudioSetting(q);
       if (setting !== 'tts' && setting !== 'file' && !q.audioData && !String(q.audioText || q.savedAudioText || '').trim()) return;
-      q.audioSetting = 'quiz';
+      if (setting !== 'none') q.audioSetting = 'quiz';
       q.audioData = '';
       q.audioText = '';
       delete q.savedAudioText;
@@ -23127,6 +23182,7 @@ function mediaAudioCellHtml(r, idx) {
   const { kind, status } = r.audio;
   if (kind === 'na') return '';
   if (kind === 'none') return '<span class="muted">—</span>';
+  if (status === 'empty') return `<span class="mm-media muted" title="${escapeHtml(t('Students hear nothing until a file is uploaded or recorded.'))}">🎵 ${escapeHtml(t('File'))} ⚠ ${escapeHtml(t('no file yet'))}</span>`;
   const label = kind === 'tts' ? `🔊 ${escapeHtml(t('TTS'))}` : `🎵 ${escapeHtml(t('File'))}`;
   const voice = kind === 'tts' ? ` <span class="small muted">${escapeHtml(String(r.q.language || ''))}</span>` : '';
   const mark = status === 'local'
@@ -23710,15 +23766,22 @@ function undoDeleteQuestions() {
 // prepares the clips (same path as Generate missing's audio).
 function applyVoiceChange(voice) {
   const state = mediaManagerState;
-  const changed = setQuestionAudioOn(mediaManagerJobQuestions('selected'), voice || '');
+  const selected = mediaManagerJobQuestions('selected');
+  const changed = setQuestionAudioOn(selected, voice || '');
   state.form = '';
+  // A voice is for reading aloud: a question with its own audio file keeps
+  // the file (Same as quiz or No audio do replace it). Say so.
+  const keptFiles = voice && voice !== 'quiz'
+    ? selected.filter((q) => q && supportsQuestionAudio(q.type) && questionAudioSetting(q) === 'file').length
+    : 0;
+  const notes = keptFiles ? [t('{n} kept their audio file', { n: keptFiles })] : [];
   if (!voice || !changed.length) {
-    state.notice = `${t('🔊 Audio')}: ${t('{n} updated', { n: changed.length })}`;
+    state.notice = `${t('🔊 Audio')}: ${[t('{n} updated', { n: changed.length }), ...notes].join(' · ')}`;
     renderBuilder();
     renderMediaManager();
     return;
   }
-  runMediaManagerJob(t('🔊 Audio'), changed, async () => ({ status: 'skipped', reason: '' }), { withTts: true });
+  runMediaManagerJob(t('🔊 Audio'), changed, async () => ({ status: 'skipped', reason: '' }), { withTts: true, notes });
 }
 
 function openQuestionFromMediaManager(idx) {
@@ -25045,9 +25108,6 @@ async function playQuestionAudio(question, opts = {}) {
     });
   });
 
-  // Text we can regenerate from if the attached file is unplayable/missing.
-  const ttsFallbackText = questionSpeechText(question);
-
   if (question.audioMode === 'file' && question.audioData) {
     const src = question.audioData;
     let ok = false;
@@ -25093,21 +25153,19 @@ async function playQuestionAudio(question, opts = {}) {
       failReason = t('The attached audio could not be played.');
     }
 
-    // Fall back to TTS when there is text. Only a confirmed missing file can
-    // change the editor's saved audio source.
-    if (ttsFallbackText) {
-      if (fileGone && typeof opts.onMissingFile === 'function') {
-        try { opts.onMissingFile(failReason); } catch { }
-      }
-      // fall through to TTS synthesis below
+    // A file that does not play is not replaced by reading the question
+    // aloud: the teacher chose the file (the student page does the same).
+    // Only a confirmed missing file drops the editor's dead reference.
+    if (fileGone && typeof opts.onMissingFile === 'function') {
+      try { opts.onMissingFile(failReason); } catch { }
     } else {
       setStatus(hostStatusEl, failReason, 'bad');
-      return false;
     }
+    return false;
   }
 
-  // TTS mode (and fallback for missing/broken files).
-  const text = ttsFallbackText;
+  // TTS mode.
+  const text = questionSpeechText(question);
   if (!text) {
     return false;
   }
