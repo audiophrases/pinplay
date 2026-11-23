@@ -5268,8 +5268,6 @@ async function openCloudQuizByKey(quizKey, label) {
   const loadedQuiz = await res.json();
   // The quiz JSON is stored directly (not wrapped)
   validateImportedQuiz(loadedQuiz);
-  // Older Workers stored the computed playback flag even for authored scripts.
-  migrateQuestionAudio(loadedQuiz, { recoverAssignmentScripts: true });
   quiz = loadedQuiz;
   // Extract just the basename: handles both `quizzes/<pin>.json` and
   // `workspaces/<wsid>/quizzes/<pin>.json` for guests.
@@ -14183,6 +14181,8 @@ async function openAssignmentInBuilder(code, titleHint) {
   }
 
   validateImportedQuiz(loadedQuiz);
+  // Older Workers stored the computed playback flag even for authored scripts.
+  migrateQuestionAudio(loadedQuiz, { recoverAssignmentScripts: true });
   quiz = loadedQuiz;
   // The cloud quiz it was made from, so ☁️ Save updates that one instead of
   // adding a copy. Assignments from before this was recorded have none.

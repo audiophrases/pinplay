@@ -231,6 +231,32 @@ describe('questionMediaStatus', () => {
       assert.equal(A.questionTtsText(quiz.questions[0]), script);
     });
 
+    it('recovers a legacy script when opening an assignment and preserves its mute when opening a cloud quiz', async () => {
+      const script = '[ca] Hola. [en] Hello.';
+      const legacyQuiz = () => ({
+        version: 1, title: 'Legacy quiz',
+        questions: [{ id: 'a', type: 'slide', prompt: 'Hello', audioMode: 'tts', audioEnabled: false, audioText: script }],
+      });
+      const saved = [];
+      const builder = {
+        ...A, quiz: null, createSessionPassword: 'test', t: interpolate,
+        api: async () => ({ quiz: legacyQuiz() }),
+        loadBackendUrl: () => 'https://be.test',
+        fetch: async () => jsonRes(200, legacyQuiz()),
+        hostStatusEl: null, assignmentStatusEl: null, builderSectionToggleEl: null,
+        setStatus() {}, setApplyAssignmentTarget() {}, pullAiAcceptedAnswers: async () => 0,
+        renderBuilder: () => A.normalizeQuizAudioDefaults(builder.quiz),
+        saveQuiz: (quiz) => saved.push(plain(quiz.questions[0])),
+      };
+      const loaders = loadDeclarations(APP_SRC, [
+        'openAssignmentInBuilder', 'openCloudQuizByKey', 'validateImportedQuiz', 'collapseAllQuestions',
+      ], builder);
+
+      await loaders.openAssignmentInBuilder('ABC', 'Legacy quiz');
+      await loaders.openCloudQuizByKey('quizzes/ABC.json', 'Legacy quiz');
+      assert.deepEqual(saved.map(q => [q.audioSetting, q.audioText]), [['tts', script], ['none', script]]);
+    });
+
     it('keeps unchecked recordings and scripts silent when importing a legacy export', () => {
       const recording = 'https://example.test/recording.mp3';
       const quiz = migrated({ questions: [
