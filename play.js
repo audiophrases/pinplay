@@ -7744,8 +7744,10 @@ async function playAssignmentQuestionAudio(question, opts = {}) {
       studentEdgeTtsCache.set(key, audioUrl);
     }
     if (aborted()) return 'aborted';
-    await playAudioEl(new Audio(audioUrl));
+    const played = await playAudioEl(new Audio(audioUrl));
     if (aborted()) return 'aborted';
+    // A clip the browser would not play goes to the browser's own voice below.
+    if (!played) throw new Error('Edge TTS playback failed');
     return true;
   } catch {
     if (aborted()) return 'aborted';

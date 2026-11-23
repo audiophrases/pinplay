@@ -209,20 +209,19 @@ describe('questionMediaStatus', () => {
       assert.equal(A.questionTtsText(quiz.questions[1]), 'True?');
     });
 
-    it('an AI quiz made without audio (No audio on every item) follows the quiz', () => {
+    it('an explicit No audio is kept; a question without any audio setting follows the quiz', () => {
       const quiz = migrated({ questions: [
         { type: 'mcq', prompt: 'A', audioSetting: 'none', audioEnabled: false },
         { type: 'slide', prompt: 'B', audioSetting: 'none', audioEnabled: false },
       ] });
-      assert.deepEqual([settings(quiz), A.getQuizAudio(quiz), plays(quiz)], [['quiz', 'quiz'], 'NONE', ['none', 'none']]);
+      assert.deepEqual([settings(quiz), A.getQuizAudio(quiz)], [['none', 'none'], 'NONE']);
       A.setQuizAudio(quiz, 'EN');
-      assert.deepEqual(plays(quiz), ['tts', 'tts'], 'picking English reads them, with no question to override');
-      // Skipped items beside spoken ones stay skipped.
-      const mixed = migrated({ questions: [
-        { type: 'slide', prompt: 'A', audioSetting: 'tts', audioText: 'Hola' },
-        { type: 'mcq', prompt: 'B', audioSetting: 'none', audioEnabled: false },
-      ] });
-      assert.deepEqual(settings(mixed), ['tts', 'none']);
+      assert.deepEqual(plays(quiz), ['none', 'none'], 'never made heard without the teacher choosing it');
+      // An AI quiz made without audio (no audio fields) follows the quiz.
+      const ai = migrated({ questions: [{ type: 'mcq', prompt: 'A' }, { type: 'slide', prompt: 'B' }] });
+      assert.deepEqual([settings(ai), A.getQuizAudio(ai)], [['quiz', 'quiz'], 'NONE']);
+      A.setQuizAudio(ai, 'EN');
+      assert.deepEqual(plays(ai), ['tts', 'tts']);
     });
 
     describe('an assignment stored before the Worker kept the quiz\'s audio, opened again', () => {
@@ -249,13 +248,22 @@ describe('questionMediaStatus', () => {
         assert.deepEqual([A.getQuizAudio(quiz), quiz.language], ['OTHER', 'es-ES-ElviraNeural']);
       });
 
-      it('a quiz that read nothing, or questions that disagree, are not guessed', () => {
+      it('a quiz that read nothing is not guessed', () => {
         const silent = readAllEn();
         silent.questions.forEach((q) => { q.audioEnabled = !!q.audioText; });
         assert.equal(A.getQuizAudio(reopened(silent)), 'CUSTOM');
+        assert.deepEqual(plays(silent), ['none', 'none', 'tts', 'none']);
+      });
+
+      it('questions read in different languages each keep their own read-aloud and voice', () => {
         const mixed = readAllEn();
         mixed.questions[1].language = 'fr-FR-DeniseNeural';
-        assert.equal(A.getQuizAudio(reopened(mixed)), 'CUSTOM');
+        reopened(mixed);
+        assert.equal(A.getQuizAudio(mixed), 'CUSTOM');
+        assert.deepEqual(settings(mixed), ['tts', 'tts', 'tts', 'none']);
+        assert.deepEqual(plays(mixed), ['tts', 'tts', 'tts', 'none']);
+        assert.deepEqual(JSON.parse(JSON.stringify(mixed.questions.slice(0, 2).map((q) => A.prepareQuestionTts(q, mixed)))),
+          [{ voice: 'en-US-BrianNeural', text: 'A' }, { voice: 'fr-FR-DeniseNeural', text: 'B' }]);
       });
 
       it('a cloud quiz (not an assignment) is not guessed', () => {
@@ -384,11 +392,14 @@ describe('questionMediaStatus', () => {
     await A.changeBuilderQuizAudio('NONE');
     assert.equal(prompts, 2);
     assert.equal(sandbox.quiz.ttsLanguage, 'NONE');
-    assert.deepEqual([own.audioSetting, silent.audioSetting, recorded.audioSetting], ['quiz', 'quiz', 'quiz']);
+    // The muted question keeps No audio: on Same as quiz the next language would read it.
+    assert.deepEqual([own.audioSetting, silent.audioSetting, recorded.audioSetting], ['quiz', 'none', 'quiz']);
     assert.match(own.audioText, /\[ca\]/);
     assert.match(recorded.audioData, /a\.mp3$/);
+    override = false;
     await A.changeBuilderQuizAudio('EN');
-    assert.equal(prompts, 2);
+    assert.equal(prompts, 3, 'the muted question would be heard in English: asked');
+    assert.equal(A.questionAudioChoice(silent, sandbox.quiz), 'none', 'kept, as the teacher answered Keep');
   });
 
   it('tells the teacher which questions "Apply to all" would change', async () => {
@@ -457,7 +468,7 @@ describe('questionMediaStatus', () => {
       { type: 'mcq', prompt: 'A', audioSetting: 'none', audioEnabled: false },
       { type: 'slide', prompt: 'B', audioSetting: 'none', audioEnabled: false },
     ];
-    assert.deepEqual(append({ questions: noAudio() }), ['tts', 'tts'], 'made without audio (today\'s prompt before the fix)');
+    assert.deepEqual(append({ questions: noAudio() }), ['none', 'none'], 'an explicit No audio stays silent');
     assert.deepEqual(append({ questions: [{ type: 'mcq', prompt: 'A' }, { type: 'slide', prompt: 'B' }] }), ['tts', 'tts'], 'no audio fields at all');
     // A quiz exported on No audio keeps playing nothing.
     assert.deepEqual(append({ audioPerQuestion: true, ttsLanguage: 'NONE', questions: [{ type: 'mcq', prompt: 'A', audioSetting: 'quiz' }] }), ['none']);
@@ -1328,4 +1339,38 @@ describe('❌ Delete questions: applyDeleteQuestions, undo and listeningSections
     assert.equal(ids(sandbox.quiz.questions), 'a b');
     assert.equal(sandbox.saves, 0);
   });
+});
+
+// A question imported from the question bank with a recording plays the
+// recording: its own 🔊 Audio is the file, not the quiz's read-aloud. The bank
+// used an audio mode nothing else reads ('url'), and the new MCQ is on Same
+// as quiz, so a French quiz read the prompt instead.
+const BANK_SRC = fs.readFileSync(path.join(__dirname, '..', 'question-bank-ui.js'), 'utf8');
+
+function bankAttachMedia() {
+  // The bank's helpers live inside its IIFE: run that block on its own.
+  const start = BANK_SRC.indexOf('  const AUDIO_EXT_RE');
+  const end = BANK_SRC.indexOf('  // A bank quiz tagged with a CEFR level');
+  assert.ok(start > 0 && end > start, 'the bank media helpers moved');
+  const context = {};
+  require('node:vm').runInNewContext(`${BANK_SRC.slice(start, end)}\nthis.attachMedia = attachMedia;`, context);
+  return context.attachMedia;
+}
+
+it('a bank question with a recording plays the recording, in a quiz read aloud in French', () => {
+  const attachMedia = bankAttachMedia();
+  const A = loadDeclarations(APP_SRC, [
+    'QUESTION_TYPE_CATALOG', 'AUDIO_CAPABLE_QUESTION_TYPES', 'supportsQuestionAudio', 'QUESTION_AUDIO_SETTINGS',
+    'questionAudioSetting', 'quizReadAloudLanguage', 'questionAudioChoice',
+  ], {});
+  const quiz = { audioPerQuestion: true, ttsLanguage: 'FR', language: 'fr-FR-DeniseNeural' };
+  // As makeMcqQuestion builds it: on Same as quiz.
+  const q = { type: 'mcq', prompt: 'Écoute et choisis.', audioSetting: 'quiz', audioMode: 'tts', audioEnabled: true, answers: [] };
+  attachMedia(q, { media_url: 'https://bank.example/audio/q1.mp3' });
+  assert.deepEqual([q.audioSetting, q.audioMode, q.audioData], ['file', 'file', 'https://bank.example/audio/q1.mp3']);
+  assert.equal(A.questionAudioChoice(q, quiz), 'file');
+  // A picture stays a picture.
+  const pic = { type: 'mcq', audioSetting: 'quiz' };
+  attachMedia(pic, { media_url: 'https://bank.example/img/q1.png' });
+  assert.deepEqual([pic.imageData, pic.audioSetting], ['https://bank.example/img/q1.png', 'quiz']);
 });

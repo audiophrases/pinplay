@@ -208,6 +208,10 @@ describe('rules follow the request', () => {
     const typed = section(build({ audio: 'some', audioInstructions: 'read only the gap questions' }), 'Rules');
     assert.match(typed, /Use the teacher's instructions to choose the script and which items to read/);
     assert.match(typed, /Use "audioSetting": "none" and "audioEnabled": false on skipped items/);
+    // "Only the gap questions" cannot meet "every audio-capable item": the rule names the teacher's items.
+    assert.match(typed, /Audio in the quiz language: each item the teacher's audio instructions name \(every audio-capable item if they name none\) has "audioEnabled": true/);
+    assert.doesNotMatch(typed, /every audio-capable item has/);
+    assert.match(typed, /The examples only show how audio is written: which items have it follows the teacher's instructions\./);
   });
 
   // 2026-11-23: audio is a setting of each question, so the prompt asks for it

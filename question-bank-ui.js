@@ -149,7 +149,9 @@
     const url = (row.media_url || '').trim();
     if (!url) return;
     if (classifyMedia(url) === 'audio') {
-      q.audioMode = 'url';
+      // The question's own 🔊 Audio is this recording (not the quiz's read-aloud).
+      q.audioSetting = 'file';
+      q.audioMode = 'file';
       q.audioData = url;
       q.audioEnabled = true;
     } else {

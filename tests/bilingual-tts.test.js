@@ -274,7 +274,9 @@ describe('the AI prompts ask for bilingual audio only when the teacher does', ()
 
   it('standard prompt: the rule, the example and the teacher\'s instructions', () => {
     const { text } = A.buildCreationPrompt({ ...base, audio: 'bilingual', audioInstructions: 'ask in Catalan, read the sentence in English' });
-    assert.match(text, /Audio, bilingual: every question has "audioEnabled": true and "audioText"/);
+    // The teacher's instructions choose the items, so the rule names those, not every question.
+    assert.match(text, /Audio, bilingual, on the items the teacher's audio instructions name \(every question and teaching slide if they name none\): each of them has "audioEnabled": true and "audioText"/);
+    assert.doesNotMatch(text, /every question has "audioEnabled"/);
     assert.ok(text.includes('[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010.'));
     assert.match(text, /- Audio instructions: "ask in Catalan, read the sentence in English"/);
     assert.match(text, /"ttsLanguage": "EN", "CA" or "FR"/);

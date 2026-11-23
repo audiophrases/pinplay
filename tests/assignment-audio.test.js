@@ -161,3 +161,20 @@ test('a missing generated file from an old assignment reads its script', async (
   assert.equal(result, true);
   assert.deepEqual(fetched, ['https://example.test/api/tts/edge']);
 });
+
+// A live Edge clip the browser refuses to play is not a success: the
+// browser's own voice reads the question instead.
+test('a live clip the browser will not play falls back to the browser voice', async () => {
+  const { context, api } = setup();
+  context.Audio = class {
+    constructor(url) { this.url = url; this.events = {}; }
+    addEventListener(event, fn) { this.events[event] = fn; }
+    play() { return Promise.reject(new Error('NotAllowedError')); }
+    pause() {}
+  };
+  const spoken = [];
+  context.speakTtsSegmentsInBrowser = async (text, lang) => { spoken.push([text, lang]); return true; };
+  const result = await api.playAssignmentQuestionAudio({ audioEnabled: true, prompt: 'Question', ttsAudioKey: '', language: 'en-US-AriaNeural' });
+  assert.equal(result, true);
+  assert.deepEqual(spoken, [['Question', 'en-US-AriaNeural']]);
+});

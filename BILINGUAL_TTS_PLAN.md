@@ -187,8 +187,8 @@ bilingual rule and the teacher's words only when asked.
     English read it.
   - AI prompt without audio leaves the audio fields out (it set "none" on
     every item, which kept the quiz silent after the teacher picked English),
-    and the migration turns a quiz whose every item is on No audio with
-    nothing of its own into Same as quiz (it plays the same).
+    and the migration turned a quiz whose every item is on No audio into
+    Same as quiz (withdrawn the same day: an explicit No audio is kept).
   - ▶ Play preview of a file gone from the cloud drops the dead reference and
     keeps "Audio file" (it switched the question to read-aloud).
   - Media Manager: a file question with no file shows "🎵 File ⚠ no file
@@ -200,3 +200,22 @@ bilingual rule and the teacher's words only when asked.
     those questions came back silent.
   - Student page: a missing file reads nothing in its place, except a script
     stored beside it (old assignments stored read-aloud as generated files).
+- 2026-11-23 (second review): fixes.
+  - An explicit No audio is kept on import, appended or not; only a question
+    with no audio setting at all follows the quiz.
+  - Question bank: a question with a recording is set to its own audio file
+    (it was on Same as quiz with a mode nothing reads, so the quiz's voice read
+    the prompt).
+  - ✏️ on an assignment stored by the old Worker whose questions were read in
+    different languages: each keeps its own read-aloud in the voice it had.
+  - "Apply to all" to No audio leaves the questions on No audio as they are
+    (on Same as quiz they would be read when the quiz next gets a language).
+  - A question's voice: the search box wins only when typed in, and both
+    voice fields show the voice it has (the list's choice was reverted).
+  - AI prompt with audio instructions: the rule names the items the
+    instructions name, not every item, and says the examples only show the
+    format.
+  - Student page: a live clip the browser does not play falls back to the
+    browser's voice (it counted as played).
+  - Editing a question's text, prompt, voice or audio setting drops its clip
+    key, so the Media Manager shows it missing until it is made again.
