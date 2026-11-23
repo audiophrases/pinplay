@@ -12654,10 +12654,13 @@ async function importQuizSources(files) {
         return question;
       });
 
+      // A file that says nothing about the quiz's audio (an AI quiz) has no
+      // default of its own: appended, its questions follow this quiz's.
+      const fileSetsQuizAudio = String(parsed.ttsLanguage || '').trim() !== '' || parsed.audioPerQuestion === true;
       normalizeQuizAudioDefaults(parsed);
 
       if (mode === 'append' || totalAppended > 0) {
-        preserveAppendedQuestionAudio(parsed, quiz);
+        preserveAppendedQuestionAudio(parsed, quiz, { sourceHasDefault: fileSetsQuizAudio });
         // Deduplicate IDs: renumber incoming questions to avoid collisions
         const existingIds = new Set(quiz.questions.map((q) => q.id));
         let counter = quiz.questions.length;
@@ -22221,9 +22224,11 @@ function inferStoredQuizReadAloud(targetQuiz) {
   return { ttsLanguage, language: normalizeTtsVoice(voice, ttsLanguage) };
 }
 
-// An inherited setting can follow the destination when the two defaults match.
-// Otherwise give the imported question the playback it had in its source quiz.
-function preserveAppendedQuestionAudio(source, destination) {
+// An inherited setting can follow the destination when the two defaults match,
+// or when the source had no default of its own (`sourceHasDefault` false: a
+// file without the quiz's 🔊 Audio, such as an AI quiz). Otherwise give the
+// imported question the playback it had in its source quiz.
+function preserveAppendedQuestionAudio(source, destination, { sourceHasDefault = true } = {}) {
   const sourceLanguage = quizReadAloudLanguage(source);
   const destinationLanguage = quizReadAloudLanguage(destination);
   const sameDefault = sourceLanguage === destinationLanguage
@@ -22235,7 +22240,7 @@ function preserveAppendedQuestionAudio(source, destination) {
       settleQuestionVoice(q, source);
       return;
     }
-    if (setting !== 'quiz' || sameDefault) return;
+    if (setting !== 'quiz' || sameDefault || !sourceHasDefault) return;
     settleQuestionVoice(q, source);
     q.audioSetting = sourceLanguage ? 'tts' : 'none';
     // A retained custom script was inactive while the question followed its quiz.

@@ -444,6 +444,25 @@ describe('questionMediaStatus', () => {
     assert.equal(A.prepareQuestionTts(readAll.questions[0], destination).voice, 'fr-FR-DeniseNeural');
   });
 
+  it('an AI file appended without quiz-level audio follows the destination quiz', () => {
+    const destination = { audioPerQuestion: true, ttsLanguage: 'EN', language: 'en-US-AriaNeural', questions: [] };
+    // What the import sees: the file's own fields, before they are normalized.
+    const append = (file) => {
+      const sourceHasDefault = String(file.ttsLanguage || '').trim() !== '' || file.audioPerQuestion === true;
+      A.normalizeQuizAudioDefaults(file);
+      A.preserveAppendedQuestionAudio(file, destination, { sourceHasDefault });
+      return file.questions.map((q) => A.questionAudioChoice(q, destination));
+    };
+    const noAudio = () => [
+      { type: 'mcq', prompt: 'A', audioSetting: 'none', audioEnabled: false },
+      { type: 'slide', prompt: 'B', audioSetting: 'none', audioEnabled: false },
+    ];
+    assert.deepEqual(append({ questions: noAudio() }), ['tts', 'tts'], 'made without audio (today\'s prompt before the fix)');
+    assert.deepEqual(append({ questions: [{ type: 'mcq', prompt: 'A' }, { type: 'slide', prompt: 'B' }] }), ['tts', 'tts'], 'no audio fields at all');
+    // A quiz exported on No audio keeps playing nothing.
+    assert.deepEqual(append({ audioPerQuestion: true, ttsLanguage: 'NONE', questions: [{ type: 'mcq', prompt: 'A', audioSetting: 'quiz' }] }), ['none']);
+  });
+
   it('reads only the bilingual script when an AI reply includes a quiz voice', () => {
     const source = { ttsLanguage: 'OTHER', language: 'es-ES-ElviraNeural', questions: [
       { type: 'slide', audioSetting: 'tts', audioText: '[en] Listen. [es] Hola.' },
