@@ -141,3 +141,33 @@ bilingual rule and the teacher's words only when asked.
   - The prompts show `"ttsLanguage"` and `"readAllQuestionsAloud": false` in
     the quiz shape (and the climb example) when audio is asked, and say that
     only items with `"audioText"` are heard.
+- 2026-11-23 (later, owner's design): audio is the quiz's setting with
+  per-question exceptions, replacing the entry above.
+  - The quiz's 🔊 Audio: No audio / English / Català / Français / Other
+    language (`quiz.ttsLanguage`), plus "Custom", which is shown, never
+    picked: a quiz that came without a quiz-wide setting (`quiz.audioCustom`,
+    plays nothing by itself). Picking a setting ends Custom.
+  - Each question's own 🔊 Audio (`q.audioSetting`): Same as quiz (default) /
+    No audio / Read aloud with its own language, voice or text (bilingual
+    included) / an audio file or recording. Not set (imported, generated): its
+    own file or text, else the quiz's.
+  - `audioEnabled` and `audioMode` are outputs again: publishing
+    (`prepareQuestionTts`) works them out for the student page. A question on
+    Same as quiz is read in the quiz's voice and reads itself; the payload
+    (`normalizeQuizForLive`) drops its kept `audioText`.
+  - `migrateQuestionAudio` runs once per quiz and per imported file
+    (`quiz.audioPerQuestion`): own file → file, own text → read aloud (No audio
+    when "Don't hear questions" had silenced it), the rest Same as quiz; a
+    read-all quiz keeps its language, else No audio, or Custom when some
+    questions have their own audio (the reported quiz).
+  - Root cause of the report: the Worker's `normalizeQuiz` kept only version,
+    title and questions, so a quiz reopened from an assignment came back with
+    no audio setting, read as "Don't hear questions". It now keeps the quiz's
+    `ttsLanguage`, `language`, `readAllQuestionsAloud`, `audioCustom`,
+    `audioPerQuestion` and each question's `audioSetting` and `ttsLanguage`
+    (needs a Worker deploy).
+  - Media Manager: "🔊 Audio…" (was "Change voice…") sets Same as quiz, No
+    audio or an own voice on the selection; "Remove… 🔊 Audio" deletes a
+    question's own audio and puts it back on Same as quiz.
+  - Prompts: no quiz-level audio fields; "Audio is set per item: only items
+    with "audioText" are heard."

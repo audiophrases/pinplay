@@ -15,7 +15,7 @@ before(() => {
   A = loadDeclarations(read('app.js'), [
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
-    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'promptQuizShape', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
+    'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'promptAudioRules', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'slideHasMedia', 'slideTextFit', 'stripTeachingTextMarks', 'slideTextFitLabel', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
     'shapePromptExample', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename',
     'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'splitListeningTranscript',
     'LISTENING_PROMPT_TYPE_FIELDS', 'LISTENING_PROMPT_EXAMPLE', 'LISTENING_PROMPT_MATCH_EXAMPLE', 'LISTENING_PROMPT_LEVEL_EXAMPLE', 'buildListeningPrompt',
@@ -209,15 +209,14 @@ describe('rules follow the request', () => {
     assert.match(typed, /When they leave some items out, give each of those "audioEnabled": false/);
   });
 
-  // 2026-11-23: AIs copied the shape line and left out the quiz-level fields,
-  // so a quiz with audio on its slides came in reading nothing aloud.
-  it('audio: the quiz shape shows the quiz-level audio fields, only with audio', () => {
-    const shapeLine = (text) => text.split('\n').find((l) => l.startsWith('Quiz: {'));
-    assert.equal(shapeLine(build({ audio: 'some' })), 'Quiz: {"version": 3, "title": "…", "ttsLanguage": "…", "readAllQuestionsAloud": false, "questions": [ … ]}');
-    assert.equal(shapeLine(build({ audio: 'no' })), 'Quiz: {"version": 3, "title": "…", "questions": [ … ]}');
-    assert.equal(shapeLine(build({ audio: 'bilingual', adaptive: true, steps: 4 })), 'Quiz: {"version": 3, "title": "…", "ttsLanguage": "…", "readAllQuestionsAloud": false, "stepsPlan": [ … ], "questions": [ … ]}');
-    assert.match(section(build({ audio: 'some' }), 'Rules'), /Only items with "audioText" are heard\./);
+  // 2026-11-23: audio is a setting of each question, so the prompt asks for it
+  // per item and the quiz object needs no audio fields.
+  it('audio: said per item, with no quiz-level fields', () => {
+    const text = build({ audio: 'some' });
+    assert.match(section(text, 'Rules'), /Audio is set per item: only items with "audioText" are heard\./);
     assert.match(section(build({ audio: 'some', audioInstructions: 'only the slides' }), 'Rules'), /give each of those "audioEnabled": false and no "audioText": they stay silent\./);
+    assert.doesNotMatch(text, /readAllQuestionsAloud/);
+    assert.doesNotMatch(build({ audio: 'no' }), /readAllQuestionsAloud/);
     // The create page's "Quiz language" choice shows the audio fields in its examples too.
     assert.ok(examplesOf(build({ audio: 'quiz' })).some((ex) => ex.audioEnabled === true && ex.audioText));
   });
@@ -387,8 +386,8 @@ describe('size', () => {
     };
     assert.ok(sizes.default < 9000, JSON.stringify(sizes));
     assert.ok(sizes.allTypes < 10000, JSON.stringify(sizes));
-    // +100 for the quiz-level audio fields in the shape line ("ttsLanguage",
-    // "readAllQuestionsAloud"): AIs left them out when the shape didn't show them.
+    // +100 (2026-11-23) for saying that audio is set per item: the request
+    // with every option was already 6 characters under 12000.
     assert.ok(sizes.adaptiveAll < 12100, JSON.stringify(sizes));
     assert.ok(sizes.twoTypes < 5000, JSON.stringify(sizes));
   });
@@ -412,6 +411,23 @@ const GRADABLE = {
 };
 
 describe('examples are valid PinPlay questions', () => {
+  // 2026-11-23: a quiz opened again for editing (✏️ an assignment) came back
+  // without its audio settings, and read "No audio".
+  it('the server keeps the quiz\'s 🔊 Audio and each question\'s own', () => {
+    const quiz = W.normalizeQuiz({
+      title: 'Audio', ttsLanguage: 'ca', language: 'ca-ES-JoanaNeural', readAllQuestionsAloud: false, audioPerQuestion: true, audioCustom: true,
+      questions: [
+        { id: 'a', type: 'slide', prompt: 'Rule', audioSetting: 'tts', ttsLanguage: 'EN', audioText: '[ca] Hola. [en] Hello.' },
+        { id: 'b', type: 'tf', prompt: 'True?', audioSetting: 'quiz', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
+        { id: 'c', type: 'tf', prompt: 'Odd?', audioSetting: 'loud', ttsLanguage: 'XX', answers: [{ text: 'True', correct: true }, { text: 'False', correct: false }] },
+      ],
+    });
+    assert.deepEqual([quiz.ttsLanguage, quiz.language, quiz.readAllQuestionsAloud, quiz.audioPerQuestion, quiz.audioCustom], ['CA', 'ca-ES-JoanaNeural', false, true, true]);
+    assert.deepEqual([...quiz.questions].map((q) => [q.audioSetting, q.ttsLanguage]), [['tts', 'EN'], ['quiz', undefined], [undefined, undefined]]);
+    const bare = W.normalizeQuiz({ title: 'Old', questions: [{ id: 'a', type: 'slide', prompt: 'Rule' }] });
+    assert.equal('ttsLanguage' in bare || 'audioPerQuestion' in bare || 'audioCustom' in bare, false, 'nothing added to a quiz without them');
+  });
+
   it('the server keeps every example and each one is gradable', () => {
     const req = { ...base, typesMode: 'all', images: 'some', adaptive: true };
     const all = A.TEMPLATE_ALL_13_TYPES.questions.map((q, i) => A.shapePromptExample(q, req, i));

@@ -8058,6 +8058,9 @@ function normalizeQuiz(quiz) {
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       ttsAudioKey: String(q.ttsAudioKey || '').slice(0, 200),
+      // The question's own 🔊 Audio and read-aloud language, for editing it again.
+      ...(['quiz', 'none', 'tts', 'file'].includes(q.audioSetting) ? { audioSetting: q.audioSetting } : {}),
+      ...(['EN', 'CA', 'FR', 'OTHER'].includes(String(q.ttsLanguage || '').toUpperCase()) ? { ttsLanguage: String(q.ttsLanguage).toUpperCase() } : {}),
       imageData: String(q.imageData || ''),
       readingText: q.type === 'pin' ? '' : String(q.readingText || '').slice(0, 10000),
       media: normalizeQuestionMedia(q),
@@ -8279,6 +8282,15 @@ function normalizeQuiz(quiz) {
 
   const stepsPlan = normalizeStepsPlan(quiz.stepsPlan);
   if (stepsPlan.length) normalized.stepsPlan = stepsPlan;
+
+  // The quiz's 🔊 Audio, kept so a quiz opened again for editing (✏️ an
+  // assignment) still has it: without it the teacher page read "No audio".
+  const quizAudio = String(quiz.ttsLanguage || '').trim().toUpperCase();
+  if (['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(quizAudio)) normalized.ttsLanguage = quizAudio;
+  if (quiz.language) normalized.language = String(quiz.language).slice(0, 64);
+  if (typeof quiz.readAllQuestionsAloud === 'boolean') normalized.readAllQuestionsAloud = quiz.readAllQuestionsAloud;
+  if (quiz.audioCustom) normalized.audioCustom = true;
+  if (quiz.audioPerQuestion) normalized.audioPerQuestion = true;
 
   return normalized;
 }

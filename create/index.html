@@ -480,16 +480,17 @@
 
                   <div class="row gap top-space" id="quizAudioDefaultsRow">
                     <div style="min-width:220px;">
-                      <label><span data-i18n>Read every question aloud</span>
+                      <label><span data-i18n>🔊 Audio</span>
                         <select id="quizTtsLanguage">
-                          <option value="NONE" data-i18n>No</option>
-                          <option value="EN" data-i18n-ignore>English</option>
-                          <option value="CA" data-i18n-ignore>Català</option>
-                          <option value="FR" data-i18n-ignore>Français</option>
-                          <option value="OTHER" data-i18n>Other</option>
+                          <option value="CUSTOM" hidden data-i18n>Custom</option>
+                          <option value="NONE" data-i18n>🔇 No audio</option>
+                          <option value="EN" data-i18n-ignore>🗣 English</option>
+                          <option value="CA" data-i18n-ignore>🗣 Català</option>
+                          <option value="FR" data-i18n-ignore>🗣 Français</option>
+                          <option value="OTHER" data-i18n>🗣 Other language</option>
                         </select>
                       </label>
-                      <p class="small muted" style="margin:.35rem 0 0; max-width:340px;" data-i18n>Questions and slides with their own audio (a text to read aloud, a file or a recording) are always heard.</p>
+                      <p class="small muted" style="margin:.35rem 0 0; max-width:360px;" data-i18n>Every question and slide uses this, unless its own 🔊 Audio says otherwise: no audio, another language or voice, its own or bilingual text, or an audio file.</p>
                     </div>
                     <div style="min-width:320px; display:none;" id="quizTtsOtherWrap">
                       <label><span data-i18n>Language / voice</span>

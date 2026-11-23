@@ -22,7 +22,7 @@ before(() => {
     'QUESTION_TYPE_CATALOG', 'CANONICAL_QUESTION_TYPES', 'TEMPLATE_ALL_13_TYPES',
     'CEFR_LEVELS', 'BUILDUP_MAX_STEPS', 'SCAFFOLD_ORDER', 'buildAdaptiveLevelRules',
     'pickPromptExamples', 'TEACHER_GRADED_TYPES', 'PROMPT_VOICE', 'PROMPT_BILINGUAL_AUDIO', 'SLIDE_TEXT_BUDGET', 'PROMPT_SLIDE_TEXT', 'PROMPT_TYPE_FIELDS', 'PROMPT_EXAMPLE_FIELDS', 'PROMPT_EXAMPLE_CEFR',
-    'shapePromptExample', 'promptAudioRules', 'promptQuizShape', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename', 'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf',
+    'shapePromptExample', 'promptAudioRules', 'promptMediaRules', 'PROMPT_BATCH_MAX', 'buildCreationPrompt', 'toSafeFilename', 'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf',
     'BUILDUP_PROMPT_TYPES', 'BUILDUP_PROMPT_DEFAULT_STEPS', 'BUILDUP_PROMPT_DEFAULT_ITEMS', 'BUILDUP_PROMPT_MAX_ITEMS', 'BUILDUP_PROMPT_LESSON_SLIDES', 'buildupPromptStepItems', 'buildupPromptBatches', 'buildupPromptSize',
     'BUILDUP_PROMPT_TYPE_FIELDS', 'BUILDUP_PROMPT_EXAMPLE', 'buildupPromptExampleQuestions', 'buildupPromptNumber', 'buildBuildupPrompt', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan',
   ]);
@@ -315,14 +315,10 @@ describe('the AI prompts ask for bilingual audio only when the teacher does', ()
     const off = A.buildBuildupPrompt(climb).text;
     assert.match(off, /No generated audio on any question or teaching slide/);
     assert.doesNotMatch(off, /bilingual/i);
-    assert.match(off, /^Quiz: \{"version": 3, "title": "…", "stepsPlan"/m);
-    assert.match(off, /^\{"version": 3, "title": "Present simple: -s", "stepsPlan"/m);
     ['audio', 'bilingualAudio'].forEach((key) => {
       const on = A.buildBuildupPrompt({ ...climb, [key]: key === 'audio' ? 'bilingual' : true }).text;
       assert.match(on, /Audio, bilingual: every question has "audioEnabled": true/);
-      // The quiz-level fields, in the shape line and the example the AI copies.
-      assert.match(on, /^Quiz: \{"version": 3, "title": "…", "ttsLanguage": "…", "readAllQuestionsAloud": false, "stepsPlan"/m);
-      assert.match(on, /^\{"version": 3, "title": "Present simple: -s", "ttsLanguage": "EN", "readAllQuestionsAloud": false, "stepsPlan"/m);
+      assert.match(on, /Audio is set per item: only items with "audioText" are heard\./);
       assert.match(on, /Use the students' first language specified by the teacher\./);
       assert.match(on, /- The students' first language: "Catalan"/);
     });

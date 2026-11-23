@@ -1468,7 +1468,6 @@ function bindBuilderEvents() {
       if (quizTtsLanguageEl?.value === 'OTHER' && quizTtsOtherVoiceEl.value && quizTtsOtherVoiceEl.value !== quiz.language) {
         // Manually trigger the update if the value changed due to search
         quiz.language = quizTtsOtherVoiceEl.value;
-        applyQuizVoiceToQuestions(quiz, 'OTHER', quiz.language);
         renderBuilder();
       }
     });
@@ -1476,53 +1475,23 @@ function bindBuilderEvents() {
 
   if (quizTitleEl) quizTitleEl.addEventListener('input', renderQuizStrip);
 
+  // The quiz's 🔊 Audio: every question on "Same as quiz" follows it; the
+  // questions with their own setting keep theirs.
   if (quizTtsLanguageEl) {
     quizTtsLanguageEl.addEventListener('change', () => {
       const mode = quizTtsLanguageEl.value;
-      applyHearQuestionsMode(quiz, mode);
-
-      // If user changed the "hear questions" mode, drop any TTS-generated mp3s (keep user-uploaded audio)
-      let clearedAudio = false;
-      quiz.questions.forEach((q) => {
-        if (!q) return;
-        const audio = String(q.audioData || '');
-        const isMp3 = /\.mp3(\?|$)/i.test(audio) || audio.startsWith('data:audio/mpeg') || audio.startsWith('data:audio/mp3');
-        const looksLikeTts = q._ttsGenerated || /\/quiz-[^/]+\/audio\/q\d+(?:-[a-z0-9-]+)?\.mp3(\?|$)/i.test(audio);
-        if (q.audioMode === 'file' && audio && isMp3 && looksLikeTts) {
-          q.audioData = '';
-          q.audioMode = 'tts';
-          q._ttsGenerated = false;
-          q._userAudioUploaded = false;
-          clearedAudio = true;
-        }
-      });
-
-      // Show/hide the "Other" voice selector
-      if (quizTtsOtherWrap) {
-        quizTtsOtherWrap.style.display = mode === 'OTHER' ? '' : 'none';
-      }
-
-      // No: the other questions are not read; nothing on the questions changes
-      // (their own audio is still heard). A language: they are read in it.
-      if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) {
-        quiz.language = quizTtsOtherVoiceEl.value;
-        applyQuizVoiceToQuestions(quiz, 'OTHER', quiz.language);
-      } else if (mode !== 'NONE') {
-        const next = normalizeTtsLanguage(mode);
-        quiz.language = getVoiceForTtsLanguage(next);
-        applyQuizVoiceToQuestions(quiz, next, quiz.language);
-      }
+      if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) quiz.language = quizTtsOtherVoiceEl.value;
+      setQuizAudio(quiz, mode);
+      if (quizTtsOtherWrap) quizTtsOtherWrap.style.display = mode === 'OTHER' ? '' : 'none';
       renderBuilder();
     });
   }
 
-  // Also update all questions when the "Other" voice changes
   if (quizTtsOtherVoiceEl) {
     quizTtsOtherVoiceEl.addEventListener('change', () => {
       if (quizTtsLanguageEl?.value !== 'OTHER') return;
-      const voice = quizTtsOtherVoiceEl.value;
-      quiz.language = voice;
-      applyQuizVoiceToQuestions(quiz, 'OTHER', voice);
+      quiz.language = quizTtsOtherVoiceEl.value;
+      quiz.questions.forEach((q) => { if (q && questionAudioSetting(q) === 'quiz') q.ttsAudioKey = ''; });
       renderBuilder();
     });
   }
@@ -1657,6 +1626,7 @@ function bindBuilderEvents() {
           try {
             q.audioData = await fileToDataUrl(audio);
             q.audioMode = 'file';
+            q.audioSetting = 'file';
             q.audioEnabled = true;
             q._ttsGenerated = false;
             q._userAudioUploaded = true;
@@ -2012,6 +1982,7 @@ function bindBuilderEvents() {
         try {
           q.audioData = await fileToDataUrl(audioFile);
           q.audioMode = 'file';
+          q.audioSetting = 'file';
           q.audioEnabled = true;
           q._ttsGenerated = false;
           q._userAudioUploaded = true;
@@ -2184,6 +2155,12 @@ function bindBuilderEvents() {
   });
 
   questionListEl.addEventListener('change', async (e) => {
+    // 🔊 Audio: a new choice or language shows its own fields and voices.
+    if (e.target.closest('[data-field="audioChoice"],[data-field="ttsLanguageQuestion"]')) {
+      syncQuizFromUI();
+      renderBuilder();
+      return;
+    }
     const pinUpload = e.target.closest('[data-pin-upload]');
     if (pinUpload) {
       const idx = Number(pinUpload.dataset.pinUpload);
@@ -2249,6 +2226,7 @@ function bindBuilderEvents() {
       try {
         q.audioData = await fileToDataUrl(file);
         q.audioMode = 'file';
+        q.audioSetting = 'file';
         q.audioEnabled = true;
         q._ttsGenerated = false;
         q._userAudioUploaded = true;
@@ -3137,10 +3115,15 @@ function requireQuizTitle() {
 function renderBuilder() {
   normalizeQuizAudioDefaults(quiz);
   quizTitleEl.value = quiz.title || '';
-  if (quizTtsLanguageEl) quizTtsLanguageEl.value = getHearQuestionsMode(quiz);
+  if (quizTtsLanguageEl) {
+    // "Custom" is shown, never offered: it is how a quiz without a quiz-wide setting reads.
+    const customOption = quizTtsLanguageEl.querySelector('option[value="CUSTOM"]');
+    if (customOption) customOption.hidden = getQuizAudio(quiz) !== 'CUSTOM';
+    quizTtsLanguageEl.value = getQuizAudio(quiz);
+  }
   // Show/hide "Other" voice selector based on saved mode
   if (quizTtsOtherWrap) {
-    const isOther = getHearQuestionsMode(quiz) === 'OTHER';
+    const isOther = getQuizAudio(quiz) === 'OTHER';
     quizTtsOtherWrap.style.display = isOther ? '' : 'none';
     if (isOther && quiz.language) {
       const otherVoiceEl = document.getElementById('quizTtsOtherVoice');
@@ -3176,7 +3159,7 @@ function renderBuilder() {
     const truncPrompt = (q.prompt || '').length > 55 ? escapeHtml((q.prompt || '').slice(0, 55)) + '…' : escapeHtml(q.prompt || '');
 
     // Detect media presence for button highlighting
-    const hasAudio = supportsQuestionAudio(q.type) && !!(q.audioText || q.audioData);
+    const hasAudio = questionAudioChoice(q, quiz) !== 'none';
     const hasImage = q.type !== 'pin' && !!(q.imageData || (q.imageKeyword || '').trim() || (q.gifKeyword || '').trim());
     const hasVideo = !!((q.media?.url || '').trim());
     const hasReading = q.type !== 'pin' && !!String(q.readingText || '').trim();
@@ -3767,9 +3750,8 @@ const EDGE_TTS_LANGUAGE_DEFAULTS = {
   FR: 'fr-FR-DeniseNeural',
   OTHER: 'en-US-AriaNeural',
 };
-// A question's "TTS text language". NONE mutes that one question.
+// A question's read-aloud language (its 🔊 Audio choice says whether it is heard).
 const EDGE_TTS_LANGUAGE_OPTIONS = [
-  { value: 'NONE', label: '🔇 Not heard' },
   { value: 'EN', label: 'English' },
   { value: 'CA', label: 'Català' },
   { value: 'FR', label: 'Français' },
@@ -4124,50 +4106,38 @@ function normalizeRecognitionLang(input) {
   return filled ? { ok: true, value: filled } : { ok: false, value: '' };
 }
 
-// The "Read every question aloud" choice: 'NONE' (No) or the language every
-// question is read in. Questions and slides with their own audio (a text to
-// read aloud, a file or a recording) are heard either way (questionHeardByTts).
-function getHearQuestionsMode(targetQuiz) {
+// The quiz's 🔊 Audio: 'CUSTOM' (shown, not picked: the quiz came without
+// one), 'NONE' (No audio) or the language its questions are read in. It applies
+// to every question on "Same as quiz"; the others keep their own.
+function getQuizAudio(targetQuiz) {
+  if (targetQuiz?.audioCustom) return 'CUSTOM';
   const raw = String(targetQuiz?.ttsLanguage || '').trim().toUpperCase();
-  if (raw === 'NONE' || !raw || targetQuiz?.readAllQuestionsAloud === false) return 'NONE';
-  return normalizeTtsLanguage(targetQuiz?.ttsLanguage);
+  return !raw || raw === 'NONE' ? 'NONE' : normalizeTtsLanguage(raw);
 }
 
-// Reading every question in this language/voice: the questions without their
-// own text follow it (a muted one too: "every question"). A question's own
-// text keeps the voice it was written for, and an uploaded file stays a file.
-function applyQuizVoiceToQuestions(targetQuiz, ttsLanguage, voice) {
-  (targetQuiz?.questions || []).forEach((q) => {
-    if (!q || !supportsQuestionAudio(q.type) || String(q.audioText || '').trim()) return;
-    q.ttsLanguage = ttsLanguage;
-    q.language = voice;
-  });
-}
-
-// No keeps the quiz's language (the default for new questions); a language
-// reads every question in it.
-function applyHearQuestionsMode(targetQuiz, modeValue) {
+// Picking a setting ends "Custom". The questions on "Same as quiz" lose their
+// old clip (a new voice makes a new one).
+function setQuizAudio(targetQuiz, modeValue) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const mode = String(modeValue || '').trim().toUpperCase();
-  if (mode === 'NONE' || !mode) {
-    targetQuiz.readAllQuestionsAloud = false;
-    return;
-  }
-  // Legacy support for old saved mode.
-  if (mode === 'READ') {
-    targetQuiz.ttsLanguage = DEFAULT_EDGE_TTS_LANGUAGE;
-    targetQuiz.readAllQuestionsAloud = false;
-    return;
-  }
-  targetQuiz.ttsLanguage = normalizeTtsLanguage(mode);
-  targetQuiz.readAllQuestionsAloud = true;
+  if (mode === 'CUSTOM') return;
+  const before = getQuizAudio(targetQuiz);
+  delete targetQuiz.audioCustom;
+  targetQuiz.ttsLanguage = !mode || mode === 'NONE' ? 'NONE' : normalizeTtsLanguage(mode);
+  targetQuiz.readAllQuestionsAloud = false;
+  if (getQuizAudio(targetQuiz) === before) return;
+  (targetQuiz.questions || []).forEach((q) => {
+    if (q && questionAudioSetting(q) === 'quiz') q.ttsAudioKey = '';
+  });
 }
 
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  migrateQuestionAudio(targetQuiz);
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
-  targetQuiz.readAllQuestionsAloud = targetQuiz.ttsLanguage !== 'NONE' && targetQuiz.readAllQuestionsAloud !== false;
+  targetQuiz.readAllQuestionsAloud = false;
+  if (!targetQuiz.audioCustom) delete targetQuiz.audioCustom;
 
   if (targetQuiz.ttsLanguage === 'NONE') {
     targetQuiz.language = '';
@@ -4237,10 +4207,13 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   syncQuizFromUI();
   const q = quiz.questions[idx];
   if (!q) return false;
+  // On "Same as quiz" the question is heard in the quiz's voice, reading itself.
+  settleQuestionVoice(q, quiz);
+  const playable = questionAudioSetting(q) === 'quiz' ? { ...q, audioText: '', audioMode: 'tts' } : q;
   // Decide what we can actually preview here — independent of the live-mode
   // `audioEnabled` flag, which isn't maintained in the builder.
-  const hasFileAudio = q.audioMode === 'file' && !!q.audioData;
-  const hasTtsAudio = q.audioMode !== 'file' && !!String(q.audioText || q.prompt || '').trim();
+  const hasFileAudio = playable.audioMode === 'file' && !!playable.audioData;
+  const hasTtsAudio = playable.audioMode !== 'file' && !!String(playable.audioText || playable.prompt || '').trim();
   if (!hasFileAudio && !hasTtsAudio) {
     setStatus(hostStatusEl, t('Nothing to preview yet — upload an audio file or add text to read aloud.'), 'bad');
     return false;
@@ -4266,7 +4239,7 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
     // covering the Edge TTS fetch/decode latency on cold starts.
     // playQuestionAudio surfaces its own specific failure reason (missing
     // cloud file, decode error, TTS error), so no generic message here.
-    await playQuestionAudio(q, { onStart: restore, force: true, onMissingFile });
+    await playQuestionAudio(playable, { onStart: restore, force: true, onMissingFile });
   } finally {
     restore();
   }
@@ -4275,18 +4248,29 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   return healed;
 }
 
-function buildAudioSettingsMarkup(idx, q) {
-  const mode = q.audioMode || (q.audioData ? 'file' : 'tts');
-  const ttsLanguage = normalizeTtsLanguage(q.ttsLanguage || guessTtsLanguageFromVoice(q.language));
+// The quiz's read-aloud language as words: "English", "Català"… or the voice.
+function quizAudioLanguageName(quizCtx) {
+  const lang = quizReadAloudLanguage(quizCtx);
+  if (lang === 'OTHER') return String(quizCtx?.language || t('another language'));
+  return (EDGE_TTS_LANGUAGE_OPTIONS.find((x) => x.value === lang) || {}).label || '';
+}
+
+// A question's 🔊 Audio: Same as quiz / No audio / its own read-aloud / an
+// audio file or recording, and only the fields of that choice.
+function buildAudioSettingsMarkup(idx, q, quizCtx = quiz) {
+  const setting = questionAudioSetting(q);
+  const quizLangName = quizAudioLanguageName(quizCtx);
+  const own = String(q.ttsLanguage || '').trim().toUpperCase();
+  const ttsLanguage = normalizeTtsLanguage(own && own !== 'NONE' ? own : guessTtsLanguageFromVoice(q.language));
   const voice = normalizeTtsVoice(q.language, ttsLanguage);
   const showOtherSearch = ttsLanguage === 'OTHER';
   const ttsLanguageOptions = EDGE_TTS_LANGUAGE_OPTIONS
     .filter((x) => x.value !== 'READ')
-    .map((x) => `<option value="${x.value}" ${ttsLanguage === x.value ? 'selected' : ''}>${escapeHtml(t(x.label))}</option>`)
+    .map((x) => `<option value="${x.value}" ${ttsLanguage === x.value ? 'selected' : ''}>${x.label}</option>`)
     .join('');
 
   // Always list the question's own voice (e.g. set with the Media Manager's
-  // Change voice), or syncing the builder would replace it with the first default.
+  // 🔊 Audio…), or syncing the builder would replace it with the first default.
   const voiceSource = showOtherSearch ? EDGE_TTS_VOICE_INDEX.map((v) => v.code) : [voice, EDGE_TTS_LANGUAGE_DEFAULTS['EN'], EDGE_TTS_LANGUAGE_DEFAULTS['CA'], EDGE_TTS_LANGUAGE_DEFAULTS['FR']].filter(Boolean);
   const voiceOptions = [...new Set(voiceSource)]
     .map((v) => `<option value="${v}" ${voice === v ? 'selected' : ''}>${v}</option>`)
@@ -4295,22 +4279,49 @@ function buildAudioSettingsMarkup(idx, q) {
     .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(formatVoiceIndexLabel(v))}</option>`)
     .join('');
 
-  return `
-    <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+  const choiceOptions = [
+    ['quiz', quizLangName ? t('Same as quiz ({language})', { language: quizLangName }) : t('Same as quiz (no audio)')],
+    ['none', t('🔇 No audio')],
+    ['tts', t('🗣 Read aloud: its own language, voice or text')],
+    ['file', t('🎵 Audio file or recording')],
+  ].map(([value, label]) => `<option value="${value}" ${setting === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
+  const preview = `<div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>`;
+  let body = `<div class="small muted top-space">${escapeHtml(t('Students hear nothing on this one.'))}</div>`;
+  if (setting === 'quiz') {
+    body = quizLangName
+      ? `<div class="small muted top-space">${escapeHtml(t('Read aloud in {language}, like the rest of the quiz. Change it at the top, in the quiz\'s 🔊 Audio.', { language: quizLangName }))}</div>${preview}`
+      : `<div class="small muted top-space">${escapeHtml(t('No audio, like the rest of the quiz. Change it at the top, in the quiz\'s 🔊 Audio.'))}</div>`;
+  } else if (setting === 'tts') {
+    const readsOwn = q.type === 'slide' ? t('Leave empty to read the slide as it is shown') : t('Leave empty to read the question as it is shown');
+    body = `
+      <label class="top-space">${escapeHtml(t('What to say'))}</label>
+      <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="${escapeHtml(readsOwn)}" />
+      <div class="small muted">${t('Bilingual: a tag switches the voice — "[ca] Escolta i tria. [en] She has lived here since 2010." ([ca], [en], [fr], [es]… or a voice id such as [es-ES-ElviraNeural]).')}</div>
       <div class="row gap top-space">
-        <div style="min-width:170px;">
-          <label>Audio source</label>
-          <select data-q="${idx}" data-field="audioMode">
-            <option value="tts" ${mode === 'tts' ? 'selected' : ''}>Text-to-speech</option>
-            <option value="file" ${mode === 'file' ? 'selected' : ''}>Audio file</option>
-          </select>
+        <div style="min-width:160px;">
+          <label>${escapeHtml(t('Language'))}</label>
+          <select data-q="${idx}" data-field="ttsLanguageQuestion">${ttsLanguageOptions}</select>
         </div>
         <div style="min-width:220px;">
-          <label>Audio file</label>
+          <label>${escapeHtml(t('Voice'))}</label>
+          <select data-q="${idx}" data-field="language">${voiceOptions}</select>
+        </div>
+      </div>
+      ${showOtherSearch ? `<label class="top-space">Find Edge voice (language · country · person · code)</label>
+      <input data-q="${idx}" data-field="voiceSearch" list="edgeVoiceIndex" value="${escapeHtml(voice)}" placeholder="Type language/country/person/code" />
+      <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
+      <div class="small top-space">${escapeHtml(q.ttsAudioKey ? t('Audio ready ✅ (it is made again when you change the text or the voice).') : t('The audio is made when you save or publish.'))}</div>
+      ${preview}`;
+  } else if (setting === 'file') {
+    body = `
+      <div class="row gap top-space">
+        <div style="min-width:220px;">
+          <label>${escapeHtml(t('Audio file'))}</label>
           <input data-audio-upload="${idx}" type="file" accept="audio/*" />
         </div>
         <div style="min-width:200px;">
-          <label>Record voice</label>
+          <label>${escapeHtml(t('Or record it'))}</label>
           <div class="row gap">
             <button type="button" class="btn" data-record-audio="${idx}">🎙 Record</button>
             <button type="button" class="btn" data-stop-record-audio="${idx}" hidden>■ Stop</button>
@@ -4318,21 +4329,15 @@ function buildAudioSettingsMarkup(idx, q) {
           </div>
         </div>
       </div>
-      <label class="top-space">Text to read aloud (max 1000 chars)</label>
-      <input data-q="${idx}" data-field="audioText" maxlength="1200" value="${escapeHtml(q.audioText || '')}" placeholder="This is a sample text." />
-      <div class="small muted">${t('Bilingual: a tag switches the voice — "[ca] Escolta i tria. [en] She has lived here since 2010." ([ca], [en], [fr], [es]… or a voice id such as [es-ES-ElviraNeural]).')}</div>
-      <label>TTS text language</label>
-      <select data-q="${idx}" data-field="ttsLanguageQuestion">${ttsLanguageOptions}</select>
-      ${showOtherSearch ? `<label class="top-space">Find Edge voice (language · country · person · code)</label>
-      <input data-q="${idx}" data-field="voiceSearch" list="edgeVoiceIndex" value="${escapeHtml(voice)}" placeholder="Type language/country/person/code" />
-      <datalist id="edgeVoiceIndex">${voiceIndexOptions}</datalist>` : ''}
-      <label>TTS Voice</label>
-      <select data-q="${idx}" data-field="language">${voiceOptions}</select>
-      <div class="small top-space">${mode === 'file'
-      ? (q.audioData ? 'Audio file uploaded ✅' : 'No audio file uploaded yet.')
-      : (ttsLanguage === 'NONE' ? escapeHtml(t('🔇 This question is not heard. Choose the language of its text to hear it.'))
-        : q.ttsAudioKey ? 'Audio ready ✅ — reads the text aloud (auto-updates when you edit the text).' : 'Reads the text above aloud (Text-to-speech).')}</div>
-      <div class="top-space"><button type="button" class="btn" data-play-audio-preview="${idx}">▶ Play preview</button></div>
+      <div class="small top-space">${escapeHtml(q.audioData ? t('Audio file ready ✅') : t('No audio file yet: upload one or record it.'))}</div>
+      ${q.audioData ? preview : ''}`;
+  }
+  return `
+    <div class="top-space" style="padding:.55rem; border:1px dashed var(--line); border-radius:.55rem;">
+      <label>${escapeHtml(t('🔊 Audio of this question'))}
+        <select data-q="${idx}" data-field="audioChoice">${choiceOptions}</select>
+      </label>
+      ${body}
     </div>
   `;
 }
@@ -4394,7 +4399,7 @@ function syncQuizFromUI(event) {
   const index = field?.dataset?.q;
   const changedIndex = index != null && /^\d+$/.test(index) ? Number(index) : null;
   quiz.title = quizTitleEl.value.trim();
-  applyHearQuestionsMode(quiz, quizTtsLanguageEl?.value || getHearQuestionsMode(quiz));
+  setQuizAudio(quiz, quizTtsLanguageEl?.value || getQuizAudio(quiz));
 
   quiz.questions.forEach((q, idx) => {
     if (changedIndex !== null && idx !== changedIndex) return;
@@ -4485,67 +4490,63 @@ function syncQuizFromUI(event) {
 
     }
 
+    // 🔊 Audio: the choice, then only the fields that choice shows (a field
+    // that isn't on screen keeps its value, so switching back loses nothing).
     if (supportsQuestionAudio(q.type)) {
-      const audioModeEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="audioMode"]`);
+      const audioChoiceEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="audioChoice"]`);
       const audioTextEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="audioText"]`);
       const languageEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="language"]`);
       const ttsLanguageQuestionEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="ttsLanguageQuestion"]`);
       const voiceSearchEl = questionRoot.querySelector(`[data-q="${idx}"][data-field="voiceSearch"]`);
 
-      const quizTtsLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
-      q.audioMode = ['tts', 'file'].includes(String(audioModeEl?.value || '')) ? String(audioModeEl.value) : (q.audioData ? 'file' : 'tts');
-      const nextAudioText = String(audioTextEl?.value || '').slice(0, 1200);
-      const prevAudioText = String(q.audioText || '');
-      q.audioText = nextAudioText;
-
-      // If audioText changed and we previously generated TTS, drop the stale mp3
-      // so the next publish regenerates from the new text.
-      if (nextAudioText !== prevAudioText && q._ttsGenerated) {
-        q.audioData = '';
-        q.audioMode = 'tts';
-        q._ttsGenerated = false;
-        q._userAudioUploaded = false;
-        q._audioVersion = '';
-      }
-
-      let textLang = normalizeTtsLanguage(ttsLanguageQuestionEl?.value || q.ttsLanguage || quizTtsLanguage);
-      let pickedVoice = String(languageEl?.value || '').slice(0, 64);
-      // Text typed into an empty question that was "Not heard" (as the old
-      // "Don't hear questions" left them all) is meant to be heard: it takes
-      // the quiz's language, or the default.
-      if (textLang === 'NONE' && !prevAudioText.trim() && nextAudioText.trim()) {
-        textLang = ownAudioLanguage({}, quizTtsLanguage);
-        pickedVoice = normalizeTtsVoice(quiz.language, textLang);
-        if (ttsLanguageQuestionEl) ttsLanguageQuestionEl.value = textLang;
-        if (languageEl) {
-          if (![...languageEl.options].some((o) => o.value === pickedVoice)) languageEl.add(new Option(pickedVoice, pickedVoice));
-          languageEl.value = pickedVoice;
+      if (audioChoiceEl && QUESTION_AUDIO_SETTINGS.includes(audioChoiceEl.value)) {
+        const before = questionAudioSetting(q);
+        q.audioSetting = audioChoiceEl.value;
+        // Its own read-aloud starts in the voice it had with the quiz.
+        if (before === 'quiz' && q.audioSetting === 'tts' && quizReadAloudLanguage(quiz)) {
+          const withQuiz = { ...q, audioSetting: 'quiz' };
+          settleQuestionVoice(withQuiz, quiz);
+          q.ttsLanguage = withQuiz.ttsLanguage;
+          q.language = withQuiz.language;
         }
+        if (q.audioSetting === 'tts' || q.audioSetting === 'file') q.audioMode = q.audioSetting;
       }
-      q.ttsLanguage = textLang;
-      let resolvedVoice = normalizeTtsVoice(pickedVoice, textLang);
 
-      if (textLang === 'OTHER' && voiceSearchEl) {
-        const rawSearch = String(voiceSearchEl.value || '').trim();
-        if (rawSearch) {
-          const rawLower = rawSearch.toLowerCase();
-          const hit = EDGE_TTS_VOICE_INDEX.find((v) => {
-            const label = formatVoiceIndexLabel(v).toLowerCase();
-            return v.code.toLowerCase() === rawLower || label.includes(rawLower);
-          });
-          if (hit) resolvedVoice = hit.code;
+      if (audioTextEl) {
+        const nextAudioText = String(audioTextEl.value || '').slice(0, 1200);
+        const prevAudioText = String(q.audioText || '');
+        q.audioText = nextAudioText;
+        // If audioText changed and we previously generated TTS, drop the stale mp3
+        // so the next publish regenerates from the new text.
+        if (nextAudioText !== prevAudioText && q._ttsGenerated) {
+          q.audioData = '';
+          q.audioMode = 'tts';
+          q._ttsGenerated = false;
+          q._userAudioUploaded = false;
+          q._audioVersion = '';
         }
       }
 
-      q.language = normalizeTtsVoice(resolvedVoice, quizTtsLanguage);
-
-      if (q.audioMode !== 'file') q.audioData = q.audioData || '';
-
-      // New rule: no checkbox.
-      // TTS is enabled when text exists and language is not 'NONE'; file mode enabled when audioData exists.
-      q.audioEnabled = q.audioMode === 'file'
-        ? !!q.audioData
-        : (textLang !== 'NONE' && !!String(q.audioText || '').trim());
+      if (ttsLanguageQuestionEl || languageEl) {
+        const prevLang = ownAudioLanguage(q, quiz.ttsLanguage);
+        const textLang = normalizeTtsLanguage(ttsLanguageQuestionEl?.value || prevLang);
+        q.ttsLanguage = textLang;
+        let resolvedVoice = normalizeTtsVoice(String(languageEl?.value || '').slice(0, 64), textLang);
+        // A new language brings its own voice (the voice list follows on the re-render).
+        if (textLang !== prevLang && textLang !== 'OTHER') resolvedVoice = getVoiceForTtsLanguage(textLang);
+        if (textLang === 'OTHER' && voiceSearchEl) {
+          const rawSearch = String(voiceSearchEl.value || '').trim();
+          if (rawSearch) {
+            const rawLower = rawSearch.toLowerCase();
+            const hit = EDGE_TTS_VOICE_INDEX.find((v) => {
+              const label = formatVoiceIndexLabel(v).toLowerCase();
+              return v.code.toLowerCase() === rawLower || label.includes(rawLower);
+            });
+            if (hit) resolvedVoice = hit.code;
+          }
+        }
+        q.language = resolvedVoice;
+      }
     }
 
     // Sync imageKeyword from form
@@ -5491,26 +5492,18 @@ function shapePromptExample(q, req, index) {
   return ex;
 }
 
-// Shared TTS policy for Standard, Adaptive and Climb prompt generation. The
-// app's rule: an item with its own "audioText" is heard; the quiz never reads
-// the others ("readAllQuestionsAloud": false).
+// Shared TTS policy for Standard, Adaptive and Climb prompt generation. Audio
+// is a setting of each item: on import, an item with "audioText" is read
+// aloud and one with "audioEnabled": false is silent (migrateQuestionAudio).
 function promptAudioRules(req) {
-  if (!req.audio || req.audio === 'no') return ['No generated audio on any question or teaching slide: set "readAllQuestionsAloud": false on the quiz and "audioEnabled": false on every item; omit "audioText" and audio files.'];
+  if (!req.audio || req.audio === 'no') return ['No generated audio on any question or teaching slide: "audioEnabled": false on every item; omit "audioText" and audio files.'];
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
     : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText": what to read, in the quiz language, never a practice answer. Write a gap as ___ in "audioText" too: the voice pauses there. Set the quiz and item voice using ${PROMPT_VOICE}.`;
-  const heard = ' Only items with "audioText" are heard.';
+  const heard = ' Audio is set per item: only items with "audioText" are heard.';
   // The rule about the teacher's audio instructions goes only with a prompt that quotes some.
   const typed = String(req.audioInstructions || req.bilingualNote || '').trim();
   return typed ? [rule + heard, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText": they stay silent.'] : [rule + heard];
-}
-
-// The quiz object's shape line. With audio it shows the quiz-level audio
-// fields: an AI leaves out what the shape doesn't show. `extra` goes after them
-// (', "stepsPlan": [ … ]').
-function promptQuizShape(req, extra = '') {
-  const audio = req.audio && req.audio !== 'no' ? ', "ttsLanguage": "…", "readAllQuestionsAloud": false' : '';
-  return `Quiz: {"version": 3, "title": "…"${audio}${extra}, "questions": [ … ]}`;
 }
 
 // Picture, video, audio and reading-passage rules for this request.
@@ -5659,7 +5652,7 @@ function buildCreationPrompt(request) {
   }
   out.push('',
     '## Question fields',
-    promptQuizShape(req, req.adaptive ? ', "stepsPlan": [ … ]' : ''),
+    req.adaptive ? 'Quiz: {"version": 3, "title": "…", "stepsPlan": [ … ], "questions": [ … ]}' : 'Quiz: {"version": 3, "title": "…", "questions": [ … ]}',
     ...(req.adaptive ? ['stepsPlan entry: {"step": 1, "title": "…", "change": "…", "rule": "…"}. Include the whole plan in batch 1 only; keep step numbers consistent across batches. "cefr" on a question is optional context, never the step number.'] : []),
     `Every question has ${common}, plus the fields of its type:`,
     ...allowed.map((type) => `- ${type}: ${PROMPT_TYPE_FIELDS[type] || ''}`),
@@ -6282,7 +6275,7 @@ function buildBuildupPrompt(req) {
     ...rules.map((r, i) => `${i + 1}. ${r}`),
     '',
     '## Quiz fields',
-    promptQuizShape(req, ', "stepsPlan": [ … ]'),
+    'Quiz: {"version": 3, "title": "…", "stepsPlan": [ … ], "questions": [ … ]}',
     'stepsPlan entry: {"step": 1, "title": "…", "change": "…", "rule": "…"}',
     'Every question has "id", "type", "prompt", "points", "timeLimit", "step", plus the fields of its type:',
     ...allowed.map((type) => `- ${type}: ${BUILDUP_PROMPT_TYPE_FIELDS[type] || PROMPT_TYPE_FIELDS[type] || ''}`),
@@ -6290,7 +6283,7 @@ function buildBuildupPrompt(req) {
     '## Example',
     `Shape only (3 steps and 2 questions each${allowed.includes('slide') ? ', each step after its lesson of 2, 1 and 3 slides' : ''}): your skill, steps, questions and language come from the task above, with ${steps} steps and ${items} questions each${allowed.includes('slide') ? ', and lessons sized to each step\'s change' : ''}.`,
     '```json',
-    `{"version": 3, "title": "Present simple: -s"${req.audio !== 'no' ? ', "ttsLanguage": "EN", "readAllQuestionsAloud": false' : ''}, "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${buildupPromptExampleQuestions(allowed).map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
+    `{"version": 3, "title": "Present simple: -s", "stepsPlan": [\n${BUILDUP_PROMPT_EXAMPLE.stepsPlan.map((p) => `  ${JSON.stringify(p)}`).join(',\n')}\n], "questions": [\n${buildupPromptExampleQuestions(allowed).map((q) => `  ${JSON.stringify(q)}`).join(',\n')}\n]}`,
     '```',
     '',
     'Before you write: re-read "The teacher\'s own words" at the top. Where they contradict these general instructions, follow the teacher. Only the JSON format and field names are fixed.',
@@ -12603,6 +12596,10 @@ async function importQuizSources(files) {
         return question;
       });
 
+      // Each question gets its own 🔊 Audio from the file's settings, so an
+      // appended batch keeps its audio whatever the open quiz says.
+      migrateQuestionAudio(parsed);
+
       if (mode === 'append' || (mode === 'replace' && i > 0)) {
         // Deduplicate IDs: renumber incoming questions to avoid collisions
         const existingIds = new Set(quiz.questions.map((q) => q.id));
@@ -12645,9 +12642,6 @@ async function importQuizSources(files) {
         if (parsed.title && !quiz.title) quiz.title = parsed.title;
         if (placed.plan.length) quiz.stepsPlan = placed.plan;
         else delete quiz.stepsPlan;
-        if (parsed.readAllQuestionsAloud != null && quiz.readAllQuestionsAloud == null) {
-          quiz.readAllQuestionsAloud = parsed.readAllQuestionsAloud;
-        }
       } else {
         // First file in replace mode. Keep any active assignment binding —
         // replacing questions is a valid edit the user may want to Apply back.
@@ -20920,6 +20914,7 @@ function createEmptyQuiz() {
     ttsLanguage: 'NONE',
     language: '',
     readAllQuestionsAloud: false,
+    audioPerQuestion: true,
     questions: [],
   };
 }
@@ -20941,7 +20936,8 @@ function makeMcqQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -20965,7 +20961,8 @@ function makeSlideQuestion(opts = {}) {
     prompt: 'Watch, listen and remember…',
     points: 0,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -20988,7 +20985,8 @@ function makeMultiQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21012,7 +21010,8 @@ function makeTfQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21035,7 +21034,8 @@ function makeTextQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21055,7 +21055,8 @@ function makeOpenQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21074,7 +21075,8 @@ function makeSpeakingQuestion(opts = {}) {
     prompt: 'Speak your answer when called by the teacher.',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21093,7 +21095,8 @@ function makeVoiceTextQuestion(opts = {}) {
     prompt: 'Speak your answer aloud.',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21114,7 +21117,8 @@ function makeVoiceRecordQuestion(opts = {}) {
     prompt: 'Record your spoken answer.',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21217,7 +21221,8 @@ function makePuzzleQuestion(opts = {}) {
     prompt: '',
     points: 1000,
     timeLimit: 0,
-    audioEnabled: opts.withAudio !== undefined ? !!opts.withAudio : quiz.readAllQuestionsAloud,
+    audioSetting: opts.withAudio ? 'tts' : 'quiz',
+    audioEnabled: !!opts.withAudio || !!quizReadAloudLanguage(quiz),
     audioMode: 'tts',
     audioText: '',
     ttsLanguage,
@@ -21470,6 +21475,9 @@ function normalizeQuizForLive(raw) {
     ttsLanguage: quizTtsLanguage,
     language: quizVoice,
     readAllQuestionsAloud: importedReadAll(raw),
+    // Kept through the server, so the quiz opened again for editing is not migrated again.
+    ...(raw.audioPerQuestion ? { audioPerQuestion: true } : {}),
+    ...(raw.audioCustom ? { audioCustom: true } : {}),
     questions: [],
   };
 
@@ -21490,7 +21498,10 @@ function normalizeQuizForLive(raw) {
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled,
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      audioText: String(q.audioText || '').slice(0, 1200),
+      // The student page reads "audioText": only a question's own read-aloud has one
+      // (on "Same as quiz" it reads itself; a kept text waits for its own setting again).
+      audioText: supportsQuestionAudio(q.type) && questionAudioSetting(q) !== 'tts' ? '' : String(q.audioText || '').slice(0, 1200),
+      audioSetting: questionAudioSetting(q),
       ttsLanguage: questionTtsLanguage,
       language: questionVoice,
       audioData: String(q.audioData || ''),
@@ -21962,72 +21973,138 @@ function importedReadAll(raw) {
   return !(Array.isArray(raw?.questions) ? raw.questions : []).some((q) => q && q.audioEnabled === false);
 }
 
-// A question is read by TTS when the quiz reads every question aloud, or when
-// it has its own text to read ("audioText"). The mode alone does not say so:
-// every question is in `tts` mode until it gets an audio file.
-function questionWantsTts(q, readAllQuestionsAloud) {
-  if (readAllQuestionsAloud) return true;
-  return String(q?.audioMode || '').toLowerCase() === 'tts' && !!String(q?.audioText || '').trim();
+// ---------- Question audio: the quiz's setting, and each question's own ----------
+// The quiz's 🔊 Audio (quiz.ttsLanguage: NONE = No audio, or EN/CA/FR/OTHER =
+// read aloud in that language; quiz.audioCustom = "Custom", shown when a quiz
+// came without one, which plays nothing) applies to every question whose own
+// 🔊 Audio (q.audioSetting) is "Same as quiz". A question can instead have its
+// own: No audio, Read aloud (its own language, voice or text, bilingual
+// included) or an audio file/recording. `audioEnabled` and `audioMode` are what
+// publishing works out from both, for the student page.
+const QUESTION_AUDIO_SETTINGS = ['quiz', 'none', 'tts', 'file'];
+
+// A question's own 🔊 Audio. Not set (an imported or generated question): its
+// own file or text if it has one, else the quiz's.
+function questionAudioSetting(q) {
+  if (QUESTION_AUDIO_SETTINGS.includes(q?.audioSetting)) return q.audioSetting;
+  if (String(q?.audioMode || '').toLowerCase() === 'file' && q?.audioData) return 'file';
+  if (String(q?.audioText || '').trim()) return 'tts';
+  return 'quiz';
 }
 
-// A question set to "Not heard" (its own ttsLanguage NONE) is never read.
-function questionTtsMuted(q) {
-  return String(q?.ttsLanguage || '').trim().toUpperCase() === 'NONE';
+// The language the quiz reads its questions in, or '' (No audio / Custom).
+function quizReadAloudLanguage(quizCtx) {
+  const lang = String(quizCtx?.ttsLanguage || '').trim().toUpperCase();
+  return !quizCtx?.audioCustom && ['EN', 'CA', 'FR', 'OTHER'].includes(lang) ? lang : '';
 }
 
-// Whether a question is heard by TTS. Its own text ("audioText") is always
-// read, whatever the quiz says, like an audio file; the quiz setting only
-// decides whether every OTHER question is read too ("Read every question
-// aloud": a language, with readAllQuestionsAloud).
-function questionHeardByTts(q, quizLanguage, readAllQuestionsAloud) {
-  if (!supportsQuestionAudio(q?.type) || questionTtsMuted(q)) return false;
-  const readAll = !!readAllQuestionsAloud && normalizeTtsLanguage(quizLanguage) !== 'NONE';
-  return questionWantsTts(q, readAll);
+// What a question plays: 'none' | 'tts' | 'file'.
+function questionAudioChoice(q, quizCtx) {
+  if (!supportsQuestionAudio(q?.type)) return 'none';
+  const setting = questionAudioSetting(q);
+  if (setting === 'quiz') return quizReadAloudLanguage(quizCtx) ? 'tts' : 'none';
+  return setting;
 }
 
-// The language a question's own text is read in: its own, else the quiz's,
-// else the default (a quiz that reads nothing aloud has no language).
+// Whether a question is read aloud by TTS (shared by publishing and the Media Manager).
+function questionHeardByTts(q, quizCtx) {
+  return questionAudioChoice(q, quizCtx) === 'tts';
+}
+
+// The text read aloud: a question on "Same as quiz" reads itself; its own
+// read-aloud reads its "audioText", or itself when that is empty.
+function questionTtsText(q) {
+  return questionAudioSetting(q) === 'quiz' ? questionSpeechText({ ...q, audioText: '' }) : questionSpeechText(q);
+}
+
+// Gives a read-aloud question the voice it is read with: the quiz's on "Same
+// as quiz", else its own (its language, else the quiz's, else the default).
+function settleQuestionVoice(q, quizCtx) {
+  if (!supportsQuestionAudio(q?.type)) return;
+  const quizLang = quizReadAloudLanguage(quizCtx);
+  if (questionAudioSetting(q) === 'quiz') {
+    if (!quizLang) return;
+    q.ttsLanguage = quizLang;
+    q.language = quizLang === 'OTHER' ? normalizeTtsVoice(quizCtx.language, 'OTHER') : getVoiceForTtsLanguage(quizLang);
+    return;
+  }
+  const lang = ownAudioLanguage(q, quizLang || 'NONE');
+  q.ttsLanguage = lang;
+  q.language = normalizeTtsVoice(q.language, lang);
+}
+
+// The language a question is read in: its own, else the quiz's, else the default.
 function ownAudioLanguage(q, quizLanguage) {
-  if (String(q?.ttsLanguage || '').trim()) return normalizeTtsLanguage(q.ttsLanguage);
+  const own = String(q?.ttsLanguage || '').trim().toUpperCase();
+  if (own && own !== 'NONE') return normalizeTtsLanguage(own);
   const quizLang = normalizeTtsLanguage(quizLanguage);
   return quizLang === 'NONE' ? DEFAULT_EDGE_TTS_LANGUAGE : quizLang;
 }
 
-// Settles a question's voice/language fields as publishing does and returns the
-// TTS clip it needs ({ voice, text }), or null when it has no TTS audio (a
-// `tts`-mode question without audio then loses its stale key and is not heard).
-// Shared by ensureQuizMediaReady and the Media Manager.
-function prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud) {
-  const overrideText = String(q.audioText || '').trim();
+// The language that goes with a voice id ("ca-ES-JoanaNeural" → CA).
+function ttsLanguageForVoice(voice) {
+  const v = String(voice || '').toLowerCase();
+  if (v.startsWith('en-')) return 'EN';
+  if (v.startsWith('ca-')) return 'CA';
+  if (v.startsWith('fr-')) return 'FR';
+  return 'OTHER';
+}
 
-  // A muted question keeps its NONE; one without its own text follows the
-  // quiz's language, unless the quiz has none (it is not read then).
-  if (supportsQuestionAudio(q.type) && !questionTtsMuted(q)) {
-    const langForQuestion = overrideText ? ownAudioLanguage(q, quizLanguage) : normalizeTtsLanguage(quizLanguage);
-    if (langForQuestion !== 'NONE') {
-      q.ttsLanguage = langForQuestion;
-      q.language = normalizeTtsVoice(q.language, langForQuestion);
+// Once per quiz (and per imported file): quizzes from before the per-question
+// setting kept it on the quiz ("Hear questions" + "Read every question
+// aloud"). A question with its own file or text keeps it; the others follow
+// the quiz. A quiz that read every question keeps its language; one that
+// didn't plays nothing by itself: "Custom" when some questions have their own
+// audio (an AI quiz with audio on its slides only), else No audio. Its own text
+// is now heard even where the quiz said "Don't hear questions" (AI quizzes came
+// in that way, slides silent); a text that switch had silenced (ttsLanguage
+// NONE) becomes No audio, so it stays silent.
+function migrateQuestionAudio(targetQuiz) {
+  if (!targetQuiz || typeof targetQuiz !== 'object' || targetQuiz.audioPerQuestion) return;
+  // As the old builder read it: a language, and read-all unless switched off.
+  const quizLang = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
+  const hasLang = ['EN', 'CA', 'FR', 'OTHER'].includes(quizLang);
+  const readAll = hasLang && targetQuiz.readAllQuestionsAloud !== false;
+  let own = 0;
+  (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
+    if (!q || !supportsQuestionAudio(q.type) || QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)) return;
+    const muted = String(q.ttsLanguage || '').trim().toUpperCase() === 'NONE';
+    if (String(q.audioMode || '').toLowerCase() === 'file' && q.audioData) q.audioSetting = 'file';
+    else if (String(q.audioText || '').trim()) q.audioSetting = muted ? 'none' : 'tts';
+    else q.audioSetting = 'quiz';
+    if (q.audioSetting !== 'quiz') own += 1;
+    if (muted) {
+      q.ttsLanguage = hasLang ? quizLang : DEFAULT_EDGE_TTS_LANGUAGE;
+      q.language = normalizeTtsVoice(q.language, q.ttsLanguage);
     }
+  });
+  if (!readAll) {
+    targetQuiz.ttsLanguage = 'NONE';
+    if (own) targetQuiz.audioCustom = true;
   }
+  targetQuiz.readAllQuestionsAloud = false;
+  targetQuiz.audioPerQuestion = true;
+}
 
-  const ttsMode = String(q.audioMode || '').toLowerCase() === 'tts';
-  const ttsText = questionSpeechText(q).slice(0, 1200);
-
-  if (questionHeardByTts(q, quizLanguage, readAllQuestionsAloud) && ttsText) {
-    return { voice: q.language || getVoiceForTtsLanguage(ownAudioLanguage(q, quizLanguage)), text: ttsText };
-  }
-  if (ttsMode) {
-    q.ttsAudioKey = '';
-    q.audioEnabled = false;
-  }
+// Settles a question as publishing does: its voice, and what the student page
+// reads (audioEnabled, audioMode). Returns the TTS clip it needs ({ voice,
+// text }), or null when it is not read aloud (its stale key is dropped).
+// Shared by ensureQuizMediaReady and the Media Manager.
+function prepareQuestionTts(q, quizCtx) {
+  if (!supportsQuestionAudio(q.type)) return null;
+  settleQuestionVoice(q, quizCtx);
+  const choice = questionAudioChoice(q, quizCtx);
+  const ttsText = choice === 'tts' ? questionTtsText(q).slice(0, 1200) : '';
+  if (choice !== 'none') q.audioMode = choice;
+  q.audioEnabled = choice === 'file' ? !!q.audioData : !!ttsText;
+  if (ttsText) return { voice: q.language || getVoiceForTtsLanguage(q.ttsLanguage), text: ttsText };
+  if (String(q.audioMode || '').toLowerCase() === 'tts') q.ttsAudioKey = '';
   return null;
 }
 
 async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false, requirePreviewAudio = false } = {}) {
   normalizeQuizAudioDefaults(quiz);
   const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
-  const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
-  const readAllQuestionsAloud = !!quiz.readAllQuestionsAloud;
   let converted = 0;
   let uploaded = 0;
   let mediaAutoUpdated = false;
@@ -22119,7 +22196,7 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
     // changes — no stale-mp3 invalidation, no flip to `file`. The mp3 is generated
     // once and reused; we only materialize it on R2 at publish boundaries
     // (materializeTts), not on every local save / media check.
-    const ttsClip = prepareQuestionTts(q, quizLanguage, readAllQuestionsAloud);
+    const ttsClip = prepareQuestionTts(q, quiz);
     if (ttsClip && requirePreviewAudio) {
       // The server confirms the stored clip and supplies its canonical key.
       if (!q.listeningSection && !(q.audioMode === 'file' && q.audioData)) {
@@ -22337,19 +22414,18 @@ function questionMediaStatus(q, quizCtx = {}) {
     visual = { kind: 'none', status: 'none' };
   }
 
+  // What the question plays (its own 🔊 Audio, or the quiz's), as publishing reads it.
   let audio;
-  const mode = String(q.audioMode || '').toLowerCase();
   const audioData = String(q.audioData || '');
+  const choice = questionAudioChoice(q, quizCtx);
   if (!supportsQuestionAudio(q.type)) {
     audio = { kind: 'na', status: 'na' };
-  } else if (mode !== 'tts' && audioData) {
+  } else if (choice === 'file' && audioData) {
     audio = { kind: 'file', status: audioData.startsWith('data:') ? 'local' : 'ready' };
+  } else if (choice === 'tts' && questionTtsText(q)) {
+    audio = { kind: 'tts', status: q.ttsAudioKey ? 'ready' : 'missing' };
   } else {
-    // Same rule as prepareQuestionTts (publishing).
-    const heard = questionHeardByTts(q, quizCtx.ttsLanguage || 'NONE', !!quizCtx.readAllQuestionsAloud);
-    audio = heard && questionSpeechText(q)
-      ? { kind: 'tts', status: q.ttsAudioKey ? 'ready' : 'missing' }
-      : { kind: 'none', status: 'none' };
+    audio = { kind: 'none', status: 'none' };
   }
 
   const changedAt = Math.max(mediaVersionTime(q._imageVersion), mediaVersionTime(q._audioVersion));
@@ -22555,7 +22631,7 @@ async function generateMissingVisualFor(q) {
 
 // Regenerate: the next result for the same keyword (from the session cache).
 // Missing media is generated instead; TTS audio is unchanged (same voice + text
-// gives the same clip: use Change voice).
+// gives the same clip: use 🔊 Audio… to change the voice).
 async function regenerateVisualFor(q) {
   const { visual } = questionMediaStatus(q, quiz);
   if (visual.status === 'missing') return generateMissingVisualFor(q);
@@ -22606,12 +22682,11 @@ async function regenerateVisualFor(q) {
 // Returns question -> outcome.
 async function generateMissingTtsFor(questions, job) {
   const outcomes = new Map();
-  const quizLanguage = normalizeTtsLanguage(quiz.ttsLanguage);
   const pending = [];
   for (const q of questions) {
     if (job.cancelled) break;
     if (questionMediaStatus(q, quiz).audio.status !== 'missing') continue;
-    const clip = prepareQuestionTts(q, quizLanguage, !!quiz.readAllQuestionsAloud);
+    const clip = prepareQuestionTts(q, quiz);
     if (!clip) continue;
     q.ttsAudioKey = await computeTtsAudioKey(clip.voice, clip.text);
     q.audioEnabled = true;
@@ -22743,14 +22818,31 @@ function answerMediaKeyword(q, shared = new Set()) {
   return keyword.slice(0, 140);
 }
 
-// Change voice: for questions read with TTS. The old clip key is dropped so the
-// new one is prepared. Returns the changed questions.
-function setTtsVoiceOn(questions, voice, quizCtx) {
-  if (!EDGE_TTS_VOICE_OPTIONS.includes(voice)) return [];
+// 🔊 Audio… on several questions: 'quiz' puts them on "Same as quiz", ''
+// sets No audio (texts and files are kept for later), and a voice gives them
+// their own read-aloud with it (the old clip key dropped so the new one is
+// prepared). A question with its own audio file keeps it, unless it goes back
+// to the quiz's. Returns the changed questions.
+function setQuestionAudioOn(questions, value) {
+  if (value && value !== 'quiz' && !EDGE_TTS_VOICE_OPTIONS.includes(value)) return [];
   const changed = [];
   questions.forEach((q) => {
-    if (questionMediaStatus(q, quizCtx).audio.kind !== 'tts') return;
-    q.language = voice;
+    if (!q || !supportsQuestionAudio(q.type)) return;
+    const setting = questionAudioSetting(q);
+    if (value === 'quiz' || !value) {
+      const next = value || 'none';
+      if (setting === next) return;
+      q.audioSetting = next;
+      q.ttsAudioKey = '';
+      changed.push(q);
+      return;
+    }
+    if (setting === 'file') return;
+    if (setting === 'tts' && q.language === value) return;
+    q.audioSetting = 'tts';
+    q.audioMode = 'tts';
+    q.language = value;
+    q.ttsLanguage = ttsLanguageForVoice(value);
     q.ttsAudioKey = '';
     changed.push(q);
   });
@@ -22775,10 +22867,11 @@ function removeMediaFrom(questions, what) {
       q.media = makeDefaultQuestionMedia();
       q.videoKeyword = '';
     } else if (what === 'audio') {
-      // Uploaded/recorded audio and custom read-aloud text. While the quiz reads
-      // every question aloud, the question text is still read (the mode goes
-      // back to TTS, as the builder's own sync would).
-      if (!q.audioData && !String(q.audioText || '').trim()) return;
+      // Its own audio (an uploaded/recorded file, its own text to read) is
+      // gone, and the question goes back to "Same as quiz".
+      const setting = questionAudioSetting(q);
+      if (setting !== 'tts' && setting !== 'file' && !q.audioData && !String(q.audioText || '').trim()) return;
+      q.audioSetting = 'quiz';
       q.audioData = '';
       q.audioText = '';
       q.audioMode = 'tts';
@@ -23135,14 +23228,23 @@ function refreshMediaSelection() {
     bar.innerHTML = readingTextFormHtml([...state.selected]);
     setTimeout(() => bar.querySelector('[data-mm-reading]')?.focus(), 0);
   } else if (n && state.form === 'voice') {
-    const ttsCount = [...state.selected].filter((q) => questionMediaStatus(q, quiz).audio.kind === 'tts').length;
-    const voiceTitle = escapeHtml(t('Voice for {n} question(s) read with TTS:', { n: ttsCount }));
-    bar.innerHTML = `<strong>${voiceTitle}</strong>
-       <select data-mm-voice aria-label="${escapeHtml(t('TTS Voice'))}">${mediaManagerVoiceOptionsHtml()}</select>
-       <button type="button" class="btn btn-sm primary" data-mm-voice-apply ${ttsCount ? '' : 'disabled'}>${escapeHtml(t('Change voice'))}</button>
+    const audioCount = [...state.selected].filter((q) => supportsQuestionAudio(q?.type)).length;
+    const audioTitle = escapeHtml(t('🔊 Audio for {n} question(s):', { n: audioCount }));
+    bar.innerHTML = `<strong>${audioTitle}</strong>
+       <select data-mm-voice aria-label="${escapeHtml(t('🔊 Audio'))}">
+         <option value="quiz">${escapeHtml(quizAudioLanguageName(quiz) ? t('Same as quiz ({language})', { language: quizAudioLanguageName(quiz) }) : t('Same as quiz (no audio)'))}</option>
+         <option value="">${escapeHtml(t('🔇 No audio'))}</option>
+         <optgroup label="${escapeHtml(t('🗣 Read aloud, with its own voice'))}">${mediaManagerVoiceOptionsHtml()}</optgroup>
+       </select>
+       <button type="button" class="btn btn-sm primary" data-mm-voice-apply ${audioCount ? '' : 'disabled'}>${escapeHtml(t('Apply'))}</button>
        <button type="button" class="btn btn-sm" data-mm-form="">${escapeHtml(t('Cancel'))}</button>`;
-    const firstTts = [...state.selected].find((q) => questionMediaStatus(q, quiz).audio.kind === 'tts');
-    if (firstTts?.language && EDGE_TTS_VOICE_OPTIONS.includes(firstTts.language)) bar.querySelector('[data-mm-voice]').value = firstTts.language;
+    // Starts on what the first selected question has.
+    const first = [...state.selected].find((q) => supportsQuestionAudio(q?.type));
+    const firstSetting = first ? questionAudioSetting(first) : 'quiz';
+    const select = bar.querySelector('[data-mm-voice]');
+    if (firstSetting === 'none') select.value = '';
+    else if (firstSetting === 'tts' && EDGE_TTS_VOICE_OPTIONS.includes(first.language)) select.value = first.language;
+    else select.value = 'quiz';
   } else if (n) {
     const selectedText = escapeHtml(t('{n} selected', { n }));
     const hiddenHtml = hiddenSelected
@@ -23153,7 +23255,7 @@ function refreshMediaSelection() {
          <button type="button" class="btn btn-sm primary" data-mm-action="generate" title="${escapeHtml(t('Search for the media the keywords ask for, and prepare missing audio'))}">${escapeHtml(t('✨ Generate missing'))}</button>
          <button type="button" class="btn btn-sm" data-mm-action="regenerate" title="${escapeHtml(t('Take the next result for the same keyword'))}">${escapeHtml(t('🔄 Regenerate'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="replace" title="${escapeHtml(t('Set a new keyword, or pick a picture or GIF by hand'))}">${escapeHtml(t('🔁 Replace…'))}</button>
-         <button type="button" class="btn btn-sm" data-mm-form="voice">${escapeHtml(t('🗣 Change voice…'))}</button>
+         <button type="button" class="btn btn-sm" data-mm-form="voice" title="${escapeHtml(t('No audio, or read the selected questions aloud with a voice'))}">${escapeHtml(t('🔊 Audio…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="reading" title="${escapeHtml(t('Give the selected questions the same reading text, or change or remove it'))}">${escapeHtml(t('📖 Reading text…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="remove">${escapeHtml(t('🗑 Remove…'))}</button>
          <button type="button" class="btn btn-sm" data-mm-form="move" title="${escapeHtml(t('Move the selected questions together to another position in the quiz'))}">${escapeHtml(t('↕ Move…'))}</button>
@@ -23191,7 +23293,7 @@ function removeSelectedMedia(what) {
   renderMediaManager();
 }
 
-// Voices for Change voice: the three defaults first, then every Edge voice.
+// Voices for 🔊 Audio…: the three defaults first, then every Edge voice.
 let mediaManagerVoiceOptionsCache = '';
 
 function mediaManagerVoiceOptionsHtml() {
@@ -23279,7 +23381,6 @@ function pickMediaByHand(kind) {
   else openImageSearchDialog(idx);
 }
 
-// Change voice, then prepare the new clips (same path as Generate missing's audio).
 // ---------------------------------------------------------------- reading text (bulk)
 // B / I / U buttons for a reading-text box: they wrap the selected words in the
 // marks formatReadingTextHtml shows as formatting. `target` is a selector.
@@ -23515,12 +23616,19 @@ function undoDeleteQuestions() {
   document.querySelector('#mediaManagerOverlay .media-manager')?.focus();
 }
 
+// 🔊 Audio…: No audio ('') or read aloud with this voice; reading aloud then
+// prepares the clips (same path as Generate missing's audio).
 function applyVoiceChange(voice) {
   const state = mediaManagerState;
-  const changed = setTtsVoiceOn(mediaManagerJobQuestions('selected'), voice, quiz);
+  const changed = setQuestionAudioOn(mediaManagerJobQuestions('selected'), voice || '');
   state.form = '';
-  if (!changed.length) { renderMediaManager(); return; }
-  runMediaManagerJob(t('Change voice'), changed, async () => ({ status: 'skipped', reason: '' }), { withTts: true });
+  if (!voice || !changed.length) {
+    state.notice = `${t('🔊 Audio')}: ${t('{n} updated', { n: changed.length })}`;
+    renderBuilder();
+    renderMediaManager();
+    return;
+  }
+  runMediaManagerJob(t('🔊 Audio'), changed, async () => ({ status: 'skipped', reason: '' }), { withTts: true });
 }
 
 function openQuestionFromMediaManager(idx) {
@@ -25879,6 +25987,7 @@ async function startBuilderAudioRecording(idx, q) {
       syncQuizFromUI();
       q.audioData = dataUrl;
       q.audioMode = 'file';
+      q.audioSetting = 'file';
       q.audioEnabled = true;
       q._ttsGenerated = false;
       q._userAudioUploaded = true;

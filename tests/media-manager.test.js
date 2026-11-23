@@ -25,11 +25,12 @@ const NAMES = [
   'videoBackendCandidates', 'videoProviderPreferenceOf', 'applyFoundVideo', 'searchVideosForKeyword', 'autoFillVideos',
   'generateMissingVisualFor', 'regenerateVisualFor', 'removeMediaFrom', 'mediaManagerState',
   'EDGE_TTS_LANGUAGE_DEFAULTS', 'EDGE_TTS_VOICE_INDEX', 'EDGE_TTS_VOICE_OPTIONS', 'DEFAULT_EDGE_TTS_LANGUAGE', 'DEFAULT_EDGE_TTS_VOICE',
-  'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll', 'questionWantsTts', 'questionTtsMuted', 'questionHeardByTts', 'ownAudioLanguage', 'prepareQuestionTts',
-  'getHearQuestionsMode', 'applyQuizVoiceToQuestions', 'applyHearQuestionsMode',
+  'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll',
+  'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting', 'quizReadAloudLanguage', 'questionAudioChoice', 'questionHeardByTts', 'questionTtsText',
+  'ownAudioLanguage', 'ttsLanguageForVoice', 'settleQuestionVoice', 'migrateQuestionAudio', 'prepareQuestionTts', 'getQuizAudio', 'setQuizAudio', 'quizAudioLanguageName',
   'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
-  'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setTtsVoiceOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
+  'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setQuestionAudioOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
 
 const interpolate = (s, vars = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -124,87 +125,129 @@ describe('questionMediaStatus', () => {
     assert.deepEqual(st({ type: 'mcq', readingText: 'Once upon a time', gifKeyword: 'x' }).visual, { kind: 'na', status: 'na' });
   });
 
-  it('audio: TTS ready or missing, uploaded file, quiz-wide read-aloud, a question not heard', () => {
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }).audio, { kind: 'tts', status: 'ready' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi' }).audio, { kind: 'tts', status: 'missing' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3' }).audio, { kind: 'file', status: 'ready' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'data:audio/webm;base64,AA' }).audio, { kind: 'file', status: 'local' });
-    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }).audio, { kind: 'none', status: 'none' });
-    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, { ttsLanguage: 'EN', readAllQuestionsAloud: true }).audio, { kind: 'tts', status: 'missing' });
-    // A question set to "Not heard" stays silent, even while every question is read.
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsLanguage: 'NONE' }).audio, { kind: 'none', status: 'none' });
-    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi', ttsLanguage: 'NONE' }, { ttsLanguage: 'EN', readAllQuestionsAloud: true }).audio, { kind: 'none', status: 'none' });
+  // Audio (2026-11-23): the quiz's 🔊 Audio applies to every question on
+  // "Same as quiz"; a question can have its own setting instead.
+  const OFF = { ttsLanguage: 'NONE' };
+  const ON_EN = { ttsLanguage: 'EN' };
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+
+  it('audio: TTS ready or missing, uploaded file, nothing to play', () => {
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }, OFF).audio, { kind: 'tts', status: 'ready' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi' }, OFF).audio, { kind: 'tts', status: 'missing' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3' }, OFF).audio, { kind: 'file', status: 'ready' });
+    assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'data:audio/webm;base64,AA' }, OFF).audio, { kind: 'file', status: 'local' });
+    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, OFF).audio, { kind: 'none', status: 'none' });
   });
 
-  // A quiz that reads nothing aloud by itself (no language) still plays what a
-  // question or slide has of its own, as it always did with an audio file.
-  it('audio: a question\'s own text is heard even when the quiz reads nothing aloud', () => {
-    const off = { ttsLanguage: 'NONE', readAllQuestionsAloud: false };
-    assert.deepEqual(st({ type: 'slide', audioMode: 'tts', audioText: '[ca] Hola. [en] Hello.', prompt: 'Rule', ttsLanguage: 'EN' }, off).audio, { kind: 'tts', status: 'missing' });
-    assert.deepEqual(st({ type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' }, off).audio, { kind: 'tts', status: 'missing' });
-    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, off).audio, { kind: 'none', status: 'none' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3' }, off).audio, { kind: 'file', status: 'ready' });
+  it('audio: "Same as quiz" follows the quiz; a question\'s own setting wins', () => {
+    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, ON_EN).audio, { kind: 'tts', status: 'missing' });
+    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi', audioSetting: 'quiz' }, OFF).audio, { kind: 'none', status: 'none' });
+    assert.deepEqual(st({ type: 'mcq', prompt: 'Hi' }, { ttsLanguage: 'NONE', audioCustom: true }).audio, { kind: 'none', status: 'none' }, 'Custom plays nothing by itself');
+    [ON_EN, OFF].forEach((ctx) => {
+      assert.deepEqual(st({ type: 'slide', prompt: 'Rule', audioSetting: 'none', audioText: 'Kept.' }, ctx).audio, { kind: 'none', status: 'none' });
+      assert.deepEqual(st({ type: 'mcq', prompt: 'Hi', audioSetting: 'tts' }, ctx).audio, { kind: 'tts', status: 'missing' });
+      assert.deepEqual(st({ type: 'mcq', audioSetting: 'file', audioData: 'https://x/a.mp3' }, ctx).audio, { kind: 'file', status: 'ready' });
+    });
+    // Not set (imported or generated): its own file or text, else the quiz's.
+    assert.equal(A.questionAudioSetting({ type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3' }), 'file');
+    assert.equal(A.questionAudioSetting({ type: 'mcq', audioText: 'Hi' }), 'tts');
+    assert.equal(A.questionAudioSetting({ type: 'mcq', audioEnabled: false }), 'quiz');
+    assert.equal(A.questionAudioChoice({ type: 'spellingbee', audioSetting: 'tts' }, ON_EN), 'none');
   });
 
-  // Clips were made for questions nobody asked to hear: every question is in
-  // `tts` mode until it gets a file, so the mode alone says nothing.
-  it('audio: with read-all off, only a question with its own text is read', () => {
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }).audio, { kind: 'none', status: 'none' });
-    assert.deepEqual(st({ type: 'mcq', audioMode: 'tts', audioEnabled: true, prompt: 'Hi', ttsAudioKey: 'tts/a.mp3' }).audio, { kind: 'none', status: 'none' });
-    assert.deepEqual(st({ type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' }).audio, { kind: 'tts', status: 'missing' });
+  it('publishing works out what the student page plays, and in which voice', () => {
+    // Same as quiz: the quiz's voice, the question itself (a kept text is not read).
+    const follower = { type: 'slide', prompt: '**If** + present', audioSetting: 'quiz', audioText: 'Old text', ttsLanguage: 'CA', language: 'ca-ES-JoanaNeural' };
+    assert.deepEqual(plain(A.prepareQuestionTts(follower, ON_EN)), { voice: 'en-US-AriaNeural', text: 'If + present' });
+    assert.deepEqual([follower.audioEnabled, follower.audioMode, follower.ttsLanguage], [true, 'tts', 'EN']);
+    assert.equal(A.prepareQuestionTts({ type: 'mcq', prompt: 'Hola' }, { ttsLanguage: 'OTHER', language: 'es-ES-ElviraNeural' }).voice, 'es-ES-ElviraNeural');
+    // Its own read-aloud: its own voice and text, whatever the quiz says.
+    const own = { type: 'slide', audioSetting: 'tts', audioText: '[ca] Hola. [en] Hello.', ttsLanguage: 'EN', language: 'en-US-AriaNeural' };
+    assert.deepEqual(plain(A.prepareQuestionTts(own, OFF)), { voice: 'en-US-AriaNeural', text: '[ca] Hola. [en] Hello.' });
+    const bare = { type: 'slide', audioSetting: 'tts', audioText: 'Listen.' };
+    assert.equal(A.prepareQuestionTts(bare, OFF).voice, A.DEFAULT_EDGE_TTS_VOICE);
+    assert.equal(bare.ttsLanguage, A.DEFAULT_EDGE_TTS_LANGUAGE);
+    // No audio: nothing; its text is kept for later.
+    const off = { type: 'mcq', audioSetting: 'none', audioMode: 'tts', audioText: 'Kept.', prompt: 'Hi', ttsAudioKey: 'tts/old.mp3' };
+    assert.equal(A.prepareQuestionTts(off, ON_EN), null);
+    assert.deepEqual([off.audioEnabled, off.ttsAudioKey, off.audioText, off.audioSetting], [false, '', 'Kept.', 'none']);
+    // A file is played as a file.
+    const file = { type: 'mcq', audioSetting: 'file', audioMode: 'tts', audioData: 'https://x/a.mp3' };
+    assert.equal(A.prepareQuestionTts(file, ON_EN), null);
+    assert.deepEqual([file.audioEnabled, file.audioMode], [true, 'file']);
   });
 
-  it('publishing makes no clip for such a question, and marks it as not heard', () => {
-    const { A: app } = load(() => jsonRes(200, {}));
-    const off = { type: 'mcq', audioMode: 'tts', audioEnabled: true, prompt: 'If you heat ice, it ___.', ttsAudioKey: 'tts/old.mp3' };
-    assert.equal(app.prepareQuestionTts(off, 'EN', false), null);
-    assert.equal(off.audioEnabled, false);
-    assert.equal(off.ttsAudioKey, '');
-    const own = { type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' };
-    assert.equal(app.prepareQuestionTts(own, 'EN', false).text, 'Listen.');
-    assert.equal(app.prepareQuestionTts({ type: 'mcq', audioMode: 'tts', prompt: 'Hi' }, 'EN', true).text, 'Hi');
+  describe('quizzes from before the quiz/question setting', () => {
+    const migrated = (quiz) => { A.migrateQuestionAudio(quiz); return quiz; };
+    const settings = (quiz) => quiz.questions.map((q) => q.audioSetting);
+    const plays = (quiz) => quiz.questions.map((q) => A.questionAudioChoice(q, quiz));
+
+    // The 2026-11-23 report: an AI quiz whose bilingual slides came in silent
+    // ("Don't hear questions"). The slides keep their audio and the quiz reads
+    // Custom; picking English reads the practice questions too.
+    it('own texts and no quiz-wide reading: Custom, the texts heard, the rest silent', () => {
+      const quiz = migrated({ ttsLanguage: 'NONE', readAllQuestionsAloud: false, questions: [
+        { type: 'slide', audioMode: 'tts', audioEnabled: false, audioText: '[ca] Hola. [en] Hello.', ttsLanguage: 'EN' },
+        { type: 'tf', audioMode: 'tts', audioEnabled: false, audioText: '', ttsLanguage: 'NONE', prompt: 'True?' },
+      ] });
+      assert.deepEqual(settings(quiz), ['tts', 'quiz']);
+      assert.equal(A.getQuizAudio(quiz), 'CUSTOM');
+      assert.deepEqual(plays(quiz), ['tts', 'none']);
+      A.setQuizAudio(quiz, 'EN');
+      assert.equal(A.getQuizAudio(quiz), 'EN');
+      assert.deepEqual(plays(quiz), ['tts', 'tts']);
+      assert.equal(A.questionTtsText(quiz.questions[0]), '[ca] Hola. [en] Hello.');
+      assert.equal(A.questionTtsText(quiz.questions[1]), 'True?');
+    });
+
+    it('a quiz that read every question keeps its language; one that read nothing: No audio', () => {
+      const all = migrated({ ttsLanguage: 'CA', questions: [{ type: 'mcq', audioMode: 'tts', prompt: 'Hola' }] });
+      assert.deepEqual([settings(all), A.getQuizAudio(all), plays(all)], [['quiz'], 'CA', ['tts']]);
+      const none = migrated({ ttsLanguage: 'EN', readAllQuestionsAloud: false, questions: [{ type: 'mcq', audioMode: 'tts', audioEnabled: true, prompt: 'Hi' }] });
+      assert.deepEqual([settings(none), A.getQuizAudio(none), plays(none)], [['quiz'], 'NONE', ['none']]);
+      assert.equal(none.readAllQuestionsAloud, false);
+    });
+
+    it('texts "Don\'t hear questions" had silenced get No audio; files keep playing', () => {
+      const quiz = migrated({ ttsLanguage: 'EN', readAllQuestionsAloud: true, questions: [
+        { type: 'slide', audioMode: 'tts', audioText: 'Listen.', ttsLanguage: 'NONE', language: '' },
+        { type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3', ttsLanguage: 'NONE' },
+      ] });
+      assert.deepEqual(settings(quiz), ['none', 'file']);
+      assert.deepEqual([quiz.questions[0].ttsLanguage, quiz.questions[0].language], ['EN', 'en-US-AriaNeural']);
+    });
+
+    it('runs once, and leaves a question that has a setting', () => {
+      const quiz = migrated({ ttsLanguage: 'EN', readAllQuestionsAloud: true, questions: [{ type: 'mcq', prompt: 'Hi' }] });
+      quiz.questions[0].audioSetting = 'none'; // the teacher's choice afterwards
+      quiz.questions.push({ type: 'mcq', prompt: 'New', audioSetting: 'tts' });
+      migrated(quiz);
+      assert.deepEqual([settings(quiz), A.getQuizAudio(quiz)], [['none', 'tts'], 'EN']);
+    });
   });
 
-  it('publishing: own text without a quiz language, a muted question, no NONE written', () => {
-    const { A: app } = load(() => jsonRes(200, {}));
-    // The 2026-11-23 report: an AI quiz with bilingual slides and no quiz-level
-    // language. Its slides are read; its practice questions are not.
-    const slide = { type: 'slide', audioMode: 'tts', audioEnabled: false, audioText: '[ca] Hola. [en] Hello.', prompt: 'Rule', ttsLanguage: 'EN', language: 'en-US-AriaNeural' };
-    assert.deepEqual(JSON.parse(JSON.stringify(app.prepareQuestionTts(slide, 'NONE', false))), { voice: 'en-US-AriaNeural', text: '[ca] Hola. [en] Hello.' });
-    assert.equal(slide.ttsLanguage, 'EN');
-    const bare = { type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule' };
-    assert.equal(app.prepareQuestionTts(bare, 'NONE', false).voice, app.DEFAULT_EDGE_TTS_VOICE);
-    assert.equal(bare.ttsLanguage, app.DEFAULT_EDGE_TTS_LANGUAGE);
-    const practice = { type: 'tf', audioMode: 'tts', prompt: 'True?', ttsLanguage: 'EN' };
-    assert.equal(app.prepareQuestionTts(practice, 'NONE', false), null);
-    assert.equal(practice.ttsLanguage, 'EN', 'a quiz without a language does not mute the question');
-    const muted = { type: 'slide', audioMode: 'tts', audioText: 'Listen.', prompt: 'Rule', ttsLanguage: 'NONE' };
-    assert.equal(app.prepareQuestionTts(muted, 'EN', true), null);
-    assert.equal(muted.ttsLanguage, 'NONE');
+  it('the quiz\'s 🔊 Audio: Custom is shown, never picked; a new setting drops the clips that follow it', () => {
+    assert.equal(A.getQuizAudio({ ttsLanguage: 'FR' }), 'FR');
+    assert.equal(A.getQuizAudio({ ttsLanguage: '' }), 'NONE');
+    assert.equal(A.getQuizAudio({ ttsLanguage: 'NONE', audioCustom: true }), 'CUSTOM');
+    const follower = { type: 'mcq', prompt: 'Hi', ttsAudioKey: 'tts/en.mp3' };
+    const own = { type: 'slide', audioSetting: 'tts', audioText: 'Hola', ttsAudioKey: 'tts/own.mp3' };
+    const quiz = { ttsLanguage: 'NONE', audioCustom: true, questions: [follower, own] };
+    A.setQuizAudio(quiz, 'CUSTOM');
+    assert.equal(A.getQuizAudio(quiz), 'CUSTOM');
+    A.setQuizAudio(quiz, 'fr');
+    assert.equal(A.getQuizAudio(quiz), 'FR');
+    assert.equal(quiz.audioCustom, undefined);
+    assert.deepEqual([follower.ttsAudioKey, own.ttsAudioKey], ['', 'tts/own.mp3']);
   });
 
-  it('Read every question aloud: No keeps the language and every question\'s own audio', () => {
-    const { A: app } = load(() => jsonRes(200, {}));
-    assert.equal(app.getHearQuestionsMode({ ttsLanguage: 'EN', readAllQuestionsAloud: true }), 'EN');
-    assert.equal(app.getHearQuestionsMode({ ttsLanguage: 'EN', readAllQuestionsAloud: false }), 'NONE');
-    assert.equal(app.getHearQuestionsMode({ ttsLanguage: 'NONE' }), 'NONE');
-    const q = { ttsLanguage: 'CA', readAllQuestionsAloud: true };
-    app.applyHearQuestionsMode(q, 'NONE');
-    assert.deepEqual({ ...q }, { ttsLanguage: 'CA', readAllQuestionsAloud: false });
-    app.applyHearQuestionsMode(q, 'FR');
-    assert.deepEqual({ ...q }, { ttsLanguage: 'FR', readAllQuestionsAloud: true });
-  });
-
-  it('choosing a language moves the questions without their own text, and nothing else', () => {
-    const { A: app } = load(() => jsonRes(200, {}));
-    const plain = { type: 'mcq', prompt: 'Hi', ttsLanguage: 'NONE', language: '' };
-    const own = { type: 'slide', prompt: 'Rule', audioText: 'Escolta.', ttsLanguage: 'CA', language: 'ca-ES-JoanaNeural' };
-    const file = { type: 'mcq', prompt: 'Hi', audioMode: 'file', audioData: 'https://x/a.mp3', ttsLanguage: 'EN', language: 'en-US-AriaNeural' };
-    app.applyQuizVoiceToQuestions({ questions: [plain, own, file] }, 'FR', 'fr-FR-DeniseNeural');
-    assert.deepEqual([plain.ttsLanguage, plain.language], ['FR', 'fr-FR-DeniseNeural']);
-    assert.deepEqual([own.ttsLanguage, own.language], ['CA', 'ca-ES-JoanaNeural']);
-    assert.equal(file.audioMode, 'file');
-    assert.equal(file.audioData, 'https://x/a.mp3');
+  it('a question\'s 🔊 Audio offers the quiz\'s setting first, and only its own fields', () => {
+    const html = A.buildAudioSettingsMarkup(0, { type: 'mcq', prompt: 'Hi' }, ON_EN);
+    assert.match(html, /<option value="quiz" selected>Same as quiz \(English\)<\/option>/);
+    assert.doesNotMatch(html, /data-field="audioText"/);
+    assert.match(A.buildAudioSettingsMarkup(0, { type: 'mcq', prompt: 'Hi' }, OFF), /Same as quiz \(no audio\)/);
+    assert.match(A.buildAudioSettingsMarkup(0, { type: 'slide', audioSetting: 'tts' }, ON_EN), /data-field="audioText"[^>]*placeholder="Leave empty to read the slide as it is shown"/);
+    assert.match(A.buildAudioSettingsMarkup(0, { type: 'mcq', audioSetting: 'file' }, ON_EN), /data-audio-upload="0"/);
   });
 
   it('an imported file decides: its own setting, or an item with the audio off', () => {
@@ -329,7 +372,8 @@ describe('autoFillImages: GIF searches and the GIPHY limit', () => {
 });
 
 describe('Media Manager rows, filters and sorting', () => {
-  const EN = { ttsLanguage: 'EN', readAllQuestionsAloud: false };
+  // Only the questions with their own audio play (the quiz's 🔊 Audio: No audio).
+  const EN = { ttsLanguage: 'NONE' };
   let A;
   let qs;
   let rows;
@@ -634,8 +678,8 @@ describe('removeMediaFrom', () => {
     assert.equal(v.media.kind, 'none');
     assert.equal(v.videoKeyword, '');
     assert.equal(A.removeMediaFrom([a], 'audio'), 1);
-    assert.deepEqual([a.audioMode, a.audioText, a.ttsAudioKey], ['tts', '', ''], 'back to reading the question, as the builder would');
-    assert.equal(A.removeMediaFrom([{ type: 'mcq', audioMode: 'tts', prompt: 'x' }], 'audio'), 0, 'nothing to remove from plain read-aloud');
+    assert.deepEqual([a.audioMode, a.audioText, a.ttsAudioKey, a.audioSetting], ['tts', '', '', 'quiz'], 'its own audio gone: back to "Same as quiz"');
+    assert.equal(A.removeMediaFrom([{ type: 'mcq', audioMode: 'tts', prompt: 'x' }], 'audio'), 0, 'nothing of its own to remove');
   });
 });
 describe('GIF pause and the cache', () => {
@@ -685,27 +729,37 @@ describe('Replace: setMediaKeywordOn', () => {
   });
 });
 
-describe('Change voice', () => {
-  const EN = { ttsLanguage: 'EN', readAllQuestionsAloud: false };
-
-  it('sets the voice on TTS questions only and drops the old clip key', () => {
+describe('🔊 Audio… on several questions', () => {
+  it('a voice gives them their own read-aloud; a file stays a file', () => {
     const { A } = load(() => jsonRes(200, {}));
     const tts = { type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', ttsAudioKey: 'tts/old.mp3', language: 'en-US-AriaNeural' };
+    const follower = { type: 'mcq', prompt: 'Hi' };
     const file = { type: 'mcq', audioMode: 'file', audioData: 'https://x/a.mp3', language: 'en-US-AriaNeural' };
     const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
-    const changed = A.setTtsVoiceOn([tts, file], voice, EN);
-    assert.equal(changed.length, 1);
-    assert.equal(tts.language, voice);
-    assert.equal(tts.ttsAudioKey, '');
+    const changed = A.setQuestionAudioOn([tts, follower, file], voice);
+    assert.equal(changed.length, 2);
+    assert.deepEqual([tts.language, tts.ttsAudioKey, follower.audioSetting, follower.language], [voice, '', 'tts', voice]);
+    assert.equal(follower.ttsLanguage, A.ttsLanguageForVoice(voice));
     assert.equal(file.language, 'en-US-AriaNeural');
-    assert.equal(A.setTtsVoiceOn([tts], 'xx-Not-A-Voice', EN).length, 0);
+    assert.equal(A.setQuestionAudioOn([tts], 'xx-Not-A-Voice').length, 0);
+  });
+
+  it('No audio, or back to the quiz\'s setting', () => {
+    const { A } = load(() => jsonRes(200, {}));
+    const own = { type: 'slide', audioSetting: 'tts', audioText: 'Hola', ttsAudioKey: 'tts/own.mp3' };
+    const file = { type: 'mcq', audioSetting: 'file', audioData: 'https://x/a.mp3' };
+    assert.equal(A.setQuestionAudioOn([own, file], '').length, 2);
+    assert.deepEqual([own.audioSetting, file.audioSetting, own.audioText, file.audioData], ['none', 'none', 'Hola', 'https://x/a.mp3']);
+    assert.equal(A.setQuestionAudioOn([own, file], 'quiz').length, 2);
+    assert.deepEqual([own.audioSetting, file.audioSetting, own.ttsAudioKey], ['quiz', 'quiz', '']);
+    assert.equal(A.setQuestionAudioOn([own], 'quiz').length, 0, 'already there');
   });
 
   it('the voice survives the publish preparation and the builder dropdown', () => {
     const { A } = load(() => jsonRes(200, {}));
     const voice = A.EDGE_TTS_VOICE_INDEX.find((v) => !Object.values(A.EDGE_TTS_LANGUAGE_DEFAULTS).includes(v.code)).code;
     const q = { type: 'mcq', audioMode: 'tts', audioText: 'Hi', prompt: 'Hi', language: voice };
-    const clip = A.prepareQuestionTts(q, 'EN', false);
+    const clip = A.prepareQuestionTts(q, { ttsLanguage: 'EN' });
     assert.equal(clip.voice, voice);
     // The builder's voice <select> must list it, or syncing would fall back to the first default.
     const html = A.buildAudioSettingsMarkup(0, q);
