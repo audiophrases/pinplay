@@ -4301,9 +4301,9 @@ function quizAudioLanguageName(quizCtx) {
 function buildAudioSettingsMarkup(idx, q, quizCtx = quiz) {
   const setting = questionAudioSetting(q);
   const quizLangName = quizAudioLanguageName(quizCtx);
-  const own = String(q.ttsLanguage || '').trim().toUpperCase();
-  const ttsLanguage = normalizeTtsLanguage(own && own !== 'NONE' ? own : guessTtsLanguageFromVoice(q.language));
-  const voice = normalizeTtsVoice(q.language, ttsLanguage);
+  const resolved = { ...q };
+  settleQuestionVoice(resolved, quizCtx);
+  const { ttsLanguage, language: voice } = resolved;
   const showOtherSearch = ttsLanguage === 'OTHER';
   const ttsLanguageOptions = EDGE_TTS_LANGUAGE_OPTIONS
     .filter((x) => x.value !== 'READ')
@@ -22009,11 +22009,13 @@ async function ensureTtsAudioBatchOnR2(items, rate = '+0%', onProgress = null) {
   return keys;
 }
 
-// Legacy files can ask for quiz-wide read-aloud. Files with per-item audio and
-// no explicit read-all flag use their quiz language as a voice fallback only.
+// Legacy files can ask for quiz-wide read-aloud via a flag. An explicit
+// "Same as quiz" setting also signals that a quiz-wide voice is intentional.
 function importedReadAll(raw) {
   if (typeof raw?.readAllQuestionsAloud === 'boolean') return raw.readAllQuestionsAloud;
-  return !(Array.isArray(raw?.questions) ? raw.questions : []).some((q) => q && (
+  const questions = Array.isArray(raw?.questions) ? raw.questions : [];
+  if (questions.some((q) => q?.audioSetting === 'quiz')) return true;
+  return !questions.some((q) => q && (
     q.audioEnabled === false || QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)
     || String(q.audioText || '').trim() || q.audioData
   ));
@@ -22117,9 +22119,10 @@ function migrateQuestionAudio(targetQuiz) {
     if (!q || !supportsQuestionAudio(q.type)) return;
     const muted = String(q.ttsLanguage || '').trim().toUpperCase() === 'NONE';
     if (!QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)) {
-      if (!explicitReadAll && q.audioEnabled === false) q.audioSetting = 'none';
-      else if (q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file')) q.audioSetting = 'file';
+      // Older assignments can have a script alongside a disabled playback flag.
+      if (q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file')) q.audioSetting = 'file';
       else if (String(q.audioText || '').trim()) q.audioSetting = muted ? 'none' : 'tts';
+      else if (!explicitReadAll && q.audioEnabled === false) q.audioSetting = 'none';
       else q.audioSetting = 'quiz';
     }
     if (q.audioSetting === 'tts' || q.audioSetting === 'file') hasOwnAudio = true;
@@ -25068,24 +25071,24 @@ async function playQuestionAudio(question, opts = {}) {
           }
           if (ok) return true;
           failReason = t('Audio file was downloaded but could not be decoded.');
-        } else {
+        } else if (res.status === 404 || res.status === 410) {
           fileGone = true;
           // Include the R2 key so the prefix (assign-/preview-/quiz-) reveals
           // where the missing object was expected to live.
           const key = src.replace(/^https?:\/\/[^/]+\/api\/media\//, '').replace(/\?.*$/, '');
           failReason = t('Audio file missing from cloud storage ({status}): {key}', { status: res.status, key });
+        } else {
+          failReason = t('Could not reach the audio file: {msg}', { msg: `HTTP ${res.status}` });
         }
       } catch (err) {
-        fileGone = true;
         failReason = t('Could not reach the audio file: {msg}', { msg: err?.message || 'network error' });
       }
     } else {
       failReason = t('The attached audio could not be played.');
     }
 
-    // Self-heal: if the file is unusable but we still have the source text, let
-    // the caller drop the dead reference and regenerate, then fall through to
-    // live TTS so playback isn't blocked.
+    // Fall back to TTS when there is text. Only a confirmed missing file can
+    // change the editor's saved audio source.
     if (ttsFallbackText) {
       if (fileGone && typeof opts.onMissingFile === 'function') {
         try { opts.onMissingFile(failReason); } catch { }

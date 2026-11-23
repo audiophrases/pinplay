@@ -28,7 +28,7 @@ const NAMES = [
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll',
   'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting', 'quizReadAloudLanguage', 'questionAudioChoice', 'questionHeardByTts', 'questionTtsText',
   'ownAudioLanguage', 'ttsLanguageForVoice', 'settleQuestionVoice', 'migrateQuestionAudio', 'prepareQuestionTts', 'getQuizAudio', 'setQuizAudio', 'quizAudioLanguageName',
-  'normalizeQuizAudioDefaults', 'preserveAppendedQuestionAudio', 'changeBuilderQuizAudio', 'previewBuilderQuestionAudio',
+  'normalizeQuizAudioDefaults', 'preserveAppendedQuestionAudio', 'changeBuilderQuizAudio', 'previewBuilderQuestionAudio', 'playQuestionAudio',
   'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
   'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setQuestionAudioOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
@@ -218,6 +218,18 @@ describe('questionMediaStatus', () => {
       assert.deepEqual([quiz.questions[0].ttsLanguage, quiz.questions[0].language], ['EN', 'en-US-AriaNeural']);
     });
 
+    it('restores scripts from old assignments while preserving explicit mutes', () => {
+      const script = '[ca] Hola. [en] Hello.';
+      const quiz = migrated({ questions: [
+        { type: 'slide', audioMode: 'tts', audioEnabled: false, audioText: script },
+        { type: 'slide', audioEnabled: false, audioText: script, audioSetting: 'none' },
+        { type: 'slide', audioEnabled: false, audioText: script, ttsLanguage: 'NONE' },
+        { type: 'slide', audioEnabled: false, prompt: 'Silent practice' },
+      ] });
+      assert.deepEqual(plays(quiz), ['tts', 'none', 'none', 'none']);
+      assert.equal(A.questionTtsText(quiz.questions[0]), script);
+    });
+
     it('runs once, and leaves a question that has a setting', () => {
       const quiz = migrated({ ttsLanguage: 'EN', readAllQuestionsAloud: true, questions: [{ type: 'mcq', prompt: 'Hi' }] });
       quiz.questions[0].audioSetting = 'none'; // the teacher's choice afterwards
@@ -296,18 +308,66 @@ describe('questionMediaStatus', () => {
     assert.equal(A.prepareQuestionTts(source.questions[0], source).voice, 'es-ES-ElviraNeural');
   });
 
-  it('repairs the saved audio setting when a recording has gone missing', async () => {
-    const { A, sandbox } = load();
-    const q = { type: 'slide', audioSetting: 'file', audioMode: 'file', audioData: 'https://x/a.mp3', audioText: 'Read this.' };
-    sandbox.quiz.questions = [q];
-    sandbox.syncQuizFromUI = () => {};
-    sandbox.renderBuilder = () => {};
-    sandbox.hostStatusEl = null;
-    sandbox.setStatus = () => {};
-    sandbox.playQuestionAudio = async (playable, { onMissingFile }) => onMissingFile('Missing file.');
-    await A.previewBuilderQuestionAudio(0, { textContent: 'Play' });
-    assert.deepEqual([q.audioSetting, q.audioData, q.ttsAudioKey], ['tts', '', '']);
-    assert.equal(A.prepareQuestionTts(q, sandbox.quiz).text, 'Read this.');
+  it('honors an explicit quiz follower when an import also has muted questions', () => {
+    const source = { ttsLanguage: 'FR', questions: [
+      { type: 'slide', audioSetting: 'quiz', prompt: 'Bonjour.' },
+      { type: 'slide', audioSetting: 'none', prompt: 'Silent instructions' },
+    ] };
+    A.normalizeQuizAudioDefaults(source);
+    assert.equal(A.getQuizAudio(source), 'FR');
+    assert.equal(A.prepareQuestionTts(source.questions[0], source).voice, 'fr-FR-DeniseNeural');
+    assert.equal(A.questionAudioChoice(source.questions[1], source), 'none');
+  });
+
+  for (const [failure, resetsSource] of [[404, true], [410, true], [503, false], ['offline', false]]) {
+    it(`plays fallback TTS after a recording fails with ${failure}`, async () => {
+      const audioData = 'https://x.test/a.mp3';
+      const { A, sandbox, calls } = load(async (url) => {
+        if (url !== audioData) return new Response('tts audio');
+        if (failure === 'offline') throw new TypeError('Network unavailable');
+        return new Response(null, { status: failure });
+      });
+      const q = { type: 'slide', audioSetting: 'file', audioMode: 'file', audioData, audioText: 'Read this.' };
+      sandbox.quiz.questions = [q];
+      sandbox.syncQuizFromUI = () => {};
+      sandbox.renderBuilder = () => {};
+      sandbox.hostStatusEl = null;
+      sandbox.setStatus = () => {};
+      sandbox.live = { host: {} };
+      sandbox.primeAnsweringFx = () => {};
+      sandbox.stopFx = () => {};
+      sandbox.stopQuestionAudioPlayback = () => {};
+      sandbox.edgeTtsBlobUrlCache = new Map();
+      let fallbackPlays = 0;
+      sandbox.Audio = class {
+        constructor(src) { this.src = src; }
+        addEventListener(type, fn) { if (type === 'ended') this.finish = fn; }
+        async play() {
+          if (this.src === audioData) throw new Error('Recording playback failed');
+          assert.match(this.src, /^blob:/);
+          fallbackPlays += 1;
+          this.finish();
+        }
+      };
+      try {
+        const healed = await A.previewBuilderQuestionAudio(0, { textContent: 'Play' });
+        assert.deepEqual(calls, [audioData, 'https://be.test/api/tts/edge']);
+        assert.equal(fallbackPlays, 1);
+        assert.equal(healed, resetsSource);
+        assert.deepEqual([q.audioSetting, q.audioData], resetsSource ? ['tts', ''] : ['file', audioData]);
+      } finally {
+        for (const url of sandbox.edgeTtsBlobUrlCache.values()) URL.revokeObjectURL(url);
+      }
+    });
+  }
+
+  it('selects the same fallback voice in the editor that TTS uses at playback', () => {
+    const quiz = { ttsLanguage: 'FR' };
+    const q = { type: 'slide', audioSetting: 'tts', audioText: 'Bonjour.' };
+    assert.match(A.buildAudioSettingsMarkup(0, q, quiz), /<option value="FR" selected>/);
+    const clip = A.prepareQuestionTts({ ...q }, quiz);
+    assert.equal(clip.voice, 'fr-FR-DeniseNeural');
+    assert.match(A.buildAudioSettingsMarkup(0, q, quiz), /<option value="fr-FR-DeniseNeural" selected>/);
   });
 
   it('a question\'s 🔊 Audio offers the quiz\'s setting first, and only its own fields', () => {
