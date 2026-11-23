@@ -7747,12 +7747,13 @@ function publicQuestionMediaPayload(question) {
 function publicAudioPayload(question) {
   const enabled = !!question?.audioEnabled;
   if (!enabled) return { audioEnabled: false };
+  const mode = ['tts', 'file'].includes(String(question?.audioMode || '')) ? String(question.audioMode) : (question?.audioData ? 'file' : 'tts');
   return {
     audioEnabled: true,
-    audioMode: ['tts', 'file'].includes(String(question?.audioMode || '')) ? String(question.audioMode) : (question?.audioData ? 'file' : 'tts'),
+    audioMode: mode,
     audioText: String(question?.audioText || ''),
     language: String(question?.language || 'en-US-Wave'),
-    audioData: String(question?.audioData || ''),
+    audioData: mode === 'file' ? String(question?.audioData || '') : '',
     ttsAudioKey: String(question?.ttsAudioKey || ''),
   };
 }
@@ -8053,8 +8054,9 @@ function normalizeQuiz(quiz) {
       timeLimit: normalizeTimeLimitValue(q.timeLimit, q.type),
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled,
-      audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
+      audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : (q.audioData ? 'file' : 'tts'),
       audioText: String(q.audioText || '').slice(0, 1200),
+      ...(q.savedAudioText ? { savedAudioText: String(q.savedAudioText).slice(0, 1200) } : {}),
       language: String(q.language || 'en-US-Wave').slice(0, 32) || 'en-US-Wave',
       audioData: String(q.audioData || ''),
       ttsAudioKey: String(q.ttsAudioKey || '').slice(0, 200),
@@ -9207,7 +9209,6 @@ async function extractBase64MediaToR2(quiz, env, prefix) {
       const key = `${prefix}/${slot}/${q.id || Math.random().toString(36).slice(2)}${ext}`;
       await env.QUIZ_MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
       q[field] = `https://pinplay-api.eugenime.workers.dev/api/media/${key}`;
-      if (field === 'audioData') q.audioMode = 'file';
     }
   }
   for (const sec of (Array.isArray(out.listeningSections) ? out.listeningSections : [])) {

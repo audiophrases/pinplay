@@ -583,7 +583,6 @@ const resultCard = document.getElementById('resultCard');
 
 const shouldAutoloadQuiz = !window.location.pathname.includes('/create/');
 let quiz = shouldAutoloadQuiz ? (loadQuiz() || createEmptyQuiz()) : createEmptyQuiz();
-normalizeQuizAudioDefaults(quiz);
 collapseAllQuestions(quiz);
 let soloGame = null;
 let soloSpellingBeeController = null; // live SpellingBee controller in solo/preview play
@@ -1439,7 +1438,6 @@ function bindBuilderEvents() {
     });
   }
 
-  const quizTtsOtherWrap = document.getElementById('quizTtsOtherWrap');
   const quizTtsOtherVoiceEl = document.getElementById('quizTtsOtherVoice');
   const quizTtsOtherSearchEl = document.getElementById('quizTtsOtherSearch');
 
@@ -1447,9 +1445,9 @@ function bindBuilderEvents() {
   const renderOtherVoiceOptions = (filter = '') => {
     if (!quizTtsOtherVoiceEl) return;
     const needle = String(filter || '').trim().toLowerCase();
-    const currentVoice = quiz.language || quizTtsOtherVoiceEl.value;
+    const currentVoice = getQuizAudio(quiz) === 'OTHER' ? quiz.language : quizTtsOtherVoiceEl.value;
     const filtered = EDGE_TTS_VOICE_INDEX.filter((v) => {
-      if (!needle) return true;
+      if (!needle || v.code === currentVoice) return true;
       const haystack = `${v.code} ${v.language} ${v.country} ${v.person}`.toLowerCase();
       return haystack.includes(needle);
     });
@@ -1464,35 +1462,21 @@ function bindBuilderEvents() {
   if (quizTtsOtherSearchEl) {
     quizTtsOtherSearchEl.addEventListener('input', () => {
       renderOtherVoiceOptions(quizTtsOtherSearchEl.value);
-      // If we are in OTHER mode, search might have changed the effective selection (even if it's the first result)
-      if (quizTtsLanguageEl?.value === 'OTHER' && quizTtsOtherVoiceEl.value && quizTtsOtherVoiceEl.value !== quiz.language) {
-        // Manually trigger the update if the value changed due to search
-        quiz.language = quizTtsOtherVoiceEl.value;
-        renderBuilder();
-      }
     });
   }
 
   if (quizTitleEl) quizTitleEl.addEventListener('input', renderQuizStrip);
 
-  // The quiz's 🔊 Audio: every question on "Same as quiz" follows it; the
-  // questions with their own setting keep theirs.
   if (quizTtsLanguageEl) {
     quizTtsLanguageEl.addEventListener('change', () => {
-      const mode = quizTtsLanguageEl.value;
-      if (mode === 'OTHER' && quizTtsOtherVoiceEl?.value) quiz.language = quizTtsOtherVoiceEl.value;
-      setQuizAudio(quiz, mode);
-      if (quizTtsOtherWrap) quizTtsOtherWrap.style.display = mode === 'OTHER' ? '' : 'none';
-      renderBuilder();
+      changeBuilderQuizAudio(quizTtsLanguageEl.value, quizTtsOtherVoiceEl?.value);
     });
   }
 
   if (quizTtsOtherVoiceEl) {
     quizTtsOtherVoiceEl.addEventListener('change', () => {
       if (quizTtsLanguageEl?.value !== 'OTHER') return;
-      quiz.language = quizTtsOtherVoiceEl.value;
-      quiz.questions.forEach((q) => { if (q && questionAudioSetting(q) === 'quiz') q.ttsAudioKey = ''; });
-      renderBuilder();
+      changeBuilderQuizAudio('OTHER', quizTtsOtherVoiceEl.value);
     });
   }
 
@@ -3127,7 +3111,12 @@ function renderBuilder() {
     quizTtsOtherWrap.style.display = isOther ? '' : 'none';
     if (isOther && quiz.language) {
       const otherVoiceEl = document.getElementById('quizTtsOtherVoice');
-      if (otherVoiceEl) otherVoiceEl.value = quiz.language;
+      if (otherVoiceEl) {
+        if (!Array.from(otherVoiceEl.options).some((option) => option.value === quiz.language)) {
+          otherVoiceEl.add(new Option(quiz.language, quiz.language));
+        }
+        otherVoiceEl.value = quiz.language;
+      }
     }
   }
   questionListEl.innerHTML = '';
@@ -4117,17 +4106,62 @@ function getQuizAudio(targetQuiz) {
 
 // Picking a setting ends "Custom". The questions on "Same as quiz" lose their
 // old clip (a new voice makes a new one).
-function setQuizAudio(targetQuiz, modeValue) {
+function setQuizAudio(targetQuiz, modeValue, { voice, overrideQuestions = false } = {}) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
   const mode = String(modeValue || '').trim().toUpperCase();
   if (mode === 'CUSTOM') return;
   const before = getQuizAudio(targetQuiz);
+  const beforeVoice = targetQuiz.language;
   delete targetQuiz.audioCustom;
   targetQuiz.ttsLanguage = !mode || mode === 'NONE' ? 'NONE' : normalizeTtsLanguage(mode);
+  targetQuiz.language = mode === 'OTHER' ? normalizeTtsVoice(voice || beforeVoice, 'OTHER') : getVoiceForTtsLanguage(targetQuiz.ttsLanguage);
   targetQuiz.readAllQuestionsAloud = false;
-  if (getQuizAudio(targetQuiz) === before) return;
+  if (getQuizAudio(targetQuiz) === before && targetQuiz.language === beforeVoice) return;
   (targetQuiz.questions || []).forEach((q) => {
-    if (q && questionAudioSetting(q) === 'quiz') q.ttsAudioKey = '';
+    if (!supportsQuestionAudio(q?.type) || q.listeningSection) return;
+    if (overrideQuestions) q.audioSetting = 'quiz';
+    if (questionAudioSetting(q) === 'quiz') q.ttsAudioKey = '';
+  });
+}
+
+async function changeBuilderQuizAudio(mode, voice) {
+  syncQuizFromUI();
+  const targetQuiz = quiz;
+  const proposed = { ...quiz, questions: [] };
+  setQuizAudio(proposed, mode, { voice });
+  if (getQuizAudio(proposed) === getQuizAudio(quiz) && proposed.language === quiz.language) return;
+  const readAloud = !!quizReadAloudLanguage(proposed);
+  const hasConflict = quiz.questions.some((q) => {
+    if (!supportsQuestionAudio(q?.type) || q.listeningSection) return false;
+    const setting = questionAudioSetting(q);
+    if (setting === 'none') return readAloud;
+    return setting === 'tts' || setting === 'file';
+  });
+  const overrideQuestions = hasConflict && await confirmQuizAudioOverride();
+  if (quiz !== targetQuiz) return;
+  setQuizAudio(quiz, mode, { voice, overrideQuestions });
+  renderBuilder();
+}
+
+function confirmQuizAudioOverride() {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'dialog-card';
+  dialog.setAttribute('aria-labelledby', 'quizAudioOverrideTitle');
+  dialog.innerHTML = `
+    <h3 id="quizAudioOverrideTitle">${escapeHtml(t('Change quiz audio'))}</h3>
+    <p>${escapeHtml(t('Some questions have individual audio settings. Should they keep their settings or follow the new quiz audio setting?'))}</p>
+    <form method="dialog" class="row gap">
+      <button class="btn primary" value="keep" autofocus>${escapeHtml(t('Keep individual settings'))}</button>
+      <button class="btn" value="override">${escapeHtml(t('Apply to all questions'))}</button>
+    </form>
+  `;
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(dialog.returnValue === 'override');
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
   });
 }
 
@@ -4138,6 +4172,11 @@ function normalizeQuizAudioDefaults(targetQuiz) {
   targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
   targetQuiz.readAllQuestionsAloud = false;
   if (!targetQuiz.audioCustom) delete targetQuiz.audioCustom;
+  (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
+    if (!q || q.audioSetting === 'tts' || typeof q.savedAudioText !== 'string') return;
+    if (!q.audioText) q.audioText = q.savedAudioText;
+    delete q.savedAudioText;
+  });
 
   if (targetQuiz.ttsLanguage === 'NONE') {
     targetQuiz.language = '';
@@ -4207,14 +4246,9 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   syncQuizFromUI();
   const q = quiz.questions[idx];
   if (!q) return false;
-  // On "Same as quiz" the question is heard in the quiz's voice, reading itself.
-  settleQuestionVoice(q, quiz);
-  const playable = questionAudioSetting(q) === 'quiz' ? { ...q, audioText: '', audioMode: 'tts' } : q;
-  // Decide what we can actually preview here — independent of the live-mode
-  // `audioEnabled` flag, which isn't maintained in the builder.
-  const hasFileAudio = playable.audioMode === 'file' && !!playable.audioData;
-  const hasTtsAudio = playable.audioMode !== 'file' && !!String(playable.audioText || playable.prompt || '').trim();
-  if (!hasFileAudio && !hasTtsAudio) {
+  const playable = { ...q, ttsAudioKey: '' };
+  const clip = prepareQuestionTts(playable, quiz);
+  if (!playable.audioEnabled) {
     setStatus(hostStatusEl, t('Nothing to preview yet — upload an audio file or add text to read aloud.'), 'bad');
     return false;
   }
@@ -4226,8 +4260,11 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
   // If the attached cloud file is gone, drop the dead reference and switch
   // back to Text-to-speech so the next save regenerates a fresh mp3.
   const onMissingFile = (reason) => {
+    if (q.audioData !== playable.audioData || questionAudioSetting(q) !== 'file') return;
     q.audioData = '';
+    q.audioSetting = 'tts';
     q.audioMode = 'tts';
+    q.ttsAudioKey = '';
     q._ttsGenerated = false;
     q._userAudioUploaded = false;
     q._audioVersion = '';
@@ -4235,6 +4272,10 @@ async function previewBuilderQuestionAudio(idx, audioBtn) {
     setStatus(hostStatusEl, t('{reason} Switched back to Text-to-speech — it will regenerate on the next save.', { reason: reason || '' }).trim(), 'checking');
   };
   try {
+    if (clip) {
+      playable.audioText = clip.text;
+      playable.ttsAudioKey = await computeTtsAudioKey(clip.voice, clip.text).catch(() => '');
+    }
     // onStart clears the loading label as soon as audio actually begins,
     // covering the Edge TTS fetch/decode latency on cold starts.
     // playQuestionAudio surfaces its own specific failure reason (missing
@@ -4399,8 +4440,6 @@ function syncQuizFromUI(event) {
   const index = field?.dataset?.q;
   const changedIndex = index != null && /^\d+$/.test(index) ? Number(index) : null;
   quiz.title = quizTitleEl.value.trim();
-  setQuizAudio(quiz, quizTtsLanguageEl?.value || getQuizAudio(quiz));
-
   quiz.questions.forEach((q, idx) => {
     if (changedIndex !== null && idx !== changedIndex) return;
     const questionRoot = questionListEl.querySelector(`[data-question-index="${idx}"]`) || questionListEl;
@@ -5386,7 +5425,7 @@ const PROMPT_VOICE = '"ttsLanguage": "EN", "CA" or "FR" — for any other langua
 // Bilingual question audio (BILINGUAL_TTS_PLAN.md): how the AI writes it. The
 // instruction is said in the students' own language, the content being learned
 // in the language of the quiz; tags in the text switch the voice.
-const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Each voice can only pronounce its own language, so EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation (a pronoun, a verb form, an ending): left untagged, the other voice reads it as a word or an abbreviation of its own language. Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am." Go back to the students\' language with its tag after each one. Where you can, word the explanation so that the quiz-language words come together at the end, which changes the voice fewer times: "[ca] Fixa\'t en el subjecte i el verb: [en] I am. You are." Before you answer, reread every "audioText" and tag any quiz-language word still inside a segment of the students\' language. The audio plays while the student is answering, so it never says the answer: write a gap as ___, where the voice pauses ("[en] I ___ happy."), read a sentence to correct as it is printed, and keep the model sentence that gives the answer away out of the audio. The quiz and every question carry the voice of the language of the quiz: ' + PROMPT_VOICE + '.';
+const PROMPT_BILINGUAL_AUDIO = 'every question has "audioEnabled": true and "audioText": what is said, in two languages, with a tag in square brackets where the language changes — the instruction and any explanation in the students\' own language, the words being learned in the language of the quiz. Example: "audioText": "[ca] Escolta la frase i tria el temps verbal correcte. [en] She has lived in Girona since 2010." A tag is a two-letter language code ([ca], [en], [fr], [es]) or an Edge voice id ([es-ES-ElviraNeural]). Each voice can only pronounce its own language, so EVERY word of the quiz language gets its own tag, even one word quoted inside an explanation (a pronoun, a verb form, an ending): left untagged, the other voice reads it as a word or an abbreviation of its own language. Wrong: "[ca] Amb I fem servir am." Right: "[ca] Amb [en] I [ca] fem servir [en] am." Go back to the students\' language with its tag after each one. Where you can, word the explanation so that the quiz-language words come together at the end, which changes the voice fewer times: "[ca] Fixa\'t en el subjecte i el verb: [en] I am. You are." Before you answer, reread every "audioText" and tag any quiz-language word still inside a segment of the students\' language. The audio plays while the student is answering, so it never says the answer: write a gap as ___, where the voice pauses ("[en] I ___ happy."), read a sentence to correct as it is printed, and keep the model sentence that gives the answer away out of the audio. Each spoken item carries the voice of the quiz language: ' + PROMPT_VOICE + '.';
 
 // The fields each question type needs, as the AI should write them.
 // How much teaching text a slide shows at a comfortable size on a phone held
@@ -5483,6 +5522,7 @@ function shapePromptExample(q, req, index) {
   else if (req.images === 'mix' && (gif || pic)) ex[gif ? 'gifKeyword' : 'imageKeyword'] = gif || pic;
   // 'quiz' is the create page's "Quiz language"; 'some' a typed audio option.
   if ((req.audio === 'some' || req.audio === 'quiz') && q.audioText && q.type !== 'wordle') {
+    ex.audioSetting = 'tts';
     ex.audioEnabled = true;
     // A gap is written the way the audio rule says it: three underscores.
     ex.audioText = q.audioText.replace(/_{2,}/g, '___');
@@ -5493,17 +5533,16 @@ function shapePromptExample(q, req, index) {
 }
 
 // Shared TTS policy for Standard, Adaptive and Climb prompt generation. Audio
-// is a setting of each item: on import, an item with "audioText" is read
-// aloud and one with "audioEnabled": false is silent (migrateQuestionAudio).
+// is a setting of each item.
 function promptAudioRules(req) {
-  if (!req.audio || req.audio === 'no') return ['No generated audio on any question or teaching slide: "audioEnabled": false on every item; omit "audioText" and audio files.'];
+  if (!req.audio || req.audio === 'no') return ['No generated audio: set "audioSetting": "none" and "audioEnabled": false on every item. Omit "audioText" and audio files.'];
   const rule = req.audio === 'bilingual'
     ? `Audio, bilingual: ${PROMPT_BILINGUAL_AUDIO} Apply this to teaching slides too. Use the students' first language specified by the teacher.`
-    : `Audio in the quiz language: every question and teaching slide that supports TTS has "audioEnabled": true, "audioMode": "tts" and "audioText": what to read, in the quiz language, never a practice answer. Write a gap as ___ in "audioText" too: the voice pauses there. Set the quiz and item voice using ${PROMPT_VOICE}.`;
-  const heard = ' Audio is set per item: only items with "audioText" are heard.';
+    : `Audio in the quiz language: every audio-capable item has "audioEnabled": true and "audioText": the script in the quiz language. Never read a practice answer. Write gaps as ___ so the voice pauses. Set each spoken item's voice using ${PROMPT_VOICE}.`;
+  const heard = ' Set "audioSetting": "tts" on spoken items. Omit quiz-level audio fields.';
   // The rule about the teacher's audio instructions goes only with a prompt that quotes some.
   const typed = String(req.audioInstructions || req.bilingualNote || '').trim();
-  return typed ? [rule + heard, 'Audio instructions from the teacher specify what to say and which items to read. They guide the generated "audioText"; do not read the instructions themselves aloud. When they leave some items out, give each of those "audioEnabled": false and no "audioText": they stay silent.'] : [rule + heard];
+  return typed ? [rule + heard, 'Use the teacher\'s instructions to choose the script and which items to read. Do not read the instructions aloud. Use "audioSetting": "none" and "audioEnabled": false on skipped items. Omit their "audioText".'] : [rule + heard];
 }
 
 // Picture, video, audio and reading-passage rules for this request.
@@ -12566,10 +12605,6 @@ async function importQuizSources(files) {
       const text = typeof file.text === 'function' ? await file.text() : String(file.text || '');
       const parsed = JSON.parse(text);
       validateImportedQuiz(parsed);
-      // A file that doesn't say whether every question is read aloud: not when
-      // it turns the audio off on some item, so only the items with their own
-      // audio are heard (an AI often leaves the quiz-level fields out).
-      if (typeof parsed.readAllQuestionsAloud !== 'boolean') parsed.readAllQuestionsAloud = importedReadAll(parsed);
       // Normalize prompts/corrections on import for compatibility
       parsed.questions = (parsed.questions || []).map((q) => {
         const next = normalizeImportedQuestion(q);
@@ -12596,11 +12631,10 @@ async function importQuizSources(files) {
         return question;
       });
 
-      // Each question gets its own 🔊 Audio from the file's settings, so an
-      // appended batch keeps its audio whatever the open quiz says.
-      migrateQuestionAudio(parsed);
+      normalizeQuizAudioDefaults(parsed);
 
-      if (mode === 'append' || (mode === 'replace' && i > 0)) {
+      if (mode === 'append' || totalAppended > 0) {
+        preserveAppendedQuestionAudio(parsed, quiz);
         // Deduplicate IDs: renumber incoming questions to avoid collisions
         const existingIds = new Set(quiz.questions.map((q) => q.id));
         let counter = quiz.questions.length;
@@ -14084,6 +14118,7 @@ async function hostApplyBuilderToLive() {
   try {
     ensureHostReady();
     syncQuizFromUI();
+    await ensureQuizMediaReady({ contextLabel: 'apply to live game', materializeTts: true });
     const payload = normalizeQuizForLive(quiz);
 
     await api('/api/host/quiz/update', {
@@ -19039,6 +19074,11 @@ function buildPreviewHostQuestion(q) {
     points: q.points,
     timeLimit: q.timeLimit,
     isPoll: !!q.isPoll,
+    audioEnabled: !!q.audioEnabled,
+    audioMode: q.audioMode,
+    audioText: q.audioEnabled ? q.audioText : '',
+    audioData: q.audioEnabled && q.audioMode === 'file' ? q.audioData : '',
+    language: q.language,
     imageData: String(q.imageData || '') || undefined,
     pinMode: ['any', 'all'].includes(String(q.pinMode)) ? String(q.pinMode) : (parseInt(String(q.pinMode), 10) >= 1 ? String(q.pinMode) : 'all'),
     zoneCount: Array.isArray(q.zones) ? q.zones.length : (q.zone ? 1 : 1),
@@ -19500,10 +19540,12 @@ function buildPreviewSimulationState(question) {
 }
 
 function renderPreviewFrame() {
-  updateEditorPreviewNav();
   if (!previewMode.active) return;
-  const q = quiz.questions[previewMode.index];
-  if (!q) return;
+  const question = quiz.questions[previewMode.index];
+  if (!question) return;
+  const q = { ...question, ttsAudioKey: '' };
+  const clip = prepareQuestionTts(q, quiz);
+  if (clip) q.audioText = clip.text;
 
   const sim = buildPreviewSimulationState(q);
 
@@ -20775,7 +20817,7 @@ function applyStepToRange() {
 function compactQuestionForLevelTagging(q) {
   const DROP = new Set(['id', 'points', 'timeLimit', 'isPoll', 'cefr', 'step', 'collapsed', 'mediaExpand', 'media',
     'imageData', 'imageKeyword', 'gifKeyword', 'videoKeyword', 'videoProviderPreference', 'audioEnabled',
-    'audioMode', 'audioText', 'audioData', 'ttsAudioKey', 'ttsLanguage', 'language', 'zones', 'zone']);
+    'audioMode', 'audioSetting', 'audioText', 'savedAudioText', 'audioData', 'ttsAudioKey', 'ttsLanguage', 'language', 'zones', 'zone']);
   const clip = (value, depth) => {
     if (typeof value === 'string') {
       const s = value.replace(/\s+/g, ' ').trim();
@@ -21489,6 +21531,10 @@ function normalizeQuizForLive(raw) {
     const questionTtsLanguage = normalizeTtsLanguage(questionLangSeed);
     const preferredQuestionVoice = q.language || (questionTtsLanguage === 'OTHER' ? quizVoice : '');
     const questionVoice = normalizeTtsVoice(preferredQuestionVoice, questionTtsLanguage);
+    const audioSetting = questionAudioSetting(q);
+    const keepAudioText = !supportsQuestionAudio(q.type) || audioSetting === 'tts';
+    const audioText = String(q.audioText || '').slice(0, 1200);
+    const savedAudioText = (keepAudioText ? '' : audioText) || String(q.savedAudioText || '').slice(0, 1200);
     const base = {
       id: String(q.id || crypto.randomUUID()),
       type: q.type,
@@ -21498,10 +21544,9 @@ function normalizeQuizForLive(raw) {
       isPoll: !!q.isPoll,
       audioEnabled: !!q.audioEnabled,
       audioMode: ['tts', 'file'].includes(String(q.audioMode || '')) ? String(q.audioMode) : 'tts',
-      // The student page reads "audioText": only a question's own read-aloud has one
-      // (on "Same as quiz" it reads itself; a kept text waits for its own setting again).
-      audioText: supportsQuestionAudio(q.type) && questionAudioSetting(q) !== 'tts' ? '' : String(q.audioText || '').slice(0, 1200),
-      audioSetting: questionAudioSetting(q),
+      audioText: keepAudioText ? audioText : '',
+      ...(savedAudioText ? { savedAudioText } : {}),
+      audioSetting,
       ttsLanguage: questionTtsLanguage,
       language: questionVoice,
       audioData: String(q.audioData || ''),
@@ -21964,13 +22009,14 @@ async function ensureTtsAudioBatchOnR2(items, rate = '+0%', onProgress = null) {
   return keys;
 }
 
-// Whether an imported quiz reads every question aloud. The file's own
-// "readAllQuestionsAloud" decides; a file without it reads everything, unless
-// it turns the audio off on some item ("audioEnabled": false): then only the
-// items with their own audio are heard.
+// Legacy files can ask for quiz-wide read-aloud. Files with per-item audio and
+// no explicit read-all flag use their quiz language as a voice fallback only.
 function importedReadAll(raw) {
   if (typeof raw?.readAllQuestionsAloud === 'boolean') return raw.readAllQuestionsAloud;
-  return !(Array.isArray(raw?.questions) ? raw.questions : []).some((q) => q && q.audioEnabled === false);
+  return !(Array.isArray(raw?.questions) ? raw.questions : []).some((q) => q && (
+    q.audioEnabled === false || QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)
+    || String(q.audioText || '').trim() || q.audioData
+  ));
 }
 
 // ---------- Question audio: the quiz's setting, and each question's own ----------
@@ -22000,7 +22046,7 @@ function quizReadAloudLanguage(quizCtx) {
 
 // What a question plays: 'none' | 'tts' | 'file'.
 function questionAudioChoice(q, quizCtx) {
-  if (!supportsQuestionAudio(q?.type)) return 'none';
+  if (!supportsQuestionAudio(q?.type) || q.listeningSection) return 'none';
   const setting = questionAudioSetting(q);
   if (setting === 'quiz') return quizReadAloudLanguage(quizCtx) ? 'tts' : 'none';
   return setting;
@@ -22030,7 +22076,8 @@ function settleQuestionVoice(q, quizCtx) {
   }
   const lang = ownAudioLanguage(q, quizLang || 'NONE');
   q.ttsLanguage = lang;
-  q.language = normalizeTtsVoice(q.language, lang);
+  const quizVoice = lang === 'OTHER' && quizLang === 'OTHER' ? quizCtx.language : '';
+  q.language = normalizeTtsVoice(q.language || quizVoice, lang);
 }
 
 // The language a question is read in: its own, else the quiz's, else the default.
@@ -22061,29 +22108,62 @@ function ttsLanguageForVoice(voice) {
 // NONE) becomes No audio, so it stays silent.
 function migrateQuestionAudio(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object' || targetQuiz.audioPerQuestion) return;
-  // As the old builder read it: a language, and read-all unless switched off.
   const quizLang = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   const hasLang = ['EN', 'CA', 'FR', 'OTHER'].includes(quizLang);
-  const readAll = hasLang && targetQuiz.readAllQuestionsAloud !== false;
-  let own = 0;
+  const explicitReadAll = typeof targetQuiz.readAllQuestionsAloud === 'boolean';
+  const readAll = hasLang && importedReadAll(targetQuiz);
+  let hasOwnAudio = false;
   (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
-    if (!q || !supportsQuestionAudio(q.type) || QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)) return;
+    if (!q || !supportsQuestionAudio(q.type)) return;
     const muted = String(q.ttsLanguage || '').trim().toUpperCase() === 'NONE';
-    if (String(q.audioMode || '').toLowerCase() === 'file' && q.audioData) q.audioSetting = 'file';
-    else if (String(q.audioText || '').trim()) q.audioSetting = muted ? 'none' : 'tts';
-    else q.audioSetting = 'quiz';
-    if (q.audioSetting !== 'quiz') own += 1;
+    if (!QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)) {
+      if (!explicitReadAll && q.audioEnabled === false) q.audioSetting = 'none';
+      else if (q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file')) q.audioSetting = 'file';
+      else if (String(q.audioText || '').trim()) q.audioSetting = muted ? 'none' : 'tts';
+      else q.audioSetting = 'quiz';
+    }
+    if (q.audioSetting === 'tts' || q.audioSetting === 'file') hasOwnAudio = true;
+    if (q.audioSetting === 'tts' && !readAll) {
+      q.ttsLanguage = ownAudioLanguage(q, hasLang ? quizLang : 'NONE');
+      if (!q.language && q.ttsLanguage === 'OTHER') q.language = targetQuiz.language;
+    }
     if (muted) {
-      q.ttsLanguage = hasLang ? quizLang : DEFAULT_EDGE_TTS_LANGUAGE;
+      q.ttsLanguage = ownAudioLanguage(q, hasLang ? quizLang : 'NONE');
       q.language = normalizeTtsVoice(q.language, q.ttsLanguage);
     }
   });
   if (!readAll) {
     targetQuiz.ttsLanguage = 'NONE';
-    if (own) targetQuiz.audioCustom = true;
+    if (hasOwnAudio) targetQuiz.audioCustom = true;
   }
   targetQuiz.readAllQuestionsAloud = false;
   targetQuiz.audioPerQuestion = true;
+}
+
+// An inherited setting can follow the destination when the two defaults match.
+// Otherwise give the imported question the playback it had in its source quiz.
+function preserveAppendedQuestionAudio(source, destination) {
+  const sourceLanguage = quizReadAloudLanguage(source);
+  const destinationLanguage = quizReadAloudLanguage(destination);
+  const sameDefault = sourceLanguage === destinationLanguage
+    && (sourceLanguage !== 'OTHER' || source.language === destination.language);
+  source.questions.forEach((q) => {
+    if (!supportsQuestionAudio(q?.type) || q.listeningSection) return;
+    const setting = questionAudioSetting(q);
+    if (setting === 'tts') {
+      settleQuestionVoice(q, source);
+      return;
+    }
+    if (setting !== 'quiz' || sameDefault) return;
+    settleQuestionVoice(q, source);
+    q.audioSetting = sourceLanguage ? 'tts' : 'none';
+    // A retained custom script was inactive while the question followed its quiz.
+    if (sourceLanguage && q.audioText) {
+      q.savedAudioText = q.audioText;
+      q.audioText = '';
+    }
+    q.ttsAudioKey = '';
+  });
 }
 
 // Settles a question as publishing does: its voice, and what the student page
@@ -22098,7 +22178,7 @@ function prepareQuestionTts(q, quizCtx) {
   if (choice !== 'none') q.audioMode = choice;
   q.audioEnabled = choice === 'file' ? !!q.audioData : !!ttsText;
   if (ttsText) return { voice: q.language || getVoiceForTtsLanguage(q.ttsLanguage), text: ttsText };
-  if (String(q.audioMode || '').toLowerCase() === 'tts') q.ttsAudioKey = '';
+  q.ttsAudioKey = '';
   return null;
 }
 
@@ -22870,10 +22950,11 @@ function removeMediaFrom(questions, what) {
       // Its own audio (an uploaded/recorded file, its own text to read) is
       // gone, and the question goes back to "Same as quiz".
       const setting = questionAudioSetting(q);
-      if (setting !== 'tts' && setting !== 'file' && !q.audioData && !String(q.audioText || '').trim()) return;
+      if (setting !== 'tts' && setting !== 'file' && !q.audioData && !String(q.audioText || q.savedAudioText || '').trim()) return;
       q.audioSetting = 'quiz';
       q.audioData = '';
       q.audioText = '';
+      delete q.savedAudioText;
       q.audioMode = 'tts';
       q.ttsAudioKey = '';
       q._audioVersion = '';
@@ -26118,4 +26199,5 @@ window.pinplayInternals = {
   getCreateSessionPassword: () => createSessionPassword,
 };
 
+normalizeQuizAudioDefaults(quiz);
 init();

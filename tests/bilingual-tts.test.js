@@ -313,12 +313,12 @@ describe('the AI prompts ask for bilingual audio only when the teacher does', ()
 
   it('climb prompt: no audio unless asked, then the same rule', () => {
     const off = A.buildBuildupPrompt(climb).text;
-    assert.match(off, /No generated audio on any question or teaching slide/);
+    assert.match(off, /No generated audio: set "audioSetting": "none"/);
     assert.doesNotMatch(off, /bilingual/i);
     ['audio', 'bilingualAudio'].forEach((key) => {
       const on = A.buildBuildupPrompt({ ...climb, [key]: key === 'audio' ? 'bilingual' : true }).text;
       assert.match(on, /Audio, bilingual: every question has "audioEnabled": true/);
-      assert.match(on, /Audio is set per item: only items with "audioText" are heard\./);
+      assert.match(on, /Set "audioSetting": "tts" on spoken items. Omit quiz-level audio fields\./);
       assert.match(on, /Use the students' first language specified by the teacher\./);
       assert.match(on, /- The students' first language: "Catalan"/);
     });

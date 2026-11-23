@@ -28,6 +28,7 @@ const NAMES = [
   'normalizeTtsLanguage', 'getVoiceForTtsLanguage', 'normalizeTtsVoice', 'importedReadAll',
   'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting', 'quizReadAloudLanguage', 'questionAudioChoice', 'questionHeardByTts', 'questionTtsText',
   'ownAudioLanguage', 'ttsLanguageForVoice', 'settleQuestionVoice', 'migrateQuestionAudio', 'prepareQuestionTts', 'getQuizAudio', 'setQuizAudio', 'quizAudioLanguageName',
+  'normalizeQuizAudioDefaults', 'preserveAppendedQuestionAudio', 'changeBuilderQuizAudio', 'previewBuilderQuestionAudio',
   'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
   'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setQuestionAudioOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
@@ -239,6 +240,74 @@ describe('questionMediaStatus', () => {
     assert.equal(A.getQuizAudio(quiz), 'FR');
     assert.equal(quiz.audioCustom, undefined);
     assert.deepEqual([follower.ttsAudioKey, own.ttsAudioKey], ['', 'tts/own.mp3']);
+  });
+
+  it('asks before a quiz-wide change overrides individual audio and keeps it unless approved', async () => {
+    const { A, sandbox } = load();
+    const own = { type: 'slide', audioSetting: 'tts', audioText: '[ca] Hola. [en] Hello.' };
+    const silent = { type: 'mcq', audioSetting: 'none' };
+    const recorded = { type: 'slide', audioSetting: 'file', audioData: 'https://x/a.mp3' };
+    sandbox.quiz = { ttsLanguage: 'CA', language: 'ca-ES-JoanaNeural', questions: [own, silent, recorded] };
+    sandbox.syncQuizFromUI = () => {};
+    sandbox.renderBuilder = () => {};
+    let prompts = 0;
+    let override = false;
+    sandbox.confirmQuizAudioOverride = async () => { prompts++; return override; };
+    await A.changeBuilderQuizAudio('FR');
+    assert.equal(sandbox.quiz.ttsLanguage, 'FR');
+    assert.deepEqual([own.audioSetting, silent.audioSetting, recorded.audioSetting], ['tts', 'none', 'file']);
+    override = true;
+    await A.changeBuilderQuizAudio('NONE');
+    assert.equal(prompts, 2);
+    assert.equal(sandbox.quiz.ttsLanguage, 'NONE');
+    assert.deepEqual([own.audioSetting, silent.audioSetting, recorded.audioSetting], ['quiz', 'quiz', 'quiz']);
+    assert.match(own.audioText, /\[ca\]/);
+    assert.match(recorded.audioData, /a\.mp3$/);
+    await A.changeBuilderQuizAudio('EN');
+    assert.equal(prompts, 2);
+  });
+
+  it('preserves item audio including silence when appending to a different quiz audio default', () => {
+    const source = { ttsLanguage: 'CA', questions: [
+      { type: 'slide', audioText: '[ca] Hola. [en] Hello.' },
+      { type: 'mcq', audioEnabled: false, prompt: 'Silent practice' },
+      { type: 'slide', prompt: 'No audio fields' },
+    ] };
+    const destination = { ttsLanguage: 'EN' };
+    A.normalizeQuizAudioDefaults(source);
+    assert.equal(A.getQuizAudio(source), 'CUSTOM');
+    A.preserveAppendedQuestionAudio(source, destination);
+    assert.deepEqual(source.questions.map((q) => A.questionAudioChoice(q, destination)), ['tts', 'none', 'none']);
+    assert.equal(A.prepareQuestionTts(source.questions[0], destination).voice, 'ca-ES-JoanaNeural');
+
+    const readAll = { audioPerQuestion: true, ttsLanguage: 'FR', questions: [{ type: 'slide', prompt: 'Bonjour', audioSetting: 'quiz' }] };
+    A.normalizeQuizAudioDefaults(readAll);
+    A.preserveAppendedQuestionAudio(readAll, destination);
+    assert.equal(A.prepareQuestionTts(readAll.questions[0], destination).voice, 'fr-FR-DeniseNeural');
+  });
+
+  it('reads only the bilingual script when an AI reply includes a quiz voice', () => {
+    const source = { ttsLanguage: 'OTHER', language: 'es-ES-ElviraNeural', questions: [
+      { type: 'slide', audioSetting: 'tts', audioText: '[en] Listen. [es] Hola.' },
+      { type: 'slide', prompt: 'Silent instructions' },
+    ] };
+    A.normalizeQuizAudioDefaults(source);
+    assert.equal(A.questionAudioChoice(source.questions[1], source), 'none');
+    assert.equal(A.prepareQuestionTts(source.questions[0], source).voice, 'es-ES-ElviraNeural');
+  });
+
+  it('repairs the saved audio setting when a recording has gone missing', async () => {
+    const { A, sandbox } = load();
+    const q = { type: 'slide', audioSetting: 'file', audioMode: 'file', audioData: 'https://x/a.mp3', audioText: 'Read this.' };
+    sandbox.quiz.questions = [q];
+    sandbox.syncQuizFromUI = () => {};
+    sandbox.renderBuilder = () => {};
+    sandbox.hostStatusEl = null;
+    sandbox.setStatus = () => {};
+    sandbox.playQuestionAudio = async (playable, { onMissingFile }) => onMissingFile('Missing file.');
+    await A.previewBuilderQuestionAudio(0, { textContent: 'Play' });
+    assert.deepEqual([q.audioSetting, q.audioData, q.ttsAudioKey], ['tts', '', '']);
+    assert.equal(A.prepareQuestionTts(q, sandbox.quiz).text, 'Read this.');
   });
 
   it('a question\'s 🔊 Audio offers the quiz\'s setting first, and only its own fields', () => {

@@ -22,10 +22,11 @@ before(() => {
     'normalizeCefr', 'normalizeClimbStep', 'climbStepsOf', 'listeningSectionLevelCounts', 'LISTENING_PROMPT_SCRIPT_EXAMPLE',
   ], { LISTENING_SCRIPT_RULES: require('../listening-script.js').LISTENING_SCRIPT_RULES });
   W = loadDeclarations(read('cloudflare/worker.js'), [
+    'extractBase64MediaToR2', 'publicAudioPayload',
     'CEFR_LEVELS', 'normalizeCefrLevel', 'clamp', 'round', 'randomId', 'normalizeTimeLimitValue', 'minTimeByType',
     'normalizeQuestionMedia', 'normalizeTextAnswer', 'tokenizeWords', 'tokenEditDistance', 'getCorrectedVariantsList',
     'countErrorHuntRequiredTokens', 'normalizeWordle', 'LISTENING_SECTION_TYPES', 'LISTENING_MAX_SECTIONS', 'LISTENING_DEFAULT_PLAYS', 'LISTENING_MAX_TRANSCRIPT', 'sanitizeListeningSectionId', 'normalizeListeningAudio', 'normalizeListeningSectionList', 'LISTENING_MAX_CUES', 'LISTENING_MAX_CUE_TEXT', 'normalizeListeningCues', 'normalizeListeningHeard', 'assignListeningMembership', 'stripListeningQuestionMedia', 'normalizeListeningSections', 'normalizeQuiz', 'BUILDUP_MAX_STEPS', 'normalizeClimbStep', 'STEPS_PLAN_LEVELS', 'normalizeStepsPlan', 'detectQuestionMediaProvider', 'contextGapList',
-  ], { crypto: require('node:crypto').webcrypto });
+  ], { atob, crypto: require('node:crypto').webcrypto });
 });
 
 const base = {
@@ -178,7 +179,7 @@ describe('rules follow the request', () => {
     const text = build({ images: 'no', audio: 'no', video: 'no', typesMode: 'include', selectedTypes: ['mcq', 'text'] });
     assert.doesNotMatch(text, /videoKeyword|readingText/);
     // "audioText" is named once, by the rule that says to leave it out.
-    assert.match(section(text, 'Rules'), /No generated audio on any question or teaching slide: .* omit "audioText" and audio files\./);
+    assert.match(section(text, 'Rules'), /No generated audio: .*"audioSetting": "none".*Omit "audioText" and audio files\./);
     assert.equal((text.match(/audioText/g) || []).length, 1);
     assert.match(section(text, 'Rules'), /No pictures: leave out "imageKeyword" and "gifKeyword"\./);
     examplesOf(text).forEach((ex) => {
@@ -193,32 +194,34 @@ describe('rules follow the request', () => {
     assert.equal((rules.match(/Audio in the quiz language:/g) || []).length, 1);
     assert.doesNotMatch(rules, /Audio, bilingual:/);
     assert.match(rules, /es-ES-ElviraNeural/);
-    assert.match(rules, /Write a gap as ___ in "audioText" too: the voice pauses there/);
+    assert.match(rules, /Write gaps as ___ so the voice pauses/);
     assert.ok(examplesOf(text).some((ex) => ex.audioEnabled === true && ex.audioText));
     // The rule about the teacher's audio instructions comes only when they typed some.
     // "Never the answer" is said once, inside the audio rule.
-    assert.equal((rules.match(/never a practice answer/g) || []).length, 1);
+    assert.equal((rules.match(/Never read a practice answer/g) || []).length, 1);
     assert.doesNotMatch(rules, /Never reveal/);
-    assert.doesNotMatch(rules, /Audio instructions from the teacher/);
+    assert.doesNotMatch(rules, /Use the teacher's instructions/);
     // An example's gap is written the way the rule says: three underscores.
     const gapEx = examplesOf(build({ audio: 'some', typesMode: 'include', selectedTypes: ['mcq', 'context_gap'] })).find((ex) => ex.type === 'context_gap');
     assert.match(gapEx.audioText, /(^|[^_])___([^_]|$)/);
     assert.doesNotMatch(gapEx.audioText, /____/);
     const typed = section(build({ audio: 'some', audioInstructions: 'read only the gap questions' }), 'Rules');
-    assert.match(typed, /Audio instructions from the teacher specify what to say and which items to read/);
-    assert.match(typed, /When they leave some items out, give each of those "audioEnabled": false/);
+    assert.match(typed, /Use the teacher's instructions to choose the script and which items to read/);
+    assert.match(typed, /Use "audioSetting": "none" and "audioEnabled": false on skipped items/);
   });
 
   // 2026-11-23: audio is a setting of each question, so the prompt asks for it
   // per item and the quiz object needs no audio fields.
   it('audio: said per item, with no quiz-level fields', () => {
-    const text = build({ audio: 'some' });
-    assert.match(section(text, 'Rules'), /Audio is set per item: only items with "audioText" are heard\./);
-    assert.match(section(build({ audio: 'some', audioInstructions: 'only the slides' }), 'Rules'), /give each of those "audioEnabled": false and no "audioText": they stay silent\./);
-    assert.doesNotMatch(text, /readAllQuestionsAloud/);
+    for (const audio of ['some', 'bilingual']) {
+      const text = build({ audio, audioInstructions: 'only the slides' });
+      assert.match(section(text, 'Rules'), /Set "audioSetting": "tts" on spoken items. Omit quiz-level audio fields\./);
+      assert.match(section(text, 'Rules'), /"audioSetting": "none" and "audioEnabled": false on skipped items/);
+      assert.doesNotMatch(text, /readAllQuestionsAloud|Set the quiz and item voice|The quiz and every question carry the voice/);
+    }
     assert.doesNotMatch(build({ audio: 'no' }), /readAllQuestionsAloud/);
     // The create page's "Quiz language" choice shows the audio fields in its examples too.
-    assert.ok(examplesOf(build({ audio: 'quiz' })).some((ex) => ex.audioEnabled === true && ex.audioText));
+    assert.ok(examplesOf(build({ audio: 'quiz' })).some((ex) => ex.audioSetting === 'tts' && ex.audioEnabled === true && ex.audioText));
   });
 
   it('shows a slide example within the text budget whenever slides are allowed', () => {
@@ -411,6 +414,26 @@ const GRADABLE = {
 };
 
 describe('examples are valid PinPlay questions', () => {
+  it('stores an inactive recording without using it in place of TTS', async () => {
+    const uploads = [];
+    const quiz = W.normalizeQuiz({ questions: [{
+      id: 'q1', type: 'slide', prompt: 'Visible text', audioEnabled: true,
+      audioSetting: 'tts', audioMode: 'tts', audioText: 'New script',
+      savedAudioText: 'Old script', audioData: 'data:audio/mpeg;base64,QQ==',
+    }] });
+    const stored = await W.extractBase64MediaToR2(quiz, {
+      QUIZ_MEDIA: { put: async (key) => uploads.push(key) },
+    }, 'assignment');
+    const [q] = stored.questions;
+    assert.deepEqual(uploads, ['assignment/audio/q1.mp3']);
+    assert.match(q.audioData, /assignment\/audio\/q1\.mp3$/);
+    assert.equal(q.savedAudioText, 'Old script');
+    assert.equal(q.audioMode, 'tts');
+    const publicAudio = W.publicAudioPayload(q);
+    assert.equal(publicAudio.audioText, 'New script');
+    assert.equal(publicAudio.audioData, '');
+    assert.equal(publicAudio.savedAudioText, undefined);
+  });
   // 2026-11-23: a quiz opened again for editing (✏️ an assignment) came back
   // without its audio settings, and read "No audio".
   it('the server keeps the quiz\'s 🔊 Audio and each question\'s own', () => {

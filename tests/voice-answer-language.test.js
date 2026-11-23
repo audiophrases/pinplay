@@ -35,13 +35,26 @@ function load() {
     'round', 'detectVideoProvider', 'makeDefaultQuestionMedia', 'normalizeQuestionMedia',
     'CEFR_LEVELS', 'normalizeCefr', 'importedReadAll',
     'QUESTION_TYPE_CATALOG', 'AUDIO_CAPABLE_QUESTION_TYPES', 'supportsQuestionAudio', 'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting',
-    'normalizeQuizForLive',
+    'normalizeQuizForLive', 'normalizeQuizAudioDefaults', 'migrateQuestionAudio',
   ], sandbox);
 }
 
 const voiceText = (extra = {}) => ({
   id: 'v1', type: 'voice_text', prompt: 'Com es diu?', accepted: ['gat'], points: 1000, timeLimit: 30,
   ttsLanguage: 'EN', language: 'en-US-AriaNeural', ...extra,
+});
+
+it('restores an inactive bilingual script when a published assignment is reopened', () => {
+  const A = load();
+  const text = '[ca] Hola. [en] Hello.';
+  const published = A.normalizeQuizForLive({ title: 'T', audioPerQuestion: true, ttsLanguage: 'EN', questions: [
+    { id: 'slide', type: 'slide', prompt: 'Visible', audioSetting: 'quiz', audioText: text },
+  ] });
+  assert.equal(published.questions[0].audioText, '');
+  assert.equal(published.questions[0].savedAudioText, text);
+  A.normalizeQuizAudioDefaults(published);
+  assert.equal(published.questions[0].audioText, text);
+  assert.equal(published.questions[0].savedAudioText, undefined);
 });
 
 describe('the recognition language reaches the published quiz', () => {
