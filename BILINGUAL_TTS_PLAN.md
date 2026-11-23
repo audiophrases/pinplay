@@ -219,3 +219,14 @@ bilingual rule and the teacher's words only when asked.
     browser's voice (it counted as played).
   - Editing a question's text, prompt, voice or audio setting drops its clip
     key, so the Media Manager shows it missing until it is made again.
+- 2026-11-23 (third review): fixes.
+  - A clip made while its question is edited is not stored on it: publishing
+    and Generate missing keep a key only when the question would still make
+    that clip (questionStillMakesClip).
+  - ✏️ on an assignment stored by the old Worker: every question keeps the
+    voice it was read in. The quiz takes the voice most of them used that a
+    quiz can have (another language's voice, or English, Català or Français's
+    own); the others get their own read-aloud in their voice.
+  - A question-bank recording saved with audioMode "url" (before the bank
+    fix) opens as its own audio file, unless the teacher chose otherwise.
+

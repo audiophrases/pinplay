@@ -29,7 +29,7 @@ const NAMES = [
   'QUESTION_AUDIO_SETTINGS', 'questionAudioSetting', 'quizReadAloudLanguage', 'questionAudioChoice', 'questionHeardByTts', 'questionTtsText',
   'ownAudioLanguage', 'ttsLanguageForVoice', 'settleQuestionVoice', 'migrateQuestionAudio', 'inferStoredQuizReadAloud', 'prepareQuestionTts', 'getQuizAudio', 'setQuizAudio', 'quizAudioLanguageName',
   'normalizeQuizAudioDefaults', 'preserveAppendedQuestionAudio', 'changeBuilderQuizAudio', 'previewBuilderQuestionAudio', 'playQuestionAudio',
-  'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor',
+  'sha256HexClient', 'TTS_TAG_VOICES', 'TTS_GAP', 'splitTtsSegments', 'ttsClipSeed', 'ttsClipFile', 'computeTtsAudioKey', 'TTS_EDGE_CALLS_PER_REQUEST', 'TTS_BATCH_PARALLEL', 'packTtsBatches', 'ensureTtsAudioBatchOnR2', 'MEDIA_TTS_CHUNK', 'generateMissingTtsFor', 'questionStillMakesClip',
   'setMediaKeywordOn', 'LISTENING_STOPWORDS', 'MEDIA_KEYWORD_STOPWORDS', 'isMediaStopword', 'mediaWordKey',
   'mediaAnswerText', 'mediaAnswerWords', 'sharedAnswerWords', 'answerMediaKeyword', 'applyAnswerKeywords', 'setQuestionAudioOn', 'EDGE_TTS_LANGUAGE_OPTIONS', 'guessTtsLanguageFromVoice', 'formatVoiceIndexLabel', 'escapeHtml', 'buildAudioSettingsMarkup',
 ];
@@ -227,47 +227,50 @@ describe('questionMediaStatus', () => {
     describe('an assignment stored before the Worker kept the quiz\'s audio, opened again', () => {
       const reopened = (quiz) => { A.migrateQuestionAudio(quiz, { recoverAssignmentScripts: true }); return quiz; };
       // What the old app published for a quiz reading every question, one with its own script.
-      const readAllEn = () => ({ title: 'Old', questions: [
-        { type: 'mcq', prompt: 'A', audioEnabled: true, audioMode: 'tts', audioText: '', language: 'en-US-BrianNeural' },
-        { type: 'mcq', prompt: 'B', audioEnabled: true, audioMode: 'tts', audioText: '', language: 'en-US-BrianNeural' },
-        { type: 'slide', prompt: 'C', audioEnabled: true, audioMode: 'tts', audioText: 'Own script', language: 'en-US-AriaNeural' },
-        { type: 'slide', prompt: '', audioEnabled: false, audioMode: 'tts', language: 'en-US-BrianNeural' },
+      const readAll = (voices) => ({ title: 'Old', questions: [
+        ...voices.map((language, i) => ({ type: 'mcq', prompt: `Q${i + 1}`, audioEnabled: true, audioMode: 'tts', audioText: '', language })),
+        { type: 'slide', prompt: 'S', audioEnabled: true, audioMode: 'tts', audioText: 'Own script', language: 'en-US-AriaNeural' },
+        { type: 'slide', prompt: '', audioEnabled: false, audioMode: 'tts', language: voices[0] },
       ] });
+      // The voice each question is read in now.
+      const heardIn = (quiz) => quiz.questions.map((q) => A.prepareQuestionTts({ ...q }, quiz)?.voice || '-');
 
-      it('reads its questions in the language and voice it read them in', () => {
-        const quiz = reopened(readAllEn());
-        assert.deepEqual([A.getQuizAudio(quiz), quiz.language], ['EN', 'en-US-BrianNeural']);
+      it('one voice: the quiz reads in it', () => {
+        const quiz = reopened(readAll(['en-US-AriaNeural', 'en-US-AriaNeural']));
+        assert.deepEqual([A.getQuizAudio(quiz), quiz.language], ['EN', 'en-US-AriaNeural']);
         assert.deepEqual(settings(quiz), ['quiz', 'quiz', 'tts', 'none']);
-        assert.deepEqual(plays(quiz), ['tts', 'tts', 'tts', 'none']);
+        assert.deepEqual(heardIn(quiz), ['en-US-AriaNeural', 'en-US-AriaNeural', 'en-US-AriaNeural', '-']);
       });
 
       it('another language comes back from the voice', () => {
-        const quiz = readAllEn();
-        quiz.questions.forEach((q) => { q.language = 'es-ES-ElviraNeural'; });
-        reopened(quiz);
+        const quiz = reopened(readAll(['es-ES-ElviraNeural', 'es-ES-ElviraNeural']));
         assert.deepEqual([A.getQuizAudio(quiz), quiz.language], ['OTHER', 'es-ES-ElviraNeural']);
+        assert.deepEqual(settings(quiz).slice(0, 2), ['quiz', 'quiz']);
       });
 
+      // Every question keeps the voice it was read in, whatever the quiz's can be.
+      for (const [label, voices, quizAudio] of [
+        ['Spanish and German (both "Other language")', ['es-ES-ElviraNeural', 'de-DE-KatjaNeural'], 'OTHER'],
+        ['British and US English', ['en-GB-SoniaNeural', 'en-US-AriaNeural'], 'EN'],
+        ['French and an English voice that is not the default', ['en-US-BrianNeural', 'fr-FR-DeniseNeural'], 'FR'],
+        ['only British English (no voice an English quiz can have)', ['en-GB-SoniaNeural', 'en-GB-SoniaNeural'], 'CUSTOM'],
+      ]) {
+        it(`${label}: each question keeps its voice`, () => {
+          const quiz = reopened(readAll(voices));
+          assert.equal(A.getQuizAudio(quiz), quizAudio);
+          assert.deepEqual(heardIn(quiz), [...voices, 'en-US-AriaNeural', '-']);
+        });
+      }
+
       it('a quiz that read nothing is not guessed', () => {
-        const silent = readAllEn();
+        const silent = readAll(['en-US-AriaNeural', 'en-US-AriaNeural']);
         silent.questions.forEach((q) => { q.audioEnabled = !!q.audioText; });
         assert.equal(A.getQuizAudio(reopened(silent)), 'CUSTOM');
         assert.deepEqual(plays(silent), ['none', 'none', 'tts', 'none']);
       });
 
-      it('questions read in different languages each keep their own read-aloud and voice', () => {
-        const mixed = readAllEn();
-        mixed.questions[1].language = 'fr-FR-DeniseNeural';
-        reopened(mixed);
-        assert.equal(A.getQuizAudio(mixed), 'CUSTOM');
-        assert.deepEqual(settings(mixed), ['tts', 'tts', 'tts', 'none']);
-        assert.deepEqual(plays(mixed), ['tts', 'tts', 'tts', 'none']);
-        assert.deepEqual(JSON.parse(JSON.stringify(mixed.questions.slice(0, 2).map((q) => A.prepareQuestionTts(q, mixed)))),
-          [{ voice: 'en-US-BrianNeural', text: 'A' }, { voice: 'fr-FR-DeniseNeural', text: 'B' }]);
-      });
-
       it('a cloud quiz (not an assignment) is not guessed', () => {
-        assert.equal(A.getQuizAudio(migrated(readAllEn())), 'CUSTOM');
+        assert.equal(A.getQuizAudio(migrated(readAll(['en-US-AriaNeural', 'en-US-AriaNeural']))), 'CUSTOM');
       });
     });
 
@@ -934,6 +937,27 @@ describe('generateMissingTtsFor', () => {
     assert.match(questions[8].ttsAudioKey, /^ws\/tts\//);
   });
 
+  it('a question edited while its clip is made keeps no key for the old text', async () => {
+    const questions = [
+      { type: 'mcq', audioSetting: 'tts', audioMode: 'tts', audioText: 'First script', prompt: 'P1' },
+      { type: 'mcq', audioSetting: 'tts', audioMode: 'tts', audioText: 'Other', prompt: 'P2' },
+    ];
+    const { A, sandbox } = load((url, opts) => {
+      const items = JSON.parse(opts.body).items;
+      questions[0].audioText = 'Second script'; // the teacher types while the clips are made
+      return jsonRes(200, { results: items.map((it) => ({ ok: true, key: `ws/tts/${it.text.replace(/\s/g, '-')}.mp3` })) });
+    });
+    sandbox.quiz = { audioPerQuestion: true, questions, ttsLanguage: 'EN' };
+    sandbox.createSessionPassword = 'secret';
+    const outcomes = await A.generateMissingTtsFor(questions, { cancelled: false });
+    assert.equal(questions[0].ttsAudioKey, '', 'the First script clip is not the Second script\'s audio');
+    assert.equal(outcomes.get(questions[0]).status, 'skipped');
+    assert.equal(A.questionMediaStatus(questions[0], sandbox.quiz).audio.status, 'missing');
+    assert.equal(questions[1].ttsAudioKey, 'ws/tts/Other.mp3');
+    assert.equal(A.questionStillMakesClip(questions[1], sandbox.quiz, { voice: 'en-US-AriaNeural', text: 'Other' }), true);
+    assert.equal(A.questionStillMakesClip(questions[1], sandbox.quiz, { voice: 'fr-FR-DeniseNeural', text: 'Other' }), false);
+  });
+
   it('keeps every request under the Worker\'s 50 outbound calls when clips switch voices', async () => {
     // A bilingual slide is one Edge call per segment: 25 such clips in one
     // request made the Worker fail with "Too many subrequests" past call 50.
@@ -1373,4 +1397,22 @@ it('a bank question with a recording plays the recording, in a quiz read aloud i
   const pic = { type: 'mcq', audioSetting: 'quiz' };
   attachMedia(pic, { media_url: 'https://bank.example/img/q1.png' });
   assert.deepEqual([pic.imageData, pic.audioSetting], ['https://bank.example/img/q1.png', 'quiz']);
+});
+
+it('a question-bank recording saved before the fix reopens as its own audio file', () => {
+  const { A } = load();
+  const mp3 = 'https://bank.example/audio/q1.mp3';
+  // A quiz from before the per-question setting, and one saved today on Same as quiz.
+  const older = { ttsLanguage: 'NONE', questions: [{ type: 'mcq', prompt: 'Listen', audioMode: 'url', audioEnabled: true, audioData: mp3 }] };
+  const today = { audioPerQuestion: true, ttsLanguage: 'FR', questions: [
+    { type: 'mcq', prompt: 'Listen', audioSetting: 'quiz', audioMode: 'url', audioEnabled: true, audioData: mp3 },
+    { type: 'mcq', prompt: 'Muted by the teacher', audioSetting: 'none', audioMode: 'url', audioEnabled: true, audioData: mp3 },
+  ] };
+  [older, today].forEach((quiz) => A.normalizeQuizAudioDefaults(quiz));
+  assert.deepEqual([older.questions[0].audioSetting, older.questions[0].audioMode], ['file', 'file']);
+  assert.equal(A.questionAudioChoice(older.questions[0], older), 'file', 'heard although the quiz has No audio');
+  assert.deepEqual(today.questions.map((q) => A.questionAudioChoice(q, today)), ['file', 'none']);
+  const played = { ...older.questions[0] };
+  assert.equal(A.prepareQuestionTts(played, older), null);
+  assert.equal(played.audioEnabled, true);
 });

@@ -4188,6 +4188,14 @@ function confirmQuizAudioOverride(own = {}, language = '') {
 
 function normalizeQuizAudioDefaults(targetQuiz) {
   if (!targetQuiz || typeof targetQuiz !== 'object') return;
+  // The question bank saved a recording with an audio mode nothing reads
+  // ('url', only ever written by the bank), on Same as quiz since 2026-11-23:
+  // it is the question's own audio file. Another setting the teacher chose is kept.
+  (Array.isArray(targetQuiz.questions) ? targetQuiz.questions : []).forEach((q) => {
+    if (!q || String(q.audioMode || '').toLowerCase() !== 'url' || !q.audioData) return;
+    if (!q.audioSetting || q.audioSetting === 'quiz') q.audioSetting = 'file';
+    q.audioMode = 'file';
+  });
   migrateQuestionAudio(targetQuiz);
   const raw = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   targetQuiz.ttsLanguage = ['NONE', 'EN', 'CA', 'FR', 'OTHER'].includes(raw) ? raw : 'NONE';
@@ -22169,13 +22177,13 @@ function ttsLanguageForVoice(voice) {
 function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } = {}) {
   if (!targetQuiz || typeof targetQuiz !== 'object' || targetQuiz.audioPerQuestion) return;
   // An assignment stored before the Worker kept the quiz's 🔊 Audio: the
-  // questions it read aloud tell which language it read them in. Read in
-  // different languages, each keeps its own read-aloud in the voice it had.
+  // questions it read aloud tell the quiz's voice, and the ones read in
+  // another voice keep it as their own read-aloud.
   const stored = recoverAssignmentScripts && !String(targetQuiz.ttsLanguage || '').trim()
     ? inferStoredQuizReadAloud(targetQuiz)
     : null;
   const inferred = stored?.ttsLanguage ? stored : null;
-  const heardOnTheirOwn = stored && !inferred ? new Set(stored.heard) : null;
+  const ownVoice = stored?.own || null;
   if (inferred) {
     targetQuiz.ttsLanguage = inferred.ttsLanguage;
     targetQuiz.language = inferred.language;
@@ -22195,7 +22203,11 @@ function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } =
       if (!explicitReadAll && q.audioEnabled === false && !recoverScript) q.audioSetting = 'none';
       else if (hasFile) q.audioSetting = 'file';
       else if (hasScript) q.audioSetting = muted ? 'none' : 'tts';
-      else q.audioSetting = heardOnTheirOwn?.has(q) ? 'tts' : 'quiz';
+      else q.audioSetting = ownVoice?.has(q) ? 'tts' : 'quiz';
+      if (q.audioSetting === 'tts' && ownVoice?.has(q)) {
+        q.language = ownVoice.get(q);
+        q.ttsLanguage = ttsLanguageForVoice(q.language);
+      }
     }
     if (q.audioSetting === 'tts' || q.audioSetting === 'file') hasOwnAudio = true;
     if (q.audioSetting === 'tts' && !readAll) {
@@ -22215,13 +22227,15 @@ function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } =
   targetQuiz.audioPerQuestion = true;
 }
 
-// The read-aloud language of a quiz stored without its 🔊 Audio (an
-// assignment saved by a Worker from before 2026-11-23, which kept only the
-// questions). A quiz that read every question aloud published its plain
-// questions (nothing of their own) as heard, in the quiz's voice: when all of
-// them agree on the language, that is the quiz's. Returns null when nothing
-// was heard, else { heard: those questions, ttsLanguage, language }, with an
-// empty ttsLanguage when they were read in different languages.
+// The read-aloud of a quiz stored without its 🔊 Audio (an assignment saved
+// by a Worker from before 2026-11-23, which kept only the questions). The
+// questions it read aloud with nothing of their own were read in a voice each,
+// which they still carry. The quiz takes the voice most of them used that a
+// quiz can have (any voice for another language; for English, Català and
+// Français only that language's own); every question read in another voice
+// keeps it as its own read-aloud. Returns null when nothing was heard, else
+// { heard, own: Map(question → its voice), ttsLanguage, language }, with an
+// empty ttsLanguage when no voice can be the quiz's.
 function inferStoredQuizReadAloud(targetQuiz) {
   const heard = (Array.isArray(targetQuiz?.questions) ? targetQuiz.questions : []).filter((q) => {
     if (!q || !supportsQuestionAudio(q.type) || q.listeningSection || q.audioEnabled !== true) return false;
@@ -22229,22 +22243,25 @@ function inferStoredQuizReadAloud(targetQuiz) {
     return !hasFile && !String(q.audioText || '').trim();
   });
   if (!heard.length) return null;
-  const languageOf = (q) => {
-    const own = String(q.ttsLanguage || '').trim().toUpperCase();
-    return ['EN', 'CA', 'FR', 'OTHER'].includes(own) ? own : ttsLanguageForVoice(q.language);
-  };
-  const languages = new Set(heard.map(languageOf));
-  if (languages.size !== 1) return { heard, ttsLanguage: '', language: '' };
-  const [ttsLanguage] = languages;
-  // The voice most of them used (one voice per quiz, unless edited by hand).
-  const tally = new Map();
-  heard.forEach((q) => {
+  // Its own voice, else (the old Worker filled a missing one with "en-US-Wave")
+  // its language's.
+  const voiceOf = (q) => {
     const voice = String(q.language || '').trim();
-    if (EDGE_TTS_VOICE_OPTIONS.includes(voice)) tally.set(voice, (tally.get(voice) || 0) + 1);
-  });
-  const voice = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-  if (ttsLanguage === 'OTHER' && !voice) return { heard, ttsLanguage: '', language: '' };
-  return { heard, ttsLanguage, language: normalizeTtsVoice(voice, ttsLanguage) };
+    if (EDGE_TTS_VOICE_OPTIONS.includes(voice)) return voice;
+    const own = String(q.ttsLanguage || '').trim().toUpperCase();
+    return getVoiceForTtsLanguage(['EN', 'CA', 'FR'].includes(own) ? own : DEFAULT_EDGE_TTS_LANGUAGE);
+  };
+  const quizVoiceFor = (voice) => {
+    const lang = ttsLanguageForVoice(voice);
+    return lang === 'OTHER' ? voice : getVoiceForTtsLanguage(lang);
+  };
+  const voices = new Map(heard.map((q) => [q, voiceOf(q)]));
+  const tally = new Map();
+  voices.forEach((voice) => { if (quizVoiceFor(voice) === voice) tally.set(voice, (tally.get(voice) || 0) + 1); });
+  // Most used; on a tie, the one heard first.
+  const language = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  const own = new Map([...voices].filter(([, voice]) => voice !== language));
+  return { heard, own, ttsLanguage: language ? ttsLanguageForVoice(language) : '', language };
 }
 
 // An inherited setting can follow the destination when the two defaults match,
@@ -22289,6 +22306,15 @@ function prepareQuestionTts(q, quizCtx) {
   if (ttsText) return { voice: q.language || getVoiceForTtsLanguage(q.ttsLanguage), text: ttsText };
   q.ttsAudioKey = '';
   return null;
+}
+
+// Whether a question still makes this clip ({ voice, text }). A clip is made
+// while the teacher can still edit the question: its key is stored only when
+// the question would make the same clip now (else it keeps no key, and the
+// edited text is made on the next save or when a student plays it).
+function questionStillMakesClip(q, quizCtx, clip) {
+  const now = prepareQuestionTts({ ...q }, quizCtx);
+  return !!now && now.voice === clip.voice && now.text === clip.text;
 }
 
 async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsToMp3 = true, strictMediaCheck = true, uploadToR2 = true, materializeTts = false, requirePreviewAudio = false } = {}) {
@@ -22394,9 +22420,10 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       }
     } else if (ttsClip) {
       try {
-        q.ttsAudioKey = await computeTtsAudioKey(ttsClip.voice, ttsClip.text);
+        const key = await computeTtsAudioKey(ttsClip.voice, ttsClip.text);
+        if (questionStillMakesClip(q, quiz, ttsClip)) q.ttsAudioKey = key;
         q.audioEnabled = true; // this question has playable TTS audio (incl. quiz-wide read-aloud)
-        if (materializeTts && uploadToR2) pendingTts.push({ q, voice: ttsClip.voice, text: ttsClip.text });
+        if (materializeTts && uploadToR2) pendingTts.push({ q, voice: ttsClip.voice, text: ttsClip.text, madeKey: key });
       } catch (err) {
         // Non-fatal: playback lazily synthesizes via Edge if the object is absent.
         console.warn(`Q${i + 1} TTS prepare failed:`, err?.message || err);
@@ -22426,7 +22453,9 @@ async function ensureQuizMediaReady({ contextLabel = 'quiz action', convertTtsTo
       for (const [idx, item] of pendingTts.entries()) {
         const key = keys?.[idx];
         if (key) {
-          item.q.ttsAudioKey = key;
+          // Edited while its clip was made: the old clip is not its audio.
+          if (questionStillMakesClip(item.q, quiz, item)) item.q.ttsAudioKey = key;
+          else if ([key, item.madeKey].includes(item.q.ttsAudioKey)) item.q.ttsAudioKey = '';
           uploaded += 1;
         } else if (item.questionNumber) {
           item.q.ttsAudioKey = '';
@@ -22882,9 +22911,10 @@ async function generateMissingTtsFor(questions, job) {
     if (questionMediaStatus(q, quiz).audio.status !== 'missing') continue;
     const clip = prepareQuestionTts(q, quiz);
     if (!clip) continue;
-    q.ttsAudioKey = await computeTtsAudioKey(clip.voice, clip.text);
+    const key = await computeTtsAudioKey(clip.voice, clip.text);
+    if (questionStillMakesClip(q, quiz, clip)) q.ttsAudioKey = key;
     q.audioEnabled = true;
-    pending.push({ q, ...clip });
+    pending.push({ q, ...clip, madeKey: key });
     outcomes.set(q, { status: 'filled', reason: '' });
   }
   for (let i = 0; i < pending.length && !job.cancelled; i += MEDIA_TTS_CHUNK) {
@@ -22903,7 +22933,12 @@ async function generateMissingTtsFor(questions, job) {
     }
     chunk.forEach((item, k) => {
       if (keys[k]) {
-        item.q.ttsAudioKey = keys[k];
+        // Edited while its clip was made: it stays missing, to be made again.
+        if (questionStillMakesClip(item.q, quiz, item)) item.q.ttsAudioKey = keys[k];
+        else {
+          if ([keys[k], item.madeKey].includes(item.q.ttsAudioKey)) item.q.ttsAudioKey = '';
+          outcomes.set(item.q, { status: 'skipped', reason: '' });
+        }
       } else {
         item.q.ttsAudioKey = '';
         outcomes.set(item.q, { status: 'failed', reason });
