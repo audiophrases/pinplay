@@ -220,14 +220,38 @@ describe('questionMediaStatus', () => {
 
     it('restores scripts from old assignments while preserving explicit mutes', () => {
       const script = '[ca] Hola. [en] Hello.';
-      const quiz = migrated({ questions: [
+      const quiz = { questions: [
         { type: 'slide', audioMode: 'tts', audioEnabled: false, audioText: script },
         { type: 'slide', audioEnabled: false, audioText: script, audioSetting: 'none' },
         { type: 'slide', audioEnabled: false, audioText: script, ttsLanguage: 'NONE' },
         { type: 'slide', audioEnabled: false, prompt: 'Silent practice' },
-      ] });
+      ] };
+      A.migrateQuestionAudio(quiz, { recoverAssignmentScripts: true });
       assert.deepEqual(plays(quiz), ['tts', 'none', 'none', 'none']);
       assert.equal(A.questionTtsText(quiz.questions[0]), script);
+    });
+
+    it('keeps unchecked recordings and scripts silent when importing a legacy export', () => {
+      const recording = 'https://example.test/recording.mp3';
+      const quiz = migrated({ questions: [
+        { type: 'mcq', audioMode: 'file', audioData: recording, audioEnabled: false },
+        { type: 'slide', audioMode: 'tts', audioText: 'Unused script', audioEnabled: false },
+      ] });
+      for (const q of quiz.questions) {
+        assert.equal(A.prepareQuestionTts(q, quiz), null);
+        assert.equal(q.audioEnabled, false);
+      }
+      assert.equal(quiz.questions[0].audioData, recording);
+      assert.equal(quiz.questions[1].audioText, 'Unused script');
+    });
+
+    it('ignores a listening-section follower when inferring narration for other items', () => {
+      const quiz = migrated({ ttsLanguage: 'FR', questions: [
+        { type: 'mcq', listeningSection: 'p1', audioSetting: 'quiz' },
+        { type: 'slide', audioText: 'Bonjour.' },
+        { type: 'slide', prompt: 'Practice' },
+      ] });
+      assert.deepEqual(plays(quiz), ['none', 'tts', 'none']);
     });
 
     it('runs once, and leaves a question that has a setting', () => {
@@ -370,6 +394,14 @@ describe('questionMediaStatus', () => {
     assert.match(A.buildAudioSettingsMarkup(0, q, quiz), /<option value="fr-FR-DeniseNeural" selected>/);
   });
 
+  it('derives the language selector from an explicit question voice before using the quiz language', () => {
+    const quiz = { ttsLanguage: 'EN' };
+    const q = { type: 'slide', audioSetting: 'tts', audioText: 'Bonjour.', language: 'fr-FR-DeniseNeural' };
+    assert.match(A.buildAudioSettingsMarkup(0, q, quiz), /<option value="FR" selected>/);
+    assert.equal(A.prepareQuestionTts(q, quiz).voice, 'fr-FR-DeniseNeural');
+    assert.equal(q.ttsLanguage, 'FR');
+  });
+
   it('a question\'s 🔊 Audio offers the quiz\'s setting first, and only its own fields', () => {
     const html = A.buildAudioSettingsMarkup(0, { type: 'mcq', prompt: 'Hi' }, ON_EN);
     assert.match(html, /<option value="quiz" selected>Same as quiz \(English\)<\/option>/);
@@ -383,8 +415,9 @@ describe('questionMediaStatus', () => {
     const { A: app } = load(() => jsonRes(200, {}));
     assert.equal(app.importedReadAll({ readAllQuestionsAloud: false, questions: [{}] }), false);
     assert.equal(app.importedReadAll({ readAllQuestionsAloud: true, questions: [{ audioEnabled: false }] }), true);
-    assert.equal(app.importedReadAll({ questions: [{ audioEnabled: true, audioText: 'Listen.' }, { audioEnabled: false }] }), false);
-    assert.equal(app.importedReadAll({ questions: [{ prompt: 'Hi' }] }), true);
+    assert.equal(app.importedReadAll({ questions: [{ type: 'slide', audioEnabled: true, audioText: 'Listen.' }, { type: 'mcq', audioEnabled: false }] }), false);
+    assert.equal(app.importedReadAll({ questions: [{ type: 'slide', prompt: 'Hi' }] }), true);
+    assert.equal(app.importedReadAll({ questions: [{ type: 'mcq', listeningSection: 'p1', audioEnabled: false }, { type: 'slide', prompt: 'Hi' }] }), true);
   });
 
   it('changedAt is the later of the picture and audio revisions', () => {

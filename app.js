@@ -5268,6 +5268,8 @@ async function openCloudQuizByKey(quizKey, label) {
   const loadedQuiz = await res.json();
   // The quiz JSON is stored directly (not wrapped)
   validateImportedQuiz(loadedQuiz);
+  // Older Workers stored the computed playback flag even for authored scripts.
+  migrateQuestionAudio(loadedQuiz, { recoverAssignmentScripts: true });
   quiz = loadedQuiz;
   // Extract just the basename: handles both `quizzes/<pin>.json` and
   // `workspaces/<wsid>/quizzes/<pin>.json` for guests.
@@ -22013,12 +22015,13 @@ async function ensureTtsAudioBatchOnR2(items, rate = '+0%', onProgress = null) {
 // "Same as quiz" setting also signals that a quiz-wide voice is intentional.
 function importedReadAll(raw) {
   if (typeof raw?.readAllQuestionsAloud === 'boolean') return raw.readAllQuestionsAloud;
-  const questions = Array.isArray(raw?.questions) ? raw.questions : [];
-  if (questions.some((q) => q?.audioSetting === 'quiz')) return true;
-  return !questions.some((q) => q && (
+  const questions = (Array.isArray(raw?.questions) ? raw.questions : [])
+    .filter((q) => q && !q.listeningSection && supportsQuestionAudio(q.type));
+  if (questions.some((q) => q.audioSetting === 'quiz')) return true;
+  return !questions.some((q) =>
     q.audioEnabled === false || QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)
     || String(q.audioText || '').trim() || q.audioData
-  ));
+  );
 }
 
 // ---------- Question audio: the quiz's setting, and each question's own ----------
@@ -22086,6 +22089,7 @@ function settleQuestionVoice(q, quizCtx) {
 function ownAudioLanguage(q, quizLanguage) {
   const own = String(q?.ttsLanguage || '').trim().toUpperCase();
   if (own && own !== 'NONE') return normalizeTtsLanguage(own);
+  if (q?.language && EDGE_TTS_VOICE_OPTIONS.includes(q.language)) return ttsLanguageForVoice(q.language);
   const quizLang = normalizeTtsLanguage(quizLanguage);
   return quizLang === 'NONE' ? DEFAULT_EDGE_TTS_LANGUAGE : quizLang;
 }
@@ -22108,7 +22112,7 @@ function ttsLanguageForVoice(voice) {
 // is now heard even where the quiz said "Don't hear questions" (AI quizzes came
 // in that way, slides silent); a text that switch had silenced (ttsLanguage
 // NONE) becomes No audio, so it stays silent.
-function migrateQuestionAudio(targetQuiz) {
+function migrateQuestionAudio(targetQuiz, { recoverAssignmentScripts = false } = {}) {
   if (!targetQuiz || typeof targetQuiz !== 'object' || targetQuiz.audioPerQuestion) return;
   const quizLang = String(targetQuiz.ttsLanguage || '').trim().toUpperCase();
   const hasLang = ['EN', 'CA', 'FR', 'OTHER'].includes(quizLang);
@@ -22119,10 +22123,12 @@ function migrateQuestionAudio(targetQuiz) {
     if (!q || !supportsQuestionAudio(q.type)) return;
     const muted = String(q.ttsLanguage || '').trim().toUpperCase() === 'NONE';
     if (!QUESTION_AUDIO_SETTINGS.includes(q.audioSetting)) {
-      // Older assignments can have a script alongside a disabled playback flag.
-      if (q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file')) q.audioSetting = 'file';
-      else if (String(q.audioText || '').trim()) q.audioSetting = muted ? 'none' : 'tts';
-      else if (!explicitReadAll && q.audioEnabled === false) q.audioSetting = 'none';
+      const hasFile = q.audioData && (!q.audioMode || String(q.audioMode).toLowerCase() === 'file');
+      const hasScript = !!String(q.audioText || '').trim();
+      const recoverScript = recoverAssignmentScripts && hasScript && !hasFile;
+      if (!explicitReadAll && q.audioEnabled === false && !recoverScript) q.audioSetting = 'none';
+      else if (hasFile) q.audioSetting = 'file';
+      else if (hasScript) q.audioSetting = muted ? 'none' : 'tts';
       else q.audioSetting = 'quiz';
     }
     if (q.audioSetting === 'tts' || q.audioSetting === 'file') hasOwnAudio = true;
