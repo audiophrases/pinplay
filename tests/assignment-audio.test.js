@@ -35,6 +35,8 @@ function setup() {
     pauseAssignmentAnsweringAmbient() {},
     stopAllAssignmentAmbient() {},
     questionSpeechText: (q) => q.prompt,
+    // The silence that wakes the sound output (tested on its own below).
+    wakeAudioOutput: async () => {},
     TTS_GAP: /___/,
     loadBackendUrl: () => 'https://example.test',
     normalizeBackendUrl: (url) => url,
@@ -63,10 +65,13 @@ function setup() {
 }
 
 const question = { audioEnabled: true, prompt: 'Question', ttsAudioKey: 'tts/prompt.mp3' };
+// Lets a clip start: question audio first waits for the silence that wakes the output.
+const flush = () => new Promise((r) => setImmediate(r));
 
 test('navigation to a silent question stops playback and queued autoplay immediately', async () => {
   const { context, api, clips, timers, navigate } = setup();
   const playback = api.playAssignmentQuestionAudio(question);
+  await flush();
   context.assignmentPromptAutoplayTimer = context.setTimeout(() => {});
   assert.equal(clips[0].playing, true);
   navigate();
@@ -82,8 +87,10 @@ test('a late TTS response cannot play over the next question', async () => {
   const response = deferred();
   context.fetch = () => response.promise;
   const old = api.playAssignmentQuestionAudio({ ...question, ttsAudioKey: '' });
+  await flush();
   navigate();
   const current = api.playAssignmentQuestionAudio(question);
+  await flush();
   response.resolve({ ok: true, blob: async () => ({}) });
   assert.equal(await old, 'aborted');
   assert.equal(clips.length, 1);
@@ -96,6 +103,7 @@ test('rapid navigation cancels each prompt without restarting a fallback', async
   const { api, clips, navigate } = setup();
   for (let i = 0; i < 4; i += 1) {
     const playback = api.playAssignmentQuestionAudio(question);
+    await flush();
     navigate();
     assert.equal(await playback, 'aborted');
   }
@@ -114,6 +122,7 @@ test('browser speech cancellation settles playback and late completion preserves
   navigate();
   assert.equal(await old, 'aborted');
   const current = api.playAssignmentQuestionAudio(question);
+  await flush();
   speech.resolve(true);
   await Promise.resolve();
   assert.equal(context.playing, true);
@@ -177,4 +186,70 @@ test('a live clip the browser will not play falls back to the browser voice', as
   const result = await api.playAssignmentQuestionAudio({ audioEnabled: true, prompt: 'Question', ttsAudioKey: '', language: 'en-US-AriaNeural' });
   assert.equal(result, true);
   assert.deepEqual(spoken, [['Question', 'en-US-AriaNeural']]);
+});
+
+// Before a question's audio, 0.3 s of silence wakes the sound output (a
+// projector, Bluetooth headphones or a Chromebook lost the first syllable).
+const { extractDeclaration } = require('./helpers/extract-declaration');
+const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+
+test('the wake-up silence is the same in both players', () => {
+  for (const name of ['AUDIO_WAKE_MS', 'wakeAudioOutput']) {
+    assert.equal(extractDeclaration(appSource, name), extractDeclaration(source, name), name);
+  }
+});
+
+test('the wake-up silence is 0.3 s of silent WAV, played whole, and made once', async () => {
+  const blobs = [];
+  const played = [];
+  const context = {
+    audioWakeUrl: '',
+    URL: { createObjectURL: (blob) => { blobs.push(blob); return `blob:silence${blobs.length}`; } },
+    Blob,
+    setTimeout: () => 0,
+    Audio: class {
+      constructor(url) { this.url = url; this.events = {}; }
+      addEventListener(event, fn) { this.events[event] = fn; }
+      play() { played.push(this.url); setImmediate(() => this.events.ended()); return Promise.resolve(); }
+    },
+  };
+  const { wakeAudioOutput } = loadDeclarations(source, ['AUDIO_WAKE_MS', 'wakeAudioOutput'], context);
+  await wakeAudioOutput();
+  await wakeAudioOutput();
+  assert.equal(blobs.length, 1, 'the silence is made once');
+  assert.deepEqual(played, ['blob:silence1', 'blob:silence1']);
+  const bytes = new Uint8Array(await blobs[0].arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const text = (at, n) => String.fromCharCode(...bytes.slice(at, at + n));
+  assert.deepEqual([text(0, 4), text(8, 4), text(12, 4), text(36, 4)], ['RIFF', 'WAVE', 'fmt ', 'data']);
+  assert.equal(view.getUint32(4, true), bytes.length - 8);
+  const [channels, rate, byteRate, bits, size] = [view.getUint16(22, true), view.getUint32(24, true), view.getUint32(28, true), view.getUint16(34, true), view.getUint32(40, true)];
+  assert.deepEqual([channels, bits, byteRate], [1, 16, rate * 2]);
+  assert.equal(size / byteRate, 0.3, 'seconds of silence');
+  assert.ok(bytes.slice(44).every((b) => b === 0), 'every sample is silent');
+});
+
+test('the silence plays before the clip, and a stop during it keeps the clip from starting', async () => {
+  const { context, api, clips, navigate } = setup();
+  const order = [];
+  let wake = deferred();
+  context.wakeAudioOutput = () => { order.push('silence'); return wake.promise; };
+  const AudioBase = context.Audio;
+  context.Audio = class extends AudioBase { constructor(url) { super(url); order.push(url); } };
+  const first = api.playAssignmentQuestionAudio(question);
+  await flush();
+  assert.equal(clips.length, 0, 'nothing plays during the silence');
+  wake.resolve();
+  await flush();
+  assert.deepEqual(order, ['silence', 'https://example.test/api/media/tts/prompt.mp3']);
+  clips[0].events.ended();
+  assert.equal(await first, true);
+  // The student moves on while the silence plays: the old question's clip never starts.
+  wake = deferred();
+  const stopped = api.playAssignmentQuestionAudio(question);
+  await flush();
+  navigate();
+  wake.resolve();
+  assert.equal(await stopped, 'aborted');
+  assert.equal(clips.length, 1);
 });

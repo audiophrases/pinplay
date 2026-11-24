@@ -520,6 +520,8 @@ describe('questionMediaStatus', () => {
       sandbox.primeAnsweringFx = () => {};
       sandbox.stopFx = () => {};
       sandbox.stopQuestionAudioPlayback = () => {};
+      sandbox.questionAudioStopGen = 0;
+      sandbox.wakeAudioOutput = async () => {};
       sandbox.edgeTtsBlobUrlCache = new Map();
       let fallbackPlays = 0;
       sandbox.Audio = class {
@@ -541,6 +543,37 @@ describe('questionMediaStatus', () => {
       if (gone) assert.match(msg, /Upload or record the audio file again\./);
     });
   }
+
+  it('the editor and projector player waits for the wake-up silence, and a stop during it plays nothing', async () => {
+    const { A, sandbox } = load(async () => new Response('tts audio'));
+    const created = [];
+    let wake;
+    Object.assign(sandbox, {
+      hostStatusEl: null, setStatus() {}, live: { host: {} }, primeAnsweringFx() {}, stopFx() {}, resumeFx() {},
+      questionAudioStopGen: 0, edgeTtsBlobUrlCache: new Map(),
+      stopQuestionAudioPlayback: () => { sandbox.questionAudioStopGen += 1; },
+      wakeAudioOutput: () => new Promise((r) => { wake = r; }),
+      Audio: class {
+        constructor(src) { this.src = src; created.push(src); }
+        addEventListener(type, fn) { if (type === 'ended') this.finish = fn; }
+        async play() { this.finish(); }
+      },
+    });
+    const q = { type: 'mcq', prompt: 'Hi', audioMode: 'tts', ttsAudioKey: 'tts/hi.mp3', language: 'en-US-AriaNeural' };
+    const played = A.playQuestionAudio(q, { force: true });
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(created, [], 'nothing plays during the silence');
+    wake();
+    assert.equal(await played, true);
+    assert.deepEqual(created, ['https://be.test/api/media/tts/hi.mp3']);
+    // The next question (or a second ▶) stops it while the silence plays.
+    const stopped = A.playQuestionAudio(q, { force: true });
+    await new Promise((r) => setImmediate(r));
+    sandbox.stopQuestionAudioPlayback();
+    wake();
+    assert.equal(await stopped, false);
+    assert.equal(created.length, 1);
+  });
 
   it('selects the same fallback voice in the editor that TTS uses at playback', () => {
     const quiz = { ttsLanguage: 'FR' };

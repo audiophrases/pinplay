@@ -590,6 +590,8 @@ let soloWordleController = null; // live Wordle controller in solo/preview play
 let pendingScrollQuestionIndex = null;
 let dragQuestionIndex = null;
 let activeQuestionAudioEl = null;
+// Bumped by every stop: a question's audio that was stopped while it waited does not start.
+let questionAudioStopGen = 0;
 let builderAudioRecorder = null;
 const edgeTtsBlobUrlCache = new Map();
 let previewPoll = null;
@@ -25130,6 +25132,7 @@ function hasQuestionAudio(question) {
 }
 
 function stopQuestionAudioPlayback() {
+  questionAudioStopGen += 1;
   try {
     if (activeQuestionAudioEl) {
       activeQuestionAudioEl.pause();
@@ -25143,6 +25146,43 @@ function stopQuestionAudioPlayback() {
       window.speechSynthesis.cancel();
     }
   } catch { }
+}
+
+// Wakes the sound output before a question's audio. After a quiet spell a
+// projector (HDMI), Bluetooth headphones or a Chromebook's power saving take
+// a moment to start, and the first syllable of the voice was lost (a replay,
+// with the output awake, was whole). AUDIO_WAKE_MS of silence plays first; it
+// never holds the clip up for more than a moment. Identical in app.js and play.js.
+const AUDIO_WAKE_MS = 300;
+let audioWakeUrl = '';
+function wakeAudioOutput() {
+  if (!audioWakeUrl) {
+    // A WAV of silence: 8 kHz, 16-bit, mono.
+    const rate = 8000;
+    const size = Math.round(rate * AUDIO_WAKE_MS / 1000) * 2;
+    const bytes = new Uint8Array(44 + size);
+    const view = new DataView(bytes.buffer);
+    [...'RIFF'].forEach((c, i) => { bytes[i] = c.charCodeAt(0); });
+    view.setUint32(4, 36 + size, true);
+    [...'WAVEfmt '].forEach((c, i) => { bytes[8 + i] = c.charCodeAt(0); });
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    [...'data'].forEach((c, i) => { bytes[36 + i] = c.charCodeAt(0); });
+    view.setUint32(40, size, true);
+    audioWakeUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  }
+  return new Promise((resolve) => {
+    const silence = new Audio(audioWakeUrl);
+    silence.addEventListener('ended', () => resolve(), { once: true });
+    silence.addEventListener('error', () => resolve(), { once: true });
+    silence.play().catch(() => resolve());
+    setTimeout(resolve, AUDIO_WAKE_MS + 400);
+  });
 }
 
 async function playQuestionAudio(question, opts = {}) {
@@ -25159,6 +25199,9 @@ async function playQuestionAudio(question, opts = {}) {
   primeAnsweringFx(answeringKey);
   stopFx('answering');
   stopQuestionAudioPlayback();
+  const stopGen = questionAudioStopGen;
+  await wakeAudioOutput();
+  if (stopGen !== questionAudioStopGen) return false;
 
   const maybeResumeQuestionMusic = () => {
     const s = live.host.state;

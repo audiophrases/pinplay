@@ -230,3 +230,10 @@ bilingual rule and the teacher's words only when asked.
   - A question-bank recording saved with audioMode "url" (before the bank
     fix) opens as its own audio file, unless the teacher chose otherwise.
 
+- 2026-11-24: the first syllable of a question's audio was lost on first
+  play (a replay was whole): after a quiet spell the sound output (a
+  projector over HDMI, Bluetooth headphones, a Chromebook's power saving)
+  takes a moment to start. Both players (student page; editor, preview and
+  projector) now play 0.3 s of silence first (wakeAudioOutput, AUDIO_WAKE_MS,
+  identical in app.js and play.js); a stop during it keeps the clip from
+  starting. The clips themselves are unchanged.
